@@ -82,9 +82,10 @@ const TEXT_TAGS = new Set([
 	'IMPLEMENTATION-CONFIG-VARIANT',
 	'SW-SYSCOND',
 	'MATCHING-CRITERION-REF',
-	'LABEL',
-	'ANNOTATION-TEXT',
-	'VERBATIM',
+	// The legacy `\formatAnnotation` reads the AUTOSAR language layers, not the
+	// enclosing `LABEL` / `ANNOTATION-TEXT` / `VERBATIM` elements themselves.
+	'L-4',
+	'L-5',
 	'VALUE-REF',
 	'TARGET-REF',
 	'CONTEXT-ELEMENT-REF',
@@ -286,6 +287,9 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				return;
 			}
 			case 'annotation': {
+				// One list entry per `ANNOTATION`. The legacy `\appendAnnotations`
+				// concatenates every annotation into a single `/* … */` run; a list is
+				// our deliberate semantic-preserving deviation (parent D6).
 				const parent = nearest(ancestors, 'annotations');
 				if (parent) {
 					(parent.annotations ??= []).push(
@@ -415,16 +419,21 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				}
 				return;
 			}
-			case 'LABEL': {
-				const parent = nearest(ancestors, 'annotation');
-				if (parent) {
+			case 'L-4': {
+				// Label = `LABEL/L-4` text. The `.mm` has no language predicate, so the
+				// first `L-4` in document order wins; later layers are ignored.
+				const parent = hasAncestor(ancestors, 'LABEL') ? nearest(ancestors, 'annotation') : undefined;
+				if (parent && parent.label === undefined) {
 					parent.label = decode(raw).trim();
 				}
 				return;
 			}
-			case 'ANNOTATION-TEXT':
-			case 'VERBATIM': {
-				const parent = nearest(ancestors, 'annotation');
+			case 'L-5': {
+				// Text = `ANNOTATION-TEXT/VERBATIM/L-5` text, first in document order.
+				const parent =
+					hasAncestor(ancestors, 'ANNOTATION-TEXT') && hasAncestor(ancestors, 'VERBATIM')
+						? nearest(ancestors, 'annotation')
+						: undefined;
 				if (parent && parent.text === undefined) {
 					parent.text = decode(raw).trim();
 				}
@@ -540,7 +549,12 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		if (text.startsWith('<![CDATA[', i)) {
 			const e = text.indexOf(']]>', i + 9);
 			const stop = e < 0 ? len : e;
-			append(text.slice(i + 9, stop), i + 9, stop);
+			// An empty `<![CDATA[]]>` must not register a text chunk: it would set the
+			// element's text start/end to the marker itself and widen the recorded range
+			// past the real text (a write would then replace `]]>` or `<![CDATA[`).
+			if (stop > i + 9) {
+				append(text.slice(i + 9, stop), i + 9, stop);
+			}
 			i = e < 0 ? len : e + 3;
 			continue;
 		}
@@ -678,6 +692,11 @@ function nearest(ancestors: Entry[], ...kinds: RecKind[]): Rec | undefined {
 		}
 	}
 	return undefined;
+}
+
+/** True when one of the open ancestors is the (prefix-stripped) tag `name`. */
+function hasAncestor(ancestors: Entry[], name: string): boolean {
+	return ancestors.some((a) => a.name === name);
 }
 
 /**

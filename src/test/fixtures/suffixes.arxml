@@ -9,8 +9,16 @@
           <DEFINITION-REF>/D/M</DEFINITION-REF>
           <ANNOTATIONS>
             <ANNOTATION>
-              <LABEL>Note</LABEL>
-              <VERBATIM>module note</VERBATIM>
+              <LABEL>
+                <L-4 L="EN"> Note </L-4>
+                <L-4 L="DE">Hinweis</L-4>
+              </LABEL>
+              <ANNOTATION-TEXT>
+                <VERBATIM>
+                  <L-5 L="EN"> module note </L-5>
+                  <L-5 L="DE">Modulnotiz</L-5>
+                </VERBATIM>
+              </ANNOTATION-TEXT>
             </ANNOTATION>
           </ANNOTATIONS>
           <VARIATION-POINT>
@@ -32,7 +40,11 @@
               <DEFINITION-REF>/D/C</DEFINITION-REF>
               <ANNOTATIONS>
                 <ANNOTATION>
-                  <ANNOTATION-TEXT>no label here</ANNOTATION-TEXT>
+                  <ANNOTATION-TEXT>
+                    <VERBATIM>
+                      <L-5 L="EN">no label here</L-5>
+                    </VERBATIM>
+                  </ANNOTATION-TEXT>
                 </ANNOTATION>
               </ANNOTATIONS>
               <PARAMETER-VALUES>

@@ -2,6 +2,7 @@ import * as assert from 'assert';
 
 import { isArxmlPath, isEcucValues } from '../../core/ecuc/detect';
 import { EcucDocumentModel } from '../../core/ecuc/model';
+import { scanEcucValues } from '../../core/ecuc/scanner';
 import { expectedModel, fixtureText, plain, scanFixture, slice, stripRanges } from './modelTestUtils';
 
 /** Fixtures with a committed expected model. */
@@ -57,6 +58,27 @@ suite('scanner (core)', () => {
 		assert.strictEqual(model.modules[0].definitionRef, '/D/M');
 	});
 
+	test('AC1: an empty CDATA section does not widen a captured range', () => {
+		// `<![CDATA[]]>` carries no text, so it must not register as the start (or end) of
+		// an element's text: the range has to point at the real value only, or a write
+		// would replace the marker itself and corrupt the element.
+		const shapes = ['<VALUE><![CDATA[]]>abc</VALUE>', '<VALUE>abc<![CDATA[]]></VALUE>'];
+		for (const value of shapes) {
+			const text =
+				'<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>' +
+				'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>' +
+				'<DEFINITION-REF>/D/M</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE>' +
+				'<SHORT-NAME>C</SHORT-NAME><DEFINITION-REF>/D/C</DEFINITION-REF><PARAMETER-VALUES>' +
+				'<ECUC-TEXTUAL-PARAM-VALUE><DEFINITION-REF>/D/C/A</DEFINITION-REF>' +
+				value +
+				'</ECUC-TEXTUAL-PARAM-VALUE></PARAMETER-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS>' +
+				'</ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>';
+			const parameter = scanEcucValues(text).modules[0].containers[0].parameters[0];
+			assert.strictEqual(parameter.displayValue, 'abc', value);
+			assert.strictEqual(slice(text, parameter.valueRange!), 'abc', value);
+		}
+	});
+
 	test('AC1: the module element range covers its closing tag', () => {
 		const text = fixtureText('basic.arxml');
 		const model = scanFixture('basic.arxml');
@@ -104,6 +126,40 @@ suite('scanner (core)', () => {
 		// Context 2: the compared value inside a POST-BUILD-VARIANT-CONDITION.
 		assert.deepStrictEqual(container.postBuildVariants, [{ criterion: 'Crit1', operator: '==', value: '63' }]);
 		assert.strictEqual(container.parameters.length, 1, 'the condition VALUE must not become a parameter');
+	});
+
+	test('AC1: annotations are read from the layered LABEL/L-4 and ANNOTATION-TEXT/VERBATIM/L-5 shape', () => {
+		const module = scanFixture('suffixes.arxml').modules[0];
+		// Trimmed, and the first language layer in document order wins: the `.mm`
+		// selects `child[?L-4]` / `child[?L-5]` with no language predicate.
+		assert.strictEqual(module.annotations![0].label, 'Note');
+		assert.strictEqual(module.annotations![0].text, 'module note');
+		// The DE layer must not have been picked up.
+		assert.notStrictEqual(module.annotations![0].label, 'Hinweis');
+		assert.notStrictEqual(module.annotations![0].text, 'Modulnotiz');
+
+		// An annotation with no LABEL still yields its text.
+		const annotation = module.containers[0].annotations![0];
+		assert.strictEqual(annotation.text, 'no label here');
+		assert.strictEqual(annotation.label, undefined);
+	});
+
+	test('AC1: a flat annotation yields no label and no text', () => {
+		// The legacy `\formatAnnotation` reads only `LABEL/L-4` and
+		// `ANNOTATION-TEXT/VERBATIM/L-5`, so a flat `<LABEL>Note</LABEL>` contributes
+		// nothing. Matching that, rather than inventing a fallback, is deliberate.
+		const text =
+			'<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>' +
+			'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>' +
+			'<DEFINITION-REF>/D/M</DEFINITION-REF><ANNOTATIONS><ANNOTATION>' +
+			'<LABEL>Note</LABEL><ANNOTATION-TEXT><VERBATIM>flat body</VERBATIM></ANNOTATION-TEXT>' +
+			'</ANNOTATION></ANNOTATIONS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS>' +
+			'</AR-PACKAGE></AR-PACKAGES></AUTOSAR>';
+		const annotation = scanEcucValues(text).modules[0].annotations![0];
+		assert.strictEqual(annotation.label, undefined);
+		assert.strictEqual(annotation.text, undefined);
+		// Nothing was captured, so only the range remains.
+		assert.deepStrictEqual(Object.keys(annotation), ['range']);
 	});
 
 	test('AC3: detection is namespace-tolerant and gate-ordered', () => {

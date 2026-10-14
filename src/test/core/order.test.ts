@@ -16,14 +16,19 @@ function parameter(definitionRef: string, value?: string): ParameterNode {
 	};
 }
 
-function reference(definitionRef: string, target?: string): ReferenceNode {
+function reference(
+	definitionRef: string,
+	target?: string,
+	context: string[] = [],
+	instance = false
+): ReferenceNode {
 	return {
 		kind: 'reference',
-		instance: false,
+		instance,
 		definitionRef,
 		name: definitionRef.slice(definitionRef.lastIndexOf('/') + 1),
 		targetRawPath: target,
-		contextPaths: [],
+		contextPaths: context,
 		range: { start: 0, end: 0 },
 	};
 }
@@ -139,6 +144,28 @@ suite('order (core)', () => {
 				[]
 			).parameters.map((p) => p.displayValue),
 			['aaa', 'zzz']
+		);
+	});
+
+	test('AC5: an instance reference orders by target plus context, not target alone', () => {
+		// Two instance references with the same DEFINITION-REF and TARGET-REF, differing
+		// only in CONTEXT-ELEMENT-REF. The legacy key is `VALUE-IREF.data`, which carries
+		// the context, so the context decides the order.
+		const shared = [
+			reference('/D/R', '/T', ['/Ctx/B'], true),
+			reference('/D/R', '/T', ['/Ctx/A'], true),
+		];
+		const sorted = orderMembers([], shared, 'all', []).references;
+		assert.deepStrictEqual(sorted.map((r) => r.contextPaths.join()), ['/Ctx/A', '/Ctx/B']);
+
+		// The old target-only identity was identical for both (`/T`), so the stable sort
+		// kept declaration order. This oracle reproduces that old result: it must differ
+		// from the context-aware order, or the fix is not observable.
+		const targetOnly = legacySort(shared, (r) => `${r.definitionRef}"${r.targetRawPath ?? ''}"`);
+		assert.deepStrictEqual(targetOnly.map((r) => r.contextPaths.join()), ['/Ctx/B', '/Ctx/A']);
+		assert.notDeepStrictEqual(
+			sorted.map((r) => r.contextPaths.join()),
+			targetOnly.map((r) => r.contextPaths.join())
 		);
 	});
 

@@ -139,11 +139,24 @@ export function orderMembers(
 				references,
 				set,
 				(r) => r.definitionRef,
-				(r) => r.targetRawPath,
+				referenceIdentity,
 				(r) => tailOf(r.definitionRef)
 			)
 		),
 	};
+}
+
+/**
+ * Sort identity of a reference: the legacy `child[?VALUE-REF | ?VALUE-IREF].data`.
+ * For an instance reference that is the `TARGET-REF` text followed by the
+ * `CONTEXT-ELEMENT-REF` texts, concatenated in document order with no separator —
+ * so two instance references with the same target but different contexts order by
+ * context. Inter-element whitespace inside `VALUE-IREF` is ignored, which makes
+ * this a documented approximation of `.data` rather than a byte-exact
+ * reproduction (parent D6).
+ */
+function referenceIdentity(r: ReferenceNode): string {
+	return (r.targetRawPath ?? '') + r.contextPaths.join('');
 }
 
 /** `DEFINITION-REF` tail, the legacy `\lastShortName`. */
