@@ -300,3 +300,41 @@ The test host has no webview DOM, so the split is explicit:
   double-click gesture, and the drag-free feel of the tree. These are exactly what the user is
   complaining about, so the checklist in `implement.md` has a manual section and the outcomes go in
   this task's `implement.md` when someone runs it.
+
+## 13. Node identity: a collision this child has to fix
+
+The parent integration review found that `nodeId.ts` builds a container id from the container's path
+and short-name only:
+
+```
+container:<containerPath>/<shortName>
+```
+
+Two sibling containers that share a `SHORT-NAME` therefore produce the **same** id — observed as
+`byId.size === 4` for a 5-node fixture. Nothing writes wrongly today (the write path resolves by id and
+the bytes are then guarded), but a *reveal* can select the wrong sibling, which is squarely this
+child's subject: it is about where a click takes you.
+
+Parameters already solved this: their id carries a per-owner ordinal (`<owner>/param:<tail>#<n>`).
+Containers and modules simply never got one. The fix is to give them the same treatment:
+
+```
+container:<containerPath>/<shortName>#<ordinal>
+```
+
+Two properties must hold, and both are why the ordinal cannot be the obvious one:
+
+- **Stable across a re-scan.** The ordinal comes from the **raw** model's document order, not from the
+  display order. Ordering functions are pure and the model is unchanged by them, so this is the same
+  source `nodeId` already uses — but it must be computed before any ordering is applied, or changing
+  `arxmlScope.ecuc.editor.sort` would renumber ids and break the editing child's re-resolution
+  (parent design §2.2 of that child).
+- **Independent of the sort mode.** Covered by the same rule; asserted by a test that renders under
+  both `all` and `declaration` and compares ids.
+
+`src/core/**` is not touched: this is an identity scheme, not a parsing rule, and the ordinal is
+derivable from the model that already exists.
+
+Nothing persists an id across sessions — the webview holds them in memory and the host rebuilds them
+from the model — so changing the scheme breaks no stored state. The editing child's suite is the
+regression test for that claim.

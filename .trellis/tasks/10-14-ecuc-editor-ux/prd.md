@@ -70,6 +70,9 @@ high-contrast theme.
   usable fallback.** The webview is a plain inlined page with a nonce and a CSP.
 - **R-UX11 — The read-only invariant is unchanged.** This child adds no write path.
 - **R-UX12 — A new setting is declared with a default and documented** in `docs/ECUC_EDITOR.md`.
+- **R-UX13 — Node identity is unambiguous.** Two siblings sharing a `SHORT-NAME` must not share an
+  identifier, so a reveal or an edit can never land on the wrong node. Ids must stay stable across a
+  re-scan, and must be derived from the document's own order rather than from the displayed order.
 
 ## Acceptance Criteria
 
@@ -99,8 +102,10 @@ high-contrast theme.
 - [ ] **AC11** `package.json` `dependencies` is unchanged, no asset file was added, and every colour
       introduced resolves to a `--vscode-*` variable with a non-transparent fallback where the theme
       may not define one.
-- [ ] **AC12** `npm run check-types`, `npm run lint` and `npm test` are green (95 passing before this
+- [ ] **AC12** `npm run check-types`, `npm run lint` and `npm test` are green (96 passing before this
       child), and no write path was added.
+- [ ] **AC13** Two sibling containers with the same `SHORT-NAME` receive distinct ids, and revealing
+      either one selects that one. The ids are unchanged by a sort-mode change and by a re-scan.
 
 ## Constraints
 

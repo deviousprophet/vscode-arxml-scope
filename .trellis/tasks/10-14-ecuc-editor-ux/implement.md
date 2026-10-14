@@ -41,10 +41,14 @@ on every document change and collapse without persistence is worse than no colla
 - [ ] 9. `src/editor/renderHtml.ts` — keyboard map and accessibility (`design.md` §8, §9):
       Home/End/PageUp/PageDown, type-ahead, `aria-posinset` / `aria-setsize` / `aria-selected`, the
       count announced through the live region, reduced-motion handling.
-- [ ] 10. `docs/ECUC_EDITOR.md` — document the reveal behaviour and the new setting (R-UX12), and
+- [ ] 10. `src/editor/nodeId.ts` — the sibling collision (R-UX13, AC13). Ids must remain stable across a
+      re-scan and independent of the sort mode, so the disambiguating ordinal is computed from the
+      **raw** model's document order, exactly as parameter ids already do. `src/core/**` is not
+      touched: this is an identity scheme, not a parsing rule.
+- [ ] 11. `docs/ECUC_EDITOR.md` — document the reveal behaviour and the new setting (R-UX12), and
       describe the interaction model (click selects, double-click reveals) where it currently implies
       that revealing is what a click does.
-- [ ] 11. Tests per the table below.
+- [ ] 12. Tests per the table below.
 
 ## Test coverage
 
@@ -62,6 +66,7 @@ on every document change and collapse without persistence is worse than no colla
 | AC10 — aria attributes and the key map | markup: `aria-*`; script-level: the key handler's branches |
 | AC11 — no new dependency, no asset, colours are theme variables | `package.json` `dependencies` unchanged; grep the new CSS for a colour literal that is not a fallback |
 | AC12 — suite, types, lint, and no new write path | the three commands, plus a grep for `WorkspaceEdit` / `writeFile` in the changed files |
+| AC13 — sibling `SHORT-NAME` collision | a fixture with two sibling containers sharing a short-name: assert distinct ids, that each maps to its own range, and that both survive a re-scan and a sort-mode change |
 
 Every assertion must fail when the feature is deleted — see `.trellis/spec/frontend/testing.md`. In
 particular, a test that only asserts a class name appears is not evidence that the interaction works;
