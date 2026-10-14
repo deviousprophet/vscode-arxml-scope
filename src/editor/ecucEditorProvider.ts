@@ -6,8 +6,9 @@
  *
  * `CustomTextEditorProvider` has no `openCustomDocument`, no
  * `onDidChangeCustomDocument` and no save/revert hooks — undo, redo, dirty state and
- * save belong to the real `TextDocument`. This child writes nothing at all; it renders
- * and navigates only.
+ * save belong to the real `TextDocument`. The one write this provider performs goes
+ * through `WorkspaceEdit` onto that document, so it participates in that history
+ * (child design §2.4, §2.7).
  */
 import { randomBytes } from 'crypto';
 import * as path from 'path';
@@ -18,6 +19,7 @@ import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { RenderOptions, renderHtml, renderTree } from './renderHtml';
 import { buildNodeIndex } from './nodeId';
+import { applyEdit, buildEdit } from './ecucEdit';
 import { followReference, revealRangeInTextEditor } from './navigation';
 
 export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
@@ -25,6 +27,8 @@ export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
 interface WebviewMessage {
 	type?: string;
 	nodeId?: string;
+	/** The text the user typed, for `type: 'edit'` (parent design §8). */
+	value?: string;
 }
 
 /**
@@ -117,6 +121,8 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					void this.revealNode(document, model, message.nodeId);
 				} else if (message.type === 'follow') {
 					void this.followReference(document, model, message.nodeId, panel);
+				} else if (message.type === 'edit' && typeof message.value === 'string') {
+					void this.editValue(document, panel, message.nodeId, message.value);
 				}
 			})
 		);
@@ -181,5 +187,32 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			return;
 		}
 		await revealRangeInTextEditor(document, result.range);
+	}
+
+	/**
+	 * The write path (child design §2.3, §2.5): validate against a fresh scan, refuse
+	 * with a `notice` and no mutation, or apply exactly one `WorkspaceEdit`.
+	 *
+	 * The refresh after a successful write is the existing `onDidChangeTextDocument`
+	 * subscription — it re-scans and pushes the tree. Pushing here as well would be a
+	 * second update path for one change, which `rescan.test.ts` counts against the
+	 * platform's own events.
+	 */
+	private async editValue(
+		document: vscode.TextDocument,
+		panel: vscode.WebviewPanel,
+		nodeId: string,
+		value: string
+	): Promise<void> {
+		const text = document.getText();
+		const plan = buildEdit(scanEcucValues(text), text, nodeId, value);
+		if (!plan.ok) {
+			await panel.webview.postMessage({ type: 'notice', message: plan.reason, kind: 'warn' });
+			return;
+		}
+		const applied = await applyEdit(document, plan.record);
+		if (!applied.ok) {
+			await panel.webview.postMessage({ type: 'notice', message: applied.reason, kind: 'warn' });
+		}
 	}
 }

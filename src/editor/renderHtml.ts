@@ -21,6 +21,7 @@ import {
 } from '../core/ecuc/model';
 import { SORT_EXCEPTIONS, orderContainers, orderMembers, orderModules } from '../core/ecuc/order';
 import { filterScript, haystack } from './filter';
+import { valueEditorScript } from './ecucValueEditor';
 import { NodeIndex, buildNodeIndex } from './nodeId';
 
 export interface RenderOptions {
@@ -50,6 +51,8 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <div id="main">${renderTree(model, options)}</div>
 <script nonce="${nonce}">
 ${filterScript()}
+const vscode = acquireVsCodeApi();
+${valueEditorScript()}
 ${TREE_SCRIPT}
 </script>
 </body>
@@ -109,12 +112,15 @@ function item(ctx: Ctx, spec: ItemSpec): string {
 	const focusable = selected || (ctx.selectedId === undefined && ctx.first);
 	ctx.first = false;
 	const expanded = spec.children.length > 0 ? ' aria-expanded="true"' : '';
+	// The value the in-tree editor starts from, so the webview never re-derives it from
+	// the rendered text (parent design §9, `ecucValueEditor.ts`).
+	const editable = spec.kind === 'parameter' ? ` data-value="${escapeAttr(spec.value ?? '')}"` : '';
 	const group =
 		spec.children.length > 0 ? `<div role="group" class="children">${spec.children.join('')}</div>` : '';
 	return (
 		`<div class="node" role="treeitem" aria-level="${spec.level}"${expanded} tabindex="${focusable ? '0' : '-1'}"` +
 		` data-node-id="${escapeAttr(spec.id)}" data-kind="${escapeAttr(spec.kind)}"` +
-		` data-haystack="${escapeAttr(haystack(spec))}"${selected ? ' data-selected="true"' : ''}` +
+		` data-haystack="${escapeAttr(haystack(spec))}"${editable}${selected ? ' data-selected="true"' : ''}` +
 		` title="${escapeAttr(spec.title)}">` +
 		`<span class="row"><span class="label">${escapeHtml(spec.label)}</span>${spec.meta.join('')}</span>${group}</div>`
 	);
@@ -323,6 +329,14 @@ body {
 .value {
 	color: var(--vscode-symbolIcon-numberForeground, var(--vscode-foreground));
 }
+.value-edit {
+	min-width: 12ch;
+	padding: 0 2px;
+	font-family: var(--vscode-editor-font-family);
+	color: var(--vscode-input-foreground);
+	background: var(--vscode-input-background);
+	border: 1px solid var(--vscode-focusBorder);
+}
 .target {
 	text-decoration: underline;
 	cursor: pointer;
@@ -335,10 +349,10 @@ body {
 /**
  * Keyboard traversal, activation and the message bridge. There is no `ready` message:
  * the initial model is already in the HTML, and a re-scan swaps the region whole, so a
- * first-paint push would only be a second update path (design §3).
+ * first-paint push would only be a second update path (design §3). `vscode` is declared
+ * once above, because `acquireVsCodeApi` may only be called once per page.
  */
 const TREE_SCRIPT = `
-const vscode = acquireVsCodeApi();
 const main = document.getElementById('main');
 const notice = document.getElementById('notice');
 let selectedId;

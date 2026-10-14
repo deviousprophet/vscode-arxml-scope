@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic editing fixture: one textual parameter to edit, one to leave alone. -->
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+    <AR-PACKAGES>
+        <AR-PACKAGE>
+            <SHORT-NAME>PkgE</SHORT-NAME>
+            <ELEMENTS>
+                <ECUC-MODULE-CONFIGURATION-VALUES>
+                    <SHORT-NAME>EditMod</SHORT-NAME>
+                    <DEFINITION-REF DEST="ECUC-MODULE-DEF">/PkgE/EditDefs/EditMod</DEFINITION-REF>
+                    <CONTAINERS>
+                        <ECUC-CONTAINER-VALUE>
+                            <SHORT-NAME>EditCont</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgE/EditDefs/EditMod/EditCont</DEFINITION-REF>
+                            <PARAMETER-VALUES>
+                                <ECUC-TEXTUAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/PkgE/EditDefs/EditMod/EditCont/Label</DEFINITION-REF>
+                                    <VALUE>bee</VALUE>
+                                </ECUC-TEXTUAL-PARAM-VALUE>
+                                <ECUC-TEXTUAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/PkgE/EditDefs/EditMod/EditCont/Note</DEFINITION-REF>
+                                    <VALUE>keep</VALUE>
+                                </ECUC-TEXTUAL-PARAM-VALUE>
+                            </PARAMETER-VALUES>
+                        </ECUC-CONTAINER-VALUE>
+                    </CONTAINERS>
+                </ECUC-MODULE-CONFIGURATION-VALUES>
+            </ELEMENTS>
+        </AR-PACKAGE>
+    </AR-PACKAGES>
+</AUTOSAR>
