@@ -7,13 +7,10 @@
 
 import { existsSync, readFileSync, appendFileSync, readdirSync, realpathSync, statSync } from "fs"
 import { isAbsolute, join, relative } from "path"
-import { platform } from "os"
-import { execSync } from "child_process"
 import { createHash } from "crypto"
 import { Buffer, isUtf8 } from "buffer"
 import process from "process"
 
-const PYTHON_CMD = platform() === "win32" ? "python" : "python"
 // Debug logging
 const DEBUG_LOG = "/tmp/trellis-plugin-debug.log"
 
@@ -519,24 +516,6 @@ export class TrellisContext {
 
   readProjectFile(relativePath) {
     return this.readFile(join(this.directory, relativePath))
-  }
-
-  runScript(scriptPath, cwd = null, contextKey = null) {
-    try {
-      const result = execSync(`${PYTHON_CMD} "${scriptPath}"`, {
-        cwd: cwd || this.directory,
-        timeout: 10000,
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          ...(contextKey ? { TRELLIS_CONTEXT_ID: contextKey } : {}),
-        },
-      })
-      return result || ""
-    } catch {
-      return ""
-    }
   }
 
   // ============================================================

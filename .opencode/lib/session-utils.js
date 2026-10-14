@@ -2,10 +2,9 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "fs"
 import { join } from "path"
 import { execFileSync } from "child_process"
-import { platform } from "os"
 import { debugLog } from "./trellis-context.js"
 
-const PYTHON_CMD = platform() === "win32" ? "python" : "python"
+const PYTHON_CMD = "python"
 
 const FIRST_REPLY_NOTICE = `<first-reply-notice>
 On the first visible assistant reply in this session, briefly acknowledge that Trellis SessionStart context loaded.
@@ -128,6 +127,9 @@ function loadTrellisConfig(directory, contextKey = null) {
       timeout: 5000,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
+      // Suppress the transient console window Windows would otherwise create
+      // for this console-subsystem child on every per-turn hook.
+      windowsHide: true,
       env: {
         ...process.env,
         ...(contextKey ? { TRELLIS_CONTEXT_ID: contextKey } : {}),
@@ -293,6 +295,7 @@ function runGit(directory, args) {
       timeout: 3000,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     }).trim()
   } catch {
     return ""
