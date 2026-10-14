@@ -39,10 +39,9 @@ replace. This is exactly why `nodeId` must be path-based and stable across a re-
 
 **2.3 Applying an edit.** In order: re-scan and resolve the node; refuse if the node is gone or is not
 a value-bearing node; validate the candidate with the core validator; refuse if invalid, if
-unrepresentable in XML, or if it is unchanged; `workspace.applyEdit` a `WorkspaceEdit` that replaces
-the recomputed region with the escaped text; on success record the edit and fire
-`onDidChangeCustomDocument` with a `CustomDocumentEditEvent`; re-scan and push the new model to the
-webview. Refusals post a `notice` and mutate nothing.
+unrepresentable in XML, or if it is unchanged; `workspace.applyEdit` **one** `WorkspaceEdit` that
+replaces the recomputed region with the escaped text; on success re-scan and push the new model to the
+webview. There is no event to fire — see §2.4. Refusals post a `notice` and mutate nothing.
 
 **2.4 Undo and redo are not ours to implement.** `CustomTextEditorProvider` has no
 `onDidChangeCustomDocument` and no `undo()`/`redo()` callbacks, and it must not be given any: the
@@ -67,16 +66,18 @@ those hooks — was wrong and has been removed. Verify the behaviour (§`prd.md`
 implementing a mechanism: a revert must reload from disk and the view must refresh through the
 re-scan subscription.
 
-**2.7 One edit, one undo step.** A single user action produces a single `WorkspaceEdit` and a single
-event, so Ctrl+Z returns to the previous state in one keystroke, matching any other editor.
+**2.7 One edit, one undo step.** A single user action produces exactly one `WorkspaceEdit`, so Ctrl+Z
+returns to the previous state in one keystroke, matching any other editor. Nothing has to cooperate
+with the history: the text document records the edit because the edit is real.
 
 ## 3. Risks
 
 - **Offset replay** (the naive implementation) writes to the wrong bytes as soon as a value changes
   length. §2.2 is the mitigation, and the byte-comparison test asserts it rather than trusting it.
 - **Shape-2 fidelity.** `<VALUE/>` must round-trip. §2.1's verbatim `oldText` is the mitigation.
-- **Recursion while firing the change event** (§2.4) — a double-fired event produces an undo stack that
-  needs two presses per edit.
-- **Workbench-command dependence** for revert and save-as (§2.6) — verify in Spike A, do not assume.
+- **Undo granularity** (§2.4, §2.7) — if a single action ever becomes two `WorkspaceEdit`s, undo needs
+  two presses per edit. One edit, one `WorkspaceEdit`; there is no event to double-fire.
+- **Revert and save-as are platform behaviour, not ours** (§2.6) — verify the behaviour in Spike A rather
+  than assuming it; there is no hook to implement if it misbehaves.
 - **Refusal must not half-write.** Validation runs before `applyEdit`; there is no repair path if that
   ordering is inverted.
