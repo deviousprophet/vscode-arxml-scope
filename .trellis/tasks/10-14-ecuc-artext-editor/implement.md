@@ -22,37 +22,51 @@ with `task.py start` once that child's artifacts have been reviewed.
 ## Resume state — read this first when picking the work up on another machine
 
 **Where the work lives.** Branch `feat/arxml-scope`, remote
-`https://github.com/deviousprophet/vscode-arxml-scope`. The plan and the first child's implementation
-are in the checkpoint commit `chore: plan ECUC editor and implement core scanner`.
+`https://github.com/deviousprophet/vscode-arxml-scope`. Commits so far: `0c09d4c` (the plan plus the
+scanner child's implementation) and `e094300` (the defects the quality check found).
 
 **Task state at checkpoint.** No task is `current` — `task.py` runs in degraded mode here (no session
 identity), so `task.py current` prints nothing on either machine. Use `task.py list` to see the tree:
 the parent and `10-14-ecuc-model-scanner` are `in_progress`; `10-14-artext-custom-editor` and
-`10-14-ecuc-value-editing` are still `planning` and must be reviewed before `task.py start`.
+`10-14-ecuc-value-editing` are still `planning` and must be reviewed before `task.py start`. The
+scanner child is deliberately **not archived yet** — `task.py archive` moves the directory and would
+break the relative references the other children's artifacts make to it; archive it in Step 4.
 
 **Done.**
 
-- Step 0 is **not** done: neither Spike A nor Spike B has been run.
-- Step 1 (`ecuc-model-scanner`) is **implemented but not yet quality-checked** (Phase 2.2). Core
+- Step 0 is **not** done: neither Spike A nor Spike B has been run, and neither can be finished by an
+  agent — both need a human in a running Extension Development Host. See "Spikes" below.
+- Step 1 (`ecuc-model-scanner`) is **implemented and quality-checked** (Phase 2.2 complete). Core
   modules, 10 synthetic fixtures, 9 hand-authored expected models and the core test suites are
-  committed. See the child's `implement.md` `## Implemented state` for the evidence and the one open
-  acceptance criterion.
+  committed. AC1–AC9 are all met: `npm test` passes with 37 tests, `check-types` and `lint` are clean,
+  and `src/core/` imports no `vscode`. Three defects were found and fixed — empty-CDATA range
+  corruption, annotations captured from the wrong XML layer, and an instance-reference sort key that
+  ignored the context. Details and evidence: the child's `implement.md` `## Phase 2.2 check`.
+- Two items are recorded in the child as known and deliberately not changed: a comment inside a
+  `<VALUE>` is included in `valueRange`, so a write deletes it (documented behaviour, not a defect);
+  and the expected models' *authorship* cannot be proven from the repository, only their agreement
+  with the legacy rules and their behaviour-sensitivity.
 
 **Next, in order.**
 
-1. Phase **2.2 quality check** of `10-14-ecuc-model-scanner` — dispatch `trellis-check`, or review the
-   child's `## Implemented state` against its `prd.md` AC1–AC9. AC9 is only partially verified today.
-2. **Step 2** (`10-14-artext-custom-editor`) — and run **Spike B** first, because the reveal mechanism
-   in `design.md` §10 depends on its outcome.
-3. **Step 3** (`10-14-ecuc-value-editing`) — gated on **Spike A**; do not start it while the
-   `CustomDocument` undo/redo contract is unproven.
-4. **Step 4** — the parent integration review.
+1. **Step 2** (`10-14-artext-custom-editor`) — review its artifacts, then `task.py start`. Only the
+   *reveal mechanism* detail of `design.md` §10 depends on Spike B; the activation gate, rendering,
+   filter, keyboard handling and the re-scan subscription do not, and the two-command reveal described
+   in §10 works either way. Do not let an unrun spike block the whole step.
+2. **Spike B** — a human runs it in an Extension Development Host and records the outcome here.
+3. **Step 3** (`10-14-ecuc-value-editing`) — gated on **Spike A**. Do not start it while the
+   `CustomDocument` undo/redo contract is unproven: that contract is not patchable from the outside.
+4. **Step 4** — the parent integration review, then archive the children.
 
-**Known blocker.** `npm test` cannot run in the current environment: `vscode-test` fails to fetch the
-VS Code release list (`407 Proxy Authentication Required` from `update.code.visualstudio.com`). The
-`pretest` chain (`compile-tests`, `compile`, `lint`) passes, and the core suites pass through
-`npx mocha --ui tdd "out/test/core/*.test.js"`. Fix the download path — proxy settings, `VSCODE_TEST_*`
-or an offline `.vscode-test/` — before claiming AC9 for any child.
+**Spikes (both need a human at a running VS Code).** No agent can complete these headlessly — they
+require opening the Extension Development Host, opening a file with the custom editor, pressing
+Ctrl+Z/Ctrl+Y and watching the dirty indicator. Write throwaway scaffolding, hand the checklist to the
+user, and record the outcome in this file.
+
+**Environment notes.** `npm test` works: `.vscode-test/vscode-win32-x64-archive-1.141.2` is downloaded
+and `.vscode-test/` is gitignored. The earlier `407 Proxy Authentication Required` from
+`update.code.visualstudio.com` was transient and did not need a code change. On a fresh machine,
+`npm install` first, then `npm test` will re-download VS Code once.
 
 **Guardrails that survive the machine change.** Do not add `bin/` or `plugins/` from the legacy tool
 (`reference/legacy-arxml2artext/README.md` explains why), do not reintroduce the ARTEXT text form,
