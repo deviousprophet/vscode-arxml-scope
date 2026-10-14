@@ -1,6 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { SpikeEditorProvider } from './spikes/spikeProvider';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -20,6 +21,23 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(disposable);
+
+	// THROWAWAY — Step 0 spike scaffolding. Delete together with `src/spikes/` and `spike/` once
+	// Spike A and Spike B are answered; see
+	// `.trellis/tasks/10-14-ecuc-artext-editor/research/spike-results.md`.
+	context.subscriptions.push(
+		vscode.window.registerCustomEditorProvider(SpikeEditorProvider.viewType, new SpikeEditorProvider(), {
+			webviewOptions: { retainContextWhenHidden: true },
+		}),
+		vscode.commands.registerCommand('vscode-arxml-scope.spike.open', async (uri?: vscode.Uri) => {
+			const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+			if (!target) {
+				void vscode.window.showInformationMessage('Open a *.spike.arxml file first.');
+				return;
+			}
+			await vscode.commands.executeCommand('vscode.openWith', target, SpikeEditorProvider.viewType);
+		})
+	);
 }
 
 // This method is called when your extension is deactivated

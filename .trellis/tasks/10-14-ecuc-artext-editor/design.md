@@ -304,16 +304,17 @@ editor is reachable through VS Code's own *Open With…*, which is the explicit 
    external edits both refresh the view.
 6. Dispose the listener and handle `panel.onDidDispose`.
 
-**Undo/redo — the mechanism matters.** VS Code owns the undo/redo **stack** for a custom editor; the
-extension supplies **invertible operations** and fires them through
-`onDidChangeCustomDocument` with a `CustomDocumentEditEvent` carrying `undo()` and `redo()`. So the
-extension does not hand-roll a history list; it must supply the inverse `WorkspaceEdit` for each edit
-and re-fire the change event. Getting this wrong produces an editor whose edits cannot be undone,
-which is why §14 makes it one of the first things verified.
-
-**Save lifecycle.** Writes already land on the real `TextDocument`, so dirty state is VS Code's own
-and `saveCustomDocument` delegates to `document.save()`; `saveCustomDocumentAs` and
-`revertCustomDocument` are implemented (revert reloads and re-scans).
+**Undo/redo, dirty state and save come from VS Code, not from us.** `CustomTextEditorProvider`
+declares only `resolveCustomTextEditor(document: TextDocument, …)`: it has no `openCustomDocument`, no
+`onDidChangeCustomDocument` and no save/revert hooks — those belong to `CustomEditorProvider`, the
+variant that owns a custom document of its own. Because every write goes through `WorkspaceEdit` on
+the **real `TextDocument`**, the text document's own history and dirty tracking apply: Ctrl+Z and
+Ctrl+Y work with one press per edit, the dirty dot appears, and save is a plain save. There is
+therefore **no invertible `CustomDocumentEditEvent` to build, no `undo()`/`redo()` callbacks, and no
+private history**. An earlier draft of this design specified exactly that machinery; it was removed
+after the API was read, and the corrected statement is recorded in
+`research/spike-results.md` §Spike A. What still deserves a manual check is only the behaviour: one
+press per undo, a dirty dot after an edit, and a save that persists (§14).
 
 **Filter.** Client-side over the rendered tree, matching label, short-name and value. No round-trip to
 the extension host.
@@ -420,9 +421,10 @@ only asserts that the code agrees with itself.
 1. **Live vs command-driven reveal (§10).** Whether a custom editor and the plain text editor can show
    the same resource simultaneously is unverified. Spike this before building anything on top of it;
    R9 is satisfiable with commands alone either way.
-2. **Undo/redo wiring (§9).** The invertible-edit-event contract for custom editors is the most
-   failure-prone part of the design. Verify it in the smallest possible case before adding real
-   write-back on top.
+2. **Undo/redo wiring (§9).** *Settled from the API, not by risk:* `CustomTextEditorProvider` exposes
+   no edit-event hook, so undo/redo/dirty/save are the real `TextDocument`'s own and there is no
+   contract to get wrong. Only the behaviour needs the manual check in Spike A (one press per undo,
+   dirty dot, save persists). Do not reintroduce the invertible-event machinery.
 3. **Scanner edge cases (§5).** `<!DOCTYPE>` internal subsets, CDATA, entity decoding and attribute
    values containing `>` are the likely defect sites. Fixtures exist for them; the scanner's behaviour
    on these must be asserted rather than assumed.

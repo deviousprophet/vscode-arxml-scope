@@ -5,9 +5,11 @@ half of §9 (lifecycle). Read those first; this file records only what this chil
 
 ## 1. Document model
 
-The provider gains a `CustomDocument` per file. It is thin, because writes land on the **real**
-`TextDocument`: the class holds the `uri` and the current model **derived by re-scanning**, and it is
-the object the provider returns from `openCustomDocument` / `resolveCustomTextEditor`.
+There is no custom document class to write. `CustomTextEditorProvider` has no `openCustomDocument`,
+so VS Code hands `resolveCustomTextEditor` the **real `TextDocument`** and that is what every write
+targets. The provider keeps only per-panel state: the current model, **derived by re-scanning**, and
+nothing cached across a change. Re-scanning rather than caching is what keeps a stale range from ever
+being written to the wrong bytes.
 
 The model is never cached across a change. Every write, undo, redo and external edit invalidates it,
 and the next question about a node re-scans. A cached model is the mechanism by which a stale range
@@ -42,26 +44,28 @@ the recomputed region with the escaped text; on success record the edit and fire
 `onDidChangeCustomDocument` with a `CustomDocumentEditEvent`; re-scan and push the new model to the
 webview. Refusals post a `notice` and mutate nothing.
 
-**2.4 Undo and redo do not re-fire.** The `undo()` and `redo()` callbacks apply their replacement and
-return; they must not fire `onDidChangeCustomDocument` again, or the history double-counts. VS Code
-owns the stack; the extension supplies the inverse operation and fires exactly once, when the edit is
-first applied.
+**2.4 Undo and redo are not ours to implement.** `CustomTextEditorProvider` has no
+`onDidChangeCustomDocument` and no `undo()`/`redo()` callbacks, and it must not be given any: the
+writes go through `WorkspaceEdit` onto the real `TextDocument`, so the text document's own history
+applies and one user action is one undo step for free. This replaced the invertible-edit-event design
+that the first draft specified — see the parent's `research/spike-results.md` §Spike A. Do not add a
+private history, and do not convert the provider to `CustomEditorProvider` to get callbacks it does
+not need.
 
 **2.5 Validation before mutation.** The validator is the core child's function, so a refusal costs no
 partial write: either the whole replacement is applied or nothing is. This ordering is what AC6
 measures, and it is the reason validation lives in core and not in the message handler.
 
-**2.6 Lifecycle.**
+**2.6 Lifecycle is the platform's.**
 
-- `saveCustomDocument` → the document is already the real text document, so this delegates to saving
-  it. Dirty state is VS Code's own tracking, which is why D10 chose to edit the `TextDocument` rather
-  than carry an in-memory value.
-- `revertCustomDocument` → reload from disk via the workbench's revert command, then re-scan and push.
-- `saveCustomDocumentAs` → save-as through the workbench and adopt the new `uri`.
-
-Revert and save-as are implemented but flagged for verification with **Spike A**: they depend on
-workbench commands rather than a document API, and that is exactly the kind of assumption a spike
-exists to test.
+There is nothing to implement here. `CustomTextEditorProvider` has no `saveCustomDocument`,
+`saveCustomDocumentAs` or `revertCustomDocument` hook, so the extension does not provide them; save,
+save-as and revert are the ordinary text-document operations, and dirty state is VS Code's own
+tracking. This is the direct consequence of D10's choice to edit the real `TextDocument` rather than
+carry an in-memory value, and it is why the first draft of this section — which described delegating
+those hooks — was wrong and has been removed. Verify the behaviour (§`prd.md` AC5) rather than
+implementing a mechanism: a revert must reload from disk and the view must refresh through the
+re-scan subscription.
 
 **2.7 One edit, one undo step.** A single user action produces a single `WorkspaceEdit` and a single
 event, so Ctrl+Z returns to the previous state in one keystroke, matching any other editor.

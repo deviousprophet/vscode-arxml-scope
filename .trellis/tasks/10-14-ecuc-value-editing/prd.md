@@ -18,16 +18,19 @@ ever touching anything but that value's text.
 - `../10-14-ecuc-model-scanner` complete: `validate.ts` and per-node value ranges exist and are tested.
 - `../10-14-artext-custom-editor` complete: the provider, the message channel and the re-scan
   subscription exist, because every applied edit refreshes the view through them.
-- Parent plan **Spike A** (`../10-14-ecuc-artext-editor/implement.md` §Step 0) has proven the
-  `CustomDocument` undo/redo contract. If it did not, this child does not start: the lifecycle contract
-  cannot be worked around from inside the editor.
+- Parent plan **Spike A** (`../10-14-ecuc-artext-editor/implement.md` §Step 0): its API half is
+  already settled and recorded in `../10-14-ecuc-artext-editor/research/spike-results.md` — there is
+  no custom-document edit-event contract to satisfy, because undo/redo/dirty/save belong to the real
+  `TextDocument`. The behavioural rows (one press per undo, dirty dot, save persists) should be
+  observed before this child is closed out, but they do not gate starting it.
 
 ## Scope
 
-- The `CustomDocument` implementation and its invertible edit events.
-- The two write shapes for a value.
+- The write path: re-scanning to locate the region, applying one `WorkspaceEdit`, and refreshing the
+  view. No custom document class and no edit-event callbacks — `CustomTextEditorProvider` provides no
+  hook for them, and undo/redo/dirty/save are the real `TextDocument`'s own.
 - Validation in front of every write, with no mutation on refusal.
-- The save, save-as and revert lifecycle, and re-scan after every applied change.
+- Re-scan after every applied change, so the view is never stale.
 
 ## Requirements
 

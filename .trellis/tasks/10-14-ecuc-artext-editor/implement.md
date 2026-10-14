@@ -75,19 +75,27 @@ ECUC file.
 
 ## Step 0 — De-risking spikes (parent)
 
-**Status:** not started. Both spikes are still open; they gate Step 3 (A, the `CustomDocument`
-undo/redo contract) and the reveal mechanism of Step 2 (B).
+**Status:** scaffolding written, spikes not yet run. Procedure, the exact steps and the slots to
+record the outcomes are in `research/spike-results.md`; the throwaway probe lives in `src/spikes/` and
+`spike/`. Both spikes need a human in an Extension Development Host (F5) — an agent cannot press
+Ctrl+Z or watch a dirty indicator. They gate Step 3 (A, the `CustomDocument` undo/redo contract) and
+settle the reveal mechanism of Step 2 (B).
 
 Two design risks from `design.md` §15 can invalidate large parts of the plan, so they are settled
 before any child starts. Both are small, throwaway probes on the current scaffold; neither is a
 deliverable and neither creates fixtures or tests that must be kept.
 
-- [ ] **Spike A — custom editor lifecycle.** Register a minimal `CustomTextEditorProvider` for a
-      throwaway `viewType`, render static HTML, and confirm: it does *not* become the default for
-      `.arxml`; `onDidChangeCustomDocument` with a `CustomDocumentEditEvent` makes Ctrl+Z and Ctrl+Y
-      apply `undo()`/`redo()`; the dirty indicator appears; `saveCustomDocument` persists.
-      **Settles `design.md` §9/§15.2.** If the invertible-event contract behaves differently than
-      designed, revise §9 before Step 3 is planned.
+- [ ] **Spike A — custom editor lifecycle.** Scaffolding is written (`spike/`,
+      `src/spikes/spikeProvider.ts`); the procedure and result slots are in
+      `research/spike-results.md`. The API half is already **settled**: `CustomTextEditorProvider`
+      declares only `resolveCustomTextEditor(document: TextDocument, …)` — no `openCustomDocument`,
+      no `onDidChangeCustomDocument`, no save/revert hooks — so undo, redo, dirty state and save are
+      VS Code's own and the invertible-`CustomDocumentEditEvent` machinery this step originally
+      described must **not** be built. What remains is behavioural and needs a human: the probe does
+      not claim `.arxml`; the dirty dot appears after an edit; Ctrl+Z and Ctrl+Y work with **one**
+      press each; Ctrl+S persists; an external edit refreshes the view.
+      **Settles `design.md` §9/§15.2**, both already revised for the API finding. If the behavioural
+      rows disagree with that contract, report it before Step 3.
 - [ ] **Spike B — reveal mechanics.** Determine whether our custom editor and the plain text editor
       can show the same `.arxml` at the same time (second group via *Open With…*), or whether
       `vscode.openWith(uri, 'default', { selection })` necessarily replaces the custom editor.
@@ -151,13 +159,18 @@ Deliverable: the editor surface — the actual product.
 
 Deliverable: editing that cannot damage the file.
 
-- [ ] `src/editor/ecucDocument.ts` — `CustomDocument` with invertible `CustomDocumentEditEvent`s,
-      wired as proven by Spike A (R12).
+- [ ] `src/editor/ecucEdit.ts` — the edit record and `applyEdit`: recompute the region by re-scan,
+      replace via `WorkspaceEdit` on the real `TextDocument`, re-scan, push the model (R12). **Do not
+      build `CustomDocumentEditEvent` machinery** — `CustomTextEditorProvider` has no such hook, and
+      undo/redo/dirty/save are the text document's own (parent `design.md` §9,
+      `research/spike-results.md` §Spike A).
 - [ ] Write shapes 1 and 2 from `design.md` §8 — text-content replacement, and whole-element
       replacement for an empty or self-closing `<VALUE>`.
 - [ ] Validation before every write, surfaced as a message, with no mutation on refusal (R13).
 - [ ] Re-scan and refresh the view after every applied edit, including undo/redo.
-- [ ] `saveCustomDocument`, `saveCustomDocumentAs`, `revertCustomDocument`.
+- [ ] Verify the save, revert and save-as behaviour rather than implementing it (R12, AC5): they are
+      the ordinary text-document operations and dirty state is VS Code's own. If a revert does not
+      refresh the view, the fault is in the re-scan subscription, not in a missing hook.
 - [ ] `src/test/editor/*.test.ts` for AC7, AC8, AC9.
 
 **Done when:** AC7 (byte comparison), AC8 and AC9 pass; suite and lint green.

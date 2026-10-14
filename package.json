@@ -16,6 +16,21 @@
       {
         "command": "vscode-arxml-scope.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "vscode-arxml-scope.spike.open",
+        "title": "Spike: Open lifecycle probe editor"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "vscode-arxml-scope.spikeEditor",
+        "displayName": "Spike lifecycle probe (throwaway)",
+        "selector": [
+          {
+            "filenamePattern": "*.spike.arxml"
+          }
+        ]
       }
     ]
   },
