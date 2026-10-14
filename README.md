@@ -22,7 +22,7 @@ Everything is read-only except the ECUC editor, which writes only the `<VALUE>` 
 
 1. Install the extension.
 2. Open a folder containing `.arxml` files.
-3. Open an ECUC-Values `.arxml` with **ARXML Scope: Open ECUC Configuration** from the command palette, from the Explorer context menu, or through *Open With…*. A plain open uses the text editor.
+3. Open an ECUC-Values `.arxml` with **ARXML Scope: Open with ECUC Editor** from the command palette, from the Explorer context menu, or through *Open With…*. A plain open uses the text editor.
 
 ## Requirements
 

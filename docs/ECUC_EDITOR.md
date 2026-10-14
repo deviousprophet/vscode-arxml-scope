@@ -6,7 +6,7 @@ parameter values in place, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
-> value editing) are in place with 93 passing tests. Two things are deliberately not implemented and
+> value editing) are in place with 96 passing tests. Two things are deliberately not implemented and
 > are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
 > resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
 > `design.md`, `implement.md`) with the reference analysis in its
@@ -29,7 +29,7 @@ displays, so nothing has to be guessed back from a rendering.
 The editor never claims the default for `.arxml`; a plain open still uses the text editor. That is
 enforced by `priority: "option"` in the manifest — the default would claim every `.arxml`.
 
-- **Command palette:** `ARXML Scope: Open ECUC Configuration`.
+- **Command palette:** `ARXML Scope: Open with ECUC Editor`.
 - **Explorer context menu** on an `.arxml` file, and the **editor context menu** when an `.arxml` is
   open in the text editor.
 - **VS Code's own *Open With…*** lists the editor as well.

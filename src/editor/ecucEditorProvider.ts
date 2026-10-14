@@ -99,16 +99,32 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 
 		// The single refresh path: any change to this document — an undo, an external
 		// edit, or the sibling child's write — re-scans and swaps the tree, so no range
-		// on screen can outlive the text it points at.
+		// on screen can outlive the text it points at. The same push serves a settings
+		// change, which re-renders the model that is already scanned (parent AC3).
+		const push = (): void => {
+			const current = this.selections.get(key);
+			const options: RenderOptions = { ...editorSettings(), selectedId: current };
+			void panel.webview.postMessage({ type: 'model', tree: renderTree(model, options), selectedId: current });
+		};
+
 		disposables.push(
 			vscode.workspace.onDidChangeTextDocument((event) => {
 				if (event.document.uri.toString() !== key) {
 					return;
 				}
 				model = scanEcucValues(document.getText());
-				const current = this.selections.get(key);
-				const options: RenderOptions = { ...editorSettings(), selectedId: current };
-				void panel.webview.postMessage({ type: 'model', tree: renderTree(model, options), selectedId: current });
+				push();
+			})
+		);
+
+		// `arxmlScope.ecuc.editor.sort` / `sortExcept` are read at every render, but
+		// nothing re-renders an open panel on its own, so without this the setting would
+		// only take effect after the document next changed or the editor was reopened.
+		disposables.push(
+			vscode.workspace.onDidChangeConfiguration((event) => {
+				if (event.affectsConfiguration('arxmlScope.ecuc.editor')) {
+					push();
+				}
 			})
 		);
 

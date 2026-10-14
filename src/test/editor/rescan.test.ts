@@ -82,14 +82,34 @@ async function withScratchDocument(
 	name: string,
 	run: (uri: vscode.Uri, document: vscode.TextDocument) => Promise<void>
 ): Promise<void> {
+	await withScratchText(name, fixtureText('editor/navigation.arxml'), run);
+}
+
+/** Opens a scratch file holding `text`, so a test can control the declaration order. */
+async function withScratchText(
+	name: string,
+	text: string,
+	run: (uri: vscode.Uri, document: vscode.TextDocument) => Promise<void>
+): Promise<void> {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arxml-scope-rescan-'));
 	const uri = vscode.Uri.file(path.join(dir, name));
-	fs.writeFileSync(uri.fsPath, fixtureText('editor/navigation.arxml'), 'utf8');
+	fs.writeFileSync(uri.fsPath, text, 'utf8');
 	try {
 		await run(uri, await vscode.workspace.openTextDocument(uri));
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
+}
+
+async function waitFor(what: string, predicate: () => boolean, timeoutMs = 3000): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (predicate()) {
+			return;
+		}
+		await sleep(25);
+	}
+	assert.fail(`timed out waiting for ${what}`);
 }
 
 /** Replaces a parameter's `<VALUE>` text in memory; never saved. */
@@ -241,6 +261,28 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 			const tree = refreshed.tree ?? '';
 			assert.ok(tree.includes(`data-node-id="${id}"`), 'the node is still in the tree');
 			assert.strictEqual(tree.split('data-selected="true"').length - 1, 1, 'exactly one node is marked');
+		});
+	});
+
+	test('AC3: toggling the sort setting re-renders an open panel', async () => {
+		await withScratchText('settings.arxml', ecucText(['ContZ', 'ContA']), async (_uri, document) => {
+			const provider = new EcucEditorProvider();
+			const stub = stubPanel();
+			provider.resolveCustomTextEditor(document, stub.panel, new vscode.CancellationTokenSource().token);
+
+			const sorted = stub.raw.webview.html;
+			assert.ok(sorted.indexOf('ContA') < sorted.indexOf('ContZ'), 'the default is `sort all`');
+			assert.strictEqual(stub.messages.length, 0, 'nothing is pushed before a change');
+
+			const config = vscode.workspace.getConfiguration('arxmlScope.ecuc.editor');
+			try {
+				await config.update('sort', 'declaration', vscode.ConfigurationTarget.Global);
+				await waitFor('the settings re-render', () => stub.messages.some((message) => message.type === 'model'));
+				const tree = stub.messages.filter((message) => message.type === 'model').at(-1)!.tree ?? '';
+				assert.ok(tree.indexOf('ContZ') < tree.indexOf('ContA'), 'declaration order is rendered now');
+			} finally {
+				await config.update('sort', undefined, vscode.ConfigurationTarget.Global);
+			}
 		});
 	});
 

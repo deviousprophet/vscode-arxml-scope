@@ -21,7 +21,8 @@
   "children": [
     "10-14-ecuc-model-scanner",
     "10-14-artext-custom-editor",
-    "10-14-ecuc-value-editing"
+    "10-14-ecuc-value-editing",
+    "10-14-ecuc-editor-ux"
   ],
   "parent": null,
   "relatedFiles": [],

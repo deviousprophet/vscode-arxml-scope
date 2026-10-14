@@ -13,7 +13,7 @@ First release with the ECUC editor. The rest of the extension's feature list is 
 - **ECUC editor** — a custom editor for ECUC-Values `.arxml` files that renders the file as a
   keyboard-navigable document tree: the same information the legacy `arxml2artext` tool's ARTEXT output
   carried, read straight from the arxml instead of through a generated text file.
-  Opt-in through `ARXML Scope: Open ECUC Configuration`, the Explorer and editor context menus, or
+  Opt-in through `ARXML Scope: Open with ECUC Editor`, the Explorer and editor context menus, or
   VS Code's own *Open With…*. A plain open still uses the text editor.
 - **Value editing** — the text content of a parameter's `<VALUE>` is edited in place. Validation runs
   before every write, so a value that is invalid for its parameter kind, or that XML cannot represent,
