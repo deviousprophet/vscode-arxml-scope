@@ -103,16 +103,19 @@ function touchesCdata(text: string, range: Range): boolean {
  *
  * For an empty or self-closing value the scanner already points at the element, so the
  * outward expansion is only needed once such a value has been given text — the case
- * design §2.2 describes. The search for the closing `>` starts at the range's last
- * character, so a raw `>` inside the text (which XML allows) cannot be mistaken for it.
+ * design §2.2 describes. The closing tag's `>` is found from the `</` that follows the
+ * text, never from the text's last character: a raw `>` is legal unescaped in XML text,
+ * so a value ending in one (`<VALUE>a></VALUE>`) would otherwise have its own `>`
+ * mistaken for the closing tag's and the span would stop short of `</VALUE>`.
  */
 function elementSpan(text: string, valueRange: Range): Range {
 	if (text[valueRange.start] === '<') {
 		return valueRange;
 	}
+	const closeTag = text.indexOf('</', valueRange.end);
 	return {
 		start: text.lastIndexOf('<', valueRange.start),
-		end: text.indexOf('>', valueRange.end - 1) + 1,
+		end: text.indexOf('>', closeTag < 0 ? valueRange.end : closeTag) + 1,
 	};
 }
 

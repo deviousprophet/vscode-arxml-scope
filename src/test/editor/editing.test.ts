@@ -21,7 +21,7 @@ import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { LineIndex } from '../../core/text/offsets';
 import { EcucEditorProvider } from '../../editor/ecucEditorProvider';
-import { applyEdit, buildEdit, parameterFor, regionOf } from '../../editor/ecucEdit';
+import { applyEdit, buildEdit, parameterFor, regionOf, wrapElement } from '../../editor/ecucEdit';
 import { buildNodeIndex } from '../../editor/nodeId';
 import { renderHtml, renderTree } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
@@ -123,6 +123,24 @@ function parameterId(text: string, name: string): string {
 		}
 	}
 	throw new Error(`no parameter named ${name}`);
+}
+
+/**
+ * The id the **rendered tree** gives the parameter labelled `name`.
+ *
+ * This is the widget's own source of truth (`item.dataset.nodeId`), so a test that uses
+ * it exercises the contract the two children share: the id rendered after a re-scan is
+ * the id the write path resolves. Deriving it with `parameterId` instead would let the
+ * two sides disagree without any test noticing.
+ */
+function nodeIdInTree(tree: string, name: string): string | undefined {
+	for (const item of tree.split('<div class="node"').slice(1)) {
+		const label = /<span class="label">([^<]*)<\/span>/.exec(item)?.[1];
+		if (label === name) {
+			return /data-node-id="([^"]*)"/.exec(item)?.[1];
+		}
+	}
+	return undefined;
 }
 
 function notices(stub: StubPanel): StubMessage[] {
@@ -574,5 +592,47 @@ suite('editor value editing (AC1–AC9)', () => {
 			'element'
 		)!;
 		assert.strictEqual(grown.slice(grownRegion.range.start, grownRegion.range.end), '<VALUE>42</VALUE>');
+	});
+
+	test('§2.2: the element span of a value ending in a raw `>` still reaches `</VALUE>`', () => {
+		// `>` is legal unescaped in XML text, so `<VALUE>a></VALUE>` is well formed and
+		// the value's own `>` is the last character of the text region. An element span
+		// found from that character stops short of the closing tag, and a write would
+		// leave a stray `</VALUE>` behind.
+		const text = fixtureText('editing/numeric.arxml').replace('<VALUE>7</VALUE>', '<VALUE>a></VALUE>');
+		const model = scanEcucValues(text);
+		const parameter = parameterFor(model, parameterId(text, 'Count'))!;
+		assert.strictEqual(parameter.displayValue, 'a>', 'the fixture really ends the text with `>`');
+
+		const described = regionOf(parameter, text, 'element')!;
+		assert.strictEqual(text.slice(described.range.start, described.range.end), '<VALUE>a></VALUE>');
+		assert.strictEqual(wrapElement(described.oldText, '42'), '<VALUE>42</VALUE>');
+	});
+
+	test('§2.2: the id in the re-scanned tree is the id the next edit resolves', async () => {
+		// The seam the editing child rests on: after a change — an edit, an undo, an
+		// external write — the tree the user clicks is a re-scan, so the id in it must be
+		// the id `buildEdit` resolves. The id is taken from the rendered tree, exactly as
+		// the widget takes it from `data-node-id`, and never re-derived by the test.
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const original = document.getText();
+			const { stub } = open(document);
+			await vscode.window.showTextDocument(document);
+
+			await stub.send({ type: 'edit', nodeId: parameterId(original, 'Count'), value: '42' });
+			await waitFor('the first edit', () => document.getText().includes('<VALUE>42</VALUE>'));
+			await vscode.commands.executeCommand('undo');
+			await waitFor('the pushed undo', () => (lastModel(stub).tree ?? '').includes('= 7'));
+			assert.strictEqual(document.getText(), original, 'one press restores the bytes');
+
+			const id = nodeIdInTree(lastModel(stub).tree ?? '', 'Count');
+			assert.ok(id, 'the re-scanned tree still carries the parameter');
+			assert.strictEqual(id, parameterId(original, 'Count'), 'and it is the id the write path resolves');
+
+			await stub.send({ type: 'edit', nodeId: id!, value: '9' });
+			await waitFor('the second edit', () => document.getText().includes('<VALUE>9</VALUE>'));
+			assert.strictEqual(document.getText(), original.replace('<VALUE>7</VALUE>', '<VALUE>9</VALUE>'));
+			await waitFor('the pushed second edit', () => (lastModel(stub).tree ?? '').includes('= 9'));
+		});
 	});
 });
