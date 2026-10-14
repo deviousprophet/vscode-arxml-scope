@@ -113,22 +113,51 @@ function elementSpan(text: string, valueRange: Range): Range {
 		return valueRange;
 	}
 	const closeTag = text.indexOf('</', valueRange.end);
+	const end = closeTag < 0 ? text.indexOf('>', valueRange.end) + 1 : tagEnd(text, closeTag);
 	return {
 		start: text.lastIndexOf('<', valueRange.start),
-		end: text.indexOf('>', closeTag < 0 ? valueRange.end : closeTag) + 1,
+		// `-1` only from a tag with no `>` at all (malformed input): keep the text's own end
+		// rather than building a range that ends before it starts.
+		end: end < 0 ? valueRange.end : end,
 	};
 }
 
 /**
+ * Offset just past the `>` that ends the tag starting at `start`, or `-1` when there is
+ * none.
+ *
+ * Quote-aware, because `>` is legal unescaped inside an attribute value: the first `>`
+ * is not necessarily the end of the tag. The scanner's lexer is quote-aware for the same
+ * reason, so a writer that is not would rewrite the element without its closing quote and
+ * every attribute after it — a silent corruption of a well-formed input.
+ */
+function tagEnd(text: string, start: number): number {
+	let quote = '';
+	for (let i = start + 1; i < text.length; i++) {
+		const c = text[i];
+		if (quote !== '') {
+			if (c === quote) {
+				quote = '';
+			}
+		} else if (c === '"' || c === "'") {
+			quote = c;
+		} else if (c === '>') {
+			return i + 1;
+		}
+	}
+	return -1;
+}
+
+/**
  * The exact string that will occupy an `element` region: `<VALUE>` + escaped + `</VALUE>`.
- * The element's own open and close tags are kept verbatim, so a namespace prefix or a
- * space before the slash survives (parent design §8, shape 2).
+ * The element's own open and close tags are kept verbatim, so a namespace prefix, an
+ * attribute or a space before the slash survives (parent design §8, shape 2).
  */
 export function wrapElement(slice: string, escaped: string): string {
-	const gt = slice.indexOf('>');
-	const open = slice.slice(0, gt + 1).replace(/[\s/]+>$/, '>');
+	const gt = tagEnd(slice, 0);
+	const open = (gt < 0 ? slice : slice.slice(0, gt)).replace(/[\s/]+>$/, '>');
 	const lt = slice.lastIndexOf('<');
-	const closing = lt > gt && slice[lt + 1] === '/' ? slice.slice(lt) : `</${tagName(open)}>`;
+	const closing = gt >= 0 && lt >= gt && slice[lt + 1] === '/' ? slice.slice(lt) : `</${tagName(open)}>`;
 	return open + escaped + closing;
 }
 

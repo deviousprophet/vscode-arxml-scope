@@ -609,6 +609,24 @@ suite('editor value editing (AC1–AC9)', () => {
 		assert.strictEqual(wrapElement(described.oldText, '42'), '<VALUE>42</VALUE>');
 	});
 
+	test('§2.2: a `>` inside an attribute does not truncate the element being wrapped', () => {
+		// `>` is legal unescaped in an attribute value, so the first `>` of the slice is not
+		// necessarily the end of the open tag. The scanner's lexer is quote-aware for that
+		// reason (parent design §5); a wrapper that is not rewrites the element without its
+		// closing quote and the attributes after it, which is not well-formed XML. The
+		// element's own tags are kept verbatim, so the attribute survives the write.
+		const text = fixtureText('editing/self-closing.arxml').replace('<VALUE/>', '<VALUE DEST="a>b"/>');
+		const model = scanEcucValues(text);
+		const id = parameterId(text, 'Count');
+		const described = regionOf(parameterFor(model, id)!, text, 'element')!;
+		assert.strictEqual(described.oldText, '<VALUE DEST="a>b"/>', 'the whole element, verbatim');
+		assert.strictEqual(wrapElement(described.oldText, '42'), '<VALUE DEST="a>b">42</VALUE>');
+
+		const plan = buildEdit(model, text, id, '42');
+		assert.ok(plan.ok);
+		assert.strictEqual(plan.record.newText, '<VALUE DEST="a>b">42</VALUE>');
+	});
+
 	test('§2.2: the id in the re-scanned tree is the id the next edit resolves', async () => {
 		// The seam the editing child rests on: after a change — an edit, an undo, an
 		// external write — the tree the user clicks is a re-scan, so the id in it must be

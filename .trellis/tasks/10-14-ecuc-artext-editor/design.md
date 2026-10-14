@@ -60,8 +60,12 @@ src/
       offsets.ts             # LineIndex: char offset -> Position
   editor/
     ecucEditorProvider.ts    # CustomTextEditorProvider
-    ecucDocument.ts          # CustomDocument: edits, invertible events, save/revert
     renderHtml.ts            # webview HTML/CSS/JS, inlined
+    navigation.ts            # node <-> source range, reference following
+    nodeId.ts                # path-based node ids, stable across a re-scan
+    filter.ts                # filter matching, shared by both halves
+    ecucEdit.ts              # the edit record, region resolution, applyEdit
+    ecucValueEditor.ts       # the in-tree value widget (webview half)
   commands.ts                # open + reveal commands
   extension.ts               # activation wiring
   test/
@@ -259,10 +263,10 @@ its navigation (D9). This is the fix, not a port.
 
 ## 8. Write-back and validation
 
-**Write path.** The webview posts `{ type: 'edit', nodeId, value }`; the provider validates, applies
-`WorkspaceEdit.replace(uri, range, escaped)` to the `TextDocument`, and fires an invertible edit event
-(§9). The `<VALUE>`/`</VALUE>` tags, surrounding whitespace, indentation and every other byte of the
-file stay untouched (R11, AC7).
+**Write path.** The webview posts `{ type: 'edit', nodeId, value }`; the provider validates and applies
+one `WorkspaceEdit.replace(uri, range, escaped)` to the `TextDocument`. There is no edit event to fire:
+undo, redo, dirty state and save are the real `TextDocument`'s own (§9). The `<VALUE>`/`</VALUE>` tags,
+surrounding whitespace, indentation and every other byte of the file stay untouched (R11, AC7).
 
 Two write shapes, because an ECUC value can be written in two ways:
 
@@ -301,7 +305,8 @@ editor is reachable through VS Code's own *Open With…*, which is the explicit 
    default editor rather than rendering an empty shell.
 2. `scanEcucValues(document.getText())` once, and build a `LineIndex`.
 3. Render inlined HTML (CSS + JS + `nonce` + CSP meta) from the model.
-4. `webview.onDidReceiveMessage` handles `ready`, `edit`, `reveal` and `filter`.
+4. `webview.onDidReceiveMessage` handles `edit`, `reveal`, `follow` and `select`; the initial model is
+   already in the HTML, so there is no `ready` round-trip.
 5. Subscribe to `workspace.onDidChangeTextDocument` for this document and re-scan, so undo/redo and
    external edits both refresh the view.
 6. Dispose the listener and handle `panel.onDidDispose`.

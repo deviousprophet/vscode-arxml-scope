@@ -189,7 +189,7 @@ Deliverable: editing that cannot damage the file.
 ## Step 4 — Parent integration review
 
 - [x] Walk every cross-child acceptance criterion in `prd.md` and record its evidence. — see
-      **Step 4 report** at the end of this file.
+      **Step 4 report** and **Step 4 report — second pass** at the end of this file.
 - [x] Confirm no `vscode` import exists under `src/core/` (D16). — `git grep vscode -- src/core` finds
       one doc comment in `model.ts` and nothing else.
 - [x] Confirm no derived artefacts are written anywhere near a user's file (AC10). — no filesystem
@@ -197,12 +197,12 @@ Deliverable: editing that cannot damage the file.
 - [x] Confirm no real customer file is tracked, and that `src/test/data/` is ignored (AC11). — every
       tracked `.arxml` is a synthetic fixture; the vendored reference has no `bin/`, `plugins/` or
       `license.dat`.
-- [ ] Update `CHANGELOG.md` and the `README.md` feature list. — **not done here**; owned by the
-      session, which has already written the 0.1.0 notes. Drift found is reported in the Step 4 report
-      rather than fixed.
-- [ ] Write `docs/ECUC_EDITOR.md` if it has drifted from what was built (D12). — **not done here**;
-      the drift found is reported in the Step 4 report. The document otherwise describes what was
-      built.
+- [x] Update `CHANGELOG.md` and the `README.md` feature list. — done by the session in `eb50a33`,
+      which also corrected the command name in all three documents. One line still needs a bump when
+      this review's changes land: `docs/ECUC_EDITOR.md:9` says "96 passing tests", the suite is 97.
+- [x] Write `docs/ECUC_EDITOR.md` if it has drifted from what was built (D12). — the document
+      describes what was built; the drift the first pass reported was fixed in `eb50a33`. See the
+      second-pass section for what remains true about it.
 - [ ] Archive the children. — **not done here**: `task.py archive` would move
       `10-14-ecuc-model-scanner/` and break the relative references the sibling artifacts make to it.
       Do it once the sibling `10-14-ecuc-editor-ux` (added to this parent mid-review) has landed.
@@ -423,3 +423,178 @@ parameter's `= value` starts an edit instead of revealing) is part of the same r
 - **Large-file performance and large-tree rendering** (`design.md` §15.4–15.5) remain unmeasured.
 - **Cross-file reference following** is out of scope by design (D7/F2), so AC6's cross-file case is
   only the same-file absent case.
+
+## Step 4 report — second pass
+
+Re-run of the parent integration review. Two things about the dispatch were wrong and are worth
+recording: the tree was **not** clean (the session had already committed `dbfc727` and then `eb50a33`
+while the first pass ran) and the first pass did **not** record nothing — its report is the section
+above, committed in `eb50a33`. So this pass reviews `eb50a33` plus two uncommitted files, not
+`dbfc727`.
+
+`eb50a33` contains three things beyond the `dbfc727` span fix: the first pass's report above, the
+README/CHANGELOG/`docs/ECUC_EDITOR.md` correction so all three now say `ARXML Scope: Open with ECUC
+Editor` (matching `package.json:26`), and the `onDidChangeConfiguration` re-push that closes the first
+pass's finding 2. A fourth child, `10-14-ecuc-editor-ux`, was added to this parent mid-review; it is
+not covered here and was not touched.
+
+Uncommitted at the end of this pass:
+
+- `src/editor/ecucEdit.ts` — the quote-aware tag end of finding 8.
+- `src/test/editor/editing.test.ts` — the regression test for it.
+
+Everything else reviewed here is committed and unchanged by this pass.
+
+### Evidence this pass observed itself
+
+```
+npm run check-types   -> exit 0
+npm run lint          -> exit 0
+npm test              -> exit 0, "97 passing" (96 at eb50a33 + 1 added below)
+git grep -n vscode -- src/core
+  -> src/core/ecuc/model.ts:6  (a doc comment; no import)
+git grep -nE "writeFile|createFile|mkdir|appendFile|unlink|fs\." -- src ":(exclude)src/test"
+  -> no match
+git grep -nE "WorkspaceEdit|applyEdit" -- src ":(exclude)src/test"
+  -> src/editor/ecucEdit.ts:236,242 (the only WorkspaceEdit), src/editor/ecucEditorProvider.ts:22,210,229
+     (the call site and comments), src/spikes/spikeProvider.ts (throwaway)
+git ls-files -> 226 tracked files, 23 tracked .arxml, every one a synthetic fixture or the labelled
+     spike/sample.spike.arxml
+git check-ignore -v src/test/data/real.arxml -> .gitignore:6:src/test/data/
+reference/legacy-arxml2artext/ -> Arxml2Artext.cmd, Arxml2Artext.mm, README.md only
+```
+
+**Carried over, not re-observed by this pass.** The first pass's three probes over the compiled
+`out/` (the 17-fixture/30-parameter seam probe, the 9-model expected-model probe, the element-span
+probe) were scratch programs that were never committed and cannot be re-run from the tree. Their
+claims are consistent with what I read, but the evidence *in this pass* for those properties is the
+committed tests and my own reading, not a re-run. Where this table cites a probe, it means the first
+pass's evidence, quoted because it is still the only evidence for that property.
+
+**Byte-diff of the `.expected` pairs — mine, and it corrects the first pass's wording.** Common-prefix
+/ common-suffix reconstruction (`src == prefix + expected-mid + suffix`) holds for all four pairs, so
+each expected file is its input with the value spans replaced and nothing else. `escaping` is one span
+(`&amp;plain` → `a&amp;b&lt;c&gt;d`), `numeric` one (`7` → `42`), `textual` one (`bee` → `hello
+world`) — but **`self-closing` is two**, not one: `<VALUE/>` → `<VALUE>42</VALUE>` *and*
+`<VALUE></VALUE>` → `<VALUE>named</VALUE>`, i.e. both element-shape writes in one file. `crlf.arxml`
+has 31 `\r\n` and 0 bare LFs. There is no `crlf.expected.arxml`; AC7 covers it by counting line
+endings instead.
+
+### Parent acceptance criteria — this pass's verdicts
+
+| AC | Verdict | Evidence (this pass) |
+|---|---|---|
+| AC1 | **Met** | `scanner.test.ts` `AC1: every fixture matches its committed expected model` (9 models). `deep.json` nests a container 6 levels (`R4` wants 5+); `suffixes.json` carries a `syscond`, two post-build variants and a labelled plus an unlabelled annotation across module/container/parameter. My byte-diff above confirms the 4 editing `.expected` files are their inputs with only the value spans changed. |
+| AC2 | **Met** | `detect.isEcucValues` returns on the path check first; `scanner.test.ts` `AC3: detection is namespace-tolerant and gate-ordered` asserts `isEcucValues(basicText, 'basic.xml') === false`, so the content is not consulted. Editor surface: `activation.test.ts` AC2 (a non-ECUC `.arxml` and a non-`.arxml` each explain and leave the text editor). |
+| AC3 | **Met** | `order.test.ts` (sort all, exception declaration order, prefix case, no interleaving) and `rescan.test.ts` §2.2 ×3 prove the ordering functions are pure, so ids do not move with the setting. Setting → render is the listener at `ecucEditorProvider.ts:123-129`, asserted by `rescan.test.ts:267` `AC3: toggling the sort setting re-renders an open panel`, which switches the pushed tree from sorted to declaration order and restores the setting in a `finally`. |
+| AC4 | **Met** | `activation.test.ts` AC3 uses `vscode.open` (the normal resolution path) and asserts `TabInputText`, no custom view, active text editor; the manifest test asserts `priority: "option"`, empty `activationEvents` and no `workbench.editorAssociations` default. |
+| AC5 | **Met** | `reveal.test.ts`: editor → source for a parameter, a container and a reference (the selected range is the node's own range); source → editor for an offset inside a value (→ its parameter) and on a module/container tag (→ that element). The nested-container and reference-*offset* cases of source → editor ride on the generic `innermostNodeIdAt` mapping rather than a direct assertion — unchanged from the first pass, still acceptable. |
+| AC6 | **Met** | `references.test.ts`: a same-file target is selected through the command; an absent path and an ambiguous suffix each produce a notice and no navigation, nothing thrown. |
+| AC7 | **Met** | `editing.test.ts` AC1/AC2/AC3/AC7 byte-compare to `.expected` files (numeric, textual, self-closing, escaping, and a CRLF file with every `\r\n` counted). My own byte-diff above is the independent half. |
+| AC8 | **Met, partly manual** | `editing.test.ts` AC4 (one `undo` restores the original bytes; one `redo` re-applies them) and AC5 (`isDirty` false→true→false, save writes the expected bytes, `workbench.action.files.revert` reloads and re-renders). The dirty *indicator* is a UI artefact, so `isDirty` stands in; Spike A rows A3–A6 are still unobserved. |
+| AC9 | **Met** | `editing.test.ts` AC6 ×4 refusals — invalid numerical value, XML-illegal character, CDATA-backed value, region whose bytes moved — each asserting the notice text, the document text, the on-disk bytes and `isDirty`. |
+| AC10 | **Met** | No filesystem write API anywhere in `src/**` outside tests (my grep); the only write is the one `WorkspaceEdit` at `ecucEdit.ts:236-242`. `activation.test.ts` AC9 and `editing.test.ts` AC9 snapshot fixture directories across a full flow. No `.artext_cache`, no lock file, no hashing. |
+| AC11 | **Met** | 226 tracked files; 23 tracked `.arxml`, all synthetic fixtures or the labelled `spike/sample.spike.arxml`; `git check-ignore -v src/test/data/real.arxml` → `.gitignore:6:src/test/data/`; `reference/legacy-arxml2artext/` holds only `Arxml2Artext.cmd`, `Arxml2Artext.mm` and `README.md`, and `.gitattributes` pins those `-text`. |
+| AC12 | **Met** | `npm test` 97 passing / 0 failing; `npm run check-types` and `npm run lint` clean. |
+
+### Integration seams — this pass
+
+- **`nodeId` stability across the write path — holds.** Ids come from `containerPath` + `SHORT-NAME` +
+  a per-owner declaration-order ordinal, built from the **raw** model, never from the display-ordered
+  view; the ordering functions are pure (`rescan.test.ts` §2.2 ×3). The seam no child test reached —
+  take the id out of the **re-scanned** tree, exactly as the widget takes it from `data-node-id` — is
+  `editing.test.ts` §2.2 *the id in the re-scanned tree is the id the next edit resolves*.
+- **`valueRange` / verbatim-slice semantics — sound.** `scanner.ts:476-479`: text present → the
+  *trimmed inner text* span; empty or self-closing → the *whole element* span (`textRange(entry) ??
+  entry.rec?.range`). That is what the byte rule `text[valueRange.start] === '<'` and the two write
+  shapes depend on. A raw `<` cannot appear in XML text outside CDATA, so the discriminator cannot
+  misfire, and the one case where the bytes *do* look like an element (`<![CDATA[<b>]]>`) is refused by
+  `touchesCdata`. The empty-value half of the contract lives in a scanner code comment rather than in
+  `design.md` §4 (which says only "text content inside `<VALUE>`") — a documentation gap, not a code
+  one. My byte-diff of `self-closing` is the fixture-level confirmation that both element-shape writes
+  are what the tests claim.
+- **One validator, and it is the core one — confirmed.** `buildEdit` calls
+  `core/ecuc/validate.ts:validateValue` (`ecucEdit.ts:190`) and the provider never writes without a
+  plan from `buildEdit` (`ecucEditorProvider.ts:229`). The webview carries only `data-value` and posts
+  the typed string, so there is no second, weaker check to drift from the core one.
+- **One push per change, no double push — confirmed.** `rescan.test.ts` §1.5 counts the platform's own
+  `onDidChangeTextDocument` events for the document and asserts `stub.messages.length === events`, so a
+  second subscription would fail it. The write handler deliberately does not push
+  (`ecucEditorProvider.ts:210-214`); the settings listener added in `eb50a33` fires only on a
+  configuration change.
+- **End-to-end chain — already covered, so not duplicated.** `editing.test.ts` AC8 is the chain:
+  `resolveCustomTextEditor` renders → the widget's `{ type: 'edit', nodeId, value }` reaches the
+  provider's handler → the write lands → the subscription re-scans → the pushed tree is asserted equal
+  to a fresh `renderTree` of the document; AC1 on the same fixture asserts the document text and the
+  on-disk bytes. I did not add a second E2E test.
+
+### Findings
+
+**8. Medium — the writer was not quote-aware, so a `>` inside an attribute value truncated the element
+being wrapped. FIXED (uncommitted).**
+`elementSpan` found the closing tag's `>` from the first `>` after the text, and `wrapElement` took the
+open tag as everything up to the first `>` of the slice. `>` is legal unescaped inside an attribute
+value, so for a self-closing `<VALUE DEST="a>b"/>` the open tag was cut at `a>`, the closing tag was
+then derived from that truncated open string, and the write produced `<VALUE DEST="a>42</VALUE>` —
+dropping the closing quote and `b`, i.e. not well-formed XML. This is the same defect class as
+`dbfc727` (a raw `>` inside the *value*) one level out: the scanner's lexer is quote-aware for exactly
+this reason (`design.md` §5) and the writer was not. Fixed with one helper, `tagEnd(text, start)`
+(quote-aware; returns the offset just past the tag's `>` or `-1`), used by both `elementSpan` and
+`wrapElement`, plus a `-1` guard so malformed input cannot build an inverted range. Regression test
+`editing.test.ts` §2.2 *a `>` inside an attribute does not truncate the element being wrapped* —
+mutation-proven: with the old `wrapElement` restored it fails (`AssertionError` at
+`out/test/editor/editing.test.js:532`); restored, the suite passes.
+
+Reachability, honestly: unlike finding 1, this one **is** reachable through the shipped gesture. A
+parameter whose `<VALUE …/>` is self-closing or `<VALUE …></VALUE>` with no text has `valueRange` = the
+whole element, so `buildEdit` picks the `element` shape and calls `wrapElement` on the element bytes
+(`editing.test.ts` AC3's `self-closing` fixture is exactly that path). The trigger is only an
+*attribute containing `>`* on that element — legal XML, unusual for AUTOSAR `<VALUE>`, and in no
+fixture — so the exposure is narrow, but it is not latent the way finding 1 was.
+
+**Corrections to the first pass's findings.** Finding 4 (doc drift) is now **partly resolved**: the
+command-title drift is gone (`README.md`, `docs/ECUC_EDITOR.md`, `CHANGELOG.md` and `package.json:26`
+all say `ARXML Scope: Open with ECUC Editor`). Two items remain, both report-only:
+`docs/ECUC_EDITOR.md:9` still says "96 passing tests" (97 now — a one-line bump best folded into the
+same commit as finding 8); and the three `design.md` drifts stand — §3's file list still names
+`editor/ecucDocument.ts` (line 63), §8 still says the write "fires an invertible edit event" (line
+263), and §9 step 4 still lists `ready` and `filter` messages (line 304). All three contradict what
+both children built and what `ecucEdit.ts:9-12` documents.
+
+Findings 1–7 of the first pass were re-checked and stand as written: 1 fixed by `dbfc727`; 2 fixed by
+`eb50a33`; 3 (sibling containers with one `SHORT-NAME` collide on `container:<path>/<shortName>`),
+5 (throwaway spike provider still registered, `customEditors` entry with no `priority`), 6
+(`commands.ts` reads the document before gating) and 7 (a click reveals the source and swaps the editor;
+owned by `10-14-ecuc-editor-ux`) are all still as described. None was re-opened.
+
+### Still unverified, and why
+
+- **Spike A rows A1–A8 and all of Spike B.** Need a human in a running Extension Development Host
+  (Ctrl+Z, the dirty dot, *Open With…* in a second group). `spike/` and `src/spikes/spikeProvider.ts`
+  are still present and live for `*.spike.arxml`, and `research/spike-results.md` §Outcomes still says
+  "not yet observed". Spike A's API half is settled and is what the design records:
+  `CustomTextEditorProvider` has no edit-event hook, so no `CustomDocument` machinery exists.
+- **The live webview's DOM behaviour.** `@vscode/test-electron` exposes no webview DOM, so keyboard
+  traversal, the client-side filter pass and the click-to-edit gesture are asserted on the generated
+  HTML/script string, not by driving a webview.
+- **The provenance of the expected models' *content*.** My byte-diff proves every range is the text it
+  claims, which is what AC1 can be checked against; it cannot prove the labels, ordering and annotation
+  text were derived from `Arxml2Artext.mm` rather than from the scanner. Child 1's check read the `.mm`
+  for the annotation and instance-reference cases; I did not re-derive the rest.
+- **Large-file performance and large-tree rendering** (`design.md` §15.4–15.5) remain unmeasured.
+- **Cross-file reference following** is out of scope by design (D7/F2), so AC6's cross-file case is only
+  the same-file absent case.
+
+### Where two children disagree about a contract
+
+- **Quote-awareness of `>` inside an attribute value.** The core scanner is quote-aware (`design.md`
+  §5, and `scanner.ts`'s lexer); the editing child's writer was not. Same defect class as `dbfc727`.
+  Resolved by finding 8. This is the one place a child's assumption about another child's contract was
+  actually wrong.
+- **No `CustomDocument`, no `ready`/`filter`.** Both children agree and built accordingly; `design.md`
+  §3/§8/§9 still describe the opposite. Documentation drift, reported.
+- **The click model.** The editing child's interaction decision 3 (a click on a parameter's `= value`
+  starts an edit) and the UX child's focus/click rework overlap; `10-14-ecuc-editor-ux` owns it (R-UX2)
+  and its PRD should win. Not a defect in either — just the parent must not treat the editing child's
+  gesture as final.
+
