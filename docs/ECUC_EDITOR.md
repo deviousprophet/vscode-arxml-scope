@@ -2,17 +2,16 @@
 
 A VS Code custom editor for ECUC-Values `.arxml` files: it renders the file as a readable document
 tree — the same information the legacy `arxml2artext` tool's ARTEXT output carried — and lets you edit
-parameter and reference values in place, without leaving VS Code.
+parameter values in place, without leaving VS Code.
 
-> Status: core and the read-only editor implemented, value editing not yet. `src/core/` (detection,
-> scanner, model, ordering, resolution, validation, offset index) and `src/editor/` (custom editor
-> provider, rendering, filter, navigation) are in place with passing tests; the value-editing child
-> (`../10-14-ecuc-value-editing`) is still design only, so the *Editing* section below describes
-> behaviour that is not shipped yet. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/`
-> (`prd.md`, `design.md`, `implement.md`) with the reference analysis in its
+> Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
+> validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
+> value editing) are in place with 93 passing tests. Two things are deliberately not implemented and
+> are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
+> resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
+> `design.md`, `implement.md`) with the reference analysis in its
 > `research/legacy-artext-analysis.md`, and the legacy transform is vendored as text under
-> `reference/legacy-arxml2artext/`. This document is the reader-facing description and is revised at
-> the end of implementation if anything drifts.
+> `reference/legacy-arxml2artext/`.
 
 ## Why it exists
 
@@ -27,7 +26,8 @@ displays, so nothing has to be guessed back from a rendering.
 
 ## Opening it
 
-The editor never claims the default for `.arxml`; a plain open still uses the text editor.
+The editor never claims the default for `.arxml`; a plain open still uses the text editor. That is
+enforced by `priority: "option"` in the manifest — the default would claim every `.arxml`.
 
 - **Command palette:** `ARXML Scope: Open ECUC Configuration`.
 - **Explorer context menu** on an `.arxml` file, and the **editor context menu** when an `.arxml` is
@@ -58,8 +58,10 @@ is keyboard-navigable with the arrow keys.
 
 ## Editing
 
-Only the text content of a `<VALUE>` element is ever written.
+Only the text content of a parameter's `<VALUE>` element is ever written.
 
+- Click a parameter's value (or press `F2` while it is focused) to edit it, `Enter` to commit,
+  `Escape` to cancel. Clicking the label still reveals the node in the source, as before.
 - A value with content has **just that content** replaced; a self-closing or empty `<VALUE/>` becomes
   `<VALUE>text</VALUE>`. Nothing else in the file changes — not indentation, not line endings, not
   attribute spacing, not sibling order.
@@ -67,12 +69,15 @@ Only the text content of a `<VALUE>` element is ever written.
 - Numerical parameters accept `true`/`false`, decimal integers, hexadecimal literals, and decimal
   fractions with an optional exponent. A value that is invalid for its parameter kind, or that XML
   cannot represent, is **refused with an explanation and the file is left untouched**.
+- A value backed by a CDATA section is shown but **not editable**: it is refused rather than risk
+  writing into the section, because CDATA-aware escaping (splitting on `]]>`) is not implemented.
 - An edit that changes nothing does not mark the file dirty.
-- Ctrl+Z and Ctrl+Y work through VS Code's own undo history; save behaves like any other editor.
+- Ctrl+Z and Ctrl+Y work through VS Code's own undo history, one press per edit; save and revert
+  behave like any other editor.
 
 Deliberately not supported, because each would mean rewriting structure that this editor only reads:
-adding or removing containers, parameters or references; renaming a short-name; retargeting a
-reference; reformatting.
+adding or removing containers, parameters or references; renaming a short-name; **retargeting a
+reference** (references are read-only — only parameter values are editable); reformatting.
 
 ## Navigation
 
@@ -95,6 +100,7 @@ The default exception list is the legacy tool's, carried over unchanged.
 ## Limitations
 
 - One file at a time: references are not resolved across files, and workspaces are not indexed.
+- CDATA-backed values are not editable (see *Editing*).
 - No structural editing (see *Editing*).
 - No comparison against a baseline. The legacy text diff is gone with the ARTEXT text form; a
   semantic comparison needs the AR-path matching planned for the broader roadmap and should not be
@@ -115,5 +121,7 @@ rendered output.
 
 - `src/core/ecuc/` — detection, scanner, model, ordering, resolution, validation. **No `vscode`
   imports**, so the same code can later serve a workspace index or a language server.
-- `src/editor/` — the custom editor provider, rendering, navigation, and the document/edit model.
+- `src/core/text/offsets.ts` — the line/offset index.
+- `src/editor/` — the custom editor provider, rendering, filter, navigation, and the value-edit path.
 - `src/commands.ts` — the commands and the activation gate.
+- `src/spikes/` — throwaway Step 0 scaffolding, awaiting a manual run and then deletion.

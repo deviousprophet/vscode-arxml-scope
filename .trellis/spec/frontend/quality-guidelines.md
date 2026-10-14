@@ -1,51 +1,47 @@
 # Quality Guidelines
 
-> Code quality standards for frontend development.
+Rules that every change in this repository must keep. Each one exists because breaking it has a cost
+that is not obvious from the code.
 
----
+## Forbidden patterns
 
-## Overview
+| Never | Why |
+|---|---|
+| `import … from 'vscode'` under `src/core/**` | The core is a pure library over text; this is what keeps a future workspace index or language server possible. |
+| A new runtime dependency | The core is dependency-free by design and the extension bundles with esbuild. Reach for the standard library or the platform first. |
+| Writing a derived file, cache or index beside a user's file | The legacy tool did this and it is the main reason it is being replaced. Nothing but the `<VALUE>` text a user edited may be written. |
+| Reintroducing the ARTEXT text form: a grammar, `Open as ARTEXT`, a text diff | ARTEXT survives only as the name of the information model. Anything that exists only because an external process produced a text file is dropped. |
+| Generating an expected fixture from the code under test | A snapshot agrees with the code by construction. See `testing.md`. |
+| Editing a committed fixture from a test | It passes once, then fails forever and silently rewrites the repository. |
+| Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. |
+| Reading a real customer file from a test | The repository is public. Fixtures are synthetic. |
 
-<!--
-Document your project's quality standards here.
+## Rules the write path must keep
 
-Questions to answer:
-- What patterns are forbidden?
-- What linting rules do you enforce?
-- What are your testing requirements?
-- What code review standards apply?
--->
+- **One `WorkspaceEdit` per user action.** One action is exactly one undo step. Do not batch two edits
+  into one, and do not split one into two.
+- **Validation runs before the write, always.** A refusal leaves the bytes untouched. Never skip
+  validation to make a test pass — the refusal test exists to make that visible.
+- **Write only inside the recomputed region.** Recompute it by re-scanning rather than replaying a
+  stored offset: a value's length changes when it is edited, so every later offset shifts.
+- **Refuse rather than guess.** If a region cannot be established safely (it no longer resolves, its
+  bytes moved, it sits inside a CDATA section), refuse with a message. A refusal costs the user one
+  action; a wrong write costs them their file.
 
-(To be filled by the team)
+## Rules the editor must keep
 
----
+- **Never claim a file by default.** The custom editor's manifest `priority` is `"option"`; the
+  default is `"default"`, which would take over every `.arxml`. Activation is explicit.
+- **Dispose everything.** Every subscription and panel handler is disposed with its panel. A listener
+  outliving its panel is a defect.
+- **Re-scan after every change** instead of caching, so the view can never show a stale range that a
+  later write would target.
+- **A webview gets a CSP and a nonce**, and its state is re-posted on every change rather than assumed
+  to survive.
 
-## Forbidden Patterns
+## Before calling work done
 
-<!-- Patterns that should never be used and why -->
-
-(To be filled by the team)
-
----
-
-## Required Patterns
-
-<!-- Patterns that must always be used -->
-
-(To be filled by the team)
-
----
-
-## Testing Requirements
-
-<!-- What level of testing is expected -->
-
-(To be filled by the team)
-
----
-
-## Code Review Checklist
-
-<!-- What reviewers should check -->
-
-(To be filled by the team)
+- `npm run check-types`, `npm run lint` and `npm test` are green.
+- Every new assertion fails when its feature is deleted (`testing.md`).
+- Anything that could not be verified in this environment is stated plainly as unverified — not
+  implied to have passed.
