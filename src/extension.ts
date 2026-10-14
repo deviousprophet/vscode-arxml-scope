@@ -1,6 +1,8 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { registerCommands } from './commands';
+import { EcucEditorProvider, VIEW_TYPE } from './editor/ecucEditorProvider';
 import { SpikeEditorProvider } from './spikes/spikeProvider';
 
 // This method is called when your extension is activated
@@ -21,6 +23,17 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(disposable);
+
+	// The ECUC editor. `priority: "option"` in the manifest is what keeps a normally
+	// opened `.arxml` in the text editor (parent D14, AC3): the view is reachable only
+	// through the command, the menu entry, or *Open With…*.
+	const ecucProvider = new EcucEditorProvider();
+	context.subscriptions.push(
+		vscode.window.registerCustomEditorProvider(VIEW_TYPE, ecucProvider, {
+			webviewOptions: { retainContextWhenHidden: true },
+		})
+	);
+	registerCommands(context, ecucProvider);
 
 	// THROWAWAY — Step 0 spike scaffolding. Delete together with `src/spikes/` and `spike/` once
 	// Spike A and Spike B are answered; see

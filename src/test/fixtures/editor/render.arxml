@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic render fixture: one instance of every display rule in parent design §6. -->
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+    <AR-PACKAGES>
+        <AR-PACKAGE>
+            <SHORT-NAME>PkgA</SHORT-NAME>
+            <AR-PACKAGES>
+                <AR-PACKAGE>
+                    <SHORT-NAME>PkgB</SHORT-NAME>
+                    <ELEMENTS>
+                        <ECUC-MODULE-CONFIGURATION-VALUES>
+                            <SHORT-NAME>ModX</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-MODULE-DEF">/PkgA/PkgB/ModDefs/ModX</DEFINITION-REF>
+                            <IMPLEMENTATION-CONFIG-VARIANT>VARIANT-PRE-COMPILE</IMPLEMENTATION-CONFIG-VARIANT>
+                            <ANNOTATIONS>
+                                <ANNOTATION>
+                                    <LABEL>
+                                        <L-4 L="EN">Note</L-4>
+                                    </LABEL>
+                                    <ANNOTATION-TEXT>
+                                        <VERBATIM>
+                                            <L-5 L="EN">module note</L-5>
+                                        </VERBATIM>
+                                    </ANNOTATION-TEXT>
+                                </ANNOTATION>
+                            </ANNOTATIONS>
+                            <VARIATION-POINT>
+                                <SW-SYSCOND>(A == B)</SW-SYSCOND>
+                                <POST-BUILD-VARIANT-CONDITIONS>
+                                    <POST-BUILD-VARIANT-CONDITION>
+                                        <MATCHING-CRITERION-REF>/PkgA/PkgB/ModDefs/Crit1</MATCHING-CRITERION-REF>
+                                        <VALUE>1</VALUE>
+                                    </POST-BUILD-VARIANT-CONDITION>
+                                    <POST-BUILD-VARIANT-CONDITION>
+                                        <MATCHING-CRITERION-REF>/PkgA/PkgB/ModDefs/Crit2</MATCHING-CRITERION-REF>
+                                        <VALUE>2</VALUE>
+                                    </POST-BUILD-VARIANT-CONDITION>
+                                </POST-BUILD-VARIANT-CONDITIONS>
+                            </VARIATION-POINT>
+                            <CONTAINERS>
+                                <ECUC-CONTAINER-VALUE>
+                                    <SHORT-NAME>ContA</SHORT-NAME>
+                                    <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgA/PkgB/ModDefs/ModX/ContA</DEFINITION-REF>
+                                    <ANNOTATIONS>
+                                        <ANNOTATION>
+                                            <ANNOTATION-TEXT>
+                                                <VERBATIM>
+                                                    <L-5 L="EN">container note</L-5>
+                                                </VERBATIM>
+                                            </ANNOTATION-TEXT>
+                                        </ANNOTATION>
+                                    </ANNOTATIONS>
+                                    <PARAMETER-VALUES>
+                                        <ECUC-NUMERICAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/PkgA/PkgB/ModDefs/ModX/ContA/IniValue</DEFINITION-REF>
+                                            <VALUE>63</VALUE>
+                                        </ECUC-NUMERICAL-PARAM-VALUE>
+                                        <ECUC-TEXTUAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/PkgA/PkgB/ModDefs/ModX/ContA/Title</DEFINITION-REF>
+                                            <VALUE>hello</VALUE>
+                                        </ECUC-TEXTUAL-PARAM-VALUE>
+                                        <ECUC-NUMERICAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-BOOLEAN-PARAM-DEF">/PkgA/PkgB/ModDefs/ModX/ContA/Flag</DEFINITION-REF>
+                                            <VALUE>true</VALUE>
+                                        </ECUC-NUMERICAL-PARAM-VALUE>
+                                    </PARAMETER-VALUES>
+                                    <REFERENCE-VALUES>
+                                        <ECUC-REFERENCE-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/PkgA/PkgB/ModDefs/ModX/ContA/PeerRef</DEFINITION-REF>
+                                            <VALUE-REF DEST="ECUC-CONTAINER-VALUE">/PkgA/PkgB/ModX/ContA/ContB</VALUE-REF>
+                                        </ECUC-REFERENCE-VALUE>
+                                        <ECUC-INSTANCE-REFERENCE-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-INSTANCE-REFERENCE-DEF">/PkgA/PkgB/ModDefs/ModX/ContA/PeerIref</DEFINITION-REF>
+                                            <VALUE-IREF>
+                                                <TARGET-REF DEST="ECUC-CONTAINER-VALUE">/PkgA/PkgB/ModX/ContA/ContB</TARGET-REF>
+                                                <CONTEXT-ELEMENT-REF DEST="ECUC-CONTAINER-VALUE">/PkgA/PkgB/ModX/ContA</CONTEXT-ELEMENT-REF>
+                                            </VALUE-IREF>
+                                        </ECUC-INSTANCE-REFERENCE-VALUE>
+                                    </REFERENCE-VALUES>
+                                    <SUB-CONTAINERS>
+                                        <ECUC-CONTAINER-VALUE>
+                                            <SHORT-NAME>ContB</SHORT-NAME>
+                                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgA/PkgB/ModDefs/ModX/ContB</DEFINITION-REF>
+                                            <PARAMETER-VALUES>
+                                                <ECUC-TEXTUAL-PARAM-VALUE>
+                                                    <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/PkgA/PkgB/ModDefs/ModX/ContB/Text</DEFINITION-REF>
+                                                    <VALUE>nested</VALUE>
+                                                </ECUC-TEXTUAL-PARAM-VALUE>
+                                            </PARAMETER-VALUES>
+                                        </ECUC-CONTAINER-VALUE>
+                                    </SUB-CONTAINERS>
+                                </ECUC-CONTAINER-VALUE>
+                            </CONTAINERS>
+                        </ECUC-MODULE-CONFIGURATION-VALUES>
+                    </ELEMENTS>
+                </AR-PACKAGE>
+            </AR-PACKAGES>
+        </AR-PACKAGE>
+    </AR-PACKAGES>
+</AUTOSAR>

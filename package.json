@@ -20,6 +20,21 @@
       {
         "command": "vscode-arxml-scope.spike.open",
         "title": "Spike: Open lifecycle probe editor"
+      },
+      {
+        "command": "vscode-arxml-scope.openEcucEditor",
+        "title": "Open with ECUC Editor",
+        "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.revealInSource",
+        "title": "Reveal in ARXML Source",
+        "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.revealInEcucEditor",
+        "title": "Reveal in ECUC Editor",
+        "category": "ARXML Scope"
       }
     ],
     "customEditors": [
@@ -31,8 +46,77 @@
             "filenamePattern": "*.spike.arxml"
           }
         ]
+      },
+      {
+        "viewType": "vscode-arxml-scope.ecucEditor",
+        "displayName": "ECUC Values Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.arxml"
+          }
+        ],
+        "priority": "option"
       }
-    ]
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "vscode-arxml-scope.openEcucEditor",
+          "when": "resourceExtname == .arxml",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "vscode-arxml-scope.openEcucEditor",
+          "when": "resourceExtname == .arxml",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-arxml-scope.revealInEcucEditor",
+          "when": "resourceExtname == .arxml",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ARXML Scope",
+      "properties": {
+        "arxmlScope.ecuc.editor.sort": {
+          "type": "string",
+          "enum": [
+            "all",
+            "declaration"
+          ],
+          "default": "all",
+          "description": "Order of modules, containers, parameters and references in the ECUC editor. \"declaration\" keeps the file's own order."
+        },
+        "arxmlScope.ecuc.editor.sortExcept": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "DcmDspDidRef",
+            "DcmDspRequestRoutineResultsOutSignal",
+            "DcmDspStartRoutineInSignal",
+            "DcmDspStartRoutineOutSignal",
+            "DcmDspStopRoutineInSignal",
+            "DcmDspStopRoutineOutSignal",
+            "DcmArgumentRef",
+            "DemDidDataElementClassRef",
+            "DemExtendedDataRecordClassRef",
+            "DemDataElementClassRef",
+            "DemDidClassRef",
+            "DemFreezeFrameRecordClassRef",
+            "DemSPNClassRef",
+            "EcuMDriverInitItem",
+            "EcuMRbCallOutItem"
+          ],
+          "description": "DEFINITION-REF tails that keep declaration order under \"all\". Defaults to the list from the legacy Arxml2Artext.cmd."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

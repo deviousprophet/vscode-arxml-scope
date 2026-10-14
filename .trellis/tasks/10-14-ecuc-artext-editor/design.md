@@ -287,9 +287,11 @@ Rejection returns a reason which the editor surfaces; **no file mutation occurs*
 ## 9. Editor: provider, document lifecycle, undo/redo, webview
 
 **Contribution.** A `contributes.customEditors` entry with `viewType`
-`vscode-arxml-scope.ecucEditor` and `selector: [{ filenamePattern: '*.arxml' }]`. Because D14 forbids
-taking over by default, activation is driven by the command
-`vscode-arxml-scope.openEcucEditor`, which verifies detection and then calls
+`vscode-arxml-scope.ecucEditor`, `selector: [{ filenamePattern: '*.arxml' }]` and
+**`priority: "option"`**. The `priority` carries D14: the manifest default is `"default"`, which would
+make the custom editor the default for every `.arxml` and break R15, so `"option"` is required rather
+than cosmetic. Activation is then driven by the command `vscode-arxml-scope.openEcucEditor`, which
+verifies detection and calls
 `vscode.commands.executeCommand('vscode.openWith', uri, 'vscode-arxml-scope.ecucEditor')`. The same
 editor is reachable through VS Code's own *Open With…*, which is the explicit path.
 
@@ -344,7 +346,7 @@ expected, it must be spiked first. Tracked in §15.
 | `commands` | `vscode-arxml-scope.openEcucEditor` | Opens the file in the custom editor after detection passes |
 | `commands` | `vscode-arxml-scope.revealInSource` | Editor → arxml range (§10) |
 | `commands` | `vscode-arxml-scope.revealInEcucEditor` | arxml cursor → editor node (§10) |
-| `customEditors` | `viewType: vscode-arxml-scope.ecucEditor`, `selector: [{ filenamePattern: '*.arxml' }]` | Never selected by default (D14) |
+| `customEditors` | `viewType: vscode-arxml-scope.ecucEditor`, `selector: [{ filenamePattern: '*.arxml' }]`, **`priority: "option"`** | `priority` is what enforces D14 — the manifest default is `"default"`, which would claim every `.arxml` |
 | `menus` | `explorer/context` and `editor/context`, enabled for `.arxml` | Entry points for the explicit commands |
 | `configuration` | `arxmlScope.ecuc.editor.sort` — `"all"` (default) \| `"declaration"` | D11 |
 | `configuration` | `arxmlScope.ecuc.editor.sortExcept` — string array, default the 15 entries from `Arxml2Artext.cmd` | D11 |

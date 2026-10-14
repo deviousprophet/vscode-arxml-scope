@@ -25,10 +25,16 @@ point at the right bytes.
 ## 2. Decisions this child owns
 
 **2.1 View type and activation.** `viewType` is `vscode-arxml-scope.ecucEditor`, with
-`selector: [{ filenamePattern: '*.arxml' }]`. Registering a selector does **not** make it the default
-— VS Code offers it through *Open With…* — but relying on that alone would be fragile, so the
-supported entry point is the command `vscode-arxml-scope.openEcucEditor`, which gates on detection
-and then calls `vscode.openWith(uri, viewType)` (parent D14).
+`selector: [{ filenamePattern: '*.arxml' }]` and **`priority: "option"`**.
+
+The `priority` is not decoration and the first draft of this section was wrong about it: the manifest
+default is `"default"`, which makes the custom editor the default for every matching file and would
+break D14 and AC3. `"option"` is what actually keeps the text editor as the default and exposes the
+custom editor only through *Open With…* and our own command. Verified in the manifest and asserted by
+a test.
+
+The supported entry point remains the command `vscode-arxml-scope.openEcucEditor`, which gates on
+detection and then calls `vscode.openWith(uri, viewType)`.
 
 **2.2 Message protocol.** Webview → extension: `{ type: 'ready' }` (first paint, triggers the initial
 model push if the panel is not re-rendered), `{ type: 'reveal', nodeId }`, `{ type: 'filter', text }`.

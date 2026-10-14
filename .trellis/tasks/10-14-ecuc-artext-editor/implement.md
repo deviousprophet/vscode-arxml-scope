@@ -34,28 +34,39 @@ break the relative references the other children's artifacts make to it; archive
 
 **Done.**
 
-- Step 0 is **not** done: neither Spike A nor Spike B has been run, and neither can be finished by an
-  agent — both need a human in a running Extension Development Host. See "Spikes" below.
+- Step 0: **Spike A's API half is settled** — `CustomTextEditorProvider` exposes only
+  `resolveCustomTextEditor(document: TextDocument, …)`, so undo/redo/dirty/save are the real
+  `TextDocument`'s own and no edit-event machinery exists to get wrong (the design was corrected
+  accordingly). Its behavioural rows and all of **Spike B** still need a human in an Extension
+  Development Host; the scaffolding and the checklist are ready. See "Spikes" below.
 - Step 1 (`ecuc-model-scanner`) is **implemented and quality-checked** (Phase 2.2 complete). Core
   modules, 10 synthetic fixtures, 9 hand-authored expected models and the core test suites are
-  committed. AC1–AC9 are all met: `npm test` passes with 37 tests, `check-types` and `lint` are clean,
-  and `src/core/` imports no `vscode`. Three defects were found and fixed — empty-CDATA range
-  corruption, annotations captured from the wrong XML layer, and an instance-reference sort key that
-  ignored the context. Details and evidence: the child's `implement.md` `## Phase 2.2 check`.
-- Two items are recorded in the child as known and deliberately not changed: a comment inside a
-  `<VALUE>` is included in `valueRange`, so a write deletes it (documented behaviour, not a defect);
-  and the expected models' *authorship* cannot be proven from the repository, only their agreement
-  with the legacy rules and their behaviour-sensitivity.
+  committed. AC1–AC9 are all met. Three defects were found and fixed — empty-CDATA range corruption,
+  annotations captured from the wrong XML layer, and an instance-reference sort key that ignored the
+  context. Details and evidence: the child's `implement.md` `## Phase 2.2 check`.
+- Step 2 (`10-14-artext-custom-editor`) is **implemented** (Phase 2.1) and **not yet checked**
+  (Phase 2.2). The provider, rendering, filter, keyboard handling, both reveal directions and the
+  same-file reference follow are in `src/editor/` and `src/commands.ts`, with editor fixtures and
+  tests; `npm test` reports 67 passing. Two things the implementer corrected against this design, both
+  now fixed here: `priority: "option"` is what enforces D14 (the manifest default is `"default"`, which
+  would claim every `.arxml`), and the gate falls back to `vscode.openWith(uri, 'default')` rather than
+  `workbench.action.reopenWithEditor`. Reveal is implemented as the two commands, assuming Spike B
+  finds no live pairing.
+- Recorded as known and deliberately unchanged in the scanner child: a comment inside a `<VALUE>` is
+  included in `valueRange`, so a write deletes it (documented behaviour, not a defect); and the
+  expected models' *authorship* cannot be proven from the repository, only their agreement with the
+  legacy rules and their behaviour-sensitivity.
 
 **Next, in order.**
 
-1. **Step 2** (`10-14-artext-custom-editor`) — review its artifacts, then `task.py start`. Only the
-   *reveal mechanism* detail of `design.md` §10 depends on Spike B; the activation gate, rendering,
-   filter, keyboard handling and the re-scan subscription do not, and the two-command reveal described
-   in §10 works either way. Do not let an unrun spike block the whole step.
-2. **Spike B** — a human runs it in an Extension Development Host and records the outcome here.
-3. **Step 3** (`10-14-ecuc-value-editing`) — gated on **Spike A**. Do not start it while the
-   `CustomDocument` undo/redo contract is unproven: that contract is not patchable from the outside.
+1. Phase **2.2 quality check** of `10-14-artext-custom-editor` — dispatch `trellis-check` against its
+   `prd.md` AC1–AC10. AC3 (no takeover) and AC9 (no file written) deserve independent eyes, since both
+   are "nothing happened" criteria that a passing test can mask.
+2. **Spike B**, then Spike A's behavioural rows — a human, in an Extension Development Host, using
+   `research/spike-results.md`. If Spike B finds a live pairing is achievable, revisit `design.md` §10;
+   otherwise the two commands stand.
+3. **Step 3** (`10-14-ecuc-value-editing`) — its Spike A gate is now only the behavioural rows, not an
+   unproven contract.
 4. **Step 4** — the parent integration review, then archive the children.
 
 **Spikes (both need a human at a running VS Code).** No agent can complete these headlessly — they
