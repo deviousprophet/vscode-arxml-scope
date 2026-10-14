@@ -19,6 +19,7 @@ import * as vscode from 'vscode';
 
 import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { scanEcucValues } from '../../core/ecuc/scanner';
+import { LineIndex } from '../../core/text/offsets';
 import { EcucEditorProvider } from '../../editor/ecucEditorProvider';
 import { applyEdit, buildEdit, parameterFor, regionOf } from '../../editor/ecucEdit';
 import { buildNodeIndex } from '../../editor/nodeId';
@@ -225,6 +226,25 @@ suite('editor value editing (AC1–AC9)', () => {
 		});
 	});
 
+	test('§2.1: a CDATA-backed value is refused, not mistaken for an element', () => {
+		const text = fixtureText('editing/cdata.arxml');
+		const model = scanEcucValues(text);
+		const id = parameterId(text, 'Pattern');
+		const parameter = parameterFor(model, id)!;
+
+		// The scanner points `valueRange` at the inside of the section, so its first byte is
+		// `<` although it is not an element. Neither region kind may be resolved from it:
+		// `element` would write markup into the value, `value` would write escaped text into
+		// a section where `&` is literal.
+		assert.strictEqual(text[parameter.valueRange!.start], '<', 'the bytes look like an element');
+		assert.strictEqual(regionOf(parameter, text, 'value'), undefined);
+		assert.strictEqual(regionOf(parameter, text, 'element'), undefined);
+
+		const plan = buildEdit(model, text, id, '42');
+		assert.strictEqual(plan.ok, false, 'a CDATA value is refused rather than wrapped');
+		assert.ok(plan.ok === false && plan.reason.includes('CDATA'), plan.ok ? 'accepted' : plan.reason);
+	});
+
 	test('AC3: &, < and > are written escaped and read back unchanged', async () => {
 		await withEditingFixture('escaping.arxml', async (uri, document) => {
 			const original = document.getText();
@@ -320,6 +340,7 @@ suite('editor value editing (AC1–AC9)', () => {
 	test('AC6: a character XML cannot represent is refused with a reason and no mutation', async () => {
 		await withEditingFixture('textual.arxml', async (uri, document) => {
 			const before = document.getText();
+			const onDisk = fs.readFileSync(uri.fsPath, 'utf8');
 			const { stub } = open(document);
 
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Label'), value: 'bad\u0001char' });
@@ -327,7 +348,25 @@ suite('editor value editing (AC1–AC9)', () => {
 
 			assert.ok(lastNotice(stub).message?.includes('XML cannot represent'), lastNotice(stub).message);
 			assert.strictEqual(document.getText(), before);
+			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false);
+		});
+	});
+
+	test('AC6: a CDATA-backed value is refused with a reason and no mutation', async () => {
+		await withEditingFixture('cdata.arxml', async (uri, document) => {
+			const before = document.getText();
+			const onDisk = fs.readFileSync(uri.fsPath, 'utf8');
+			const { stub } = open(document);
+
+			// `Pattern` holds `<![CDATA[<b>]]>`: a write there would put markup into the value.
+			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Pattern'), value: '42' });
+			await waitFor('the refusal', () => notices(stub).length > 0);
+
+			assert.ok(lastNotice(stub).message?.includes('CDATA'), lastNotice(stub).message);
+			assert.strictEqual(document.getText(), before, 'the document is untouched');
+			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
+			assert.strictEqual(document.isDirty, false, 'a refusal does not dirty the document');
 		});
 	});
 
@@ -352,6 +391,25 @@ suite('editor value editing (AC1–AC9)', () => {
 			const result = await applyEdit(document, plan.record);
 			assert.strictEqual(result.ok, false, 'a stale record is not applied');
 			assert.ok(document.getText().includes('<VALUE>11</VALUE>'), 'the competing bytes survive');
+		});
+	});
+
+	test('AC6: a record whose region no longer resolves is refused rather than written', async () => {
+		await withEditingFixture('self-closing.arxml', async (_uri, document) => {
+			const before = document.getText();
+			// A `value` record cannot resolve against a self-closing element: it has no text
+			// content to replace, so `regionOf` finds nothing and the write is refused.
+			const record = {
+				nodeId: parameterId(before, 'Count'),
+				region: 'value' as const,
+				oldText: '7',
+				newText: '42',
+			};
+			const result = await applyEdit(document, record);
+
+			assert.strictEqual(result.ok, false, 'an unresolvable region is not applied');
+			assert.strictEqual(document.getText(), before, 'the document is untouched');
+			assert.strictEqual(document.isDirty, false);
 		});
 	});
 
@@ -411,6 +469,70 @@ suite('editor value editing (AC1–AC9)', () => {
 		for (const [name, text] of committedBefore) {
 			assert.strictEqual(fs.readFileSync(committed(name), 'utf8'), text, `${name} is unmodified`);
 		}
+	});
+
+	test('AC7: an edit on a CRLF document leaves every other byte, line endings included', async () => {
+		await withEditingFixture('crlf.arxml', async (uri, document) => {
+			const before = document.getText();
+			assert.ok(before.includes('\r\n'), 'the fixture is CRLF');
+			const breaks = (before.match(/\r\n/g) ?? []).length;
+
+			// Derived by hand from the fixture: only the value's inner text changes.
+			const expected = before.replace('<VALUE>63</VALUE>', '<VALUE>64</VALUE>');
+			assert.notStrictEqual(expected, before, 'the replacement actually applied to the expectation');
+
+			const { stub } = open(document);
+			await stub.send({ type: 'edit', nodeId: parameterId(before, 'IniValue'), value: '64' });
+			await waitFor('the CRLF edit', () => document.getText().includes('<VALUE>64</VALUE>'));
+
+			assert.strictEqual(document.getText(), expected, 'only the value changed');
+			assert.strictEqual((document.getText().match(/\r\n/g) ?? []).length, breaks, 'no line ending changed');
+
+			await document.save();
+			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), expected, 'the bytes on disk');
+		});
+	});
+
+	test('§2.2: the offset-to-position conversion the write uses is VS Code’s, on CRLF too', async () => {
+		await withEditingFixture('crlf.arxml', async (_uri, document) => {
+			const text = document.getText();
+			const index = new LineIndex(text);
+			const mismatches: number[] = [];
+			for (let offset = 0; offset <= text.length; offset++) {
+				const mine = index.positionAt(offset);
+				const theirs = document.positionAt(offset);
+				if (mine.line !== theirs.line || mine.character !== theirs.character) {
+					mismatches.push(offset);
+				}
+			}
+			// VS Code reports the `\r` for an offset that falls on the `\n` of a CRLF;
+			// `LineIndex` reports the offset literally. That is the only divergence, and a
+			// region never begins or ends inside an EOL — the value's bytes are trimmed of
+			// their surrounding whitespace first — so the write is unaffected.
+			for (const offset of mismatches) {
+				assert.strictEqual(text.slice(offset - 1, offset + 1), '\r\n', `offset ${offset} is not an EOL interior`);
+			}
+			assert.ok(mismatches.length > 0, 'the CRLF fixture exercises the divergence');
+
+			// What the write actually depends on: the `Range` built from `LineIndex` selects
+			// exactly the bytes of the region it was computed for.
+			const model = scanEcucValues(text);
+			for (const parameter of model.modules[0].containers[0].parameters) {
+				for (const region of ['value', 'element'] as const) {
+					const described = regionOf(parameter, text, region);
+					if (!described) {
+						continue;
+					}
+					const start = index.positionAt(described.range.start);
+					const end = index.positionAt(described.range.end);
+					assert.strictEqual(
+						document.getText(new vscode.Range(start.line, start.character, end.line, end.character)),
+						described.oldText,
+						`${parameter.name} ${region}`
+					);
+				}
+			}
+		});
 	});
 
 	test('§9: the tree carries the value the widget edits, and the widget is inlined', () => {

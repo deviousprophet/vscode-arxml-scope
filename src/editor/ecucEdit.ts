@@ -44,7 +44,9 @@ export function parameterFor(model: EcucDocumentModel, nodeId: string): Paramete
  *
  * `element` is the whole `<VALUE/>` slice, `value` the text content inside the tags. The
  * rule is the bytes rather than the decoded value: an element slice begins with `<`.
- * `undefined` means the node has nothing of that kind to replace, which is a refusal.
+ * `undefined` means the node has nothing of that kind to replace, which is a refusal —
+ * including a range inside a CDATA section, which has no region of either kind
+ * (`touchesCdata`).
  */
 export function regionOf(
 	parameter: ParameterNode,
@@ -55,14 +57,45 @@ export function regionOf(
 	if (!valueRange) {
 		return undefined;
 	}
+	let range: Range;
 	if (region === 'value') {
 		if (text[valueRange.start] === '<') {
 			return undefined; // the range covers the element, not its text content
 		}
-		return { range: valueRange, oldText: text.slice(valueRange.start, valueRange.end) };
+		range = valueRange;
+	} else {
+		range = elementSpan(text, valueRange);
 	}
-	const range = elementSpan(text, valueRange);
+	if (touchesCdata(text, range)) {
+		return undefined; // a CDATA section is neither text content nor an element
+	}
 	return { range, oldText: text.slice(range.start, range.end) };
+}
+
+/**
+ * True when `range` is inside, or straddles, a `<![CDATA[…]]>` section.
+ *
+ * The scanner points a value's range at the *inside* of a CDATA section, and the bytes
+ * there are not interchangeable with escaped text content. Writing escaped text into one
+ * changes what a conforming XML parser reads (`&amp;` is the literal four characters
+ * inside CDATA); a section whose content begins with `<` is mistaken for an element by the
+ * byte rule above, and gets that markup written back into the value; and a range that
+ * crosses a marker deletes the `]]>` and leaves the section unterminated, which is not
+ * well-formed XML at all. Every one of those is a refusal rather than a write; editing a
+ * CDATA-backed value is out of scope (`implement.md`, decision 5), and this is what makes
+ * that a refusal instead of silent damage.
+ */
+function touchesCdata(text: string, range: Range): boolean {
+	const bytes = text.slice(range.start, range.end);
+	if (bytes.includes('<![CDATA[') || bytes.includes(']]>')) {
+		return true;
+	}
+	const open = text.lastIndexOf('<![CDATA[', range.start);
+	if (open < 0) {
+		return false;
+	}
+	const close = text.indexOf(']]>', open + 9);
+	return close < 0 || close > range.start;
 }
 
 /**
@@ -70,8 +103,8 @@ export function regionOf(
  *
  * For an empty or self-closing value the scanner already points at the element, so the
  * outward expansion is only needed once such a value has been given text — the case
- * design §2.2 describes. Text content cannot contain a raw `>`, so the first one after
- * the range closes the end tag.
+ * design §2.2 describes. The search for the closing `>` starts at the range's last
+ * character, so a raw `>` inside the text (which XML allows) cannot be mistaken for it.
  */
 function elementSpan(text: string, valueRange: Range): Range {
 	if (text[valueRange.start] === '<') {
@@ -118,6 +151,9 @@ export function buildEdit(
 	const valueRange = parameter.valueRange;
 	if (!valueRange) {
 		return { ok: false, reason: `"${parameter.name}" has no <VALUE> element to edit` };
+	}
+	if (touchesCdata(text, valueRange)) {
+		return { ok: false, reason: `"${parameter.name}" is stored in a CDATA section, which this editor does not edit` };
 	}
 	const validation = validateValue(parameter, value);
 	if (!validation.ok) {
