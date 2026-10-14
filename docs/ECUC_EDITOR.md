@@ -6,12 +6,13 @@ parameter values in place, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
-> value editing) are in place with 97 passing tests. Two things are deliberately not implemented and
+> value editing) are in place with 131 passing tests. Two things are deliberately not implemented and
 > are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
 > resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
 > `design.md`, `implement.md`) with the reference analysis in its
 > `research/legacy-artext-analysis.md`, and the legacy transform is vendored as text under
-> `reference/legacy-arxml2artext/`.
+> `reference/legacy-arxml2artext/`. The reading-experience overhaul (interaction model, collapse,
+> hierarchy, filter feedback, node identity) is `.trellis/tasks/10-14-ecuc-editor-ux/`.
 
 ## Why it exists
 
@@ -50,18 +51,51 @@ the file back to the text editor rather than showing an empty view.
 | Conditions | `[SW-SYSCOND]` and post-build-variant conditions as `<Ref == value && …>` |
 | Annotations | `[Label] text`, including annotations without a label (the `/* … */` wrapper belongs to the dropped ARTEXT text form and is not shown) |
 
-Hovering a container or parameter shows its full `DEFINITION-REF` path.
+Hovering a container or parameter shows its full `DEFINITION-REF` path. Each kind — module,
+container, parameter, reference — carries its own inline-SVG marker and accent, so the kinds are
+distinguishable in a high-contrast theme where colour alone is not enough.
 
 Ordering matches the legacy tool: by `DEFINITION-REF` then identity, with the legacy exception list
-preserved (see *Settings*). A filter box narrows the tree by label, short-name or value. The whole tree
-is keyboard-navigable with the arrow keys.
+preserved (see *Settings*).
+
+## Browsing
+
+The tree is for reading first; reaching the source is deliberate.
+
+| Interaction | Effect |
+|---|---|
+| Click a row — its label, its metadata or its empty space | selects that node; the view stays where it is |
+| Click a container's twisty | collapses or expands it; the selection does not move |
+| Double-click a row, or `Ctrl`/`Alt`+`Enter` | reveals the node in the source (see *Navigation*) |
+| Click a reference's target, or `Enter` on a reference | follows the reference |
+| `Enter` on a container | collapses or expands it |
+| `Enter` on a leaf | reveals it |
+| `Space` | selects the focused node, and nothing else |
+
+A container or module with children has a toggle and reports its state through `aria-expanded`; a leaf
+has no toggle. **Expand all** and **Collapse all** in the toolbar do not disturb the selection or the
+scroll position. The collapsed set, the selection and the scroll position all survive a re-scan, so
+editing the file in the text editor beside the tree does not spring the tree open while you type.
+
+The filter box narrows the tree by label, short-name or value and reports `shown of total`, or
+`No matches` when nothing matches; matched text is highlighted, and a collapsed ancestor of a match is
+shown for as long as the filter is active — clearing the filter (or pressing `Escape` in the box)
+restores exactly the collapsed set you had.
+
+The whole tree is keyboard-navigable: the arrow keys traverse and collapse, `Home`/`End` and
+`PageUp`/`PageDown` move through the visible rows, and typing a letter jumps to the next label
+starting with it.
 
 ## Editing
 
 Only the text content of a parameter's `<VALUE>` element is ever written.
 
 - Click a parameter's value (or press `F2` while it is focused) to edit it, `Enter` to commit,
-  `Escape` to cancel. Clicking the label still reveals the node in the source, as before.
+  `Escape` to cancel. A parameter's value shows a tooltip and a hover affordance saying it is editable;
+  clicking the label selects the node, it does not reveal it. `Tab` and `Shift`+`Tab` commit and move
+  to the next or previous parameter's value.
+- A refused value — one that is invalid for its parameter kind, or that XML cannot represent — keeps
+  **the text you typed**, marks the field invalid, and says why. Nothing is discarded.
 - A value with content has **just that content** replaced; a self-closing or empty `<VALUE/>` becomes
   `<VALUE>text</VALUE>`. Nothing else in the file changes — not indentation, not line endings, not
   attribute spacing, not sibling order.
@@ -82,7 +116,9 @@ reference** (references are read-only — only parameter values are editable); r
 ## Navigation
 
 - **View → source:** revealing a node opens the file in the text editor with that node's range
-  selected.
+  selected. Revealing is **non-destructive**: the ECUC editor's tab stays open, the source opens
+  *beside* it as a preview, and focus stays in the tree. `arxmlScope.ecuc.editor.revealMode` changes
+  this (see *Settings*).
 - **Source → view:** with the cursor in the arxml text editor, the command opens the custom editor at
   the innermost node under the cursor.
 - **References:** following a reference selects its target when that target is in the same file. A
@@ -94,8 +130,10 @@ reference** (references are read-only — only parameter values are editable); r
 |---|---|---|
 | `arxmlScope.ecuc.editor.sort` | `all` | `all` applies the legacy sort; `declaration` keeps the file's authored order |
 | `arxmlScope.ecuc.editor.sortExcept` | 15 entries | `DEFINITION-REF` tails that keep declaration order even under `all` |
+| `arxmlScope.ecuc.editor.revealMode` | `beside` | Where *Reveal in ARXML Source* shows the file: `beside` opens it next to the ECUC editor and keeps focus in the tree; `focus` opens it beside and moves focus there; `replace` swaps the ECUC editor's tab for the text editor, as older versions did |
 
-The default exception list is the legacy tool's, carried over unchanged.
+The default exception list is the legacy tool's, carried over unchanged. The reveal mode is read at
+every reveal, so changing it takes effect without a reload.
 
 ## Limitations
 

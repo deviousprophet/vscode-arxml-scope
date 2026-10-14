@@ -49,9 +49,13 @@ suite('editor reveal (AC4, AC5)', () => {
 			const id = index.idOf(node)!;
 			const range = await vscode.commands.executeCommand<vscode.Range>('vscode-arxml-scope.revealInSource', uri, id);
 			assert.ok(range, id);
-			const editor = vscode.window.activeTextEditor;
-			assert.ok(editor, 'the text editor must be active after reveal');
-			assert.strictEqual(editor.document.uri.toString(), uri.toString());
+			// UX child design §3: reveal opens the source *beside* the tree and preserves
+			// focus, so the editor is visible but is not necessarily the focused one. The
+			// old `activeTextEditor` assertion was the behaviour that defect described.
+			const editor = vscode.window.visibleTextEditors.find(
+				(candidate) => candidate.document.uri.toString() === uri.toString()
+			);
+			assert.ok(editor, 'the range must be shown in a visible text editor');
 			assert.strictEqual(editor.document.getText(range), slice(text, node.range), id);
 			assert.strictEqual(editor.selection.start.line, range.start.line, id);
 			assert.strictEqual(editor.selection.start.character, range.start.character, id);

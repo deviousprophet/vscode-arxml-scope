@@ -134,11 +134,16 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				}
 				if (message.type === 'reveal') {
-					void this.revealNode(document, model, message.nodeId);
+					void this.revealNode(document, model, message.nodeId, panel);
 				} else if (message.type === 'follow') {
 					void this.followReference(document, model, message.nodeId, panel);
 				} else if (message.type === 'edit' && typeof message.value === 'string') {
 					void this.editValue(document, panel, message.nodeId, message.value);
+				} else if (message.type === 'select') {
+					// A click in the tree is view state the host must know too: the re-scan
+					// payload carries the selection, so without this a document change would
+					// move the selection back (UX child design §4.1, AC4).
+					this.selections.set(key, message.nodeId);
 				}
 			})
 		);
@@ -175,16 +180,22 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
 	}
 
+	/**
+	 * Reveals a node's range in the source without destroying the custom editor's tab
+	 * (UX child design §3). The panel's own column is passed through so the source opens
+	 * beside the tree rather than beside whatever happens to be "active".
+	 */
 	private async revealNode(
 		document: vscode.TextDocument,
 		model: ReturnType<typeof scanEcucValues>,
-		nodeId: string
+		nodeId: string,
+		panel: vscode.WebviewPanel
 	): Promise<void> {
 		const entry = buildNodeIndex(model).byId.get(nodeId);
 		if (!entry) {
 			return;
 		}
-		await revealRangeInTextEditor(document, entry.range);
+		await revealRangeInTextEditor(document, entry.range, { viewColumn: panel.viewColumn });
 	}
 
 	private async followReference(
@@ -202,7 +213,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			await panel.webview.postMessage({ type: 'notice', message: result.reason, kind: 'warn' });
 			return;
 		}
-		await revealRangeInTextEditor(document, result.range);
+		await revealRangeInTextEditor(document, result.range, { viewColumn: panel.viewColumn });
 	}
 
 	/**

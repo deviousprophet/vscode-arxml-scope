@@ -7,6 +7,13 @@
  * by a declaration-order ordinal, which is why the index is built from the raw model
  * rather than from the display-ordered view: toggling the sort setting cannot
  * renumber a node.
+ *
+ * Every kind carries that ordinal. Containers and modules used to be identified by
+ * their path alone, so two sibling containers sharing a `SHORT-NAME` shared one id and
+ * a reveal could land on the wrong one (UX child design §13, R-UX13); parameters and
+ * references already had the ordinal. The ordinal is a counter over the raw model's
+ * document order — the same source the rest of the id uses — and is never taken from
+ * the display order.
  */
 import {
 	ContainerNode,
@@ -56,7 +63,10 @@ export function buildNodeIndex(model: EcucDocumentModel): NodeIndex {
 	};
 
 	const visitContainer = (container: ContainerNode): void => {
-		const id = `container:${container.containerPath.join('/')}/${container.shortName}`;
+		// The owner is the container's path — identical for siblings — so the ordinal
+		// separates two siblings that share a short-name (UX child design §13).
+		const owner = container.containerPath.join('/');
+		const id = `container:${owner}/${container.shortName}#${ordinal(owner, 'container', container.shortName)}`;
 		add(container, id, container.shortName, container.range);
 		for (const parameter of container.parameters) {
 			add(parameter, `${id}/param:${parameter.name}#${ordinal(id, 'param', parameter.name)}`, parameter.name, parameter.range);
@@ -70,7 +80,12 @@ export function buildNodeIndex(model: EcucDocumentModel): NodeIndex {
 	};
 
 	for (const module of model.modules) {
-		add(module, `module:${module.definitionRef}|${module.shortName}`, module.shortName, module.range);
+		const id = `module:${module.definitionRef}|${module.shortName}#${ordinal(
+			'',
+			'module',
+			`${module.definitionRef}|${module.shortName}`
+		)}`;
+		add(module, id, module.shortName, module.range);
 		for (const container of module.containers) {
 			visitContainer(container);
 		}

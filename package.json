@@ -114,6 +114,16 @@
             "EcuMRbCallOutItem"
           ],
           "description": "DEFINITION-REF tails that keep declaration order under \"all\". Defaults to the list from the legacy Arxml2Artext.cmd."
+        },
+        "arxmlScope.ecuc.editor.revealMode": {
+          "type": "string",
+          "enum": [
+            "beside",
+            "focus",
+            "replace"
+          ],
+          "default": "beside",
+          "description": "Where \"Reveal in ARXML Source\" shows the file. \"beside\" opens the source next to the ECUC editor and keeps focus in the tree; \"focus\" opens it beside and moves focus there; \"replace\" swaps the ECUC editor's tab for the text editor, as older versions did."
         }
       }
     }

@@ -40,8 +40,10 @@ async function openEcucEditor(uri?: vscode.Uri): Promise<void> {
 }
 
 /**
- * Editor → source (design §2.3). `follow` resolves a reference's target instead of
- * revealing the reference itself; it is the webview's `follow` message.
+ * Editor → source (design §2.3; UX child design §3). `follow` resolves a reference's
+ * target instead of revealing the reference itself; it is the webview's `follow`
+ * message. Both go through `revealRangeInTextEditor`, which opens the source beside the
+ * tree (or swaps the tab in `replace` mode) instead of replacing the custom editor.
  */
 async function revealInSource(uri?: vscode.Uri, nodeId?: string, follow = false): Promise<vscode.Range | undefined> {
 	const target = uri ?? vscode.window.activeTextEditor?.document.uri;

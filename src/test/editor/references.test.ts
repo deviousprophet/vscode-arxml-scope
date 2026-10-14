@@ -54,8 +54,12 @@ suite('editor references (AC6)', () => {
 			true
 		);
 		assert.ok(target, 'the target range');
-		const editor = vscode.window.activeTextEditor;
-		assert.ok(editor, 'the text editor must be active');
+		// UX child design §3: the source opens beside the tree, so the editor is visible
+		// without having to be the focused one.
+		const editor = vscode.window.visibleTextEditors.find(
+			(candidate) => candidate.document.uri.toString() === uri.toString()
+		);
+		assert.ok(editor, 'the range must be shown in a visible text editor');
 		assert.strictEqual(editor.document.getText(target), slice(text, container.range));
 
 		for (const name of ['Missing', 'Ambiguous']) {
