@@ -48,10 +48,13 @@ Ordered checklist for this child. Design: `design.md` + `../10-14-ecuc-artext-ed
 | `references.test.ts` | AC6 — same-file target selected; absent and ambiguous each noticed, nothing thrown |
 | `filter.test.ts` | AC7 — narrowing and restoring |
 | `a11y.test.ts` | AC8 — the rendered tree exposes tree roles and the expected keyboard affordances |
+| `rescan.test.ts` | design §1.5 — the re-scan push, the document filter and the disposal that releases the subscription; §2.2 — node-id stability across a file reorder, across the sort setting and across a value edit; §2.4 — the selection survives a re-scan |
 
 Assertions on rendered HTML are made against the string returned by `renderHtml`, not through a live
-webview, wherever the webview adds no coverage. Only the cases that need the real document lifecycle
-(AC2, AC4, AC5, AC9) use a live editor, since webview-driven tests are slow and brittle.
+webview, wherever the webview adds no coverage. The cases that need the real document lifecycle
+(AC2, AC3, AC4, AC5, AC9) use a live editor, and `rescan.test.ts` drives the provider's own entry
+point with a stub panel plus a real in-memory document edit, since webview-driven tests are slow and
+brittle and `@vscode/test-electron` exposes no webview DOM or message observer.
 
 ## Validation commands
 
@@ -132,8 +135,69 @@ Decisions taken where the design was ambiguous or wrong:
     not rendered. That shape is unreachable in valid AUTOSAR (`PARAMETER-VALUES` live under
     `ECUC-CONTAINER-VALUE`), so it is not a defect and core was not modified.
 
-Not covered by an automated assertion: the live webview's keyboard handling, the client-side filter
-pass and the `model`-message swap are asserted on the rendered string, not by driving a live webview —
-`@vscode/test-electron` exposes no webview key-press or DOM API. The re-scan subscription itself is
-likewise asserted structurally (one refresh path, disposed with the panel) rather than by mutating a
-document under a live panel.
+Not covered by an automated assertion: the live webview's keyboard handling and the client-side filter
+pass are asserted on the rendered string, not by driving a live webview — `@vscode/test-electron`
+exposes no webview key-press or DOM API, and the extension host has no DOM, so no cheaper real test
+exists for either. The re-scan subscription is asserted for real by `rescan.test.ts` (a stub panel
+records the pushes, a real in-memory document edit drives them, and the disposal check proves the
+subscription is released) rather than structurally.
+
+## Phase 2.2 check (verified, this session)
+
+Independently re-checked against `prd.md` AC1–AC10, `design.md`, the parent `design.md` §6/§9/§10/§11
+and `reference/legacy-arxml2artext/Arxml2Artext.mm`. Evidence observed, not taken on trust:
+
+1. **Read-only (AC9, parent D15/R11).** `grep` over `src/editor/**` and `src/commands.ts` for
+   `WorkspaceEdit`, `applyEdit`, `writeFile`, `fs.` and any save/revert call: no match. The only
+   matches in the repository are in `src/spikes/**` (throwaway) and in tests that *read* fixtures.
+2. **AC3 is not masked any more.** The test previously opened the fixture with
+   `vscode.window.showTextDocument`, which forces the text editor and therefore **cannot fail** with
+   `priority: "default"`. It now uses `vscode.open`, the normal open path, which runs editor
+   resolution — the thing `priority` controls — and still asserts `TabInputText`, no custom editor
+   and the active text editor on that document.
+3. **`priority: "option"`.** Confirmed against the real VS Code 1.141.2 build the tests run in: its
+   extension-point schema declares `priority: { enum: ["default", "option"], default: "default" }`,
+   and its editor cache excludes a resolver only when `priority.editor === "option"`. The manifest
+   assertion in `activation.test.ts` therefore asserts the actual mechanism, not a restatement.
+4. **Gate fallback.** `vscode.openWith(uri, 'default')` is correct: `workbench.action.reopenWithEditor`
+   opens the *Reopen With…* picker. `design.md` §1.1 and §2.2 were still describing the old protocol
+   and the old fallback; both are now corrected to match the code.
+5. **Rendering against parent §6.** Every row of §6's table is rendered, in the §6 order, and nothing
+   outside it is added (module/container/parameter/reference label, secondary, variant, conditions,
+   annotations, schema release, hover path, secondary hex). §6's annotation row shows `[Label]` +
+   text with **no** `/* … */` wrapper, so dropping the wrapper is §6's own reading, not a deviation
+   from it; `docs/ECUC_EDITOR.md` disagreed and has been corrected. See §Outcome 6.
+6. **Module-level parameters/references (Outcome 10) — confirmed a non-issue.** The `.mm`'s
+   `ECUC-MODULE-CONFIGURATION-VALUES` transformation reads only `ANNOTATIONS`, `VARIATION-POINT`,
+   `DEFINITION-REF`, `SHORT-NAME`, `IMPLEMENTATION-CONFIG-VARIANT` and `CONTAINERS` — never a
+   module-level `PARAMETER-VALUES`/`REFERENCE-VALUES`. Measured over the real corpus available here
+   (208 ECUC-Values `.arxml` files, 436 modules): zero module-level member lists. Core was left
+   untouched, as required.
+7. **Node ids (design §2.2).** Verified by test, not by comment: an id does not depend on where a
+   node's siblings are declared, and rendering under `sort: 'all'` does not renumber anything
+   because the ordering functions are pure. Both were confirmed by mutation — breaking the purity of
+   `orderContainers` and reverting the selection fix each made the new tests fail.
+8. **Re-scan (design §1.5).** Now asserted for real, including the document-URI filter and the
+   disposal that releases the subscription.
+
+### Fixed in this check
+
+1. `src/test/editor/activation.test.ts` — AC3's "normally opened" test opened the file with
+   `showTextDocument`, which bypasses editor resolution; it now uses `vscode.open` (HIGH: the
+   criterion was asserted by a test that could not fail).
+2. `src/editor/ecucEditorProvider.ts` — the re-scan payload carried the selection captured when the
+   panel was created, so a node selected with source → editor was silently deselected by the next
+   document change; the provider now tracks each panel's current selection.
+3. `src/editor/renderHtml.ts` — the webview's `select` handler now moves the `data-selected` marker
+   with the focus, so a reused panel does not show two highlighted nodes.
+4. `src/test/editor/rescan.test.ts` (new) — real coverage for design §1.5, §2.2 and §2.4, the three
+   mechanisms the editing child builds on.
+5. `docs/ECUC_EDITOR.md` — the annotation row said `/* [Label] text */` (the dropped text form) and
+   the status paragraph still said the editor was design-only; both corrected.
+6. `.trellis/tasks/10-14-artext-custom-editor/design.md` — §1.1 still named
+   `workbench.action.reopenWithEditor` and §1.4/§2.2 still described the `ready`/`filter` protocol
+   that was never built; corrected to the code as shipped.
+
+Not fixed, and deliberately: the `@vscode/test-electron` host has no DOM, so the live webview's key
+handling and the client-side filter pass remain asserted on the generated string. No cheaper real
+test exists for them.

@@ -56,6 +56,12 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	private readonly panels = new Map<string, vscode.WebviewPanel>();
 	/** Selections requested before their panel existed, consumed by `resolveCustomTextEditor`. */
 	private readonly pending = new Map<string, string>();
+	/**
+	 * The node each open panel is currently focused on. The re-scan payload carries it,
+	 * so a change to the document cannot silently move the selection back to whatever
+	 * node the editor happened to be opened at (design §2.2, §2.4).
+	 */
+	private readonly selections = new Map<string, string>();
 
 	public resolveCustomTextEditor(
 		document: vscode.TextDocument,
@@ -71,14 +77,17 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			// `webview.html` is never set, so there is no empty shell to flash.
 			void vscode.window.showWarningMessage(reason);
 			void vscode.commands.executeCommand('vscode.openWith', document.uri, 'default');
-			panel.onDidDispose(() => this.panels.delete(key));
+			panel.onDidDispose(() => this.forget(key));
 			return;
 		}
 
 		const disposables: vscode.Disposable[] = [];
 		const nonce = randomBytes(16).toString('base64');
-		let selectedId = this.pending.get(key);
+		const selectedId = this.pending.get(key) ?? this.selections.get(key);
 		this.pending.delete(key);
+		if (selectedId !== undefined) {
+			this.selections.set(key, selectedId);
+		}
 		let model = scanEcucValues(document.getText());
 
 		panel.webview.options = { enableScripts: true };
@@ -93,8 +102,9 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				}
 				model = scanEcucValues(document.getText());
-				const options: RenderOptions = { ...editorSettings(), selectedId };
-				void panel.webview.postMessage({ type: 'model', tree: renderTree(model, options), selectedId });
+				const current = this.selections.get(key);
+				const options: RenderOptions = { ...editorSettings(), selectedId: current };
+				void panel.webview.postMessage({ type: 'model', tree: renderTree(model, options), selectedId: current });
 			})
 		);
 
@@ -115,8 +125,15 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			for (const disposable of disposables) {
 				disposable.dispose();
 			}
-			this.panels.delete(key);
+			this.forget(key);
 		});
+	}
+
+	/** Releases everything this provider keeps for a document. */
+	private forget(key: string): void {
+		this.panels.delete(key);
+		this.selections.delete(key);
+		this.pending.delete(key);
 	}
 
 	/**
@@ -127,6 +144,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		const key = uri.toString();
 		const panel = this.panels.get(key);
 		if (panel) {
+			this.selections.set(key, nodeId);
 			panel.reveal();
 			await panel.webview.postMessage({ type: 'select', nodeId });
 			return;

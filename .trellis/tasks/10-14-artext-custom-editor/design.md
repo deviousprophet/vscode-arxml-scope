@@ -9,12 +9,15 @@ this child and what it must decide itself.
 `resolveCustomTextEditor(document, panel, token)` runs once per panel, not once per file:
 
 1. **Gate.** Check `.arxml`, then run the core detection. On failure, post an explanation, then
-   `workbench.action.reopenWithEditor` back to the text editor. The return must happen **before** any
-   HTML is rendered, so a rejected file never flashes an empty tree.
+   `vscode.openWith(uri, 'default')` back to the text editor. The return must happen **before** any
+   HTML is rendered, so a rejected file never flashes an empty tree. (`workbench.action.reopenWithEditor`
+   stood here in the first draft and is wrong: it opens the *Reopen With…* picker rather than the text
+   editor, so the fallback would not be deterministic. Corrected at implementation time — see
+   `implement.md` §Outcome 2 — and the same call is what §2.3 already uses.)
 2. **Scan.** `scanEcucValues(document.getText())` and keep the resulting model together with the
    `LineIndex`, in a per-panel state object.
 3. **Render.** Build the HTML string with `renderHtml(model)` and set `panel.webview.html`.
-4. **Wire.** `onDidReceiveMessage` for `ready`, `reveal` and `filter`; a
+4. **Wire.** `onDidReceiveMessage` for `reveal` and `follow` (§2.2); a
    `workspace.onDidChangeTextDocument` subscription filtered to this document; `panel.onDidDispose`
    to dispose both.
 
@@ -36,11 +39,16 @@ a test.
 The supported entry point remains the command `vscode-arxml-scope.openEcucEditor`, which gates on
 detection and then calls `vscode.openWith(uri, viewType)`.
 
-**2.2 Message protocol.** Webview → extension: `{ type: 'ready' }` (first paint, triggers the initial
-model push if the panel is not re-rendered), `{ type: 'reveal', nodeId }`, `{ type: 'filter', text }`.
-Extension → webview: `{ type: 'model', … }` after a re-scan, and `{ type: 'notice', message, kind }`
-for a refusal or an unresolvable reference. `nodeId` is a stable path-based id from the model, not an
-array index, so it survives a re-scan that reorders nodes.
+**2.2 Message protocol.** Webview → extension: `{ type: 'reveal', nodeId }` and
+`{ type: 'follow', nodeId }` (a reference's own range versus its target — one message cannot mean
+both, so `follow` is separate). Extension → webview: `{ type: 'model', tree, selectedId }` after a
+re-scan, `{ type: 'select', nodeId }` when the panel already exists, and
+`{ type: 'notice', message, kind }` for an unresolvable reference. `nodeId` is a stable path-based id
+from the model, not an array index, so it survives a re-scan that reorders nodes.
+
+There is deliberately **no `ready` and no `filter` message**, as built: the initial model is baked
+into the HTML, the filter is client-side (§2.5), and either round-trip would be a second, partial
+update path — the bug source §3 warns about.
 
 **2.3 Reveal, editor → source.** Open the same resource with the text editor at the node's range:
 `vscode.openWith(uri, 'default', { selection })` followed by `revealRange`. Per Spike B, on a

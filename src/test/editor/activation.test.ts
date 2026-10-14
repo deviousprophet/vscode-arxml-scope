@@ -53,12 +53,18 @@ suite('editor activation (AC2, AC3, AC9)', () => {
 
 	test('AC3: a normally opened arxml still uses the text editor', async () => {
 		const uri = fixtureUri('basic.arxml');
-		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
-		await sleep(200);
+		// `vscode.open` is the normal open path — the one an Explorer click or
+		// `File: Open File` takes — so it runs editor resolution, which is exactly what
+		// `priority` controls. `showTextDocument` would force the text editor and could
+		// not fail even with a `default` priority, so it would prove nothing here.
+		await vscode.commands.executeCommand('vscode.open', uri);
+		await sleep(600);
 
 		const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
 		assert.ok(input instanceof vscode.TabInputText, 'the plain text editor must be used');
-		assert.strictEqual(activeViewType(), undefined);
+		assert.strictEqual(activeViewType(), undefined, 'the custom editor must not claim the file');
+		assert.ok(vscode.window.activeTextEditor, 'the text editor must be active');
+		assert.strictEqual(vscode.window.activeTextEditor!.document.uri.toString(), uri.toString());
 	});
 
 	test('AC3: the manifest never claims .arxml by default', () => {

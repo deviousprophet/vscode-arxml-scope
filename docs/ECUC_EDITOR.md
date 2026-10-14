@@ -4,10 +4,12 @@ A VS Code custom editor for ECUC-Values `.arxml` files: it renders the file as a
 tree — the same information the legacy `arxml2artext` tool's ARTEXT output carried — and lets you edit
 parameter and reference values in place, without leaving VS Code.
 
-> Status: core implemented, editor not yet. `src/core/` (detection, scanner, model, ordering,
-> resolution, validation, offset index) is in place with passing core tests; the custom editor itself
-> is still design only. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
-> `design.md`, `implement.md`) with the reference analysis in its
+> Status: core and the read-only editor implemented, value editing not yet. `src/core/` (detection,
+> scanner, model, ordering, resolution, validation, offset index) and `src/editor/` (custom editor
+> provider, rendering, filter, navigation) are in place with passing tests; the value-editing child
+> (`../10-14-ecuc-value-editing`) is still design only, so the *Editing* section below describes
+> behaviour that is not shipped yet. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/`
+> (`prd.md`, `design.md`, `implement.md`) with the reference analysis in its
 > `research/legacy-artext-analysis.md`, and the legacy transform is vendored as text under
 > `reference/legacy-arxml2artext/`. This document is the reader-facing description and is revised at
 > the end of implementation if anything drifts.
@@ -46,7 +48,7 @@ the file back to the text editor rather than showing an empty view.
 | Parameter | the `DEFINITION-REF` tail, the value, and the hexadecimal form of a numeric value as secondary information |
 | Reference | the `DEFINITION-REF` tail, the target path, and the context of an instance reference |
 | Conditions | `[SW-SYSCOND]` and post-build-variant conditions as `<Ref == value && …>` |
-| Annotations | `/* [Label] text */`, including annotations without a label |
+| Annotations | `[Label] text`, including annotations without a label (the `/* … */` wrapper belongs to the dropped ARTEXT text form and is not shown) |
 
 Hovering a container or parameter shows its full `DEFINITION-REF` path.
 

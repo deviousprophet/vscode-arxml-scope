@@ -438,6 +438,13 @@ window.addEventListener('message', (event) => {
 		prepareFocus();
 	} else if (message.type === 'select') {
 		selectedId = message.nodeId;
+		for (const item of document.querySelectorAll('#tree [role="treeitem"]')) {
+			if (item.dataset.nodeId === selectedId) {
+				item.dataset.selected = 'true';
+			} else {
+				delete item.dataset.selected;
+			}
+		}
 		prepareFocus();
 	} else if (message.type === 'notice') {
 		notice.textContent = message.message;
