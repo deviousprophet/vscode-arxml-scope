@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+    <AR-PACKAGES>
+        <AR-PACKAGE>
+            <SHORT-NAME>PkgA</SHORT-NAME>
+            <ELEMENTS>
+                <ECUC-MODULE-CONFIGURATION-VALUES>
+                    <SHORT-NAME>ModA</SHORT-NAME>
+                    <DEFINITION-REF DEST="ECUC-MODULE-DEF">/PkgA/ModDefs/ModA</DEFINITION-REF>
+                    <IMPLEMENTATION-CONFIG-VARIANT>VARIANT-PRE-COMPILE</IMPLEMENTATION-CONFIG-VARIANT>
+                    <CONTAINERS>
+                        <ECUC-CONTAINER-VALUE>
+                            <SHORT-NAME>ContA</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgA/ModDefs/ModA/ContA</DEFINITION-REF>
+                            <PARAMETER-VALUES>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/PkgA/ModDefs/ModA/ContA/IniValue</DEFINITION-REF>
+                                    <VALUE>63</VALUE>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                                <ECUC-TEXTUAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/PkgA/ModDefs/ModA/ContA/Title</DEFINITION-REF>
+                                    <VALUE>hello</VALUE>
+                                </ECUC-TEXTUAL-PARAM-VALUE>
+                            </PARAMETER-VALUES>
+                            <REFERENCE-VALUES>
+                                <ECUC-REFERENCE-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/PkgA/ModDefs/ModA/ContA/PeerRef</DEFINITION-REF>
+                                    <VALUE-REF DEST="ECUC-CONTAINER-VALUE">/PkgA/ModA/ContB</VALUE-REF>
+                                </ECUC-REFERENCE-VALUE>
+                                <ECUC-INSTANCE-REFERENCE-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INSTANCE-REFERENCE-DEF">/PkgA/ModDefs/ModA/ContA/PeerIref</DEFINITION-REF>
+                                    <VALUE-IREF>
+                                        <TARGET-REF DEST="ECUC-CONTAINER-VALUE">/PkgA/ModA/ContB</TARGET-REF>
+                                        <CONTEXT-ELEMENT-REF DEST="ECUC-CONTAINER-VALUE">/PkgA/ModA/ContA</CONTEXT-ELEMENT-REF>
+                                    </VALUE-IREF>
+                                </ECUC-INSTANCE-REFERENCE-VALUE>
+                            </REFERENCE-VALUES>
+                            <SUB-CONTAINERS>
+                                <ECUC-CONTAINER-VALUE>
+                                    <SHORT-NAME>ContB</SHORT-NAME>
+                                    <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgA/ModDefs/ModA/ContB</DEFINITION-REF>
+                                    <PARAMETER-VALUES>
+                                        <ECUC-TEXTUAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/PkgA/ModDefs/ModA/ContB/Text</DEFINITION-REF>
+                                            <VALUE>nested</VALUE>
+                                        </ECUC-TEXTUAL-PARAM-VALUE>
+                                    </PARAMETER-VALUES>
+                                </ECUC-CONTAINER-VALUE>
+                            </SUB-CONTAINERS>
+                        </ECUC-CONTAINER-VALUE>
+                    </CONTAINERS>
+                </ECUC-MODULE-CONFIGURATION-VALUES>
+            </ELEMENTS>
+        </AR-PACKAGE>
+    </AR-PACKAGES>
+</AUTOSAR>

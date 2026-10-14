@@ -1,0 +1,30 @@
+{
+  "id": "ecuc-artext-editor",
+  "name": "ecuc-artext-editor",
+  "title": "ECUC ARTEXT editor for ARXML files",
+  "description": "Port the Arxml2Artext ECUC-Values to ARTEXT semantics into vscode-arxml-scope as a TypeScript renderer plus an editable custom editor that navigates into the source arxml, replacing the legacy Windows-only mmx binary pipeline.",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "deviousprophet",
+  "assignee": "deviousprophet",
+  "createdAt": "2026-10-14",
+  "completedAt": null,
+  "branch": "feat/arxml-scope",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "10-14-ecuc-model-scanner",
+    "10-14-artext-custom-editor",
+    "10-14-ecuc-value-editing"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

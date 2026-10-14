@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check the core modules against the project's code standards before the child is accepted."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify strict typing and that src/core imports no vscode module."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Verification rules and AI-reviewer false positives to filter before raising findings."}
+{"file": ".trellis/tasks/10-14-ecuc-artext-editor/research/legacy-artext-analysis.md", "reason": "Ground truth for checking scanner, ordering and resolution parity."}

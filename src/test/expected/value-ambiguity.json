@@ -1,0 +1,47 @@
+{
+	"schema": { "release": "00048" },
+	"packages": [{ "path": ["P"], "range": { "start": 139, "end": 1256 } }],
+	"modules": [
+		{
+			"kind": "module",
+			"definitionRef": "/D/M",
+			"definitionRefRange": { "start": 308, "end": 312 },
+			"shortName": "M",
+			"shortNameRange": { "start": 267, "end": 268 },
+			"range": { "start": 210, "end": 1220 },
+			"containers": [
+				{
+					"kind": "container",
+					"definitionRef": "/D/C",
+					"definitionRefRange": { "start": 459, "end": 463 },
+					"shortName": "C",
+					"shortNameRange": { "start": 414, "end": 415 },
+					"range": { "start": 365, "end": 1152 },
+					"containerPath": ["P", "M"],
+					"parameters": [
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/D/C/IniValue",
+							"definitionRefRange": { "start": 593, "end": 606 },
+							"name": "IniValue",
+							"displayValue": "63",
+							"hexValue": "0x3F",
+							"valueRange": { "start": 649, "end": 651 },
+							"range": { "start": 530, "end": 705 }
+						}
+					],
+					"references": [],
+					"containers": [],
+					"postBuildVariants": [{ "criterion": "Crit1", "operator": "==", "value": "63" }],
+					"postBuildRange": { "start": 788, "end": 1083 }
+				}
+			]
+		}
+	],
+	"pathIndex": [
+		["/P/M/C", { "start": 365, "end": 1152 }],
+		["/P/M", { "start": 210, "end": 1220 }],
+		["/P", { "start": 139, "end": 1256 }]
+	]
+}

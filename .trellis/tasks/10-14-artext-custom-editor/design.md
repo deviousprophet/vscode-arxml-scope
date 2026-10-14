@@ -1,0 +1,73 @@
+# Design: ARTEXT custom editor for ECUC-Values arxml
+
+Implements `../10-14-ecuc-artext-editor/design.md` §6 (display rules), §9 (editor) and §10
+(navigation), plus §11 (contributions). Read those first; this file records only what is specific to
+this child and what it must decide itself.
+
+## 1. Provider lifecycle
+
+`resolveCustomTextEditor(document, panel, token)` runs once per panel, not once per file:
+
+1. **Gate.** Check `.arxml`, then run the core detection. On failure, post an explanation, then
+   `workbench.action.reopenWithEditor` back to the text editor. The return must happen **before** any
+   HTML is rendered, so a rejected file never flashes an empty tree.
+2. **Scan.** `scanEcucValues(document.getText())` and keep the resulting model together with the
+   `LineIndex`, in a per-panel state object.
+3. **Render.** Build the HTML string with `renderHtml(model)` and set `panel.webview.html`.
+4. **Wire.** `onDidReceiveMessage` for `ready`, `reveal` and `filter`; a
+   `workspace.onDidChangeTextDocument` subscription filtered to this document; `panel.onDidDispose`
+   to dispose both.
+
+The re-scan subscription is not optional. Without it an external edit — or an undo of this editor's
+own write in the sibling child — leaves a stale tree on screen, and the ranges it holds no longer
+point at the right bytes.
+
+## 2. Decisions this child owns
+
+**2.1 View type and activation.** `viewType` is `vscode-arxml-scope.ecucEditor`, with
+`selector: [{ filenamePattern: '*.arxml' }]`. Registering a selector does **not** make it the default
+— VS Code offers it through *Open With…* — but relying on that alone would be fragile, so the
+supported entry point is the command `vscode-arxml-scope.openEcucEditor`, which gates on detection
+and then calls `vscode.openWith(uri, viewType)` (parent D14).
+
+**2.2 Message protocol.** Webview → extension: `{ type: 'ready' }` (first paint, triggers the initial
+model push if the panel is not re-rendered), `{ type: 'reveal', nodeId }`, `{ type: 'filter', text }`.
+Extension → webview: `{ type: 'model', … }` after a re-scan, and `{ type: 'notice', message, kind }`
+for a refusal or an unresolvable reference. `nodeId` is a stable path-based id from the model, not an
+array index, so it survives a re-scan that reorders nodes.
+
+**2.3 Reveal, editor → source.** Open the same resource with the text editor at the node's range:
+`vscode.openWith(uri, 'default', { selection })` followed by `revealRange`. Per Spike B, on a
+resource already shown in the custom editor this **swaps** the editor rather than opening a second
+pane; that is the accepted behaviour, and the outcome is recorded in the parent plan before this child
+is implemented. If Spike B proved a live pair achievable, the same command targets the other group
+instead and nothing else changes.
+
+**2.4 Reveal, source → editor.** Offered from the arxml text editor. The cursor offset is converted
+through `LineIndex` and matched against node ranges. Several nodes can contain one offset (a parameter
+inside a container inside a module), so the **innermost** — smallest containing range — wins. This is
+a binary search over ranges sorted by start offset, so the deep-nesting case stays cheap. The resulting
+`nodeId` is passed through the same `reveal` handling as §2.3 in reverse, so both directions share one
+mapping and cannot drift.
+
+**2.5 Filter is client-side.** The input box narrows the already-rendered tree by matching label,
+short-name and value, and keeps a node visible when any descendant matches. No message round-trip, no
+re-scan: the filter is a view concern and the extension host already sent everything the view needs.
+
+**2.6 Rendering.** `renderHtml` emits one inlined CSS block, one inlined script, a `nonce` on the
+script tag and a CSP meta allowing only that nonce. Every colour is a `--vscode-*` variable
+(parent R16). The tree uses real ARIA tree roles with `tabindex`, arrow-key traversal and visible
+focus. A numeric value's hex form is a secondary element, not concatenated into the value, so the
+edit child can replace the value text without touching it.
+
+**2.7 Hover shows the full path.** The `DEFINITION-REF` path is already in the model; it goes in the
+node's `title`, so no tooltip infrastructure is needed (parent D8).
+
+## 3. Risks
+
+- **Stale ranges.** Every path that mutates the document must re-scan. The subscription in §1 is the
+  single mechanism; a second, partial update path would be the bug source.
+- **Empty view on a rejected file** (§1.1) — the gate must complete before `webview.html` is set.
+- **Live pairing** (§2.3) is settled by Spike B, not by assumption.
+- **Large trees** (parent `design.md` §15.5): the tree is rendered whole. Measure with a realistically
+  large file before adding virtualisation; do not add it speculatively.

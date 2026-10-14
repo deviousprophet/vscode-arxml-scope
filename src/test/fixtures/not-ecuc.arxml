@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>P</SHORT-NAME>
+      <ELEMENTS>
+        <SOME-OTHER-COLLECTION>
+          <SHORT-NAME>Other</SHORT-NAME>
+        </SOME-OTHER-COLLECTION>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>

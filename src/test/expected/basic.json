@@ -1,0 +1,107 @@
+{
+	"schema": { "release": "00048" },
+	"packages": [{ "path": ["PkgA"], "range": { "start": 238, "end": 3656 } }],
+	"modules": [
+		{
+			"kind": "module",
+			"definitionRef": "/PkgA/ModDefs/ModA",
+			"definitionRefRange": { "start": 476, "end": 494 },
+			"shortName": "ModA",
+			"shortNameRange": { "start": 399, "end": 403 },
+			"variant": "VARIANT-PRE-COMPILE",
+			"variantRange": { "start": 563, "end": 582 },
+			"range": { "start": 332, "end": 3610 },
+			"containers": [
+				{
+					"kind": "container",
+					"definitionRef": "/PkgA/ModDefs/ModA/ContA",
+					"definitionRefRange": { "start": 835, "end": 859 },
+					"shortName": "ContA",
+					"shortNameRange": { "start": 735, "end": 740 },
+					"range": { "start": 672, "end": 3524 },
+					"containerPath": ["PkgA", "ModA"],
+					"parameters": [
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/PkgA/ModDefs/ModA/ContA/IniValue",
+							"definitionRefRange": { "start": 1067, "end": 1100 },
+							"name": "IniValue",
+							"displayValue": "63",
+							"hexValue": "0x3F",
+							"valueRange": { "start": 1161, "end": 1163 },
+							"range": { "start": 956, "end": 1233 }
+						},
+						{
+							"kind": "parameter",
+							"numeric": false,
+							"definitionRef": "/PkgA/ModDefs/ModA/ContA/Title",
+							"definitionRefRange": { "start": 1374, "end": 1404 },
+							"name": "Title",
+							"displayValue": "hello",
+							"valueRange": { "start": 1465, "end": 1470 },
+							"range": { "start": 1266, "end": 1538 }
+						}
+					],
+					"references": [
+						{
+							"kind": "reference",
+							"instance": false,
+							"definitionRef": "/PkgA/ModDefs/ModA/ContA/PeerRef",
+							"definitionRefRange": { "start": 1767, "end": 1799 },
+							"name": "PeerRef",
+							"targetRawPath": "/PkgA/ModA/ContB",
+							"targetPath": "PkgA.ModA.ContB",
+							"contextPaths": [],
+							"targetRange": { "start": 1892, "end": 1908 },
+							"range": { "start": 1666, "end": 1976 }
+						},
+						{
+							"kind": "reference",
+							"instance": true,
+							"definitionRef": "/PkgA/ModDefs/ModA/ContA/PeerIref",
+							"definitionRefRange": { "start": 2128, "end": 2161 },
+							"name": "PeerIref",
+							"targetRawPath": "/PkgA/ModA/ContB",
+							"targetPath": "PkgA.ModA.ContB",
+							"contextPaths": ["PkgA.ModA.ContA"],
+							"targetRange": { "start": 2308, "end": 2324 },
+							"range": { "start": 2009, "end": 2580 }
+						}
+					],
+					"containers": [
+						{
+							"kind": "container",
+							"definitionRef": "/PkgA/ModDefs/ModA/ContB",
+							"definitionRefRange": { "start": 2885, "end": 2909 },
+							"shortName": "ContB",
+							"shortNameRange": { "start": 2777, "end": 2782 },
+							"range": { "start": 2706, "end": 3430 },
+							"containerPath": ["PkgA", "ModA", "ContA"],
+							"parameters": [
+								{
+									"kind": "parameter",
+									"numeric": false,
+									"definitionRef": "/PkgA/ModDefs/ModA/ContB/Text",
+									"definitionRefRange": { "start": 3138, "end": 3167 },
+									"name": "Text",
+									"displayValue": "nested",
+									"valueRange": { "start": 3236, "end": 3242 },
+									"range": { "start": 3022, "end": 3318 }
+								}
+							],
+							"references": [],
+							"containers": []
+						}
+					]
+				}
+			]
+		}
+	],
+	"pathIndex": [
+		["/PkgA/ModA/ContA/ContB", { "start": 2706, "end": 3430 }],
+		["/PkgA/ModA/ContA", { "start": 672, "end": 3524 }],
+		["/PkgA/ModA", { "start": 332, "end": 3610 }],
+		["/PkgA", { "start": 238, "end": 3656 }]
+	]
+}

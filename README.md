@@ -39,6 +39,11 @@ All tooling is read-only: ARXML Scope never modifies your files.
 
 Issues and pull requests are welcome. Please include a minimal, non-confidential ARXML sample when reporting a bug.
 
+Work in progress is tracked under `.trellis/` — start with `.trellis/workflow.md`. The ECUC editor's
+design and current status are in [docs/ECUC_EDITOR.md](docs/ECUC_EDITOR.md), and the legacy ARTEXT
+mapping it replaces is vendored as text under
+[reference/legacy-arxml2artext/](reference/legacy-arxml2artext/README.md).
+
 ## License
 
 See [LICENSE](LICENSE).
