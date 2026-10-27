@@ -118,3 +118,52 @@ Reworked the Document view from a tree skin into a calm editor-like text surface
 ### Status
 
 [OK] **Completed**
+
+## Session 4: ECUC quiet-source design implementation
+
+**Date**: 2026-10-28
+**Task**: ECUC editor quiet-source (archived)
+**Branch**: `feat/arxml-scope`
+
+### Summary
+
+Implemented the quiet-source design spec on the ECUC Document view: real source line numbers and gutter, 26px strip, token system, full-row selection rail/tint, muted value separator, inline invalid reason, details/bottom sheet, and Tree surface alignment. Then ran @code-review and fixed the findings.
+
+### Main Changes
+
+- `data-line`/`#tree data-ln-digits`, CSS `:has` gutter width (no CSP-blocked style attribute).
+- `--tok-*` palette with `@supports` color-mix fallbacks; 10% dark/no-fill light selection for contrast.
+- Source line-number gutter, fold chevrons/collapsed stub, muted `=` punctuation, F2 hint.
+- Real 26px strip, filter/count/icons/Document|Tree/Details switch, notice under the strip.
+- Details panel clamp/stacked keys/actions/empty copy/bottom sheet.
+- Inline invalid reason and 1s flash; high-contrast outlines in both views.
+- Tree view shared surface/tokens/states; chips, glyphs, dotted values retained.
+- Docs/specs and tests updated; 14 stale generated capture HTML files removed.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0eb70ca` | feat(editor): implement the quiet-source ECUC document view |
+| `8d8c1be` | chore(task): remove generated capture HTML |
+| `fef027b` | fix(editor): address quiet-source review findings |
+| `d393230` | chore(task): archive 10-27-ecuc-editor-quiet-source |
+
+### Testing
+
+- [OK] `npm run check-types`, `npm run lint`
+- [OK] 166 passing; `preview:check` ok
+- [OK] 10 mutations each failed their intended test
+- [OK] `@code-review` findings fixed; spec file unchanged
+- [OK] Document captures in light/dark/HC, selected, collapsed, invalid, details, narrow; Tree captures
+
+### Known Follow-ups
+
+- Huge sample load ~3.8 s vs ~2.2 s from 12k line-number pseudo-elements; no virtualisation.
+- Real source line numbers are non-monotonic under the legacy `all` sort; `declaration` is ascending.
+- Narrow capture is at the harness 492px floor; real 360px webview check remains.
+- Light selection uses the 2px rail (no fill) to keep the key accent at 4.51:1.
+
+### Status
+
+[OK] **Completed**
