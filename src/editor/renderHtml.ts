@@ -188,8 +188,7 @@ function item(ctx: Ctx, spec: ItemSpec): string {
 	const end = ctx.lineIndex?.positionAt(spec.range.end);
 	const position =
 		start && end
-			? ` data-range-start="${spec.range.start}" data-range-end="${spec.range.end}"` +
-				` data-line="${start.line}" data-column="${start.character}"` +
+			? ` data-line="${start.line}" data-column="${start.character}"` +
 				` data-end-line="${end.line}" data-end-column="${end.character}"`
 			: '';
 	const group = hasChildren ? `<div role="group" class="children">${spec.children.join('')}</div>` : '';
@@ -297,7 +296,7 @@ function parameterItem(
 	// Keep that split for parameter values instead of painting every value with the numeric
 	// token; reference targets get the link colour in `referenceItem`.
 	const valueKind = parameter.numeric
-		? value === 'true' || value === 'false'
+		? /^(true|false)$/i.test(value)
 			? 'boolean'
 			: 'numeric'
 		: 'textual';
@@ -761,18 +760,21 @@ body {
 	background: var(--vscode-list-focusBackground, var(--vscode-list-hoverBackground));
 }
 .node[data-selected="true"] > .row {
+	--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground);
 	background: var(--vscode-list-activeSelectionBackground);
-	color: var(--vscode-list-activeSelectionForeground);
+	color: var(--ecuc-selection-fg);
 	outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
 	outline-offset: -1px;
 }
 body:not(:focus-within) .node[data-selected="true"] > .row {
+	--ecuc-selection-fg: var(--vscode-list-inactiveSelectionForeground);
 	background: var(--vscode-list-inactiveSelectionBackground);
-	color: var(--vscode-list-inactiveSelectionForeground);
+	color: var(--ecuc-selection-fg);
 }
 /* Token colours are for the normal background. On a selection they can fall to ~1.2:1
  * (the light theme's green value on the blue selection is the worst case), so the whole
- * selected row uses the theme's selection foreground. */
+ * selected row uses the theme's selection foreground. The custom property lets the
+ * active and inactive states share one rule. */
 .node[data-selected="true"] > .row > .value,
 .node[data-selected="true"] > .row .short,
 .node[data-selected="true"] > .row .variant,
@@ -780,16 +782,18 @@ body:not(:focus-within) .node[data-selected="true"] > .row {
 .node[data-selected="true"] > .row .condition,
 .node[data-selected="true"] > .row .annotation,
 .node[data-selected="true"] > .row .context {
-	color: var(--vscode-list-activeSelectionForeground);
+	color: var(--ecuc-selection-fg);
 }
-body:not(:focus-within) .node[data-selected="true"] > .row > .value,
-body:not(:focus-within) .node[data-selected="true"] > .row .short,
-body:not(:focus-within) .node[data-selected="true"] > .row .variant,
-body:not(:focus-within) .node[data-selected="true"] > .row .hex,
-body:not(:focus-within) .node[data-selected="true"] > .row .condition,
-body:not(:focus-within) .node[data-selected="true"] > .row .annotation,
-body:not(:focus-within) .node[data-selected="true"] > .row .context {
-	color: var(--vscode-list-inactiveSelectionForeground);
+/* The marker, twisty and kind border are part of the selected row too. */
+.node[data-selected="true"] > .row > .twisty,
+.node[data-selected="true"] > .row .glyph svg {
+	color: var(--ecuc-selection-fg);
+}
+.node[data-selected="true"] > .row.k-module,
+.node[data-selected="true"] > .row.k-container,
+.node[data-selected="true"] > .row.k-parameter,
+.node[data-selected="true"] > .row.k-reference {
+	border-left-color: var(--ecuc-selection-fg);
 }
 .children {
 	margin-left: 14px;
@@ -1059,8 +1063,8 @@ function updateInspector() {
 	const hex = textOf(row, '.row-meta .hex');
 	const contextText = textOf(row, '.row-meta .context');
 	const context = contextText.startsWith('context ') ? contextText.slice('context '.length) : contextText;
-	const conditions = Array.from(row.querySelectorAll('.row-meta .condition')).map((element) => element.textContent).join(' ');
-	const annotations = Array.from(row.querySelectorAll('.row-meta .annotation')).map((element) => element.textContent).join(' ');
+	const conditions = Array.from(row.querySelectorAll('.row-meta .condition')).map((element) => element.textContent).join('\\n');
+	const annotations = Array.from(row.querySelectorAll('.row-meta .annotation')).map((element) => element.textContent).join('\\n');
 	const line = item.dataset.line;
 	const column = item.dataset.column;
 	const endLine = item.dataset.endLine;

@@ -134,7 +134,7 @@ export function filterScript(): string {
 		const empty = document.getElementById('empty');
 		const emptyText = document.getElementById('empty-text');
 		if (clearButton) {
-			clearButton.hidden = filterInput.value === '';
+			clearButton.hidden = filterInput.value.trim() === '';
 		}
 		const visible = new Map();
 		// Ancestors of a match are expanded while the filter is active, so a match inside

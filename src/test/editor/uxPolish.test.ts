@@ -73,15 +73,17 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		const html = renderTree(model, { lineIndex: index });
 		assert.ok(
 			html.includes(
-				`data-range-start="${parameter.range.start}" data-range-end="${parameter.range.end}"` +
-					` data-line="${start.line}" data-column="${start.character}"` +
+				`data-line="${start.line}" data-column="${start.character}"` +
 					` data-end-line="${end.line}" data-end-column="${end.character}"`
 			),
 			'the parameter carries its real source position'
 		);
+		assert.ok(!html.includes('data-range-start='), 'the unused raw range is not duplicated as data');
 	});
 
 	test('AC4: the inspector reads the data and posts reveal/copy, with no innerHTML', () => {
+		// Source-level field list: the DOM pass is browser-observed (implement.md); driving the
+		// whole inspector would need a full DOM and is not claimed here.
 		const html = page();
 		const update = functionSource(html, 'updateInspector');
 		for (const field of [
@@ -194,7 +196,7 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		assert.ok(apply.includes("countLabel.dataset.state = 'none'"));
 		assert.ok(apply.includes("countLabel.dataset.state = 'empty'"));
 		assert.ok(apply.includes("countLabel.dataset.state = 'filtered'"));
-		assert.ok(apply.includes("clearButton.hidden = filterInput.value === ''"));
+		assert.ok(apply.includes("clearButton.hidden = filterInput.value.trim() === ''"));
 		assert.ok(apply.includes("emptyText.textContent = 'No matches for \"' + filterInput.value.trim() + '\".'"));
 		assert.ok(script.includes('#empty-clear'), 'the clear action survives the tree swap by delegation');
 	});
@@ -212,15 +214,13 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 
 	test('AC9: a selected row uses the selection foreground for token-coloured text', () => {
 		const style = styleOf(page());
+		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground)'));
+		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-inactiveSelectionForeground)'));
 		assert.ok(
-			/\.node\[data-selected="true"\] > \.row > \.value[\s\S]*?\{[^}]*var\(--vscode-list-activeSelectionForeground\)/.test(
+			/\.node\[data-selected="true"\] > \.row > \.value[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
 				style
 			),
 			'the value and secondary fields do not keep a low-contrast token colour on the selection'
-		);
-		assert.ok(
-			/body:not\(:focus-within\)[\s\S]*?var\(--vscode-list-inactiveSelectionForeground\)/.test(style),
-			'and the unfocused selection uses the inactive selection foreground'
 		);
 	});
 

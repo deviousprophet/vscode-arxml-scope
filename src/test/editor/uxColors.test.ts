@@ -16,6 +16,39 @@ import { fixtureText } from '../core/modelTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
+/** Uppercase/mixed-case booleans are legal AUTOSAR values; the reference grammar highlights them. */
+const BOOLEAN_CASE_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>P</SHORT-NAME>
+      <ELEMENTS>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>M</SHORT-NAME>
+          <DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/M</DEFINITION-REF>
+          <CONTAINERS>
+            <ECUC-CONTAINER-VALUE>
+              <SHORT-NAME>C</SHORT-NAME>
+              <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/M/C</DEFINITION-REF>
+              <PARAMETER-VALUES>
+                <ECUC-NUMERICAL-PARAM-VALUE>
+                  <DEFINITION-REF DEST="ECUC-BOOLEAN-PARAM-DEF">/P/M/C/Upper</DEFINITION-REF>
+                  <VALUE>TRUE</VALUE>
+                </ECUC-NUMERICAL-PARAM-VALUE>
+                <ECUC-NUMERICAL-PARAM-VALUE>
+                  <DEFINITION-REF DEST="ECUC-BOOLEAN-PARAM-DEF">/P/M/C/Mixed</DEFINITION-REF>
+                  <VALUE>False</VALUE>
+                </ECUC-NUMERICAL-PARAM-VALUE>
+              </PARAMETER-VALUES>
+            </ECUC-CONTAINER-VALUE>
+          </CONTAINERS>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>`;
+
+
 function tree(): string {
 	const text = fixtureText(FIXTURE);
 	return renderTree(scanEcucValues(text), { lineIndex: new LineIndex(text) });
@@ -50,6 +83,12 @@ suite('editor semantic colours (AC14)', () => {
 		assert.strictEqual(kindFor('Flag'), 'boolean');
 		// The class contract is unchanged; the widget and filter still select `.value`.
 		assert.ok(tree().includes('<span class="value" data-value-kind="numeric"'));
+		const upper = renderTree(scanEcucValues(BOOLEAN_CASE_FIXTURE), {});
+		assert.strictEqual(
+			(upper.match(/data-value-kind="boolean"/g) ?? []).length,
+			2,
+			'boolean detection is case-insensitive (TRUE / False)'
+		);
 	});
 
 	test('AC14: each kind has its own accent and glyph variable', () => {
@@ -73,10 +112,22 @@ suite('editor semantic colours (AC14)', () => {
 		assert.ok(/\.short\s*\{[^}]*--vscode-symbolIcon-variableForeground/.test(style));
 	});
 
-	test('AC14: selection still owns the foreground, and no colour literal is added', () => {
+	test('AC14: selection still owns the foreground and markers, and no colour literal is added', () => {
 		const style = styleOf(page());
+		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground)'));
+		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-inactiveSelectionForeground)'));
 		assert.ok(
-			/\.node\[data-selected="true"\] > \.row > \.value[\s\S]*?\{[^}]*--vscode-list-activeSelectionForeground/.test(
+			/\.node\[data-selected="true"\] > \.row > \.value[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
+				style
+			)
+		);
+		assert.ok(
+			/\.node\[data-selected="true"\] > \.row > \.twisty[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
+				style
+			)
+		);
+		assert.ok(
+			/\.node\[data-selected="true"\] > \.row\.k-parameter[\s\S]*?border-left-color: var\(--ecuc-selection-fg\)/.test(
 				style
 			)
 		);

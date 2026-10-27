@@ -148,6 +148,10 @@ suite('editor reveal (AC1, AC2)', () => {
 		await resetRevealMode();
 	});
 
+	suiteTeardown(async () => {
+		await resetRevealMode();
+	});
+
 	test('AC1: a select from the tree opens no text editor and survives the next re-scan', async () => {
 		await withScratch('select.arxml', async (uri, document) => {
 			const provider = new EcucEditorProvider();
