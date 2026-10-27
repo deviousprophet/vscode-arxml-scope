@@ -22,12 +22,14 @@ import {
 	EcucDocumentModel,
 	ModuleNode,
 	ParameterNode,
+	Range,
 	ReferenceNode,
 	SortMode,
 	Suffixes,
 	lastShortName,
 } from '../core/ecuc/model';
 import { SORT_EXCEPTIONS, orderContainers, orderMembers, orderModules } from '../core/ecuc/order';
+import { LineIndex } from '../core/text/offsets';
 import { filterScript, haystack } from './filter';
 import { valueEditorScript } from './ecucValueEditor';
 import { NodeIndex, buildNodeIndex } from './nodeId';
@@ -39,6 +41,12 @@ export interface RenderOptions {
 	sortExcept?: readonly string[];
 	/** Node to mark and focus on load (child design §2.4, source → editor). */
 	selectedId?: string;
+	/**
+	 * The current document text's line index. When present, every node carries its
+	 * 0-based source position as data attributes; the details inspector adds one for
+	 * display. The renderer never guesses a position from the displayed order.
+	 */
+	lineIndex?: LineIndex;
 }
 
 /** Builds the whole page. */
@@ -53,18 +61,30 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </head>
 <body>
 <div class="toolbar">
+<div class="filter-wrap">
 <input id="filter" class="filter" type="search" placeholder="Filter labels, short names and values" aria-label="Filter the ECUC tree">
-<span id="count" class="count" role="status" aria-live="polite"></span>
+<button id="filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden>&times;</button>
+</div>
+<span id="count" class="count" role="status" aria-live="polite" data-state="none"></span>
 <span id="notice" class="notice" role="status" aria-live="polite"></span>
 <span class="grow"></span>
 <button id="expand-all" class="tool" type="button" title="Expand every container">Expand all</button>
 <button id="collapse-all" class="tool" type="button" title="Collapse every container">Collapse all</button>
+<button id="details-toggle" class="tool" type="button" aria-pressed="true" aria-controls="inspector" title="Show or hide the node details">Details</button>
 </div>
+<div id="content">
 <div id="main">${renderTree(model, options)}</div>
+<aside id="inspector" class="inspector" role="region" aria-label="Node details">
+<div class="inspector-empty">
+<p>Select a node to see its details.</p>
+<p class="inspector-hint">Double-click a row to reveal it in the source.</p>
+</div>
+</aside>
+</div>
 <script nonce="${nonce}">
-${filterScript()}
 const vscode = acquireVsCodeApi();
 ${valueEditorScript()}
+${filterScript()}
 ${TREE_SCRIPT}
 </script>
 </body>
@@ -78,6 +98,7 @@ export function renderTree(model: EcucDocumentModel, options: RenderOptions = {}
 		sort: options.sort ?? 'all',
 		except: options.sortExcept ?? SORT_EXCEPTIONS,
 		selectedId: options.selectedId,
+		lineIndex: options.lineIndex,
 		first: true,
 	};
 
@@ -93,7 +114,8 @@ export function renderTree(model: EcucDocumentModel, options: RenderOptions = {}
 	const items = modules.map((module, at) => moduleItem(ctx, module, 1, at + 1, modules.length));
 	return (
 		`<div class="meta">${meta.join('')}</div>` +
-		`<div id="tree" class="tree" role="tree" aria-label="ECUC values">${items.join('')}</div>`
+		`<div id="tree" class="tree" role="tree" aria-label="ECUC values">${items.join('')}</div>` +
+		`<div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div>`
 	);
 }
 
@@ -102,6 +124,8 @@ interface Ctx {
 	sort: SortMode;
 	except: readonly string[];
 	selectedId?: string;
+	/** Source line/column for the inspector; absent when the caller has no document text. */
+	lineIndex?: LineIndex;
 	/** True until the first item is written; it carries the roving `tabindex="0"`. */
 	first: boolean;
 }
@@ -111,7 +135,14 @@ interface ItemSpec {
 	kind: string;
 	label: string;
 	shortName?: string;
+	/** Full slash-delimited `DEFINITION-REF`, for the inspector and Copy path. */
+	definitionRef: string;
+	/** The raw value Copy value should carry, where the entity has one. */
 	value?: string;
+	/** The raw reference target, where the entity has one. */
+	target?: string;
+	/** The rendered value cell; absent for modules and containers. */
+	valueHtml?: string;
 	/** Hover text: the full `DEFINITION-REF` path where there is one (design §2.7). */
 	title: string;
 	level: number;
@@ -120,6 +151,8 @@ interface ItemSpec {
 	setsize: number;
 	meta: string[];
 	children: string[];
+	/** The node's own source range, for the line/column the inspector shows. */
+	range: Range;
 }
 
 /** The inline-SVG kind markers: shape as well as colour, so high-contrast themes work. */
@@ -147,21 +180,38 @@ function item(ctx: Ctx, spec: ItemSpec): string {
 	// The value the in-tree editor starts from, so the webview never re-derives it from
 	// the rendered text (parent design §9, `ecucValueEditor.ts`).
 	const editable = spec.kind === 'parameter' ? ` data-value="${escapeAttr(spec.value ?? '')}"` : '';
+	const target = spec.kind === 'reference' ? ` data-target="${escapeAttr(spec.target ?? '')}"` : '';
+	// The source position is carried as data, not hover text, so the inspector can show it
+	// without a host round-trip. `LineIndex` is 0-based like a VS Code Position; the
+	// inspector adds one for display.
+	const start = ctx.lineIndex?.positionAt(spec.range.start);
+	const end = ctx.lineIndex?.positionAt(spec.range.end);
+	const position =
+		start && end
+			? ` data-range-start="${spec.range.start}" data-range-end="${spec.range.end}"` +
+				` data-line="${start.line}" data-column="${start.character}"` +
+				` data-end-line="${end.line}" data-end-column="${end.character}"`
+			: '';
 	const group = hasChildren ? `<div role="group" class="children">${spec.children.join('')}</div>` : '';
 	// A toggle only where there is something to toggle; a leaf gets a spacer instead, so
 	// the labels of leaves and containers line up (UX child design §4.2).
 	const twisty = hasChildren
 		? `<span class="twisty" aria-hidden="true">${TWISTY_SVG}</span>`
 		: '<span class="spacer" aria-hidden="true"></span>';
+	const rowClass = `row k-${spec.kind}${spec.valueHtml ? ' has-value' : ' no-value'}`;
+	const meta = spec.meta.length > 0 ? `<span class="row-meta">${spec.meta.join('')}</span>` : '';
 	return (
 		`<div class="node" role="treeitem" aria-level="${spec.level}" aria-posinset="${spec.posinset}"` +
 		` aria-setsize="${spec.setsize}" aria-selected="${selected ? 'true' : 'false'}"${expanded}` +
 		` tabindex="${focusable ? '0' : '-1'}"` +
 		` data-node-id="${escapeAttr(spec.id)}" data-kind="${escapeAttr(spec.kind)}"` +
-		` data-haystack="${escapeAttr(haystack(spec))}"${editable}${selected ? ' data-selected="true"' : ''}` +
+		` data-definition-ref="${escapeAttr(spec.definitionRef)}"` +
+		` data-short-name="${escapeAttr(spec.shortName ?? '')}"` +
+		` data-haystack="${escapeAttr(haystack(spec))}"${editable}${target}${position}` +
+		`${selected ? ' data-selected="true"' : ''}` +
 		` title="${escapeAttr(spec.title)}">` +
-		`<span class="row k-${spec.kind}">${twisty}<span class="glyph" aria-hidden="true">${GLYPHS[spec.kind] ?? ''}</span>` +
-		`<span class="label">${escapeHtml(spec.label)}</span>${spec.meta.join('')}</span>${group}</div>`
+		`<span class="${rowClass}">${twisty}<span class="glyph" aria-hidden="true">${GLYPHS[spec.kind] ?? ''}</span>` +
+		`<span class="label">${escapeHtml(spec.label)}</span>${spec.valueHtml ?? ''}${meta}</span>${group}</div>`
 	);
 }
 
@@ -172,13 +222,19 @@ function moduleItem(ctx: Ctx, module: ModuleNode, level: number, posinset: numbe
 		kind: 'module',
 		label: dotted(module.definitionRef),
 		shortName: module.shortName,
+		definitionRef: module.definitionRef,
 		title: module.definitionRef,
 		level,
 		posinset,
 		setsize,
+		range: module.range,
 		meta: [
-			`<span class="short">"${escapeHtml(module.shortName)}"</span>`,
-			module.variant ? `<span class="variant">(${escapeHtml(camelize(module.variant))})</span>` : '',
+			`<span class="short" title="${escapeAttr(module.shortName)}">"${escapeHtml(module.shortName)}"</span>`,
+			module.variant
+				? `<span class="variant" title="${escapeAttr(camelize(module.variant))}">(${escapeHtml(
+						camelize(module.variant)
+					)})</span>`
+				: '',
 			...suffixSpans(module),
 		].filter(Boolean),
 		children: containers.map((c, at) => containerItem(ctx, c, level + 1, at + 1, containers.length)),
@@ -212,11 +268,16 @@ function containerItem(
 		kind: 'container',
 		label: lastShortName(container.definitionRef),
 		shortName: container.shortName,
+		definitionRef: container.definitionRef,
 		title: container.definitionRef,
 		level,
 		posinset,
 		setsize,
-		meta: [`<span class="short">"${escapeHtml(container.shortName)}"</span>`, ...suffixSpans(container)],
+		range: container.range,
+		meta: [
+			`<span class="short" title="${escapeAttr(container.shortName)}">"${escapeHtml(container.shortName)}"</span>`,
+			...suffixSpans(container),
+		],
 		children,
 	});
 }
@@ -236,15 +297,24 @@ function parameterItem(
 		id: ctx.index.idOf(parameter) ?? '',
 		kind: 'parameter',
 		label: parameter.name,
+		definitionRef: parameter.definitionRef,
 		value,
+		// The value is the first line's fourth column, so it stays aligned across
+		// siblings; the hex and the suffixes move to the quieter second line.
+		valueHtml: `<span class="value" title="${escapeAttr(
+			'Click to edit, or press F2: = ' + shown
+		)}">= ${escapeHtml(shown)}</span>`,
 		title: parameter.definitionRef,
 		level,
 		posinset,
 		setsize,
+		range: parameter.range,
 		meta: [
-			// The value advertises that it is editable (UX child design §6, AC8).
-			`<span class="value" title="Click to edit, or press F2">= ${escapeHtml(shown)}</span>`,
-			parameter.hexValue ? `<span class="hex">(= ${escapeHtml(parameter.hexValue)})</span>` : '',
+			parameter.hexValue
+				? `<span class="hex" title="${escapeAttr('(= ' + parameter.hexValue + ')')}">(= ${escapeHtml(
+						parameter.hexValue
+					)})</span>`
+				: '',
 			...suffixSpans(parameter),
 		].filter(Boolean),
 		children: [],
@@ -259,25 +329,30 @@ function referenceItem(
 	setsize: number
 ): string {
 	const target = reference.targetPath ?? reference.targetRawPath ?? '';
+	const rawTarget = reference.targetRawPath ?? target;
 	const context = reference.instance && reference.contextPaths.length > 0
-		? `<span class="context">context ${escapeHtml(reference.contextPaths.join(', '))}</span>`
+		? `<span class="context" title="${escapeAttr(
+				'context ' + reference.contextPaths.join(', ')
+			)}">context ${escapeHtml(reference.contextPaths.join(', '))}</span>`
 		: '';
 	return item(ctx, {
 		id: ctx.index.idOf(reference) ?? '',
 		kind: 'reference',
 		label: reference.name,
+		definitionRef: reference.definitionRef,
 		value: target,
+		target: rawTarget,
+		// The target is the row's follow affordance — not the whole row, which selects
+		// now (UX child design §2, §5).
+		valueHtml: `<span class="value target" data-follow="true" title="${escapeAttr(
+			'Follow to the target: = ' + target
+		)}">= ${escapeHtml(target)}</span>`,
 		title: reference.definitionRef,
 		level,
 		posinset,
 		setsize,
-		meta: [
-			// The target is the row's follow affordance — not the whole row, which selects
-			// now (UX child design §2, §5).
-			`<span class="value target" data-follow="true" title="Follow to the target">= ${escapeHtml(target)}</span>`,
-			context,
-			...suffixSpans(reference),
-		].filter(Boolean),
+		range: reference.range,
+		meta: [context, ...suffixSpans(reference)].filter(Boolean),
 		children: [],
 	});
 }
@@ -286,11 +361,17 @@ function referenceItem(
 function suffixSpans(node: Suffixes): string[] {
 	const spans: string[] = [];
 	if (node.syscond) {
-		spans.push(`<span class="condition">[${escapeHtml(node.syscond)}]</span>`);
+		spans.push(
+			`<span class="condition" title="${escapeAttr('[' + node.syscond + ']')}">[${escapeHtml(
+				node.syscond
+			)}]</span>`
+		);
 	}
 	if (node.postBuildVariants && node.postBuildVariants.length > 0) {
 		const text = node.postBuildVariants.map((v) => `${v.criterion} ${v.operator} ${v.value}`).join(' && ');
-		spans.push(`<span class="condition">&lt;${escapeHtml(text)}&gt;</span>`);
+		spans.push(
+			`<span class="condition" title="${escapeAttr('<' + text + '>')}">&lt;${escapeHtml(text)}&gt;</span>`
+		);
 	}
 	for (const annotation of node.annotations ?? []) {
 		const label = annotation.label ? `[${annotation.label}] ` : '';
@@ -298,7 +379,9 @@ function suffixSpans(node: Suffixes): string[] {
 		if (label === '' && text === '') {
 			continue;
 		}
-		spans.push(`<span class="annotation">${escapeHtml(label + text)}</span>`);
+		spans.push(
+			`<span class="annotation" title="${escapeAttr(label + text)}">${escapeHtml(label + text)}</span>`
+		);
 	}
 	return spans;
 }
@@ -414,8 +497,9 @@ html, body {
 	height: 100%;
 }
 body {
-	font-family: var(--vscode-font-family);
-	font-size: var(--vscode-font-size);
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: var(--vscode-font-size, 13px);
+	line-height: 1.4;
 	color: var(--vscode-foreground);
 	background: var(--vscode-editor-background);
 	margin: 0;
@@ -425,7 +509,8 @@ body {
 }
 .toolbar {
 	display: flex;
-	gap: 8px;
+	flex-wrap: wrap;
+	gap: 6px 8px;
 	align-items: center;
 	padding: 6px 10px;
 	flex: none;
@@ -435,15 +520,60 @@ body {
 .grow {
 	flex: 1 1 auto;
 }
+.filter-wrap {
+	position: relative;
+	display: flex;
+	flex: 1 1 280px;
+	max-width: 560px;
+	min-width: 180px;
+}
 .filter {
-	min-width: 240px;
-	padding: 2px 6px;
+	width: 100%;
+	min-width: 0;
+	padding: 3px 24px 3px 8px;
 	color: var(--vscode-input-foreground);
 	background: var(--vscode-input-background);
-	border: 1px solid var(--vscode-input-border, transparent);
+	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, transparent));
+}
+.filter:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
+	outline-offset: -1px;
+}
+.filter-clear {
+	position: absolute;
+	right: 3px;
+	top: 50%;
+	transform: translateY(-50%);
+	padding: 0 4px;
+	font: inherit;
+	line-height: 1;
+	cursor: pointer;
+	color: var(--vscode-input-foreground);
+	background: transparent;
+	border: 0;
+}
+.filter-clear[hidden] {
+	display: none;
+}
+.filter-clear:hover {
+	color: var(--vscode-foreground);
 }
 .count {
-	color: var(--vscode-descriptionForeground);
+	padding: 1px 7px;
+	border: 1px solid transparent;
+	border-radius: 9px;
+	white-space: nowrap;
+	color: var(--vscode-badge-foreground, var(--vscode-foreground));
+	background: var(--vscode-badge-background, transparent);
+}
+.count[data-state="none"] {
+	padding: 0;
+	background: transparent;
+}
+.count[data-state="empty"] {
+	color: var(--vscode-foreground);
+	background: var(--vscode-inputValidation-warningBackground, var(--vscode-badge-background, transparent));
+	border-color: var(--vscode-inputValidation-warningBorder, var(--vscode-panel-border, transparent));
 }
 .tool {
 	padding: 2px 8px;
@@ -455,22 +585,48 @@ body {
 .tool:hover {
 	background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
 }
+.tool:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
+	outline-offset: 1px;
+}
 .notice {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	color: var(--vscode-foreground);
 }
 .notice[data-kind="warn"] {
 	color: var(--vscode-editorWarning-foreground);
 }
+#content {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+}
 #main {
 	flex: 1 1 auto;
+	min-width: 0;
 	overflow: auto;
+}
+#inspector {
+	flex: 0 0 300px;
+	min-width: 220px;
+	overflow: auto;
+	padding: 8px 10px 16px;
+	border-left: 1px solid var(--vscode-panel-border);
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+#inspector[hidden] {
+	display: none;
 }
 .meta {
 	padding: 6px 10px;
 	color: var(--vscode-descriptionForeground);
 }
 .schema, .package {
-	font-family: var(--vscode-editor-font-family);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 }
 .tree {
 	padding: 4px 0 12px;
@@ -479,17 +635,19 @@ body {
 	outline: none;
 }
 .row {
-	display: flex;
-	flex-wrap: nowrap;
-	gap: 6px;
-	align-items: baseline;
-	padding: 1px 8px 1px 4px;
+	display: grid;
+	grid-template-columns: 12px 12px 26ch minmax(0, 1fr);
+	column-gap: 6px;
+	row-gap: 1px;
+	align-items: center;
+	padding: 2px 8px 2px 4px;
 }
 .row:hover {
 	background: var(--vscode-list-hoverBackground);
 }
 .twisty {
-	flex: 0 0 12px;
+	grid-column: 1;
+	grid-row: 1;
 	width: 12px;
 	display: inline-flex;
 	align-items: center;
@@ -497,7 +655,8 @@ body {
 	color: var(--vscode-icon-foreground, var(--vscode-foreground));
 }
 .spacer {
-	flex: 0 0 12px;
+	grid-column: 1;
+	grid-row: 1;
 	width: 12px;
 }
 .twisty svg {
@@ -507,7 +666,8 @@ body {
 	transform: rotate(90deg);
 }
 .glyph {
-	flex: 0 0 12px;
+	grid-column: 2;
+	grid-row: 1;
 	width: 12px;
 	display: inline-flex;
 	align-items: center;
@@ -515,11 +675,44 @@ body {
 	color: var(--vscode-icon-foreground, var(--vscode-foreground));
 }
 .label {
-	flex: 0 0 22ch;
+	grid-column: 3;
+	grid-row: 1;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-weight: 600;
+}
+.row.no-value .label {
+	grid-column: 3 / -1;
+}
+.value {
+	grid-column: 4;
+	grid-row: 1;
+	justify-self: start;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--vscode-symbolIcon-numberForeground, var(--vscode-foreground));
+}
+.row-meta {
+	grid-column: 3 / -1;
+	grid-row: 2;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 8px;
+	min-width: 0;
+	font-size: 0.9em;
+	color: var(--vscode-descriptionForeground);
+}
+.row-meta > span {
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .row.k-module, .row.k-container {
 	border-left: 2px solid var(--vscode-symbolIcon-classForeground, var(--vscode-foreground));
@@ -533,14 +726,37 @@ body {
 .node:focus-visible > .row {
 	outline: 1px solid var(--vscode-focusBorder);
 	outline-offset: -1px;
-	background: var(--vscode-list-focusBackground);
+	background: var(--vscode-list-focusBackground, var(--vscode-list-hoverBackground));
 }
 .node[data-selected="true"] > .row {
 	background: var(--vscode-list-activeSelectionBackground);
 	color: var(--vscode-list-activeSelectionForeground);
+	outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
+	outline-offset: -1px;
 }
 body:not(:focus-within) .node[data-selected="true"] > .row {
 	background: var(--vscode-list-inactiveSelectionBackground);
+	color: var(--vscode-list-inactiveSelectionForeground);
+}
+/* Token colours are for the normal background. On a selection they can fall to ~1.2:1
+ * (the light theme's green value on the blue selection is the worst case), so the whole
+ * selected row uses the theme's selection foreground. */
+.node[data-selected="true"] > .row > .value,
+.node[data-selected="true"] > .row .short,
+.node[data-selected="true"] > .row .variant,
+.node[data-selected="true"] > .row .hex,
+.node[data-selected="true"] > .row .condition,
+.node[data-selected="true"] > .row .annotation,
+.node[data-selected="true"] > .row .context {
+	color: var(--vscode-list-activeSelectionForeground);
+}
+body:not(:focus-within) .node[data-selected="true"] > .row > .value,
+body:not(:focus-within) .node[data-selected="true"] > .row .short,
+body:not(:focus-within) .node[data-selected="true"] > .row .variant,
+body:not(:focus-within) .node[data-selected="true"] > .row .hex,
+body:not(:focus-within) .node[data-selected="true"] > .row .condition,
+body:not(:focus-within) .node[data-selected="true"] > .row .annotation,
+body:not(:focus-within) .node[data-selected="true"] > .row .context {
 	color: var(--vscode-list-inactiveSelectionForeground);
 }
 .children {
@@ -564,14 +780,17 @@ body:not(:focus-within) .node[data-selected="true"] > .row {
 	color: var(--vscode-symbolIcon-enumeratorForeground, var(--vscode-foreground));
 }
 .condition {
+	padding: 0 4px;
+	border: 1px solid var(--vscode-panel-border, transparent);
+	border-radius: 3px;
 	color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground));
 }
 .annotation {
+	padding: 0 4px;
+	border: 1px solid var(--vscode-panel-border, transparent);
+	border-radius: 3px;
 	color: var(--vscode-descriptionForeground);
 	font-style: italic;
-}
-.value {
-	color: var(--vscode-symbolIcon-numberForeground, var(--vscode-foreground));
 }
 .row.k-parameter > .value {
 	cursor: text;
@@ -585,7 +804,7 @@ body:not(:focus-within) .node[data-selected="true"] > .row {
 .value-edit {
 	min-width: 12ch;
 	padding: 0 2px;
-	font-family: var(--vscode-editor-font-family);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	color: var(--vscode-input-foreground);
 	background: var(--vscode-input-background);
 	border: 1px solid var(--vscode-focusBorder);
@@ -603,6 +822,73 @@ body:not(:focus-within) .node[data-selected="true"] > .row {
 mark {
 	color: var(--vscode-editor-findMatchForeground, var(--vscode-foreground));
 	background: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground));
+}
+.empty {
+	padding: 36px 20px;
+	text-align: center;
+	color: var(--vscode-descriptionForeground);
+}
+.empty[hidden] {
+	display: none;
+}
+.empty p {
+	margin: 0 0 10px;
+}
+.inspector-empty {
+	padding: 6px 0;
+	color: var(--vscode-descriptionForeground);
+}
+.inspector-empty p {
+	margin: 0 0 6px;
+}
+.inspector-hint {
+	font-size: 0.9em;
+}
+.inspector-kind {
+	font-size: 0.8em;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--vscode-descriptionForeground);
+}
+.inspector-label {
+	margin: 2px 0 10px;
+	font-weight: 600;
+	word-break: break-word;
+}
+.inspector-row {
+	margin: 0 0 9px;
+}
+.inspector-key {
+	display: block;
+	margin-bottom: 2px;
+	font-size: 0.75em;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--vscode-descriptionForeground);
+}
+.inspector-code {
+	margin: 0;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+.inspector-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 12px;
+}
+@media (max-width: 720px) {
+	#content {
+		flex-direction: column;
+	}
+	#inspector {
+		flex: 0 0 auto;
+		min-width: 0;
+		max-height: 42%;
+		border-left: 0;
+		border-top: 1px solid var(--vscode-panel-border);
+	}
 }
 @media (prefers-reduced-motion: reduce) {
 	.twisty svg {
@@ -628,6 +914,12 @@ mark {
 const TREE_SCRIPT = `
 const main = document.getElementById('main');
 const notice = document.getElementById('notice');
+const inspector = document.getElementById('inspector');
+const detailsToggle = document.getElementById('details-toggle');
+const savedState = vscode.getState();
+// Only the object shape this page writes is accepted; anything else starts clean.
+let viewState =
+	savedState && typeof savedState === 'object' && !Array.isArray(savedState) ? savedState : {};
 let selectedId;
 let collapsed = new Set();
 let typeAhead = { text: '', at: 0 };
@@ -673,9 +965,144 @@ function setSelection(nodeId) {
 			delete item.dataset.selected;
 		}
 	}
+	updateInspector();
+}
+
+function textOf(parent, selector) {
+	const element = parent.querySelector(selector);
+	return element ? element.textContent : '';
+}
+
+function inspectorElement(tag, className, text) {
+	const element = document.createElement(tag);
+	if (className) {
+		element.className = className;
+	}
+	if (text !== undefined) {
+		element.textContent = text;
+	}
+	return element;
+}
+
+function inspectorRow(key, value) {
+	const row = inspectorElement('div', 'inspector-row');
+	row.appendChild(inspectorElement('span', 'inspector-key', key));
+	row.appendChild(inspectorElement('div', 'inspector-code', value));
+	return row;
+}
+
+/**
+ * Rebuilds the details panel from the selected row. It reads the model-derived data
+ * attributes and the rendered secondary spans; it never re-parses the source and never
+ * uses innerHTML with model text. The panel lives outside #main, so a re-scan does not
+ * destroy it.
+ */
+function updateInspector() {
+	if (!inspector || inspector.hidden) {
+		return;
+	}
+	inspector.textContent = '';
+	const item = selectedId === undefined
+		? undefined
+		: allItems().find((candidate) => candidate.dataset.nodeId === selectedId);
+	if (!item) {
+		const empty = inspectorElement('div', 'inspector-empty');
+		empty.appendChild(inspectorElement('p', '', 'Select a node to see its details.'));
+		empty.appendChild(inspectorElement('p', 'inspector-hint', 'Double-click a row to reveal it in the source.'));
+		inspector.appendChild(empty);
+		return;
+	}
+	const row = item.querySelector(':scope > .row');
+	if (!row) {
+		return;
+	}
+	const kind = item.dataset.kind || 'node';
+	const label = textOf(row, ':scope > .label');
+	const definitionRef = item.dataset.definitionRef || item.title || '';
+	const shortName = item.dataset.shortName || '';
+	const value = item.dataset.value || '';
+	const target = item.dataset.target || '';
+	const variant = textOf(row, '.row-meta .variant');
+	const hex = textOf(row, '.row-meta .hex');
+	const contextText = textOf(row, '.row-meta .context');
+	const context = contextText.startsWith('context ') ? contextText.slice('context '.length) : contextText;
+	const conditions = Array.from(row.querySelectorAll('.row-meta .condition')).map((element) => element.textContent).join(' ');
+	const annotations = Array.from(row.querySelectorAll('.row-meta .annotation')).map((element) => element.textContent).join(' ');
+	const line = item.dataset.line;
+	const column = item.dataset.column;
+	const endLine = item.dataset.endLine;
+	const endColumn = item.dataset.endColumn;
+
+	inspector.appendChild(inspectorElement('div', 'inspector-kind', kind));
+	inspector.appendChild(inspectorElement('div', 'inspector-label', label));
+	if (definitionRef) {
+		inspector.appendChild(inspectorRow('Definition', definitionRef));
+	}
+	if (shortName) {
+		inspector.appendChild(inspectorRow('Short name', shortName));
+	}
+	if (variant) {
+		inspector.appendChild(inspectorRow('Variant', variant));
+	}
+	if (kind === 'parameter') {
+		inspector.appendChild(inspectorRow('Value', value === '' ? '(empty)' : value));
+	}
+	if (hex) {
+		inspector.appendChild(inspectorRow('Hexadecimal', hex));
+	}
+	if (target) {
+		inspector.appendChild(inspectorRow('Target', target));
+	}
+	if (context) {
+		inspector.appendChild(inspectorRow('Context', context));
+	}
+	if (conditions) {
+		inspector.appendChild(inspectorRow('Conditions', conditions));
+	}
+	if (annotations) {
+		inspector.appendChild(inspectorRow('Annotations', annotations));
+	}
+	if (line !== undefined && column !== undefined && endLine !== undefined && endColumn !== undefined) {
+		inspector.appendChild(
+			inspectorRow(
+				'Source',
+				'L' + (Number(line) + 1) + ':' + (Number(column) + 1) + ' - L' + (Number(endLine) + 1) + ':' + (Number(endColumn) + 1)
+			)
+		);
+	}
+
+	const actions = inspectorElement('div', 'inspector-actions');
+	const reveal = inspectorElement('button', 'tool', 'Reveal in source');
+	reveal.type = 'button';
+	reveal.addEventListener('click', () => revealItem(item));
+	actions.appendChild(reveal);
+	const path = definitionRef || label;
+	if (path) {
+		const copyPath = inspectorElement('button', 'tool', 'Copy path');
+		copyPath.type = 'button';
+		copyPath.addEventListener('click', () => vscode.postMessage({ type: 'copy', text: path }));
+		actions.appendChild(copyPath);
+	}
+	const valueText = target || value;
+	if (valueText) {
+		const copyValue = inspectorElement('button', 'tool', target ? 'Copy target' : 'Copy value');
+		copyValue.type = 'button';
+		copyValue.addEventListener('click', () => vscode.postMessage({ type: 'copy', text: valueText }));
+		actions.appendChild(copyValue);
+	}
+	inspector.appendChild(actions);
 }
 
 function prepareFocus() {
+	// A host-rendered selection (source -> editor, or a pending selection) arrives as
+	// markup, not as a message. Adopt it before the first paint so the details panel is
+	// not empty until the user clicks.
+	if (selectedId === undefined) {
+		const marked = document.querySelector('#tree [aria-selected="true"]');
+		if (marked) {
+			selectedId = marked.dataset.nodeId;
+		}
+	}
 	if (selectedId !== undefined) {
 		for (const item of allItems()) {
 			if (item.dataset.nodeId === selectedId) {
@@ -857,6 +1284,24 @@ document.addEventListener('dblclick', onRowDoubleClick);
 document.addEventListener('keydown', onTreeKeydown);
 document.getElementById('collapse-all').addEventListener('click', collapseAll);
 document.getElementById('expand-all').addEventListener('click', expandAll);
+if (detailsToggle && inspector) {
+	detailsToggle.addEventListener('click', () => {
+		inspector.hidden = !inspector.hidden;
+		detailsToggle.setAttribute('aria-pressed', inspector.hidden ? 'false' : 'true');
+		viewState.inspectorHidden = inspector.hidden;
+		vscode.setState(viewState);
+		if (!inspector.hidden) {
+			updateInspector();
+		}
+	});
+	// The panel preference survives a re-scan (the shell is not swapped) and a full
+	// webview reload (the host state); the harness persists the same state in
+	// localStorage so the browser loop can exercise it.
+	if (viewState.inspectorHidden === true) {
+		inspector.hidden = true;
+		detailsToggle.setAttribute('aria-pressed', 'false');
+	}
+}
 
 window.addEventListener('message', (event) => {
 	const message = event.data;
@@ -878,6 +1323,7 @@ window.addEventListener('message', (event) => {
 				main.scrollTop = top;
 			},
 		});
+		updateInspector();
 	} else if (message.type === 'select') {
 		setSelection(message.nodeId);
 		prepareFocus();
@@ -893,4 +1339,5 @@ window.addEventListener('message', (event) => {
 
 applyFilter();
 prepareFocus();
+updateInspector();
 `;

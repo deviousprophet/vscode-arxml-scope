@@ -157,7 +157,13 @@ function lastModel(stub: StubPanel): StubMessage {
 
 /** A fresh scan rendered exactly as the provider renders it, for the staleness check. */
 function expectedTree(text: string): string {
-	return renderTree(scanEcucValues(text), { sort: 'all', sortExcept: [...SORT_EXCEPTIONS] });
+	// The provider now passes the document's LineIndex, so the tree carries its source
+	// positions; the expected tree must be built from the same document text.
+	return renderTree(scanEcucValues(text), {
+		sort: 'all',
+		sortExcept: [...SORT_EXCEPTIONS],
+		lineIndex: new LineIndex(text),
+	});
 }
 
 function open(document: vscode.TextDocument): { provider: EcucEditorProvider; stub: StubPanel } {

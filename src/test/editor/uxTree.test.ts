@@ -43,7 +43,7 @@ function styleOf(html: string): string {
 
 /** The opening tag of the node that owns the first `.row k-<kind>` in `tree`. */
 function nodeTagFor(tree: string, kind: string): string {
-	const at = tree.indexOf(`<span class="row k-${kind}">`);
+	const at = tree.indexOf(`<span class="row k-${kind}`);
 	assert.notStrictEqual(at, -1, `a ${kind} row is rendered`);
 	const open = tree.lastIndexOf('<div class="node"', at);
 	assert.notStrictEqual(open, -1, `the ${kind} row belongs to a node`);
@@ -88,10 +88,10 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 
 	test('AC3: a toggle is rendered only where there is something to toggle', () => {
 		const tree = renderTree(scanEcucValues(fixtureText(FIXTURE)), {});
-		assert.ok(tree.includes('<span class="row k-module"><span class="twisty"'), 'a module has a toggle');
-		assert.ok(tree.includes('<span class="row k-container"><span class="twisty"'), 'a container has a toggle');
-		assert.ok(tree.includes('<span class="row k-parameter"><span class="spacer"'), 'a parameter gets a spacer');
-		assert.ok(tree.includes('<span class="row k-reference"><span class="spacer"'), 'a reference gets a spacer');
+		assert.ok(/class="row k-module[^"]*"[^>]*><span class="twisty"/.test(tree), 'a module has a toggle');
+		assert.ok(/class="row k-container[^"]*"[^>]*><span class="twisty"/.test(tree), 'a container has a toggle');
+		assert.ok(/class="row k-parameter[^"]*"[^>]*><span class="spacer"/.test(tree), 'a parameter gets a spacer');
+		assert.ok(/class="row k-reference[^"]*"[^>]*><span class="spacer"/.test(tree), 'a reference gets a spacer');
 		assert.ok(tree.includes('aria-hidden="true"'), 'the marker is not announced twice');
 		assert.ok(tree.includes('class="twisty" aria-hidden="true"><svg'), 'the twisty is inline SVG, not an asset');
 
@@ -268,7 +268,7 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 	test('AC6: each kind has its own class, its own marker shape and its own accent', () => {
 		const tree = renderTree(scanEcucValues(fixtureText(FIXTURE)), {});
 		for (const kind of ['module', 'container', 'parameter', 'reference']) {
-			assert.ok(tree.includes(`class="row k-${kind}"`), `the ${kind} class`);
+			assert.ok(tree.includes(`class="row k-${kind}`), `the ${kind} class`);
 			assert.ok(tree.includes(`class="g-${kind}"`), `the ${kind} marker`);
 		}
 		// Distinct shapes, so the kinds are told apart without colour (high-contrast safe).
@@ -318,7 +318,8 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 
 	test('AC8: a value advertises that it is editable, by tooltip and by hover', () => {
 		const script = page();
-		assert.ok(script.includes('<span class="value" title="Click to edit, or press F2">'), 'the tooltip');
+		assert.ok(script.includes('<span class="value" title="Click to edit, or press F2:'), 'the tooltip');
+		assert.ok(script.includes('= "hello"'), 'and it carries the full value for a clipped cell');
 		const style = styleOf(script);
 		assert.ok(/\.row\.k-parameter\s*>\s*\.value\s*\{[^}]*cursor:\s*text/.test(style), 'the caret');
 		assert.ok(/\.row\.k-parameter:hover\s*>\s*\.value::after/.test(style), 'the hover affordance');
@@ -345,7 +346,9 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		// The widget's listeners are registered before the tree's, and claim their events.
 		const widgetClick = script.indexOf("document.addEventListener('click', (event) => {");
 		const treeClick = script.indexOf("document.addEventListener('click', onRowClick)");
+		const firstClick = script.indexOf("document.addEventListener('click', ");
 		assert.ok(widgetClick !== -1 && treeClick !== -1);
+		assert.strictEqual(widgetClick, firstClick, 'the widget registers the first document click listener');
 		assert.ok(widgetClick < treeClick, 'the widget sees the click first');
 		assert.ok(
 			script.slice(widgetClick, treeClick).includes('stopImmediatePropagation()'),

@@ -6,8 +6,8 @@ parameter values in place, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
-> value editing) are in place with 131 passing tests. Two things are deliberately not implemented and
-> are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
+> value editing, details inspector) are in place with 147 passing tests. Two things are deliberately
+> not implemented and are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
 > resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
 > `design.md`, `implement.md`) with the reference analysis in its
 > `research/legacy-artext-analysis.md`, and the legacy transform is vendored as text under
@@ -51,9 +51,11 @@ the file back to the text editor rather than showing an empty view.
 | Conditions | `[SW-SYSCOND]` and post-build-variant conditions as `<Ref == value && …>` |
 | Annotations | `[Label] text`, including annotations without a label (the `/* … */` wrapper belongs to the dropped ARTEXT text form and is not shown) |
 
-Hovering a container or parameter shows its full `DEFINITION-REF` path. Each kind — module,
-container, parameter, reference — carries its own inline-SVG marker and accent, so the kinds are
-distinguishable in a high-contrast theme where colour alone is not enough.
+Rows keep the primary label and value on the first line and move short-name, variant, hexadecimal
+form, context, conditions and annotations to a quieter second line. Long labels and values truncate
+with a tooltip; the full text is in the details panel. Each kind — module, container, parameter,
+reference — carries its own inline-SVG marker and accent, so the kinds are distinguishable in a
+high-contrast theme where colour alone is not enough.
 
 Ordering matches the legacy tool: by `DEFINITION-REF` then identity, with the legacy exception list
 preserved (see *Settings*).
@@ -78,13 +80,26 @@ scroll position. The collapsed set, the selection and the scroll position all su
 editing the file in the text editor beside the tree does not spring the tree open while you type.
 
 The filter box narrows the tree by label, short-name or value and reports `shown of total`, or
-`No matches` when nothing matches; matched text is highlighted, and a collapsed ancestor of a match is
-shown for as long as the filter is active — clearing the filter (or pressing `Escape` in the box)
-restores exactly the collapsed set you had.
+`No matches` when nothing matches. It has a clear button and a count badge; a zero-match filter shows
+an empty state with its own **Clear filter** action. Matched text is highlighted, and a collapsed
+ancestor of a match is shown for as long as the filter is active — clearing the filter (or pressing
+`Escape` in the box) restores exactly the collapsed set you had.
 
 The whole tree is keyboard-navigable: the arrow keys traverse and collapse, `Home`/`End` and
 `PageUp`/`PageDown` move through the visible rows, and typing a letter jumps to the next label
 starting with it.
+
+## Details panel
+
+Selecting a node fills the **details** panel on the right. It shows the node's kind, primary label,
+full `DEFINITION-REF`, short name and variant, value and hexadecimal form (parameters), target and
+context (references), conditions, annotations, and the source range as `Lline:column - Lline:column`.
+The range is computed from the document text, not from the displayed order.
+
+The panel's actions are **Reveal in source**, **Copy path** and **Copy value** (or **Copy target** for
+a reference). Copying goes through the host clipboard and does not touch the file. The **Details**
+toolbar button shows or hides the panel; hiding it gives the tree the full width. The preference is
+remembered through the webview state, so it survives a re-scan and a reload.
 
 ## Editing
 
@@ -134,6 +149,25 @@ reference** (references are read-only — only parameter values are editable); r
 
 The default exception list is the legacy tool's, carried over unchanged. The reveal mode is read at
 every reveal, so changing it takes effect without a reload.
+
+## Development preview harness
+
+The webview can be rendered outside VS Code for visual work:
+
+```bash
+npm run preview:ecuc     # compile, then serve http://127.0.0.1:4173/
+npm run preview:check    # render every fixture x theme and hit the server; no browser
+```
+
+The harness wraps the **production** `renderHtml` output with a stubbed `acquireVsCodeApi`, a theme
+preset (light, dark, high contrast), fixture/theme/sort switches, a simulated re-scan, notice
+injection and a message log. It binds to `127.0.0.1`, reads only committed fixtures, adds no runtime
+dependency and is never imported by the extension. `?chrome=0` hides the preview panel for clean
+screenshots.
+
+It is a development tool, not a substitute for a VS Code webview: it cannot prove VS Code's own theme
+variable resolution, the real custom-editor tab/focus behaviour or host clipboard permissions. Those
+remain Extension Development Host checks.
 
 ## Limitations
 

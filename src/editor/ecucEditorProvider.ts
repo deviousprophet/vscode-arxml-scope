@@ -17,9 +17,11 @@ import { isArxmlPath, isEcucValues } from '../core/ecuc/detect';
 import { ReferenceNode, SortMode } from '../core/ecuc/model';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
+import { LineIndex } from '../core/text/offsets';
 import { RenderOptions, renderHtml, renderTree } from './renderHtml';
 import { buildNodeIndex } from './nodeId';
 import { applyEdit, buildEdit } from './ecucEdit';
+import { copyText } from './clipboard';
 import { followReference, revealRangeInTextEditor } from './navigation';
 
 export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
@@ -29,6 +31,8 @@ interface WebviewMessage {
 	nodeId?: string;
 	/** The text the user typed, for `type: 'edit'` (parent design §8). */
 	value?: string;
+	/** The exact text a `type: 'copy'` request wants on the clipboard. */
+	text?: string;
 }
 
 /**
@@ -95,7 +99,12 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		let model = scanEcucValues(document.getText());
 
 		panel.webview.options = { enableScripts: true };
-		panel.webview.html = renderHtml(model, { ...editorSettings(), nonce, selectedId });
+		panel.webview.html = renderHtml(model, {
+			...editorSettings(),
+			nonce,
+			selectedId,
+			lineIndex: new LineIndex(document.getText()),
+		});
 
 		// The single refresh path: any change to this document — an undo, an external
 		// edit, or the sibling child's write — re-scans and swaps the tree, so no range
@@ -103,7 +112,11 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		// change, which re-renders the model that is already scanned (parent AC3).
 		const push = (): void => {
 			const current = this.selections.get(key);
-			const options: RenderOptions = { ...editorSettings(), selectedId: current };
+			const options: RenderOptions = {
+				...editorSettings(),
+				selectedId: current,
+				lineIndex: new LineIndex(document.getText()),
+			};
 			void panel.webview.postMessage({ type: 'model', tree: renderTree(model, options), selectedId: current });
 		};
 
@@ -130,7 +143,23 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 
 		disposables.push(
 			panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
-				if (!message || typeof message.nodeId !== 'string') {
+				if (!message) {
+					return;
+				}
+				// Copy carries text, not a node: handle it before the node-id guard.
+				if (message.type === 'copy' && typeof message.text === 'string') {
+					void copyText(vscode.env.clipboard, message.text).then(
+						(notice) => panel.webview.postMessage({ type: 'notice', message: notice }),
+						(error) =>
+							panel.webview.postMessage({
+								type: 'notice',
+								message: 'Could not copy: ' + String(error),
+								kind: 'warn',
+							})
+					);
+					return;
+				}
+				if (typeof message.nodeId !== 'string') {
 					return;
 				}
 				if (message.type === 'reveal') {

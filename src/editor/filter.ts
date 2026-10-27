@@ -88,11 +88,14 @@ export function filterScript(): string {
 	return `
 	const filterInput = document.getElementById('filter');
 	const countLabel = document.getElementById('count');
+	const clearButton = document.getElementById('filter-clear');
 	${matchRanges.toString()}
 
 	/** The spans a match can be highlighted in: the three fields the haystack carries. */
 	function highlightableSpans(item) {
-		return Array.from(item.querySelectorAll(':scope > .row > .label, :scope > .row > .short, :scope > .row > .value'));
+		return Array.from(
+			item.querySelectorAll(':scope > .row > .label, :scope > .row > .row-meta .short, :scope > .row > .value')
+		);
 	}
 
 	function highlightSpan(span, needle) {
@@ -126,6 +129,13 @@ export function filterScript(): string {
 	function applyFilter() {
 		const needle = filterInput.value.trim().toLowerCase();
 		const items = Array.from(document.querySelectorAll('#tree [role="treeitem"]'));
+		// The empty block is part of the swapped tree region, so it is looked up fresh on
+		// every pass; a node captured at load would be detached after a re-scan.
+		const empty = document.getElementById('empty');
+		const emptyText = document.getElementById('empty-text');
+		if (clearButton) {
+			clearButton.hidden = filterInput.value === '';
+		}
 		const visible = new Map();
 		// Ancestors of a match are expanded while the filter is active, so a match inside
 		// a collapsed subtree is reachable (design §4.4). The collapsed set itself is
@@ -162,10 +172,25 @@ export function filterScript(): string {
 		}
 		if (needle === '') {
 			countLabel.textContent = '';
+			countLabel.dataset.state = 'none';
+			if (empty) {
+				empty.hidden = true;
+			}
 		} else if (shown === 0) {
 			countLabel.textContent = 'No matches';
+			countLabel.dataset.state = 'empty';
+			if (empty) {
+				empty.hidden = false;
+			}
+			if (emptyText) {
+				emptyText.textContent = 'No matches for "' + filterInput.value.trim() + '".';
+			}
 		} else {
 			countLabel.textContent = shown + ' of ' + items.length;
+			countLabel.dataset.state = 'filtered';
+			if (empty) {
+				empty.hidden = true;
+			}
 		}
 		applyCollapsed(ancestors);
 	}
@@ -176,6 +201,21 @@ export function filterScript(): string {
 			event.preventDefault();
 			filterInput.value = '';
 			applyFilter();
+		}
+	});
+	if (clearButton) {
+		clearButton.addEventListener('click', () => {
+			filterInput.value = '';
+			applyFilter();
+			filterInput.focus();
+		});
+	}
+	// Delegated so the button keeps working after a re-scan swaps the empty block.
+	document.addEventListener('click', (event) => {
+		if (event.target && event.target.closest && event.target.closest('#empty-clear')) {
+			filterInput.value = '';
+			applyFilter();
+			filterInput.focus();
 		}
 	});
 `;
