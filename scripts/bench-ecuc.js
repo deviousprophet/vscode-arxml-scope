@@ -13,16 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = path.resolve(__dirname, '..');
-const OUT = path.join(ROOT, 'out');
-
-function outModule(relative) {
-	const file = path.join(OUT, relative);
-	if (!fs.existsSync(file)) {
-		throw new Error('Missing ' + file + '. Run `npm run compile-tests` first.');
-	}
-	return require(file);
-}
+const { ROOT, outModule } = require('./out-module');
 
 function median(values) {
 	const sorted = [...values].sort((a, b) => a - b);
@@ -83,7 +74,7 @@ function main() {
 	console.log('ECUC benchmark');
 	console.log('  file:        ' + file);
 	console.log('  size:        ' + formatBytes(fileBytes) + ' (' + text.length + ' UTF-16 code units)');
-	console.log('  nodes:       ' + nodes + ' model nodes, ' + index.last.byId.size + ' indexed ids');
+	console.log('  nodes:       ' + nodes + ' indexed nodes (' + model.modules.length + ' modules)');
 	console.log('  scan:        ' + scan.median.toFixed(2) + ' ms (median of 3)');
 	console.log('  index:       ' + index.median.toFixed(2) + ' ms');
 	console.log('  renderTree:  ' + tree.median.toFixed(2) + ' ms (' + formatBytes(Buffer.byteLength(tree.last)) + ')');

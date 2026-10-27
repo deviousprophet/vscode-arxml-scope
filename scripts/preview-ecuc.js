@@ -19,8 +19,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 
-const ROOT = path.resolve(__dirname, '..');
-const OUT = path.join(ROOT, 'out');
+const { ROOT, outModule } = require('./out-module');
 const FIXTURE_ROOT = path.join(ROOT, 'src', 'test', 'fixtures');
 // Optional local sample set, outside the repository. `preview:ecuc` lists it when it exists;
 // `preview:check` never does, so CI does not depend on a developer's sample directory.
@@ -207,21 +206,13 @@ let scanner;
 let renderer;
 let offsets;
 
-function outModule(relative) {
-	const file = path.join(OUT, relative);
-	if (!fs.existsSync(file)) {
-		throw new Error('Missing ' + file + '. Run `npm run compile-tests` first.');
-	}
-	return require(file);
-}
-
 function loadProduction() {
 	scanner = outModule(path.join('core', 'ecuc', 'scanner.js'));
 	renderer = outModule(path.join('editor', 'renderHtml.js'));
 	offsets = outModule(path.join('core', 'text', 'offsets.js'));
 }
 
-function escapeHtml(text) {
+function escapeAttr(text) {
 	return String(text)
 		.replace(/&/g, '&amp;')
 		.replace(/</g, '&lt;')
@@ -494,7 +485,7 @@ const PANEL_JS = `
 
 function options(values, selected) {
 	return values
-		.map((value) => `<option value="${escapeHtml(value)}"${value === selected ? ' selected' : ''}>${escapeHtml(value)}</option>`)
+		.map((value) => `<option value="${escapeAttr(value)}"${value === selected ? ' selected' : ''}>${escapeAttr(value)}</option>`)
 		.join('');
 }
 
@@ -503,8 +494,8 @@ function panelHtml(ctx) {
 <div id="preview-panel" data-collapsed="false">
 	<div class="preview-head">
 		<span class="preview-badge">PREVIEW</span>
-		<span class="preview-title">${escapeHtml(ctx.fixture.id)}</span>
-		<span class="preview-theme">${escapeHtml(ctx.theme.label)}</span>
+		<span class="preview-title">${escapeAttr(ctx.fixture.id)}</span>
+		<span class="preview-theme">${escapeAttr(ctx.theme.label)}</span>
 		<button id="preview-toggle" class="preview-button" type="button" aria-expanded="true">Hide</button>
 	</div>
 	<div class="preview-body">

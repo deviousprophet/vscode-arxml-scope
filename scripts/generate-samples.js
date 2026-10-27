@@ -36,7 +36,7 @@ function indent(depth) {
 	return '  '.repeat(depth);
 }
 
-function parameterXml(container, parameter, paramsPer, index) {
+function parameterXml(container, parameter, index) {
 	const pathBase = `/PkgSample/DemoDefs/DemoMod/${container}`;
 	const definition = `${pathBase}/${parameter.name}`;
 	const value =
@@ -101,7 +101,11 @@ function moduleXml({ containers, paramsPer }) {
 		}
 		lines.push(indent(7) + '<PARAMETER-VALUES>');
 		for (let index = 0; index < paramsPer; index++) {
-			lines.push(...parameterXml(id, PARAMS[index], paramsPer, index));
+			const parameter = PARAMS[index];
+			if (!parameter) {
+				throw new Error(`No sample parameter descriptor at index ${index}`);
+			}
+			lines.push(...parameterXml(id, parameter, index));
 		}
 		lines.push(indent(7) + '</PARAMETER-VALUES>');
 		if (containers > 1) {
@@ -138,8 +142,11 @@ function write(name, content, description, nodeCount) {
 }
 
 function main() {
-	const insideRepo = path.relative(ROOT, OUT);
-	if (insideRepo === '' || (!insideRepo.startsWith('..') && !path.isAbsolute(insideRepo))) {
+	const relative = path.relative(ROOT, OUT);
+	const insideRepo =
+		relative === '' ||
+		(!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep));
+	if (insideRepo) {
 		throw new Error(
 			'Refusing to write samples inside the repository (' +
 				OUT +
