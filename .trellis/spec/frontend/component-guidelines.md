@@ -74,6 +74,12 @@ toggles without moving the selection, a follow follows, everything else selects.
 - Every colour is a `--vscode-*` variable; a literal may appear only as a fallback inside `var(...)`.
   The indent-guide fallback `#80808040` is the only literal in the stylesheet. No asset file; glyphs
   and the twisty are inline SVG under `default-src 'none'`.
+- **Value type is data.** A parameter's value span carries `data-value-kind="numeric|textual|boolean"`;
+  the CSS maps it to `symbolIcon-number/string/booleanForeground`. Reference targets use the link
+  colour, short names the variable colour. The value and name colours borrow the reference branch's
+  `artext.tmLanguage.json` scopes (strings, numbers, booleans, variables); that branch is a grammar,
+  not a palette to copy. Module and container accents use `symbolIcon-moduleForeground` and
+  `symbolIcon-namespaceForeground`, not one shared class colour.
 - Token colours are for the normal background. On a selected row they can fall below 3:1 (the light
   theme's green value was 1.33:1 on the blue selection), so selected rows use
   `--vscode-list-activeSelectionForeground` (and the inactive equivalent when focus is outside).

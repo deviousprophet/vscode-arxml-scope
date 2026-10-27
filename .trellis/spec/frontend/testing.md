@@ -100,6 +100,18 @@ is behaviourally tested with a stub (exact text, rejection), and the provider br
 because a provider-level clipboard seam would be more machinery than the one-line wiring justifies.
 When you use this pattern, say so in the task notes; do not present it as a behavioural test.
 
+## Samples and benchmarks are evidence
+
+`npm run samples:ecuc` writes synthetic ECUC files to `../sample` (outside the repository) and
+`npm run perf:ecuc -- <file>` measures the scanner, node index and renderers in Node. The sample files
+are not committed; the generator and benchmark are dev-only. `preview:check` must not include the
+local sample directory, or CI would depend on a developer's disk.
+
+A benchmark is evidence, not a promise. It does not cover browser layout/paint or a real VS Code
+webview; record the browser page observation separately. A single huge-file run is not a reason to add
+virtualisation. The sample generator is deterministic and the generated files are synthetic; never
+point it at a real customer directory.
+
 ## The page's own helpers are the ones under test
 
 When a rule lives in the inlined page script, extract the page's copy with `scriptTestUtils` and drive

@@ -50,6 +50,12 @@ that is not obvious from the code.
   select `:scope > .row > .value`; a wrapper cell breaks them.
 - **A fixed label track keeps values aligned.** Each row is its own grid; a per-row `1fr` label sizes to
   content and breaks the column.
+- **Value colours follow the ARTEXT scopes.** `data-value-kind` selects numeric/textual/boolean
+  colours; reference targets use the link colour; short names use the variable colour. Do not paint
+  every value with one token. The kinds use module/namespace/field/reference `symbolIcon` variables,
+  not one accent for both module and container.
+- **Samples and benchmarks are dev-only.** The sample directory is outside the repository and
+  synthetic; `preview:check` excludes it. A benchmark is evidence, not a performance promise.
 
 ## Before calling work done
 
