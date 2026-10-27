@@ -136,7 +136,18 @@ async function closeTextTabs(uri: vscode.Uri): Promise<void> {
 	await sleep(100);
 }
 
+/** Clears a setting a previous test may have left behind if it timed out mid-way. */
+async function resetRevealMode(): Promise<void> {
+	await vscode.workspace
+		.getConfiguration('arxmlScope.ecuc.editor')
+		.update('revealMode', undefined, vscode.ConfigurationTarget.Global);
+}
+
 suite('editor reveal (AC1, AC2)', () => {
+	setup(async () => {
+		await resetRevealMode();
+	});
+
 	test('AC1: a select from the tree opens no text editor and survives the next re-scan', async () => {
 		await withScratch('select.arxml', async (uri, document) => {
 			const provider = new EcucEditorProvider();
@@ -200,7 +211,13 @@ suite('editor reveal (AC1, AC2)', () => {
 		);
 	});
 
-	test('AC2: focus mode takes focus in the source and still does not close the custom editor', async () => {
+	test('AC2: focus mode takes focus in the source and still does not close the custom editor', async function (
+		this: Mocha.Context
+	) {
+		// Opening the custom editor, closing tabs, revealing and waiting for the tab event is
+		// legitimately slower than the 2 s default on this host; the old timeout also leaked
+		// `revealMode: focus` into the next test when it fired.
+		this.timeout(10000);
 		const config = vscode.workspace.getConfiguration('arxmlScope.ecuc.editor');
 		const uri = fixtureUri('editor/navigation.arxml');
 		try {
