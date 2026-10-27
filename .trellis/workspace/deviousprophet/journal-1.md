@@ -80,3 +80,41 @@ Replaced the chip-heavy default tree presentation with a dense, monospace Docume
 ### Status
 
 [OK] **Completed**
+
+## Session 3: ECUC document view editor-like visual pass
+
+**Date**: 2026-10-27
+**Task**: ECUC document view editor-like visual pass (archived)
+**Branch**: `feat/arxml-scope`
+
+### Summary
+
+Reworked the Document view from a tree skin into a calm editor-like text surface: neutral labels, a restrained semantic palette, no underlined targets or dotted values, a gutter twisty, exact 4ch indentation, a compact bar and a quiet line selection. Tree view is unchanged.
+
+### Main Changes
+
+- Document labels use the editor foreground; only keywords, strings, numbers/hex, booleans and annotations keep accent.
+- Reference targets are plain until hover; parameter values lose the dotted underline and hover pencil.
+- The twisty moves into a 3.5ch gutter; children indent 4ch and braces align with the parent row.
+- Selection is an editor line highlight plus a 2px focus edge, not the list-selection bar.
+- Document bar is compact (3px padding, 240px filter, flat buttons); Tree view keeps the base bar.
+- Corrected the prototype after it still showed the old `.value` dotted underline; the final production CSS removes it.
+- Document tests extended for the neutral palette, gutter, selection, value affordance and bar; docs and frontend specs updated.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d074185` | feat(editor): make the ECUC document view read like an editor |
+| `d0424f1` | chore(task): archive 10-27-ecuc-document-editor-look |
+
+### Testing
+
+- [OK] `npm run check-types`, `npm run lint`
+- [OK] 160 passing; `preview:check` ok
+- [OK] 7 mutations (label colours, target underline, dotted value, twisty flow, selection bar, toolbar padding, header keyword) each failed a test
+- [OK] Document large 798/901 ms load, 56.3 ms filter; huge 2,200/2,512 ms, 119.6 ms filter
+
+### Status
+
+[OK] **Completed**
