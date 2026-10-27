@@ -70,7 +70,7 @@ suite('editor rendering (AC1)', () => {
 	test('AC1: the re-scan payload is the tree region on its own', () => {
 		const model = scanEcucValues(fixtureText(FIXTURE));
 		const region = renderTree(model, {});
-		assert.ok(region.startsWith('<div class="document" style="--ln-digits:'));
+		assert.ok(region.startsWith('<div class="document">'));
 		assert.ok(region.includes('id="tree"'));
 		assert.ok(!region.includes('<script'), 'the payload is a fragment, not a page');
 		assert.ok(renderHtml(model, { nonce: 'test-nonce' }).includes(region));

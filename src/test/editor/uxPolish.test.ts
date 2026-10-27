@@ -219,8 +219,8 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 
 	test('AC9: selection uses a quiet tint and keeps token colours', () => {
 		const style = styleOf(page());
-		assert.ok(/--sel-bg:\s*var\(--vscode-list-inactiveSelectionBackground/.test(style));
-		assert.ok(/--sel-bg-focus:\s*var\(--vscode-list-activeSelectionBackground/.test(style));
+		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(style));
+		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(style));
 		assert.ok(
 			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg\)/.test(style)
 		);

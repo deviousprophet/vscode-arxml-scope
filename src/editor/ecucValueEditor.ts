@@ -82,7 +82,7 @@ function flashRow(nodeId) {
 	for (const item of document.querySelectorAll('#tree [role="treeitem"]')) {
 		if (item.dataset.nodeId === nodeId) {
 			item.classList.add('flash');
-			setTimeout(() => item.classList.remove('flash'), 900);
+			setTimeout(() => item.classList.remove('flash'), 1000);
 			return;
 		}
 	}
@@ -181,7 +181,6 @@ window.addEventListener('message', (event) => {
 			if (!error) {
 				error = document.createElement('span');
 				error.className = 'value-error';
-				error.setAttribute('role', 'alert');
 				valueEdit.error = error;
 				valueEdit.input.after(error);
 			}

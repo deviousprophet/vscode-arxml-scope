@@ -41,15 +41,17 @@ The spec flags five decisions. The implementation adopts the recommended default
 ## 3. Renderer and gutter data
 
 `renderTree` currently returns `.meta` + `#tree` + `#empty` as siblings. Wrap them in
-`<div class="document" style="--ln-digits:N">` so the header, tree and empty line inherit the same
-gutter variables. This is the only wrapper change; the region is still swapped whole on a re-scan.
+`<div class="document">` so the header, tree and empty line inherit the same gutter variables. The
+`#tree` element carries `data-ln-digits="N"`; the wrapper's CSS `:has(#tree[data-ln-digits="N"])`
+sets `--ln-digits` without a CSP-blocked inline style attribute. This is the only wrapper change; the
+region is still swapped whole on a re-scan.
 
 - `Ctx` gains `maxLine`, updated in `item()` from `ctx.lineIndex?.positionAt(spec.range.start)`.
-  `--ln-digits` is `String(ctx.maxLine || 1).length`.
+  The digits are `String(ctx.maxLine || 1).length`.
 - The row gets `data-line="<start.line + 1>"` (1-based; the inspector's existing `.node` `data-line`
   stays 0-based). Header/braces get no `data-line`.
 - `.document` defines `--ln-w = calc(var(--ln-digits, 4) * 1ch + 1ch)` and
-  `--gut = calc(var(--ln-w) + 4ch)`.
+  `--gut = calc(var(--ln-w) + 4ch)`; the `:has` selectors cover 1–7 digits (the default is 4).
 - `#tree` is `position: relative`; rows stay unpositioned, so `.row::before` (the line number) anchors
   to `#tree` at `left: 0; width: var(--ln-w); text-align: right`.
 - `#tree` has `padding-left: var(--gut)`, top `0.5 × --ecuc-lh`, right `2ch`, bottom `3 × --ecuc-lh`;

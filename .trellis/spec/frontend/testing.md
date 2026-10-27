@@ -105,7 +105,7 @@ toggle, make the inspector visible by default, remove the module prefix, remove 
 emphasis, and neutralize the document selectors. The editor-like pass adds: restore per-kind label
 colours, restore the target underline, restore the dotted value underline, put the twisty back in the
 flex flow, restore the list-selection row bar, restore the 6px toolbar padding, and remove the header
-keyword rule. The quiet-source pass adds: remove `data-line`/`--ln-digits`, restore the
+keyword rule. The quiet-source pass adds: remove `data-line`/`#tree data-ln-digits`, restore the
 `--ecuc-selection-fg` monochrome selection, remove the full-row gutter margin/padding, remove the
 collapsed `{ ... }` stub or the `F2` hint, remove the `--tok-*` block, remove the narrow line-number
 hide, and remove the details width clamp/bottom sheet; each mutation must fail a test. A CSS selector

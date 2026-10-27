@@ -1,8 +1,8 @@
-﻿/**
- * Webview HTML for the ECUC tree (child design Â§2.6, parent design Â§6; UX child design
- * Â§2, Â§4, Â§5, Â§7, Â§8, Â§9).
+/**
+ * Webview HTML for the ECUC tree (child design §2.6, parent design §6; UX child design
+ * §2, §4, §5, §7, §8, §9).
  *
- * Everything is inlined â€” no asset files, no remote loads â€” because the CSP forbids
+ * Everything is inlined — no asset files, no remote loads — because the CSP forbids
  * them and `esbuild.js` has no asset-copy step. Every colour is a `--vscode-*` custom
  * property (or a fallback inside one), so light, dark and high-contrast themes all work
  * (parent R16). Kind glyphs and the twisty are inline SVG for the same reason: inline
@@ -11,8 +11,8 @@
  * `renderTree` returns the region the provider swaps on a re-scan; `renderHtml` wraps
  * it in the page (toolbar, CSP, nonce, script).
  *
- * The state that has to survive a re-scan â€” the collapsed set and the scroll position â€”
- * lives in the webview (UX child design Â§4.1). The handful of pure helpers that decide
+ * The state that has to survive a re-scan — the collapsed set and the scroll position —
+ * lives in the webview (UX child design §4.1). The handful of pure helpers that decide
  * it are defined here as real functions and serialized into the page with
  * `toString()`, so the page and the tests share one definition instead of two.
  */
@@ -39,7 +39,7 @@ export interface RenderOptions {
 	nonce?: string;
 	sort?: SortMode;
 	sortExcept?: readonly string[];
-	/** Node to mark and focus on load (child design Â§2.4, source â†’ editor). */
+	/** Node to mark and focus on load (child design §2.4, source → editor). */
 	selectedId?: string;
 	/**
 	 * The current document text's line index. When present, every node carries its
@@ -66,13 +66,13 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <button id="filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 </div>
 <span id="count" class="count" role="status" aria-live="polite" data-state="none"></span>
-<span id="notice" class="notice" role="status" aria-live="polite"></span>
 <span class="grow"></span>
 <button id="collapse-all" class="tool icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 6h4V2M3 6l4-4M13 10H9v4M13 10l-4 4"/></svg></button>
 <button id="expand-all" class="tool icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M7 2v4H3M7 2L3 6M9 14v-4h4M9 14l4-4"/></svg></button>
 <button id="view-toggle" class="tool view-switch" type="button" aria-pressed="true" title="Switch to tree view"><span class="view-document">Document</span><span class="view-sep" aria-hidden="true">|</span><span class="view-tree">Tree</span></button>
 <button id="details-toggle" class="tool details-toggle" type="button" aria-pressed="false" aria-controls="inspector" title="Show node details" aria-label="Show node details"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg><span class="lbl">Details</span></button>
 </div>
+<div id="notice" class="notice" role="status" aria-live="polite"></div>
 <div id="content">
 <div id="main">${renderTree(model, options)}</div>
 <aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>
@@ -120,9 +120,9 @@ export function renderTree(model: EcucDocumentModel, options: RenderOptions = {}
 	const items = modules.map((module, at) => moduleItem(ctx, module, 1, at + 1, modules.length));
 	const digits = String(Math.max(1, ctx.maxLine)).length;
 	return (
-		`<div class="document" style="--ln-digits:${digits}">` +
+		`<div class="document">` +
 		`<div class="meta">${meta.join('')}</div>` +
-		`<div id="tree" class="tree" role="tree" aria-label="ECUC values">${items.join('')}</div>` +
+		`<div id="tree" class="tree" role="tree" aria-label="ECUC values" data-ln-digits="${digits}">${items.join('')}</div>` +
 		`<div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div>` +
 		`</div>`
 	);
@@ -154,7 +154,7 @@ interface ItemSpec {
 	target?: string;
 	/** The rendered value cell; absent for modules and containers. */
 	valueHtml?: string;
-	/** Hover text: the full `DEFINITION-REF` path where there is one (design Â§2.7). */
+	/** Hover text: the full `DEFINITION-REF` path where there is one (design §2.7). */
 	title: string;
 	level: number;
 	/** Position within its group, and the group's size, for `aria-posinset` / `aria-setsize`. */
@@ -189,7 +189,7 @@ function item(ctx: Ctx, spec: ItemSpec): string {
 	const hasChildren = spec.children.length > 0;
 	const expanded = hasChildren ? ' aria-expanded="true"' : '';
 	// The value the in-tree editor starts from, so the webview never re-derives it from
-	// the rendered text (parent design Â§9, `ecucValueEditor.ts`).
+	// the rendered text (parent design §9, `ecucValueEditor.ts`).
 	const editable = spec.kind === 'parameter' ? ` data-value="${escapeAttr(spec.value ?? '')}"` : '';
 	const target = spec.kind === 'reference' ? ` data-target="${escapeAttr(spec.target ?? '')}"` : '';
 	// The source position is carried as data, not hover text, so the inspector can show it
@@ -208,7 +208,7 @@ function item(ctx: Ctx, spec: ItemSpec): string {
 			: '';
 	const group = hasChildren ? `<div role="group" class="children">${spec.children.join('')}</div>` : '';
 	// A toggle only where there is something to toggle; a leaf gets a spacer instead, so
-	// the labels of leaves and containers line up (UX child design Â§4.2).
+	// the labels of leaves and containers line up (UX child design §4.2).
 	const twisty = hasChildren
 		? `<span class="twisty" aria-hidden="true">${TWISTY_SVG}</span>`
 		: '<span class="spacer" aria-hidden="true"></span>';
@@ -265,7 +265,7 @@ function containerItem(
 	const members = orderMembers(container.parameters, container.references, ctx.sort, ctx.except);
 	const nested = orderContainers(container.containers, ctx.sort, ctx.except);
 	// One group per container: parameters, then references, then child containers, so the
-	// positions stay contiguous (parent design Â§6).
+	// positions stay contiguous (parent design §6).
 	const total = members.parameters.length + members.references.length + nested.length;
 	const children: string[] = [];
 	for (const parameter of members.parameters) {
@@ -364,8 +364,8 @@ function referenceItem(
 		definitionRef: reference.definitionRef,
 		value: target,
 		target: rawTarget,
-		// The target is the row's follow affordance â€” not the whole row, which selects
-		// now (UX child design Â§2, Â§5).
+		// The target is the row's follow affordance — not the whole row, which selects
+		// now (UX child design §2, §5).
 		valueHtml: `<span class="value target" data-follow="true" title="${escapeAttr(
 			'Follow to the target: = ' + target
 		)}"><span class="punct">=</span> <span class="value-text">${escapeHtml(target)}</span></span>`,
@@ -408,13 +408,13 @@ function suffixSpans(node: Suffixes): string[] {
 	return spans;
 }
 
-/** `/A/B/C` â†’ `A.B.C`, the legacy `\structify`. */
+/** `/A/B/C` → `A.B.C`, the legacy `\structify`. */
 function dotted(path: string): string {
 	const parts = path.split('/');
 	return parts.length <= 1 ? path : parts.slice(1).join('.');
 }
 
-/** `VARIANT-PRE-COMPILE` â†’ `VariantPreCompile`, the legacy `\camelize`. */
+/** `VARIANT-PRE-COMPILE` → `VariantPreCompile`, the legacy `\camelize`. */
 function camelize(value: string): string {
 	return value
 		.split('-')
@@ -433,9 +433,9 @@ function escapeAttr(text: string): string {
 }
 
 /* ---------------------------------------------------------------------------------
- * Re-render state (UX child design Â§4.1). Serialized into the page with `toString()`
- * so the webview and the tests run the same code, and so the ordering â€” capture the
- * scroll *before* the `innerHTML` swap, restore it *after* everything else â€” is
+ * Re-render state (UX child design §4.1). Serialized into the page with `toString()`
+ * so the webview and the tests run the same code, and so the ordering — capture the
+ * scroll *before* the `innerHTML` swap, restore it *after* everything else — is
  * asserted rather than assumed.
  * ------------------------------------------------------------------------------- */
 
@@ -460,7 +460,7 @@ export function collapsedIdsFor(items: readonly { id: string; hasChildren: boole
 
 /**
  * The index a movement key moves focus to, or `undefined` when the key is not a move
- * (UX child design Â§8). `page` is how many rows fit in the viewport, so PageUp/PageDown
+ * (UX child design §8). `page` is how many rows fit in the viewport, so PageUp/PageDown
  * move by a screen rather than a fixed count.
  */
 export function moveTarget(key: string, from: number, count: number, page: number): number | undefined {
@@ -539,17 +539,35 @@ body[data-view] {
 	--tok-number: var(--vscode-debugTokenExpression-number, var(--vscode-editor-foreground));
 	--tok-meta: var(--vscode-debugTokenExpression-name, var(--vscode-editor-foreground));
 	--tok-comment: var(--vscode-charts-green, var(--vscode-editor-foreground));
-	--tok-comment: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-editor-foreground)) 85%, var(--vscode-editor-background));
 	--tok-key: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
 	--tok-punct: var(--vscode-editor-foreground);
-	--tok-punct: color-mix(in srgb, var(--vscode-editor-foreground) 70%, var(--vscode-editor-background));
 	--tok-dim: var(--vscode-editor-foreground);
-	--tok-dim: color-mix(in srgb, var(--vscode-editor-foreground) 55%, var(--vscode-editor-background));
 	--hover-bg: var(--vscode-list-hoverBackground, transparent);
-	--sel-bg: var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-lineHighlightBackground, transparent));
-	--sel-bg-focus: var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, transparent));
-	--sel-bg-focus: color-mix(in srgb, var(--sel-bg-focus) 45%, transparent);
+	--sel-bg: var(--vscode-editor-background);
+	--sel-bg-focus: var(--vscode-editor-background);
 	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
+}
+@supports (color: color-mix(in srgb, currentColor 50%, transparent)) {
+	body[data-view] {
+		--tok-comment: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-editor-foreground)) 85%, var(--vscode-editor-background));
+		--tok-punct: color-mix(in srgb, var(--vscode-editor-foreground) 70%, var(--vscode-editor-background));
+		--tok-dim: color-mix(in srgb, var(--vscode-editor-foreground) 55%, var(--vscode-editor-background));
+		/* A 10% dark / 2% fallback tint preserves token contrast; the light
+		 * theme has no fill (below). The active line number and 2px rail
+		 * carry the selection meaning. */
+		--sel-bg: color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background)) 2%, var(--vscode-editor-background));
+		--sel-bg-focus: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 2%, var(--vscode-editor-background));
+	}
+	body.vscode-dark[data-view] {
+		--sel-bg: color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background)) 10%, var(--vscode-editor-background));
+		--sel-bg-focus: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 10%, var(--vscode-editor-background));
+	}
+	body.vscode-light[data-view] {
+		/* The light key accent is 4.51:1 on white; any fill would drop it below
+		 * 4.5:1, so the light selection is the active line number + rail only. */
+		--sel-bg: var(--vscode-editor-background);
+		--sel-bg-focus: var(--vscode-editor-background);
+	}
 }
 .toolbar {
 	display: flex;
@@ -687,15 +705,20 @@ body[data-view] {
 }
 
 .notice {
-	flex: 0 1 auto;
-	min-width: 0;
+	padding: 0 8px;
+	min-height: 18px;
+	font-size: 12px;
+	line-height: 18px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	color: var(--vscode-foreground);
+	color: var(--tok-dim);
+}
+.notice:empty {
+	display: none;
 }
 .notice[data-kind="warn"] {
-	color: var(--vscode-editorWarning-foreground);
+	color: var(--vscode-editorWarning-foreground, var(--tok-dim));
 }
 #content {
 	display: flex;
@@ -706,6 +729,7 @@ body[data-view] {
 	flex: 1 1 auto;
 	min-width: 0;
 	overflow: auto;
+	scroll-padding-left: 9ch;
 }
 #inspector {
 	flex: 0 0 clamp(260px, 30%, 340px);
@@ -862,6 +886,7 @@ body[data-view] {
 }
 .node[data-selected="true"] > .row {
 	background: var(--sel-bg);
+	box-shadow: inset 2px 0 0 var(--rail);
 }
 #tree:focus-within .node[data-selected="true"] > .row {
 	background: var(--sel-bg-focus);
@@ -876,7 +901,7 @@ body[data-view] {
 	display: none;
 }
 .node.flash > .row {
-	animation: ecuc-flash 900ms ease-out;
+	animation: ecuc-flash 1s ease-out;
 }
 @keyframes ecuc-flash {
 	from { background: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground)); }
@@ -925,7 +950,7 @@ body[data-view] {
 	border: 1px solid var(--vscode-focusBorder);
 }
 .value-edit[aria-invalid="true"] {
-	border-color: var(--vscode-editorError-foreground, var(--vscode-errorForeground));
+	border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-editorError-foreground, var(--vscode-errorForeground)));
 }
 .value-error {
 	margin-left: 1ch;
@@ -942,8 +967,8 @@ body[data-view] {
 	cursor: pointer;
 }
 .target:hover .value-text {
-	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
 	text-decoration: underline;
+	text-decoration-color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
 	text-underline-offset: 3px;
 }
 .context {
@@ -1019,7 +1044,7 @@ mark {
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	line-height: 1.4;
-	white-space: pre-wrap;
+	white-space: normal;
 	overflow-wrap: anywhere;
 }
 .inspector-actions {
@@ -1032,10 +1057,18 @@ mark {
  * and hover/focus affordances. Tree view keeps its grid; document selectors are
  * scoped. See docs/ECUC_EDITOR_DESIGN_SPEC.md. */
 body[data-view="document"] .document {
+	--ln-digits: 4;
 	--ln-w: calc(var(--ln-digits, 4) * 1ch + 1ch);
 	--gut: calc(var(--ln-w) + 4ch);
 	--indent: 4ch;
 }
+body[data-view="document"] .document:has(#tree[data-ln-digits="1"]) { --ln-digits: 1; }
+body[data-view="document"] .document:has(#tree[data-ln-digits="2"]) { --ln-digits: 2; }
+body[data-view="document"] .document:has(#tree[data-ln-digits="3"]) { --ln-digits: 3; }
+body[data-view="document"] .document:has(#tree[data-ln-digits="4"]) { --ln-digits: 4; }
+body[data-view="document"] .document:has(#tree[data-ln-digits="5"]) { --ln-digits: 5; }
+body[data-view="document"] .document:has(#tree[data-ln-digits="6"]) { --ln-digits: 6; }
+body[data-view="document"] .document:has(#tree[data-ln-digits="7"]) { --ln-digits: 7; }
 body[data-view="document"] #tree {
 	position: relative;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
@@ -1046,11 +1079,10 @@ body[data-view="document"] #tree {
 	tab-size: 4;
 	white-space: pre;
 	padding: calc(var(--ecuc-lh) * 0.5) 2ch calc(var(--ecuc-lh) * 3) var(--gut);
-	scroll-padding-left: var(--gut);
 }
 body[data-view="document"] .meta {
 	padding: calc(var(--ecuc-lh) * 0.5) 0 0 var(--gut);
-	margin-bottom: var(--ecuc-lh);
+	margin-bottom: calc(var(--ecuc-lh) * 0.5);
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	line-height: var(--ecuc-lh);
@@ -1100,6 +1132,18 @@ body[data-view="document"] .children .children .children .children .children .ro
 body[data-view="document"] .children .children .children .children .children .children .row {
 	margin-left: calc(-1 * (var(--gut) + var(--indent) * 6));
 	padding-left: calc(var(--gut) + var(--indent) * 6);
+}
+body[data-view="document"] .children .children .children .children .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 7));
+	padding-left: calc(var(--gut) + var(--indent) * 7);
+}
+body[data-view="document"] .children .children .children .children .children .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 8));
+	padding-left: calc(var(--gut) + var(--indent) * 8);
+}
+body[data-view="document"] .children .children .children .children .children .children .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 9));
+	padding-left: calc(var(--gut) + var(--indent) * 9);
 }
 body[data-view="document"] .row::before {
 	content: attr(data-line);
@@ -1219,8 +1263,8 @@ body[data-view="document"] .target {
 	text-decoration: none;
 }
 body[data-view="document"] .target:hover .value-text {
-	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
 	text-decoration: underline;
+	text-decoration-color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
 	text-underline-offset: 3px;
 }
 body[data-view="document"] .condition,
@@ -1241,7 +1285,6 @@ body[data-view="document"] .row.k-module .label::before {
 }
 body[data-view="document"] .children {
 	margin-left: var(--indent);
-	border-left: 0;
 }
 body[data-view="document"] .children::before,
 body[data-view="document"] .children::after {
@@ -1261,6 +1304,7 @@ body[data-view="document"] #tree > .node + .node {
 }
 body[data-view="document"] .node[data-selected="true"] > .row {
 	background: var(--sel-bg);
+	box-shadow: inset 2px 0 0 var(--rail);
 }
 body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
 	background: var(--sel-bg-focus);
@@ -1301,38 +1345,56 @@ body[data-view="document"] #tree:not(:has([role="treeitem"]:not([style*="display
 	padding-bottom: 0;
 }
 @media (forced-colors: active) {
-	body[data-view="document"] .node[data-selected="true"] > .row,
-	body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
+	body[data-view] .node[data-selected="true"] > .row,
+	body[data-view] #tree:focus-within .node[data-selected="true"] > .row {
 		background: transparent;
 		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
 		outline-offset: -1px;
 	}
-	body[data-view="document"] .node:hover > .row {
+	body[data-view] .node:hover > .row {
 		background: transparent;
 		outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
 		outline-offset: -1px;
 	}
-	body[data-view="document"] .node:focus-visible > .row {
+	body[data-view] .node:focus-visible > .row {
 		box-shadow: none;
 		outline: 2px solid var(--vscode-focusBorder);
 		outline-offset: -2px;
 	}
+	body[data-view] mark {
+		color: var(--vscode-editor-foreground);
+		background: transparent;
+		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+	}
+	body[data-view] .node.flash > .row {
+		animation: none;
+		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+	}
 }
-body.vscode-high-contrast[data-view="document"] .node[data-selected="true"] > .row,
-body.vscode-high-contrast[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
+body.vscode-high-contrast[data-view] .node[data-selected="true"] > .row,
+body.vscode-high-contrast[data-view] #tree:focus-within .node[data-selected="true"] > .row {
 	background: transparent;
 	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
 	outline-offset: -1px;
 }
-body.vscode-high-contrast[data-view="document"] .node:hover > .row {
+body.vscode-high-contrast[data-view] .node:hover > .row {
 	background: transparent;
 	outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
 	outline-offset: -1px;
 }
-body.vscode-high-contrast[data-view="document"] .node:focus-visible > .row {
+body.vscode-high-contrast[data-view] .node:focus-visible > .row {
 	box-shadow: none;
 	outline: 2px solid var(--vscode-focusBorder);
 	outline-offset: -2px;
+}
+body.vscode-high-contrast[data-view] mark {
+	color: var(--vscode-editor-foreground);
+	background: transparent;
+	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+}
+body.vscode-high-contrast[data-view] .node.flash > .row {
+	animation: none;
+	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
 }
 @media (max-width: 720px) {
 	body[data-view="document"] .document {
@@ -1366,6 +1428,9 @@ body.vscode-high-contrast[data-view="document"] .node:focus-visible > .row {
 	#content {
 		flex-direction: column;
 	}
+	#main {
+		scroll-padding-left: 3ch;
+	}
 	#inspector {
 		flex: 0 0 auto;
 		min-width: 0;
@@ -1379,7 +1444,7 @@ body.vscode-high-contrast[data-view="document"] .node:focus-visible > .row {
 		transition: none;
 	}
 	.node.flash > .row {
-		animation: none;
+		animation: ecuc-flash 1s steps(1, end);
 	}
 }
 `;
@@ -1387,10 +1452,10 @@ body.vscode-high-contrast[data-view="document"] .node:focus-visible > .row {
 /**
  * Keyboard traversal, activation, collapse and the message bridge. There is no `ready`
  * message: the initial model is already in the HTML, and a re-scan swaps the region
- * whole, so a first-paint push would only be a second update path (design Â§3). `vscode`
+ * whole, so a first-paint push would only be a second update path (design §3). `vscode`
  * is declared once above, because `acquireVsCodeApi` may only be called once per page.
  *
- * Interaction model (UX child design Â§2): a click selects, the twisty toggles, a double
+ * Interaction model (UX child design §2): a click selects, the twisty toggles, a double
  * click or Ctrl/Alt+Enter reveals, Enter is toggle-or-reveal, Space selects only. The
  * value widget's handlers are registered before these and claim their events with
  * `stopImmediatePropagation`, so nothing here runs for an interaction it owns.
@@ -1616,7 +1681,7 @@ function prune() {
 /**
  * The one place that writes \`aria-expanded\`, and therefore the one place that decides
  * what is visible. \`expandedOverride\` carries the ancestors of filter matches, which are
- * shown while a filter is active without touching the collapsed set (design Â§4.4).
+ * shown while a filter is active without touching the collapsed set (design §4.4).
  */
 function applyCollapsed(expandedOverride) {
 	for (const item of allItems()) {
@@ -1654,7 +1719,7 @@ function rowHeight() {
 	return measured > 0 ? measured : 20;
 }
 
-/** Type-ahead over the visible labels, with a 2 s window (design Â§8). */
+/** Type-ahead over the visible labels, with a 2 s window (design §8). */
 function typeAheadJump(character) {
 	const now = Date.now();
 	typeAhead.text = (now - typeAhead.at > 2000 ? '' : typeAhead.text) + character.toLowerCase();
@@ -1671,7 +1736,7 @@ function typeAheadJump(character) {
 	}
 }
 
-/** A click selects; the twisty toggles; the target follows (UX child design Â§2). */
+/** A click selects; the twisty toggles; the target follows (UX child design §2). */
 function onRowClick(event) {
 	if (!(event.target instanceof Element)) {
 		return;
@@ -1693,7 +1758,7 @@ function onRowClick(event) {
 	selectItem(item);
 }
 
-/** A double click is the deliberate reveal (UX child design Â§2). */
+/** A double click is the deliberate reveal (UX child design §2). */
 function onRowDoubleClick(event) {
 	if (!(event.target instanceof Element)) {
 		return;
@@ -1740,7 +1805,7 @@ function onTreeKeydown(event) {
 	} else if (event.key === 'Enter') {
 		event.preventDefault();
 		// A leaf has nothing to toggle, so revealing it is the only useful action; a
-		// container is revealed with Ctrl/Alt+Enter or a double click (design Â§2).
+		// container is revealed with Ctrl/Alt+Enter or a double click (design §2).
 		if (event.ctrlKey || event.altKey) {
 			revealItem(item);
 		} else if (group) {

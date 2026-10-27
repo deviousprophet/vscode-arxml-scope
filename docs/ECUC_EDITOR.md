@@ -6,7 +6,7 @@ parameter values in place, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
-> value editing, details inspector) are in place with 164 passing tests. Two things are deliberately
+> value editing, details inspector) are in place with 166 passing tests. Two things are deliberately
 > not implemented and are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
 > resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
 > `design.md`, `implement.md`) with the reference analysis in its
@@ -44,7 +44,7 @@ the file back to the text editor rather than showing an empty view.
 ## What it shows
 
 The editor opens in **Document** view, a quiet-source monospace surface: the editor font (13px
-fallback), 1.55 line height, real ARXML source line numbers in a left gutter, a fold column, 4-space
+fallback), 1.55 line height, real ARXML source line numbers in a left gutter, a fold column, 4ch
 indentation, `{`/`}` on their own lines, one blank row between modules, and inline metadata. The
 schema/package header and the braces are unnumbered. Labels are neutral except the single key accent
 on parameter/reference names; keywords, strings, numbers/hex, conditions, annotations and booleans
@@ -64,7 +64,7 @@ docked 260–340px panel, or a bottom sheet at narrow widths. The view and detai
 | Conditions | `[SW-SYSCOND]` and post-build-variant conditions as `<Ref == value && …>` |
 | Annotations | `[Label] text`, shown in comment form (`/* … */`) in Document view, without a label when absent |
 
-In Document view the tree's twisty column moves into the gutter, so labels align on exact 4-space
+In Document view the tree's twisty column moves into the gutter, so labels align on exact 4ch
 steps and the braces align with the parent row. Expanded fold chevrons appear while the pointer is
 over the tree or focus is inside it; a collapsed container always shows its chevron and a `{ ... }`
 stub. There are no list bullets, per-row borders, chips or fixed label columns. Long lines scroll
@@ -85,10 +85,11 @@ meta token, and annotations the comment token (italic). Parameter and reference 
 key accent; module paths, container labels, context paths and reference targets are neutral; `=`,
 braces and punctuation use the muted punctuation token. Reference targets use the link colour plus
 underline only on hover. In Tree view each kind also carries its own inline-SVG marker and accent, so
-the kinds are distinguishable where colour alone is not enough. Selected and focused rows use a
-translucent editor tint and a 2px gutter rail; the selected line number brightens and the syntax
-colours stay. The `F2` hint appears on the selected parameter line. High contrast switches the tint
-to outlines.
+the kinds are distinguishable where colour alone is not enough. Selected rows use a translucent
+editor tint and a brighter line number; focus adds a 2px gutter rail, and the syntax colours stay.
+The light theme trades the tint for token contrast, so the line number (Document) and, when focused,
+the rail carry the selection there. The `F2` hint appears on the selected parameter line. High contrast switches the tint to
+outlines.
 
 The presentational reference is the post-processed ARTEXT output of the remote
 `ref/ecucvalues-for-vscode` branch: `mmx` + `Arxml2Artext.mm`, then the extension's

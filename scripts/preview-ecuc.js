@@ -71,9 +71,16 @@ const THEMES = {
 			'symbolIcon-enumeratorForeground': '#267f99',
 			'symbolIcon-keywordForeground': '#0000ff',
 			'symbolIcon-numberForeground': '#098658',
+			'debugTokenExpression-boolean': '#0000ff',
+			'debugTokenExpression-string': '#a31515',
+			'debugTokenExpression-number': '#098658',
+			'debugTokenExpression-name': '#af00db',
+			'charts-green': '#388a34',
 			'tree-indentGuidesStroke': '#d3d3d3',
 			'editor-findMatchHighlightBackground': '#ea5c0055',
 			'editor-findMatchForeground': '#000000',
+			'editorLineNumber-foreground': '#237893',
+			'editorLineNumber-activeForeground': '#0b216f',
 			'editorWarning-foreground': '#bf8803',
 			'inputValidation-warningBackground': '#fff4d1',
 			'inputValidation-warningBorder': '#bf8803',
@@ -128,9 +135,16 @@ const THEMES = {
 			'symbolIcon-enumeratorForeground': '#b8d7a3',
 			'symbolIcon-keywordForeground': '#569cd6',
 			'symbolIcon-numberForeground': '#b5cea8',
+			'debugTokenExpression-boolean': '#569cd6',
+			'debugTokenExpression-string': '#ce9178',
+			'debugTokenExpression-number': '#b5cea8',
+			'debugTokenExpression-name': '#c586c0',
+			'charts-green': '#89d185',
 			'tree-indentGuidesStroke': '#404040',
 			'editor-findMatchHighlightBackground': '#ea5c0055',
 			'editor-findMatchForeground': '#ffffff',
+			'editorLineNumber-foreground': '#858585',
+			'editorLineNumber-activeForeground': '#c6c6c6',
 			'editorWarning-foreground': '#cca700',
 			'inputValidation-warningBackground': '#352a05',
 			'inputValidation-warningBorder': '#cca700',
@@ -185,9 +199,16 @@ const THEMES = {
 			'symbolIcon-enumeratorForeground': '#ffffff',
 			'symbolIcon-keywordForeground': '#ffffff',
 			'symbolIcon-numberForeground': '#ffffff',
+			'debugTokenExpression-boolean': '#ffffff',
+			'debugTokenExpression-string': '#ffffff',
+			'debugTokenExpression-number': '#ffffff',
+			'debugTokenExpression-name': '#ffffff',
+			'charts-green': '#ffffff',
 			'tree-indentGuidesStroke': '#ffffff',
 			'editor-findMatchHighlightBackground': '#f38518',
 			'editor-findMatchForeground': '#000000',
+			'editorLineNumber-foreground': '#ffffff',
+			'editorLineNumber-activeForeground': '#ffffff',
 			'editorWarning-foreground': '#f38518',
 			'inputValidation-warningBackground': '#000000',
 			'inputValidation-warningBorder': '#f38518',
@@ -546,6 +567,8 @@ function wrap(html, ctx) {
 		'</script>',
 	].join('\n');
 	let page = html.replace('<html lang="en">', `<html lang="en" data-preview-theme="${ctx.theme.id}">`);
+	const themeClass = ctx.theme.id === 'dark' ? 'vscode-dark' : ctx.theme.id === 'light' ? 'vscode-light' : 'vscode-high-contrast';
+	page = page.replace('<body data-view="document">', `<body data-view="document" class="${themeClass}">`);
 	page = page.replace('</head>', head + '\n</head>');
 	if (ctx.chrome) {
 		page = page.replace(
@@ -726,9 +749,19 @@ async function runCheck() {
 		for (const theme of THEME_ORDER) {
 			try {
 				const page = buildPage(fixture, { theme, sort: 'all', chrome: true }, fixtures);
+				const themeClass =
+					theme === 'light' ? 'vscode-light' : theme === 'dark' ? 'vscode-dark' : 'vscode-high-contrast';
 				const ok =
 					page.includes('data-preview-theme="' + theme + '"') &&
+					page.includes('class="' + themeClass + '"') &&
 					page.includes('--vscode-editor-background: ' + THEMES[theme].vars['editor-background']) &&
+					page.includes(
+						'--vscode-debugTokenExpression-string: ' + THEMES[theme].vars['debugTokenExpression-string']
+					) &&
+					page.includes(
+						'--vscode-editorLineNumber-activeForeground: ' +
+							THEMES[theme].vars['editorLineNumber-activeForeground']
+					) &&
 					page.includes(expectedTree) &&
 					page.includes('role="treeitem"') &&
 					page.includes('id="inspector"') &&
@@ -739,7 +772,7 @@ async function runCheck() {
 				check(
 					fixture.id + ' / ' + theme,
 					ok,
-					ok ? '' : 'missing production tree, stub, theme, inspector or empty state'
+					ok ? '' : 'missing production tree, stub, theme class/tokens, inspector or empty state'
 				);
 			} catch (error) {
 				check(fixture.id + ' / ' + theme, false, error && error.message ? error.message : String(error));

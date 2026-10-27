@@ -7,7 +7,7 @@ Baseline: `docs/ECUC_EDITOR_DESIGN_SPEC.md` (read-only; do not edit), the protot
 ## Ordered checklist
 
 - [x] 1. **Renderer data** (`renderHtml.ts`): wrap `renderTree` output in
-      `<div class="document" style="--ln-digits:N">…</div>`; add `Ctx.maxLine` and the 1-based
+      `<div class="document">…</div>` with `#tree data-ln-digits="N"`; add `Ctx.maxLine` and the 1-based
       `data-line` to each `.row`; add the schema-release number span; keep the `.meta`/`#tree`/`#empty`
       children. Update `renderTree` tests that assume the old root.
 - [x] 2. **Token block and typography** (§3–§5): define `--ecuc-fs`, `--ecuc-lh`, `--tok-*`,
@@ -40,7 +40,7 @@ Baseline: `docs/ECUC_EDITOR_DESIGN_SPEC.md` (read-only; do not edit), the protot
 - [x] 11. **Tokens/CSS hygiene**: no new literal colour outside a `var()` fallback; no remote asset/
       font; no new dependency; no `src/core/**`, provider behavior, manifest or write-path change.
 - [x] 12. **Tests**: update `uxDocument`, `uxColors`, `uxPolish`, `render.test`, and any rescan/render
-      root assumptions. New assertions: `.document`/`--ln-digits`, 1-based `data-line`, line-number
+      root assumptions. New assertions: `.document`/`#tree data-ln-digits`, 1-based `data-line`, line-number
       CSS, fold column/collapsed stub, token variables, selection keeps tokens, no permanent target
       underline, strip markup/order, details/narrow, empty-state comment, F2 hint/inline error.
 - [x] 13. **Docs/specs**: `docs/ECUC_EDITOR.md`; `.trellis/spec/frontend/{component-guidelines,
@@ -59,7 +59,7 @@ Baseline: `docs/ECUC_EDITOR_DESIGN_SPEC.md` (read-only; do not edit), the protot
 
 | Spec area | Tests |
 |---|---|
-| Document wrapper/gutter/data-line | `uxDocument`: `.document`, `--ln-digits`, `data-line` 1-based, row `::before`, fold column, braces/collapsed stub |
+| Document wrapper/gutter/data-line | `uxDocument`: `.document`, `#tree data-ln-digits`, `data-line` 1-based, row `::before`, fold column, braces/collapsed stub |
 | Tokens | `uxDocument`/`uxColors`: token variables/fallbacks, keyword/string/number/meta/comment/key/punct/dim mapping, no per-kind Document labels |
 | States | `uxDocument`/`uxPolish`: tint keeps token colours, active line number, focus rail, hover, target hover-only, F2 hint, editing/invalid reason |
 | Strip | `uxDocument`/`uxPolish`: 26px, filter/count/icons/switch/details order, `aria-pressed`, no textContent rewrite |
@@ -73,7 +73,7 @@ Baseline: `docs/ECUC_EDITOR_DESIGN_SPEC.md` (read-only; do not edit), the protot
 | Mutation | Expected failing test |
 |---|---|
 | Remove `data-line` from `.row` | `uxDocument` data-line test |
-| Remove `--ln-digits`/`.document` wrapper | `uxDocument` gutter test |
+| Remove `#tree data-ln-digits`/`:has` | `uxDocument` gutter test |
 | Restore per-kind Document label colours | `uxDocument` neutral-label/token test |
 | Restore `--ecuc-selection-fg` monochrome selection | `uxDocument` selection-keeps-tokens test |
 | Restore permanent `.target` underline | `uxDocument` target hover test |
@@ -116,14 +116,14 @@ Fix every spec/standards finding that is in scope, or record a reason in the tas
 ### Delivered
 
 - `src/editor/renderHtml.ts`: quiet-source Document surface with real source line numbers
-  (`data-line` on `.row`, `--ln-digits` on `.document`), `--ln-w`/`--gut`/`--indent` variables,
+  (`data-line` on `.row`, `#tree data-ln-digits`), `--ln-w`/`--gut`/`--indent` variables,
   absolute fold/line gutter, full-row negative-margin/padding selection and hover tint, 26px strip,
-  `--tok-*` token system with `color-mix` fallbacks, muted `=` punctuation, 260�340px details panel,
+  `--tok-*` token system with `color-mix` fallbacks, muted `=` punctuation, 260–340px details panel,
   =720px 3ch/numberless layout and bottom sheet.
 - Value markup split into `.punct` + `.value-text`; the value widget hides only the text and keeps
   `=` visible while editing; the filter highlights `.value-text`.
 - Inline invalid reason (`/* must be 0..255 */`) in `ecucValueEditor.ts`; the existing notice remains.
-- `src/editor/filter.ts`: source-comment empty state `/* No entities match "�". */`.
+- `src/editor/filter.ts`: source-comment empty state `/* No entities match "…". */`.
 - Tree view surface aligned: editor font/size, `--tok-*` values, tint/rail selection, hover-only
   target underline; chips/glyphs/per-kind accents/dotted values retained.
 - `docs/ECUC_EDITOR.md` and frontend specs updated; task spec/context/prototype preserved.
@@ -153,26 +153,26 @@ second render pass or virtualisation was added. This is a measured deviation fro
 
 | Mutation | Result |
 |---|---|
-| Remove `data-line` from `.row` | 1 failing � line-number test |
-| Remove `--tok-keyword` from the token block | 1 failing � token test |
-| Reintroduce `--ecuc-selection-fg` | 3 failing � selection-keeps-tokens tests |
-| Remove full-row gutter margin/padding | 1 failing � full-row test |
-| Restore 6px toolbar padding | 1 failing � strip test |
-| Remove collapsed-stub content | 1 failing � fold test |
-| Restore narrow line numbers | 1 failing � narrow test |
-| Restore `#inspector` 300px flex | 1 failing � details test |
-| Restore permanent target underline | 1 failing � target test |
-| Restore `=` inside the value token | 1 failing � value-separator test |
+| Remove `data-line` from `.row` | 1 failing — line-number test |
+| Remove `--tok-keyword` from the token block | 1 failing — token test |
+| Reintroduce `--ecuc-selection-fg` | 3 failing — selection-keeps-tokens tests |
+| Remove full-row gutter margin/padding | 1 failing — full-row test |
+| Restore 6px toolbar padding | 1 failing — strip test |
+| Remove collapsed-stub content | 1 failing — fold test |
+| Restore narrow line numbers | 1 failing — narrow test |
+| Restore `#inspector` 300px flex | 1 failing — details test |
+| Restore permanent target underline | 1 failing — target test |
+| Restore `=` inside the value token | 1 failing — value-separator test |
 
 All restored from the pre-mutation backup after each run.
 
 ### Validation
 
-- `npm run check-types` � pass.
-- `npm run lint` � pass.
-- `npm test` � 164 passing.
-- `npm run preview:check` � ok.
-- Focused document/colour/polish/render/editing suites � 93 passing before the final full run.
+- `npm run check-types` — pass.
+- `npm run lint` — pass.
+- `npm test` — 166 passing.
+- `npm run preview:check` — ok.
+- Focused document/colour/polish/render/editing suites — 94 passing before the final full run.
 
 ### AC verdicts
 
@@ -186,7 +186,7 @@ All restored from the pre-mutation backup after each run.
 | AC6 | Pass | Tree surface alignment tests/capture; grid/chips/glyphs/dotted values retained |
 | AC7 | Pass | narrow rules/tests; compact capture at the harness floor |
 | AC8 | Pass | a11y tests; focus rail/tint/contrast/HC/reduced-motion CSS |
-| AC9 | Pass | 164 passing; check-types/lint/preview:check; 10 mutations |
+| AC9 | Pass | 166 passing; check-types/lint/preview:check; 10 mutations |
 | AC10 | Pass | docs/specs updated; spec untouched; no core/write/manifest/dependency changes |
 
 ### Known deviations / follow-ups
@@ -199,7 +199,53 @@ All restored from the pre-mutation backup after each run.
   no virtualisation was added in this task.
 - **Narrow capture:** harness window floor 492px, not 360px; the same =720px media query and 3ch
   rules are tested. The real webview needs a 360px host check.
-- **High contrast:** Document uses outlines; Tree keeps the theme selection tint. The spec's
-  outline/no-fill rule is Document-specific.
+- **Capture gap:** the light and high-contrast selected/focused states are CSS-asserted but not in
+  the capture set; only the dark selected state was captured.
+- **High contrast:** outlines apply to both Document and Tree; the spec's outline/no-fill rule is
+  implemented in both views.
+- **Light selection in Tree:** the light fill is removed for token contrast; a 2px rail now marks
+  selected rows in both views, and Document also brightens the active line number. The light key
+  accent remains 4.51:1 on the normal background.
 - **D5:** the optional `/`/`Ctrl+F` filter shortcut is deferred.
-- **Ellipsis:** the collapsed stub uses the real `{ � }` character.
+- **Ellipsis:** the collapsed stub uses the real `{ … }` character.
+
+### Code review findings (2026-10-28)
+
+`@code-review` ran against `c6569de...HEAD` with the read-only spec. Findings and resolutions:
+
+- **CSP-blocked inline style for `--ln-digits`:** replaced the style attribute with
+  `#tree data-ln-digits` plus `.document:has(#tree[data-ln-digits="N"])` CSS. No style attribute;
+  test asserts it is absent.
+- **Contrast:** measured the dark 10% selection tint (keyword 4.95, string 6.09, number 9.48,
+  meta 5.79, key 8.10) and the light selection (no fill; key 4.51, number 4.60, meta 5.39, string
+  6.31). The light fill is removed because the light key accent is only 4.51:1 on white; the active
+  line number and 2px rail carry the selection.
+- **Depth:** nested full-row gutter rules extended from 6 to 10 levels.
+- **High contrast:** outlines now apply to both Document and Tree; filter matches and the follow
+  flash use outlines; no fills.
+- **Target hover:** text stays neutral; only the underline uses `--vscode-textLink-foreground`.
+- **Details:** value `white-space: normal`; keys/values/actions/empty copy as specified.
+- **Notice:** moved under the strip and muted by default; warnings use the warning token.
+- **Scroll padding:** moved to the `#main` scroll container (9ch; 3ch narrow).
+- **Header spacing:** `.meta` 0.5 line + `#tree` top 0.5 line = one blank line.
+- **Invalid value:** border uses `--vscode-inputValidation-errorBorder`; inline reason still uses
+  `--vscode-errorForeground`; no extra ARIA role.
+- **Reduced motion:** `animation: ecuc-flash 1s steps(1, end)` instead of `none`; the base flash and
+  the class-removal timeout are 1s too.
+- **Indent guides:** retained by leaving the base `.children` guide border in Document view.
+- **`color-mix` fallbacks:** moved to `@supports`; removed dead duplicate declarations.
+- **Preview harness:** the theme presets now stub `debugTokenExpression-*`, `charts-green` and
+  `editorLineNumber-*`; `preview:check` asserts the body theme class and those values, so the harness
+  reproduces the capture colours instead of falling back to monochrome.
+- **Encoding:** removed the BOM and fixed the mojibake in `renderHtml.ts` comments.
+- **Value error test:** added for the inline `.value-error`/invalid border.
+- **CSP/data-attribute deviation from spec line 298:** intentional; a style attribute is blocked by
+  the page CSP.
+- **Duplicate notice id:** moving the notice under the strip left two identical `#notice` elements;
+  removed the duplicate and added a uniqueness assertion.
+- **Accepted structural additions:** `.document` wrapper, `.punct`/`.value-text` (so `=` stays
+  visible and muted while editing), `.value-error` (inline refusal), and `:has` CSS (digit width and
+  empty state). They are presentation-only and preserve the DOM/value-widget contracts.
+- **Huge performance:** kept as a recorded follow-up; the spec's "load as today" is not met for
+  `sample/huge` (3.8 s vs 2.2 s) because of 12k line-number pseudo-elements. No virtualisation was
+  added in this task.

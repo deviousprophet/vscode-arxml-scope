@@ -44,9 +44,11 @@ that is not obvious from the code.
 - **Anything that must survive a re-scan lives outside `#main`.** The shell, toolbar and inspector are
   not swapped; the filter's empty state is inside the tree because it describes the filtered tree.
 - **Selection never recolours syntax.** Tree and Document selection use the translucent `--sel-bg`/
-  `--sel-bg-focus` tint and the 2px `--rail` focus edge; the token colours stay. Do not reintroduce
-  `--ecuc-selection-fg` or a monochrome selected line. Measure the tint contrast (the old light-theme
-  green on the blue selection was 1.33:1); high contrast uses outlines, not fills.
+  `--sel-bg-focus` tint and the 2px `--rail` focus edge; the token colours stay. The light theme uses
+  no fill because the light key accent measures 4.51:1 on white — the active line number (Document)
+  and, when focused, the 2px rail carry the selection there. Do not reintroduce `--ecuc-selection-fg`
+  or a monochrome selected line. Measure the tint contrast (the old light-theme green on the blue
+  selection was 1.33:1); high contrast uses outlines, not fills.
 - **`.value` stays a direct child of `.row`.** The widget, `highlightableSpans` and the editing tests
   select `:scope > .row > .value`; a wrapper cell breaks them. The value now contains a `--tok-punct`
   `=` and a `.value-text`; the widget hides `.value-text` and inserts the input inside `.value`, so the
@@ -62,9 +64,10 @@ that is not obvious from the code.
 - **The Document surface is text first.** Structural labels are neutral; only `--tok-*` keywords,
   strings, numbers, meta, comments and the single key accent carry colour. Reference targets are plain
   until hover; values have no dotted underline or hover pencil. Use real source line numbers
-  (`data-line`/`--ln-digits`), the `--ln-w`/`--gut`/`--indent` gutter, the fold column and the 26px
-  strip. The `=` is punctuation, not part of the value token. The tree's per-kind colours, chips,
-  dotted values and blue underlined targets belong to Tree view, not Document view.
+  (`data-line`, with `#tree data-ln-digits` selecting the gutter width), the `--ln-w`/`--gut`/
+  `--indent` gutter, the fold column and the 26px strip. The `=` is punctuation, not part of the value
+  token. The tree's per-kind colours, chips, dotted values and blue underlined targets belong to Tree
+  view, not Document view.
 - **Defaults are Document view and hidden details.** `renderHtml` writes `data-view="document"`, the
   inspector `hidden`, and `aria-pressed="false"`; the page script applies a saved Tree view or a
   shown inspector. The view and details state share the validated webview state object; a missing or

@@ -311,11 +311,17 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 			'an unfocused selection uses the quiet tint'
 		);
 		assert.ok(
+			/\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(
+				style
+			),
+			'an unfocused selection keeps a non-colour rail cue'
+		);
+		assert.ok(
 			/#tree:focus-within\s+\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*var\(--sel-bg-focus\)/.test(style),
 			'a focused selection uses the focused tint'
 		);
-		assert.ok(/--sel-bg:\s*var\(--vscode-list-inactiveSelectionBackground/.test(style));
-		assert.ok(/--sel-bg-focus:\s*var\(--vscode-list-activeSelectionBackground/.test(style));
+		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(style));
+		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(style));
 		assert.ok(!style.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
 	});
 

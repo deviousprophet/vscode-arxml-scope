@@ -102,17 +102,19 @@ toggles without moving the selection, a follow follows, everything else selects.
   `--tok-number`; variants/conditions use `--tok-meta`; annotations use `--tok-comment`, italic;
   parameter/reference labels use the single `--tok-key` accent (D1); `=`, braces and parentheses use
   `--tok-punct`; strip/keys/hints use `--tok-dim`. Reference targets are neutral with **no underline**
-  at rest; the `textLink` colour and underline appear on hover only. Do not reintroduce per-kind label
-  colours in Document view.
+  at rest; hover draws a `textLink`-coloured underline while the text stays neutral. Do not
+  reintroduce per-kind label colours in Document view.
 - **Document layout.** The row is a single flex line (`gap: 1ch`, no two-line grid, chips, per-row
-  border, padding or normal-state background). The source gutter is `data-line` (`--ln-digits` on
-  `.document`, `--ln-w`/`--gut`/`--indent` variables); `#tree` is positioned, `#tree` has
+  border, padding or normal-state background). The source gutter is `data-line` (`#tree` carries
+  `data-ln-digits`; the `.document` wrapper's `:has` rule sets `--ln-digits`, and `--ln-w`/`--gut`/
+  `--indent` drive the width); `#tree` is positioned, `#tree` has
   `padding-left: var(--gut)`, rows use a negative gutter margin plus matching left padding so the
   hover/selection tint and focus rail reach the gutter edge, and `.children` indents by
   `var(--indent)` (4ch wide, 3ch narrow). The twisty/spacer is absolute in the fold column; expanded
   chevrons reveal on `#tree:hover`/`:focus-within`, collapsed chevrons stay visible with a
-  `{ ... }` stub. Header and braces are unnumbered. Metadata stays visible (`display: flex`, never
-  `display: none`). Document values have no dotted underline or hover pencil; the tooltip/cursor keep
+  `{ … }` stub. Header and braces are unnumbered; the 4ch indent guides remain. Metadata stays visible
+  (`display: flex`, never `display: none`). Document values have no dotted underline or hover pencil;
+  the tooltip/cursor keep
   the edit affordance, and the `F2` hint appears on the selected parameter line. The strip is 26px
   with a compact filter, flat buttons and the Document|Tree switch; the details panel is 260–340px or
   a bottom sheet at ≤720px.

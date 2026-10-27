@@ -47,6 +47,8 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>'));
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));
+		assert.ok(html.includes('<div id="notice" class="notice" role="status" aria-live="polite"></div>'));
+		assert.equal(html.match(/id="notice"/g)?.length, 1, 'the notice id is unique');
 	});
 
 	test('AC2: the document CSS is one editor surface with the quiet-source tokens', () => {
@@ -62,8 +64,8 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(/--tok-punct:\s*color-mix/.test(style));
 		assert.ok(/--tok-dim:\s*color-mix/.test(style));
 		assert.ok(/--hover-bg:\s*var\(--vscode-list-hoverBackground/.test(style));
-		assert.ok(/--sel-bg:\s*var\(--vscode-list-inactiveSelectionBackground/.test(style));
-		assert.ok(/--sel-bg-focus:\s*var\(--vscode-list-activeSelectionBackground/.test(style));
+		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(style));
+		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(style));
 		assert.ok(/--rail:\s*var\(--vscode-focusBorder/.test(style));
 
 		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*position:\s*relative/.test(style));
@@ -101,7 +103,7 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--indent:\s*4ch/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--indent:\s*3ch/.test(style));
 		assert.ok(/body\[data-view="document"\] #tree > \.node \+ \.node\s*\{[^}]*margin-top:\s*var\(--ecuc-lh\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.meta\s*\{[^}]*margin-bottom:\s*var\(--ecuc-lh\)/.test(style));
+		assert.ok(/body\[data-view="document"\] \.meta\s*\{[^}]*margin-bottom:\s*calc\(var\(--ecuc-lh\) \* 0\.5\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.condition,[\s\S]*?border:\s*0/.test(style));
 		assert.ok(/body\[data-view="document"\] \.annotation::before\s*\{[^}]*content:\s*"\/\*/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*content:\s*"module /.test(style));
@@ -110,12 +112,27 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(!/body\[data-view="document"\] \.row-meta\s*\{[^}]*display:\s*none/.test(style), 'metadata is not hidden');
 	});
 
+	test('AC2: the review fixes keep the contrast tiers and indent guides', () => {
+		const style = styleOf(page());
+		assert.ok(
+			!/body\[data-view="document"\] \.children\s*\{[^}]*border-left:\s*0/.test(style),
+			'the Document indent guides stay'
+		);
+		assert.ok(/@supports \(color: color-mix\(in srgb, currentColor 50%, transparent\)\)/.test(style));
+		assert.ok(/body\.vscode-dark\[data-view\]\s*\{[^}]*--sel-bg: color-mix\([^;]*10%/.test(style));
+		assert.ok(
+			/body\.vscode-light\[data-view\]\s*\{[^}]*--sel-bg: var\(--vscode-editor-background\)/.test(style)
+		);
+	});
+
 	test('AC2: rows carry real 1-based source line numbers and the gutter width', () => {
 		const source = text();
 		const model = scanEcucValues(source);
 		const index = new LineIndex(source);
 		const region = renderTree(model, { lineIndex: index });
-		assert.ok(/class="document" style="--ln-digits:\d+"/.test(region));
+		assert.ok(region.startsWith('<div class="document">'));
+		assert.ok(/id="tree"[^>]*data-ln-digits="\d+"/.test(region));
+		assert.ok(!region.includes('style="--ln-digits'), 'no CSP-blocked style attribute');
 		const module = model.modules[0];
 		const parameter = module.containers[0].parameters.find((candidate) => candidate.name === 'IniValue');
 		assert.ok(parameter, 'the fixture has IniValue');
@@ -131,6 +148,13 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--gut:\s*calc\(var\(--ln-w\) \+ 4ch\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row::before\s*\{[^}]*content:\s*attr\(data-line\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row::before\s*\{[^}]*position:\s*absolute[^}]*width:\s*var\(--ln-w\)/.test(style));
+		assert.ok(/body\[data-view="document"\] \.row::before\s*\{[^}]*--vscode-editorLineNumber-foreground/.test(style));
+		assert.ok(
+			/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row::before,[\s\S]*?--vscode-editorLineNumber-activeForeground/.test(
+				style
+			)
+		);
+		assert.ok(/body\[data-view="document"\] \.document:has\(#tree\[data-ln-digits="2"\]\)/.test(style));
 		assert.ok(
 			/body\[data-view="document"\] \.twisty,\nbody\[data-view="document"\] \.spacer\s*\{[^}]*position:\s*absolute[^}]*left:\s*calc\(var\(--ln-w\) \+ 1ch\)/.test(
 				style
@@ -158,7 +182,7 @@ suite('editor document view (AC1–AC6)', () => {
 			'the target is plain text, not a permanent blue underline'
 		);
 		assert.ok(
-			/body\[data-view="document"\] \.target:hover \.value-text\s*\{[^}]*--vscode-textLink-foreground[^}]*text-decoration:\s*underline/.test(
+			/body\[data-view="document"\] \.target:hover \.value-text\s*\{[^}]*text-decoration:\s*underline[^}]*text-decoration-color:\s*var\(--vscode-textLink-foreground/.test(
 				style
 			),
 			'the link affordance is hover-only'
@@ -168,6 +192,7 @@ suite('editor document view (AC1–AC6)', () => {
 	test('AC3/AC5: quiet selection, focus rail and plain values', () => {
 		const style = styleOf(page());
 		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg\)/.test(style));
+		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(style));
 		assert.ok(
 			/body\[data-view="document"\] #tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg-focus\)/.test(
 				style
@@ -232,7 +257,13 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?body\[data-view="document"\] \.row::before\s*\{[^}]*display:\s*none/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.details-toggle \.lbl[\s\S]*?display:\s*none/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.grow[\s\S]*?display:\s*none/.test(style));
+		assert.ok(/\.inspector-code\s*\{[^}]*white-space:\s*normal/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?#inspector\s*\{[^}]*max-height:\s*45vh/.test(style));
+		assert.ok(/#main\s*\{[^}]*scroll-padding-left:\s*9ch/.test(style));
+		assert.ok(/@media \(max-width: 720px\)[\s\S]*?#main\s*\{[^}]*scroll-padding-left:\s*3ch/.test(style));
+		assert.ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?steps\(1, end\)/.test(style));
+		assert.ok(/@media \(forced-colors: active\)[\s\S]*?body\[data-view\] mark/.test(style));
+		assert.ok(/body\.vscode-high-contrast\[data-view\] \.node\.flash/.test(style));
 	});
 
 	test('AC2: Tree view shares the quiet-source surface tokens', () => {
@@ -242,6 +273,19 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(/\.target\s*\{[^}]*color:\s*var\(--vscode-editor-foreground\)/.test(style));
 		assert.ok(!/\.target\s*\{[^}]*text-decoration:\s*underline/.test(style), 'targets are hover-only underlined');
 		assert.ok(/\.target:hover \.value-text\s*\{[^}]*text-decoration:\s*underline/.test(style));
+	});
+
+	test('AC4: an invalid edit keeps the text and adds an inline comment reason', () => {
+		const html = page();
+		assert.ok(html.includes('value-error'));
+		assert.ok(html.includes("error.textContent = '/* ' + reason + ' */'"));
+		assert.ok(html.includes('valueEdit.input.after(error)'), 'the reason sits beside the input');
+		assert.ok(html.includes("valueEdit.input.setAttribute('aria-invalid', 'true')"));
+		const style = styleOf(html);
+		assert.ok(/\.value-error\s*\{[^}]*--vscode-errorForeground/.test(style));
+		assert.ok(
+			/\.value-edit\[aria-invalid="true"\]\s*\{[^}]*--vscode-inputValidation-errorBorder/.test(style)
+		);
 	});
 
 	test('AC5: the page’s own applyView/applyInspectorVisibility drive the stubs', () => {

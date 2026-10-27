@@ -109,14 +109,14 @@ suite('editor semantic colours (AC14)', () => {
 		assert.ok(/\.value\[data-value-kind="textual"\]\s*\{[^}]*--tok-string/.test(style));
 		assert.ok(/\.value\[data-value-kind="boolean"\]\s*\{[^}]*--tok-keyword/.test(style));
 		assert.ok(/\.target\s*\{[^}]*--vscode-editor-foreground/.test(style));
-		assert.ok(/\.target:hover \.value-text\s*\{[^}]*--vscode-textLink-foreground/.test(style));
+		assert.ok(/\.target:hover \.value-text\s*\{[^}]*text-decoration:\s*underline[^}]*text-decoration-color:\s*var\(--vscode-textLink-foreground/.test(style));
 		assert.ok(/\.short\s*\{[^}]*--tok-string/.test(style));
 	});
 
 	test('AC14: selection is a tint and does not recolour syntax', () => {
 		const style = styleOf(page());
-		assert.ok(/--sel-bg:\s*var\(--vscode-list-inactiveSelectionBackground/.test(style));
-		assert.ok(/--sel-bg-focus:\s*var\(--vscode-list-activeSelectionBackground/.test(style));
+		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(style));
+		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(style));
 		assert.ok(
 			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg\)/.test(style)
 		);
