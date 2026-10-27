@@ -293,6 +293,14 @@ function parameterItem(
 	// The legacy form quotes a textual value and leaves a numerical one bare, which is
 	// what tells the two apart at a glance.
 	const shown = parameter.numeric ? value : `"${value}"`;
+	// The reference ARTEXT grammar distinguishes strings, numeric literals and booleans.
+	// Keep that split for parameter values instead of painting every value with the numeric
+	// token; reference targets get the link colour in `referenceItem`.
+	const valueKind = parameter.numeric
+		? value === 'true' || value === 'false'
+			? 'boolean'
+			: 'numeric'
+		: 'textual';
 	return item(ctx, {
 		id: ctx.index.idOf(parameter) ?? '',
 		kind: 'parameter',
@@ -301,7 +309,7 @@ function parameterItem(
 		value,
 		// The value is the first line's fourth column, so it stays aligned across
 		// siblings; the hex and the suffixes move to the quieter second line.
-		valueHtml: `<span class="value" title="${escapeAttr(
+		valueHtml: `<span class="value" data-value-kind="${valueKind}" title="${escapeAttr(
 			'Click to edit, or press F2: = ' + shown
 		)}">= ${escapeHtml(shown)}</span>`,
 		title: parameter.definitionRef,
@@ -695,7 +703,16 @@ body {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	color: var(--vscode-symbolIcon-numberForeground, var(--vscode-foreground));
+	color: var(--vscode-foreground);
+}
+.value[data-value-kind="numeric"] {
+	color: var(--vscode-symbolIcon-numberForeground, var(--vscode-symbolIcon-fieldForeground, var(--vscode-foreground)));
+}
+.value[data-value-kind="textual"] {
+	color: var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground));
+}
+.value[data-value-kind="boolean"] {
+	color: var(--vscode-symbolIcon-booleanForeground, var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground)));
 }
 .row-meta {
 	grid-column: 3 / -1;
@@ -714,14 +731,29 @@ body {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.row.k-module, .row.k-container {
-	border-left: 2px solid var(--vscode-symbolIcon-classForeground, var(--vscode-foreground));
+.row.k-module {
+	border-left: 2px solid var(--vscode-symbolIcon-moduleForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-foreground)));
+}
+.row.k-container {
+	border-left: 2px solid var(--vscode-symbolIcon-namespaceForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-foreground)));
 }
 .row.k-parameter {
 	border-left: 2px solid var(--vscode-symbolIcon-fieldForeground, var(--vscode-foreground));
 }
 .row.k-reference {
 	border-left: 2px solid var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground));
+}
+.glyph .g-module {
+	color: var(--vscode-symbolIcon-moduleForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-icon-foreground)));
+}
+.glyph .g-container {
+	color: var(--vscode-symbolIcon-namespaceForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-icon-foreground)));
+}
+.glyph .g-parameter {
+	color: var(--vscode-symbolIcon-fieldForeground, var(--vscode-icon-foreground));
+}
+.glyph .g-reference {
+	color: var(--vscode-symbolIcon-referenceForeground, var(--vscode-icon-foreground));
 }
 .node:focus-visible > .row {
 	outline: 1px solid var(--vscode-focusBorder);
@@ -774,7 +806,7 @@ body:not(:focus-within) .node[data-selected="true"] > .row .context {
 	to { background: transparent; }
 }
 .short {
-	color: var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground));
+	color: var(--vscode-symbolIcon-variableForeground, var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground)));
 }
 .variant {
 	color: var(--vscode-symbolIcon-enumeratorForeground, var(--vscode-foreground));
@@ -813,6 +845,7 @@ body:not(:focus-within) .node[data-selected="true"] > .row .context {
 	border-color: var(--vscode-editorError-foreground, var(--vscode-errorForeground));
 }
 .target {
+	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
 	text-decoration: underline;
 	cursor: pointer;
 }

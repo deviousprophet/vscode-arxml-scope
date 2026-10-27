@@ -278,7 +278,8 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		assert.ok(/class="g-reference"[^>]*><path/.test(tree), 'an arrow');
 
 		const style = styleOf(page());
-		assert.ok(/\.row\.k-module,\s*\.row\.k-container\s*\{[^}]*var\(--vscode-/.test(style));
+		assert.ok(/\.row\.k-module\s*\{[^}]*--vscode-symbolIcon-moduleForeground/.test(style));
+		assert.ok(/\.row\.k-container\s*\{[^}]*--vscode-symbolIcon-namespaceForeground/.test(style));
 		assert.ok(/\.row\.k-parameter\s*\{[^}]*var\(--vscode-symbolIcon-fieldForeground/.test(style));
 		assert.ok(/\.row\.k-reference\s*\{[^}]*var\(--vscode-symbolIcon-referenceForeground/.test(style));
 	});
@@ -318,7 +319,8 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 
 	test('AC8: a value advertises that it is editable, by tooltip and by hover', () => {
 		const script = page();
-		assert.ok(script.includes('<span class="value" title="Click to edit, or press F2:'), 'the tooltip');
+		assert.ok(script.includes('<span class="value" data-value-kind="numeric"'), 'the value kind');
+		assert.ok(script.includes('title="Click to edit, or press F2:'), 'the tooltip');
 		assert.ok(script.includes('= "hello"'), 'and it carries the full value for a clipped cell');
 		const style = styleOf(script);
 		assert.ok(/\.row\.k-parameter\s*>\s*\.value\s*\{[^}]*cursor:\s*text/.test(style), 'the caret');
