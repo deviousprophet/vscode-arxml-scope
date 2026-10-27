@@ -223,10 +223,11 @@ Baseline was 97; the 34 added tests are the four new files below.
    behaviour and what the docs and the test now say, but "swaps the tab" in §3/§10 reads as though the
    tab disappears.
 
-## Manual verification status — **not performed** (7/7 unverified)
+## Manual verification status — **7/7 unverified in VS Code** (browser harness follow-up below)
 
-The test host has no webview DOM and no layout, so none of these were observed. Each row says what a
-human must look at in an Extension Development Host:
+The test host has no webview DOM and no layout, so none of these were observed **in VS Code**. A
+browser harness later observed the page-side behaviour recorded below; each row still needs a human in
+an Extension Development Host where noted:
 
 1. Click a container's label → selects, no XML appears. *(Gesture unverified; the handler and the host
    effect are tested.)*
@@ -245,6 +246,26 @@ human must look at in an Extension Development Host:
 
 Nothing above is implied to have passed: the markup-level tests are named so ("a toggle is rendered
 only where…", "the page re-renders through the same sequence…") and never claim a DOM behaviour.
+
+### Browser harness follow-up (2026-10-27)
+
+Task `10-27-ecuc-editor-visual-polish` rendered the real page in the in-app browser with stubbed
+VS Code variables (`npm run preview:ecuc`). Observations:
+
+| Row | Harness observation | Still needs VS Code |
+|---|---|---|
+| 1 | Clicking a container label selected it and left the tree visible; no text editor was opened. | The real webview gesture/focus model, and that no custom-editor tab is replaced. |
+| 2 | Not exercised as a gesture; the page posted `reveal` for the selected node. | The real double-click gesture, the source opening in another column, and focus staying in the tree. |
+| 3 | Collapsed `Cont04` in the 51-node `editor/large.arxml`, scrolled to 180, selected `Beta`, dispatched a `model` re-scan; the container stayed collapsed, the selection and inspector stayed, and `scrollTop` was still 180. | Typing in the real XML beside the webview, with VS Code's own re-scan events. |
+| 4 | Hovering `IniValue` showed the row hover background and the pencil affordance. | Rendered hover in a real webview is the same CSS; still worth a visual check. |
+| 5 | Clicked `IniValue`, typed `garbage`, Enter: the input stayed open with `garbage`; a simulated warn notice set `aria-invalid=true` and kept the red border. | The real host refusal; `editing.test` AC6 covers the refusal and no mutation, but the live input/focus is a VS Code check. |
+| 6 | Filtering `IniValue` inside a collapsed `ContA` expanded the ancestor and reported `3 of 9`; clearing restored `aria-expanded=false`. A nonsense filter showed the empty state and its Clear action restored the tree. | The browser DOM is real; VS Code's own webview is still the acceptance environment. |
+| 7 | Light, dark and high-contrast captures showed the tree, values, chips, selection and inspector; selected-row contrast was 6.11:1 in light and 11.99:1 in dark after the selection-foreground fix. | VS Code's own theme variables and high-contrast borders; the harness variables are approximations. |
+
+The harness also exercised the details panel for a module, container, parameter and reference, the
+Copy path/value/target messages, the Details toggle persistence across a reload, and no horizontal
+scroll at 912 CSS px. None of this is a VS Code webview pass, and row 2 remains a real-host gesture
+check.
 
 ## Files changed
 
