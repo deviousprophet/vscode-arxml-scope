@@ -14,6 +14,7 @@ that is not obvious from the code.
 | Generating an expected fixture from the code under test | A snapshot agrees with the code by construction. See `testing.md`. |
 | Editing a committed fixture from a test | It passes once, then fails forever and silently rewrites the repository. |
 | Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. |
+| A second renderer or copied markup for a preview/harness | It diverges from the product; wrap the production `renderHtml` and assert containment. |
 | Reading a real customer file from a test | The repository is public. Fixtures are synthetic. |
 
 ## Rules the write path must keep
@@ -38,6 +39,17 @@ that is not obvious from the code.
   later write would target.
 - **A webview gets a CSP and a nonce**, and its state is re-posted on every change rather than assumed
   to survive.
+- **The value widget's listeners stay first, and claim their events with `stopImmediatePropagation`.**
+  The tree and the filter must not act on a click or key the widget owns; the ordering is asserted.
+- **Anything that must survive a re-scan lives outside `#main`.** The shell, toolbar and inspector are
+  not swapped; the filter's empty state is inside the tree because it describes the filtered tree.
+- **A selected row uses the selection foreground for token-coloured text.** Token colours are for the
+  normal background; the light theme's green value on the blue selection was 1.33:1. Measure it, do not
+  just assert the CSS rule.
+- **`.value` stays a direct child of `.row`.** The widget, `highlightableSpans` and the editing tests
+  select `:scope > .row > .value`; a wrapper cell breaks them.
+- **A fixed label track keeps values aligned.** Each row is its own grid; a per-row `1fr` label sizes to
+  content and breaks the column.
 
 ## Before calling work done
 

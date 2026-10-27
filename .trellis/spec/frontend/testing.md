@@ -72,3 +72,37 @@ with `suite is not defined`.
 There is no webview DOM in the test host. Webview behaviour is therefore asserted at the level of the
 rendered HTML string, and anything that depends on real DOM interaction has to be confirmed by hand —
 say so in the task notes rather than implying it was tested.
+
+## A browser harness is not a webview
+
+`npm run preview:ecuc` serves the production `renderHtml` page in the in-app browser with a stubbed
+`acquireVsCodeApi` and stubbed `--vscode-*` variables. That is enough to observe layout, hover, focus,
+scroll, filter passes and the inspector with a real DOM — much more than a string assertion. It is
+still **not** a VS Code webview: it cannot prove VS Code's own theme resolution, the real custom-editor
+tab/column/focus behaviour, or host clipboard permissions. Record harness observations as
+harness-observed, and keep the real-host rows in the task's manual table.
+
+The harness must wrap the production renderer; a second renderer is a test that agrees with itself.
+`npm run preview:check` asserts that each wrapped page contains the exact production `renderTree`
+output plus the stub, inspector and empty state.
+
+## A CSS rule is not a contrast measurement
+
+Asserting that `.node[data-selected] .value` names a `--vscode-*` variable proves the rule exists, not
+that the text is readable. In this project the light theme's green value on the blue selection was
+**1.33:1** while the rule looked correct. Measure the computed foreground/background in the browser
+harness and record the ratio; keep the CSS assertion as a regression guard.
+
+## Source-level wiring assertions are a last resort
+
+The provider's `{ type: 'copy' }` branch is a one-liner around `copyText(clipboard, text)`. The helper
+is behaviourally tested with a stub (exact text, rejection), and the provider branch is source-asserted
+because a provider-level clipboard seam would be more machinery than the one-line wiring justifies.
+When you use this pattern, say so in the task notes; do not present it as a behavioural test.
+
+## The page's own helpers are the ones under test
+
+When a rule lives in the inlined page script, extract the page's copy with `scriptTestUtils` and drive
+it, rather than testing a host-side twin. `prepareFocus`'s initial-selection adoption is tested with a
+stubbed DOM in `uxPolish.test.ts`; the mutation "remove the adoption" fails it. A test that only greps
+for a call site can pass with the feature deleted.
