@@ -59,7 +59,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <style nonce="${nonce}">${STYLE}</style>
 </head>
-<body>
+<body data-view="document">
 <div class="toolbar">
 <div class="filter-wrap">
 <input id="filter" class="filter" type="search" placeholder="Filter labels, short names and values" aria-label="Filter the ECUC tree">
@@ -70,11 +70,12 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <span class="grow"></span>
 <button id="expand-all" class="tool" type="button" title="Expand every container">Expand all</button>
 <button id="collapse-all" class="tool" type="button" title="Collapse every container">Collapse all</button>
-<button id="details-toggle" class="tool" type="button" aria-pressed="true" aria-controls="inspector" title="Show or hide the node details">Details</button>
+<button id="view-toggle" class="tool" type="button" aria-pressed="true" title="Switch to tree view">Tree</button>
+<button id="details-toggle" class="tool" type="button" aria-pressed="false" aria-controls="inspector" title="Show node details">Details</button>
 </div>
 <div id="content">
 <div id="main">${renderTree(model, options)}</div>
-<aside id="inspector" class="inspector" role="region" aria-label="Node details">
+<aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>
 <div class="inspector-empty">
 <p>Select a node to see its details.</p>
 <p class="inspector-hint">Double-click a row to reveal it in the source.</p>
@@ -104,10 +105,10 @@ export function renderTree(model: EcucDocumentModel, options: RenderOptions = {}
 
 	const meta: string[] = [];
 	if (model.schema) {
-		meta.push(`<div class="schema">schema ${escapeHtml(model.schema.release)}</div>`);
+		meta.push(`<div class="schema"><span class="keyword">schema</span> ${escapeHtml(model.schema.release)}</div>`);
 	}
 	for (const pkg of model.packages) {
-		meta.push(`<div class="package">package ${escapeHtml(pkg.path.join('.'))}</div>`);
+		meta.push(`<div class="package"><span class="keyword">package</span> ${escapeHtml(pkg.path.join('.'))}</div>`);
 	}
 
 	const modules = orderModules(model.modules, ctx.sort, ctx.except);
@@ -755,6 +756,7 @@ body {
 	color: var(--vscode-symbolIcon-referenceForeground, var(--vscode-icon-foreground));
 }
 .node:focus-visible > .row {
+	--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground);
 	outline: 1px solid var(--vscode-focusBorder);
 	outline-offset: -1px;
 	background: var(--vscode-list-focusBackground, var(--vscode-list-hoverBackground));
@@ -775,24 +777,24 @@ body:not(:focus-within) .node[data-selected="true"] > .row {
  * (the light theme's green value on the blue selection is the worst case), so the whole
  * selected row uses the theme's selection foreground. The custom property lets the
  * active and inactive states share one rule. */
-.node[data-selected="true"] > .row > .value,
-.node[data-selected="true"] > .row .short,
-.node[data-selected="true"] > .row .variant,
-.node[data-selected="true"] > .row .hex,
-.node[data-selected="true"] > .row .condition,
-.node[data-selected="true"] > .row .annotation,
-.node[data-selected="true"] > .row .context {
+:is(.node[data-selected="true"], .node:focus-visible) > .row > .value,
+:is(.node[data-selected="true"], .node:focus-visible) > .row .short,
+:is(.node[data-selected="true"], .node:focus-visible) > .row .variant,
+:is(.node[data-selected="true"], .node:focus-visible) > .row .hex,
+:is(.node[data-selected="true"], .node:focus-visible) > .row .condition,
+:is(.node[data-selected="true"], .node:focus-visible) > .row .annotation,
+:is(.node[data-selected="true"], .node:focus-visible) > .row .context {
 	color: var(--ecuc-selection-fg);
 }
-/* The marker, twisty and kind border are part of the selected row too. */
-.node[data-selected="true"] > .row > .twisty,
-.node[data-selected="true"] > .row .glyph svg {
+/* The marker, twisty and kind border are part of the selected/focused row too. */
+:is(.node[data-selected="true"], .node:focus-visible) > .row > .twisty,
+:is(.node[data-selected="true"], .node:focus-visible) > .row .glyph svg {
 	color: var(--ecuc-selection-fg);
 }
-.node[data-selected="true"] > .row.k-module,
-.node[data-selected="true"] > .row.k-container,
-.node[data-selected="true"] > .row.k-parameter,
-.node[data-selected="true"] > .row.k-reference {
+:is(.node[data-selected="true"], .node:focus-visible) > .row.k-module,
+:is(.node[data-selected="true"], .node:focus-visible) > .row.k-container,
+:is(.node[data-selected="true"], .node:focus-visible) > .row.k-parameter,
+:is(.node[data-selected="true"], .node:focus-visible) > .row.k-reference {
 	border-left-color: var(--ecuc-selection-fg);
 }
 .children {
@@ -810,7 +812,10 @@ body:not(:focus-within) .node[data-selected="true"] > .row {
 	to { background: transparent; }
 }
 .short {
-	color: var(--vscode-symbolIcon-variableForeground, var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground)));
+	color: var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground));
+}
+.keyword {
+	color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground));
 }
 .variant {
 	color: var(--vscode-symbolIcon-enumeratorForeground, var(--vscode-foreground));
@@ -915,6 +920,131 @@ mark {
 	gap: 4px;
 	margin-top: 12px;
 }
+/* Document view: the post-processed ARTEXT look, over the same tree DOM. */
+body[data-view="document"] #tree {
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--vscode-editor-font-size, var(--vscode-font-size, 13px));
+	line-height: 1.5;
+}
+body[data-view="document"] .meta {
+	padding: 4px 10px 2px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--vscode-editor-font-size, var(--vscode-font-size, 13px));
+	color: var(--vscode-descriptionForeground);
+}
+body[data-view="document"] .schema,
+body[data-view="document"] .package {
+	font-family: inherit;
+}
+body[data-view="document"] .row {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 0;
+	align-items: baseline;
+	padding: 0 10px 0 2px;
+}
+body[data-view="document"] .row.k-module,
+body[data-view="document"] .row.k-container,
+body[data-view="document"] .row.k-parameter,
+body[data-view="document"] .row.k-reference {
+	border-left: 0;
+}
+body[data-view="document"] .glyph {
+	display: none;
+}
+body[data-view="document"] .twisty,
+body[data-view="document"] .spacer {
+	flex: 0 0 1.2ch;
+	width: 1.2ch;
+}
+body[data-view="document"] .twisty svg {
+	width: 8px;
+	height: 8px;
+}
+/* Keep the document free of list-like markers; the toggle appears on hover/focus. */
+body[data-view="document"] .twisty {
+	opacity: 0;
+}
+body[data-view="document"] .row:hover .twisty,
+body[data-view="document"] .node:focus-visible > .row .twisty {
+	opacity: 1;
+}
+body[data-view="document"] .label {
+	flex: 0 0 auto;
+	overflow: visible;
+	text-overflow: clip;
+	white-space: pre;
+	font-weight: 400;
+}
+body[data-view="document"] .value {
+	margin-left: 1ch;
+	max-width: none;
+	overflow: visible;
+	text-overflow: clip;
+	white-space: pre;
+}
+body[data-view="document"] .row-meta {
+	display: inline;
+	margin-left: 1ch;
+	font-size: inherit;
+	color: var(--vscode-descriptionForeground);
+	white-space: pre;
+}
+body[data-view="document"] .row-meta > span {
+	max-width: none;
+	overflow: visible;
+	white-space: pre;
+	margin-right: 1ch;
+}
+body[data-view="document"] .condition,
+body[data-view="document"] .annotation {
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+}
+body[data-view="document"] .annotation::before {
+	content: "/* ";
+}
+body[data-view="document"] .annotation::after {
+	content: " */";
+}
+body[data-view="document"] .row.k-module .label {
+	color: var(--vscode-symbolIcon-functionForeground, var(--vscode-symbolIcon-moduleForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-foreground))));
+}
+body[data-view="document"] .row.k-module .label::before {
+	content: "module ";
+	color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground));
+}
+body[data-view="document"] .row.k-container .label {
+	color: var(--vscode-symbolIcon-namespaceForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-foreground)));
+}
+body[data-view="document"] .row.k-parameter .label,
+body[data-view="document"] .row.k-reference .label {
+	color: var(--vscode-symbolIcon-variableForeground, var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground)));
+}
+body[data-view="document"] .children {
+	margin-left: 4ch;
+	border-left: 0;
+}
+body[data-view="document"] .children::before,
+body[data-view="document"] .children::after {
+	display: block;
+	/* Align the brace with the row's text start: the group is 4ch in, and the row
+	 * spends 1.2ch on the twisty plus 2px padding before the label. */
+	margin-left: calc(-4ch + 1.2ch + 2px);
+	color: var(--vscode-descriptionForeground);
+	white-space: pre;
+}
+body[data-view="document"] .children::before {
+	content: "{";
+}
+body[data-view="document"] .children::after {
+	content: "}";
+}
+body[data-view="document"] :is(.node[data-selected="true"], .node:focus-visible) > .row > .label,
+body[data-view="document"] :is(.node[data-selected="true"], .node:focus-visible) > .row > .label::before {
+	color: var(--ecuc-selection-fg);
+}
 @media (max-width: 720px) {
 	#content {
 		flex-direction: column;
@@ -953,10 +1083,17 @@ const main = document.getElementById('main');
 const notice = document.getElementById('notice');
 const inspector = document.getElementById('inspector');
 const detailsToggle = document.getElementById('details-toggle');
+const viewToggle = document.getElementById('view-toggle');
 const savedState = vscode.getState();
 // Only the object shape this page writes is accepted; anything else starts clean.
 let viewState =
 	savedState && typeof savedState === 'object' && !Array.isArray(savedState) ? savedState : {};
+if (viewState.view !== 'tree' && viewState.view !== 'document') {
+	viewState.view = 'document';
+}
+if (typeof viewState.inspectorHidden !== 'boolean') {
+	viewState.inspectorHidden = true;
+}
 let selectedId;
 let collapsed = new Set();
 let typeAhead = { text: '', at: 0 };
@@ -1321,24 +1458,50 @@ document.addEventListener('dblclick', onRowDoubleClick);
 document.addEventListener('keydown', onTreeKeydown);
 document.getElementById('collapse-all').addEventListener('click', collapseAll);
 document.getElementById('expand-all').addEventListener('click', expandAll);
+function applyView() {
+	document.body.dataset.view = viewState.view;
+	if (!viewToggle) {
+		return;
+	}
+	const isDocument = viewState.view === 'document';
+	viewToggle.setAttribute('aria-pressed', isDocument ? 'true' : 'false');
+	viewToggle.textContent = isDocument ? 'Tree' : 'Document';
+	viewToggle.title = isDocument ? 'Switch to tree view' : 'Switch to document view';
+}
+
+function applyInspectorVisibility() {
+	if (!inspector || !detailsToggle) {
+		return;
+	}
+	inspector.hidden = viewState.inspectorHidden === true;
+	detailsToggle.setAttribute('aria-pressed', inspector.hidden ? 'false' : 'true');
+	detailsToggle.title = inspector.hidden ? 'Show node details' : 'Hide node details';
+}
+
+if (viewToggle) {
+	viewToggle.addEventListener('click', () => {
+		viewState.view = viewState.view === 'document' ? 'tree' : 'document';
+		applyView();
+		vscode.setState(viewState);
+	});
+}
+
 if (detailsToggle && inspector) {
 	detailsToggle.addEventListener('click', () => {
-		inspector.hidden = !inspector.hidden;
-		detailsToggle.setAttribute('aria-pressed', inspector.hidden ? 'false' : 'true');
-		viewState.inspectorHidden = inspector.hidden;
+		viewState.inspectorHidden = !viewState.inspectorHidden;
+		applyInspectorVisibility();
 		vscode.setState(viewState);
-		if (!inspector.hidden) {
+		if (!viewState.inspectorHidden) {
 			updateInspector();
 		}
 	});
-	// The panel preference survives a re-scan (the shell is not swapped) and a full
-	// webview reload (the host state); the harness persists the same state in
-	// localStorage so the browser loop can exercise it.
-	if (viewState.inspectorHidden === true) {
-		inspector.hidden = true;
-		detailsToggle.setAttribute('aria-pressed', 'false');
-	}
 }
+
+// The view and panel preferences survive a re-scan (the shell is not swapped) and a
+// full webview reload (the host state); the harness persists the same state in
+// localStorage so the browser loop can exercise it.
+applyView();
+applyInspectorVisibility();
 
 window.addEventListener('message', (event) => {
 	const message = event.data;

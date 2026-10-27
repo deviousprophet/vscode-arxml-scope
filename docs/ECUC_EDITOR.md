@@ -6,13 +6,14 @@ parameter values in place, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
-> value editing, details inspector) are in place with 151 passing tests. Two things are deliberately
+> value editing, details inspector) are in place with 157 passing tests. Two things are deliberately
 > not implemented and are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
 > resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
 > `design.md`, `implement.md`) with the reference analysis in its
 > `research/legacy-artext-analysis.md`, and the legacy transform is vendored as text under
 > `reference/legacy-arxml2artext/`. The reading-experience overhaul (interaction model, collapse,
-> hierarchy, filter feedback, node identity) is `.trellis/tasks/10-14-ecuc-editor-ux/`.
+> hierarchy, filter feedback, node identity) is `.trellis/tasks/10-14-ecuc-editor-ux/`; the
+> document-style default presentation is `.trellis/tasks/10-27-ecuc-viewer-document-redesign/`.
 
 ## Why it exists
 
@@ -40,40 +41,57 @@ the file back to the text editor rather than showing an empty view.
 
 ## What it shows
 
+The editor opens in **Document** view, a dense monospace rendering of the file: one entity per line,
+4-space indentation, `{`/`}` around child groups, inline metadata, and semantic token colours. A
+toolbar **View** toggle switches to the **Tree** view, the two-line row layout with kind markers,
+chips and the fixed label column; the choice is remembered through the webview state.
+
 | Entity | Shown as |
 |---|---|
 | Schema | the detected AUTOSAR release, e.g. `00048` |
 | Package | the dotted package path |
-| Module | its full `DEFINITION-REF` path, its short-name, and its variant when present |
+| Module | `module` keyword + its full `DEFINITION-REF` path, its short-name, and its variant when present |
 | Container | the `DEFINITION-REF` tail and its short-name, nested to any depth |
 | Parameter | the `DEFINITION-REF` tail, the value, and the hexadecimal form of a numeric value as secondary information |
 | Reference | the `DEFINITION-REF` tail, the target path, and the context of an instance reference |
 | Conditions | `[SW-SYSCOND]` and post-build-variant conditions as `<Ref == value && …>` |
-| Annotations | `[Label] text`, including annotations without a label (the `/* … */` wrapper belongs to the dropped ARTEXT text form and is not shown) |
+| Annotations | `[Label] text`, shown in comment form (`/* … */`) in Document view, without a label when absent |
 
-Rows keep the primary label and value on the first line and move short-name, variant, hexadecimal
-form, context, conditions and annotations to a quieter second line. Long labels and values truncate
-with a tooltip; the full text is in the details panel. Each kind — module, container, parameter,
-reference — carries its own inline-SVG marker and accent, so the kinds are distinguishable in a
-high-contrast theme where colour alone is not enough.
+In Document view the tree's title/twisty column is collapsed to a narrow hover-revealed twisty, so the
+document has no list bullets or per-row borders and reads like a text editor. Long lines scroll
+horizontally in the pane instead of wrapping; nothing is hidden — short-name, variant, hexadecimal
+form, context, conditions and annotations move inline after the value. Tree view keeps the previous
+presentation unchanged. The full text of any row remains available in the details panel.
 
-The value colours follow the ARTEXT scopes rather than one token colour: numeric values use the
-numeric colour, textual values the string colour, and booleans the boolean/keyword colour. Reference
-targets use the link colour and short names the variable colour. Module, container, parameter and
-reference accents use their own `symbolIcon` variables. Selected rows switch to the theme's selection
-foreground so the semantic colours cannot fall below contrast on the selection background.
+The colours follow the ARTEXT grammar scopes rather than one token colour: keywords
+(`schema`/`package`/`module`) use the keyword colour, module paths the function colour, container
+labels the namespace colour, parameter/reference names the variable colour, short names and textual
+values the string colour, numbers and hex the numeric colour, booleans the boolean/keyword colour,
+reference targets the link colour, annotations the comment/description colour. In Tree view each kind
+also carries its own inline-SVG marker and accent, so the kinds are distinguishable in a
+high-contrast theme where colour alone is not enough. Selected and focused rows switch labels,
+prefixes, values and secondary fields to the theme's selection foreground so the semantic colours
+cannot fall below contrast on the selection background.
+
+The presentational reference is the post-processed ARTEXT output of the remote
+`ref/ecucvalues-for-vscode` branch: `mmx` + `Arxml2Artext.mm`, then the extension's
+`postProcessArtextGen` whitespace collapse inside `[...]`. The capture, the command and the scoped
+colour mock live in
+`.trellis/tasks/10-27-ecuc-viewer-document-redesign/research/reference-artext/`. It is a look
+reference, not a shipped format; nothing in the product reads or writes `.artext`.
 
 Ordering matches the legacy tool: by `DEFINITION-REF` then identity, with the legacy exception list
 preserved (see *Settings*).
 
 ## Browsing
 
-The tree is for reading first; reaching the source is deliberate.
+Both views are for reading first; reaching the source is deliberate. The interactions below work the
+same in Document and Tree view.
 
 | Interaction | Effect |
 |---|---|
-| Click a row — its label, its metadata or its empty space | selects that node; the view stays where it is |
-| Click a container's twisty | collapses or expands it; the selection does not move |
+| Click a row — its label, its value or its empty space | selects that node; the view stays where it is |
+| Click a container's twisty (revealed on hover in Document view) | collapses or expands it; the selection does not move |
 | Double-click a row, or `Ctrl`/`Alt`+`Enter` | reveals the node in the source (see *Navigation*) |
 | Click a reference's target, or `Enter` on a reference | follows the reference |
 | `Enter` on a container | collapses or expands it |
@@ -103,9 +121,10 @@ context (references), conditions, annotations, and the source range as `Lline:co
 The range is computed from the document text, not from the displayed order.
 
 The panel's actions are **Reveal in source**, **Copy path** and **Copy value** (or **Copy target** for
-a reference). Copying goes through the host clipboard and does not touch the file. The **Details**
-toolbar button shows or hides the panel; hiding it gives the tree the full width. The preference is
-remembered through the webview state, so it survives a re-scan and a reload.
+a reference). Copying goes through the host clipboard and does not touch the file. The panel starts
+**hidden**, so Document view gets the full width; the **Details** toolbar button shows or hides it.
+The preference and the selected view are remembered through the webview state, so they survive a
+re-scan and a reload.
 
 ## Editing
 
@@ -169,7 +188,9 @@ The harness wraps the **production** `renderHtml` output with a stubbed `acquire
 preset (light, dark, high contrast), fixture/theme/sort switches, a simulated re-scan, notice
 injection and a message log. It binds to `127.0.0.1`, reads the committed fixtures (and, for manual
 viewing, the optional local `../sample` directory described below), adds no runtime dependency and is
-never imported by the extension. `?chrome=0` hides the preview panel for clean screenshots.
+never imported by the extension. `?chrome=0` hides the preview panel for clean screenshots;
+`?view=document` or `?view=tree` seeds the saved view state so either presentation can be captured
+without clicking or relying on `localStorage`.
 
 It is a development tool, not a substitute for a VS Code webview: it cannot prove VS Code's own theme
 variable resolution, the real custom-editor tab/focus behaviour or host clipboard permissions. Those
@@ -193,10 +214,12 @@ It does not measure browser layout/paint or a real VS Code webview; treat the nu
 a performance promise. Do not add virtualisation from one run.
 
 Local runs on 2026-10-27: `large` scanned and rendered in tens of milliseconds; `huge` took roughly
-0.09–0.12 s to scan and 0.15–0.20 s to render. In the browser harness the page finished loading after
-~1.3 s (`large`) and ~7.3 s (`huge`), and a four-thousand-row filter pass took ~45 ms / ~125 ms. These
-are this machine's observations; timings vary with load and are not a guarantee. The real VS Code
-webview also pays layout and paint.
+0.09–0.12 s to scan and 0.15–0.20 s to render. In the browser harness (Document view, dark theme)
+the page finished loading after ~0.61 s (`large`, 4,001 rows) and ~1.6 s (`huge`, 12,001 rows), and
+the filter pass took ~54 ms / ~134 ms. The earlier Tree-view observations were ~1.3 s / ~7.3 s and
+~45 ms / ~125 ms; Document view is one CSS mode over the same DOM and no second render pass was
+added. These are this machine's observations; timings vary with load and are not a guarantee. The
+real VS Code webview also pays layout and paint.
 
 ## Limitations
 

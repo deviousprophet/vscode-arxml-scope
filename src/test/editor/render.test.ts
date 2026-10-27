@@ -19,8 +19,8 @@ function html(): string {
 suite('editor rendering (AC1)', () => {
 	test('AC1: the schema release and the package path are shown', () => {
 		const page = html();
-		assert.ok(page.includes('schema 00048'));
-		assert.ok(page.includes('package PkgA.PkgB'));
+		assert.ok(page.includes('>schema</span> 00048'));
+		assert.ok(page.includes('>package</span> PkgA.PkgB'));
 	});
 
 	test('AC1: the module shows its dotted DEFINITION-REF path, short name and variant', () => {

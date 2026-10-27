@@ -86,6 +86,25 @@ The harness must wrap the production renderer; a second renderer is a test that 
 `npm run preview:check` asserts that each wrapped page contains the exact production `renderTree`
 output plus the stub, inspector and empty state.
 
+## The reference must be the post-processed output
+
+The remote `ref/ecucvalues-for-vscode` branch's `.artext` is produced by `mmx` + `Arxml2Artext.mm`
+and then transformed by `postProcessArtextGen`, which collapses whitespace inside `[...]`
+(`[(A == B)]` → `[(A==B)]`). Comparing the raw `mmx` output is not comparing the reference. Capture
+the post-processed file and the exact command in the task research, and keep the raw/pre-processed
+state described in the README. The capture is evidence for the look; it is never a product fixture
+and is not read by the renderer.
+
+## Document view tests drive the page's own helpers
+
+Document markup/CSS tests are string assertions (`data-view`, toggles, token selectors, fallbacks),
+but the view/details behaviour must drive the page's own `applyView` / `applyInspectorVisibility`
+extracted with `scriptTestUtils` against stub elements — not a host-side twin. The mutation table for
+this view is: remove the `data-view` default, change the document row to `grid`, remove the view
+toggle, make the inspector visible by default, remove the module prefix, remove the selection-label
+emphasis, and neutralize the document selectors; each must fail a test. A CSS selector assertion is
+still not a rendered-layout test, so pair it with the light/dark/HC captures and a browser pass.
+
 ## A CSS rule is not a contrast measurement
 
 Asserting that `.node[data-selected] .value` names a `--vscode-*` variable proves the rule exists, not

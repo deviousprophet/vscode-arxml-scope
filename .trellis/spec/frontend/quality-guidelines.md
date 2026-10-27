@@ -48,10 +48,20 @@ that is not obvious from the code.
   just assert the CSS rule.
 - **`.value` stays a direct child of `.row`.** The widget, `highlightableSpans` and the editing tests
   select `:scope > .row > .value`; a wrapper cell breaks them.
-- **A fixed label track keeps values aligned.** Each row is its own grid; a per-row `1fr` label sizes to
-  content and breaks the column.
+- **A fixed label track keeps values aligned.** In Tree view each row is its own grid; a per-row `1fr`
+  label sizes to content and breaks the column. Document view deliberately drops the fixed track and
+  the two-line grid; do not reintroduce chips, cards, ellipsized values or per-row accents there.
+- **Document view is a presentation mode, not a data mode.** It is one `data-view` attribute and CSS
+  scoped under `body[data-view="document"]`, over the same tree DOM. The same rows, roles, ids,
+  `matchRanges`, filter/collapse state and `.value` direct-child contract apply. Never hide metadata
+  (`.row-meta`) to make the document look clean; inline it. The product never reads or writes
+  `.artext` and never runs `mmx`.
+- **Defaults are Document view and hidden details.** `renderHtml` writes `data-view="document"`, the
+  inspector `hidden`, and `aria-pressed="false"`; the page script applies a saved Tree view or a
+  shown inspector. The view and details state share the validated webview state object; a missing or
+  invalid view falls back to `document`.
 - **Value colours follow the ARTEXT scopes.** `data-value-kind` selects numeric/textual/boolean
-  colours; reference targets use the link colour; short names use the variable colour. Do not paint
+  colours; reference targets use the link colour; short names use the string colour. Do not paint
   every value with one token. The kinds use module/namespace/field/reference `symbolIcon` variables,
   not one accent for both module and container.
 - **Samples and benchmarks are dev-only.** The sample directory is outside the repository and

@@ -109,7 +109,7 @@ suite('editor semantic colours (AC14)', () => {
 		assert.ok(/\.value\[data-value-kind="textual"\]\s*\{[^}]*--vscode-symbolIcon-stringForeground/.test(style));
 		assert.ok(/\.value\[data-value-kind="boolean"\]\s*\{[^}]*--vscode-symbolIcon-booleanForeground/.test(style));
 		assert.ok(/\.target\s*\{[^}]*--vscode-textLink-foreground/.test(style));
-		assert.ok(/\.short\s*\{[^}]*--vscode-symbolIcon-variableForeground/.test(style));
+		assert.ok(/\.short\s*\{[^}]*--vscode-symbolIcon-stringForeground/.test(style));
 	});
 
 	test('AC14: selection still owns the foreground and markers, and no colour literal is added', () => {
@@ -117,17 +117,17 @@ suite('editor semantic colours (AC14)', () => {
 		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground)'));
 		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-inactiveSelectionForeground)'));
 		assert.ok(
-			/\.node\[data-selected="true"\] > \.row > \.value[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
+			/:is\(\.node\[data-selected="true"\], \.node:focus-visible\) > \.row > \.value[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
 				style
 			)
 		);
 		assert.ok(
-			/\.node\[data-selected="true"\] > \.row > \.twisty[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
+			/:is\(\.node\[data-selected="true"\], \.node:focus-visible\) > \.row > \.twisty[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
 				style
 			)
 		);
 		assert.ok(
-			/\.node\[data-selected="true"\] > \.row\.k-parameter[\s\S]*?border-left-color: var\(--ecuc-selection-fg\)/.test(
+			/:is\(\.node\[data-selected="true"\], \.node:focus-visible\) > \.row\.k-parameter[\s\S]*?border-left-color: var\(--ecuc-selection-fg\)/.test(
 				style
 			)
 		);

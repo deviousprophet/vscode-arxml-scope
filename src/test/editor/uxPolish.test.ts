@@ -44,10 +44,11 @@ function styleOf(html: string): string {
 suite('editor visual polish (AC4, AC6–AC9)', () => {
 	test('AC4: the page has a details inspector outside the re-rendered tree region', () => {
 		const html = page();
-		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details">'));
+		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>'));
 		assert.ok(html.includes('id="details-toggle"'));
 		assert.ok(html.includes('aria-controls="inspector"'));
-		assert.ok(html.includes('aria-pressed="true"'));
+		assert.ok(/id="details-toggle"[^>]*aria-pressed="false"/.test(html));
+		assert.ok(/id="view-toggle"[^>]*aria-pressed="true"/.test(html));
 		assert.ok(html.includes('Select a node to see its details.'));
 		assert.ok(!renderTree(scanEcucValues(text()), {}).includes('id="inspector"'), 'the tree swap cannot remove it');
 	});
@@ -153,8 +154,11 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 			'a re-scan refreshes the panel'
 		);
 		assert.ok(script.includes("detailsToggle.addEventListener('click'"));
-		assert.ok(script.includes('inspector.hidden = !inspector.hidden'));
+		assert.ok(script.includes('viewState.inspectorHidden = !viewState.inspectorHidden'));
+		assert.ok(script.includes('applyInspectorVisibility()'));
 		assert.ok(script.includes("detailsToggle.setAttribute('aria-pressed'"));
+		assert.ok(script.includes("viewToggle.addEventListener('click'"));
+		assert.ok(script.includes('viewState.view'));
 		assert.ok(script.includes('vscode.getState()'), 'the panel preference is restored on a reload');
 		assert.ok(script.includes('vscode.setState(viewState)'), 'and saved through the host state');
 		assert.ok(script.includes('viewState.inspectorHidden'), 'the saved flag is the hidden state');
@@ -217,7 +221,7 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground)'));
 		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-inactiveSelectionForeground)'));
 		assert.ok(
-			/\.node\[data-selected="true"\] > \.row > \.value[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
+			/:is\(\.node\[data-selected="true"\], \.node:focus-visible\) > \.row > \.value[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
 				style
 			),
 			'the value and secondary fields do not keep a low-contrast token colour on the selection'

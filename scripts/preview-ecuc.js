@@ -61,6 +61,7 @@ const THEMES = {
 			'icon-foreground': '#424242',
 			'symbolIcon-classForeground': '#b1801a',
 			'symbolIcon-moduleForeground': '#795e26',
+			'symbolIcon-functionForeground': '#795e26',
 			'symbolIcon-namespaceForeground': '#267f99',
 			'symbolIcon-variableForeground': '#0070c1',
 			'symbolIcon-booleanForeground': '#0000ff',
@@ -117,6 +118,7 @@ const THEMES = {
 			'icon-foreground': '#c5c5c5',
 			'symbolIcon-classForeground': '#ee9d28',
 			'symbolIcon-moduleForeground': '#e37933',
+			'symbolIcon-functionForeground': '#dcdcaa',
 			'symbolIcon-namespaceForeground': '#4ec9b0',
 			'symbolIcon-variableForeground': '#75beff',
 			'symbolIcon-booleanForeground': '#569cd6',
@@ -173,6 +175,7 @@ const THEMES = {
 			'icon-foreground': '#ffffff',
 			'symbolIcon-classForeground': '#ffffff',
 			'symbolIcon-moduleForeground': '#ffffff',
+			'symbolIcon-functionForeground': '#ffffff',
 			'symbolIcon-namespaceForeground': '#ffffff',
 			'symbolIcon-variableForeground': '#ffffff',
 			'symbolIcon-booleanForeground': '#ffffff',
@@ -362,11 +365,13 @@ const STUB_JS = `
 (function () {
 	var messages = [];
 	var stateKey = 'ecuc-preview-state';
-	var state = {};
-	try {
-		state = JSON.parse(window.localStorage.getItem(stateKey) || '{}') || {};
-	} catch (error) {
-		state = {};
+	var state = window.__previewInitialState || null;
+	if (!state) {
+		try {
+			state = JSON.parse(window.localStorage.getItem(stateKey) || '{}') || {};
+		} catch (error) {
+			state = {};
+		}
 	}
 	function stamp() { return new Date().toISOString().slice(11, 19); }
 	function record(direction, message) {
@@ -524,11 +529,18 @@ function panelHtml(ctx) {
 }
 
 function wrap(html, ctx) {
+	const initialState = ctx.view
+		? `<script nonce="${NONCE}">window.__previewInitialState = ${JSON.stringify({
+				view: ctx.view,
+				inspectorHidden: true,
+			})};</script>`
+		: '';
 	const head = [
 		`<style nonce="${NONCE}">`,
 		themeCss(ctx.theme),
 		PREVIEW_CSS,
 		'</style>',
+		initialState,
 		`<script nonce="${NONCE}">`,
 		STUB_JS,
 		'</script>',
@@ -559,6 +571,7 @@ function buildPage(fixture, options, fixtures) {
 		theme: THEMES[options.theme],
 		sort: options.sort,
 		chrome: options.chrome,
+		view: options.view,
 	});
 }
 
@@ -575,7 +588,9 @@ function readOptions(url) {
 	}
 	const sort = url.searchParams.get('sort') === 'declaration' ? 'declaration' : 'all';
 	const chrome = url.searchParams.get('chrome') !== '0';
-	return { theme, sort, chrome };
+	const viewParam = url.searchParams.get('view');
+	const view = viewParam === 'tree' || viewParam === 'document' ? viewParam : undefined;
+	return { theme, sort, chrome, view };
 }
 
 function send(res, status, body, type) {

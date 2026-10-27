@@ -53,20 +53,29 @@ toggles without moving the selection, a follow follows, everything else selects.
   fields (variant, hex, context, conditions, annotations) are read from the rendered `.row-meta`
   spans, which are the single rendered source; do not re-derive them from the model in the webview.
   The inspector builds text nodes, never `innerHTML` from model text.
-- Long labels/values/metadata ellipsize; the clipped value's `title` carries the full value. The
-  node's `title` remains the full `DEFINITION-REF` hover contract.
+- Long labels/values/metadata ellipsize in Tree view; the clipped value's `title` carries the full
+  value. The node's `title` remains the full `DEFINITION-REF` hover contract.
+- **Document view is CSS over the same DOM, not a second renderer.** `renderHtml` writes
+  `data-view="document"` on `<body>`; every document selector is scoped under
+  `body[data-view="document"]`, so switching back to Tree view is one attribute change. Do not create
+  a second tree, parse `.artext`, or run the legacy `mmx` binary from the extension. The document
+  keeps `.value` a direct child of `.row`, keeps every `.row-meta` field (inline, not hidden), and
+  adds `{`/`}` only as decorative `::before`/`::after` pseudo-elements.
 
 ## State
 
 - The webview owns: `selectedId`, the collapsed id set, the scroll position, type-ahead, the open
-  value edit, and the details-panel visibility. The host owns: the panel map, the selection map, and
-  a pending selection.
+  value edit, the view mode and the details-panel visibility. The host owns: the panel map, the
+  selection map, and a pending selection.
 - A re-scan replaces the tree markup but not the shell. The host payload carries `selectedId`; the
   page adopts a host-rendered `aria-selected` on first paint so a source→editor open fills the
   details panel immediately.
-- The details visibility is persisted through `acquireVsCodeApi().getState()/setState()` (validated
-  as a non-array object; hide only on `=== true`). The browser harness stubs the same API with
-  `localStorage` so the reload path is observable.
+- The view mode and details visibility are persisted together through
+  `acquireVsCodeApi().getState()/setState()` (validated as a non-array object; `view` accepts only
+  `document`/`tree`, missing/invalid falls back to `document`, and the inspector hides only on
+  `=== true`, default `true`). The first paint is already Document with the inspector hidden; the
+  page script applies a saved Tree view or a shown inspector immediately. The browser harness stubs
+  the same API with `localStorage` and `?view=document|tree` seeds the state for captures.
 - The pure state helpers (`pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`,
   `reRenderTree`) are real functions serialized into the page with `toString()`. The tests extract
   and drive the page's copy; do not create a second implementation.
@@ -78,13 +87,30 @@ toggles without moving the selection, a follow follows, everything else selects.
   and the twisty are inline SVG under `default-src 'none'`.
 - **Value type is data.** A parameter's value span carries `data-value-kind="numeric|textual|boolean"`;
   the CSS maps it to `symbolIcon-number/string/booleanForeground`. Reference targets use the link
-  colour, short names the variable colour. The value and name colours borrow the reference branch's
+  colour, short names the string colour. The value and name colours borrow the reference branch's
   `artext.tmLanguage.json` scopes (strings, numbers, booleans, variables); that branch is a grammar,
   not a palette to copy. Module and container accents use `symbolIcon-moduleForeground` and
   `symbolIcon-namespaceForeground`, not one shared class colour.
 - Token colours are for the normal background. On a selected row they can fall below 3:1 (the light
   theme's green value was 1.33:1 on the blue selection), so selected rows use
   `--vscode-list-activeSelectionForeground` (and the inactive equivalent when focus is outside).
+  In Document view the same emphasis must cover the label and its module prefix as well as the
+  values, metadata, twisty and kind border; otherwise a focused line keeps a low-contrast token
+  colour. The document rule uses `:is(.node[data-selected="true"], .node:focus-visible)` so the
+  focus ring's background gets the same treatment.
+- **Document token mapping.** `schema`/`package`/`module` prefixes use
+  `symbolIcon-keywordForeground`; a module path uses `symbolIcon-functionForeground` → module → class;
+  a container label uses `symbolIcon-namespaceForeground`; parameter/reference labels use
+  `symbolIcon-variableForeground`; short names and textual values use `symbolIcon-stringForeground`;
+  numbers/hex use `symbolIcon-numberForeground`; booleans use the keyword colour; reference targets
+  use `textLink-foreground`; annotations use `descriptionForeground`, italic. Every colour is a
+  `--vscode-*` variable with a fallback; the Dark+ hex values in the research mock are evidence, not
+  product colours.
+- **Document layout.** The row is an inline flex line (no two-line grid, no chips, no per-row
+  border); children indent by `4ch`; the decorative braces are aligned to the row text start with
+  `margin-left: calc(-4ch + 1.2ch + 2px)` (the twisty track plus the row's left padding). The twisty
+  is opacity-only (revealed on row hover/focus), not removed, so collapse stays reachable. Metadata
+  must stay `display: inline`, never `display: none`.
 - The tree exposes real `tree`/`treeitem`/`group` roles, `aria-expanded`, `aria-selected`,
   `aria-posinset`/`aria-setsize`, a roving `tabindex`, and Home/End/PageUp/PageDown. The inspector is
   a `region`, not a live region; selecting a node is already announced by the tree.
@@ -94,7 +120,9 @@ toggles without moving the selection, a follow follows, everything else selects.
 `npm run preview:ecuc` serves the **production** `renderHtml` output on `127.0.0.1` with a stubbed
 `acquireVsCodeApi`, theme presets and a preview panel. `npm run preview:check` asserts each wrapper
 contains the exact production `renderTree` output, the stub, the inspector, the empty state and a
-theme variable. The harness is dev-only, outside `src/`, and never imported by the extension.
+theme variable. `?view=document` or `?view=tree` seeds the saved view state, and `?chrome=0` produces
+a clean page for captures. The harness is dev-only, outside `src/`, and never imported by the
+extension.
 
 It is not a VS Code webview: it cannot prove VS Code's own theme resolution, tab/focus behaviour or
 host clipboard permissions. Label its results as harness-observed; the Extension Development Host
