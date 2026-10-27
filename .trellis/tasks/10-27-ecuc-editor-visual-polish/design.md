@@ -115,12 +115,14 @@ No host round-trip is needed. `item()` writes the data the inspector needs onto 
 | `data-short-name` | `shortName` where the model has one |
 | `data-value` | a parameter's raw display value (already present) |
 | `data-target` | a reference's raw target path |
-| `data-range-start` / `data-range-end` | the node's `range` |
 | `data-line` / `data-column` / `data-end-line` / `data-end-column` | `LineIndex.positionAt(range.start/end)`, 0-based |
 
-The inspector script reads the selected item, the row's `.label`, `.short`, `.variant`, `.hex`,
-`.context`, `.condition`, `.annotation`, and the attributes above. It builds DOM nodes with
-`textContent` (never `innerHTML` from model text), so a value containing `<` cannot inject markup.
+The raw `range` is used to compute the four line/column attributes; it is not emitted separately
+(no consumer reads it). The inspector reads primary identity from those data attributes and the
+secondary fields — `.short`, `.variant`, `.hex`, `.context`, `.condition`, `.annotation` — from the
+rendered `.row-meta` spans. Those spans are the single rendered source; the webview does not
+re-derive them from the model. It builds DOM nodes with `textContent` (never `innerHTML` from model
+text), so a value containing `<` cannot inject markup.
 
 ### 2.3 Inspector content
 
@@ -129,8 +131,9 @@ The inspector script reads the selected item, the row's `.label`, `.short`, `.va
 - Short name and variant, when present.
 - Parameter value and hexadecimal form; reference target and context.
 - Conditions and annotations, one per line, with their existing text.
-- Source: `Lstart:col – Lend:col` (1-based for display).
-- Actions: **Reveal in source**, **Copy path**, **Copy value** (the copy buttons are hidden when
+- Source: `Lstart:col - Lend:col` (1-based for display).
+- Actions: **Reveal in source**, **Copy path**, **Copy value** (or **Copy target** for a reference;
+  the copy buttons are hidden when
   there is no path/value).
 - Empty state when nothing is selected: a short hint and the module/package summary remains in the
   tree header.
@@ -219,8 +222,9 @@ The `<mark>` highlighting must now walk into `.row-meta .short`; the value and l
 ## 4. Source positions
 
 `RenderOptions` gains `lineIndex?: LineIndex` (from `src/core/text/offsets.ts`). `Ctx` carries it;
-`ItemSpec` gains `range`. `item()` emits the six data attributes when a line index is present. The
-provider constructs a new `LineIndex(document.getText())` for the first paint and again inside
+`ItemSpec` gains `range`. `item()` emits the four line/column attributes when a line index is
+present; the raw range is not emitted. The provider constructs a new `LineIndex(document.getText())`
+for the first paint and again inside
 `push()`, because the text may have changed. The preview harness does the same.
 
 `LineIndex` is 0-based, matching VS Code `Position`; the inspector displays 1-based values. Tests
@@ -276,9 +280,10 @@ The webview buttons post only text the user can already see; the provider does n
   from `document`, so it survives a re-render. Clearing still restores the collapsed set because the
   collapsed set is never assigned by the filter; it only passes an `ancestors` override to
   `applyCollapsed`.
-- **Toolbar controls.** Expand all, collapse all and the details toggle get inline-SVG icons plus
-  text, `aria-label`s and a `:focus-visible` ring. The details toggle uses `aria-pressed`. The toolbar
-  wraps at narrow widths instead of clipping.
+- **Toolbar controls.** Expand all, collapse all and the details toggle are text controls with
+  `title`/`aria-label`s and a `:focus-visible` ring. Icon-only controls were not used, so the labels
+  stay explicit; the details toggle uses `aria-pressed`. The toolbar wraps at narrow widths instead
+  of clipping.
 
 ## 7. Preview themes and real themes
 

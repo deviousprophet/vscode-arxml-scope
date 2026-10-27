@@ -206,8 +206,9 @@ webview also pays layout and paint.
 - No comparison against a baseline. The legacy text diff is gone with the ARTEXT text form; a
   semantic comparison needs the AR-path matching planned for the broader roadmap and should not be
   reintroduced as a text diff.
-- Large-file performance is unmeasured. The scanner is a single pass and the view renders the whole
-  tree; if a real file proves slow, measure before optimising.
+- Large-file performance is measured only on the synthetic samples; a real customer file is not
+  measured. The scanner is a single pass but the view renders the whole tree (no virtualisation), so
+  measure a real file before optimising.
 
 ## Relationship to the legacy `arxml2artext`
 

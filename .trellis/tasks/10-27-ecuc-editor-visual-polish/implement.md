@@ -366,8 +366,9 @@ VS Code webview.
   notice branch is source-asserted only; the helper's rejection path is unit-tested.
 - The real host's `getState`/`setState` persistence across a webview reload. The harness observes the
   same page path with a localStorage-backed stub, which is not VS Code's webview state.
-- Keyboard focus rings and focus styling: the CSS is asserted and the harness supplies `focusBorder`,
-  but no focused capture was taken.
+- Keyboard focus rings and focus styling: the harness captured a keyboard-focused row
+  (`research/visual/colors/display-rules-dark-focus.jpeg`) and the CSS supplies `focusBorder`; the
+  real VS Code webview's tab order and focus ring are still unverified.
 - The exact 900 × 700 and 1400 × 900 capture sizes: the in-app browser viewport was 912 × 670, and the
   700 px stacked layout was not visually exercised (the media query is CSS-asserted only).
 - The tree keyboard map (arrows, Home/End, PageUp/PageDown, Enter, Space, F2) is asserted by the
@@ -418,14 +419,24 @@ file restored.
    the repository already requires Node 24 types; no dependency was added.
 10. **`editor/large.arxml` is synthetic and outside the core expected-model list.** It exists to make
     the scroll/density rows observable; it is not a customer file and no scanner test consumes it.
-11. **Toolbar icons were not added.** Design §6 calls for inline-SVG icons plus text on Expand all,
-    Collapse all and Details; the buttons remain text-only. The PRD requires the controls, not icons,
-    and the after captures show the text buttons. This is a design deviation, not a hidden change.
-12. **Conditions and annotations share one inspector line.** Design §2.3 says one per line; the panel
-    joins them with spaces. The field labels and the complete text are present.
-13. **Captures are 912 × 670, not 900 × 700 and 1400 × 900.** Plan item 2 asked for both sizes; the
-    in-app browser available for the pass was 912 × 670, and both the six baseline and sixteen after
-    captures are at that size. The required two fixtures × three themes matrix is complete.
+11. **Toolbar controls are text buttons, not icon+text.** Design §6 was corrected: icons were not
+    added, so the labels stay explicit. The PRD requires the controls, not icons. No deviation remains.
+12. **Conditions and annotations are one per line.** The inspector joins each span with a newline and
+    the code block is `white-space: pre-wrap`; the earlier space-joined implementation is gone.
+13. **Captures are 912 × 670, not 900 × 700 and 1400 × 900.** The in-app browser available for the
+    pass was 912 × 670, and both the six baseline and sixteen after captures are at that size. The
+    required two fixtures × three themes matrix is complete; AC6's wording now names the actual size.
+14. **The raw `data-range-*` attributes were removed.** The inspector needs four line/column values,
+    not the raw offsets; the page is slightly smaller and the test asserts the range is not duplicated.
+15. **Boolean detection is case-insensitive.** `TRUE`, `True` and `False` are boolean values, matching
+    the reference grammar's `constant.language.boolean` scope; the value-kind test covers uppercase.
+16. **Selected markers/twisty/border use the selection foreground.** The light-selected bullet was
+    ~1.2:1 on the blue selection; it is now white like the text. A focused keyboard capture shows the
+    focus ring; the selected captures were refreshed.
+17. **The filter's clear button trims whitespace.** A whitespace-only query no longer shows the clear
+    control while the filter is inactive.
+18. **`uxReveal` clears the setting after the suite too.** `setup` handles the next test, `suiteTeardown`
+    handles the next file; this is test-only and does not change the reveal product path.
 
 ## Files changed
 
@@ -453,15 +464,16 @@ captures are task documentation); no document write from the inspector or the co
 | AC6 | **pass (912 × 670)** | `uxPolish` grid/direct-child/ellipsis; harness no horizontal scroll at 912 px; values aligned within a nesting level; labels, values and metadata ellipsize with a title. The exact 900 × 700/1400 × 900 sizes and the 700 px stacked layout are unverified below. |
 | AC7 | **pass** | `uxPolish`/`uxFilter` markup+script; harness `3 of 9`, ancestor expand/restore, empty state and Clear action |
 | AC8 | **pass (harness)** | toggle aria state, `hidden`, re-scan survival and `localStorage` persistence observed; `vscode.getState/setState` asserted; real host reload persistence is unverified |
-| AC9 | **pass** | no new dependency/asset; CSS literal test; light/dark/HC captures; selected contrast 6.11/11.99/21:1; the focus ring is CSS-asserted, not captured |
+| AC9 | **pass** | no new dependency/asset; CSS literal test; light/dark/HC captures; selected text and markers use the selection foreground (6.11/11.99/21:1; the light bullet was ~1.2:1 before the marker fix); a keyboard-focus capture exists (`display-rules-dark-focus.jpeg`) |
 | AC10 | **pass** | 151 passing; 8 original + 4 follow-up mutation checks; existing widget-order/no-takeover tests green |
 | AC11 | **pass** | `docs/ECUC_EDITOR.md` updated; the UX task's manual table now records harness observations and real-host gaps |
 
 ## Remaining unverified
 
 - The real VS Code webview: double-click reveal gesture, tab/column/focus behaviour, live input focus,
-  keyboard focus rings, VS Code's own theme-variable resolution, and real `getState`/`setState`
-  persistence across a reload. The UX task's seven rows are still not a VS Code pass.
+  VS Code's own theme-variable resolution, and real `getState`/`setState` persistence across a reload.
+  The harness focus capture is not a VS Code pass; the UX task's seven rows are still not a VS Code
+  pass.
 - Host clipboard permissions and the actual system clipboard; only the helper, the message and the
   provider's success wiring are verified. The provider's copy-failure notice is source-asserted only.
 - The exact 900 × 700/1400 × 900 viewports and the 700 px stacked layout: the browser was 912 × 670
@@ -523,8 +535,12 @@ locally and are not committed. The files are synthetic.
 
 | File | Scan | Node index | `renderTree` | `renderHtml` | Heap delta | RSS |
 |---|---:|---:|---:|---:|---:|---:|
-| `large` | 63.96 ms | 18.64 ms | 57.17 ms (3.75 MiB) | 65.99 ms (3.78 MiB) | 65.14 MiB | 236.60 MiB |
-| `huge` | 123.65 ms | 33.36 ms | 200.08 ms (11.23 MiB) | 162.69 ms (11.26 MiB) | 204.63 MiB | 378.21 MiB |
+| `large` | 44.98 ms | 5.56 ms | 64.88 ms (3.64 MiB) | 49.78 ms (3.67 MiB) | 60.90 MiB | 228.71 MiB |
+| `huge` | 107.92 ms | 33.47 ms | 197.19 ms (10.89 MiB) | 183.38 ms (10.93 MiB) | 191.66 MiB | 353.50 MiB |
+
+These are one warm run per file; repeated runs varied by roughly 20–30% on this host. The table is
+evidence of the order of magnitude, not a promise. `renderTree`/`renderHtml` call `buildNodeIndex`
+themselves and `renderHtml` calls `renderTree`, so the phases are separate warm runs, not additive.
 
 Memory is a post-run `heapUsed` delta plus current RSS, not a peak high-water mark. The renderer
 numbers are not additive: `renderHtml` calls `renderTree`, and both call `buildNodeIndex`, so the
@@ -537,8 +553,9 @@ A check-pass rerun on the same machine (same command, after `compile-tests`) gav
 run-to-run variance (JIT, GC, machine load), not a different code path; the single-run numbers above
 are not a promise.
 
-The harness server built `sample/large` in 90.9–93.1 ms (4,056,484 chars) and `sample/huge` in
-307.7 ms (12,079,614 chars). Browser observations at the 912 × 670 viewport:
+The harness server built `sample/large` in ~73–93 ms (~4.0M chars) and `sample/huge` in ~275–308 ms
+(~12.0M chars); the exact sizes were observed before the unused `data-range-*` attributes were
+removed, so the current page is slightly smaller. Browser observations at the 912 × 670 viewport:
 
 | Sample | Items | DOMContentLoaded | Load | Filter `Alpha` | Scroll height |
 |---|---:|---:|---:|---:|---:|
@@ -551,11 +568,12 @@ justify it). The benchmark does not measure browser layout/paint or a real VS Co
 ### Semantic colours (ARTEXT-scope mapping, not a copied palette)
 
 The reference branch `ref/ecucvalues-for-vscode` contains a TextMate grammar, not a webview palette
-(`syntaxes/artext.tmLanguage.json`). Its scopes informed the value and name mapping: `string.quoted` →
-textual, `constant.numeric` and `constant.numeric.hex` → numeric, `constant.language.boolean` →
-boolean, `variable.other` → short name. The module/container/parameter/reference accents use VS Code's
-symbol-kind variables, not the grammar. The branch defines no colours, so none were copied. Computed
-colours observed in the harness:
+(`syntaxes/artext.tmLanguage.json`). Its value scopes informed the mapping: `string.quoted` → textual,
+`constant.numeric`/`constant.numeric.hex` → numeric, `constant.language.boolean` → boolean. The
+grammar has no colour values and its `variable.other` scope is not a direct SHORT-NAME rule; the
+short-name colour is a VS Code symbol/variable choice, and module/container/parameter/reference
+accents use symbol-kind variables. The branch is a semantic reference, not a palette that was
+copied. Computed colours observed in the harness:
 
 | Element | Light | Dark | HC |
 |---|---|---|---|
@@ -569,9 +587,10 @@ colours observed in the harness:
 | Short name | `#0070c1` | `#75beff` | `#ffffff` |
 
 Selected-row contrast remains 6.11:1 (light), 11.99:1 (dark) and 21:1 (HC); the selection foreground
-overrides the semantic token colours. Captures: `research/visual/colors/display-rules-{dark,light,hc}.jpeg`,
-`display-rules-dark-selected.jpeg`, `large-dark.jpeg`, `huge-dark.jpeg`. The pre-colour captures are
-the earlier `research/visual/after/render-*` files.
+overrides the semantic token colours, the kind bullet/twisty and the row border. Captures:
+`research/visual/colors/display-rules-{dark,light,hc}.jpeg`,
+`display-rules-{dark,light,hc}-selected.jpeg`, `display-rules-dark-focus.jpeg`, `large-dark.jpeg`,
+`huge-dark.jpeg`. The pre-colour captures are the earlier `research/visual/after/render-*` files.
 
 ### Validation, tests and mutations
 
@@ -616,4 +635,38 @@ Modified: `package.json` (two dev scripts), `src/editor/renderHtml.ts` (value ki
   load is a browser observation, not a VS Code measurement.
 - The harness theme colours are approximations; VS Code's real `symbolIcon-*` values may differ slightly.
 - `huge` has no virtualisation; if real files are this size, measure the real webview before deciding.
+
+## Code-review follow-up (2026-10-27)
+
+The two-axis review (Standards + Spec) was run over `72bc245...HEAD`. It found no HIGH product defect,
+but it did find real correctness/contract gaps; these were fixed before the final commit:
+
+- **Boolean case.** `TRUE`/`True`/`False` were classified numeric; detection is now case-insensitive
+  and the existing value-kind test covers uppercase/mixed case.
+- **Selected markers.** The selected-row override covered text but not the kind bullet, twisty or
+  border; on the light selection the bullet was ~1.2:1. They now use the same selection foreground;
+  the selected captures were refreshed and a focused keyboard capture was added.
+- **Unused range data.** `data-range-start`/`data-range-end` were emitted but read by no consumer; they
+  were removed. The four line/column attributes remain.
+- **Conditions/annotations** now render one per line as the design says, rather than space-joined.
+- **Filter clear** trims whitespace, so a whitespace-only query does not show a clear control.
+- **Generator safety.** It now refuses an in-repo output path including a `..foo` name, and the unused
+  `paramsPer` parameter/unguarded `PARAMS[index]` were removed.
+- **Benchmark/scripts.** The duplicate "nodes/indexed ids" line was corrected, the shared
+  `scripts/out-module.js` loader replaced two copies, and the harness's `escapeHtml` was renamed
+  `escapeAttr` because it escapes quotes.
+- **Test isolation.** `uxReveal` now has `suiteTeardown` as well as per-test setup; test-only.
+- **Docs/contracts.** AC6 names the actual 912×670 viewport; R-VP5/AC5 include Copy target; design §6
+  now says text controls rather than unimplemented icons; the reference-branch mapping is described as
+  a grammar/scope reference, not a palette; the component spec clarifies that the inspector reads
+  secondary fields from the rendered `.row-meta` spans, while primary identity is data; sample AC12 is
+  aligned to the actual 4,001-node large file.
+
+Accepted judgement calls (not changed): the empty-inspector copy exists in the static shell and the
+script; the test helpers `styleOf`/`page`/`tree` are repeated across suites; a full provider-level
+clipboard test would need a clipboard seam. These are low-risk and documented rather than hidden.
+
+After the fixes: `npm test` **151 passing**, focused `editor interaction|visual polish|semantic colours|
+reveal` **43 passing**, `preview:check` **ok** (20 fixtures, no samples), the generator refuses an
+in-repo path, and the large/huge benchmarks were re-run (numbers in the table above; values vary).
 

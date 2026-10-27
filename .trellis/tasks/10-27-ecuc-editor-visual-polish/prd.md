@@ -74,9 +74,9 @@ Parent requirement IDs (R1–R18) and decisions live in `../10-14-ecuc-artext-ed
   the fields listed in Scope; the source range is shown as 1-based `Lline:column` values derived from
   the document text, not guessed from the rendered order.
 - **R-VP5 — The inspector acts on the selection.** Reveal posts the existing `reveal` message for the
-  selected node. Copy path and Copy value post a new `{ type: 'copy', text }` message; the host writes
-  exactly that text to the clipboard through `vscode.env.clipboard.writeText` and posts a notice.
-  Copying never writes to the file.
+  selected node. Copy path and Copy value (or Copy target for a reference) post a new
+  `{ type: 'copy', text }` message; the host writes exactly that text to the clipboard through
+  `vscode.env.clipboard.writeText` and posts a notice. Copying never writes to the file.
 - **R-VP6 — Rows read as a hierarchy.** A two-line CSS grid keeps the label and value aligned on the
   first line and puts short name, variant, hexadecimal form, context, conditions and annotations on a
   second, quieter line. Kind markers and accents remain; indent guides stay visible; long labels,
@@ -133,13 +133,14 @@ Parent requirement IDs (R1–R18) and decisions live in `../10-14-ecuc-artext-ed
       with the correct kind, full `DEFINITION-REF`, short name/variant, value/hex or target/context,
       conditions, annotations and a `Lline:column – Lline:column` range. The range for a known
       fixture node matches the `LineIndex` calculation.
-- [ ] **AC5** **Reveal** posts a reveal for the selected node; **Copy path** and **Copy value** post
-      `{ type: 'copy', text }` with the exact text. The host copy helper writes that text through the
-      clipboard interface and returns the notice; no file mutation occurs.
+- [ ] **AC5** **Reveal** posts a reveal for the selected node; **Copy path** and **Copy value** (or
+      **Copy target** for a reference) post `{ type: 'copy', text }` with the exact text. The host copy
+      helper writes that text through the clipboard interface and returns the notice; no file mutation
+      occurs.
 - [ ] **AC6** Rows render as the two-line grid: labels and values are aligned across sibling rows;
       metadata is on the second line; long text is ellipsized with a `title`; no horizontal scroll at
-      a typical 900×700 viewport. `.value` remains a direct child of `.row`, and the value widget still
-      starts an edit on click/F2.
+      the available harness viewport (912×670; the planned 900×700/1400×900 sizes were not available).
+      `.value` remains a direct child of `.row`, and the value widget still starts an edit on click/F2.
 - [ ] **AC7** The filter clear button empties the box and re-runs the filter; the count badge reports
       `shown of total` and `No matches`; a zero-match filter shows the empty state and its clear action
       restores the tree and the previous collapsed set; matched label/short-name/value text is still
