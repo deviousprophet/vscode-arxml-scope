@@ -47,10 +47,12 @@ toggles without moving the selection, a follow follows, everything else selects.
 - Secondary fields live in `.row-meta`, a second line spanning the label and value tracks. It is not
   `.meta` — that is the schema/package container. The filter's `highlightableSpans` reaches
   `.row-meta .short`.
-- `item()` writes the inspector's data: `data-definition-ref`, `data-short-name`, `data-value`
-  (parameters), `data-target` (references), and the six source-range attributes. `LineIndex` is
-  0-based like a VS Code `Position`; the inspector adds one for display. The inspector builds text
-  nodes, never `innerHTML` from model text.
+- `item()` writes the inspector's primary identity as data: `data-definition-ref`, `data-short-name`,
+  `data-value` (parameters), `data-target` (references), and the four line/column attributes.
+  `LineIndex` is 0-based like a VS Code `Position`; the inspector adds one for display. The secondary
+  fields (variant, hex, context, conditions, annotations) are read from the rendered `.row-meta`
+  spans, which are the single rendered source; do not re-derive them from the model in the webview.
+  The inspector builds text nodes, never `innerHTML` from model text.
 - Long labels/values/metadata ellipsize; the clipped value's `title` carries the full value. The
   node's `title` remains the full `DEFINITION-REF` hover contract.
 
