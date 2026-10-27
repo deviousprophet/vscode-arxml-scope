@@ -6,7 +6,7 @@ parameter values in place, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
-> value editing, details inspector) are in place with 147 passing tests. Two things are deliberately
+> value editing, details inspector) are in place with 151 passing tests. Two things are deliberately
 > not implemented and are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
 > resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
 > `design.md`, `implement.md`) with the reference analysis in its
@@ -56,6 +56,12 @@ form, context, conditions and annotations to a quieter second line. Long labels 
 with a tooltip; the full text is in the details panel. Each kind — module, container, parameter,
 reference — carries its own inline-SVG marker and accent, so the kinds are distinguishable in a
 high-contrast theme where colour alone is not enough.
+
+The value colours follow the ARTEXT scopes rather than one token colour: numeric values use the
+numeric colour, textual values the string colour, and booleans the boolean/keyword colour. Reference
+targets use the link colour and short names the variable colour. Module, container, parameter and
+reference accents use their own `symbolIcon` variables. Selected rows switch to the theme's selection
+foreground so the semantic colours cannot fall below contrast on the selection background.
 
 Ordering matches the legacy tool: by `DEFINITION-REF` then identity, with the legacy exception list
 preserved (see *Settings*).
@@ -161,13 +167,36 @@ npm run preview:check    # render every fixture x theme and hit the server; no b
 
 The harness wraps the **production** `renderHtml` output with a stubbed `acquireVsCodeApi`, a theme
 preset (light, dark, high contrast), fixture/theme/sort switches, a simulated re-scan, notice
-injection and a message log. It binds to `127.0.0.1`, reads only committed fixtures, adds no runtime
-dependency and is never imported by the extension. `?chrome=0` hides the preview panel for clean
-screenshots.
+injection and a message log. It binds to `127.0.0.1`, reads the committed fixtures (and, for manual
+viewing, the optional local `../sample` directory described below), adds no runtime dependency and is
+never imported by the extension. `?chrome=0` hides the preview panel for clean screenshots.
 
 It is a development tool, not a substitute for a VS Code webview: it cannot prove VS Code's own theme
 variable resolution, the real custom-editor tab/focus behaviour or host clipboard permissions. Those
 remain Extension Development Host checks.
+
+When `../sample` exists (by default `D:\workspace\sample` here), `preview:ecuc` lists its files as
+`sample/<name>`. `preview:check` never includes them, so CI stays deterministic.
+
+## Synthetic samples and performance
+
+```bash
+npm run samples:ecuc                 # writes ../sample, does not commit anything
+npm run perf:ecuc -- <file>          # scanner/index/render benchmark, no browser
+```
+
+The generator writes `minimal.arxml`, `display-rules.arxml`, `references.arxml`, `deep.arxml`,
+`large.arxml` (~4,000 nodes) and `huge.arxml` (~12,000 nodes) plus a README. They are synthetic, live
+outside the repository and are never committed. The benchmark reports file size, node count, scanner,
+node-index, `renderTree` and `renderHtml` medians and a post-run heap-used/RSS estimate (not a peak).
+It does not measure browser layout/paint or a real VS Code webview; treat the numbers as evidence, not
+a performance promise. Do not add virtualisation from one run.
+
+Local runs on 2026-10-27: `large` scanned and rendered in tens of milliseconds; `huge` took roughly
+0.09–0.12 s to scan and 0.15–0.20 s to render. In the browser harness the page finished loading after
+~1.3 s (`large`) and ~7.3 s (`huge`), and a four-thousand-row filter pass took ~45 ms / ~125 ms. These
+are this machine's observations; timings vary with load and are not a guarantee. The real VS Code
+webview also pays layout and paint.
 
 ## Limitations
 

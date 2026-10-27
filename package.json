@@ -142,7 +142,9 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "preview:ecuc": "npm run compile-tests && node scripts/preview-ecuc.js",
-    "preview:check": "npm run compile-tests && node scripts/preview-ecuc.js --check"
+    "preview:check": "npm run compile-tests && node scripts/preview-ecuc.js --check",
+    "samples:ecuc": "node scripts/generate-samples.js",
+    "perf:ecuc": "npm run compile-tests && node scripts/bench-ecuc.js"
   },
   "devDependencies": {
     "@types/vscode": "^1.125.0",

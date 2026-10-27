@@ -22,6 +22,9 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'out');
 const FIXTURE_ROOT = path.join(ROOT, 'src', 'test', 'fixtures');
+// Optional local sample set, outside the repository. `preview:ecuc` lists it when it exists;
+// `preview:check` never does, so CI does not depend on a developer's sample directory.
+const SAMPLE_ROOT = process.env.PREVIEW_SAMPLE_DIR || path.resolve(ROOT, '..', 'sample');
 const DEFAULT_PORT = 4173;
 const NONCE = 'preview-nonce';
 
@@ -58,6 +61,10 @@ const THEMES = {
 			'button-border': '#cecece',
 			'icon-foreground': '#424242',
 			'symbolIcon-classForeground': '#b1801a',
+			'symbolIcon-moduleForeground': '#795e26',
+			'symbolIcon-namespaceForeground': '#267f99',
+			'symbolIcon-variableForeground': '#0070c1',
+			'symbolIcon-booleanForeground': '#0000ff',
 			'symbolIcon-fieldForeground': '#0070c1',
 			'symbolIcon-referenceForeground': '#0070c1',
 			'symbolIcon-stringForeground': '#a31515',
@@ -110,6 +117,10 @@ const THEMES = {
 			'button-border': '#00000000',
 			'icon-foreground': '#c5c5c5',
 			'symbolIcon-classForeground': '#ee9d28',
+			'symbolIcon-moduleForeground': '#e37933',
+			'symbolIcon-namespaceForeground': '#4ec9b0',
+			'symbolIcon-variableForeground': '#75beff',
+			'symbolIcon-booleanForeground': '#569cd6',
 			'symbolIcon-fieldForeground': '#75beff',
 			'symbolIcon-referenceForeground': '#4fc1ff',
 			'symbolIcon-stringForeground': '#ce9178',
@@ -162,6 +173,10 @@ const THEMES = {
 			'button-border': '#6fc3df',
 			'icon-foreground': '#ffffff',
 			'symbolIcon-classForeground': '#ffffff',
+			'symbolIcon-moduleForeground': '#ffffff',
+			'symbolIcon-namespaceForeground': '#ffffff',
+			'symbolIcon-variableForeground': '#ffffff',
+			'symbolIcon-booleanForeground': '#ffffff',
 			'symbolIcon-fieldForeground': '#ffffff',
 			'symbolIcon-referenceForeground': '#ffffff',
 			'symbolIcon-stringForeground': '#ffffff',
@@ -218,19 +233,19 @@ function escapeHtml(text) {
 /* Fixtures                                                                    */
 /* -------------------------------------------------------------------------- */
 
-function discoverFixtures() {
+function discoverFixtures(options = {}) {
 	const fixtures = [];
-	const walk = (dir) => {
-		for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-			const full = path.join(dir, entry.name);
+	const walk = (baseDir, prefix) => {
+		for (const entry of fs.readdirSync(baseDir, { withFileTypes: true })) {
+			const full = path.join(baseDir, entry.name);
 			if (entry.isDirectory()) {
-				walk(full);
+				walk(full, prefix + entry.name + '/');
 				continue;
 			}
 			if (!entry.name.endsWith('.arxml') || entry.name.includes('.expected.')) {
 				continue;
 			}
-			const id = path.relative(FIXTURE_ROOT, full).split(path.sep).join('/').replace(/\.arxml$/, '');
+			const id = (prefix + path.relative(baseDir, full)).split(path.sep).join('/').replace(/\.arxml$/, '');
 			let text;
 			try {
 				text = fs.readFileSync(full, 'utf8');
@@ -249,7 +264,10 @@ function discoverFixtures() {
 			fixtures.push({ id, path: full, text, model });
 		}
 	};
-	walk(FIXTURE_ROOT);
+	walk(FIXTURE_ROOT, '');
+	if (options.includeSamples === true && fs.existsSync(SAMPLE_ROOT)) {
+		walk(SAMPLE_ROOT, 'sample/');
+	}
 	return fixtures.sort((a, b) => a.id.localeCompare(b.id));
 }
 
@@ -611,7 +629,21 @@ function createServer(fixtures) {
 			return;
 		}
 		try {
-			send(res, 200, buildPage(fixture, previewOptions, fixtures), 'text/html; charset=utf-8');
+			const started = performance.now();
+			const page = buildPage(fixture, previewOptions, fixtures);
+			const elapsed = performance.now() - started;
+			console.log(
+				'preview: ' +
+					fixture.id +
+					' / ' +
+					previewOptions.theme +
+					' built in ' +
+					elapsed.toFixed(1) +
+					' ms, ' +
+					page.length +
+					' chars'
+			);
+			send(res, 200, page, 'text/html; charset=utf-8');
 		} catch (error) {
 			send(res, 500, 'Preview failed: ' + (error && error.stack ? error.stack : String(error)));
 		}
@@ -645,7 +677,7 @@ function listen(server, port) {
 
 async function startPreview() {
 	loadProduction();
-	const fixtures = discoverFixtures();
+	const fixtures = discoverFixtures({ includeSamples: true });
 	if (fixtures.length === 0) {
 		throw new Error('No ECUC fixtures found under ' + FIXTURE_ROOT);
 	}
@@ -654,12 +686,15 @@ async function startPreview() {
 	const port = await listen(server, Number.isFinite(requested) ? requested : DEFAULT_PORT);
 	console.log('ECUC preview: http://127.0.0.1:' + port + '/');
 	console.log('Fixtures: ' + fixtures.length + ' (default editor/render); themes: ' + THEME_ORDER.join(', '));
+	if (fs.existsSync(SAMPLE_ROOT)) {
+		console.log('Local samples: ' + SAMPLE_ROOT + ' (listed as sample/<name>)');
+	}
 	console.log('Add ?chrome=0 for a clean page. Stop with Ctrl+C.');
 }
 
 async function runCheck() {
 	loadProduction();
-	const fixtures = discoverFixtures();
+	const fixtures = discoverFixtures({ includeSamples: false });
 	if (fixtures.length === 0) {
 		throw new Error('No ECUC fixtures found under ' + FIXTURE_ROOT);
 	}
