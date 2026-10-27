@@ -44,3 +44,39 @@ Browser preview harness, details inspector, semantic element colours, synthetic 
 ### Status
 
 [OK] **Completed**
+
+## Session 2: ECUC document-style viewer redesign
+
+**Date**: 2026-10-27
+**Task**: ECUC viewer document-style redesign (archived)
+**Branch**: `feat/arxml-scope`
+
+### Summary
+
+Replaced the chip-heavy default tree presentation with a dense, monospace Document view modelled on the post-processed ARTEXT reference, keeping the previous Tree view behind a toolbar toggle and hiding the details inspector by default.
+
+### Main Changes
+
+- Captured the reference by running the remote branch's `Arxml2Artext.cmd` (`mmx`) and applying `postProcessArtextGen`; stored the post-processed `.artext`, scoped HTML mock and README in the task research.
+- Document view default: one entity per line, editor monospace, 4-space indentation, braces, inline metadata, no chips/fixed columns/per-row borders.
+- Semantic token colours mapped from the reference TextMate scopes to `--vscode-*` variables; module prefix and selected/focused label emphasis.
+- View and Details toggles, both persisted through `getState()/setState()`; details hidden on first paint.
+- Preview harness `?view=document|tree` seeding, document tests, docs and frontend spec updates.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2d328df` | feat(editor): make the ECUC document view the default presentation |
+| `e95c62f` | chore(task): archive 10-27-ecuc-viewer-document-redesign |
+
+### Testing
+
+- [OK] `npm run check-types`, `npm run lint`
+- [OK] 157 passing; `preview:check` ok
+- [OK] Document mode: large 609/688 ms load, 54.1 ms filter; huge 1,605/1,833 ms load, 134.1 ms filter
+- [OK] Six mutations (default view, row layout, view toggle, inspector default, module prefix, selection emphasis) each failed a test
+
+### Status
+
+[OK] **Completed**
