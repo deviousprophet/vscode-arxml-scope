@@ -86,31 +86,36 @@ toggles without moving the selection, a follow follows, everything else selects.
   The indent-guide fallback `#80808040` is the only literal in the stylesheet. No asset file; glyphs
   and the twisty are inline SVG under `default-src 'none'`.
 - **Value type is data.** A parameter's value span carries `data-value-kind="numeric|textual|boolean"`;
-  the CSS maps it to `symbolIcon-number/string/booleanForeground`. Short names use the string colour.
-  The value and name colours borrow the reference branch's `artext.tmLanguage.json` scopes (strings,
-  numbers, booleans, variables); that branch is a grammar, not a palette to copy. In Tree view the
-  kinds keep their `symbolIcon-module/namespace/field/reference` accents and glyphs; those per-kind
-  label/accent rules apply to Tree view, not Document view.
-- Token colours are for the normal background. On a selected Tree row they can fall below 3:1 (the
-  light theme's green value was 1.33:1 on the blue selection), so Tree selection uses
-  `--vscode-list-activeSelectionForeground` (and the inactive equivalent). Document view instead uses
-  a quiet `editor-lineHighlightBackground` line highlight and the editor foreground on the selected
-  line; the focus edge is a 2px inset `focusBorder`, not the list selection bar.
-- **Document palette is restrained.** Structural labels (module path, container, parameter,
-  reference) use `--vscode-editor-foreground`. Only `schema`/`package`/`module` keywords use
-  `symbolIcon-keywordForeground`; short names/textual values use `symbolIcon-stringForeground`;
-  numbers/hex use `symbolIcon-numberForeground`; booleans use the boolean/keyword colour; variants,
-  conditions and context use `descriptionForeground`; annotations use `descriptionForeground`, italic.
-  Reference targets are `editor-foreground` with **no underline**; the `textLink` colour and underline
-  appear on hover only. Do not reintroduce the per-kind label rainbow in Document view.
+  the CSS maps it to `--tok-number`/`--tok-string`/`--tok-keyword`. Short names use `--tok-string`.
+  The token names mirror the reference branch's `artext.tmLanguage.json` scopes (strings, numbers,
+  booleans, variables); that branch is a grammar, not a palette to copy. In Tree view the kinds keep
+  their `symbolIcon-module/namespace/field/reference` accents, glyphs, chips and dotted values; those
+  per-kind rules apply to Tree view, not Document view.
+- **Selection never recolours syntax.** Tree and Document selection use the `--sel-bg`/
+  `--sel-bg-focus` tint and a 2px `--rail` focus edge. Document keeps the token colours on the
+  selected line and brightens the source line number; Tree keeps its per-kind glyphs/accents. Do not
+  reintroduce `--ecuc-selection-fg` or a monochrome selected line. The tint must stay translucent
+  enough for token contrast; high contrast uses outlines, not fills.
+- **Document palette is restrained.** Structural labels (module path, container, context path,
+  target) use `--vscode-editor-foreground`. `schema`/`package`/`module` and booleans use
+  `--tok-keyword`; short names/textual values use `--tok-string`; numbers/hex/schema release use
+  `--tok-number`; variants/conditions use `--tok-meta`; annotations use `--tok-comment`, italic;
+  parameter/reference labels use the single `--tok-key` accent (D1); `=`, braces and parentheses use
+  `--tok-punct`; strip/keys/hints use `--tok-dim`. Reference targets are neutral with **no underline**
+  at rest; the `textLink` colour and underline appear on hover only. Do not reintroduce per-kind label
+  colours in Document view.
 - **Document layout.** The row is a single flex line (`gap: 1ch`, no two-line grid, chips, per-row
-  border, padding or normal-state background); `#tree` starts at `3.5ch` and children indent by `4ch`.
-  The twisty/spacer is absolutely positioned in the gutter (`left: -2.2ch`, width `1.2ch`), so it
-  never shifts the text; braces use `margin-left: -4ch` to sit at the parent text start. The twisty is
-  opacity-only (revealed on row hover/focus), not removed, so collapse stays reachable. Metadata must
-  stay visible (`display: flex`, never `display: none`). Document values have no dotted underline or
-  hover pencil; the tooltip/cursor keep the edit affordance. The document bar is compact (3px padding,
-  240px filter, flat transparent buttons); Tree view keeps the base bar.
+  border, padding or normal-state background). The source gutter is `data-line` (`--ln-digits` on
+  `.document`, `--ln-w`/`--gut`/`--indent` variables); `#tree` is positioned, `#tree` has
+  `padding-left: var(--gut)`, rows use a negative gutter margin plus matching left padding so the
+  hover/selection tint and focus rail reach the gutter edge, and `.children` indents by
+  `var(--indent)` (4ch wide, 3ch narrow). The twisty/spacer is absolute in the fold column; expanded
+  chevrons reveal on `#tree:hover`/`:focus-within`, collapsed chevrons stay visible with a
+  `{ ... }` stub. Header and braces are unnumbered. Metadata stays visible (`display: flex`, never
+  `display: none`). Document values have no dotted underline or hover pencil; the tooltip/cursor keep
+  the edit affordance, and the `F2` hint appears on the selected parameter line. The strip is 26px
+  with a compact filter, flat buttons and the Document|Tree switch; the details panel is 260–340px or
+  a bottom sheet at ≤720px.
 - The tree exposes real `tree`/`treeitem`/`group` roles, `aria-expanded`, `aria-selected`,
   `aria-posinset`/`aria-setsize`, a roving `tabindex`, and Home/End/PageUp/PageDown. The inspector is
   a `region`, not a live region; selecting a node is already announced by the tree.

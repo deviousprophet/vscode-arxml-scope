@@ -41,6 +41,7 @@ suite('editor accessibility (AC8)', () => {
 		const page = html();
 		assert.ok(page.includes(':focus-visible'));
 		assert.ok(page.includes('var(--vscode-focusBorder)'));
-		assert.ok(page.includes('var(--vscode-list-activeSelectionBackground)'));
+		assert.ok(page.includes('--rail: var(--vscode-focusBorder'));
+		assert.ok(page.includes('--sel-bg-focus: var(--vscode-list-activeSelectionBackground'));
 	});
 });

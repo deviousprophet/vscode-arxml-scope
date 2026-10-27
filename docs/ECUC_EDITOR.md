@@ -6,15 +6,16 @@ parameter values in place, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
-> value editing, details inspector) are in place with 160 passing tests. Two things are deliberately
+> value editing, details inspector) are in place with 164 passing tests. Two things are deliberately
 > not implemented and are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
 > resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
 > `design.md`, `implement.md`) with the reference analysis in its
 > `research/legacy-artext-analysis.md`, and the legacy transform is vendored as text under
 > `reference/legacy-arxml2artext/`. The reading-experience overhaul (interaction model, collapse,
 > hierarchy, filter feedback, node identity) is `.trellis/tasks/10-14-ecuc-editor-ux/`; the
-> document-style default presentation is `.trellis/tasks/10-27-ecuc-viewer-document-redesign/`, and
-> the editor-like look is `.trellis/tasks/10-27-ecuc-document-editor-look/`.
+> document-style default is archived under `.trellis/tasks/archive/2026-10/`, and the current
+> quiet-source implementation is `.trellis/tasks/10-27-ecuc-editor-quiet-source/` with the design in
+> `docs/ECUC_EDITOR_DESIGN_SPEC.md`.
 
 ## Why it exists
 
@@ -42,14 +43,15 @@ the file back to the text editor rather than showing an empty view.
 
 ## What it shows
 
-The editor opens in **Document** view, an editor-like monospace text surface: one entity per line,
-the editor font at 1.5 line height, 4-space indentation, `{`/`}` around child groups, inline metadata
-and a compact left gutter. Labels are neutral; only keywords, short names/strings, numbers/hex,
-booleans and annotations carry accent. The twisty lives in the gutter and appears on hover, values
-are plain text (no dotted underline), and reference targets are plain until hover. A slim toolbar
-holds the filter, count, expand/collapse, **View** and **Details** actions; the **View** toggle
-switches to the **Tree** view, the two-line row layout with kind markers, chips and the fixed label
-column. Both preferences are remembered through the webview state.
+The editor opens in **Document** view, a quiet-source monospace surface: the editor font (13px
+fallback), 1.55 line height, real ARXML source line numbers in a left gutter, a fold column, 4-space
+indentation, `{`/`}` on their own lines, one blank row between modules, and inline metadata. The
+schema/package header and the braces are unnumbered. Labels are neutral except the single key accent
+on parameter/reference names; keywords, strings, numbers/hex, conditions, annotations and booleans
+carry the semantic tokens. The `=` is muted punctuation. Reference targets are plain until hover;
+values have no dotted underline (click or `F2` still edits them). A 26px strip holds the filter,
+count, collapse/expand icons, the **Document | Tree** switch and **Details**; the details panel is a
+docked 260–340px panel, or a bottom sheet at narrow widths. The view and details state persist.
 
 | Entity | Shown as |
 |---|---|
@@ -63,28 +65,38 @@ column. Both preferences are remembered through the webview state.
 | Annotations | `[Label] text`, shown in comment form (`/* … */`) in Document view, without a label when absent |
 
 In Document view the tree's twisty column moves into the gutter, so labels align on exact 4-space
-steps and the braces align with the parent row; there are no list bullets, per-row borders, chips or
-fixed label columns. Long lines scroll horizontally in the pane instead of wrapping; nothing is
-hidden — short-name, variant, hexadecimal form, context, conditions and annotations move inline after
-the value. Tree view keeps the previous presentation unchanged. The full text of any row remains
-available in the details panel.
+steps and the braces align with the parent row. Expanded fold chevrons appear while the pointer is
+over the tree or focus is inside it; a collapsed container always shows its chevron and a `{ ... }`
+stub. There are no list bullets, per-row borders, chips or fixed label columns. Long lines scroll
+horizontally instead of wrapping; nothing is hidden — short-name, variant, hexadecimal form, context,
+conditions and annotations move inline after the value. The empty filter state is a source comment
+(`/* No entities match "…". */`) with a flat Clear filter action. Tree view keeps its two-line grid,
+chips, glyphs and per-kind accents, with the shared strip, typography and token colours. The full
+text of any row remains available in the details panel.
 
-Document colours are deliberately restrained. `schema`/`package`/`module` use the keyword colour,
-short names and textual values the string colour, numbers and hex the numeric colour, booleans the
-boolean/keyword colour, and annotations the description colour (italic). Structural labels — module
-paths, container names, parameter/reference names — use the editor foreground; variants and
-conditions are muted. Reference targets are plain text and use the link colour plus underline only
-on hover. In Tree view each kind also carries its own inline-SVG marker and accent, so the kinds are
-distinguishable in a high-contrast theme where colour alone is not enough. Selected and focused rows
-use a quiet editor line highlight, a focus edge, and the editor foreground for the selected line so
-the text cannot fall below contrast on the highlight.
+Line numbers are the **real ARXML source lines** (`data-line`), the same line *Reveal in source*
+jumps to. With the default `all` ordering they can appear non-monotonic because rows are ordered by
+`DEFINITION-REF`; `declaration` ordering gives ascending line numbers. This is deliberate: the gutter
+is a source locator, not a display index.
+
+Document colours are deliberately restrained. `schema`/`package`/`module` use the keyword token,
+short names and textual values the string token, numbers and hex the numeric token, conditions the
+meta token, and annotations the comment token (italic). Parameter and reference labels use the single
+key accent; module paths, container labels, context paths and reference targets are neutral; `=`,
+braces and punctuation use the muted punctuation token. Reference targets use the link colour plus
+underline only on hover. In Tree view each kind also carries its own inline-SVG marker and accent, so
+the kinds are distinguishable where colour alone is not enough. Selected and focused rows use a
+translucent editor tint and a 2px gutter rail; the selected line number brightens and the syntax
+colours stay. The `F2` hint appears on the selected parameter line. High contrast switches the tint
+to outlines.
 
 The presentational reference is the post-processed ARTEXT output of the remote
 `ref/ecucvalues-for-vscode` branch: `mmx` + `Arxml2Artext.mm`, then the extension's
 `postProcessArtextGen` whitespace collapse inside `[...]`. The capture, the command and the scoped
-colour mock live in
-`.trellis/tasks/10-27-ecuc-viewer-document-redesign/research/reference-artext/`. It is a look
-reference, not a shipped format; nothing in the product reads or writes `.artext`.
+colour mock live in the archived
+`.trellis/tasks/archive/2026-10/10-27-ecuc-viewer-document-redesign/research/reference-artext/`.
+The quiet-source design specification is `docs/ECUC_EDITOR_DESIGN_SPEC.md`. It is a look reference,
+not a shipped format; nothing in the product reads or writes `.artext`.
 
 Ordering matches the legacy tool: by `DEFINITION-REF` then identity, with the legacy exception list
 preserved (see *Settings*).

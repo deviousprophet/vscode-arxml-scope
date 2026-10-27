@@ -32,17 +32,18 @@ function beginValueEdit(item) {
 	if (!span) {
 		return false;
 	}
+	const text = span.querySelector('.value-text') ?? span;
 	const input = document.createElement('input');
 	input.type = 'text';
 	input.className = 'value-edit';
 	input.value = item.dataset.value ?? '';
 	input.setAttribute('aria-label', 'Value of ' + item.dataset.nodeId);
-	span.style.display = 'none';
-	span.after(input);
+	text.style.display = 'none';
+	text.after(input);
 	focusItem(item);
 	input.focus();
 	input.select();
-	valueEdit = { item, span, input, pending: false };
+	valueEdit = { item, span, text, input, pending: false };
 	return true;
 }
 
@@ -51,10 +52,13 @@ function closeValueEdit() {
 	if (!valueEdit) {
 		return;
 	}
-	const { span, input } = valueEdit;
+	const { text, input } = valueEdit;
+	if (valueEdit.error) {
+		valueEdit.error.remove();
+	}
 	valueEdit = null;
 	input.remove();
-	span.style.display = '';
+	text.style.display = '';
 }
 
 /** Posts the edit but keeps the input open until the host answers (design §6). */
@@ -64,6 +68,10 @@ function commitValueEdit() {
 	}
 	const { item, input } = valueEdit;
 	valueEdit.pending = true;
+	if (valueEdit.error) {
+		valueEdit.error.remove();
+		valueEdit.error = null;
+	}
 	input.removeAttribute('aria-invalid');
 	flashId = item.dataset.nodeId;
 	vscode.postMessage({ type: 'edit', nodeId: item.dataset.nodeId, value: input.value });
@@ -161,11 +169,23 @@ window.addEventListener('message', (event) => {
 		}
 	} else if (message.type === 'notice') {
 		if (valueEdit && valueEdit.pending && message.kind === 'warn') {
-			// The write was refused: keep the text, say so, and let the user fix it.
+			// The write was refused: keep the text, say so beside the field, and let the user fix it.
 			valueEdit.pending = false;
 			pendingMove = null;
 			flashId = null;
 			valueEdit.input.setAttribute('aria-invalid', 'true');
+			const reason = typeof message.message === 'string' && message.message !== ''
+				? message.message
+				: 'The value was refused.';
+			let error = valueEdit.error;
+			if (!error) {
+				error = document.createElement('span');
+				error.className = 'value-error';
+				error.setAttribute('role', 'alert');
+				valueEdit.error = error;
+				valueEdit.input.after(error);
+			}
+			error.textContent = '/* ' + reason + ' */';
 		}
 	}
 });

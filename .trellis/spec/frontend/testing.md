@@ -105,10 +105,15 @@ toggle, make the inspector visible by default, remove the module prefix, remove 
 emphasis, and neutralize the document selectors. The editor-like pass adds: restore per-kind label
 colours, restore the target underline, restore the dotted value underline, put the twisty back in the
 flex flow, restore the list-selection row bar, restore the 6px toolbar padding, and remove the header
-keyword rule; each mutation must fail a test. A CSS selector assertion is still not a rendered-layout
-test, so pair it with the light/dark/HC captures and a browser pass. The editor-like direction is
-prototyped over the production page in `research/prototype-editor.css`; assertions and captures must
-match the production CSS, never the prototype file.
+keyword rule. The quiet-source pass adds: remove `data-line`/`--ln-digits`, restore the
+`--ecuc-selection-fg` monochrome selection, remove the full-row gutter margin/padding, remove the
+collapsed `{ ... }` stub or the `F2` hint, remove the `--tok-*` block, remove the narrow line-number
+hide, and remove the details width clamp/bottom sheet; each mutation must fail a test. A CSS selector
+assertion is still not a rendered-layout test, so pair it with the light/dark/HC captures and a
+browser pass. The quiet-source direction is prototyped in `docs/ecuc-editor-prototype.html` and
+specified in `docs/ECUC_EDITOR_DESIGN_SPEC.md`; assertions and captures must match the production
+CSS, never the prototype file. `data-line` on `.row` is 1-based (the source line), while `.node`
+`data-line` stays 0-based for the inspector; do not conflate them.
 
 ## A CSS rule is not a contrast measurement
 

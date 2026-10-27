@@ -301,27 +301,29 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 	test('AC6: the row states come from the theme, including the unfocused selection', () => {
 		const style = styleOf(page());
 		// Design §1.3 lists these as defects of the flat tree, so they are asserted rather
-		// than assumed: a hover state, and a selection that stops using the active colours
-		// when the webview is not focused.
+		// than assumed: a hover state, and a selection tint that keeps the token colours.
 		assert.ok(
-			/\.row:hover\s*\{[^}]*var\(--vscode-list-hoverBackground/.test(style),
+			/\.row:hover\s*\{[^}]*var\(--hover-bg\)/.test(style),
 			'a row has a hover state'
 		);
 		assert.ok(
-			/\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*var\(--vscode-list-activeSelectionBackground/.test(style),
-			'a focused selection uses the active colours'
+			/\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*var\(--sel-bg\)/.test(style),
+			'an unfocused selection uses the quiet tint'
 		);
 		assert.ok(
-			/body:not\(:focus-within\)\s+\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*var\(--vscode-list-inactiveSelectionBackground/.test(style),
-			'an unfocused selection uses the inactive colours'
+			/#tree:focus-within\s+\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*var\(--sel-bg-focus\)/.test(style),
+			'a focused selection uses the focused tint'
 		);
+		assert.ok(/--sel-bg:\s*var\(--vscode-list-inactiveSelectionBackground/.test(style));
+		assert.ok(/--sel-bg-focus:\s*var\(--vscode-list-activeSelectionBackground/.test(style));
+		assert.ok(!style.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
 	});
 
 	test('AC8: a value advertises that it is editable, by tooltip and by hover', () => {
 		const script = page();
 		assert.ok(script.includes('<span class="value" data-value-kind="numeric"'), 'the value kind');
 		assert.ok(script.includes('title="Click to edit, or press F2:'), 'the tooltip');
-		assert.ok(script.includes('= "hello"'), 'and it carries the full value for a clipped cell');
+		assert.ok(script.includes('>"hello"</span>'), 'and it carries the full value for a clipped cell');
 		const style = styleOf(script);
 		assert.ok(/\.row\.k-parameter\s*>\s*\.value\s*\{[^}]*cursor:\s*text/.test(style), 'the caret');
 		assert.ok(/\.row\.k-parameter:hover\s*>\s*\.value::after/.test(style), 'the hover affordance');

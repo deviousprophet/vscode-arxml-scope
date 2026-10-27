@@ -43,12 +43,14 @@ that is not obvious from the code.
   The tree and the filter must not act on a click or key the widget owns; the ordering is asserted.
 - **Anything that must survive a re-scan lives outside `#main`.** The shell, toolbar and inspector are
   not swapped; the filter's empty state is inside the tree because it describes the filtered tree.
-- **A selected Tree row uses the selection foreground for token-coloured text.** Token colours are
-  for the normal background; the light theme's green value on the blue selection was 1.33:1. Measure
-  it, do not just assert the CSS rule. Document view uses a quiet editor line highlight instead of the
-  list bar; keep the focus edge visible.
+- **Selection never recolours syntax.** Tree and Document selection use the translucent `--sel-bg`/
+  `--sel-bg-focus` tint and the 2px `--rail` focus edge; the token colours stay. Do not reintroduce
+  `--ecuc-selection-fg` or a monochrome selected line. Measure the tint contrast (the old light-theme
+  green on the blue selection was 1.33:1); high contrast uses outlines, not fills.
 - **`.value` stays a direct child of `.row`.** The widget, `highlightableSpans` and the editing tests
-  select `:scope > .row > .value`; a wrapper cell breaks them.
+  select `:scope > .row > .value`; a wrapper cell breaks them. The value now contains a `--tok-punct`
+  `=` and a `.value-text`; the widget hides `.value-text` and inserts the input inside `.value`, so the
+  separator stays visible while editing. The filter highlights `.value .value-text`.
 - **A fixed label track keeps values aligned.** In Tree view each row is its own grid; a per-row `1fr`
   label sizes to content and breaks the column. Document view deliberately drops the fixed track and
   the two-line grid; do not reintroduce chips, cards, ellipsized values or per-row accents there.
@@ -57,19 +59,20 @@ that is not obvious from the code.
   `matchRanges`, filter/collapse state and `.value` direct-child contract apply. Never hide metadata
   (`.row-meta`) to make the document look clean; inline it. The product never reads or writes
   `.artext` and never runs `mmx`.
-- **The Document surface is text first.** Labels are neutral (editor foreground); only keywords,
-  strings, numbers/hex, booleans and annotations carry accent. Reference targets are plain until
-  hover; values have no dotted underline or hover pencil. The twisty is in the gutter, children
-  indent by `4ch`, and the bar is compact. The tree's per-kind colours, chips, dotted values and blue
-  underlined targets belong to Tree view, not Document view.
+- **The Document surface is text first.** Structural labels are neutral; only `--tok-*` keywords,
+  strings, numbers, meta, comments and the single key accent carry colour. Reference targets are plain
+  until hover; values have no dotted underline or hover pencil. Use real source line numbers
+  (`data-line`/`--ln-digits`), the `--ln-w`/`--gut`/`--indent` gutter, the fold column and the 26px
+  strip. The `=` is punctuation, not part of the value token. The tree's per-kind colours, chips,
+  dotted values and blue underlined targets belong to Tree view, not Document view.
 - **Defaults are Document view and hidden details.** `renderHtml` writes `data-view="document"`, the
   inspector `hidden`, and `aria-pressed="false"`; the page script applies a saved Tree view or a
   shown inspector. The view and details state share the validated webview state object; a missing or
   invalid view falls back to `document`.
-- **Tree view keeps the ARTEXT scopes.** `data-value-kind` selects numeric/textual/boolean colours;
-  reference targets use the link colour; short names use the string colour. Do not paint every value
-  with one token. The Tree kinds use module/namespace/field/reference `symbolIcon` variables, not one
-  accent for both module and container. Document view deliberately uses the restrained palette above.
+- **Tree view keeps the ARTEXT scopes.** `data-value-kind` selects numeric/textual/boolean tokens;
+  short names use `--tok-string`; targets are neutral with a hover link/underline. Do not paint every
+  value with one token. The Tree kinds keep module/namespace/field/reference `symbolIcon` accents,
+  glyphs, chips and dotted values. Document view uses the restrained palette above.
 - **Samples and benchmarks are dev-only.** The sample directory is outside the repository and
   synthetic; `preview:check` excludes it. A benchmark is evidence, not a performance promise.
 

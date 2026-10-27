@@ -105,32 +105,27 @@ suite('editor semantic colours (AC14)', () => {
 
 	test('AC14: value types, references and short names use their semantic scopes', () => {
 		const style = styleOf(page());
-		assert.ok(/\.value\[data-value-kind="numeric"\]\s*\{[^}]*--vscode-symbolIcon-numberForeground/.test(style));
-		assert.ok(/\.value\[data-value-kind="textual"\]\s*\{[^}]*--vscode-symbolIcon-stringForeground/.test(style));
-		assert.ok(/\.value\[data-value-kind="boolean"\]\s*\{[^}]*--vscode-symbolIcon-booleanForeground/.test(style));
-		assert.ok(/\.target\s*\{[^}]*--vscode-textLink-foreground/.test(style));
-		assert.ok(/\.short\s*\{[^}]*--vscode-symbolIcon-stringForeground/.test(style));
+		assert.ok(/\.value\[data-value-kind="numeric"\]\s*\{[^}]*--tok-number/.test(style));
+		assert.ok(/\.value\[data-value-kind="textual"\]\s*\{[^}]*--tok-string/.test(style));
+		assert.ok(/\.value\[data-value-kind="boolean"\]\s*\{[^}]*--tok-keyword/.test(style));
+		assert.ok(/\.target\s*\{[^}]*--vscode-editor-foreground/.test(style));
+		assert.ok(/\.target:hover \.value-text\s*\{[^}]*--vscode-textLink-foreground/.test(style));
+		assert.ok(/\.short\s*\{[^}]*--tok-string/.test(style));
 	});
 
-	test('AC14: selection still owns the foreground and markers, and no colour literal is added', () => {
+	test('AC14: selection is a tint and does not recolour syntax', () => {
 		const style = styleOf(page());
-		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground)'));
-		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-inactiveSelectionForeground)'));
+		assert.ok(/--sel-bg:\s*var\(--vscode-list-inactiveSelectionBackground/.test(style));
+		assert.ok(/--sel-bg-focus:\s*var\(--vscode-list-activeSelectionBackground/.test(style));
 		assert.ok(
-			/:is\(\.node\[data-selected="true"\], \.node:focus-visible\) > \.row > \.value[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
+			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg\)/.test(style)
+		);
+		assert.ok(
+			/#tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg-focus\)/.test(
 				style
 			)
 		);
-		assert.ok(
-			/:is\(\.node\[data-selected="true"\], \.node:focus-visible\) > \.row > \.twisty[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
-				style
-			)
-		);
-		assert.ok(
-			/:is\(\.node\[data-selected="true"\], \.node:focus-visible\) > \.row\.k-parameter[\s\S]*?border-left-color: var\(--ecuc-selection-fg\)/.test(
-				style
-			)
-		);
+		assert.ok(!style.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
 		const hexes = [...style.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
 		assert.deepStrictEqual(hexes, ['#80808040'], 'the indent-guide fallback is still the only literal');
 	});

@@ -49,7 +49,8 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		assert.ok(html.includes('aria-controls="inspector"'));
 		assert.ok(/id="details-toggle"[^>]*aria-pressed="false"/.test(html));
 		assert.ok(/id="view-toggle"[^>]*aria-pressed="true"/.test(html));
-		assert.ok(html.includes('Select a node to see its details.'));
+		assert.ok(html.includes('Select a line to see its details.'));
+		assert.ok(html.includes('Click a line or press Space.'));
 		assert.ok(!renderTree(scanEcucValues(text()), {}).includes('id="inspector"'), 'the tree swap cannot remove it');
 	});
 
@@ -201,7 +202,7 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		assert.ok(apply.includes("countLabel.dataset.state = 'empty'"));
 		assert.ok(apply.includes("countLabel.dataset.state = 'filtered'"));
 		assert.ok(apply.includes("clearButton.hidden = filterInput.value.trim() === ''"));
-		assert.ok(apply.includes("emptyText.textContent = 'No matches for \"' + filterInput.value.trim() + '\".'"));
+		assert.ok(apply.includes("emptyText.textContent = '/* No entities match \"' + filterInput.value.trim() + '\". */'"));
 		assert.ok(script.includes('#empty-clear'), 'the clear action survives the tree swap by delegation');
 	});
 
@@ -209,23 +210,26 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		const script = filterScript();
 		assert.ok(
 			script.includes(
-				":scope > .row > .label, :scope > .row > .row-meta .short, :scope > .row > .value"
+				":scope > .row > .label, :scope > .row > .row-meta .short, :scope > .row > .value .value-text"
 			),
 			'the highlight set follows the new metadata line'
 		);
 		assert.ok(script.includes('matchRanges('), 'the one definition of a match is still used');
 	});
 
-	test('AC9: a selected row uses the selection foreground for token-coloured text', () => {
+	test('AC9: selection uses a quiet tint and keeps token colours', () => {
 		const style = styleOf(page());
-		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground)'));
-		assert.ok(style.includes('--ecuc-selection-fg: var(--vscode-list-inactiveSelectionForeground)'));
+		assert.ok(/--sel-bg:\s*var\(--vscode-list-inactiveSelectionBackground/.test(style));
+		assert.ok(/--sel-bg-focus:\s*var\(--vscode-list-activeSelectionBackground/.test(style));
 		assert.ok(
-			/:is\(\.node\[data-selected="true"\], \.node:focus-visible\) > \.row > \.value[\s\S]*?color: var\(--ecuc-selection-fg\)/.test(
-				style
-			),
-			'the value and secondary fields do not keep a low-contrast token colour on the selection'
+			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg\)/.test(style)
 		);
+		assert.ok(
+			/#tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg-focus\)/.test(
+				style
+			)
+		);
+		assert.ok(!style.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
 	});
 
 	test('AC9: fonts have usable fallbacks and no colour literal was introduced', () => {

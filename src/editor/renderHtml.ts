@@ -1,8 +1,8 @@
-/**
- * Webview HTML for the ECUC tree (child design §2.6, parent design §6; UX child design
- * §2, §4, §5, §7, §8, §9).
+﻿/**
+ * Webview HTML for the ECUC tree (child design Â§2.6, parent design Â§6; UX child design
+ * Â§2, Â§4, Â§5, Â§7, Â§8, Â§9).
  *
- * Everything is inlined — no asset files, no remote loads — because the CSP forbids
+ * Everything is inlined â€” no asset files, no remote loads â€” because the CSP forbids
  * them and `esbuild.js` has no asset-copy step. Every colour is a `--vscode-*` custom
  * property (or a fallback inside one), so light, dark and high-contrast themes all work
  * (parent R16). Kind glyphs and the twisty are inline SVG for the same reason: inline
@@ -11,8 +11,8 @@
  * `renderTree` returns the region the provider swaps on a re-scan; `renderHtml` wraps
  * it in the page (toolbar, CSP, nonce, script).
  *
- * The state that has to survive a re-scan — the collapsed set and the scroll position —
- * lives in the webview (UX child design §4.1). The handful of pure helpers that decide
+ * The state that has to survive a re-scan â€” the collapsed set and the scroll position â€”
+ * lives in the webview (UX child design Â§4.1). The handful of pure helpers that decide
  * it are defined here as real functions and serialized into the page with
  * `toString()`, so the page and the tests share one definition instead of two.
  */
@@ -39,7 +39,7 @@ export interface RenderOptions {
 	nonce?: string;
 	sort?: SortMode;
 	sortExcept?: readonly string[];
-	/** Node to mark and focus on load (child design §2.4, source → editor). */
+	/** Node to mark and focus on load (child design Â§2.4, source â†’ editor). */
 	selectedId?: string;
 	/**
 	 * The current document text's line index. When present, every node carries its
@@ -62,23 +62,23 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <body data-view="document">
 <div class="toolbar">
 <div class="filter-wrap">
-<input id="filter" class="filter" type="search" placeholder="Filter labels, short names and values" aria-label="Filter the ECUC tree">
-<button id="filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden>&times;</button>
+<input id="filter" class="filter" type="search" placeholder="Filter" aria-label="Filter the ECUC tree">
+<button id="filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 </div>
 <span id="count" class="count" role="status" aria-live="polite" data-state="none"></span>
 <span id="notice" class="notice" role="status" aria-live="polite"></span>
 <span class="grow"></span>
-<button id="expand-all" class="tool" type="button" title="Expand every container">Expand all</button>
-<button id="collapse-all" class="tool" type="button" title="Collapse every container">Collapse all</button>
-<button id="view-toggle" class="tool" type="button" aria-pressed="true" title="Switch to tree view">Tree</button>
-<button id="details-toggle" class="tool" type="button" aria-pressed="false" aria-controls="inspector" title="Show node details">Details</button>
+<button id="collapse-all" class="tool icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 6h4V2M3 6l4-4M13 10H9v4M13 10l-4 4"/></svg></button>
+<button id="expand-all" class="tool icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M7 2v4H3M7 2L3 6M9 14v-4h4M9 14l4-4"/></svg></button>
+<button id="view-toggle" class="tool view-switch" type="button" aria-pressed="true" title="Switch to tree view"><span class="view-document">Document</span><span class="view-sep" aria-hidden="true">|</span><span class="view-tree">Tree</span></button>
+<button id="details-toggle" class="tool details-toggle" type="button" aria-pressed="false" aria-controls="inspector" title="Show node details" aria-label="Show node details"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg><span class="lbl">Details</span></button>
 </div>
 <div id="content">
 <div id="main">${renderTree(model, options)}</div>
 <aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>
 <div class="inspector-empty">
-<p>Select a node to see its details.</p>
-<p class="inspector-hint">Double-click a row to reveal it in the source.</p>
+<p>Select a line to see its details.</p>
+<p class="inspector-hint">Click a line or press Space.</p>
 </div>
 </aside>
 </div>
@@ -100,12 +100,17 @@ export function renderTree(model: EcucDocumentModel, options: RenderOptions = {}
 		except: options.sortExcept ?? SORT_EXCEPTIONS,
 		selectedId: options.selectedId,
 		lineIndex: options.lineIndex,
+		maxLine: 0,
 		first: true,
 	};
 
 	const meta: string[] = [];
 	if (model.schema) {
-		meta.push(`<div class="schema"><span class="keyword">schema</span> ${escapeHtml(model.schema.release)}</div>`);
+		meta.push(
+			`<div class="schema"><span class="keyword">schema</span> <span class="number">${escapeHtml(
+				model.schema.release
+			)}</span></div>`
+		);
 	}
 	for (const pkg of model.packages) {
 		meta.push(`<div class="package"><span class="keyword">package</span> ${escapeHtml(pkg.path.join('.'))}</div>`);
@@ -113,10 +118,13 @@ export function renderTree(model: EcucDocumentModel, options: RenderOptions = {}
 
 	const modules = orderModules(model.modules, ctx.sort, ctx.except);
 	const items = modules.map((module, at) => moduleItem(ctx, module, 1, at + 1, modules.length));
+	const digits = String(Math.max(1, ctx.maxLine)).length;
 	return (
+		`<div class="document" style="--ln-digits:${digits}">` +
 		`<div class="meta">${meta.join('')}</div>` +
 		`<div id="tree" class="tree" role="tree" aria-label="ECUC values">${items.join('')}</div>` +
-		`<div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div>`
+		`<div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div>` +
+		`</div>`
 	);
 }
 
@@ -127,6 +135,8 @@ interface Ctx {
 	selectedId?: string;
 	/** Source line/column for the inspector; absent when the caller has no document text. */
 	lineIndex?: LineIndex;
+	/** Largest 1-based entity source line, used for the gutter width. */
+	maxLine: number;
 	/** True until the first item is written; it carries the roving `tabindex="0"`. */
 	first: boolean;
 }
@@ -144,7 +154,7 @@ interface ItemSpec {
 	target?: string;
 	/** The rendered value cell; absent for modules and containers. */
 	valueHtml?: string;
-	/** Hover text: the full `DEFINITION-REF` path where there is one (design §2.7). */
+	/** Hover text: the full `DEFINITION-REF` path where there is one (design Â§2.7). */
 	title: string;
 	level: number;
 	/** Position within its group, and the group's size, for `aria-posinset` / `aria-setsize`. */
@@ -179,7 +189,7 @@ function item(ctx: Ctx, spec: ItemSpec): string {
 	const hasChildren = spec.children.length > 0;
 	const expanded = hasChildren ? ' aria-expanded="true"' : '';
 	// The value the in-tree editor starts from, so the webview never re-derives it from
-	// the rendered text (parent design §9, `ecucValueEditor.ts`).
+	// the rendered text (parent design Â§9, `ecucValueEditor.ts`).
 	const editable = spec.kind === 'parameter' ? ` data-value="${escapeAttr(spec.value ?? '')}"` : '';
 	const target = spec.kind === 'reference' ? ` data-target="${escapeAttr(spec.target ?? '')}"` : '';
 	// The source position is carried as data, not hover text, so the inspector can show it
@@ -187,6 +197,10 @@ function item(ctx: Ctx, spec: ItemSpec): string {
 	// inspector adds one for display.
 	const start = ctx.lineIndex?.positionAt(spec.range.start);
 	const end = ctx.lineIndex?.positionAt(spec.range.end);
+	const sourceLine = start ? start.line + 1 : 0;
+	if (sourceLine > ctx.maxLine) {
+		ctx.maxLine = sourceLine;
+	}
 	const position =
 		start && end
 			? ` data-line="${start.line}" data-column="${start.character}"` +
@@ -194,7 +208,7 @@ function item(ctx: Ctx, spec: ItemSpec): string {
 			: '';
 	const group = hasChildren ? `<div role="group" class="children">${spec.children.join('')}</div>` : '';
 	// A toggle only where there is something to toggle; a leaf gets a spacer instead, so
-	// the labels of leaves and containers line up (UX child design §4.2).
+	// the labels of leaves and containers line up (UX child design Â§4.2).
 	const twisty = hasChildren
 		? `<span class="twisty" aria-hidden="true">${TWISTY_SVG}</span>`
 		: '<span class="spacer" aria-hidden="true"></span>';
@@ -210,7 +224,7 @@ function item(ctx: Ctx, spec: ItemSpec): string {
 		` data-haystack="${escapeAttr(haystack(spec))}"${editable}${target}${position}` +
 		`${selected ? ' data-selected="true"' : ''}` +
 		` title="${escapeAttr(spec.title)}">` +
-		`<span class="${rowClass}">${twisty}<span class="glyph" aria-hidden="true">${GLYPHS[spec.kind] ?? ''}</span>` +
+		`<span class="${rowClass}"${sourceLine ? ` data-line="${sourceLine}"` : ''}>${twisty}<span class="glyph" aria-hidden="true">${GLYPHS[spec.kind] ?? ''}</span>` +
 		`<span class="label">${escapeHtml(spec.label)}</span>${spec.valueHtml ?? ''}${meta}</span>${group}</div>`
 	);
 }
@@ -251,7 +265,7 @@ function containerItem(
 	const members = orderMembers(container.parameters, container.references, ctx.sort, ctx.except);
 	const nested = orderContainers(container.containers, ctx.sort, ctx.except);
 	// One group per container: parameters, then references, then child containers, so the
-	// positions stay contiguous (parent design §6).
+	// positions stay contiguous (parent design Â§6).
 	const total = members.parameters.length + members.references.length + nested.length;
 	const children: string[] = [];
 	for (const parameter of members.parameters) {
@@ -311,7 +325,7 @@ function parameterItem(
 		// siblings; the hex and the suffixes move to the quieter second line.
 		valueHtml: `<span class="value" data-value-kind="${valueKind}" title="${escapeAttr(
 			'Click to edit, or press F2: = ' + shown
-		)}">= ${escapeHtml(shown)}</span>`,
+		)}"><span class="punct">=</span> <span class="value-text">${escapeHtml(shown)}</span></span>`,
 		title: parameter.definitionRef,
 		level,
 		posinset,
@@ -341,7 +355,7 @@ function referenceItem(
 	const context = reference.instance && reference.contextPaths.length > 0
 		? `<span class="context" title="${escapeAttr(
 				'context ' + reference.contextPaths.join(', ')
-			)}">context ${escapeHtml(reference.contextPaths.join(', '))}</span>`
+			)}"><span class="keyword">context</span> ${escapeHtml(reference.contextPaths.join(', '))}</span>`
 		: '';
 	return item(ctx, {
 		id: ctx.index.idOf(reference) ?? '',
@@ -350,11 +364,11 @@ function referenceItem(
 		definitionRef: reference.definitionRef,
 		value: target,
 		target: rawTarget,
-		// The target is the row's follow affordance — not the whole row, which selects
-		// now (UX child design §2, §5).
+		// The target is the row's follow affordance â€” not the whole row, which selects
+		// now (UX child design Â§2, Â§5).
 		valueHtml: `<span class="value target" data-follow="true" title="${escapeAttr(
 			'Follow to the target: = ' + target
-		)}">= ${escapeHtml(target)}</span>`,
+		)}"><span class="punct">=</span> <span class="value-text">${escapeHtml(target)}</span></span>`,
 		title: reference.definitionRef,
 		level,
 		posinset,
@@ -394,13 +408,13 @@ function suffixSpans(node: Suffixes): string[] {
 	return spans;
 }
 
-/** `/A/B/C` → `A.B.C`, the legacy `\structify`. */
+/** `/A/B/C` â†’ `A.B.C`, the legacy `\structify`. */
 function dotted(path: string): string {
 	const parts = path.split('/');
 	return parts.length <= 1 ? path : parts.slice(1).join('.');
 }
 
-/** `VARIANT-PRE-COMPILE` → `VariantPreCompile`, the legacy `\camelize`. */
+/** `VARIANT-PRE-COMPILE` â†’ `VariantPreCompile`, the legacy `\camelize`. */
 function camelize(value: string): string {
 	return value
 		.split('-')
@@ -419,9 +433,9 @@ function escapeAttr(text: string): string {
 }
 
 /* ---------------------------------------------------------------------------------
- * Re-render state (UX child design §4.1). Serialized into the page with `toString()`
- * so the webview and the tests run the same code, and so the ordering — capture the
- * scroll *before* the `innerHTML` swap, restore it *after* everything else — is
+ * Re-render state (UX child design Â§4.1). Serialized into the page with `toString()`
+ * so the webview and the tests run the same code, and so the ordering â€” capture the
+ * scroll *before* the `innerHTML` swap, restore it *after* everything else â€” is
  * asserted rather than assumed.
  * ------------------------------------------------------------------------------- */
 
@@ -446,7 +460,7 @@ export function collapsedIdsFor(items: readonly { id: string; hasChildren: boole
 
 /**
  * The index a movement key moves focus to, or `undefined` when the key is not a move
- * (UX child design §8). `page` is how many rows fit in the viewport, so PageUp/PageDown
+ * (UX child design Â§8). `page` is how many rows fit in the viewport, so PageUp/PageDown
  * move by a screen rather than a fixed count.
  */
 export function moveTarget(key: string, from: number, count: number, page: number): number | undefined {
@@ -515,15 +529,41 @@ body {
 	flex-direction: column;
 	overflow: hidden;
 }
+/* Quiet-source tokens: one definition for both views. Plain declarations first are
+ * the fallback for hosts without color-mix; the second declaration refines them. */
+body[data-view] {
+	--ecuc-fs: var(--vscode-editor-font-size, 13px);
+	--ecuc-lh: calc(var(--ecuc-fs) * 1.55);
+	--tok-keyword: var(--vscode-debugTokenExpression-boolean, var(--vscode-editor-foreground));
+	--tok-string: var(--vscode-debugTokenExpression-string, var(--vscode-editor-foreground));
+	--tok-number: var(--vscode-debugTokenExpression-number, var(--vscode-editor-foreground));
+	--tok-meta: var(--vscode-debugTokenExpression-name, var(--vscode-editor-foreground));
+	--tok-comment: var(--vscode-charts-green, var(--vscode-editor-foreground));
+	--tok-comment: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-editor-foreground)) 85%, var(--vscode-editor-background));
+	--tok-key: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
+	--tok-punct: var(--vscode-editor-foreground);
+	--tok-punct: color-mix(in srgb, var(--vscode-editor-foreground) 70%, var(--vscode-editor-background));
+	--tok-dim: var(--vscode-editor-foreground);
+	--tok-dim: color-mix(in srgb, var(--vscode-editor-foreground) 55%, var(--vscode-editor-background));
+	--hover-bg: var(--vscode-list-hoverBackground, transparent);
+	--sel-bg: var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-lineHighlightBackground, transparent));
+	--sel-bg-focus: var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, transparent));
+	--sel-bg-focus: color-mix(in srgb, var(--sel-bg-focus) 45%, transparent);
+	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
+}
 .toolbar {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 6px 8px;
+	flex-wrap: nowrap;
+	gap: 6px;
 	align-items: center;
-	padding: 6px 10px;
+	height: 26px;
+	padding: 0 8px;
 	flex: none;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 12px;
+	color: var(--tok-dim);
 	background: var(--vscode-editor-background);
-	border-bottom: 1px solid var(--vscode-panel-border);
+	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
 .grow {
 	flex: 1 1 auto;
@@ -531,17 +571,24 @@ body {
 .filter-wrap {
 	position: relative;
 	display: flex;
-	flex: 1 1 280px;
-	max-width: 560px;
-	min-width: 180px;
+	flex: 0 1 28ch;
+	min-width: 0;
+	max-width: none;
 }
 .filter {
 	width: 100%;
 	min-width: 0;
-	padding: 3px 24px 3px 8px;
-	color: var(--vscode-input-foreground);
+	height: 20px;
+	padding: 0 22px 0 6px;
+	font: inherit;
+	color: var(--vscode-editor-foreground);
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 2px;
+}
+.filter:not(:placeholder-shown) {
+	color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
 	background: var(--vscode-input-background);
-	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, transparent));
 }
 .filter:focus-visible {
 	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
@@ -552,51 +599,93 @@ body {
 	right: 3px;
 	top: 50%;
 	transform: translateY(-50%);
-	padding: 0 4px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	padding: 0;
 	font: inherit;
 	line-height: 1;
 	cursor: pointer;
-	color: var(--vscode-input-foreground);
+	color: var(--tok-dim);
 	background: transparent;
 	border: 0;
+	border-radius: 2px;
 }
 .filter-clear[hidden] {
 	display: none;
 }
 .filter-clear:hover {
 	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, transparent);
 }
 .count {
-	padding: 1px 7px;
-	border: 1px solid transparent;
-	border-radius: 9px;
+	padding: 0;
+	border: 0;
 	white-space: nowrap;
-	color: var(--vscode-badge-foreground, var(--vscode-foreground));
-	background: var(--vscode-badge-background, transparent);
+	color: var(--tok-dim);
+	background: transparent;
+	font-size: 12px;
 }
 .count[data-state="none"] {
 	padding: 0;
 	background: transparent;
 }
 .count[data-state="empty"] {
-	color: var(--vscode-foreground);
-	background: var(--vscode-inputValidation-warningBackground, var(--vscode-badge-background, transparent));
-	border-color: var(--vscode-inputValidation-warningBorder, var(--vscode-panel-border, transparent));
+	color: var(--tok-dim);
+	background: transparent;
+	border-color: transparent;
 }
 .tool {
-	padding: 2px 8px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	height: 20px;
+	padding: 0 6px;
 	cursor: pointer;
-	color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
-	background: var(--vscode-button-secondaryBackground, transparent);
-	border: 1px solid var(--vscode-button-border, transparent);
+	color: var(--tok-dim);
+	background: transparent;
+	border: 0;
+	border-radius: 2px;
+	font: inherit;
 }
 .tool:hover {
-	background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
 }
 .tool:focus-visible {
 	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
 	outline-offset: 1px;
 }
+.tool svg {
+	flex: none;
+}
+.icon-tool {
+	width: 20px;
+	padding: 0;
+}
+.view-switch {
+	gap: 0;
+	padding: 0 6px;
+}
+.view-switch .view-sep {
+	color: var(--tok-dim);
+	padding: 0 3px;
+}
+.view-switch .view-document,
+.view-switch .view-tree {
+	color: var(--tok-dim);
+}
+.view-switch[aria-pressed="true"] .view-document,
+.view-switch[aria-pressed="false"] .view-tree {
+	color: var(--vscode-foreground);
+}
+.details-toggle .lbl {
+	white-space: nowrap;
+}
+
 .notice {
 	flex: 0 1 auto;
 	min-width: 0;
@@ -619,25 +708,37 @@ body {
 	overflow: auto;
 }
 #inspector {
-	flex: 0 0 300px;
-	min-width: 220px;
+	flex: 0 0 clamp(260px, 30%, 340px);
+	min-width: 0;
 	overflow: auto;
 	padding: 8px 10px 16px;
-	border-left: 1px solid var(--vscode-panel-border);
-	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	background: var(--vscode-editor-background);
 }
 #inspector[hidden] {
 	display: none;
 }
 .meta {
 	padding: 6px 10px;
-	color: var(--vscode-descriptionForeground);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	color: var(--vscode-editor-foreground);
 }
 .schema, .package {
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-family: inherit;
+}
+.meta .keyword {
+	color: var(--tok-keyword);
+}
+.meta .number {
+	color: var(--tok-number);
+}
+.number {
+	color: var(--tok-number);
 }
 .tree {
 	padding: 4px 0 12px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
 }
 .node {
 	outline: none;
@@ -651,7 +752,7 @@ body {
 	padding: 2px 8px 2px 4px;
 }
 .row:hover {
-	background: var(--vscode-list-hoverBackground);
+	background: var(--hover-bg);
 }
 .twisty {
 	grid-column: 1;
@@ -706,13 +807,13 @@ body {
 	color: var(--vscode-foreground);
 }
 .value[data-value-kind="numeric"] {
-	color: var(--vscode-symbolIcon-numberForeground, var(--vscode-symbolIcon-fieldForeground, var(--vscode-foreground)));
+	color: var(--tok-number);
 }
 .value[data-value-kind="textual"] {
-	color: var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground));
+	color: var(--tok-string);
 }
 .value[data-value-kind="boolean"] {
-	color: var(--vscode-symbolIcon-booleanForeground, var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground)));
+	color: var(--tok-keyword);
 }
 .row-meta {
 	grid-column: 3 / -1;
@@ -721,6 +822,7 @@ body {
 	flex-wrap: wrap;
 	gap: 2px 8px;
 	min-width: 0;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
 	font-size: 0.9em;
 	color: var(--vscode-descriptionForeground);
 }
@@ -756,47 +858,16 @@ body {
 	color: var(--vscode-symbolIcon-referenceForeground, var(--vscode-icon-foreground));
 }
 .node:focus-visible > .row {
-	--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground);
-	outline: 1px solid var(--vscode-focusBorder);
-	outline-offset: -1px;
-	background: var(--vscode-list-focusBackground, var(--vscode-list-hoverBackground));
+	box-shadow: inset 2px 0 0 var(--rail);
 }
 .node[data-selected="true"] > .row {
-	--ecuc-selection-fg: var(--vscode-list-activeSelectionForeground);
-	background: var(--vscode-list-activeSelectionBackground);
-	color: var(--ecuc-selection-fg);
-	outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
-	outline-offset: -1px;
+	background: var(--sel-bg);
 }
-body:not(:focus-within) .node[data-selected="true"] > .row {
-	--ecuc-selection-fg: var(--vscode-list-inactiveSelectionForeground);
-	background: var(--vscode-list-inactiveSelectionBackground);
-	color: var(--ecuc-selection-fg);
+#tree:focus-within .node[data-selected="true"] > .row {
+	background: var(--sel-bg-focus);
+	box-shadow: inset 2px 0 0 var(--rail);
 }
-/* Token colours are for the normal background. On a selection they can fall to ~1.2:1
- * (the light theme's green value on the blue selection is the worst case), so the whole
- * selected row uses the theme's selection foreground. The custom property lets the
- * active and inactive states share one rule. */
-:is(.node[data-selected="true"], .node:focus-visible) > .row > .value,
-:is(.node[data-selected="true"], .node:focus-visible) > .row .short,
-:is(.node[data-selected="true"], .node:focus-visible) > .row .variant,
-:is(.node[data-selected="true"], .node:focus-visible) > .row .hex,
-:is(.node[data-selected="true"], .node:focus-visible) > .row .condition,
-:is(.node[data-selected="true"], .node:focus-visible) > .row .annotation,
-:is(.node[data-selected="true"], .node:focus-visible) > .row .context {
-	color: var(--ecuc-selection-fg);
-}
-/* The marker, twisty and kind border are part of the selected/focused row too. */
-:is(.node[data-selected="true"], .node:focus-visible) > .row > .twisty,
-:is(.node[data-selected="true"], .node:focus-visible) > .row .glyph svg {
-	color: var(--ecuc-selection-fg);
-}
-:is(.node[data-selected="true"], .node:focus-visible) > .row.k-module,
-:is(.node[data-selected="true"], .node:focus-visible) > .row.k-container,
-:is(.node[data-selected="true"], .node:focus-visible) > .row.k-parameter,
-:is(.node[data-selected="true"], .node:focus-visible) > .row.k-reference {
-	border-left-color: var(--ecuc-selection-fg);
-}
+/* Selection never recolours syntax; the tint, active line number and rail carry the state. */
 .children {
 	margin-left: 14px;
 	border-left: 1px solid var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, #80808040));
@@ -812,25 +883,25 @@ body:not(:focus-within) .node[data-selected="true"] > .row {
 	to { background: transparent; }
 }
 .short {
-	color: var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground));
+	color: var(--tok-string);
 }
 .keyword {
-	color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground));
+	color: var(--tok-keyword);
 }
 .variant {
-	color: var(--vscode-symbolIcon-enumeratorForeground, var(--vscode-foreground));
+	color: var(--tok-meta);
 }
 .condition {
 	padding: 0 4px;
 	border: 1px solid var(--vscode-panel-border, transparent);
 	border-radius: 3px;
-	color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground));
+	color: var(--tok-meta);
 }
 .annotation {
 	padding: 0 4px;
 	border: 1px solid var(--vscode-panel-border, transparent);
 	border-radius: 3px;
-	color: var(--vscode-descriptionForeground);
+	color: var(--tok-comment);
 	font-style: italic;
 }
 .row.k-parameter > .value {
@@ -846,6 +917,9 @@ body:not(:focus-within) .node[data-selected="true"] > .row {
 	min-width: 12ch;
 	padding: 0 2px;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: inherit;
+	line-height: inherit;
+	vertical-align: baseline;
 	color: var(--vscode-input-foreground);
 	background: var(--vscode-input-background);
 	border: 1px solid var(--vscode-focusBorder);
@@ -853,32 +927,60 @@ body:not(:focus-within) .node[data-selected="true"] > .row {
 .value-edit[aria-invalid="true"] {
 	border-color: var(--vscode-editorError-foreground, var(--vscode-errorForeground));
 }
+.value-error {
+	margin-left: 1ch;
+	color: var(--vscode-errorForeground);
+	font-style: italic;
+	white-space: pre-wrap;
+}
+.punct {
+	color: var(--tok-punct);
+}
 .target {
-	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
-	text-decoration: underline;
+	color: var(--vscode-editor-foreground);
+	text-decoration: none;
 	cursor: pointer;
 }
-.context, .hex {
-	color: var(--vscode-descriptionForeground);
+.target:hover .value-text {
+	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.context {
+	color: var(--vscode-editor-foreground);
+}
+.context .keyword {
+	color: var(--tok-keyword);
+}
+.hex {
+	color: var(--tok-number);
 }
 mark {
 	color: var(--vscode-editor-findMatchForeground, var(--vscode-foreground));
 	background: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground));
 }
 .empty {
-	padding: 36px 20px;
-	text-align: center;
-	color: var(--vscode-descriptionForeground);
+	padding: 0;
+	text-align: left;
+	color: var(--tok-comment);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
+	font-style: italic;
 }
 .empty[hidden] {
 	display: none;
 }
 .empty p {
-	margin: 0 0 10px;
+	margin: 0;
+}
+.empty .tool {
+	margin-left: 1ch;
+	font-style: normal;
 }
 .inspector-empty {
 	padding: 6px 0;
-	color: var(--vscode-descriptionForeground);
+	color: var(--tok-dim);
 }
 .inspector-empty p {
 	margin: 0 0 6px;
@@ -887,13 +989,16 @@ mark {
 	font-size: 0.9em;
 }
 .inspector-kind {
-	font-size: 0.8em;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--vscode-descriptionForeground);
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 11px;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--tok-dim);
 }
 .inspector-label {
 	margin: 2px 0 10px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
 	font-weight: 600;
 	word-break: break-word;
 }
@@ -903,16 +1008,19 @@ mark {
 .inspector-key {
 	display: block;
 	margin-bottom: 2px;
-	font-size: 0.75em;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: var(--vscode-descriptionForeground);
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 11px;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--tok-dim);
 }
 .inspector-code {
 	margin: 0;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: 1.4;
 	white-space: pre-wrap;
-	word-break: break-word;
+	overflow-wrap: anywhere;
 }
 .inspector-actions {
 	display: flex;
@@ -920,19 +1028,32 @@ mark {
 	gap: 4px;
 	margin-top: 12px;
 }
-/* Document view: an editor-like text surface over the same tree DOM. The tree
- * chrome (chips, per-row borders, two-line grid, value underlines) is absent;
- * see the document-editor-look task design. */
+/* Document view: quiet source. One editor surface, a real source-line gutter,
+ * and hover/focus affordances. Tree view keeps its grid; document selectors are
+ * scoped. See docs/ECUC_EDITOR_DESIGN_SPEC.md. */
+body[data-view="document"] .document {
+	--ln-w: calc(var(--ln-digits, 4) * 1ch + 1ch);
+	--gut: calc(var(--ln-w) + 4ch);
+	--indent: 4ch;
+}
 body[data-view="document"] #tree {
+	position: relative;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--vscode-editor-font-size, 14px);
-	line-height: 1.5;
-	padding: 8px 0 24px 3.5ch;
+	font-size: var(--ecuc-fs);
+	font-weight: var(--vscode-editor-font-weight, normal);
+	line-height: var(--ecuc-lh);
+	font-variant-ligatures: none;
+	tab-size: 4;
+	white-space: pre;
+	padding: calc(var(--ecuc-lh) * 0.5) 2ch calc(var(--ecuc-lh) * 3) var(--gut);
+	scroll-padding-left: var(--gut);
 }
 body[data-view="document"] .meta {
-	padding: 4px 0 2px 3.5ch;
+	padding: calc(var(--ecuc-lh) * 0.5) 0 0 var(--gut);
+	margin-bottom: var(--ecuc-lh);
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--vscode-editor-font-size, 14px);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
 	color: var(--vscode-editor-foreground);
 }
 body[data-view="document"] .schema,
@@ -940,20 +1061,62 @@ body[data-view="document"] .package {
 	font-family: inherit;
 }
 body[data-view="document"] .meta .keyword {
-	color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-editor-foreground));
+	color: var(--tok-keyword);
+}
+body[data-view="document"] .meta .number {
+	color: var(--tok-number);
 }
 body[data-view="document"] .row {
-	position: relative;
 	display: flex;
 	flex-wrap: nowrap;
 	gap: 1ch;
 	align-items: baseline;
 	padding: 0;
+	margin-left: calc(-1 * var(--gut));
+	padding-left: var(--gut);
 	border: 0;
 	background: transparent;
 }
+body[data-view="document"] .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent)));
+	padding-left: calc(var(--gut) + var(--indent));
+}
+body[data-view="document"] .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 2));
+	padding-left: calc(var(--gut) + var(--indent) * 2);
+}
+body[data-view="document"] .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 3));
+	padding-left: calc(var(--gut) + var(--indent) * 3);
+}
+body[data-view="document"] .children .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 4));
+	padding-left: calc(var(--gut) + var(--indent) * 4);
+}
+body[data-view="document"] .children .children .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 5));
+	padding-left: calc(var(--gut) + var(--indent) * 5);
+}
+body[data-view="document"] .children .children .children .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 6));
+	padding-left: calc(var(--gut) + var(--indent) * 6);
+}
+body[data-view="document"] .row::before {
+	content: attr(data-line);
+	position: absolute;
+	left: 0;
+	width: var(--ln-w);
+	text-align: right;
+	color: var(--vscode-editorLineNumber-foreground, var(--tok-dim));
+	font-variant-numeric: tabular-nums;
+	pointer-events: none;
+}
+body[data-view="document"] .node[data-selected="true"] > .row::before,
+body[data-view="document"] .node:focus-visible > .row::before {
+	color: var(--vscode-editorLineNumber-activeForeground, var(--tok-keyword));
+}
 body[data-view="document"] .node:hover > .row {
-	background: transparent;
+	background: var(--hover-bg);
 }
 body[data-view="document"] .row.k-module,
 body[data-view="document"] .row.k-container,
@@ -964,30 +1127,36 @@ body[data-view="document"] .row.k-reference {
 body[data-view="document"] .glyph {
 	display: none;
 }
-/* The twisty lives in the gutter, not in the text flow, so labels align on
- * exact 4ch steps and the brace returns to the parent text start. */
+/* The twisty lives in the fold column of the gutter, not in the text flow. */
 body[data-view="document"] .twisty,
 body[data-view="document"] .spacer {
 	position: absolute;
-	left: -2.2ch;
-	top: 0.1em;
-	width: 1.2ch;
-	height: 1.2em;
+	left: calc(var(--ln-w) + 1ch);
+	width: 2ch;
+	height: var(--ecuc-lh);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	margin: 0;
 	padding: 0;
-	flex: none;
 }
 body[data-view="document"] .twisty svg {
-	width: 8px;
-	height: 8px;
+	width: 10px;
+	height: 10px;
 }
-/* Keep the document free of list-like markers; the toggle appears on hover/focus. */
-body[data-view="document"] .twisty {
+body[data-view="document"] #tree:not(:hover):not(:focus-within) .node[aria-expanded="true"] > .row > .twisty {
 	opacity: 0;
 }
-body[data-view="document"] .row:hover .twisty,
-body[data-view="document"] .node:focus-visible > .row .twisty {
+body[data-view="document"] .node[aria-expanded="false"] > .row > .twisty {
 	opacity: 1;
+}
+body[data-view="document"] .node[aria-expanded="false"] > .row::after {
+	content: " { … }";
+	color: var(--tok-punct);
+}
+body[data-view="document"] .node[data-kind="parameter"][data-selected="true"] > .row::after {
+	content: "  F2";
+	color: var(--tok-dim);
 }
 body[data-view="document"] .label {
 	flex: 0 0 auto;
@@ -997,6 +1166,10 @@ body[data-view="document"] .label {
 	font-weight: 400;
 	color: var(--vscode-editor-foreground);
 }
+body[data-view="document"] .node[data-kind="parameter"] > .row > .label,
+body[data-view="document"] .node[data-kind="reference"] > .row > .label {
+	color: var(--tok-key);
+}
 body[data-view="document"] .value {
 	flex: 0 0 auto;
 	margin: 0;
@@ -1005,14 +1178,20 @@ body[data-view="document"] .value {
 	text-overflow: clip;
 	white-space: pre;
 }
+body[data-view="document"] .node[data-kind="parameter"] > .row > .value:hover {
+	background: var(--vscode-toolbar-hoverBackground, var(--hover-bg));
+	border-radius: 2px;
+	cursor: text;
+}
 body[data-view="document"] .row-meta {
 	display: flex;
 	flex: 0 0 auto;
 	flex-wrap: nowrap;
 	gap: 1ch;
 	margin: 0;
+	font-family: inherit;
 	font-size: inherit;
-	color: var(--vscode-descriptionForeground);
+	color: var(--vscode-editor-foreground);
 	white-space: pre;
 }
 body[data-view="document"] .row-meta > span {
@@ -1020,6 +1199,29 @@ body[data-view="document"] .row-meta > span {
 	overflow: visible;
 	white-space: pre;
 	margin: 0;
+}
+body[data-view="document"] .variant,
+body[data-view="document"] .condition {
+	color: var(--tok-meta);
+}
+body[data-view="document"] .annotation {
+	color: var(--tok-comment);
+	font-style: italic;
+}
+body[data-view="document"] .hex {
+	color: var(--tok-number);
+}
+body[data-view="document"] .context {
+	color: var(--vscode-editor-foreground);
+}
+body[data-view="document"] .target {
+	color: var(--vscode-editor-foreground);
+	text-decoration: none;
+}
+body[data-view="document"] .target:hover .value-text {
+	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
+	text-decoration: underline;
+	text-underline-offset: 3px;
 }
 body[data-view="document"] .condition,
 body[data-view="document"] .annotation {
@@ -1035,33 +1237,17 @@ body[data-view="document"] .annotation::after {
 }
 body[data-view="document"] .row.k-module .label::before {
 	content: "module ";
-	color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground));
-}
-body[data-view="document"] .variant,
-body[data-view="document"] .condition,
-body[data-view="document"] .context {
-	color: var(--vscode-descriptionForeground);
-}
-body[data-view="document"] .hex {
-	color: var(--vscode-symbolIcon-numberForeground, var(--vscode-foreground));
-}
-body[data-view="document"] .target {
-	color: var(--vscode-editor-foreground);
-	text-decoration: none;
-}
-body[data-view="document"] .target:hover {
-	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
-	text-decoration: underline;
+	color: var(--tok-keyword);
 }
 body[data-view="document"] .children {
-	margin-left: 4ch;
+	margin-left: var(--indent);
 	border-left: 0;
 }
 body[data-view="document"] .children::before,
 body[data-view="document"] .children::after {
 	display: block;
-	margin-left: -4ch;
-	color: var(--vscode-descriptionForeground);
+	margin-left: calc(-1 * var(--indent));
+	color: var(--tok-punct);
 	white-space: pre;
 }
 body[data-view="document"] .children::before {
@@ -1070,17 +1256,19 @@ body[data-view="document"] .children::before {
 body[data-view="document"] .children::after {
 	content: "}";
 }
-/* A document selection is a quiet line highlight, not the list's blue bar. */
-body[data-view="document"] .node[data-selected="true"] > .row,
-body[data-view="document"] .node:focus-visible > .row {
-	--ecuc-selection-fg: var(--vscode-editor-foreground);
-	background: var(--vscode-editor-lineHighlightBackground, var(--vscode-list-inactiveSelectionBackground));
-	outline: none;
+body[data-view="document"] #tree > .node + .node {
+	margin-top: var(--ecuc-lh);
+}
+body[data-view="document"] .node[data-selected="true"] > .row {
+	background: var(--sel-bg);
+}
+body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
+	background: var(--sel-bg-focus);
+	box-shadow: inset 2px 0 0 var(--rail);
 }
 body[data-view="document"] .node:focus-visible > .row {
-	box-shadow: inset 2px 0 0 var(--vscode-focusBorder);
+	box-shadow: inset 2px 0 0 var(--rail);
 }
-/* Values are text in Document view: no dotted underline or hover pencil. */
 body[data-view="document"] .row.k-parameter > .value {
 	border-bottom: 0;
 }
@@ -1088,56 +1276,102 @@ body[data-view="document"] .row.k-parameter:hover > .value::after {
 	content: none;
 }
 body[data-view="document"] .value-edit {
-	padding: 0 2px;
+	padding: 0 0.5ch;
 	font-size: inherit;
 	line-height: inherit;
 	vertical-align: baseline;
 }
-/* A slimmer document bar; the actions and Tree view are unchanged. */
-body[data-view="document"] .toolbar {
-	min-height: 0;
-	padding: 3px 8px;
-	gap: 3px 4px;
+body[data-view="document"] .empty {
+	padding: 0 2ch 0 var(--gut);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
+	color: var(--tok-comment);
+	font-style: italic;
 }
-body[data-view="document"] .filter-wrap {
-	max-width: 240px;
+body[data-view="document"] .empty p {
+	margin: 0;
 }
-body[data-view="document"] .toolbar .filter {
-	max-width: 240px;
-	height: 22px;
-	font-size: 12px;
-	border-color: transparent;
-	background: var(--vscode-input-background);
-	border-radius: 2px;
+body[data-view="document"] .empty .tool {
+	margin-left: 1ch;
+	font-style: normal;
 }
-body[data-view="document"] .toolbar .tool {
-	padding: 2px 6px;
-	border: 0;
+body[data-view="document"] #tree:not(:has([role="treeitem"]:not([style*="display: none"]))) {
+	padding-top: 0;
+	padding-bottom: 0;
+}
+@media (forced-colors: active) {
+	body[data-view="document"] .node[data-selected="true"] > .row,
+	body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
+		background: transparent;
+		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
+		outline-offset: -1px;
+	}
+	body[data-view="document"] .node:hover > .row {
+		background: transparent;
+		outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
+		outline-offset: -1px;
+	}
+	body[data-view="document"] .node:focus-visible > .row {
+		box-shadow: none;
+		outline: 2px solid var(--vscode-focusBorder);
+		outline-offset: -2px;
+	}
+}
+body.vscode-high-contrast[data-view="document"] .node[data-selected="true"] > .row,
+body.vscode-high-contrast[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
 	background: transparent;
-	font-size: 11px;
-	color: var(--vscode-descriptionForeground);
+	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
+	outline-offset: -1px;
 }
-body[data-view="document"] .toolbar .tool:hover {
-	color: var(--vscode-foreground);
-	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+body.vscode-high-contrast[data-view="document"] .node:hover > .row {
+	background: transparent;
+	outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
+	outline-offset: -1px;
 }
-body[data-view="document"] .toolbar .count {
-	font-size: 11px;
-}
-body[data-view="document"] :is(.node[data-selected="true"], .node:focus-visible) > .row > .label,
-body[data-view="document"] :is(.node[data-selected="true"], .node:focus-visible) > .row > .label::before {
-	color: var(--ecuc-selection-fg);
+body.vscode-high-contrast[data-view="document"] .node:focus-visible > .row {
+	box-shadow: none;
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: -2px;
 }
 @media (max-width: 720px) {
+	body[data-view="document"] .document {
+		--ln-w: 0ch;
+		--gut: 3ch;
+		--indent: 3ch;
+	}
+	body[data-view="document"] .row::before {
+		display: none;
+	}
+	body[data-view="document"] .twisty,
+	body[data-view="document"] .spacer {
+		left: 0;
+	}
+	.toolbar {
+		padding: 0 4px;
+		gap: 3px;
+	}
+	.filter-wrap {
+		flex: 1 1 0;
+	}
+	.count,
+	.notice,
+	.grow,
+	.details-toggle .lbl {
+		display: none;
+	}
+	.tool {
+		padding: 0 4px;
+	}
 	#content {
 		flex-direction: column;
 	}
 	#inspector {
 		flex: 0 0 auto;
 		min-width: 0;
-		max-height: 42%;
+		max-height: 45vh;
 		border-left: 0;
-		border-top: 1px solid var(--vscode-panel-border);
+		border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 	}
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1153,10 +1387,10 @@ body[data-view="document"] :is(.node[data-selected="true"], .node:focus-visible)
 /**
  * Keyboard traversal, activation, collapse and the message bridge. There is no `ready`
  * message: the initial model is already in the HTML, and a re-scan swaps the region
- * whole, so a first-paint push would only be a second update path (design §3). `vscode`
+ * whole, so a first-paint push would only be a second update path (design Â§3). `vscode`
  * is declared once above, because `acquireVsCodeApi` may only be called once per page.
  *
- * Interaction model (UX child design §2): a click selects, the twisty toggles, a double
+ * Interaction model (UX child design Â§2): a click selects, the twisty toggles, a double
  * click or Ctrl/Alt+Enter reveals, Enter is toggle-or-reveal, Space selects only. The
  * value widget's handlers are registered before these and claim their events with
  * `stopImmediatePropagation`, so nothing here runs for an interaction it owns.
@@ -1264,8 +1498,8 @@ function updateInspector() {
 		: allItems().find((candidate) => candidate.dataset.nodeId === selectedId);
 	if (!item) {
 		const empty = inspectorElement('div', 'inspector-empty');
-		empty.appendChild(inspectorElement('p', '', 'Select a node to see its details.'));
-		empty.appendChild(inspectorElement('p', 'inspector-hint', 'Double-click a row to reveal it in the source.'));
+		empty.appendChild(inspectorElement('p', '', 'Select a line to see its details.'));
+		empty.appendChild(inspectorElement('p', 'inspector-hint', 'Click a line or press Space.'));
 		inspector.appendChild(empty);
 		return;
 	}
@@ -1382,7 +1616,7 @@ function prune() {
 /**
  * The one place that writes \`aria-expanded\`, and therefore the one place that decides
  * what is visible. \`expandedOverride\` carries the ancestors of filter matches, which are
- * shown while a filter is active without touching the collapsed set (design §4.4).
+ * shown while a filter is active without touching the collapsed set (design Â§4.4).
  */
 function applyCollapsed(expandedOverride) {
 	for (const item of allItems()) {
@@ -1420,7 +1654,7 @@ function rowHeight() {
 	return measured > 0 ? measured : 20;
 }
 
-/** Type-ahead over the visible labels, with a 2 s window (design §8). */
+/** Type-ahead over the visible labels, with a 2 s window (design Â§8). */
 function typeAheadJump(character) {
 	const now = Date.now();
 	typeAhead.text = (now - typeAhead.at > 2000 ? '' : typeAhead.text) + character.toLowerCase();
@@ -1437,7 +1671,7 @@ function typeAheadJump(character) {
 	}
 }
 
-/** A click selects; the twisty toggles; the target follows (UX child design §2). */
+/** A click selects; the twisty toggles; the target follows (UX child design Â§2). */
 function onRowClick(event) {
 	if (!(event.target instanceof Element)) {
 		return;
@@ -1459,7 +1693,7 @@ function onRowClick(event) {
 	selectItem(item);
 }
 
-/** A double click is the deliberate reveal (UX child design §2). */
+/** A double click is the deliberate reveal (UX child design Â§2). */
 function onRowDoubleClick(event) {
 	if (!(event.target instanceof Element)) {
 		return;
@@ -1506,7 +1740,7 @@ function onTreeKeydown(event) {
 	} else if (event.key === 'Enter') {
 		event.preventDefault();
 		// A leaf has nothing to toggle, so revealing it is the only useful action; a
-		// container is revealed with Ctrl/Alt+Enter or a double click (design §2).
+		// container is revealed with Ctrl/Alt+Enter or a double click (design Â§2).
 		if (event.ctrlKey || event.altKey) {
 			revealItem(item);
 		} else if (group) {
@@ -1548,7 +1782,6 @@ function applyView() {
 	}
 	const isDocument = viewState.view === 'document';
 	viewToggle.setAttribute('aria-pressed', isDocument ? 'true' : 'false');
-	viewToggle.textContent = isDocument ? 'Tree' : 'Document';
 	viewToggle.title = isDocument ? 'Switch to tree view' : 'Switch to document view';
 }
 
@@ -1559,6 +1792,7 @@ function applyInspectorVisibility() {
 	inspector.hidden = viewState.inspectorHidden === true;
 	detailsToggle.setAttribute('aria-pressed', inspector.hidden ? 'false' : 'true');
 	detailsToggle.title = inspector.hidden ? 'Show node details' : 'Hide node details';
+	detailsToggle.setAttribute('aria-label', inspector.hidden ? 'Show node details' : 'Hide node details');
 }
 
 if (viewToggle) {

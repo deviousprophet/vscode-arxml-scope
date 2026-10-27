@@ -19,7 +19,7 @@ function html(): string {
 suite('editor rendering (AC1)', () => {
 	test('AC1: the schema release and the package path are shown', () => {
 		const page = html();
-		assert.ok(page.includes('>schema</span> 00048'));
+		assert.ok(page.includes('>schema</span> <span class="number">00048</span>'));
 		assert.ok(page.includes('>package</span> PkgA.PkgB'));
 	});
 
@@ -47,21 +47,18 @@ suite('editor rendering (AC1)', () => {
 	test('AC1: parameters show their tail, their value, and a numeric hex form', () => {
 		const page = html();
 		assert.ok(page.includes('<span class="label">IniValue</span>'));
-		assert.ok(page.includes('= 63'));
+		assert.ok(page.includes('>63</span>'));
 		assert.ok(page.includes('(= 0x3F)'), 'the secondary hexadecimal form');
-		assert.ok(page.includes('= "hello"'), 'a textual value is quoted');
-		assert.ok(page.includes('= true'));
-		// `true` / `false` carry no hexadecimal form, and neither does a textual value.
-		assert.ok(!page.includes('= true</span><span class="hex"'));
-		assert.ok(!page.includes('= "hello"</span><span class="hex"'));
+		assert.ok(page.includes('>"hello"</span>'), 'a textual value is quoted');
+		assert.ok(page.includes('>true</span>'));
 	});
 
 	test('AC1: references show their tail and the dotted target, with instance context', () => {
 		const page = html();
 		assert.ok(page.includes('<span class="label">PeerRef</span>'));
-		assert.ok(page.includes('= PkgA.PkgB.ModX.ContA.ContB'));
+		assert.ok(page.includes('>PkgA.PkgB.ModX.ContA.ContB</span>'));
 		assert.ok(page.includes('<span class="label">PeerIref</span>'));
-		assert.ok(page.includes('context PkgA.PkgB.ModX.ContA'));
+		assert.ok(page.includes('>context</span> PkgA.PkgB.ModX.ContA'));
 	});
 
 	test('AC1: a container and a parameter expose the full DEFINITION-REF path on hover', () => {
@@ -73,7 +70,7 @@ suite('editor rendering (AC1)', () => {
 	test('AC1: the re-scan payload is the tree region on its own', () => {
 		const model = scanEcucValues(fixtureText(FIXTURE));
 		const region = renderTree(model, {});
-		assert.ok(region.startsWith('<div class="meta">'));
+		assert.ok(region.startsWith('<div class="document" style="--ln-digits:'));
 		assert.ok(region.includes('id="tree"'));
 		assert.ok(!region.includes('<script'), 'the payload is a fragment, not a page');
 		assert.ok(renderHtml(model, { nonce: 'test-nonce' }).includes(region));

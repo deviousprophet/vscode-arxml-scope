@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>ECUC editor prototype</title>
+<style>
+/* PLACEHOLDER THEME VARIABLES: stand-ins for VS Code's --vscode-* values so this page renders outside VS Code.
+   Production uses the real variables; do not copy these values. */
+[data-theme=dark]{--vscode-editor-background:#1e1e1e;--vscode-editor-foreground:#d4d4d4;--vscode-editorLineNumber-foreground:#858585;--vscode-editorLineNumber-activeForeground:#c6c6c6;--vscode-debugTokenExpression-name:#c586c0;--vscode-debugTokenExpression-string:#ce9178;--vscode-debugTokenExpression-boolean:#4e94ce;--vscode-debugTokenExpression-number:#b5cea8;--vscode-charts-green:#89d185;--vscode-symbolIcon-variableForeground:#75beff;--vscode-list-hoverBackground:#2a2d2e;--vscode-list-inactiveSelectionBackground:#37373d;--vscode-list-activeSelectionBackground:#094771;--vscode-focusBorder:#007fd4;--vscode-input-background:#3c3c3c;--vscode-inputValidation-errorBorder:#be1100;--vscode-errorForeground:#f48771;--vscode-editorGroup-border:#444;--vscode-textLink-foreground:#3794ff;--vscode-toolbar-hoverBackground:#5a5d5e50;--vscode-foreground:#ccc;--vscode-editorIndentGuide-background1:#404040}
+[data-theme=light]{--vscode-editor-background:#fff;--vscode-editor-foreground:#1f1f1f;--vscode-editorLineNumber-foreground:#6e7681;--vscode-editorLineNumber-activeForeground:#0b216f;--vscode-debugTokenExpression-name:#9b46b0;--vscode-debugTokenExpression-string:#a31515;--vscode-debugTokenExpression-boolean:#0000ff;--vscode-debugTokenExpression-number:#098658;--vscode-charts-green:#388a34;--vscode-symbolIcon-variableForeground:#007acc;--vscode-list-hoverBackground:#f0f0f0;--vscode-list-inactiveSelectionBackground:#e4e6f1;--vscode-list-activeSelectionBackground:#0060c0;--vscode-focusBorder:#0090f1;--vscode-input-background:#fff;--vscode-inputValidation-errorBorder:#be1100;--vscode-errorForeground:#a1260d;--vscode-editorGroup-border:#e5e5e5;--vscode-textLink-foreground:#006ab1;--vscode-toolbar-hoverBackground:#b8b8b850;--vscode-foreground:#3b3b3b;--vscode-editorIndentGuide-background1:#d3d3d3}
+[data-theme=hc]{--vscode-editor-background:#000;--vscode-editor-foreground:#fff;--vscode-editorLineNumber-foreground:#fff;--vscode-editorLineNumber-activeForeground:#fff;--vscode-debugTokenExpression-name:#d7a0f0;--vscode-debugTokenExpression-string:#ce9178;--vscode-debugTokenExpression-boolean:#569cd6;--vscode-debugTokenExpression-number:#b5cea8;--vscode-charts-green:#89d185;--vscode-symbolIcon-variableForeground:#9cdcfe;--vscode-focusBorder:#f38518;--vscode-input-background:#000;--vscode-inputValidation-errorBorder:#f48771;--vscode-errorForeground:#f48771;--vscode-editorGroup-border:#6fc3df;--vscode-contrastBorder:#6fc3df;--vscode-contrastActiveBorder:#f38518;--vscode-textLink-foreground:#21a6ff;--vscode-foreground:#fff;--vscode-editorIndentGuide-background1:#fff6}
+
+body{margin:0;padding:16px;background:#2b2b2b;color:#ccc;font:13px system-ui,sans-serif}
+h2{font:600 12px system-ui;margin:22px 0 6px;color:#aaa}
+.frame{--w:860px;width:var(--w);max-width:100%;container-type:inline-size;border:1px solid #555}
+.inner{--ecuc-fs:13px;--ecuc-lh:calc(var(--ecuc-fs) * 1.55);
+ --tok-keyword:var(--vscode-debugTokenExpression-boolean,var(--vscode-editor-foreground));
+ --tok-string:var(--vscode-debugTokenExpression-string,var(--vscode-editor-foreground));
+ --tok-number:var(--vscode-debugTokenExpression-number,var(--vscode-editor-foreground));
+ --tok-meta:var(--vscode-debugTokenExpression-name,var(--vscode-editor-foreground));
+ --tok-comment:color-mix(in srgb,var(--vscode-charts-green,var(--vscode-editor-foreground)) 85%,var(--vscode-editor-background));
+ --tok-key:var(--vscode-symbolIcon-variableForeground,var(--vscode-editor-foreground));
+ --tok-punct:color-mix(in srgb,var(--vscode-editor-foreground) 70%,var(--vscode-editor-background));
+ --tok-dim:color-mix(in srgb,var(--vscode-editor-foreground) 55%,var(--vscode-editor-background));
+ --hover-bg:var(--vscode-list-hoverBackground,transparent);
+ --sel-bg:var(--vscode-list-inactiveSelectionBackground,transparent);
+ --sel-bg-focus:color-mix(in srgb,var(--vscode-list-activeSelectionBackground,transparent) 45%,transparent);
+ --rail:var(--vscode-focusBorder,var(--vscode-editor-foreground));
+ background:var(--vscode-editor-background);color:var(--vscode-editor-foreground)}
+.strip{display:flex;align-items:center;gap:6px;height:26px;padding:0 8px;font:12px system-ui,sans-serif;color:var(--tok-dim);border-bottom:1px solid var(--vscode-editorGroup-border)}
+.strip .f{flex:0 1 28ch;min-width:0;height:20px;box-sizing:border-box;padding:0 6px;display:flex;align-items:center;border:1px solid transparent;border-radius:2px}
+.strip .f.on{background:var(--vscode-input-background);color:var(--vscode-editor-foreground);outline:1px solid var(--vscode-focusBorder)}
+.strip .sp{flex:1}
+.strip button,.strip .seg span{all:unset;box-sizing:border-box;height:20px;padding:0 6px;display:inline-flex;align-items:center;border-radius:2px;cursor:pointer}
+.strip .seg{display:inline-flex}.strip .seg .a{color:var(--vscode-foreground)}
+.strip .on-t{color:var(--vscode-foreground);background:var(--vscode-toolbar-hoverBackground)}
+.main{display:flex}
+.doc{position:relative;flex:1;min-width:0;overflow-x:auto;--ln-w:5ch;--gut:calc(var(--ln-w) + 4ch);padding:calc(var(--ecuc-lh)*.5) 2ch calc(var(--ecuc-lh)*1.5) 0;
+ font:var(--ecuc-fs)/var(--ecuc-lh) Consolas,"Courier New",monospace;white-space:pre;font-variant-ligatures:none;tab-size:4}
+.row{padding-left:calc(var(--gut) + var(--d,0) * 4ch);min-height:var(--ecuc-lh)}
+.row::before{content:attr(data-ln);position:absolute;left:0;width:var(--ln-w);text-align:right;color:var(--vscode-editorLineNumber-foreground,var(--tok-dim))}
+.row:hover{background:var(--hover-bg)}
+.row.sel{background:var(--sel-bg)}.row.sel.foc{background:var(--sel-bg-focus);box-shadow:inset 2px 0 0 var(--rail)}
+.row.sel::before{color:var(--vscode-editorLineNumber-activeForeground,var(--tok-dim))}
+.tw{position:absolute;left:calc(var(--ln-w) + 1ch);width:2ch;text-align:center;color:var(--tok-dim)}
+.doc:not(:hover) .tw.o{opacity:0}
+.k{color:var(--tok-keyword)}.s{color:var(--tok-string)}.n{color:var(--tok-number)}.m{color:var(--tok-meta)}
+.c{color:var(--tok-comment);font-style:italic}.key{color:var(--tok-key)}.p{color:var(--tok-punct)}.h{color:var(--tok-dim)}
+.tgt.hov{text-decoration:underline;text-decoration-color:var(--vscode-textLink-foreground);text-underline-offset:3px;cursor:pointer}
+.edit{display:inline-block;min-width:6ch;padding:0 .5ch;background:var(--vscode-input-background);outline:1px solid var(--vscode-focusBorder);border-radius:2px}
+.edit.bad{outline-color:var(--vscode-inputValidation-errorBorder)}
+.err{color:var(--vscode-errorForeground);font-style:italic}
+.coll::after{content:" { … }";color:var(--tok-punct)}
+.insp{flex:0 0 clamp(240px,32%,340px);border-left:1px solid var(--vscode-editorGroup-border);padding:10px 12px;font:12px system-ui,sans-serif;box-sizing:border-box}
+.insp dt{color:var(--tok-dim);font-size:11px;margin-top:9px}
+.insp dd{margin:2px 0 0;font:13px Consolas,monospace;overflow-wrap:anywhere}
+.insp .empty{color:var(--tok-dim)}
+.insp .acts{display:flex;gap:4px;margin-top:14px;flex-wrap:wrap}
+.insp .acts span{padding:2px 6px;border-radius:2px;color:var(--vscode-textLink-foreground)}
+/* tree view (surface aligned; structure unchanged) */
+.tree{flex:1;padding:6px 0;font:13px Consolas,monospace}
+.t{display:grid;grid-template-columns:26ch 1fr;padding:2px 8px 2px calc(8px + var(--d,0) * 2ch);min-height:34px;align-items:center}
+.t.sel{background:var(--sel-bg-focus);box-shadow:inset 2px 0 0 var(--rail)}
+.t .l{display:flex;gap:6px;align-items:center}.t .g{width:8px;height:8px;border:1px solid var(--tok-dim);border-radius:2px}
+.chip{border:1px solid var(--vscode-editorGroup-border);border-radius:3px;padding:0 4px;font:11px system-ui;color:var(--tok-dim);margin-left:6px}
+.t .v{text-decoration:underline dotted var(--tok-dim)}
+/* high contrast: outlines, no fills */
+[data-theme=hc] .row.sel,[data-theme=hc] .row.sel.foc{background:none;outline:2px solid var(--vscode-contrastActiveBorder);outline-offset:-2px;box-shadow:none}
+[data-theme=hc] .row:hover{background:none;outline:1px dashed var(--vscode-contrastBorder);outline-offset:-1px}
+/* narrow */
+@container (max-width:720px){
+ .doc{--gut:3ch}.row{padding-left:calc(var(--gut) + var(--d,0) * 3ch)}.row::before{display:none}
+ .strip .lbl,.strip .cnt{display:none}
+}
+</style>
+<body>
+<p style="margin:0 0 4px">ECUC editor design prototype. Placeholder theme values; no remote assets. Production uses real <code>--vscode-*</code> variables.</p>
+<div id="out"></div>
+<script>
+const k=t=>`<span class=k>${t}</span>`,s=t=>`<span class=s>"${t}"</span>`,n=t=>`<span class=n>${t}</span>`,
+ m=t=>`<span class=m>${t}</span>`,c=t=>`<span class=c>/* ${t} */</span>`,key=t=>`<span class=key>${t}</span>`,
+ eq=`<span class=p> = </span>`,tgt=(t,h)=>`<span class="tgt${h?' hov':''}">${t}</span>`;
+function rows(o){
+ const E=o.edit||{}, tw=(c,id)=>`<i class="tw ${c}">${c=='o'?'▾':'▸'}</i>`;
+ return [
+  {h:`${k('schema')} ${n('00048')}`},{h:`${k('package')} PkgA.PkgB`},{h:''},
+  {id:'mod',d:0,ln:12,tw:'o',h:`${k('module')} PkgA.PkgB.ModDefs.ModX ${s('ModX')} ${m('(VariantPreCompile)')} ${m('[(A==B)]')} ${m('&lt;Crit1 == 1 &amp;&amp; Crit2 == 2&gt;')} ${c('[Note] module note')}`},
+  {d:0,h:`<span class=p>{</span>`},
+  {id:'a',d:1,ln:14,tw:'o',h:`ContA ${s('ContA')} ${c('container note')}`},
+  {d:1,h:`<span class=p>{</span>`},
+  {id:'flag',d:2,ln:17,h:`${key('Flag')}${eq}${k('true')}`},
+  {id:'ini',d:2,ln:19,h:E.bad?`${key('IniValue')}${eq}<span class="edit bad">300</span> <span class=err>/* must be 0..255 */</span>`:`${key('IniValue')}${eq}${n('63')} <span class=p>(= ${n('0x3F')})</span>${o.sel=='ini'?' <span class=h aria-hidden=true>  F2</span>':''}`},
+  {id:'title',d:2,ln:21,h:`${key('Title')}${eq}${s('hello')}`},
+  {id:'iref',d:2,ln:23,h:`${key('PeerIref')}${eq}${tgt('PkgA.PkgB.ModX.ContA.ContB')} ${k('context')} PkgA.PkgB.ModX.ContA`},
+  {id:'ref',d:2,ln:26,h:`${key('PeerRef')}${eq}${tgt('PkgA.PkgB.ModX.ContA.ContB',o.hov=='ref')}`},
+  {id:'b',d:2,ln:29,tw:'o',h:`ContB ${s('ContB')}`},{d:2,h:`<span class=p>{</span>`},
+  {id:'txt',d:3,ln:31,h:`${key('Text')}${eq}${s('nested')}`},
+  {d:2,h:`<span class=p>}</span>`},{d:1,h:`<span class=p>}</span>`},
+  {id:'cc',d:1,ln:36,tw:'c',coll:1,h:`ContC ${s('ContC')}`},
+  {d:0,h:`<span class=p>}</span>`}].map(r=>{
+   const cl=['row',r.id&&r.id==o.sel?'sel foc':'',r.coll?'coll':''].join(' ');
+   return `<div class="${cl}" style="--d:${r.d||0}" ${r.ln?`data-ln="${r.ln}"`:''}>${r.tw?tw(r.tw):''}${r.h}</div>`;
+  }).join('');
+}
+function insp(o){
+ if(o.insp=='empty')return `<aside class=insp><div class=empty>Select a line to see its details.<br>Click a line or press Space.</div></aside>`;
+ return `<aside class=insp><dl><dt>Kind</dt><dd>Parameter (numeric)</dd><dt>Definition</dt><dd>/PkgA/PkgB/ModDefs/ModX/ContA/IniValue</dd>
+ <dt>Short name</dt><dd>IniValue</dd><dt>Value</dt><dd>63 (= 0x3F)</dd><dt>Source range</dt><dd>19:9 to 19:41</dd></dl>
+ <div class=acts><span>Reveal in source</span><span>Copy path</span><span>Copy value</span></div></aside>`;
+}
+function tree(){
+ const t=(d,l,v,x,sel)=>`<div class="t${sel?' sel':''}" style="--d:${d}"><span class=l><i class=g></i>${l}</span><span>${v||''}${x||''}</span></div>`;
+ return `<div class=tree>${t(0,'ModX',`<span class=s>"ModX"</span>`,`<span class=chip>VariantPreCompile</span><span class=chip>A==B</span>`)}
+ ${t(1,'ContA',`<span class=s>"ContA"</span>`)}${t(2,key('Flag'),`<span class="v k">true</span>`)}
+ ${t(2,key('IniValue'),`<span class="v n">63</span> <span class=p>(= 0x3F)</span>`,'',1)}
+ ${t(2,key('PeerRef'),'PkgA.PkgB.ModX.ContA.ContB')}${t(2,'ContB',`<span class=s>"ContB"</span>`)}</div>`;
+}
+const strip=(o)=>`<div class=strip><span class="f${o.filter?' on':''}">${o.filter||'Filter'}</span><span class=cnt>${o.filter?'3 of 340':''}</span><span class=sp></span>
+ <button aria-label="Collapse all">⊟</button><button aria-label="Expand all">⊞</button>
+ <span class=seg><span class="${o.view=='tree'?'':'a on-t'}">Document</span><span class="${o.view=='tree'?'a on-t':''}">Tree</span></span>
+ <button class="${o.insp?'on-t':''}"><span class=lbl>Details</span><span style="display:none"></span></button></div>`;
+const F=[
+ ['Document view, dark: selected + focused line, hovered target, collapsed fold',{t:'dark',sel:'ini',hov:'ref'}],
+ ['Document view, light',{t:'light',sel:'ini',hov:'ref'}],
+ ['Document view, high contrast (outlines, no fills)',{t:'hc',sel:'ini',hov:'ref'}],
+ ['Document view, editing with invalid value (reason as trailing comment)',{t:'dark',sel:'ini',edit:{bad:1}}],
+ ['Document view with details panel, selected',{t:'dark',sel:'ini',insp:'sel'}],
+ ['Document view with details panel, empty',{t:'dark',insp:'empty'}],
+ ['Narrow (360px): no line numbers, bottom-sheet details not shown here',{t:'dark',sel:'ini',w:'360px'}],
+ ['Tree view, dark (surface aligned, structure unchanged)',{t:'dark',view:'tree'}]];
+document.getElementById('out').innerHTML=F.map(([title,o])=>
+ `<h2>${title}</h2><div class=frame data-theme=${o.t} style="--w:${o.w||'860px'}"><div class=inner>${strip(o)}
+  <div class=main>${o.view=='tree'?tree():`<div class=doc>${rows(o)}</div>`}${o.insp?insp(o):''}</div></div></div>`).join('');
+</script>
+</body></html>

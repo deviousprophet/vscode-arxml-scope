@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html lang="en" data-preview-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-preview-nonce'; script-src 'nonce-preview-nonce';">
+<style nonce="preview-nonce">
+html, body {
+	height: 100%;
+}
+body {
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: var(--vscode-font-size, 13px);
+	line-height: 1.4;
+	color: var(--vscode-foreground);
+	background: var(--vscode-editor-background);
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+/* Quiet-source tokens: one definition for both views. Plain declarations first are
+ * the fallback for hosts without color-mix; the second declaration refines them. */
+body[data-view] {
+	--ecuc-fs: var(--vscode-editor-font-size, 13px);
+	--ecuc-lh: calc(var(--ecuc-fs) * 1.55);
+	--tok-keyword: var(--vscode-debugTokenExpression-boolean, var(--vscode-editor-foreground));
+	--tok-string: var(--vscode-debugTokenExpression-string, var(--vscode-editor-foreground));
+	--tok-number: var(--vscode-debugTokenExpression-number, var(--vscode-editor-foreground));
+	--tok-meta: var(--vscode-debugTokenExpression-name, var(--vscode-editor-foreground));
+	--tok-comment: var(--vscode-charts-green, var(--vscode-editor-foreground));
+	--tok-comment: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-editor-foreground)) 85%, var(--vscode-editor-background));
+	--tok-key: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
+	--tok-punct: var(--vscode-editor-foreground);
+	--tok-punct: color-mix(in srgb, var(--vscode-editor-foreground) 70%, var(--vscode-editor-background));
+	--tok-dim: var(--vscode-editor-foreground);
+	--tok-dim: color-mix(in srgb, var(--vscode-editor-foreground) 55%, var(--vscode-editor-background));
+	--hover-bg: var(--vscode-list-hoverBackground, transparent);
+	--sel-bg: var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-lineHighlightBackground, transparent));
+	--sel-bg-focus: var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, transparent));
+	--sel-bg-focus: color-mix(in srgb, var(--sel-bg-focus) 45%, transparent);
+	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
+}
+.toolbar {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 6px;
+	align-items: center;
+	height: 26px;
+	padding: 0 8px;
+	flex: none;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 12px;
+	color: var(--tok-dim);
+	background: var(--vscode-editor-background);
+	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.grow {
+	flex: 1 1 auto;
+}
+.filter-wrap {
+	position: relative;
+	display: flex;
+	flex: 0 1 28ch;
+	min-width: 0;
+	max-width: none;
+}
+.filter {
+	width: 100%;
+	min-width: 0;
+	height: 20px;
+	padding: 0 22px 0 6px;
+	font: inherit;
+	color: var(--vscode-editor-foreground);
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 2px;
+}
+.filter:not(:placeholder-shown) {
+	color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+	background: var(--vscode-input-background);
+}
+.filter:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
+	outline-offset: -1px;
+}
+.filter-clear {
+	position: absolute;
+	right: 3px;
+	top: 50%;
+	transform: translateY(-50%);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	font: inherit;
+	line-height: 1;
+	cursor: pointer;
+	color: var(--tok-dim);
+	background: transparent;
+	border: 0;
+	border-radius: 2px;
+}
+.filter-clear[hidden] {
+	display: none;
+}
+.filter-clear:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, transparent);
+}
+.count {
+	padding: 0;
+	border: 0;
+	white-space: nowrap;
+	color: var(--tok-dim);
+	background: transparent;
+	font-size: 12px;
+}
+.count[data-state="none"] {
+	padding: 0;
+	background: transparent;
+}
+.count[data-state="empty"] {
+	color: var(--tok-dim);
+	background: transparent;
+	border-color: transparent;
+}
+.tool {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	height: 20px;
+	padding: 0 6px;
+	cursor: pointer;
+	color: var(--tok-dim);
+	background: transparent;
+	border: 0;
+	border-radius: 2px;
+	font: inherit;
+}
+.tool:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+.tool:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
+	outline-offset: 1px;
+}
+.tool svg {
+	flex: none;
+}
+.icon-tool {
+	width: 20px;
+	padding: 0;
+}
+.view-switch {
+	gap: 0;
+	padding: 0 6px;
+}
+.view-switch .view-sep {
+	color: var(--tok-dim);
+	padding: 0 3px;
+}
+.view-switch .view-document,
+.view-switch .view-tree {
+	color: var(--tok-dim);
+}
+.view-switch[aria-pressed="true"] .view-document,
+.view-switch[aria-pressed="false"] .view-tree {
+	color: var(--vscode-foreground);
+}
+.details-toggle .lbl {
+	white-space: nowrap;
+}
+
+.notice {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--vscode-foreground);
+}
+.notice[data-kind="warn"] {
+	color: var(--vscode-editorWarning-foreground);
+}
+#content {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+#main {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: auto;
+}
+#inspector {
+	flex: 0 0 clamp(260px, 30%, 340px);
+	min-width: 0;
+	overflow: auto;
+	padding: 8px 10px 16px;
+	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	background: var(--vscode-editor-background);
+}
+#inspector[hidden] {
+	display: none;
+}
+.meta {
+	padding: 6px 10px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	color: var(--vscode-editor-foreground);
+}
+.schema, .package {
+	font-family: inherit;
+}
+.meta .keyword {
+	color: var(--tok-keyword);
+}
+.meta .number {
+	color: var(--tok-number);
+}
+.number {
+	color: var(--tok-number);
+}
+.tree {
+	padding: 4px 0 12px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+}
+.node {
+	outline: none;
+}
+.row {
+	display: grid;
+	grid-template-columns: 12px 12px 26ch minmax(0, 1fr);
+	column-gap: 6px;
+	row-gap: 1px;
+	align-items: center;
+	padding: 2px 8px 2px 4px;
+}
+.row:hover {
+	background: var(--hover-bg);
+}
+.twisty {
+	grid-column: 1;
+	grid-row: 1;
+	width: 12px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--vscode-icon-foreground, var(--vscode-foreground));
+}
+.spacer {
+	grid-column: 1;
+	grid-row: 1;
+	width: 12px;
+}
+.twisty svg {
+	transition: transform 120ms ease;
+}
+.node[aria-expanded="true"] > .row > .twisty svg {
+	transform: rotate(90deg);
+}
+.glyph {
+	grid-column: 2;
+	grid-row: 1;
+	width: 12px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--vscode-icon-foreground, var(--vscode-foreground));
+}
+.label {
+	grid-column: 3;
+	grid-row: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 600;
+}
+.row.no-value .label {
+	grid-column: 3 / -1;
+}
+.value {
+	grid-column: 4;
+	grid-row: 1;
+	justify-self: start;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--vscode-foreground);
+}
+.value[data-value-kind="numeric"] {
+	color: var(--tok-number);
+}
+.value[data-value-kind="textual"] {
+	color: var(--tok-string);
+}
+.value[data-value-kind="boolean"] {
+	color: var(--tok-keyword);
+}
+.row-meta {
+	grid-column: 3 / -1;
+	grid-row: 2;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 8px;
+	min-width: 0;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 0.9em;
+	color: var(--vscode-descriptionForeground);
+}
+.row-meta > span {
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.row.k-module {
+	border-left: 2px solid var(--vscode-symbolIcon-moduleForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-foreground)));
+}
+.row.k-container {
+	border-left: 2px solid var(--vscode-symbolIcon-namespaceForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-foreground)));
+}
+.row.k-parameter {
+	border-left: 2px solid var(--vscode-symbolIcon-fieldForeground, var(--vscode-foreground));
+}
+.row.k-reference {
+	border-left: 2px solid var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground));
+}
+.glyph .g-module {
+	color: var(--vscode-symbolIcon-moduleForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-icon-foreground)));
+}
+.glyph .g-container {
+	color: var(--vscode-symbolIcon-namespaceForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-icon-foreground)));
+}
+.glyph .g-parameter {
+	color: var(--vscode-symbolIcon-fieldForeground, var(--vscode-icon-foreground));
+}
+.glyph .g-reference {
+	color: var(--vscode-symbolIcon-referenceForeground, var(--vscode-icon-foreground));
+}
+.node:focus-visible > .row {
+	box-shadow: inset 2px 0 0 var(--rail);
+}
+.node[data-selected="true"] > .row {
+	background: var(--sel-bg);
+}
+#tree:focus-within .node[data-selected="true"] > .row {
+	background: var(--sel-bg-focus);
+	box-shadow: inset 2px 0 0 var(--rail);
+}
+/* Selection never recolours syntax; the tint, active line number and rail carry the state. */
+.children {
+	margin-left: 14px;
+	border-left: 1px solid var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, #80808040));
+}
+.node[aria-expanded="false"] > .children {
+	display: none;
+}
+.node.flash > .row {
+	animation: ecuc-flash 900ms ease-out;
+}
+@keyframes ecuc-flash {
+	from { background: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground)); }
+	to { background: transparent; }
+}
+.short {
+	color: var(--tok-string);
+}
+.keyword {
+	color: var(--tok-keyword);
+}
+.variant {
+	color: var(--tok-meta);
+}
+.condition {
+	padding: 0 4px;
+	border: 1px solid var(--vscode-panel-border, transparent);
+	border-radius: 3px;
+	color: var(--tok-meta);
+}
+.annotation {
+	padding: 0 4px;
+	border: 1px solid var(--vscode-panel-border, transparent);
+	border-radius: 3px;
+	color: var(--tok-comment);
+	font-style: italic;
+}
+.row.k-parameter > .value {
+	cursor: text;
+	border-bottom: 1px dotted var(--vscode-descriptionForeground);
+}
+.row.k-parameter:hover > .value::after {
+	content: "\270E";
+	margin-left: 4px;
+	color: var(--vscode-descriptionForeground);
+}
+.value-edit {
+	min-width: 12ch;
+	padding: 0 2px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: inherit;
+	line-height: inherit;
+	vertical-align: baseline;
+	color: var(--vscode-input-foreground);
+	background: var(--vscode-input-background);
+	border: 1px solid var(--vscode-focusBorder);
+}
+.value-edit[aria-invalid="true"] {
+	border-color: var(--vscode-editorError-foreground, var(--vscode-errorForeground));
+}
+.value-error {
+	margin-left: 1ch;
+	color: var(--vscode-errorForeground);
+	font-style: italic;
+	white-space: pre-wrap;
+}
+.punct {
+	color: var(--tok-punct);
+}
+.target {
+	color: var(--vscode-editor-foreground);
+	text-decoration: none;
+	cursor: pointer;
+}
+.target:hover .value-text {
+	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.context {
+	color: var(--vscode-editor-foreground);
+}
+.context .keyword {
+	color: var(--tok-keyword);
+}
+.hex {
+	color: var(--tok-number);
+}
+mark {
+	color: var(--vscode-editor-findMatchForeground, var(--vscode-foreground));
+	background: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground));
+}
+.empty {
+	padding: 0;
+	text-align: left;
+	color: var(--tok-comment);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
+	font-style: italic;
+}
+.empty[hidden] {
+	display: none;
+}
+.empty p {
+	margin: 0;
+}
+.empty .tool {
+	margin-left: 1ch;
+	font-style: normal;
+}
+.inspector-empty {
+	padding: 6px 0;
+	color: var(--tok-dim);
+}
+.inspector-empty p {
+	margin: 0 0 6px;
+}
+.inspector-hint {
+	font-size: 0.9em;
+}
+.inspector-kind {
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 11px;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--tok-dim);
+}
+.inspector-label {
+	margin: 2px 0 10px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	font-weight: 600;
+	word-break: break-word;
+}
+.inspector-row {
+	margin: 0 0 9px;
+}
+.inspector-key {
+	display: block;
+	margin-bottom: 2px;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 11px;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--tok-dim);
+}
+.inspector-code {
+	margin: 0;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: 1.4;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.inspector-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 12px;
+}
+/* Document view: quiet source. One editor surface, a real source-line gutter,
+ * and hover/focus affordances. Tree view keeps its grid; document selectors are
+ * scoped. See docs/ECUC_EDITOR_DESIGN_SPEC.md. */
+body[data-view="document"] .document {
+	--ln-w: calc(var(--ln-digits, 4) * 1ch + 1ch);
+	--gut: calc(var(--ln-w) + 4ch);
+	--indent: 4ch;
+}
+body[data-view="document"] #tree {
+	position: relative;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	font-weight: var(--vscode-editor-font-weight, normal);
+	line-height: var(--ecuc-lh);
+	font-variant-ligatures: none;
+	tab-size: 4;
+	white-space: pre;
+	padding: calc(var(--ecuc-lh) * 0.5) 2ch calc(var(--ecuc-lh) * 3) var(--gut);
+	scroll-padding-left: var(--gut);
+}
+body[data-view="document"] .meta {
+	padding: calc(var(--ecuc-lh) * 0.5) 0 0 var(--gut);
+	margin-bottom: var(--ecuc-lh);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
+	color: var(--vscode-editor-foreground);
+}
+body[data-view="document"] .schema,
+body[data-view="document"] .package {
+	font-family: inherit;
+}
+body[data-view="document"] .meta .keyword {
+	color: var(--tok-keyword);
+}
+body[data-view="document"] .meta .number {
+	color: var(--tok-number);
+}
+body[data-view="document"] .row {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 1ch;
+	align-items: baseline;
+	padding: 0;
+	margin-left: calc(-1 * var(--gut));
+	padding-left: var(--gut);
+	border: 0;
+	background: transparent;
+}
+body[data-view="document"] .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent)));
+	padding-left: calc(var(--gut) + var(--indent));
+}
+body[data-view="document"] .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 2));
+	padding-left: calc(var(--gut) + var(--indent) * 2);
+}
+body[data-view="document"] .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 3));
+	padding-left: calc(var(--gut) + var(--indent) * 3);
+}
+body[data-view="document"] .children .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 4));
+	padding-left: calc(var(--gut) + var(--indent) * 4);
+}
+body[data-view="document"] .children .children .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 5));
+	padding-left: calc(var(--gut) + var(--indent) * 5);
+}
+body[data-view="document"] .children .children .children .children .children .children .row {
+	margin-left: calc(-1 * (var(--gut) + var(--indent) * 6));
+	padding-left: calc(var(--gut) + var(--indent) * 6);
+}
+body[data-view="document"] .row::before {
+	content: attr(data-line);
+	position: absolute;
+	left: 0;
+	width: var(--ln-w);
+	text-align: right;
+	color: var(--vscode-editorLineNumber-foreground, var(--tok-dim));
+	font-variant-numeric: tabular-nums;
+	pointer-events: none;
+}
+body[data-view="document"] .node[data-selected="true"] > .row::before,
+body[data-view="document"] .node:focus-visible > .row::before {
+	color: var(--vscode-editorLineNumber-activeForeground, var(--tok-keyword));
+}
+body[data-view="document"] .node:hover > .row {
+	background: var(--hover-bg);
+}
+body[data-view="document"] .row.k-module,
+body[data-view="document"] .row.k-container,
+body[data-view="document"] .row.k-parameter,
+body[data-view="document"] .row.k-reference {
+	border-left: 0;
+}
+body[data-view="document"] .glyph {
+	display: none;
+}
+/* The twisty lives in the fold column of the gutter, not in the text flow. */
+body[data-view="document"] .twisty,
+body[data-view="document"] .spacer {
+	position: absolute;
+	left: calc(var(--ln-w) + 1ch);
+	width: 2ch;
+	height: var(--ecuc-lh);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0;
+}
+body[data-view="document"] .twisty svg {
+	width: 10px;
+	height: 10px;
+}
+body[data-view="document"] #tree:not(:hover):not(:focus-within) .node[aria-expanded="true"] > .row > .twisty {
+	opacity: 0;
+}
+body[data-view="document"] .node[aria-expanded="false"] > .row > .twisty {
+	opacity: 1;
+}
+body[data-view="document"] .node[aria-expanded="false"] > .row::after {
+	content: " { ... }";
+	color: var(--tok-punct);
+}
+body[data-view="document"] .node[data-kind="parameter"][data-selected="true"] > .row::after {
+	content: "  F2";
+	color: var(--tok-dim);
+}
+body[data-view="document"] .label {
+	flex: 0 0 auto;
+	overflow: visible;
+	text-overflow: clip;
+	white-space: pre;
+	font-weight: 400;
+	color: var(--vscode-editor-foreground);
+}
+body[data-view="document"] .node[data-kind="parameter"] > .row > .label,
+body[data-view="document"] .node[data-kind="reference"] > .row > .label {
+	color: var(--tok-key);
+}
+body[data-view="document"] .value {
+	flex: 0 0 auto;
+	margin: 0;
+	max-width: none;
+	overflow: visible;
+	text-overflow: clip;
+	white-space: pre;
+}
+body[data-view="document"] .node[data-kind="parameter"] > .row > .value:hover {
+	background: var(--vscode-toolbar-hoverBackground, var(--hover-bg));
+	border-radius: 2px;
+	cursor: text;
+}
+body[data-view="document"] .row-meta {
+	display: flex;
+	flex: 0 0 auto;
+	flex-wrap: nowrap;
+	gap: 1ch;
+	margin: 0;
+	font-family: inherit;
+	font-size: inherit;
+	color: var(--vscode-editor-foreground);
+	white-space: pre;
+}
+body[data-view="document"] .row-meta > span {
+	max-width: none;
+	overflow: visible;
+	white-space: pre;
+	margin: 0;
+}
+body[data-view="document"] .variant,
+body[data-view="document"] .condition {
+	color: var(--tok-meta);
+}
+body[data-view="document"] .annotation {
+	color: var(--tok-comment);
+	font-style: italic;
+}
+body[data-view="document"] .hex {
+	color: var(--tok-number);
+}
+body[data-view="document"] .context {
+	color: var(--vscode-editor-foreground);
+}
+body[data-view="document"] .target {
+	color: var(--vscode-editor-foreground);
+	text-decoration: none;
+}
+body[data-view="document"] .target:hover .value-text {
+	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+body[data-view="document"] .condition,
+body[data-view="document"] .annotation {
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+}
+body[data-view="document"] .annotation::before {
+	content: "/* ";
+}
+body[data-view="document"] .annotation::after {
+	content: " */";
+}
+body[data-view="document"] .row.k-module .label::before {
+	content: "module ";
+	color: var(--tok-keyword);
+}
+body[data-view="document"] .children {
+	margin-left: var(--indent);
+	border-left: 0;
+}
+body[data-view="document"] .children::before,
+body[data-view="document"] .children::after {
+	display: block;
+	margin-left: calc(-1 * var(--indent));
+	color: var(--tok-punct);
+	white-space: pre;
+}
+body[data-view="document"] .children::before {
+	content: "{";
+}
+body[data-view="document"] .children::after {
+	content: "}";
+}
+body[data-view="document"] #tree > .node + .node {
+	margin-top: var(--ecuc-lh);
+}
+body[data-view="document"] .node[data-selected="true"] > .row {
+	background: var(--sel-bg);
+}
+body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
+	background: var(--sel-bg-focus);
+	box-shadow: inset 2px 0 0 var(--rail);
+}
+body[data-view="document"] .node:focus-visible > .row {
+	box-shadow: inset 2px 0 0 var(--rail);
+}
+body[data-view="document"] .row.k-parameter > .value {
+	border-bottom: 0;
+}
+body[data-view="document"] .row.k-parameter:hover > .value::after {
+	content: none;
+}
+body[data-view="document"] .value-edit {
+	padding: 0 0.5ch;
+	font-size: inherit;
+	line-height: inherit;
+	vertical-align: baseline;
+}
+body[data-view="document"] .empty {
+	padding: 0 2ch 0 var(--gut);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
+	color: var(--tok-comment);
+	font-style: italic;
+}
+body[data-view="document"] .empty p {
+	margin: 0;
+}
+body[data-view="document"] .empty .tool {
+	margin-left: 1ch;
+	font-style: normal;
+}
+body[data-view="document"] #tree:not(:has([role="treeitem"]:not([style*="display: none"]))) {
+	padding-top: 0;
+	padding-bottom: 0;
+}
+@media (forced-colors: active) {
+	body[data-view="document"] .node[data-selected="true"] > .row,
+	body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
+		background: transparent;
+		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
+		outline-offset: -1px;
+	}
+	body[data-view="document"] .node:hover > .row {
+		background: transparent;
+		outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
+		outline-offset: -1px;
+	}
+	body[data-view="document"] .node:focus-visible > .row {
+		box-shadow: none;
+		outline: 2px solid var(--vscode-focusBorder);
+		outline-offset: -2px;
+	}
+}
+body.vscode-high-contrast[data-view="document"] .node[data-selected="true"] > .row,
+body.vscode-high-contrast[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
+	background: transparent;
+	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
+	outline-offset: -1px;
+}
+body.vscode-high-contrast[data-view="document"] .node:hover > .row {
+	background: transparent;
+	outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
+	outline-offset: -1px;
+}
+body.vscode-high-contrast[data-view="document"] .node:focus-visible > .row {
+	box-shadow: none;
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: -2px;
+}
+@media (max-width: 720px) {
+	body[data-view="document"] .document {
+		--ln-w: 0ch;
+		--gut: 3ch;
+		--indent: 3ch;
+	}
+	body[data-view="document"] .row::before {
+		display: none;
+	}
+	body[data-view="document"] .twisty,
+	body[data-view="document"] .spacer {
+		left: 0;
+	}
+	.toolbar {
+		padding: 0 4px;
+		gap: 3px;
+	}
+	.filter-wrap {
+		flex: 1 1 0;
+	}
+	.count,
+	.notice,
+	.grow,
+	.details-toggle .lbl {
+		display: none;
+	}
+	.tool {
+		padding: 0 4px;
+	}
+	#content {
+		flex-direction: column;
+	}
+	#inspector {
+		flex: 0 0 auto;
+		min-width: 0;
+		max-height: 45vh;
+		border-left: 0;
+		border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.twisty svg {
+		transition: none;
+	}
+	.node.flash > .row {
+		animation: none;
+	}
+}
+</style>
+<style nonce="preview-nonce">
+:root {
+	color-scheme: dark;
+	--vscode-foreground: #cccccc;
+	--vscode-editor-background: #1e1e1e;
+	--vscode-sideBar-background: #252526;
+	--vscode-editorWidget-background: #252526;
+	--vscode-editorWidget-border: #454545;
+	--vscode-descriptionForeground: #9d9d9d;
+	--vscode-panel-border: #3c3c3c;
+	--vscode-list-hoverBackground: #2a2d2e;
+	--vscode-list-focusBackground: #04395e;
+	--vscode-list-activeSelectionBackground: #04395e;
+	--vscode-list-activeSelectionForeground: #ffffff;
+	--vscode-list-inactiveSelectionBackground: #37373d;
+	--vscode-list-inactiveSelectionForeground: #cccccc;
+	--vscode-focusBorder: #007acc;
+	--vscode-input-background: #3c3c3c;
+	--vscode-input-foreground: #cccccc;
+	--vscode-input-border: #3c3c3c;
+	--vscode-button-background: #0e639c;
+	--vscode-button-foreground: #ffffff;
+	--vscode-button-secondaryBackground: #3a3d41;
+	--vscode-button-secondaryForeground: #cccccc;
+	--vscode-button-secondaryHoverBackground: #45494e;
+	--vscode-button-border: #00000000;
+	--vscode-icon-foreground: #c5c5c5;
+	--vscode-symbolIcon-classForeground: #ee9d28;
+	--vscode-symbolIcon-moduleForeground: #e37933;
+	--vscode-symbolIcon-functionForeground: #dcdcaa;
+	--vscode-symbolIcon-namespaceForeground: #4ec9b0;
+	--vscode-symbolIcon-variableForeground: #75beff;
+	--vscode-symbolIcon-booleanForeground: #569cd6;
+	--vscode-symbolIcon-fieldForeground: #75beff;
+	--vscode-symbolIcon-referenceForeground: #4fc1ff;
+	--vscode-symbolIcon-stringForeground: #ce9178;
+	--vscode-symbolIcon-enumeratorForeground: #b8d7a3;
+	--vscode-symbolIcon-keywordForeground: #569cd6;
+	--vscode-symbolIcon-numberForeground: #b5cea8;
+	--vscode-tree-indentGuidesStroke: #404040;
+	--vscode-editor-findMatchHighlightBackground: #ea5c0055;
+	--vscode-editor-findMatchForeground: #ffffff;
+	--vscode-editorWarning-foreground: #cca700;
+	--vscode-inputValidation-warningBackground: #352a05;
+	--vscode-inputValidation-warningBorder: #cca700;
+	--vscode-editorError-foreground: #f48771;
+	--vscode-errorForeground: #f48771;
+	--vscode-badge-background: #4d4d4d;
+	--vscode-badge-foreground: #ffffff;
+	--vscode-textLink-foreground: #3794ff;
+	--vscode-font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+	--vscode-font-size: 13px;
+	--vscode-editor-font-family: Consolas, "Courier New", monospace;
+}
+
+
+#preview-panel {
+	position: fixed;
+	right: 12px;
+	bottom: 12px;
+	z-index: 1000;
+	width: min(390px, calc(100vw - 24px));
+	max-height: 48vh;
+	display: flex;
+	flex-direction: column;
+	font-family: var(--vscode-editor-font-family, Consolas, monospace);
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+	border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+	box-shadow: 0 2px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
+}
+#preview-panel[data-collapsed="true"] .preview-body { display: none; }
+.preview-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 8px;
+	border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+}
+.preview-badge {
+	padding: 0 5px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	color: var(--vscode-badge-foreground, var(--vscode-editor-background));
+	background: var(--vscode-badge-background, var(--vscode-foreground));
+}
+.preview-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-theme { color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.preview-body { padding: 8px; overflow: auto; }
+.preview-field { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.preview-field select {
+	flex: 1 1 auto;
+	min-width: 0;
+	font: inherit;
+	color: var(--vscode-input-foreground);
+	background: var(--vscode-input-background);
+	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+}
+.preview-actions { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.preview-button {
+	padding: 1px 6px;
+	font: inherit;
+	cursor: pointer;
+	color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+	background: var(--vscode-button-secondaryBackground, transparent);
+	border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+}
+.preview-button:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground)); }
+.preview-button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.preview-log {
+	max-height: 150px;
+	margin: 0;
+	padding: 4px;
+	overflow: auto;
+	white-space: pre-wrap;
+	word-break: break-word;
+	color: var(--vscode-descriptionForeground);
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-panel-border);
+}
+@media (max-width: 700px) {
+	#preview-panel { left: 12px; right: 12px; width: auto; }
+}
+
+</style>
+<script nonce="preview-nonce">window.__previewInitialState = {"view":"document","inspectorHidden":true};</script>
+<script nonce="preview-nonce">
+
+(function () {
+	var messages = [];
+	var stateKey = 'ecuc-preview-state';
+	var state = window.__previewInitialState || null;
+	if (!state) {
+		try {
+			state = JSON.parse(window.localStorage.getItem(stateKey) || '{}') || {};
+		} catch (error) {
+			state = {};
+		}
+	}
+	function stamp() { return new Date().toISOString().slice(11, 19); }
+	function record(direction, message) {
+		messages.push({ direction: direction, at: stamp(), message: message });
+		if (window.__previewRenderLog) { window.__previewRenderLog(); }
+	}
+	var api = {
+		postMessage: function (message) {
+			record('to-host', message);
+			if (message && message.type === 'copy' && navigator.clipboard && navigator.clipboard.writeText) {
+				try {
+					navigator.clipboard.writeText(String(message.text == null ? '' : message.text)).catch(function () {});
+				} catch (error) { /* the log remains the evidence */ }
+			}
+			return true;
+		},
+		getState: function () { return state; },
+		setState: function (next) {
+			state = next || {};
+			try {
+				window.localStorage.setItem(stateKey, JSON.stringify(state));
+			} catch (error) { /* the in-memory state still works */ }
+			return state;
+		}
+	};
+	window.acquireVsCodeApi = function () { return api; };
+	window.__preview = {
+		messages: messages,
+		api: api,
+		hostMessage: function (message) {
+			record('to-page', message);
+			window.postMessage(message, '*');
+		}
+	};
+})();
+
+</script>
+</head>
+<body data-view="document">
+<div class="toolbar">
+<div class="filter-wrap">
+<input id="filter" class="filter" type="search" placeholder="Filter" aria-label="Filter the ECUC tree">
+<button id="filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+</div>
+<span id="count" class="count" role="status" aria-live="polite" data-state="none"></span>
+<span id="notice" class="notice" role="status" aria-live="polite"></span>
+<span class="grow"></span>
+<button id="collapse-all" class="tool icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 6h4V2M3 6l4-4M13 10H9v4M13 10l-4 4"/></svg></button>
+<button id="expand-all" class="tool icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M7 2v4H3M7 2L3 6M9 14v-4h4M9 14l4-4"/></svg></button>
+<button id="view-toggle" class="tool view-switch" type="button" aria-pressed="true" title="Switch to tree view"><span class="view-document">Document</span><span class="view-sep" aria-hidden="true">|</span><span class="view-tree">Tree</span></button>
+<button id="details-toggle" class="tool details-toggle" type="button" aria-pressed="false" aria-controls="inspector" title="Show node details" aria-label="Show node details"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg><span class="lbl">Details</span></button>
+</div>
+<div id="content">
+<div id="main"><div class="document" style="--ln-digits:2"><div class="meta"><div class="schema"><span class="keyword">schema</span> <span class="number">00048</span></div><div class="package"><span class="keyword">package</span> PkgA.PkgB</div></div><div id="tree" class="tree" role="tree" aria-label="ECUC values"><div class="node" role="treeitem" aria-level="1" aria-posinset="1" aria-setsize="1" aria-selected="false" aria-expanded="true" tabindex="-1" data-node-id="module:/PkgA/PkgB/ModDefs/ModX|ModX#0" data-kind="module" data-definition-ref="/PkgA/PkgB/ModDefs/ModX" data-short-name="ModX" data-haystack="pkga.pkgb.moddefs.modx modx" data-line="10" data-column="24" data-end-line="93" data-end-column="59" title="/PkgA/PkgB/ModDefs/ModX"><span class="row k-module no-value" data-line="11"><span class="twisty" aria-hidden="true"><svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><path d="M6 4l4 4-4 4z"/></svg></span><span class="glyph" aria-hidden="true"><svg class="g-module" viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><rect x="3" y="3" width="10" height="10"/></svg></span><span class="label">PkgA.PkgB.ModDefs.ModX</span><span class="row-meta"><span class="short" title="ModX">"ModX"</span><span class="variant" title="VariantPreCompile">(VariantPreCompile)</span><span class="condition" title="[(A == B)]">[(A == B)]</span><span class="condition" title="&lt;Crit1 == 1 &amp;&amp; Crit2 == 2&gt;">&lt;Crit1 == 1 &amp;&amp; Crit2 == 2&gt;</span><span class="annotation" title="[Note] module note">[Note] module note</span></span></span><div role="group" class="children"><div class="node" role="treeitem" aria-level="2" aria-posinset="1" aria-setsize="1" aria-selected="false" aria-expanded="true" tabindex="-1" data-node-id="container:PkgA/PkgB/ModX/ContA#0" data-kind="container" data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContA" data-short-name="ContA" data-haystack="conta conta" data-line="40" data-column="32" data-end-line="91" data-end-column="55" title="/PkgA/PkgB/ModDefs/ModX/ContA"><span class="row k-container no-value" data-line="41"><span class="twisty" aria-hidden="true"><svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><path d="M6 4l4 4-4 4z"/></svg></span><span class="glyph" aria-hidden="true"><svg class="g-container" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="3.5" width="9" height="9"/></svg></span><span class="label">ContA</span><span class="row-meta"><span class="short" title="ContA">"ContA"</span><span class="annotation" title="container note">container note</span></span></span><div role="group" class="children"><div class="node" role="treeitem" aria-level="3" aria-posinset="1" aria-setsize="6" aria-selected="false" tabindex="0" data-node-id="container:PkgA/PkgB/ModX/ContA#0/param:IniValue#0" data-kind="parameter" data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContA/IniValue" data-short-name="" data-haystack="inivalue 63" data-value="63" data-line="53" data-column="40" data-end-line="56" data-end-column="69" title="/PkgA/PkgB/ModDefs/ModX/ContA/IniValue"><span class="row k-parameter has-value" data-line="54"><span class="spacer" aria-hidden="true"></span><span class="glyph" aria-hidden="true"><svg class="g-parameter" viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><circle cx="8" cy="8" r="3"/></svg></span><span class="label">IniValue</span><span class="value" data-value-kind="numeric" title="Click to edit, or press F2: = 63"><span class="punct">=</span> <span class="value-text">63</span></span><span class="row-meta"><span class="hex" title="(= 0x3F)">(= 0x3F)</span></span></span></div><div class="node" role="treeitem" aria-level="3" aria-posinset="2" aria-setsize="6" aria-selected="false" tabindex="-1" data-node-id="container:PkgA/PkgB/ModX/ContA#0/param:Title#0" data-kind="parameter" data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContA/Title" data-short-name="" data-haystack="title hello" data-value="hello" data-line="57" data-column="40" data-end-line="60" data-end-column="67" title="/PkgA/PkgB/ModDefs/ModX/ContA/Title"><span class="row k-parameter has-value" data-line="58"><span class="spacer" aria-hidden="true"></span><span class="glyph" aria-hidden="true"><svg class="g-parameter" viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><circle cx="8" cy="8" r="3"/></svg></span><span class="label">Title</span><span class="value" data-value-kind="textual" title="Click to edit, or press F2: = &quot;hello&quot;"><span class="punct">=</span> <span class="value-text">"hello"</span></span></span></div><div class="node" role="treeitem" aria-level="3" aria-posinset="3" aria-setsize="6" aria-selected="false" tabindex="-1" data-node-id="container:PkgA/PkgB/ModX/ContA#0/param:Flag#0" data-kind="parameter" data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContA/Flag" data-short-name="" data-haystack="flag true" data-value="true" data-line="61" data-column="40" data-end-line="64" data-end-column="69" title="/PkgA/PkgB/ModDefs/ModX/ContA/Flag"><span class="row k-parameter has-value" data-line="62"><span class="spacer" aria-hidden="true"></span><span class="glyph" aria-hidden="true"><svg class="g-parameter" viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><circle cx="8" cy="8" r="3"/></svg></span><span class="label">Flag</span><span class="value" data-value-kind="boolean" title="Click to edit, or press F2: = true"><span class="punct">=</span> <span class="value-text">true</span></span></span></div><div class="node" role="treeitem" aria-level="3" aria-posinset="4" aria-setsize="6" aria-selected="false" tabindex="-1" data-node-id="container:PkgA/PkgB/ModX/ContA#0/ref:PeerRef#0" data-kind="reference" data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContA/PeerRef" data-short-name="" data-haystack="peerref pkga.pkgb.modx.conta.contb" data-target="/PkgA/PkgB/ModX/ContA/ContB" data-line="67" data-column="40" data-end-line="70" data-end-column="63" title="/PkgA/PkgB/ModDefs/ModX/ContA/PeerRef"><span class="row k-reference has-value" data-line="68"><span class="spacer" aria-hidden="true"></span><span class="glyph" aria-hidden="true"><svg class="g-reference" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8h8M8 5l3 3-3 3"/></svg></span><span class="label">PeerRef</span><span class="value target" data-follow="true" title="Follow to the target: = PkgA.PkgB.ModX.ContA.ContB"><span class="punct">=</span> <span class="value-text">PkgA.PkgB.ModX.ContA.ContB</span></span></span></div><div class="node" role="treeitem" aria-level="3" aria-posinset="5" aria-setsize="6" aria-selected="false" tabindex="-1" data-node-id="container:PkgA/PkgB/ModX/ContA#0/ref:PeerIref#0" data-kind="reference" data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContA/PeerIref" data-short-name="" data-haystack="peeriref pkga.pkgb.modx.conta.contb" data-target="/PkgA/PkgB/ModX/ContA/ContB" data-line="71" data-column="40" data-end-line="77" data-end-column="72" title="/PkgA/PkgB/ModDefs/ModX/ContA/PeerIref"><span class="row k-reference has-value" data-line="72"><span class="spacer" aria-hidden="true"></span><span class="glyph" aria-hidden="true"><svg class="g-reference" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8h8M8 5l3 3-3 3"/></svg></span><span class="label">PeerIref</span><span class="value target" data-follow="true" title="Follow to the target: = PkgA.PkgB.ModX.ContA.ContB"><span class="punct">=</span> <span class="value-text">PkgA.PkgB.ModX.ContA.ContB</span></span><span class="row-meta"><span class="context" title="context PkgA.PkgB.ModX.ContA"><span class="keyword">context</span> PkgA.PkgB.ModX.ContA</span></span></span></div><div class="node" role="treeitem" aria-level="3" aria-posinset="6" aria-setsize="6" aria-selected="false" aria-expanded="true" tabindex="-1" data-node-id="container:PkgA/PkgB/ModX/ContA/ContB#0" data-kind="container" data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContB" data-short-name="ContB" data-haystack="contb contb" data-line="80" data-column="40" data-end-line="89" data-end-column="63" title="/PkgA/PkgB/ModDefs/ModX/ContB"><span class="row k-container no-value" data-line="81"><span class="twisty" aria-hidden="true"><svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><path d="M6 4l4 4-4 4z"/></svg></span><span class="glyph" aria-hidden="true"><svg class="g-container" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="3.5" width="9" height="9"/></svg></span><span class="label">ContB</span><span class="row-meta"><span class="short" title="ContB">"ContB"</span></span></span><div role="group" class="children"><div class="node" role="treeitem" aria-level="4" aria-posinset="1" aria-setsize="1" aria-selected="false" tabindex="-1" data-node-id="container:PkgA/PkgB/ModX/ContA/ContB#0/param:Text#0" data-kind="parameter" data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContB/Text" data-short-name="" data-haystack="text nested" data-value="nested" data-line="84" data-column="48" data-end-line="87" data-end-column="75" title="/PkgA/PkgB/ModDefs/ModX/ContB/Text"><span class="row k-parameter has-value" data-line="85"><span class="spacer" aria-hidden="true"></span><span class="glyph" aria-hidden="true"><svg class="g-parameter" viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><circle cx="8" cy="8" r="3"/></svg></span><span class="label">Text</span><span class="value" data-value-kind="textual" title="Click to edit, or press F2: = &quot;nested&quot;"><span class="punct">=</span> <span class="value-text">"nested"</span></span></span></div></div></div></div></div></div></div></div><div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div></div></div>
+<aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>
+<div class="inspector-empty">
+<p>Select a line to see its details.</p>
+<p class="inspector-hint">Click a line or press Space.</p>
+</div>
+</aside>
+</div>
+<script nonce="preview-nonce">
+const vscode = acquireVsCodeApi();
+
+let valueEdit = null;
+let pendingMove = null;
+let flashId = null;
+
+function beginValueEdit(item) {
+	if (!item || item.dataset.kind !== 'parameter' || valueEdit) {
+		return false;
+	}
+	const span = item.querySelector(':scope > .row > .value');
+	if (!span) {
+		return false;
+	}
+	const text = span.querySelector('.value-text') ?? span;
+	const input = document.createElement('input');
+	input.type = 'text';
+	input.className = 'value-edit';
+	input.value = item.dataset.value ?? '';
+	input.setAttribute('aria-label', 'Value of ' + item.dataset.nodeId);
+	text.style.display = 'none';
+	text.after(input);
+	focusItem(item);
+	input.focus();
+	input.select();
+	valueEdit = { item, span, text, input, pending: false };
+	return true;
+}
+
+/** Closes the editor and drops the typed text: Escape, a click outside, a Tab move. */
+function closeValueEdit() {
+	if (!valueEdit) {
+		return;
+	}
+	const { text, input } = valueEdit;
+	if (valueEdit.error) {
+		valueEdit.error.remove();
+	}
+	valueEdit = null;
+	input.remove();
+	text.style.display = '';
+}
+
+/** Posts the edit but keeps the input open until the host answers (design §6). */
+function commitValueEdit() {
+	if (!valueEdit || valueEdit.pending) {
+		return;
+	}
+	const { item, input } = valueEdit;
+	valueEdit.pending = true;
+	if (valueEdit.error) {
+		valueEdit.error.remove();
+		valueEdit.error = null;
+	}
+	input.removeAttribute('aria-invalid');
+	flashId = item.dataset.nodeId;
+	vscode.postMessage({ type: 'edit', nodeId: item.dataset.nodeId, value: input.value });
+}
+
+/** Briefly highlights the row the host re-rendered after a successful write (design §6). */
+function flashRow(nodeId) {
+	for (const item of document.querySelectorAll('#tree [role="treeitem"]')) {
+		if (item.dataset.nodeId === nodeId) {
+			item.classList.add('flash');
+			setTimeout(() => item.classList.remove('flash'), 900);
+			return;
+		}
+	}
+}
+
+/** Tab / Shift+Tab: the next or previous parameter's value, after a successful commit. */
+function beginAdjacentValueEdit(move) {
+	const items = Array.from(document.querySelectorAll('#tree [data-kind="parameter"]'));
+	const at = items.findIndex((item) => item.dataset.nodeId === move.from);
+	if (at === -1) {
+		return;
+	}
+	const next = items[move.dir === 'next' ? at + 1 : at - 1];
+	if (next) {
+		beginValueEdit(next);
+	}
+}
+
+document.addEventListener('click', (event) => {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	if (valueEdit) {
+		if (valueEdit.item.contains(event.target)) {
+			// A click inside the open editor is the caret, not a reveal.
+			event.stopImmediatePropagation();
+			return;
+		}
+		closeValueEdit();
+	}
+	const span = event.target.closest('#tree .value');
+	if (span && beginValueEdit(span.closest('[role="treeitem"]'))) {
+		event.stopImmediatePropagation();
+	}
+});
+
+document.addEventListener('keydown', (event) => {
+	if (valueEdit) {
+		if (event.key === 'Enter' || event.key === 'Escape') {
+			event.preventDefault();
+			if (event.key === 'Enter') {
+				commitValueEdit();
+			} else {
+				closeValueEdit();
+			}
+		} else if (event.key === 'Tab') {
+			// Commit and move to the neighbouring value — but only once the host has
+			// accepted the commit, so a refusal cannot lose the typed text.
+			event.preventDefault();
+			pendingMove = { dir: event.shiftKey ? 'prev' : 'next', from: valueEdit.item.dataset.nodeId };
+			commitValueEdit();
+		}
+		// The input already saw the key; the tree must not also act on it.
+		event.stopImmediatePropagation();
+		return;
+	}
+	if (event.key === 'F2' && event.target instanceof Element) {
+		const item = event.target.closest('#tree [role="treeitem"]');
+		if (item && beginValueEdit(item)) {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		}
+	}
+});
+
+// A re-scan swaps the tree whole, so the input is gone with it; drop the stale state too,
+// and only then follow up on the outcome of a commit.
+window.addEventListener('message', (event) => {
+	const message = event.data;
+	if (!message) {
+		return;
+	}
+	if (message.type === 'model') {
+		const flash = flashId;
+		const move = pendingMove;
+		flashId = null;
+		pendingMove = null;
+		valueEdit = null;
+		if (flash) {
+			setTimeout(() => flashRow(flash), 0);
+		}
+		if (move) {
+			setTimeout(() => beginAdjacentValueEdit(move), 0);
+		}
+	} else if (message.type === 'notice') {
+		if (valueEdit && valueEdit.pending && message.kind === 'warn') {
+			// The write was refused: keep the text, say so beside the field, and let the user fix it.
+			valueEdit.pending = false;
+			pendingMove = null;
+			flashId = null;
+			valueEdit.input.setAttribute('aria-invalid', 'true');
+			const reason = typeof message.message === 'string' && message.message !== ''
+				? message.message
+				: 'The value was refused.';
+			let error = valueEdit.error;
+			if (!error) {
+				error = document.createElement('span');
+				error.className = 'value-error';
+				error.setAttribute('role', 'alert');
+				valueEdit.error = error;
+				valueEdit.input.after(error);
+			}
+			error.textContent = '/* ' + reason + ' */';
+		}
+	}
+});
+
+
+	const filterInput = document.getElementById('filter');
+	const countLabel = document.getElementById('count');
+	const clearButton = document.getElementById('filter-clear');
+	function matchRanges(text, query) {
+    const needle = query.trim().toLowerCase();
+    if (needle === '') {
+        return [];
+    }
+    const lower = text.toLowerCase();
+    const ranges = [];
+    let at = lower.indexOf(needle);
+    while (at !== -1) {
+        ranges.push({ start: at, end: at + needle.length });
+        at = lower.indexOf(needle, at + needle.length);
+    }
+    return ranges;
+}
+
+	/** The spans a match can be highlighted in: the three fields the haystack carries. */
+	function highlightableSpans(item) {
+		return Array.from(
+			item.querySelectorAll(':scope > .row > .label, :scope > .row > .row-meta .short, :scope > .row > .value .value-text')
+		);
+	}
+
+	function highlightSpan(span, needle) {
+		const original = span.dataset.text !== undefined ? span.dataset.text : span.textContent;
+		span.dataset.text = original;
+		const ranges = matchRanges(original, needle);
+		if (ranges.length === 0) {
+			if (span.dataset.highlighted === 'true') {
+				span.textContent = original;
+				delete span.dataset.highlighted;
+			}
+			return;
+		}
+		span.textContent = '';
+		let at = 0;
+		for (const range of ranges) {
+			if (range.start > at) {
+				span.appendChild(document.createTextNode(original.slice(at, range.start)));
+			}
+			const mark = document.createElement('mark');
+			mark.textContent = original.slice(range.start, range.end);
+			span.appendChild(mark);
+			at = range.end;
+		}
+		if (at < original.length) {
+			span.appendChild(document.createTextNode(original.slice(at)));
+		}
+		span.dataset.highlighted = 'true';
+	}
+
+	function applyFilter() {
+		const needle = filterInput.value.trim().toLowerCase();
+		const items = Array.from(document.querySelectorAll('#tree [role="treeitem"]'));
+		// The empty block is part of the swapped tree region, so it is looked up fresh on
+		// every pass; a node captured at load would be detached after a re-scan.
+		const empty = document.getElementById('empty');
+		const emptyText = document.getElementById('empty-text');
+		if (clearButton) {
+			clearButton.hidden = filterInput.value.trim() === '';
+		}
+		const visible = new Map();
+		// Ancestors of a match are expanded while the filter is active, so a match inside
+		// a collapsed subtree is reachable (design §4.4). The collapsed set itself is
+		// untouched, which is what makes clearing the filter restore it.
+		const ancestors = new Set();
+		let shown = 0;
+		for (let i = items.length - 1; i >= 0; i--) {
+			const item = items[i];
+			const self = needle === '' || matchRanges(item.dataset.haystack, needle).length > 0;
+			let descendant = false;
+			const group = item.querySelector(':scope > [role="group"]');
+			if (group) {
+				for (const child of group.children) {
+					if (visible.get(child)) {
+						descendant = true;
+						break;
+					}
+				}
+			}
+			const show = self || descendant;
+			visible.set(item, show);
+			item.style.display = show ? '' : 'none';
+			if (show) {
+				shown++;
+			}
+			if (show && descendant && !self) {
+				ancestors.add(item.dataset.nodeId);
+			}
+			if (show) {
+				for (const span of highlightableSpans(item)) {
+					highlightSpan(span, needle);
+				}
+			}
+		}
+		if (needle === '') {
+			countLabel.textContent = '';
+			countLabel.dataset.state = 'none';
+			if (empty) {
+				empty.hidden = true;
+			}
+		} else if (shown === 0) {
+			countLabel.textContent = 'No matches';
+			countLabel.dataset.state = 'empty';
+			if (empty) {
+				empty.hidden = false;
+			}
+			if (emptyText) {
+				emptyText.textContent = '/* No entities match "' + filterInput.value.trim() + '". */';
+			}
+		} else {
+			countLabel.textContent = shown + ' of ' + items.length;
+			countLabel.dataset.state = 'filtered';
+			if (empty) {
+				empty.hidden = true;
+			}
+		}
+		applyCollapsed(ancestors);
+	}
+
+	filterInput.addEventListener('input', applyFilter);
+	filterInput.addEventListener('keydown', (event) => {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			filterInput.value = '';
+			applyFilter();
+		}
+	});
+	if (clearButton) {
+		clearButton.addEventListener('click', () => {
+			filterInput.value = '';
+			applyFilter();
+			filterInput.focus();
+		});
+	}
+	// Delegated so the button keeps working after a re-scan swaps the empty block.
+	document.addEventListener('click', (event) => {
+		if (event.target && event.target.closest && event.target.closest('#empty-clear')) {
+			filterInput.value = '';
+			applyFilter();
+			filterInput.focus();
+		}
+	});
+
+
+const main = document.getElementById('main');
+const notice = document.getElementById('notice');
+const inspector = document.getElementById('inspector');
+const detailsToggle = document.getElementById('details-toggle');
+const viewToggle = document.getElementById('view-toggle');
+const savedState = vscode.getState();
+// Only the object shape this page writes is accepted; anything else starts clean.
+let viewState =
+	savedState && typeof savedState === 'object' && !Array.isArray(savedState) ? savedState : {};
+if (viewState.view !== 'tree' && viewState.view !== 'document') {
+	viewState.view = 'document';
+}
+if (typeof viewState.inspectorHidden !== 'boolean') {
+	viewState.inspectorHidden = true;
+}
+let selectedId;
+let collapsed = new Set();
+let typeAhead = { text: '', at: 0 };
+
+function pruneCollapsed(collapsed, present) {
+    const alive = new Set(present);
+    return collapsed.filter((id) => alive.has(id));
+}
+function toggleCollapsed(collapsed, id, hasChildren) {
+    if (!hasChildren) {
+        return collapsed.slice();
+    }
+    return collapsed.includes(id) ? collapsed.filter((other) => other !== id) : collapsed.concat([id]);
+}
+function collapsedIdsFor(items) {
+    return items.filter((item) => item.hasChildren).map((item) => item.id);
+}
+function moveTarget(key, from, count, page) {
+    if (count === 0) {
+        return undefined;
+    }
+    if (key === 'ArrowDown') {
+        return Math.min(from + 1, count - 1);
+    }
+    if (key === 'ArrowUp') {
+        return Math.max(from - 1, 0);
+    }
+    if (key === 'Home') {
+        return 0;
+    }
+    if (key === 'End') {
+        return count - 1;
+    }
+    if (key === 'PageUp') {
+        return Math.max(from - page, 0);
+    }
+    if (key === 'PageDown') {
+        return Math.min(from + page, count - 1);
+    }
+    return undefined;
+}
+function reRenderTree(tree, hooks) {
+    const scrollTop = hooks.readScrollTop();
+    hooks.writeHtml(tree);
+    hooks.pruneCollapsed();
+    hooks.applyCollapsed();
+    hooks.applyFilter();
+    hooks.prepareFocus();
+    hooks.writeScrollTop(scrollTop);
+}
+
+function allItems() {
+	return Array.from(document.querySelectorAll('#tree [role="treeitem"]'));
+}
+
+function treeItems() {
+	return allItems().filter((el) => el.offsetParent !== null);
+}
+
+function itemHasChildren(item) {
+	return item.querySelector(':scope > [role="group"]') !== null;
+}
+
+function focusItem(target) {
+	if (!target) {
+		return;
+	}
+	for (const item of allItems()) {
+		item.tabIndex = -1;
+	}
+	target.tabIndex = 0;
+	target.focus();
+	target.scrollIntoView({ block: 'center' });
+}
+
+function setSelection(nodeId) {
+	selectedId = nodeId;
+	for (const item of allItems()) {
+		const on = item.dataset.nodeId === nodeId;
+		item.setAttribute('aria-selected', on ? 'true' : 'false');
+		if (on) {
+			item.dataset.selected = 'true';
+		} else {
+			delete item.dataset.selected;
+		}
+	}
+	updateInspector();
+}
+
+function textOf(parent, selector) {
+	const element = parent.querySelector(selector);
+	return element ? element.textContent : '';
+}
+
+function inspectorElement(tag, className, text) {
+	const element = document.createElement(tag);
+	if (className) {
+		element.className = className;
+	}
+	if (text !== undefined) {
+		element.textContent = text;
+	}
+	return element;
+}
+
+function inspectorRow(key, value) {
+	const row = inspectorElement('div', 'inspector-row');
+	row.appendChild(inspectorElement('span', 'inspector-key', key));
+	row.appendChild(inspectorElement('div', 'inspector-code', value));
+	return row;
+}
+
+/**
+ * Rebuilds the details panel from the selected row. It reads the model-derived data
+ * attributes and the rendered secondary spans; it never re-parses the source and never
+ * uses innerHTML with model text. The panel lives outside #main, so a re-scan does not
+ * destroy it.
+ */
+function updateInspector() {
+	if (!inspector || inspector.hidden) {
+		return;
+	}
+	inspector.textContent = '';
+	const item = selectedId === undefined
+		? undefined
+		: allItems().find((candidate) => candidate.dataset.nodeId === selectedId);
+	if (!item) {
+		const empty = inspectorElement('div', 'inspector-empty');
+		empty.appendChild(inspectorElement('p', '', 'Select a line to see its details.'));
+		empty.appendChild(inspectorElement('p', 'inspector-hint', 'Click a line or press Space.'));
+		inspector.appendChild(empty);
+		return;
+	}
+	const row = item.querySelector(':scope > .row');
+	if (!row) {
+		return;
+	}
+	const kind = item.dataset.kind || 'node';
+	const label = textOf(row, ':scope > .label');
+	const definitionRef = item.dataset.definitionRef || item.title || '';
+	const shortName = item.dataset.shortName || '';
+	const value = item.dataset.value || '';
+	const target = item.dataset.target || '';
+	const variant = textOf(row, '.row-meta .variant');
+	const hex = textOf(row, '.row-meta .hex');
+	const contextText = textOf(row, '.row-meta .context');
+	const context = contextText.startsWith('context ') ? contextText.slice('context '.length) : contextText;
+	const conditions = Array.from(row.querySelectorAll('.row-meta .condition')).map((element) => element.textContent).join('\n');
+	const annotations = Array.from(row.querySelectorAll('.row-meta .annotation')).map((element) => element.textContent).join('\n');
+	const line = item.dataset.line;
+	const column = item.dataset.column;
+	const endLine = item.dataset.endLine;
+	const endColumn = item.dataset.endColumn;
+
+	inspector.appendChild(inspectorElement('div', 'inspector-kind', kind));
+	inspector.appendChild(inspectorElement('div', 'inspector-label', label));
+	if (definitionRef) {
+		inspector.appendChild(inspectorRow('Definition', definitionRef));
+	}
+	if (shortName) {
+		inspector.appendChild(inspectorRow('Short name', shortName));
+	}
+	if (variant) {
+		inspector.appendChild(inspectorRow('Variant', variant));
+	}
+	if (kind === 'parameter') {
+		inspector.appendChild(inspectorRow('Value', value === '' ? '(empty)' : value));
+	}
+	if (hex) {
+		inspector.appendChild(inspectorRow('Hexadecimal', hex));
+	}
+	if (target) {
+		inspector.appendChild(inspectorRow('Target', target));
+	}
+	if (context) {
+		inspector.appendChild(inspectorRow('Context', context));
+	}
+	if (conditions) {
+		inspector.appendChild(inspectorRow('Conditions', conditions));
+	}
+	if (annotations) {
+		inspector.appendChild(inspectorRow('Annotations', annotations));
+	}
+	if (line !== undefined && column !== undefined && endLine !== undefined && endColumn !== undefined) {
+		inspector.appendChild(
+			inspectorRow(
+				'Source',
+				'L' + (Number(line) + 1) + ':' + (Number(column) + 1) + ' - L' + (Number(endLine) + 1) + ':' + (Number(endColumn) + 1)
+			)
+		);
+	}
+
+	const actions = inspectorElement('div', 'inspector-actions');
+	const reveal = inspectorElement('button', 'tool', 'Reveal in source');
+	reveal.type = 'button';
+	reveal.addEventListener('click', () => revealItem(item));
+	actions.appendChild(reveal);
+	const path = definitionRef || label;
+	if (path) {
+		const copyPath = inspectorElement('button', 'tool', 'Copy path');
+		copyPath.type = 'button';
+		copyPath.addEventListener('click', () => vscode.postMessage({ type: 'copy', text: path }));
+		actions.appendChild(copyPath);
+	}
+	const valueText = target || value;
+	if (valueText) {
+		const copyValue = inspectorElement('button', 'tool', target ? 'Copy target' : 'Copy value');
+		copyValue.type = 'button';
+		copyValue.addEventListener('click', () => vscode.postMessage({ type: 'copy', text: valueText }));
+		actions.appendChild(copyValue);
+	}
+	inspector.appendChild(actions);
+}
+
+function prepareFocus() {
+	// A host-rendered selection (source -> editor, or a pending selection) arrives as
+	// markup, not as a message. Adopt it before the first paint so the details panel is
+	// not empty until the user clicks.
+	if (selectedId === undefined) {
+		const marked = document.querySelector('#tree [aria-selected="true"]');
+		if (marked) {
+			selectedId = marked.dataset.nodeId;
+		}
+	}
+	if (selectedId !== undefined) {
+		for (const item of allItems()) {
+			if (item.dataset.nodeId === selectedId) {
+				focusItem(item);
+				return;
+			}
+		}
+	}
+	const first = document.querySelector('#tree [role="treeitem"]');
+	if (first && !document.querySelector('#tree [tabindex="0"]')) {
+		first.tabIndex = 0;
+	}
+}
+
+/** Drop ids that the re-scan removed; everything else stays collapsed. */
+function prune() {
+	collapsed = new Set(pruneCollapsed(Array.from(collapsed), allItems().map((item) => item.dataset.nodeId)));
+}
+
+/**
+ * The one place that writes `aria-expanded`, and therefore the one place that decides
+ * what is visible. `expandedOverride` carries the ancestors of filter matches, which are
+ * shown while a filter is active without touching the collapsed set (design Â§4.4).
+ */
+function applyCollapsed(expandedOverride) {
+	for (const item of allItems()) {
+		if (!itemHasChildren(item)) {
+			continue;
+		}
+		const id = item.dataset.nodeId;
+		const closed = collapsed.has(id) && !(expandedOverride && expandedOverride.has(id));
+		item.setAttribute('aria-expanded', closed ? 'false' : 'true');
+	}
+}
+
+function flipCollapsed(nodeId) {
+	collapsed = new Set(toggleCollapsed(Array.from(collapsed), nodeId, true));
+	applyCollapsed();
+}
+
+function selectItem(item) {
+	focusItem(item);
+	setSelection(item.dataset.nodeId);
+	vscode.postMessage({ type: 'select', nodeId: item.dataset.nodeId });
+}
+
+function revealItem(item) {
+	vscode.postMessage({ type: 'reveal', nodeId: item.dataset.nodeId });
+}
+
+function followItem(item) {
+	vscode.postMessage({ type: 'follow', nodeId: item.dataset.nodeId });
+}
+
+function rowHeight() {
+	const row = document.querySelector('#tree [role="treeitem"] > .row');
+	const measured = row && row.getBoundingClientRect ? row.getBoundingClientRect().height : 0;
+	return measured > 0 ? measured : 20;
+}
+
+/** Type-ahead over the visible labels, with a 2 s window (design Â§8). */
+function typeAheadJump(character) {
+	const now = Date.now();
+	typeAhead.text = (now - typeAhead.at > 2000 ? '' : typeAhead.text) + character.toLowerCase();
+	typeAhead.at = now;
+	const items = treeItems();
+	const at = items.indexOf(document.activeElement);
+	for (let step = 1; step <= items.length; step++) {
+		const candidate = items[(at + step + items.length) % items.length];
+		const label = candidate.querySelector(':scope > .row > .label');
+		if (label && label.textContent.toLowerCase().startsWith(typeAhead.text)) {
+			focusItem(candidate);
+			return;
+		}
+	}
+}
+
+/** A click selects; the twisty toggles; the target follows (UX child design Â§2). */
+function onRowClick(event) {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	const item = event.target.closest('#tree [role="treeitem"]');
+	if (!item) {
+		return;
+	}
+	// One interaction, one effect: the twisty toggles without moving the selection, the
+	// target follows, everything else selects.
+	if (event.target.closest('.twisty')) {
+		flipCollapsed(item.dataset.nodeId);
+		return;
+	}
+	if (event.target.closest('[data-follow]')) {
+		followItem(item);
+		return;
+	}
+	selectItem(item);
+}
+
+/** A double click is the deliberate reveal (UX child design Â§2). */
+function onRowDoubleClick(event) {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	const item = event.target.closest('#tree [role="treeitem"]');
+	if (!item || event.target.closest('.twisty') || event.target.closest('[data-follow]')) {
+		return;
+	}
+	revealItem(item);
+}
+
+function onTreeKeydown(event) {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	const item = event.target.closest('#tree [role="treeitem"]');
+	if (!item) {
+		return;
+	}
+	const items = treeItems();
+	const at = items.indexOf(item);
+	const group = item.querySelector(':scope > [role="group"]');
+	const page = Math.max(1, Math.floor(main.clientHeight / rowHeight()));
+	const moved = moveTarget(event.key, at, items.length, page);
+	if (moved !== undefined) {
+		event.preventDefault();
+		focusItem(items[moved]);
+		return;
+	}
+	if (event.key === 'ArrowRight') {
+		event.preventDefault();
+		if (group && item.getAttribute('aria-expanded') !== 'true') {
+			flipCollapsed(item.dataset.nodeId);
+		} else if (group) {
+			focusItem(group.firstElementChild);
+		}
+	} else if (event.key === 'ArrowLeft') {
+		event.preventDefault();
+		if (group && item.getAttribute('aria-expanded') === 'true') {
+			flipCollapsed(item.dataset.nodeId);
+		} else {
+			focusItem(item.parentElement.closest('#tree [role="treeitem"]'));
+		}
+	} else if (event.key === 'Enter') {
+		event.preventDefault();
+		// A leaf has nothing to toggle, so revealing it is the only useful action; a
+		// container is revealed with Ctrl/Alt+Enter or a double click (design Â§2).
+		if (event.ctrlKey || event.altKey) {
+			revealItem(item);
+		} else if (group) {
+			flipCollapsed(item.dataset.nodeId);
+		} else {
+			revealItem(item);
+		}
+	} else if (event.key === ' ') {
+		event.preventDefault();
+		selectItem(item);
+	} else if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+		typeAheadJump(event.key);
+	}
+}
+
+/** Collapse-all: hide every subtree, leaving the selection and the scroll alone. */
+function collapseAll() {
+	collapsed = new Set(
+		collapsedIdsFor(allItems().map((item) => ({ id: item.dataset.nodeId, hasChildren: itemHasChildren(item) })))
+	);
+	applyCollapsed();
+}
+
+/** Expand-all: the same, the other way. Selection and scroll are untouched. */
+function expandAll() {
+	collapsed = new Set();
+	applyCollapsed();
+}
+
+document.addEventListener('click', onRowClick);
+document.addEventListener('dblclick', onRowDoubleClick);
+document.addEventListener('keydown', onTreeKeydown);
+document.getElementById('collapse-all').addEventListener('click', collapseAll);
+document.getElementById('expand-all').addEventListener('click', expandAll);
+function applyView() {
+	document.body.dataset.view = viewState.view;
+	if (!viewToggle) {
+		return;
+	}
+	const isDocument = viewState.view === 'document';
+	viewToggle.setAttribute('aria-pressed', isDocument ? 'true' : 'false');
+	viewToggle.title = isDocument ? 'Switch to tree view' : 'Switch to document view';
+}
+
+function applyInspectorVisibility() {
+	if (!inspector || !detailsToggle) {
+		return;
+	}
+	inspector.hidden = viewState.inspectorHidden === true;
+	detailsToggle.setAttribute('aria-pressed', inspector.hidden ? 'false' : 'true');
+	detailsToggle.title = inspector.hidden ? 'Show node details' : 'Hide node details';
+	detailsToggle.setAttribute('aria-label', inspector.hidden ? 'Show node details' : 'Hide node details');
+}
+
+if (viewToggle) {
+	viewToggle.addEventListener('click', () => {
+		viewState.view = viewState.view === 'document' ? 'tree' : 'document';
+		applyView();
+		vscode.setState(viewState);
+	});
+}
+
+if (detailsToggle && inspector) {
+	detailsToggle.addEventListener('click', () => {
+		viewState.inspectorHidden = !viewState.inspectorHidden;
+		applyInspectorVisibility();
+		vscode.setState(viewState);
+		if (!viewState.inspectorHidden) {
+			updateInspector();
+		}
+	});
+}
+
+// The view and panel preferences survive a re-scan (the shell is not swapped) and a
+// full webview reload (the host state); the harness persists the same state in
+// localStorage so the browser loop can exercise it.
+applyView();
+applyInspectorVisibility();
+
+window.addEventListener('message', (event) => {
+	const message = event.data;
+	if (!message) {
+		return;
+	}
+	if (message.type === 'model') {
+		selectedId = message.selectedId;
+		reRenderTree(message.tree, {
+			readScrollTop: () => main.scrollTop,
+			writeHtml: (tree) => {
+				main.innerHTML = tree;
+			},
+			pruneCollapsed: prune,
+			applyCollapsed: () => applyCollapsed(),
+			applyFilter: applyFilter,
+			prepareFocus: prepareFocus,
+			writeScrollTop: (top) => {
+				main.scrollTop = top;
+			},
+		});
+		updateInspector();
+	} else if (message.type === 'select') {
+		setSelection(message.nodeId);
+		prepareFocus();
+	} else if (message.type === 'notice') {
+		notice.textContent = message.message;
+		if (message.kind) {
+			notice.dataset.kind = message.kind;
+		} else {
+			delete notice.dataset.kind;
+		}
+	}
+});
+
+applyFilter();
+prepareFocus();
+updateInspector();
+
+</script>
+<script nonce="preview-nonce">window.addEventListener('load', function () {var toggle = document.getElementById('details-toggle'); if (toggle) toggle.click(); var row = Array.prototype.slice.call(document.querySelectorAll('#tree .row')).filter(function (r) { var l = r.querySelector('.label'); return l && l.textContent === "IniValue"; })[0]; if (row) row.click();});</script></body>
+</html>

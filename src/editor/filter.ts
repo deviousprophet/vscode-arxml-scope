@@ -94,7 +94,7 @@ export function filterScript(): string {
 	/** The spans a match can be highlighted in: the three fields the haystack carries. */
 	function highlightableSpans(item) {
 		return Array.from(
-			item.querySelectorAll(':scope > .row > .label, :scope > .row > .row-meta .short, :scope > .row > .value')
+			item.querySelectorAll(':scope > .row > .label, :scope > .row > .row-meta .short, :scope > .row > .value .value-text')
 		);
 	}
 
@@ -183,7 +183,7 @@ export function filterScript(): string {
 				empty.hidden = false;
 			}
 			if (emptyText) {
-				emptyText.textContent = 'No matches for "' + filterInput.value.trim() + '".';
+				emptyText.textContent = '/* No entities match "' + filterInput.value.trim() + '". */';
 			}
 		} else {
 			countLabel.textContent = shown + ' of ' + items.length;
