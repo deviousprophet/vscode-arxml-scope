@@ -102,8 +102,13 @@ but the view/details behaviour must drive the page's own `applyView` / `applyIns
 extracted with `scriptTestUtils` against stub elements — not a host-side twin. The mutation table for
 this view is: remove the `data-view` default, change the document row to `grid`, remove the view
 toggle, make the inspector visible by default, remove the module prefix, remove the selection-label
-emphasis, and neutralize the document selectors; each must fail a test. A CSS selector assertion is
-still not a rendered-layout test, so pair it with the light/dark/HC captures and a browser pass.
+emphasis, and neutralize the document selectors. The editor-like pass adds: restore per-kind label
+colours, restore the target underline, restore the dotted value underline, put the twisty back in the
+flex flow, restore the list-selection row bar, restore the 6px toolbar padding, and remove the header
+keyword rule; each mutation must fail a test. A CSS selector assertion is still not a rendered-layout
+test, so pair it with the light/dark/HC captures and a browser pass. The editor-like direction is
+prototyped over the production page in `research/prototype-editor.css`; assertions and captures must
+match the production CSS, never the prototype file.
 
 ## A CSS rule is not a contrast measurement
 

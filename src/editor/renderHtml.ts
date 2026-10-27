@@ -920,28 +920,40 @@ mark {
 	gap: 4px;
 	margin-top: 12px;
 }
-/* Document view: the post-processed ARTEXT look, over the same tree DOM. */
+/* Document view: an editor-like text surface over the same tree DOM. The tree
+ * chrome (chips, per-row borders, two-line grid, value underlines) is absent;
+ * see the document-editor-look task design. */
 body[data-view="document"] #tree {
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--vscode-editor-font-size, var(--vscode-font-size, 13px));
+	font-size: var(--vscode-editor-font-size, 14px);
 	line-height: 1.5;
+	padding: 8px 0 24px 3.5ch;
 }
 body[data-view="document"] .meta {
-	padding: 4px 10px 2px;
+	padding: 4px 0 2px 3.5ch;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--vscode-editor-font-size, var(--vscode-font-size, 13px));
-	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-editor-font-size, 14px);
+	color: var(--vscode-editor-foreground);
 }
 body[data-view="document"] .schema,
 body[data-view="document"] .package {
 	font-family: inherit;
 }
+body[data-view="document"] .meta .keyword {
+	color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-editor-foreground));
+}
 body[data-view="document"] .row {
+	position: relative;
 	display: flex;
 	flex-wrap: nowrap;
-	gap: 0;
+	gap: 1ch;
 	align-items: baseline;
-	padding: 0 10px 0 2px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+body[data-view="document"] .node:hover > .row {
+	background: transparent;
 }
 body[data-view="document"] .row.k-module,
 body[data-view="document"] .row.k-container,
@@ -952,10 +964,18 @@ body[data-view="document"] .row.k-reference {
 body[data-view="document"] .glyph {
 	display: none;
 }
+/* The twisty lives in the gutter, not in the text flow, so labels align on
+ * exact 4ch steps and the brace returns to the parent text start. */
 body[data-view="document"] .twisty,
 body[data-view="document"] .spacer {
-	flex: 0 0 1.2ch;
+	position: absolute;
+	left: -2.2ch;
+	top: 0.1em;
 	width: 1.2ch;
+	height: 1.2em;
+	margin: 0;
+	padding: 0;
+	flex: none;
 }
 body[data-view="document"] .twisty svg {
 	width: 8px;
@@ -975,17 +995,22 @@ body[data-view="document"] .label {
 	text-overflow: clip;
 	white-space: pre;
 	font-weight: 400;
+	color: var(--vscode-editor-foreground);
 }
 body[data-view="document"] .value {
-	margin-left: 1ch;
+	flex: 0 0 auto;
+	margin: 0;
 	max-width: none;
 	overflow: visible;
 	text-overflow: clip;
 	white-space: pre;
 }
 body[data-view="document"] .row-meta {
-	display: inline;
-	margin-left: 1ch;
+	display: flex;
+	flex: 0 0 auto;
+	flex-wrap: nowrap;
+	gap: 1ch;
+	margin: 0;
 	font-size: inherit;
 	color: var(--vscode-descriptionForeground);
 	white-space: pre;
@@ -994,7 +1019,7 @@ body[data-view="document"] .row-meta > span {
 	max-width: none;
 	overflow: visible;
 	white-space: pre;
-	margin-right: 1ch;
+	margin: 0;
 }
 body[data-view="document"] .condition,
 body[data-view="document"] .annotation {
@@ -1008,19 +1033,25 @@ body[data-view="document"] .annotation::before {
 body[data-view="document"] .annotation::after {
 	content: " */";
 }
-body[data-view="document"] .row.k-module .label {
-	color: var(--vscode-symbolIcon-functionForeground, var(--vscode-symbolIcon-moduleForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-foreground))));
-}
 body[data-view="document"] .row.k-module .label::before {
 	content: "module ";
 	color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground));
 }
-body[data-view="document"] .row.k-container .label {
-	color: var(--vscode-symbolIcon-namespaceForeground, var(--vscode-symbolIcon-classForeground, var(--vscode-foreground)));
+body[data-view="document"] .variant,
+body[data-view="document"] .condition,
+body[data-view="document"] .context {
+	color: var(--vscode-descriptionForeground);
 }
-body[data-view="document"] .row.k-parameter .label,
-body[data-view="document"] .row.k-reference .label {
-	color: var(--vscode-symbolIcon-variableForeground, var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground)));
+body[data-view="document"] .hex {
+	color: var(--vscode-symbolIcon-numberForeground, var(--vscode-foreground));
+}
+body[data-view="document"] .target {
+	color: var(--vscode-editor-foreground);
+	text-decoration: none;
+}
+body[data-view="document"] .target:hover {
+	color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
+	text-decoration: underline;
 }
 body[data-view="document"] .children {
 	margin-left: 4ch;
@@ -1029,9 +1060,7 @@ body[data-view="document"] .children {
 body[data-view="document"] .children::before,
 body[data-view="document"] .children::after {
 	display: block;
-	/* Align the brace with the row's text start: the group is 4ch in, and the row
-	 * spends 1.2ch on the twisty plus 2px padding before the label. */
-	margin-left: calc(-4ch + 1.2ch + 2px);
+	margin-left: -4ch;
 	color: var(--vscode-descriptionForeground);
 	white-space: pre;
 }
@@ -1040,6 +1069,60 @@ body[data-view="document"] .children::before {
 }
 body[data-view="document"] .children::after {
 	content: "}";
+}
+/* A document selection is a quiet line highlight, not the list's blue bar. */
+body[data-view="document"] .node[data-selected="true"] > .row,
+body[data-view="document"] .node:focus-visible > .row {
+	--ecuc-selection-fg: var(--vscode-editor-foreground);
+	background: var(--vscode-editor-lineHighlightBackground, var(--vscode-list-inactiveSelectionBackground));
+	outline: none;
+}
+body[data-view="document"] .node:focus-visible > .row {
+	box-shadow: inset 2px 0 0 var(--vscode-focusBorder);
+}
+/* Values are text in Document view: no dotted underline or hover pencil. */
+body[data-view="document"] .row.k-parameter > .value {
+	border-bottom: 0;
+}
+body[data-view="document"] .row.k-parameter:hover > .value::after {
+	content: none;
+}
+body[data-view="document"] .value-edit {
+	padding: 0 2px;
+	font-size: inherit;
+	line-height: inherit;
+	vertical-align: baseline;
+}
+/* A slimmer document bar; the actions and Tree view are unchanged. */
+body[data-view="document"] .toolbar {
+	min-height: 0;
+	padding: 3px 8px;
+	gap: 3px 4px;
+}
+body[data-view="document"] .filter-wrap {
+	max-width: 240px;
+}
+body[data-view="document"] .toolbar .filter {
+	max-width: 240px;
+	height: 22px;
+	font-size: 12px;
+	border-color: transparent;
+	background: var(--vscode-input-background);
+	border-radius: 2px;
+}
+body[data-view="document"] .toolbar .tool {
+	padding: 2px 6px;
+	border: 0;
+	background: transparent;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+body[data-view="document"] .toolbar .tool:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+body[data-view="document"] .toolbar .count {
+	font-size: 11px;
 }
 body[data-view="document"] :is(.node[data-selected="true"], .node:focus-visible) > .row > .label,
 body[data-view="document"] :is(.node[data-selected="true"], .node:focus-visible) > .row > .label::before {

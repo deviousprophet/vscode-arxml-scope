@@ -86,31 +86,31 @@ toggles without moving the selection, a follow follows, everything else selects.
   The indent-guide fallback `#80808040` is the only literal in the stylesheet. No asset file; glyphs
   and the twisty are inline SVG under `default-src 'none'`.
 - **Value type is data.** A parameter's value span carries `data-value-kind="numeric|textual|boolean"`;
-  the CSS maps it to `symbolIcon-number/string/booleanForeground`. Reference targets use the link
-  colour, short names the string colour. The value and name colours borrow the reference branch's
-  `artext.tmLanguage.json` scopes (strings, numbers, booleans, variables); that branch is a grammar,
-  not a palette to copy. Module and container accents use `symbolIcon-moduleForeground` and
-  `symbolIcon-namespaceForeground`, not one shared class colour.
-- Token colours are for the normal background. On a selected row they can fall below 3:1 (the light
-  theme's green value was 1.33:1 on the blue selection), so selected rows use
-  `--vscode-list-activeSelectionForeground` (and the inactive equivalent when focus is outside).
-  In Document view the same emphasis must cover the label and its module prefix as well as the
-  values, metadata, twisty and kind border; otherwise a focused line keeps a low-contrast token
-  colour. The document rule uses `:is(.node[data-selected="true"], .node:focus-visible)` so the
-  focus ring's background gets the same treatment.
-- **Document token mapping.** `schema`/`package`/`module` prefixes use
-  `symbolIcon-keywordForeground`; a module path uses `symbolIcon-functionForeground` → module → class;
-  a container label uses `symbolIcon-namespaceForeground`; parameter/reference labels use
-  `symbolIcon-variableForeground`; short names and textual values use `symbolIcon-stringForeground`;
-  numbers/hex use `symbolIcon-numberForeground`; booleans use the keyword colour; reference targets
-  use `textLink-foreground`; annotations use `descriptionForeground`, italic. Every colour is a
-  `--vscode-*` variable with a fallback; the Dark+ hex values in the research mock are evidence, not
-  product colours.
-- **Document layout.** The row is an inline flex line (no two-line grid, no chips, no per-row
-  border); children indent by `4ch`; the decorative braces are aligned to the row text start with
-  `margin-left: calc(-4ch + 1.2ch + 2px)` (the twisty track plus the row's left padding). The twisty
-  is opacity-only (revealed on row hover/focus), not removed, so collapse stays reachable. Metadata
-  must stay `display: inline`, never `display: none`.
+  the CSS maps it to `symbolIcon-number/string/booleanForeground`. Short names use the string colour.
+  The value and name colours borrow the reference branch's `artext.tmLanguage.json` scopes (strings,
+  numbers, booleans, variables); that branch is a grammar, not a palette to copy. In Tree view the
+  kinds keep their `symbolIcon-module/namespace/field/reference` accents and glyphs; those per-kind
+  label/accent rules apply to Tree view, not Document view.
+- Token colours are for the normal background. On a selected Tree row they can fall below 3:1 (the
+  light theme's green value was 1.33:1 on the blue selection), so Tree selection uses
+  `--vscode-list-activeSelectionForeground` (and the inactive equivalent). Document view instead uses
+  a quiet `editor-lineHighlightBackground` line highlight and the editor foreground on the selected
+  line; the focus edge is a 2px inset `focusBorder`, not the list selection bar.
+- **Document palette is restrained.** Structural labels (module path, container, parameter,
+  reference) use `--vscode-editor-foreground`. Only `schema`/`package`/`module` keywords use
+  `symbolIcon-keywordForeground`; short names/textual values use `symbolIcon-stringForeground`;
+  numbers/hex use `symbolIcon-numberForeground`; booleans use the boolean/keyword colour; variants,
+  conditions and context use `descriptionForeground`; annotations use `descriptionForeground`, italic.
+  Reference targets are `editor-foreground` with **no underline**; the `textLink` colour and underline
+  appear on hover only. Do not reintroduce the per-kind label rainbow in Document view.
+- **Document layout.** The row is a single flex line (`gap: 1ch`, no two-line grid, chips, per-row
+  border, padding or normal-state background); `#tree` starts at `3.5ch` and children indent by `4ch`.
+  The twisty/spacer is absolutely positioned in the gutter (`left: -2.2ch`, width `1.2ch`), so it
+  never shifts the text; braces use `margin-left: -4ch` to sit at the parent text start. The twisty is
+  opacity-only (revealed on row hover/focus), not removed, so collapse stays reachable. Metadata must
+  stay visible (`display: flex`, never `display: none`). Document values have no dotted underline or
+  hover pencil; the tooltip/cursor keep the edit affordance. The document bar is compact (3px padding,
+  240px filter, flat transparent buttons); Tree view keeps the base bar.
 - The tree exposes real `tree`/`treeitem`/`group` roles, `aria-expanded`, `aria-selected`,
   `aria-posinset`/`aria-setsize`, a roving `tabindex`, and Home/End/PageUp/PageDown. The inspector is
   a `region`, not a live region; selecting a node is already announced by the tree.

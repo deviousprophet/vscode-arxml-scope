@@ -6,14 +6,15 @@ parameter values in place, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
-> value editing, details inspector) are in place with 157 passing tests. Two things are deliberately
+> value editing, details inspector) are in place with 160 passing tests. Two things are deliberately
 > not implemented and are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
 > resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
 > `design.md`, `implement.md`) with the reference analysis in its
 > `research/legacy-artext-analysis.md`, and the legacy transform is vendored as text under
 > `reference/legacy-arxml2artext/`. The reading-experience overhaul (interaction model, collapse,
 > hierarchy, filter feedback, node identity) is `.trellis/tasks/10-14-ecuc-editor-ux/`; the
-> document-style default presentation is `.trellis/tasks/10-27-ecuc-viewer-document-redesign/`.
+> document-style default presentation is `.trellis/tasks/10-27-ecuc-viewer-document-redesign/`, and
+> the editor-like look is `.trellis/tasks/10-27-ecuc-document-editor-look/`.
 
 ## Why it exists
 
@@ -41,10 +42,14 @@ the file back to the text editor rather than showing an empty view.
 
 ## What it shows
 
-The editor opens in **Document** view, a dense monospace rendering of the file: one entity per line,
-4-space indentation, `{`/`}` around child groups, inline metadata, and semantic token colours. A
-toolbar **View** toggle switches to the **Tree** view, the two-line row layout with kind markers,
-chips and the fixed label column; the choice is remembered through the webview state.
+The editor opens in **Document** view, an editor-like monospace text surface: one entity per line,
+the editor font at 1.5 line height, 4-space indentation, `{`/`}` around child groups, inline metadata
+and a compact left gutter. Labels are neutral; only keywords, short names/strings, numbers/hex,
+booleans and annotations carry accent. The twisty lives in the gutter and appears on hover, values
+are plain text (no dotted underline), and reference targets are plain until hover. A slim toolbar
+holds the filter, count, expand/collapse, **View** and **Details** actions; the **View** toggle
+switches to the **Tree** view, the two-line row layout with kind markers, chips and the fixed label
+column. Both preferences are remembered through the webview state.
 
 | Entity | Shown as |
 |---|---|
@@ -57,21 +62,22 @@ chips and the fixed label column; the choice is remembered through the webview s
 | Conditions | `[SW-SYSCOND]` and post-build-variant conditions as `<Ref == value && …>` |
 | Annotations | `[Label] text`, shown in comment form (`/* … */`) in Document view, without a label when absent |
 
-In Document view the tree's title/twisty column is collapsed to a narrow hover-revealed twisty, so the
-document has no list bullets or per-row borders and reads like a text editor. Long lines scroll
-horizontally in the pane instead of wrapping; nothing is hidden — short-name, variant, hexadecimal
-form, context, conditions and annotations move inline after the value. Tree view keeps the previous
-presentation unchanged. The full text of any row remains available in the details panel.
+In Document view the tree's twisty column moves into the gutter, so labels align on exact 4-space
+steps and the braces align with the parent row; there are no list bullets, per-row borders, chips or
+fixed label columns. Long lines scroll horizontally in the pane instead of wrapping; nothing is
+hidden — short-name, variant, hexadecimal form, context, conditions and annotations move inline after
+the value. Tree view keeps the previous presentation unchanged. The full text of any row remains
+available in the details panel.
 
-The colours follow the ARTEXT grammar scopes rather than one token colour: keywords
-(`schema`/`package`/`module`) use the keyword colour, module paths the function colour, container
-labels the namespace colour, parameter/reference names the variable colour, short names and textual
-values the string colour, numbers and hex the numeric colour, booleans the boolean/keyword colour,
-reference targets the link colour, annotations the comment/description colour. In Tree view each kind
-also carries its own inline-SVG marker and accent, so the kinds are distinguishable in a
-high-contrast theme where colour alone is not enough. Selected and focused rows switch labels,
-prefixes, values and secondary fields to the theme's selection foreground so the semantic colours
-cannot fall below contrast on the selection background.
+Document colours are deliberately restrained. `schema`/`package`/`module` use the keyword colour,
+short names and textual values the string colour, numbers and hex the numeric colour, booleans the
+boolean/keyword colour, and annotations the description colour (italic). Structural labels — module
+paths, container names, parameter/reference names — use the editor foreground; variants and
+conditions are muted. Reference targets are plain text and use the link colour plus underline only
+on hover. In Tree view each kind also carries its own inline-SVG marker and accent, so the kinds are
+distinguishable in a high-contrast theme where colour alone is not enough. Selected and focused rows
+use a quiet editor line highlight, a focus edge, and the editor foreground for the selected line so
+the text cannot fall below contrast on the highlight.
 
 The presentational reference is the post-processed ARTEXT output of the remote
 `ref/ecucvalues-for-vscode` branch: `mmx` + `Arxml2Artext.mm`, then the extension's
@@ -215,11 +221,12 @@ a performance promise. Do not add virtualisation from one run.
 
 Local runs on 2026-10-27: `large` scanned and rendered in tens of milliseconds; `huge` took roughly
 0.09–0.12 s to scan and 0.15–0.20 s to render. In the browser harness (Document view, dark theme)
-the page finished loading after ~0.61 s (`large`, 4,001 rows) and ~1.6 s (`huge`, 12,001 rows), and
-the filter pass took ~54 ms / ~134 ms. The earlier Tree-view observations were ~1.3 s / ~7.3 s and
-~45 ms / ~125 ms; Document view is one CSS mode over the same DOM and no second render pass was
-added. These are this machine's observations; timings vary with load and are not a guarantee. The
-real VS Code webview also pays layout and paint.
+the page finished loading after ~0.8 s (`large`, 4,001 rows) and ~2.2 s (`huge`, 12,001 rows), and
+the filter pass took ~56 ms / ~120 ms; an earlier run observed ~0.6 s / ~1.6 s and ~54 ms / ~134 ms.
+The earlier Tree-view observations were ~1.3 s / ~7.3 s and ~45 ms / ~125 ms; Document view is one
+CSS mode over the same DOM and no second render pass was added. These are this machine's
+observations; timings vary with load and are not a guarantee. The real VS Code webview also pays
+layout and paint.
 
 ## Limitations
 
