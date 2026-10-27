@@ -41,6 +41,10 @@ Parent requirement IDs (R1–R18) and decisions live in `../10-14-ecuc-artext-ed
   toggle, and a no-match empty state with a clear action.
 - Theme robustness: font fallbacks and `--vscode-*` colour variables with usable fallbacks in light,
   dark and high-contrast themes.
+- A local synthetic sample set in `../sample` (default `D:\workspace\sample`) with a large file, and
+  a scanner/renderer benchmark for it.
+- Semantic element colours: distinct kind accents and value-type colours, with reference links and
+  short-name identity, all from theme variables.
 - Documentation of the inspector and the preview harness in `docs/ECUC_EDITOR.md`.
 
 **Out**
@@ -95,6 +99,22 @@ Parent requirement IDs (R1–R18) and decisions live in `../10-14-ecuc-artext-ed
   as observed in the harness or still unverified, never implied to have passed in VS Code.
 - **R-VP12 — Documentation.** `docs/ECUC_EDITOR.md` describes the details panel and its actions and
   the preview command, including that it is a development tool with a stubbed host.
+- **R-VP13 — Local sample set.** A committed, dependency-free generator writes a synthetic sample set
+  to `../sample` (by default `D:\workspace\sample` here): a minimal file, a full display-rules file, a
+  references file, a large file (≥4,000 nodes) and a huge stress file (≥10,000 nodes). A README there
+  says the files are synthetic and how to regenerate them. The sample files stay outside the
+  repository; the generator is committed.
+- **R-VP14 — Performance is measured, not guessed.** A committed benchmark reads a sample file, times
+  the production scanner, node index, `renderTree` and `renderHtml`, and reports file size, node
+  count, median time, a post-run heap-used delta and RSS (neither is a peak; Node has no per-phase
+  high-water mark). The harness may list the local sample directory for manual viewing, but
+  `preview:check` stays deterministic and excludes it. No optimisation is made unless the measurement
+  shows a problem.
+- **R-VP15 — Element colours are semantic.** Modules and containers have distinct accents
+  (module/namespace variables), parameters use the field accent, references use the reference/link
+  colour; numeric, textual and boolean values have distinct `--vscode-symbolIcon-*` colours; short
+  names use the variable colour; reference targets are links. Every colour is a theme variable with a
+  fallback; selected rows still use the selection foreground; all three themes stay legible.
 
 ## Acceptance Criteria
 
@@ -135,6 +155,19 @@ Parent requirement IDs (R1–R18) and decisions live in `../10-14-ecuc-artext-ed
 - [ ] **AC11** `docs/ECUC_EDITOR.md` documents the details panel, its actions and the preview command,
       and the UX task's manual-verification table is updated with what the harness observed and what
       still needs a real Extension Development Host.
+- [x] **AC12** `npm run samples:ecuc` writes `minimal.arxml`, `display-rules.arxml`,
+      `references.arxml`, `large.arxml` (≥4,000 nodes) and `huge.arxml` (≥10,000 nodes) plus
+      `README.md` to the sample directory. Every file is synthetic; the generator uses built-ins only;
+      the large files are not committed.
+- [x] **AC13** `npm run perf:ecuc -- <file>` reports file size, node count, scan/index/render times and
+      a memory estimate (post-run heap-used delta and RSS; neither is a peak high-water mark). The
+      large and huge samples are measured and the numbers (plus a browser page-load observation) are
+      recorded in `implement.md`. `preview:check` remains deterministic and excludes `sample/`.
+- [x] **AC14** Parameters carry `data-value-kind="numeric|textual|boolean"`; module/container/
+      parameter/reference accents use distinct `--vscode-symbolIcon-*` variables; reference targets use
+      a link colour; short names use the variable colour. Light/dark/high-contrast captures show the
+      new colours, selected-row contrast is still measured, and no colour literal appears outside a
+      fallback.
 
 ## Constraints
 
@@ -146,6 +179,10 @@ Parent requirement IDs (R1–R18) and decisions live in `../10-14-ecuc-artext-ed
   available to the provider; `LineIndex` is already in `src/core/text/offsets.ts`.
 - The copy message is the only new host message; it must not touch the document.
 - The webview is a plain inlined page: inline SVG only, no font/image asset, no remote load.
+- The sample directory is outside the repository and contains synthetic data only. The generator and
+  benchmark are dev-only and are not imported by the extension; `src/core/**` is untouched.
+- A benchmark number is not a promise. Real webview layout/paint and real customer files remain
+  unverified; the samples are synthetic and the browser harness is not a VS Code webview.
 - Any behaviour needing a real webview DOM is recorded as harness-observed or unverified, never
   claimed as a VS Code webview pass.
 

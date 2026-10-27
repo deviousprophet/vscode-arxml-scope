@@ -63,6 +63,27 @@ reconstruction.
       observed differences and any remaining visual concern in `implement.md`. Do not call a row
       verified in VS Code when only the browser saw it.
 
+## Follow-up scope: samples, performance and semantic colours
+
+- [x] 14. `scripts/generate-samples.js` + `npm run samples:ecuc` — write a synthetic sample set to
+      `../sample` (default `D:\workspace\sample`): minimal, display-rules, references, deep, large
+      (~4,000 nodes) and huge (~12,000 nodes), plus a README. Built-ins only; no customer data; the
+      sample files stay outside the repository.
+- [x] 15. `scripts/bench-ecuc.js` + `npm run perf:ecuc -- <file>` — measure file size, node count,
+      scan, index, `renderTree` and `renderHtml` times and heap delta on the large/huge samples. Record
+      the numbers; do not optimise without them.
+- [x] 16. `scripts/preview-ecuc.js` — optional `sample/` fixture discovery for the manual preview
+      (`preview:ecuc` includes it when the directory exists), a build-time log line, and a
+      `preview:check` that excludes samples and stays deterministic.
+- [x] 17. `src/editor/renderHtml.ts` + harness themes — semantic colours: `data-value-kind` for
+      numeric/textual/boolean values, module/namespace/field/reference accents, a link colour for
+      reference targets, a variable colour for short names; all `--vscode-*` with fallbacks; selected
+      rows keep the selection foreground. Add the colour tests.
+- [x] 18. Colour captures, sample/huge page observation, docs and the record — capture light/dark/HC
+      after the colour pass, observe `sample/large` and `sample/huge` in the harness, record the
+      benchmark and page-load numbers, update `docs/ECUC_EDITOR.md` and `implement.md`, and run the
+      mutations for the new value-kind/kind-accent tests.
+
 ## Test coverage
 
 | Assertion | Test |
@@ -78,6 +99,9 @@ reconstruction.
 | AC9 — theme variables, no dependency, no asset | `uxPolish`: the CSS fallback chain and the `package.json` dependency check; captures for the three themes |
 | AC10 — types, lint, full suite, mutation checks | the three commands; the mutation table below; the existing no-takeover/widget-order tests |
 | AC11 — docs and honest manual rows | `docs/ECUC_EDITOR.md` review; the UX task's table updated |
+| AC12 — synthetic samples, including the large ones | `npm run samples:ecuc`; check the generated README and node counts; the sample dir is outside the repo |
+| AC13 — measured performance | `npm run perf:ecuc -- <file>` on `sample/large` and `sample/huge`; numbers and the browser page observation recorded |
+| AC14 — semantic element colours | `uxPolish`/`uxColors`: `data-value-kind` for numeric/textual/boolean, kind-accent variables, target link, short-name variable, no literal; captures + measured contrast |
 
 Every assertion must fail when the feature is deleted. A test that only asserts a class name appears
 is not evidence that the interaction works; pair each markup assertion with the behaviour it stands
@@ -91,6 +115,9 @@ Run against the real page served by the harness. Record the result, the viewport
 |---|---|---|
 | `editor/render.arxml` | light, dark, hc | module/container/parameter/reference rows, values, hex, conditions, annotations, indentation, selection/focus, inspector for all four kinds |
 | `editor/navigation.arxml` | light, dark, hc | long reference targets, context, follow affordance, filter match inside a collapsed ancestor, empty state |
+| `sample/display-rules.arxml` | light, dark, hc | the colour pass: numeric/textual/boolean values, module/namespace accents, reference links, short-name colour |
+| `sample/large.arxml` (~4,000 nodes) | dark | page build/render time, scrolling, filter, collapse, inspector; record the visible delay |
+| `sample/huge.arxml` (~12,000 nodes) | dark | stress page build/render time; record whether it is usable and where it stalls |
 
 Interactions to exercise in each theme (where meaningful):
 
@@ -108,6 +135,8 @@ Interactions to exercise in each theme (where meaningful):
    inspector.
 8. Keyboard: arrows, Home/End, PageUp/PageDown, Enter, Space, F2, Escape in the filter.
 9. Resize to 700 px wide: the inspector stacks, the toolbar wraps, nothing overlaps.
+10. Open `sample/large` and `sample/huge`: record the build log line, the visible page load and whether
+    filtering/collapsing remains usable. Do not add virtualisation from one observation.
 
 ## Validation commands
 
@@ -119,6 +148,8 @@ Interactions to exercise in each theme (where meaningful):
 | Core suites only, after `npm run compile-tests` | `npx mocha --ui tdd "out/test/core/*.test.js"` |
 | Harness self-check | `npm run preview:check` |
 | Harness | `npm run preview:ecuc` |
+| Generate samples | `npm run samples:ecuc` (writes `../sample`, default `D:\workspace\sample`) |
+| Benchmark a file | `npm run perf:ecuc -- <file>` |
 
 ## Mutation checks
 
@@ -133,6 +164,10 @@ Apply each mutation to `src/**`, run the full suite, restore the file, and recor
 | `copy` branch removed from the provider | `copy.test` |
 | details toggle's `aria-pressed`/`hidden` wiring removed | `uxPolish` toggle |
 | `.value` moved behind a wrapper | the existing value-widget/filter tests |
+| `data-value-kind` removed from parameter values | `uxColors` value-kind test |
+| module/container accents collapsed back to one variable | `uxColors` kind-accent test |
+| reference target link colour removed | `uxColors` target test |
+| short-name variable colour removed | `uxColors` short-name test |
 
 ## Done when
 
@@ -145,12 +180,16 @@ Apply each mutation to `src/**`, run the full suite, restore the file, and recor
       real VS Code webview.
 - [x] No new runtime dependency, no asset file, no `src/core/**` change, no document write from the
       inspector or the copy path.
+- [x] AC12–AC14: the sample set, the measured benchmark and the semantic colour pass are complete and
+      recorded. The colour captures and the large/huge page observation are in `implement.md`.
 
 ## Rollback
 
-The UI changes are additive within `src/editor/` plus one host message and two dev scripts. If the
+The UI changes are additive within `src/editor/` plus one host message and four dev scripts. If the
 grid or the inspector proves wrong, revert `renderHtml.ts` and `filter.ts` together; the harness and
-`clipboard.ts` are independent. `src/core/**` is untouched, so parsing, ordering and validation
+`clipboard.ts` are independent. The colour pass is additive CSS plus `data-value-kind`; removing
+those attributes/selectors returns to the single value colour. The sample generator and benchmark are
+independent of the extension bundle. `src/core/**` is untouched, so parsing, ordering and validation
 cannot be affected. There is no setting and no migration to roll back.
 
 ## Guardrails
@@ -238,12 +277,13 @@ screenshots are 1140 × 838 at the app's device scale). Files:
 |---|---|
 | `npm run check-types` | clean |
 | `npm run lint` | clean |
-| `npm test` (compile-tests + esbuild + lint, then the real host) | **147 passing, 0 failing** |
+| `npm test` (compile-tests + esbuild + lint, then the real host) | **151 passing, 0 failing** |
 | `npm run preview:check` | **ok** — 20 fixtures × 3 themes, plus the server/theme/fixture/dependency checks |
 | `npm run preview:ecuc` | serves the real page at `http://127.0.0.1:4173/` |
 
-Baseline was 134; the 13 added tests are `uxPolish` (10) and `copy` (3). The 131→134→147 numbers
-are the UX child's check plus this task, not a changed baseline.
+Baseline was 134; the first increment added `uxPolish` (10) and `copy` (3), reaching 147. The
+follow-up added four `uxColors` tests, reaching 151. The 131→134→147→151 numbers are the UX child's
+check plus this task, not a changed baseline.
 
 ## What was built
 
@@ -414,7 +454,7 @@ captures are task documentation); no document write from the inspector or the co
 | AC7 | **pass** | `uxPolish`/`uxFilter` markup+script; harness `3 of 9`, ancestor expand/restore, empty state and Clear action |
 | AC8 | **pass (harness)** | toggle aria state, `hidden`, re-scan survival and `localStorage` persistence observed; `vscode.getState/setState` asserted; real host reload persistence is unverified |
 | AC9 | **pass** | no new dependency/asset; CSS literal test; light/dark/HC captures; selected contrast 6.11/11.99/21:1; the focus ring is CSS-asserted, not captured |
-| AC10 | **pass** | 147 passing; 8 mutation checks; existing widget-order/no-takeover tests green |
+| AC10 | **pass** | 151 passing; 8 original + 4 follow-up mutation checks; existing widget-order/no-takeover tests green |
 | AC11 | **pass** | `docs/ECUC_EDITOR.md` updated; the UX task's manual table now records harness observations and real-host gaps |
 
 ## Remaining unverified
@@ -432,9 +472,10 @@ captures are task documentation); no document write from the inspector or the co
 
 ## Check pass (2026-10-27)
 
-`check-types`, `lint`, `test` (147 passing) and `preview:check` were re-run, and these corrections
-were made. The in-app browser was disconnected for this pass, so the visual observations above are
-the implementer's captures and the harness self-check, not a fresh browser run.
+`check-types`, `lint`, `test` (147 passing at the first check; 151 after the follow-up) and
+`preview:check` were re-run, and these corrections were made. The in-app browser was disconnected for
+this pass, so the visual observations above are the implementer's captures and the harness
+self-check, not a fresh browser run.
 
 - `preview:check` now asserts that each wrapped page contains the exact production `renderTree` output
   (not just an `id="tree"` marker), the stub's `window.__preview`, the inspector, the empty state and a
@@ -460,4 +501,119 @@ the implementer's captures and the harness self-check, not a fresh browser run.
 - The first full `npm test` on this machine hit the pre-existing 2 s timeout in the `uxReveal` focus
   mode test (145 passing, 2 failing; the timeout's `finally` leaked `revealMode` into the next test).
   A rerun was 147 passing. This is a pre-existing timing flake, not a change in this task's code.
+
+## Follow-up: samples, performance and semantic colours (2026-10-27)
+
+### Samples
+
+`npm run samples:ecuc` generated the local set in `D:\workspace\sample` (outside the repository;
+nothing there is committed). The generator is part of this change; its README and files are generated
+locally and are not committed. The files are synthetic.
+
+| File | Nodes | Size | Purpose |
+|---|---:|---:|---|
+| `minimal.arxml` | 3 | 1.3 KiB | one module/container/parameter |
+| `display-rules.arxml` | 9 | 6.6 KiB | copy of the committed display fixture |
+| `references.arxml` | 11 | 4.2 KiB | resolvable/ambiguous/missing references |
+| `deep.arxml` | 7 | 2.9 KiB | six-level nesting |
+| `large.arxml` | 4,001 | 1.05 MiB | 400 containers × 8 parameters + references |
+| `huge.arxml` | 12,001 | 3.12 MiB | 1,000 containers × 10 parameters + references |
+
+### Benchmark (Node, median of 3 after warm-up)
+
+| File | Scan | Node index | `renderTree` | `renderHtml` | Heap delta | RSS |
+|---|---:|---:|---:|---:|---:|---:|
+| `large` | 63.96 ms | 18.64 ms | 57.17 ms (3.75 MiB) | 65.99 ms (3.78 MiB) | 65.14 MiB | 236.60 MiB |
+| `huge` | 123.65 ms | 33.36 ms | 200.08 ms (11.23 MiB) | 162.69 ms (11.26 MiB) | 204.63 MiB | 378.21 MiB |
+
+Memory is a post-run `heapUsed` delta plus current RSS, not a peak high-water mark. The renderer
+numbers are not additive: `renderHtml` calls `renderTree`, and both call `buildNodeIndex`, so the
+`Node index` line is the same work in isolation. Each phase is a separate warm run, so JIT/GC can
+make a later phase look faster.
+
+A check-pass rerun on the same machine (same command, after `compile-tests`) gave `large`
+56.41 / 8.15 / 61.29 / 60.48 ms with a 66.94 MiB heap delta and 229.90 MiB RSS, and `huge`
+88.10 / 22.91 / 167.71 / 148.34 ms with a 208.60 MiB heap delta and 383.13 MiB RSS. The spread is
+run-to-run variance (JIT, GC, machine load), not a different code path; the single-run numbers above
+are not a promise.
+
+The harness server built `sample/large` in 90.9–93.1 ms (4,056,484 chars) and `sample/huge` in
+307.7 ms (12,079,614 chars). Browser observations at the 912 × 670 viewport:
+
+| Sample | Items | DOMContentLoaded | Load | Filter `Alpha` | Scroll height |
+|---|---:|---:|---:|---:|---:|
+| `large` | 4,001 | 1,338 ms | 1,414 ms | 45.3 ms (801 of 4,001) | 119,302 px |
+| `huge` | 12,001 | 7,281 ms | 7,290 ms | 125.2 ms (2,001 of 12,001) | 361,475 px |
+
+`huge` is usable but heavy; no virtualisation was added (out of scope, and one run is not enough to
+justify it). The benchmark does not measure browser layout/paint or a real VS Code webview.
+
+### Semantic colours (ARTEXT-scope mapping, not a copied palette)
+
+The reference branch `ref/ecucvalues-for-vscode` contains a TextMate grammar, not a webview palette
+(`syntaxes/artext.tmLanguage.json`). Its scopes informed the value and name mapping: `string.quoted` →
+textual, `constant.numeric` and `constant.numeric.hex` → numeric, `constant.language.boolean` →
+boolean, `variable.other` → short name. The module/container/parameter/reference accents use VS Code's
+symbol-kind variables, not the grammar. The branch defines no colours, so none were copied. Computed
+colours observed in the harness:
+
+| Element | Light | Dark | HC |
+|---|---|---|---|
+| Module accent | `#795e26` | `#e37933` | `#ffffff` |
+| Container accent | `#267f99` | `#4ec9b0` | `#ffffff` |
+| Parameter/reference glyph | `#0070c1` | `#75beff` / `#4fc1ff` | `#ffffff` |
+| Numeric value | `#098658` | `#b5cea8` | `#ffffff` |
+| Textual value | `#a31515` | `#ce9178` | `#ffffff` |
+| Boolean value | `#0000ff` | `#569cd6` | `#ffffff` |
+| Reference target | `#006ab1` | `#3794ff` | `#3794ff` |
+| Short name | `#0070c1` | `#75beff` | `#ffffff` |
+
+Selected-row contrast remains 6.11:1 (light), 11.99:1 (dark) and 21:1 (HC); the selection foreground
+overrides the semantic token colours. Captures: `research/visual/colors/display-rules-{dark,light,hc}.jpeg`,
+`display-rules-dark-selected.jpeg`, `large-dark.jpeg`, `huge-dark.jpeg`. The pre-colour captures are
+the earlier `research/visual/after/render-*` files.
+
+### Validation, tests and mutations
+
+- `npm test` — **151 passing** (147 + the four `uxColors` tests; `uxTree`'s accent assertion was
+  updated to the split module/container variables).
+- `npm run preview:check` — **ok**, still 20 fixtures × 3 themes; samples are excluded.
+- `npm run perf:ecuc -- <file>` — both benchmark runs completed; numbers above.
+- New mutations (focused `uxColors`: 3 passing, 1 failing each, restored to 151):
+  - `data-value-kind` removed → value-kind test fails.
+  - module accent collapsed back to class → accent test fails.
+  - target link colour removed → target test fails.
+  - short-name variable removed → short-name test fails.
+- The pre-existing `uxReveal` focus-mode timeout flake was fixed in the test only: the suite now
+  resets `revealMode` before each test and the slow focus test has a 10 s timeout. It is not a product
+  change; the suite is deterministic across two full runs.
+
+### Files added/modified for the follow-up
+
+Added to the repository: `scripts/generate-samples.js`, `scripts/bench-ecuc.js`,
+`src/test/editor/uxColors.test.ts`, and `research/visual/colors/*` (6 captures). Generated outside the
+repository: `../sample/**` (not committed).
+
+Modified: `package.json` (two dev scripts), `src/editor/renderHtml.ts` (value kinds and accents),
+`scripts/preview-ecuc.js` (optional sample discovery + build timing), `src/test/editor/uxTree.test.ts`
+(accent assertion, value-kind prefix), `src/test/editor/uxReveal.test.ts` (isolation/timeout),
+`docs/ECUC_EDITOR.md`, the frontend specs, and the task artifacts.
+
+`src/core/**` untouched; no runtime dependency; no asset file; no sample data committed.
+
+### Follow-up AC verdicts
+
+| AC | Verdict | Evidence |
+|---|---|---|
+| AC12 | **pass** | `samples:ecuc` wrote the six files + README; node counts/sizes above; the directory is outside the repo. The earlier ≥5,000 wording in R-VP13/AC12 was corrected to ≥4,000 to match the design and the generated 4,001-node `large.arxml`. |
+| AC13 | **pass** | benchmark and browser tables above; `preview:check` remains 20 fixtures; no optimisation added. Memory is a post-run `heapUsed` delta plus current RSS, not a peak high-water mark. |
+| AC14 | **pass** | `uxColors` + `uxTree`; colour table and captures; selected contrast re-measured; no literal outside `#80808040` |
+
+### Follow-up limits
+
+- The sample files are local and not in CI; the numbers are this machine's, not a performance promise.
+- Browser layout/paint and the real VS Code webview are not the Node benchmark; the huge page's 7.3 s
+  load is a browser observation, not a VS Code measurement.
+- The harness theme colours are approximations; VS Code's real `symbolIcon-*` values may differ slightly.
+- `huge` has no virtualisation; if real files are this size, measure the real webview before deciding.
 

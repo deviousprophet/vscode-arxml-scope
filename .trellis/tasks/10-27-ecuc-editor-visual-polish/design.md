@@ -371,3 +371,125 @@ inspector.innerHTML = `<code>${item.dataset.definitionRef}</code>`;
 const code = document.createElement('code');
 code.textContent = item.dataset.definitionRef;
 ```
+
+## 11. Local samples and benchmark
+
+### 11.1 Generator
+
+`scripts/generate-samples.js` is plain Node, built-ins only:
+
+```text
+default output: path.resolve(ROOT, '..', 'sample')   # D:\workspace\sample here
+optional argument: node scripts/generate-samples.js <dir>
+```
+
+It writes a self-describing `README.md` and:
+
+| File | Content | Approx. nodes |
+|---|---|---|
+| `minimal.arxml` | one module, one container, one parameter | 3 |
+| `display-rules.arxml` | a copy of the committed `editor/render.arxml` display fixture | 9 |
+| `references.arxml` | a copy of the committed `editor/navigation.arxml` reference fixture | 11 |
+| `deep.arxml` | a copy of the committed core `deep.arxml` nesting fixture | 7 |
+| `large.arxml` | 400 containers × 8 parameters + one reference each | ~4,000 |
+| `huge.arxml` | 1,000 containers × 10 parameters + one reference each | ~12,000 |
+
+The two large files are generated from an array of strings and one `writeFileSync` each; no random
+data, no customer data, no cache. The sample directory is outside the repository and is not
+committed; the generator refuses an output path inside the repository. The generator is committed so
+the set is reproducible.
+
+### 11.2 Harness inclusion
+
+`discoverFixtures({ includeSamples })` walks the committed fixtures always, and additionally walks
+`SAMPLE_ROOT` when `includeSamples` is true (or `PREVIEW_SAMPLE_DIR` points elsewhere). Sample ids are
+prefixed `sample/`, so the preview panel can switch to `sample/large` / `sample/huge`. `startPreview`
+includes them when the directory exists; `runCheck` never does, so CI remains deterministic and does
+not depend on a local sample directory.
+
+The sample page goes through the same `scanEcucValues` → `renderHtml` path; it is not a second
+renderer. The server logs the build time and page size for each request so a large page can be
+compared with a small one.
+
+### 11.3 Benchmark
+
+`scripts/bench-ecuc.js` (or `npm run perf:ecuc -- <file>`) requires `out/`, reads the file, and
+measures with a warm-up plus three medians:
+
+- file size and UTF-16 length;
+- node count from the model;
+- `scanEcucValues`, `buildNodeIndex`, `renderTree`, `renderHtml`; `renderHtml` calls `renderTree`,
+  and both call `buildNodeIndex`, so the index line is the same work in isolation, not an additive
+  phase;
+- heap-used delta around the run and RSS after the run; neither is a peak high-water mark (Node
+  exposes no per-phase high-water mark).
+
+It prints a summary and exits non-zero if the file cannot be scanned. It does **not** measure browser
+layout/paint: that is observed separately in the harness page for `sample/large` and `sample/huge`.
+The benchmark is evidence, not a promise; no optimisation or virtualisation is added unless the
+numbers show a problem.
+
+## 12. Semantic element colours
+
+`data-value-kind` on the parameter's value span distinguishes the three value types without changing
+the `class="value"` prefix (the widget and filter selectors stay valid):
+
+| Element | Selector | Theme variable(s) |
+|---|---|---|
+| Module accent | `.row.k-module`, `.g-module` | `--vscode-symbolIcon-moduleForeground` → class → foreground |
+| Container accent | `.row.k-container`, `.g-container` | `--vscode-symbolIcon-namespaceForeground` → class → foreground |
+| Parameter accent | `.row.k-parameter`, `.g-parameter` | `--vscode-symbolIcon-fieldForeground` → foreground |
+| Reference accent | `.row.k-reference`, `.g-reference` | `--vscode-symbolIcon-referenceForeground` → foreground |
+| Numeric value | `.value[data-value-kind="numeric"]` | `--vscode-symbolIcon-numberForeground` → field → foreground |
+| Textual value | `.value[data-value-kind="textual"]` | `--vscode-symbolIcon-stringForeground` → foreground |
+| Boolean value | `.value[data-value-kind="boolean"]` | `--vscode-symbolIcon-booleanForeground` → keyword → foreground |
+| Reference target | `.value.target` | `--vscode-textLink-foreground` → reference → foreground |
+| Short name | `.short` | `--vscode-symbolIcon-variableForeground` → string → foreground |
+| Variant | `.variant` | `--vscode-symbolIcon-enumeratorForeground` → foreground |
+| Condition | `.condition` | `--vscode-symbolIcon-keywordForeground` → foreground, chip border |
+| Annotation | `.annotation` | `--vscode-descriptionForeground`, italic chip |
+| Hex/context | `.hex`, `.context` | `--vscode-descriptionForeground` |
+
+The existing selected-row rule (`.node[data-selected="true"] > .row > .value` and the `.row-meta`
+spans) has higher specificity than the value-kind selectors and continues to force the theme's
+selection foreground; the visual pass re-measures the ratios. The harness theme adds module,
+namespace, variable and boolean values; real VS Code supplies them, with the fallback chain above
+when a theme omits one. No colour literal is introduced outside a `var(...)` fallback.
+
+**Wrong — one number colour for every value.**
+
+```css
+.value { color: var(--vscode-symbolIcon-numberForeground); }
+```
+
+**Correct — the value type chooses the variable.**
+
+```css
+.value[data-value-kind="textual"] { color: var(--vscode-symbolIcon-stringForeground, var(--vscode-foreground)); }
+.value[data-value-kind="boolean"] { color: var(--vscode-symbolIcon-booleanForeground, var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground))); }
+```
+
+**Wrong — module and container share one accent.**
+
+```css
+.row.k-module, .row.k-container { border-left: 2px solid var(--vscode-symbolIcon-classForeground); }
+```
+
+**Correct — the kind picks the symbol icon.**
+
+```css
+.row.k-module { border-left-color: var(--vscode-symbolIcon-moduleForeground, var(--vscode-symbolIcon-classForeground)); }
+.row.k-container { border-left-color: var(--vscode-symbolIcon-namespaceForeground, var(--vscode-symbolIcon-classForeground)); }
+```
+
+## 13. Additional files and rollback
+
+Added: `scripts/generate-samples.js`, `scripts/bench-ecuc.js`, the generated `../sample/**` (outside
+the repository), colour tests in `uxColors.test.ts`, and `research/visual/colors/**` captures.
+Modified: `src/editor/renderHtml.ts` (value kinds and accents), `scripts/preview-ecuc.js` (optional
+sample discovery and build timing), harness themes, `docs/ECUC_EDITOR.md`, task artifacts.
+
+The colour pass is additive CSS plus a data attribute; roll it back by removing the value-kind
+attributes and the new selectors, returning to the single `.value` colour. The sample generator and
+benchmark are independent of the extension bundle. `src/core/**` is untouched, so the scanner and
+write path cannot be affected.
