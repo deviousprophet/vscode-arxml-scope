@@ -4,9 +4,6 @@ Browse and edit AUTOSAR ECUC-Values files in VS Code without reading raw XML. Th
 modules, containers, parameters and references as a keyboard-navigable document, with types, value
 formats and source locations in one place.
 
-> **Status:** the ECUC editor is usable today (0.1.0). Workspace-wide navigation, validation, completion
-> and search are planned.
-
 ## What it does
 
 | Capability | What you get |
