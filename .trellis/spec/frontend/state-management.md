@@ -45,8 +45,9 @@ from the next displayed row; that is a second owner of the rule, and the reason 
 ## Pure helpers, serialized once
 
 `pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`, `reconcileRowState`,
-`resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`, the virtual-scroll functions and the
-filter/flatten functions live in `renderHtml.ts`, `virtualScroll.ts`, `renderRows.ts` and `filter.ts`.
+`resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`, `ancestorIds`, the virtual-scroll
+functions and the filter/flatten functions live in `renderHtml.ts`, `virtualScroll.ts`,
+`renderRows.ts` and `filter.ts`.
 The page emits them with `Function.prototype.toString()` (the virtual math through
 `virtualScrollScript()`). Tests extract the page's own copy with `scriptTestUtils` and compile it, so
 "the page and the tests share one definition" is an assertion rather than a claim. Do not add a

@@ -355,4 +355,25 @@ suite('virtual page (design §4, §5, §8)', () => {
 		const ancestors = evaluateFunction<typeof ancestorIds>(html, 'ancestorIds');
 		assert.deepStrictEqual(ancestors(rows, 'row-4'), ['row-3', 'row-2', 'row-1', 'row-0'], 'nearest parent first');
 	});
+
+	test('design §4: expandAncestors expands exactly the ids ancestorIds reports', () => {
+		const html = page();
+		const rows = syntheticRows(6);
+		const collapsed = new Set(['row-1', 'row-3']);
+		const globals = globalThis as unknown as { rows?: unknown; collapsed?: unknown; ancestorIds?: unknown };
+		const saved = { rows: globals.rows, collapsed: globals.collapsed, ancestorIds: globals.ancestorIds };
+		globals.rows = rows;
+		globals.collapsed = collapsed;
+		globals.ancestorIds = evaluateFunction<typeof ancestorIds>(html, 'ancestorIds');
+		try {
+			const expandAncestors = evaluateFunction<(id: string) => boolean>(html, 'expandAncestors');
+			assert.strictEqual(expandAncestors('row-4'), true, 'a collapsed ancestor is expanded');
+			assert.deepStrictEqual(Array.from(collapsed), [], 'exactly the ancestors were removed');
+			assert.strictEqual(expandAncestors('row-4'), false, 'a second reveal changes nothing');
+		} finally {
+			globals.rows = saved.rows;
+			globals.collapsed = saved.collapsed;
+			globals.ancestorIds = saved.ancestorIds;
+		}
+	});
 });

@@ -125,7 +125,7 @@ row model carries no source-position fields.
 
 The virtual row renderer is tested at two levels. Pure modules (`renderRows`, `virtualScroll`,
 `filterRows`/`flattenRows`) have ordinary unit tests over values. The page's own copy is extracted
-from `renderHtml` with `scriptTestUtils` and compiled: `filterRows`, `flattenRows`,
+from `renderHtml` with `scriptTestUtils` and compiled: `filterRows`, `flattenRows`, `ancestorIds`,
 `inspectorFields`, `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` and the
 virtual math are driven with real row data, so the page does not get a second implementation.
 `virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse/filter

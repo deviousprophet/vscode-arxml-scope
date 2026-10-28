@@ -326,9 +326,10 @@ export function flattenRows(rows: readonly FilterRow[], options: FlattenOptions 
 }
 
 /**
- * The ancestors of `id`, nearest parent first. Rows must be in display order with
- * parents before children; a root row or an id that is not in the list yields `[]`.
- * One owner of the parent-id walk: revealing a row expands exactly these ids.
+ * The ancestors of `id` used to expand a revealed row, nearest parent first. A root
+ * row or an id that is not in the list yields `[]`; a malformed parent cycle stops
+ * instead of looping. This is the one owner of the walk expansion performs — the
+ * display list decides what stays open, and nothing re-walks parents to find out.
  */
 export function ancestorIds(rows: readonly FilterRow[], id: string): string[] {
 	const byId = new Map<string, FilterRow>();
@@ -336,8 +337,13 @@ export function ancestorIds(rows: readonly FilterRow[], id: string): string[] {
 		byId.set(row.id, row);
 	}
 	const out: string[] = [];
+	const seen = new Set<string>([id]);
 	let current = byId.get(id);
 	while (current && current.parentId !== null) {
+		if (seen.has(current.parentId)) {
+			break;
+		}
+		seen.add(current.parentId);
 		out.push(current.parentId);
 		current = byId.get(current.parentId);
 	}
