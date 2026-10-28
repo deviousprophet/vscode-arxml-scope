@@ -371,3 +371,37 @@ Moved the Document fold control into a fixed 26px VS Code-style gutter with the 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 10: ECUC parameter types, formats and details-only follow
+<!-- trellis-session: v=2 fp=5332ff545e7f66d5 -->
+
+**Date**: 2026-10-28
+**Task**: ECUC parameter types, formats and details-only follow
+**Branch**: `feat/arxml-scope`
+
+### Summary
+
+Added AUTOSAR DEFINITION-REF DEST capture, type-aware validation and details, Decimal/Hexadecimal/Binary formats, type-specific details controls, details-only reference jump and empty-container markers.
+
+### Main Changes
+
+- Scanner/model carry definitionDest; validateValue enforces integer/float/boolean literals; unused hexValue removed.
+- Details show Type and dec/hex/bin formats; integer/float sanitize input without rewriting text; Boolean uses a select; empty containers show { }.
+- Reference values are plain text; Jump to target is details-only; Document hex meta removed.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8f83733` | feat(editor): add AUTOSAR parameter details and formats |
+| `a8675f8` | chore(task): archive 10-28-ecuc-parameter-details-formats |
+
+### Testing
+
+- [OK] npm run check-types, npm run lint, npm test (217 passing), npm run preview:check
+- [OK] Mutation table 7/7 caught; dark/HC/narrow/deep captures recorded
+
+### Status
+
+[OK] **Completed**
