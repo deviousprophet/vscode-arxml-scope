@@ -18,4 +18,4 @@ function outModule(relative) {
 	return require(file);
 }
 
-module.exports = { ROOT, OUT, outModule };
+module.exports = { ROOT, outModule };

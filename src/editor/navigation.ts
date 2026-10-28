@@ -23,7 +23,7 @@ import { LineIndex } from '../core/text/offsets';
 import { NodeEntry, NodeIndex } from './nodeId';
 
 /** A model range as a VS Code range, through the document's own line index. */
-export function toVscodeRange(lineIndex: LineIndex, range: Range): vscode.Range {
+function toVscodeRange(lineIndex: LineIndex, range: Range): vscode.Range {
 	const start = lineIndex.positionAt(range.start);
 	const end = lineIndex.positionAt(range.end);
 	return new vscode.Range(start.line, start.character, end.line, end.character);
