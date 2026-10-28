@@ -81,7 +81,7 @@ harness — say so in the task notes rather than implying it was tested.
 `acquireVsCodeApi` and stubbed `--vscode-*` variables. That is enough to observe layout, hover, focus,
 scroll, filter passes and the inspector with a real DOM — much more than a string assertion. It is
 still **not** a VS Code webview: it cannot prove VS Code's own theme resolution, the real custom-editor
-tab/column/focus behaviour, or host clipboard permissions. Record harness observations as
+tab/column/focus behaviour, or accessibility-tree exposure. Record harness observations as
 harness-observed, and keep the real-host rows in the task's manual table.
 
 The harness must wrap the production renderer; a second renderer is a test that agrees with itself.
@@ -100,56 +100,60 @@ and is not read by the renderer.
 
 ## Document view tests drive the page's own helpers
 
-Document markup/CSS tests are string assertions (`data-view`, toggles, token selectors, fallbacks),
-but the view/details behaviour must drive the page's own `applyView` / `applyInspectorVisibility`
-extracted with `scriptTestUtils` against stub elements — not a host-side twin. The mutation table for
-this view is: remove the `data-view` default, change the document row to `grid`, remove the view
-toggle, make the inspector visible by default, remove the module prefix, remove the selection-label
-emphasis, and neutralize the document selectors. The editor-like pass adds: restore per-kind label
-colours, restore the target underline, restore the dotted value underline, put the twisty back in the
-flex flow, restore the list-selection row bar, restore the 6px toolbar padding, and remove the header
-keyword rule. The quiet-source pass adds: remove `data-line`/`#tree data-ln-digits`, restore the
-`--ecuc-selection-fg` monochrome selection, remove the full-row gutter margin/padding, remove the
-collapsed `{ ... }` stub or the `F2` hint, remove the `--tok-*` block, remove the narrow line-number
-hide, and remove the details width clamp/bottom sheet; each mutation must fail a test. A CSS selector
-assertion is still not a rendered-layout test, so pair it with the light/dark/HC captures and a
-browser pass. The quiet-source direction is prototyped in `docs/ecuc-editor-prototype.html` and
-specified in `docs/ECUC_EDITOR_DESIGN_SPEC.md`; assertions and captures must match the production
-CSS, never the prototype file. `data-line` on `.row` is 1-based (the source line), while `.node`
-`data-line` stays 0-based for the inspector; do not conflate them.
+Document markup/CSS tests are string assertions (the Document-only shell, layout/geometry, token
+selectors, fallbacks, no Tree/line-number/copy code), but the view/details behaviour must drive the
+page's own `applyInspectorVisibility`, `subtreeRowIds`, `guidesFor`, `reconcileRowState` and
+`detailsValueInput` extracted with `scriptTestUtils` against stub elements — not a host-side twin.
+The mutation table for this pass is: re-add a Tree toggle/view state, Tree CSS/glyph/probes; re-add
+the line-number gutter/`data-line`/digits; re-add the repeating indent gradient; drop the
+bracket-guide computation or leak it to every row; drop brace hover; re-add inline `.value` editing;
+re-add the F2 pseudo hint; re-add the details Source row or a Copy action; drop the details edit post;
+re-add digits to the re-scan; switch the container accent; make every reference followable; leak the
+selected subtree; remove the collapse/expand labels or the twisty's row-height hit area; re-add the
+gutter-era scroll padding; re-add the high-contrast subtree fill; discard a pending details draft;
+each mutation must fail a test. A CSS selector assertion
+is still not a rendered-layout test, so pair it with the dark/HC/selected parameter/selected
+container/guide-hover/details/narrow/deep captures and a browser pass. Assertions and captures must
+match the production CSS, never the prototype file. There is no source-line gutter to conflate; the
+row model carries no source-position fields.
 
 ## Virtual page tests drive the page's serialized row code
 
 The virtual row renderer is tested at two levels. Pure modules (`renderRows`, `virtualScroll`,
 `filterRows`/`flattenRows`) have ordinary unit tests over values. The page's own copy is extracted
 from `renderHtml` with `scriptTestUtils` and compiled: `filterRows`, `flattenRows`,
-`inspectorFields`, `reconcileRowState`, `resolveFocusId` and the virtual math are driven with real row
-data, so the page does not get a second implementation. `virtualPage.test.ts` pins the window range
-and overscan, the bounded row count, collapse/filter display lists, the offscreen inspector source,
-focus restoration and the re-scan payload. Structural assertions (a window loop, spacers, no
-`innerHTML`/style attribute in the row builder, `data-level` CSS) are the regression guard; the real
-DOM pass is the browser harness.
+`inspectorFields`, `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` and the
+virtual math are driven with real row data, so the page does not get a second implementation.
+`virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse/filter
+display lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan
+payload. Structural
+assertions (a window loop, spacers, no `innerHTML`/style attribute in the row builder, `data-level`
+CSS) are the regression guard; the real DOM pass is the browser harness.
 
 Mutation checks for this layer: render the full row list instead of `[start,end)`, remove the
 top/bottom spacers, zero the overscan, drop subtree collapse/filter-ancestor logic, drop the filter
 generation guard, use `innerHTML` for row text, use an inline depth style, remove
-`aria-level`/posinset/setsize, remove focus restore, send full HTML on re-scan, or use
-`#tree-window` as the offset; each must fail a test. Prefer the page's own functions over a grep-only
-assertion, and record which checks were browser-observed rather than unit-tested.
+`aria-level`/posinset/setsize, remove focus restore, send full HTML on re-scan, use
+`#tree-window` as the offset, leak bracket guides outside their container, or leak the subtree tint
+to siblings; each must fail a test. Prefer the
+page's own functions over a grep-only assertion, and record which checks were browser-observed rather
+than unit-tested.
 
 ## A CSS rule is not a contrast measurement
 
 Asserting that `.node[data-selected] .value` names a `--vscode-*` variable proves the rule exists, not
-that the text is readable. In this project the light theme's green value on the blue selection was
-**1.33:1** while the rule looked correct. Measure the computed foreground/background in the browser
-harness and record the ratio; keep the CSS assertion as a regression guard.
+that the text is readable. An earlier light-theme pass had a green value on the blue selection at
+**1.33:1** while the rule looked correct — one reason that pass was dropped. Measure the computed
+foreground/background in the browser harness and record the ratio; keep the CSS assertion as a
+regression guard.
 
 ## Source-level wiring assertions are a last resort
 
-The provider's `{ type: 'copy' }` branch is a one-liner around `copyText(clipboard, text)`. The helper
-is behaviourally tested with a stub (exact text, rejection), and the provider branch is source-asserted
-because a provider-level clipboard seam would be more machinery than the one-line wiring justifies.
-When you use this pattern, say so in the task notes; do not present it as a behavioural test.
+The provider's `{ type: 'copy' }` branch and clipboard module were removed with the details Copy
+actions. The remaining source-level wiring is the details editor's `{ type: 'edit' }` post and the
+re-scan handler; the input's Enter/Escape/Tab and refusal behaviour are asserted through the page's
+own serialized functions and browser captures, while the provider write is behaviourally tested.
+When you use a source assertion, say so in the task notes; do not present it as a behavioural test.
 
 ## Samples and benchmarks are evidence
 

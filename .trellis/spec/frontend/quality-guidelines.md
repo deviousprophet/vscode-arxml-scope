@@ -41,8 +41,9 @@ that is not obvious from the code.
   later write would target.
 - **A webview gets a CSP and a nonce**, and its state is re-posted on every change rather than assumed
   to survive.
-- **The value widget's listeners stay first, and claim their events with `stopImmediatePropagation`.**
-  The tree and the filter must not act on a click or key the widget owns; the ordering is asserted.
+- **The details editor owns its input events.** The value input lives in the details panel, outside
+  `#tree`, and stops `Enter`/`Escape`/`Tab` propagation. The Document row handler only selects/opens
+  the details editor; it never inserts an input into `.value`.
 - **Anything that must survive a re-scan lives outside the row window.** The shell, toolbar and
   inspector are not rebuilt; the row store, display list and window are. The filter's empty state is
   beside the tree because it describes the filtered list.
@@ -52,42 +53,45 @@ that is not obvious from the code.
 - **Rows are data, then text nodes.** The host emits `EcucRow` values; the page builds labels and
   values with `textContent`. Never use `innerHTML` for model text, and never reuse a full-tree HTML
   string as the re-scan payload.
-- **Selection never recolours syntax.** Tree and Document selection use the translucent `--sel-bg`/
-  `--sel-bg-focus` tint and the 2px `--rail` focus edge; the token colours stay. The light theme uses
-  no fill because the light key accent measures 4.51:1 on white — the active line number (Document)
-  and, when focused, the 2px rail carry the selection there. Do not reintroduce `--ecuc-selection-fg`
-  or a monochrome selected line. Measure the tint contrast (the old light-theme green on the blue
-  selection was 1.33:1); high contrast uses outlines, not fills.
-- **`.value` stays a direct child of `.row`.** The widget, `highlightableSpans` and the editing tests
-  select `:scope > .row > .value`; a wrapper cell breaks them. The value now contains a `--tok-punct`
-  `=` and a `.value-text`; the widget hides `.value-text` and inserts the input inside `.value`, so the
-  separator stays visible while editing. The filter highlights `.value .value-text`.
-- **A fixed label track keeps values aligned.** In Tree view each row is its own grid; a per-row `1fr`
-  label sizes to content and breaks the column. Document view deliberately drops the fixed track and
-  the two-line grid; do not reintroduce chips, cards, ellipsized values or per-row accents there.
-- **Document view is a presentation mode, not a data mode.** It is one `data-view` attribute and CSS
-  scoped under `body[data-view="document"]`, over the same rows and virtual window. The same rows,
-  roles, ids, `matchRanges`, filter/collapse state and `.value` direct-child contract apply. Never
-  hide metadata (`.row-meta`) to make the document look clean; inline it. The product never reads or
-  writes `.artext` and never runs `mmx`.
+- **Selection never recolours syntax.** A selected parameter uses `--sel-bg-focus`, the 2px
+  `--rail` and a 1px `--sel-outline`; a selected container/module also tints its visible subtree
+  with `--subtree-bg`. Tokens keep their colours; high contrast uses outlines, not fills. Do not
+  reintroduce `--ecuc-selection-fg` or a monochrome selected line.
+- **`.value` stays a direct child of `.row`.** The filter and tests select `.row > .value`; a wrapper
+  cell breaks them. The value contains a `--tok-punct` `=` and a `.value-text`; the document never
+  inserts an input. The details input is a separate `.details-value` in the inspector.
+- **One Document presentation.** There is no Tree toggle, view state, Tree grid/glyph/chip CSS or
+  Tree row height. Do not reintroduce a hidden second view.
 - **The Document surface is text first.** Structural labels are neutral; only `--tok-*` keywords,
-  strings, numbers, meta, comments and the single key accent carry colour. Reference targets are plain
-  until hover; values have no dotted underline or hover pencil. Use real source line numbers
-  (`data-line`, with `#tree data-ln-digits` selecting the gutter width), the `--ln-w`/`--gut`/
-  `--indent` gutter, the fold column and the 26px strip. The `=` is punctuation, not part of the value
-  token. The tree's per-kind colours, chips, dotted values and blue underlined targets belong to Tree
-  view, not Document view.
-- **Defaults are Document view and hidden details.** `renderHtml` writes `data-view="document"`, the
-  inspector `hidden`, and `aria-pressed="false"`; the page script applies a saved Tree view or a
-  shown inspector. The view and details state share the validated webview state object; a missing or
-  invalid view falls back to `document`.
-- **Tree view keeps the ARTEXT scopes.** `data-value-kind` selects numeric/textual/boolean tokens;
-  short names use `--tok-string`; targets are neutral with a hover link/underline. Do not paint every
-  value with one token. The Tree kinds keep module/namespace/field/reference `symbolIcon` accents,
-  glyphs, chips and dotted values. Document view uses the restrained palette above.
-- **A re-scan keeps state, not markup.** The host posts rows; the page reconciles selection, collapse,
-  query, view and scroll, rebuilds the display list and renders the window. There is no `innerHTML`
-  tree swap and no second refresh path.
+  strings, numbers, meta, comments, the green container name, the yellow italic reference target and
+  the single key accent carry colour. Unresolved reference targets are not links; resolved targets
+  underline only on hover; values have no dotted underline or hover pencil. Use
+  `--doc-pad`/`--indent`, the inline fold column and the 26px strip; there is no line-number gutter.
+  The `=` is punctuation, not part of the value token.
+- **No line-number gutter.** Do not add `data-line`, `data-ln-digits`, `--ln-*`, `--gut`, a digits
+  payload or source-position fields back to the row model. Bracket guides are the only vertical
+  rules; they run from opening to closing brace, fade at rest and activate on hover. A repeating
+  indent gradient is forbidden.
+- **Defaults are Document and hidden details.** `renderHtml` writes `data-view="document"`, the
+  inspector `hidden`, and `aria-pressed="false"`; only `inspectorHidden` is persisted. An old saved
+  `view` is ignored.
+- **Details editing is the only value edit path.** A selected parameter's value input commits through
+  the existing `{ type: 'edit', nodeId, value }` message; Enter commits, Escape restores, Tab moves.
+  A refusal keeps the typed text, marks the input invalid and shows the reason. The panel exposes
+  Reveal in source only; there is no Source block or copy action.
+- **Dark is the supported theme for now.** Do not re-add a light-only selection/token branch or a
+  light preview/capture; high contrast is the accessibility variant. High-contrast/forced-colors
+  subtree rows use a dotted outline, not the fill.
+- **The twisty hit area is the row.** The span stretches to `var(--ecuc-lh)`; do not shrink it back to
+  the 12px icon, or clicking above/below the chevron starts selecting instead of toggling.
+- **Reference follow is same-file only.** Only a target resolved through `resolvePath(model.pathIndex)`
+  gets `followable`/`data-follow`. Following selects the target node in the ECUC editor; unresolved
+  targets are not links.
+- **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels at
+  normal widths and the row twisty stays visible at rest; labels may hide only at <=720px.
+- **A re-scan keeps state, not markup.** The host posts `{ type: 'model', rows, selectedId }`; the
+  page reconciles selection, collapse, query and scroll, rebuilds the display list and renders the
+  window. There is no `innerHTML` tree swap and no second refresh path.
 - **The filter scans the row index, never the DOM.** `filterRows`/`flattenRows` provide the matches,
   their ancestors and the displayed list; only rendered rows get `<mark>` elements. The input
   debounces and a stale generation is discarded.

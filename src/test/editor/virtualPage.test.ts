@@ -10,15 +10,16 @@
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { LineIndex } from '../../core/text/offsets';
 import { buildFilterIndex, filterRows, flattenRows, FilterRow } from '../../editor/filter';
 import {
 	RowPayload,
 	encodeRowDocument,
+	guidesFor,
 	inspectorFields,
 	reconcileRowState,
 	renderHtml,
 	resolveFocusId,
+	subtreeRowIds,
 } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
 import { evaluateFunction, functionSource } from './scriptTestUtils';
@@ -26,8 +27,7 @@ import { evaluateFunction, functionSource } from './scriptTestUtils';
 const FIXTURE = 'editor/render.arxml';
 
 function page(): string {
-	const source = fixtureText(FIXTURE);
-	return renderHtml(scanEcucValues(source), { nonce: 'test-nonce', lineIndex: new LineIndex(source) });
+	return renderHtml(scanEcucValues(fixtureText(FIXTURE)), { nonce: 'test-nonce' });
 }
 
 /** The escaped row payload, parsed exactly as the page parses it. */
@@ -162,8 +162,7 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.strictEqual(fields.definitionRef, '/PkgA/PkgB/ModDefs/ModX/ContA/IniValue');
 		assert.strictEqual(fields.value, '63');
 		assert.strictEqual(fields.hex, '(= 0x3F)');
-		assert.ok(fields.source, 'the source range is on the row data');
-		assert.strictEqual(fields.source!.line, parameter.line);
+		assert.ok(!('source' in fields), 'the details Source block is removed');
 		// The page's copy is the same function; updateInspector looks the row up by id
 		// and never queries the rendered tree.
 		const inline = evaluateFunction<typeof inspectorFields>(html, 'inspectorFields');
@@ -193,19 +192,55 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.ok(render.includes('element.focus({ preventScroll: true })'));
 	});
 
-	test('design §5/§8: a window rebuild moves an open value edit and a host select can expand', () => {
+	test('design §4: subtree ids and bracket guides cover only the selected container', () => {
+		const rows = [
+			{ id: 'root', subtreeSize: 3 },
+			{ id: 'a', subtreeSize: 1 },
+			{ id: 'b', subtreeSize: 0 },
+			{ id: 'sibling', subtreeSize: 0 },
+		];
+		assert.deepStrictEqual(subtreeRowIds('root', rows), ['root', 'a', 'b', 'sibling']);
+		assert.deepStrictEqual(subtreeRowIds('a', rows), ['a', 'b']);
+		assert.deepStrictEqual(subtreeRowIds('b', rows), ['b']);
+		assert.deepStrictEqual(subtreeRowIds('missing', rows), []);
+		assert.deepStrictEqual(subtreeRowIds(undefined, rows), []);
+
+		const display = [
+			{ type: 'node' as const, rowIndex: 0, depth: 0, level: 1 },
+			{ type: 'brace-open' as const, rowIndex: 0, level: 1 },
+			{ type: 'node' as const, rowIndex: 1, depth: 1, level: 2 },
+			{ type: 'brace-open' as const, rowIndex: 1, level: 2 },
+			{ type: 'node' as const, rowIndex: 2, depth: 2, level: 3 },
+			{ type: 'brace-close' as const, rowIndex: 1, level: 2 },
+			{ type: 'brace-close' as const, rowIndex: 0, level: 1 },
+		];
+		assert.deepStrictEqual(
+			guidesFor(display, [{ id: 'root' }, { id: 'a' }, { id: 'b' }]),
+			[
+				[],
+				[],
+				[{ level: 1, id: 'root' }],
+				[{ level: 1, id: 'root' }],
+				[{ level: 1, id: 'root' }, { level: 2, id: 'a' }],
+				[{ level: 1, id: 'root' }, { level: 2, id: 'a' }],
+				[{ level: 1, id: 'root' }],
+			]
+		);
+		const inlineGuides = evaluateFunction<typeof guidesFor>(page(), 'guidesFor');
+		assert.deepStrictEqual(inlineGuides(display, [{ id: 'root' }, { id: 'a' }, { id: 'b' }]), guidesFor(display, [{ id: 'root' }, { id: 'a' }, { id: 'b' }]));
+		const inlineSubtree = evaluateFunction<typeof subtreeRowIds>(page(), 'subtreeRowIds');
+		assert.deepStrictEqual(inlineSubtree('root', rows), subtreeRowIds('root', rows));
+		const build = functionSource(page(), 'buildNodeRow');
+		assert.ok(build.includes('appendGuides(rowElement, displayIndex)'), 'every node row carries its open guides');
+		assert.ok(build.includes('node.dataset.subtree'), 'the selected container marks its descendants');
+		const rebuild = functionSource(page(), 'rebuildDisplay');
+		assert.ok(rebuild.includes('guideLevels = guidesFor(displayRows, rows)'));
+		const setRows = functionSource(page(), 'setRows');
+		assert.ok(setRows.includes('subtreeIds = new Set(subtreeRowIds(selectedId, rows))'));
+	});
+
+	test('design §5/§8: a host select refreshes the window and the initial focus can expand', () => {
 		const html = page();
-		const render = functionSource(html, 'renderWindow');
-		assert.ok(render.includes('detachValueEdit()'), 'the open editor is lifted before the old rows are cleared');
-		assert.ok(render.includes('reattachValueEdit(item, editing)'), 'and reattached to the rebuilt row');
-		assert.ok(
-			render.indexOf('detachValueEdit()') < render.indexOf('treeWindow.textContent'),
-			'the input is detached before the window is replaced'
-		);
-		assert.ok(
-			render.indexOf('reattachValueEdit') > render.indexOf('applyRoving'),
-			'the input keeps focus after the row focus restore'
-		);
 		const select = html.slice(html.indexOf("message.type === 'select'"));
 		assert.ok(
 			select.indexOf('renderWindow(true)') !== -1 &&
@@ -215,35 +250,38 @@ suite('virtual page (design §4, §5, §8)', () => {
 		const prepare = functionSource(html, 'prepareFocus');
 		assert.ok(prepare.includes('expandAncestors(selectedId)'), 'an initial selection can expand its ancestors');
 		assert.ok(prepare.includes('displayIndexById.has(selectedId)'), 'and is only focused once displayed');
+		const inspector = functionSource(html, 'updateInspector');
+		assert.ok(inspector.includes('detailsValueInput(row, data)'), 'the details editor owns the value field');
+		assert.ok(!inspector.includes("'Source'"), 'the Source block is gone');
+		assert.ok(!inspector.includes('Copy path') && !inspector.includes('Copy value'), 'copy actions are gone');
 	});
 
-	test('design §8: a re-scan preserves selection, collapse, query and view where possible', () => {
+	test('design §8: a re-scan preserves selection, collapse and query where possible', () => {
 		const html = page();
 		const inline = new Function(
 			`${functionSource(html, 'pruneCollapsed')}\n${functionSource(html, 'reconcileRowState')}\nreturn reconcileRowState;`
 		)() as typeof reconcileRowState;
-		const state = { selectedId: 'b', collapsed: ['a', 'gone'], query: 'ini', view: 'tree' as const };
+		const state = { selectedId: 'b', collapsed: ['a', 'gone'], query: 'ini' };
 		const next = [{ id: 'a' }, { id: 'b' }];
 		const preserved = reconcileRowState(state, next);
 		assert.deepStrictEqual(preserved, {
 			selectedId: 'b',
 			collapsed: ['a'],
 			query: 'ini',
-			view: 'tree',
 		});
 		assert.deepStrictEqual(inline(state, next), preserved);
 
 		const dropped = reconcileRowState(state, [{ id: 'a' }, { id: 'c' }]);
 		assert.strictEqual(dropped.selectedId, undefined, 'a selected row that is gone is dropped');
 		const handler = html.slice(html.indexOf("if (message.type === 'model')"));
-		assert.ok(handler.includes('setRows(message.rows, message.digits, message.selectedId)'));
+		assert.ok(handler.includes('setRows(message.rows, message.selectedId)'));
 		assert.ok(handler.includes('const scrollTop = main.scrollTop'), 'a re-scan captures the scroll position');
 		assert.ok(handler.includes('main.scrollTop = scrollTop'), 'and restores it where possible');
 		assert.ok(!handler.includes('message.tree'), 'the re-scan carries rows, not full-tree HTML');
 		assert.ok(!html.includes('main.innerHTML'), 'there is no DOM-swap render path');
 		assert.ok(
 			(html.match(/message\.type === 'model'/g) ?? []).length >= 2,
-			'the value widget still sees the message type it clears on'
+			'the details editor still sees the message type it clears on'
 		);
 	});
 
@@ -284,7 +322,6 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.ok(module);
 		const escaped = encodeRowDocument({
 			rows: [{ ...module, label: '</script><script>alert(1)</script>' }],
-			digits: 1,
 		});
 		assert.ok(!escaped.includes('</script>'), 'model text cannot close the script element');
 		assert.strictEqual(JSON.parse(escaped).rows[0].label, '</script><script>alert(1)</script>');

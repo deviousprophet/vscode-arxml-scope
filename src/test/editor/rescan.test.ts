@@ -27,7 +27,6 @@ import { sleep } from './editorTestUtils';
 interface StubMessage {
 	type?: string;
 	rows?: EcucRow[];
-	digits?: number;
 	selectedId?: string;
 	nodeId?: string;
 }
@@ -178,10 +177,10 @@ function containerNamed(model: EcucDocumentModel, name: string) {
 }
 
 /** The escaped initial row document, parsed exactly as the page does. */
-function initialPayload(html: string): { rows: EcucRow[]; digits: number; selectedId?: string } {
+function initialPayload(html: string): { rows: EcucRow[]; selectedId?: string } {
 	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(html);
 	assert.ok(match, 'the page embeds the row document');
-	return JSON.parse(match[1]) as { rows: EcucRow[]; digits: number; selectedId?: string };
+	return JSON.parse(match[1]) as { rows: EcucRow[]; selectedId?: string };
 }
 
 suite('editor re-scan (design §1.5, §2.2)', () => {
@@ -197,7 +196,6 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 				initial.rows.some((row) => row.kind === 'parameter' && row.value === '7'),
 				'the first paint carries the value'
 			);
-			assert.strictEqual(initial.digits, 2);
 			assert.strictEqual(stub.messages.length, 0, 'nothing is pushed before the document changes');
 
 			// Count the platform's own change events for this document, so "one refresh
@@ -220,7 +218,6 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 			assert.ok(Array.isArray(pushed.rows), 'the payload is row data, not a tree string');
 			assert.ok(pushed.rows!.some((row) => row.kind === 'parameter' && row.value === '8'), 'the new value');
 			assert.ok(!pushed.rows!.some((row) => row.kind === 'parameter' && row.value === '7'), 'not the stale one');
-			assert.strictEqual(pushed.digits, 2);
 
 			// The subscription must not outlive the panel.
 			stub.dispose();

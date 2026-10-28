@@ -8,11 +8,10 @@
  * (`orderModules` / `orderContainers` / `orderMembers`, `lastShortName`,
  * `dotted`, `camelize`, the suffix rules).
  *
- * `EcucRow` carries the fields the old `renderTree` template needed — label,
- * value/target/context, the meta parts, the inspector source position and the
- * search haystack — but as values. Every row is in DFS/display order with its
- * children contiguous after it, which is what makes `subtreeSize` a complete
- * collapse index and `parentId` enough for filter ancestors.
+ * `EcucRow` carries the fields the Document surface needs - label, value/target/
+ * context, the meta parts and the search haystack - but as values. Every row is in
+ * DFS/display order with its children contiguous after it, which is what makes
+ * `subtreeSize` a complete collapse index and `parentId` enough for filter ancestors.
  */
 import {
 	ContainerNode,
@@ -25,8 +24,8 @@ import {
 	Suffixes,
 	lastShortName,
 } from '../core/ecuc/model';
+import { resolvePath } from '../core/ecuc/resolve';
 import { SORT_EXCEPTIONS, orderContainers, orderMembers, orderModules } from '../core/ecuc/order';
-import { LineIndex } from '../core/text/offsets';
 import { haystack } from './filter';
 import { NodeIndex, buildNodeIndex } from './nodeId';
 
@@ -53,25 +52,20 @@ export interface EcucRow {
 	label: string;
 	shortName?: string;
 	definitionRef: string;
-	/** Raw value or reference target, for copy and the in-tree editor. */
+	/** Raw value or reference target, for the details field and follow. */
 	value?: string;
 	valueKind?: 'numeric' | 'textual' | 'boolean';
 	/** The displayed value: quoted for textual parameters, bare otherwise. */
 	shownValue?: string;
 	/** Raw `VALUE-REF` / `TARGET-REF`, for the reference follow action. */
 	target?: string;
+	/** True when the reference target resolves inside this file. */
+	followable?: boolean;
 	/** Raw instance-reference context paths, dotted like the target. */
 	contextPaths?: string[];
 	/** Hover text: the full `DEFINITION-REF` (design §2.7). */
 	title: string;
 	meta: MetaPart[];
-	/** 1-based source line of the row; 0 when the caller has no document text. */
-	sourceLine: number;
-	/** 0-based source position for the details inspector (`sourceLine` is its +1). */
-	line: number;
-	column: number;
-	endLine: number;
-	endColumn: number;
 	/** Lower-cased label + short name + value, the existing filter haystack. */
 	haystack: string;
 }
@@ -80,8 +74,6 @@ export interface EcucRow {
 export interface RowDocument {
 	/** DFS/display order. */
 	rows: EcucRow[];
-	/** Digit count of the widest source line, for the line-number gutter. */
-	digits: number;
 }
 
 export interface RowBuildOptions {
@@ -89,20 +81,13 @@ export interface RowBuildOptions {
 	sort?: SortMode;
 	/** The `sort all` exception list; defaults to the legacy 15 entries. */
 	sortExcept?: readonly string[];
-	/**
-	 * The current document text's line index. Without it every row carries
-	 * `sourceLine: 0` and zeroed inspector positions, matching the old renderer.
-	 */
-	lineIndex?: LineIndex;
 }
 
 interface BuildContext {
 	index: NodeIndex;
 	sort: SortMode;
 	except: readonly string[];
-	lineIndex?: LineIndex;
-	/** Largest 1-based entity source line, used for the gutter width. */
-	maxLine: number;
+	pathIndex: Map<string, Range>;
 }
 
 /**
@@ -115,15 +100,14 @@ export function buildRows(model: EcucDocumentModel, options: RowBuildOptions = {
 		index: buildNodeIndex(model),
 		sort: options.sort ?? 'all',
 		except: options.sortExcept ?? SORT_EXCEPTIONS,
-		lineIndex: options.lineIndex,
-		maxLine: 0,
+		pathIndex: model.pathIndex,
 	};
 	const rows: EcucRow[] = [];
 	const modules = orderModules(model.modules, ctx.sort, ctx.except);
 	for (let at = 0; at < modules.length; at++) {
 		moduleRow(ctx, rows, modules[at], 1, at + 1, modules.length, null);
 	}
-	return { rows, digits: String(Math.max(1, ctx.maxLine)).length };
+	return { rows };
 }
 
 function moduleRow(
@@ -154,7 +138,6 @@ function moduleRow(
 			...(module.variant ? [variantPart(module.variant)] : []),
 			...suffixParts(module),
 		],
-		...sourceFields(ctx, module.range),
 		haystack: haystack({ label: dotted(module.definitionRef), shortName: module.shortName }),
 	};
 	rows.push(row);
@@ -191,7 +174,6 @@ function containerRow(
 		definitionRef: container.definitionRef,
 		title: container.definitionRef,
 		meta: [shortPart(container.shortName), ...suffixParts(container)],
-		...sourceFields(ctx, container.range),
 		haystack: haystack({ label: lastShortName(container.definitionRef), shortName: container.shortName }),
 	};
 	rows.push(row);
@@ -247,7 +229,6 @@ function parameterRow(
 		shownValue: shown,
 		title: parameter.definitionRef,
 		meta: [...(parameter.hexValue ? [hexPart(parameter.hexValue)] : []), ...suffixParts(parameter)],
-		...sourceFields(ctx, parameter.range),
 		haystack: haystack({ label: parameter.name, value }),
 	});
 }
@@ -263,6 +244,7 @@ function referenceRow(
 ): void {
 	const target = reference.targetPath ?? reference.targetRawPath ?? '';
 	const rawTarget = reference.targetRawPath ?? target;
+	const followable = rawTarget !== '' && resolvePath(ctx.pathIndex, rawTarget) !== undefined;
 	rows.push({
 		id: ctx.index.idOf(reference) ?? '',
 		kind: 'reference',
@@ -277,6 +259,7 @@ function referenceRow(
 		value: target,
 		shownValue: target,
 		target: rawTarget,
+		followable,
 		...(reference.instance && reference.contextPaths.length > 0
 			? { contextPaths: reference.contextPaths.slice() }
 			: {}),
@@ -287,32 +270,8 @@ function referenceRow(
 				: []),
 			...suffixParts(reference),
 		],
-		...sourceFields(ctx, reference.range),
 		haystack: haystack({ label: reference.name, value: target }),
 	});
-}
-
-/** 0-based inspector position from the document line index; zeroed when absent. */
-function sourceFields(
-	ctx: BuildContext,
-	range: Range
-): Pick<EcucRow, 'sourceLine' | 'line' | 'column' | 'endLine' | 'endColumn'> {
-	if (!ctx.lineIndex) {
-		return { sourceLine: 0, line: 0, column: 0, endLine: 0, endColumn: 0 };
-	}
-	const start = ctx.lineIndex.positionAt(range.start);
-	const end = ctx.lineIndex.positionAt(range.end);
-	const sourceLine = start.line + 1;
-	if (sourceLine > ctx.maxLine) {
-		ctx.maxLine = sourceLine;
-	}
-	return {
-		sourceLine,
-		line: start.line,
-		column: start.character,
-		endLine: end.line,
-		endColumn: end.character,
-	};
 }
 
 function shortPart(shortName: string): MetaPart {

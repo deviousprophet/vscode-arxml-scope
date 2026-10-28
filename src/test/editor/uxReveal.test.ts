@@ -181,6 +181,25 @@ suite('editor reveal (AC1, AC2)', () => {
 		});
 	});
 
+	test('AC12: following a same-file reference selects the target container in the editor', async () => {
+		await withScratch('follow.arxml', async (_uri, document) => {
+			const provider = new EcucEditorProvider();
+			const stub = stubPanel();
+			provider.resolveCustomTextEditor(document, stub.panel, new vscode.CancellationTokenSource().token);
+
+			const model = scanEcucValues(document.getText());
+			const index = buildNodeIndex(model);
+			const container = model.modules[0].containers[0];
+			const good = container.references.find((reference) => reference.name === 'Good');
+			assert.ok(good, 'the fixture has a good reference');
+
+			stub.send({ type: 'follow', nodeId: index.idOf(good)! });
+			await sleep(100);
+			const select = stub.messages.filter((message) => message.type === 'select').at(-1);
+			assert.strictEqual(select?.nodeId, index.idOf(container), 'the target container is selected');
+		});
+	});
+
 	test('AC2: a reveal leaves the custom editor open and shows the range in the source', async () => {
 		const uri = fixtureUri('editor/navigation.arxml');
 		await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);

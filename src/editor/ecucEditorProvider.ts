@@ -17,13 +17,11 @@ import { isArxmlPath, isEcucValues } from '../core/ecuc/detect';
 import { ReferenceNode, SortMode } from '../core/ecuc/model';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
-import { LineIndex } from '../core/text/offsets';
 import { RenderOptions, renderHtml } from './renderHtml';
 import { buildRows } from './renderRows';
 import { buildNodeIndex } from './nodeId';
 import { applyEdit, buildEdit } from './ecucEdit';
-import { copyText } from './clipboard';
-import { followReference, revealRangeInTextEditor } from './navigation';
+import { followReference, nodeIdForRange, revealRangeInTextEditor } from './navigation';
 
 export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
 
@@ -32,8 +30,6 @@ interface WebviewMessage {
 	nodeId?: string;
 	/** The text the user typed, for `type: 'edit'` (parent design §8). */
 	value?: string;
-	/** The exact text a `type: 'copy'` request wants on the clipboard. */
-	text?: string;
 }
 
 /**
@@ -104,7 +100,6 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			...editorSettings(),
 			nonce,
 			selectedId,
-			lineIndex: new LineIndex(document.getText()),
 		});
 
 		// The single refresh path: any change to this document — an undo, an external
@@ -116,15 +111,13 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			const options: RenderOptions = {
 				...editorSettings(),
 				selectedId: current,
-				lineIndex: new LineIndex(document.getText()),
 			};
 			const rowDocument = buildRows(model, options);
-			// `type: 'model'` is kept because the value widget clears its edit state on
-			// that message; the payload is row data, not full-tree HTML.
+			// `type: 'model'` is kept because the details editor clears its pending
+			// state on that message; the payload is row data, not full-tree HTML.
 			void panel.webview.postMessage({
 				type: 'model',
 				rows: rowDocument.rows,
-				digits: rowDocument.digits,
 				selectedId: current,
 			});
 		};
@@ -153,19 +146,6 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		disposables.push(
 			panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
 				if (!message) {
-					return;
-				}
-				// Copy carries text, not a node: handle it before the node-id guard.
-				if (message.type === 'copy' && typeof message.text === 'string') {
-					void copyText(vscode.env.clipboard, message.text).then(
-						(notice) => panel.webview.postMessage({ type: 'notice', message: notice }),
-						(error) =>
-							panel.webview.postMessage({
-								type: 'notice',
-								message: 'Could not copy: ' + String(error),
-								kind: 'warn',
-							})
-					);
 					return;
 				}
 				if (typeof message.nodeId !== 'string') {
@@ -251,7 +231,19 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			await panel.webview.postMessage({ type: 'notice', message: result.reason, kind: 'warn' });
 			return;
 		}
-		await revealRangeInTextEditor(document, result.range, { viewColumn: panel.viewColumn });
+		const index = buildNodeIndex(model);
+		const targetId = nodeIdForRange(index, result.range);
+		if (!targetId) {
+			await panel.webview.postMessage({
+				type: 'notice',
+				message: 'The same-file target is present but not an ECUC row.',
+				kind: 'warn',
+			});
+			return;
+		}
+		this.selections.set(document.uri.toString(), targetId);
+		panel.reveal();
+		await panel.webview.postMessage({ type: 'select', nodeId: targetId });
 	}
 
 	/**

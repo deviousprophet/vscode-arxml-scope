@@ -13,9 +13,9 @@ The extension has no store, no framework and no server state. State is split bet
 
 The host re-scans on every `onDidChangeTextDocument` and on a settings change. It does not cache the
 model: the row document is always built from a fresh scan (`buildRows`), so no range on screen can
-outlive its text. A re-scan posts `{ type: 'model', rows, digits, selectedId }`; the message type is
-kept because the value widget clears its edit state on it. The payload is row data, never a
-full-tree HTML string.
+outlive its text. A re-scan posts `{ type: 'model', rows, selectedId }`; the message type is kept
+because the details editor clears its edit state on it. The payload is row data, never a full-tree
+HTML string.
 
 ## Webview state
 
@@ -27,10 +27,10 @@ full-tree HTML string.
 | `collapsed: Set<nodeId>` | page script | yes; pruned by `pruneCollapsed` and read by `flattenRows` |
 | `filterQuery`, `filterResult` | page script | yes; the index is rebuilt and the query re-run against the new rows |
 | `windowRange`, `main.scrollTop` | page script + browser | yes where possible; the scroll offset is restored and clamped by the new total |
-| `displayRows`, `expandedIds` | page script | derived from the rows, collapsed set, filter and view |
+| `displayRows`, `expandedIds`, `subtreeIds`, `guideLevels` | page script | derived from the rows, collapsed set, filter and selected subtree |
 | type-ahead buffer | page script | yes; it is a transient 2 s window |
-| `valueEdit` / `pendingMove` / `flashId` | value widget | no; the re-scan message removes the input and clears the stale state |
-| `viewState.view`, `viewState.inspectorHidden` | page + host state | yes, through `getState()/setState()` |
+| `detailsEdit` / `pendingMove` / `flashId` | details editor | no; the re-scan message clears stale state and rebuilds the details input |
+| `uiState.inspectorHidden` | page + host state | yes, through `getState()/setState()` |
 
 The collapsed set is the only state that must not be re-derived from the rendered order. Node ids
 are path-based and include a declaration-order ordinal (see `nodeId.ts`); pruning only drops ids the
@@ -43,20 +43,20 @@ does not show the collapsed stub.
 ## Pure helpers, serialized once
 
 `pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`, `reconcileRowState`,
-`resolveFocusId`, `inspectorFields`, the virtual-scroll functions and the filter/flatten functions
-live in `renderHtml.ts`, `virtualScroll.ts`, `renderRows.ts` and `filter.ts`. The page emits them
-with `Function.prototype.toString()` (the virtual math through `virtualScrollScript()`). Tests
-extract the page's own copy with `scriptTestUtils` and compile it, so "the page and the tests share
-one definition" is an assertion rather than a claim. Do not add a second host-side implementation of
-a view rule.
+`resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`, the virtual-scroll functions and the
+filter/flatten functions live in `renderHtml.ts`, `virtualScroll.ts`, `renderRows.ts` and `filter.ts`.
+The page emits them with `Function.prototype.toString()` (the virtual math through
+`virtualScrollScript()`). Tests extract the page's own copy with `scriptTestUtils` and compile it, so
+"the page and the tests share one definition" is an assertion rather than a claim. Do not add a
+second host-side implementation of a view rule.
 
 ## Persistence
 
 - **Within the page:** the shell (toolbar, inspector) lives outside the rows, so a re-scan cannot
   destroy it. The row store, flattening and window are rebuilt in place; there is no innerHTML swap.
-- **Across a webview reload:** the view and details panel use
+- **Across a webview reload:** the details panel uses
   `acquireVsCodeApi().getState()/setState()`. Validate the shape: a non-null, non-array object; hide
-  only when `inspectorHidden === true`; `view` accepts only `document`/`tree`, else `document`.
+  only when `inspectorHidden === true`. An old saved `view` is ignored; there is no second view.
 - **In the browser harness:** `scripts/preview-ecuc.js` stubs `getState()/setState()` with a
   `localStorage` key, so the reload path can be observed without VS Code. The stub is a development
   aid, not a production storage layer.
@@ -64,7 +64,7 @@ a view rule.
 ## No derived artefacts
 
 Nothing is written beside the user's file. The only write is the user's `<VALUE>` text through one
-`WorkspaceEdit`; the inspector's Copy actions go to the clipboard, not the document. The harness
-writes no files into the workspace; it serves from memory, reads the committed fixtures, and for
-manual viewing may also read the optional local `../sample` directory. `preview:check` never includes
-that directory, so CI does not depend on a developer's disk.
+`WorkspaceEdit`; the details panel exposes Reveal only. The harness writes no files into the
+workspace; it serves from memory, reads the committed fixtures, and for manual viewing may also read
+the optional local `../sample` directory. `preview:check` never includes that directory, so CI does
+not depend on a developer's disk.

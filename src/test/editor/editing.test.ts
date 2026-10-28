@@ -31,7 +31,6 @@ import { repoRoot, sleep } from './editorTestUtils';
 interface StubMessage {
 	type?: string;
 	rows?: EcucRow[];
-	digits?: number;
 	message?: string;
 	nodeId?: string;
 	selectedId?: string;
@@ -157,12 +156,9 @@ function lastRows(stub: StubPanel): EcucRow[] {
 
 /** A fresh scan rendered exactly as the provider renders it, for the staleness check. */
 function expectedRows(text: string): EcucRow[] {
-	// The provider passes the document's LineIndex, so the rows carry their source
-	// positions; the expected rows must be built from the same document text.
 	return buildRows(scanEcucValues(text), {
 		sort: 'all',
 		sortExcept: [...SORT_EXCEPTIONS],
-		lineIndex: new LineIndex(text),
 	}).rows;
 }
 
@@ -559,7 +555,7 @@ suite('editor value editing (AC1–AC9)', () => {
 		});
 	});
 
-	test('§9: the rows carry the value the widget edits, and the widget is inlined', () => {
+	test('§9: the rows carry the value the details editor edits, and the details editor is inlined', () => {
 		const model = scanEcucValues(fixtureText('editing/numeric.arxml'));
 		const rows = buildRows(model, {}).rows;
 		const parameter = rows.find((row) => row.kind === 'parameter')!;
@@ -568,10 +564,13 @@ suite('editor value editing (AC1–AC9)', () => {
 		assert.ok(parameter.meta.some((part) => part.text === '(= 0x7)'), 'the model’s secondary hex stays beside it');
 
 		const page = renderHtml(model, { nonce: 'test-nonce' });
-		assert.ok(page.includes('.value-edit'), 'the editor is styled from --vscode-* variables');
+		assert.ok(page.includes('.details-value'), 'the editor is styled from --vscode-* variables');
 		assert.ok(page.includes("type: 'edit'"), 'and posts the edit message');
-		assert.ok(page.includes('nodeId: item.dataset.nodeId'), 'with the id the provider resolves');
-		assert.ok(page.includes("event.key === 'Enter' || event.key === 'Escape'"), 'Enter commits, Escape cancels');
+		assert.ok(page.includes('nodeId: edit.rowId'), 'with the id the provider resolves');
+		assert.ok(page.includes("event.key === 'Enter'"), 'Enter commits');
+		assert.ok(page.includes("event.key === 'Escape'"), 'Escape cancels');
+		assert.ok(page.includes("event.key === 'Tab'"), 'Tab commits and moves');
+		assert.ok(!page.includes("span.querySelector('.value-text')"), 'the Document value is not an input host');
 		assert.ok(!/acquireVsCodeApi\(\)[\s\S]*acquireVsCodeApi\(\)/.test(page), 'the API is acquired once');
 	});
 

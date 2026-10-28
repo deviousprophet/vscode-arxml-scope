@@ -67,4 +67,15 @@ suite('editor accessibility (AC8)', () => {
 		assert.ok(page.includes('--sel-bg-focus: color-mix('));
 		assert.ok(page.includes('--vscode-list-activeSelectionBackground'));
 	});
+
+	test('AC8: the details value editor has a label, invalid state and live error', () => {
+		const page = html();
+		const details = functionSource(page, 'detailsValueInput');
+		assert.ok(details.includes("input.setAttribute('aria-label'"), 'the input is named');
+		assert.ok(details.includes("input.id = 'details-value'"));
+		assert.ok(details.includes('aria-invalid'), 'refusal marks the input invalid');
+		assert.ok(details.includes("error.setAttribute('role', 'status')"), 'the error is announced');
+		assert.ok(details.includes("error.setAttribute('aria-live', 'polite')"));
+		assert.ok(page.includes('.details-value-error'), 'the error has a style');
+	});
 });

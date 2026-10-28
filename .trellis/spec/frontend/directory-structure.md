@@ -11,14 +11,14 @@ src/
     text/             offsets.ts (line/offset index)
   editor/             the custom editor. May import `vscode`.
     ecucEditorProvider.ts   provider: gate, scan, build rows, wire, re-scan
-    renderRows.ts           host row document: display order, meta, source, haystack
+    renderRows.ts           host row document: display order, meta, haystack (no source/digits)
     virtualScroll.ts        pure cumulative heights, visible range, offsets, total
     renderHtml.ts           the page shell, row window, row builder, page script
     navigation.ts           node <-> source range, reference following
     nodeId.ts               path-based node ids, stable across a re-scan
     filter.ts               row index/filter/flatten and shared match ranges
     ecucEdit.ts             the edit record, region resolution, applyEdit
-    ecucValueEditor.ts      the in-tree value widget (webview half)
+    ecucDetailsEditor.ts    the details-panel value editor (webview half)
   test/
     core/               core suites
     editor/             editor suites

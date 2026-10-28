@@ -27,73 +27,9 @@ const SAMPLE_ROOT = process.env.PREVIEW_SAMPLE_DIR || path.resolve(ROOT, '..', '
 const DEFAULT_PORT = 4173;
 const NONCE = 'preview-nonce';
 
-const THEME_ORDER = ['light', 'dark', 'hc'];
+const THEME_ORDER = ['dark', 'hc'];
 
 const THEMES = {
-	light: {
-		id: 'light',
-		label: 'Light+',
-		colorScheme: 'light',
-		vars: {
-			'foreground': '#333333',
-			'editor-background': '#ffffff',
-			'sideBar-background': '#f3f3f3',
-			'editorWidget-background': '#f3f3f3',
-			'editorWidget-border': '#c8c8c8',
-			'descriptionForeground': '#717171',
-			'panel-border': '#e5e5e5',
-			'list-hoverBackground': '#f0f0f0',
-			'list-focusBackground': '#e4e6f1',
-			'list-activeSelectionBackground': '#0060c0',
-			'list-activeSelectionForeground': '#ffffff',
-			'list-inactiveSelectionBackground': '#e4e6f1',
-			'list-inactiveSelectionForeground': '#333333',
-			'focusBorder': '#0090f1',
-			'input-background': '#ffffff',
-			'input-foreground': '#333333',
-			'input-border': '#cecece',
-			'button-background': '#007acc',
-			'button-foreground': '#ffffff',
-			'button-secondaryBackground': '#f3f3f3',
-			'button-secondaryForeground': '#333333',
-			'button-secondaryHoverBackground': '#e8e8e8',
-			'button-border': '#cecece',
-			'icon-foreground': '#424242',
-			'symbolIcon-classForeground': '#b1801a',
-			'symbolIcon-moduleForeground': '#795e26',
-			'symbolIcon-functionForeground': '#795e26',
-			'symbolIcon-namespaceForeground': '#267f99',
-			'symbolIcon-variableForeground': '#0070c1',
-			'symbolIcon-booleanForeground': '#0000ff',
-			'symbolIcon-fieldForeground': '#0070c1',
-			'symbolIcon-referenceForeground': '#0070c1',
-			'symbolIcon-stringForeground': '#a31515',
-			'symbolIcon-enumeratorForeground': '#267f99',
-			'symbolIcon-keywordForeground': '#0000ff',
-			'symbolIcon-numberForeground': '#098658',
-			'debugTokenExpression-boolean': '#0000ff',
-			'debugTokenExpression-string': '#a31515',
-			'debugTokenExpression-number': '#098658',
-			'debugTokenExpression-name': '#af00db',
-			'charts-green': '#388a34',
-			'tree-indentGuidesStroke': '#d3d3d3',
-			'editor-findMatchHighlightBackground': '#ea5c0055',
-			'editor-findMatchForeground': '#000000',
-			'editorLineNumber-foreground': '#237893',
-			'editorLineNumber-activeForeground': '#0b216f',
-			'editorWarning-foreground': '#bf8803',
-			'inputValidation-warningBackground': '#fff4d1',
-			'inputValidation-warningBorder': '#bf8803',
-			'editorError-foreground': '#a1260d',
-			'errorForeground': '#a1260d',
-			'badge-background': '#c4c4c4',
-			'badge-foreground': '#333333',
-			'textLink-foreground': '#006ab1',
-			'font-family': '"Segoe UI", "Helvetica Neue", Arial, sans-serif',
-			'font-size': '13px',
-			'editor-font-family': 'Consolas, "Courier New", monospace',
-		},
-	},
 	dark: {
 		id: 'dark',
 		label: 'Dark+',
@@ -229,13 +165,11 @@ const THEMES = {
 let scanner;
 let renderer;
 let rowBuilder;
-let offsets;
 
 function loadProduction() {
 	scanner = outModule(path.join('core', 'ecuc', 'scanner.js'));
 	renderer = outModule(path.join('editor', 'renderHtml.js'));
 	rowBuilder = outModule(path.join('editor', 'renderRows.js'));
-	offsets = outModule(path.join('core', 'text', 'offsets.js'));
 }
 
 function escapeAttr(text) {
@@ -404,11 +338,6 @@ const STUB_JS = `
 	var api = {
 		postMessage: function (message) {
 			record('to-host', message);
-			if (message && message.type === 'copy' && navigator.clipboard && navigator.clipboard.writeText) {
-				try {
-					navigator.clipboard.writeText(String(message.text == null ? '' : message.text)).catch(function () {});
-				} catch (error) { /* the log remains the evidence */ }
-			}
 			return true;
 		},
 		getState: function () { return state; },
@@ -458,16 +387,16 @@ const PANEL_JS = `
 	}
 	function rowPayload() {
 		var script = document.getElementById('ecuc-rows');
-		if (!script) { return { rows: [], digits: 1 }; }
+		if (!script) { return { rows: [] }; }
 		try {
 			return JSON.parse(script.textContent || '{}');
 		} catch (error) {
-			return { rows: [], digits: 1 };
+			return { rows: [] };
 		}
 	}
 	function rescan() {
 		var payload = rowPayload();
-		preview.hostMessage({ type: 'model', rows: payload.rows || [], digits: payload.digits, selectedId: currentSelection() });
+		preview.hostMessage({ type: 'model', rows: payload.rows || [], selectedId: currentSelection() });
 	}
 	function rescanChanged() {
 		var payload = rowPayload();
@@ -483,7 +412,7 @@ const PANEL_JS = `
 		row.value = after;
 		row.shownValue = after;
 		row.haystack = String(row.haystack || '').replace(String(before).toLowerCase(), after.toLowerCase());
-		preview.hostMessage({ type: 'model', rows: rows, digits: payload.digits, selectedId: currentSelection() });
+		preview.hostMessage({ type: 'model', rows: rows, selectedId: currentSelection() });
 		preview.hostMessage({ type: 'notice', message: 'Simulated a document change (value only).', kind: 'info' });
 	}
 	function notice(kind, text) {
@@ -547,8 +476,8 @@ function panelHtml(ctx) {
 			ctx.sort
 		)}</select></label>
 		<div class="preview-actions">
-			<button id="preview-rescan" class="preview-button" type="button" title="Deliver the current tree back as a host model message">Re-scan</button>
-			<button id="preview-rescan-change" class="preview-button" type="button" title="Deliver a tree with the first parameter's text changed">Re-scan + value</button>
+			<button id="preview-rescan" class="preview-button" type="button" title="Deliver the current rows back as a host model message">Re-scan</button>
+			<button id="preview-rescan-change" class="preview-button" type="button" title="Deliver rows with the first parameter's text changed">Re-scan + value</button>
 			<button id="preview-notice-info" class="preview-button" type="button">Info notice</button>
 			<button id="preview-notice-warn" class="preview-button" type="button">Warn notice</button>
 			<button id="preview-clear-log" class="preview-button" type="button">Clear log</button>
@@ -559,12 +488,9 @@ function panelHtml(ctx) {
 }
 
 function wrap(html, ctx) {
-	const initialState = ctx.view
-		? `<script nonce="${NONCE}">window.__previewInitialState = ${JSON.stringify({
-				view: ctx.view,
-				inspectorHidden: true,
-			})};</script>`
-		: '';
+	const initialState = `<script nonce="${NONCE}">window.__previewInitialState = ${JSON.stringify({
+		inspectorHidden: true,
+	})};</script>`;
 	const head = [
 		`<style nonce="${NONCE}">`,
 		themeCss(ctx.theme),
@@ -576,7 +502,7 @@ function wrap(html, ctx) {
 		'</script>',
 	].join('\n');
 	let page = html.replace('<html lang="en">', `<html lang="en" data-preview-theme="${ctx.theme.id}">`);
-	const themeClass = ctx.theme.id === 'dark' ? 'vscode-dark' : ctx.theme.id === 'light' ? 'vscode-light' : 'vscode-high-contrast';
+	const themeClass = ctx.theme.id === 'dark' ? 'vscode-dark' : 'vscode-high-contrast';
 	page = page.replace('<body data-view="document">', `<body data-view="document" class="${themeClass}">`);
 	page = page.replace('</head>', head + '\n</head>');
 	if (ctx.chrome) {
@@ -589,13 +515,12 @@ function wrap(html, ctx) {
 }
 
 function buildPage(fixture, options, fixtures) {
-	if (!offsets) {
+	if (!renderer) {
 		loadProduction();
 	}
 	const html = renderer.renderHtml(fixture.model, {
 		nonce: NONCE,
 		sort: options.sort,
-		lineIndex: new offsets.LineIndex(fixture.text),
 	});
 	return wrap(html, {
 		fixture,
@@ -603,7 +528,6 @@ function buildPage(fixture, options, fixtures) {
 		theme: THEMES[options.theme],
 		sort: options.sort,
 		chrome: options.chrome,
-		view: options.view,
 	});
 }
 
@@ -620,9 +544,7 @@ function readOptions(url) {
 	}
 	const sort = url.searchParams.get('sort') === 'declaration' ? 'declaration' : 'all';
 	const chrome = url.searchParams.get('chrome') !== '0';
-	const viewParam = url.searchParams.get('view');
-	const view = viewParam === 'tree' || viewParam === 'document' ? viewParam : undefined;
-	return { theme, sort, chrome, view };
+	return { theme, sort, chrome };
 }
 
 function send(res, status, body, type) {
@@ -749,11 +671,8 @@ async function runCheck() {
 	// The exact initial row payload the production renderer embeds: the wrapper
 	// must not alter it, and it must match the production row builder.
 	const payloadFor = (fixture) => {
-		const rows = rowBuilder.buildRows(fixture.model, {
-			sort: 'all',
-			lineIndex: new offsets.LineIndex(fixture.text),
-		});
-		return renderer.encodeRowDocument({ rows: rows.rows, digits: rows.digits });
+		const rows = rowBuilder.buildRows(fixture.model, { sort: 'all' });
+		return renderer.encodeRowDocument({ rows: rows.rows });
 	};
 
 	for (const fixture of fixtures) {
@@ -761,18 +680,13 @@ async function runCheck() {
 		for (const theme of THEME_ORDER) {
 			try {
 				const page = buildPage(fixture, { theme, sort: 'all', chrome: true }, fixtures);
-				const themeClass =
-					theme === 'light' ? 'vscode-light' : theme === 'dark' ? 'vscode-dark' : 'vscode-high-contrast';
+				const themeClass = theme === 'dark' ? 'vscode-dark' : 'vscode-high-contrast';
 				const ok =
 					page.includes('data-preview-theme="' + theme + '"') &&
 					page.includes('class="' + themeClass + '"') &&
 					page.includes('--vscode-editor-background: ' + THEMES[theme].vars['editor-background']) &&
 					page.includes(
 						'--vscode-debugTokenExpression-string: ' + THEMES[theme].vars['debugTokenExpression-string']
-					) &&
-					page.includes(
-						'--vscode-editorLineNumber-activeForeground: ' +
-							THEMES[theme].vars['editorLineNumber-activeForeground']
 					) &&
 					page.includes(expectedRows) &&
 					page.includes('id="ecuc-rows"') &&
@@ -781,6 +695,8 @@ async function runCheck() {
 					page.includes('id="tree-bottom"') &&
 					page.includes('id="inspector"') &&
 					page.includes('id="empty"') &&
+					!page.includes('id="view-toggle"') &&
+					!page.includes('data-ln-digits') &&
 					page.includes('window.__preview') &&
 					page.includes('id="preview-panel"') &&
 					!expectedRows.includes('undefined');
@@ -823,14 +739,14 @@ async function runCheck() {
 		check('GET /health', health.status === 200 && (await health.text()) === 'ok');
 
 		const page = await fetch(
-			'http://127.0.0.1:' + port + '/preview?fixture=' + encodeURIComponent(fixtures[0].id) + '&theme=light'
+			'http://127.0.0.1:' + port + '/preview?fixture=' + encodeURIComponent(fixtures[0].id) + '&theme=dark'
 		);
 		const pageText = await page.text();
 		check(
 			'GET /preview',
 			page.status === 200 &&
 				pageText.includes(payloadFor(fixtures[0])) &&
-				pageText.includes('data-preview-theme="light"')
+				pageText.includes('data-preview-theme="dark"')
 		);
 
 		const bad = await fetch('http://127.0.0.1:' + port + '/preview?fixture=' + encodeURIComponent('../package.json'));

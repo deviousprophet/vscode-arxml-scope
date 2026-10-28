@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { ReferenceNode } from '../../core/ecuc/model';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { buildNodeIndex } from '../../editor/nodeId';
-import { followReference } from '../../editor/navigation';
+import { followReference, nodeIdForRange } from '../../editor/navigation';
 import { fixtureText, slice } from '../core/modelTestUtils';
 import { fixtureUri } from './editorTestUtils';
 
@@ -31,6 +31,14 @@ suite('editor references (AC6)', () => {
 		if (result.ok) {
 			assert.deepStrictEqual(result.range, container.range);
 			assert.ok(slice(text, result.range).startsWith('<ECUC-CONTAINER-VALUE>'));
+		}
+	});
+
+	test('AC6: a same-file target maps back to its ECUC row id', () => {
+		const result = followReference(model, reference('Good'));
+		assert.strictEqual(result.ok, true);
+		if (result.ok) {
+			assert.strictEqual(nodeIdForRange(index, result.range), index.idOf(container));
 		}
 	});
 

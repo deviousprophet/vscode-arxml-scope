@@ -10,7 +10,6 @@
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { LineIndex } from '../../core/text/offsets';
 import { renderHtml } from '../../editor/renderHtml';
 import { buildRows } from '../../editor/renderRows';
 import { fixtureText } from '../core/modelTestUtils';
@@ -51,13 +50,11 @@ const BOOLEAN_CASE_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
 
 
 function rows(): ReturnType<typeof buildRows>['rows'] {
-	const text = fixtureText(FIXTURE);
-	return buildRows(scanEcucValues(text), { lineIndex: new LineIndex(text) }).rows;
+	return buildRows(scanEcucValues(fixtureText(FIXTURE))).rows;
 }
 
 function page(): string {
-	const text = fixtureText(FIXTURE);
-	return renderHtml(scanEcucValues(text), { nonce: 'test-nonce', lineIndex: new LineIndex(text) });
+	return renderHtml(scanEcucValues(fixtureText(FIXTURE)), { nonce: 'test-nonce' });
 }
 
 function styleOf(html: string): string {
@@ -81,7 +78,7 @@ suite('editor semantic colours (AC14)', () => {
 		assert.strictEqual(kindFor('Title'), 'textual');
 		assert.strictEqual(kindFor('Flag'), 'boolean');
 		// The class contract is unchanged; the widget and filter still select `.value`.
-		assert.ok(page().includes("value.className = row.kind === 'reference' ? 'value target' : 'value'"));
+		assert.ok(page().includes("value.className = followable ? 'value target' : 'value'"));
 		const upper = buildRows(scanEcucValues(BOOLEAN_CASE_FIXTURE), {}).rows;
 		assert.strictEqual(
 			upper.filter((row) => row.valueKind === 'boolean').length,
@@ -90,16 +87,13 @@ suite('editor semantic colours (AC14)', () => {
 		);
 	});
 
-	test('AC14: each kind has its own accent and glyph variable', () => {
+	test('AC14: the Tree kind glyphs and accent borders are removed', () => {
 		const style = styleOf(page());
-		assert.ok(/\.row\.k-module\s*\{[^}]*--vscode-symbolIcon-moduleForeground/.test(style));
-		assert.ok(/\.row\.k-container\s*\{[^}]*--vscode-symbolIcon-namespaceForeground/.test(style));
-		assert.ok(/\.row\.k-parameter\s*\{[^}]*--vscode-symbolIcon-fieldForeground/.test(style));
-		assert.ok(/\.row\.k-reference\s*\{[^}]*--vscode-symbolIcon-referenceForeground/.test(style));
-		assert.ok(/\.glyph \.g-module\s*\{[^}]*--vscode-symbolIcon-moduleForeground/.test(style));
-		assert.ok(/\.glyph \.g-container\s*\{[^}]*--vscode-symbolIcon-namespaceForeground/.test(style));
-		assert.ok(/\.glyph \.g-parameter\s*\{[^}]*--vscode-symbolIcon-fieldForeground/.test(style));
-		assert.ok(/\.glyph \.g-reference\s*\{[^}]*--vscode-symbolIcon-referenceForeground/.test(style));
+		assert.ok(!style.includes('.glyph'), 'no Tree glyphs');
+		assert.ok(!/\.row\.k-module\s*\{[^}]*--vscode-symbolIcon/.test(style), 'no module kind border');
+		assert.ok(!/\.row\.k-container\s*\{[^}]*--vscode-symbolIcon/.test(style), 'no container kind border');
+		assert.ok(!/\.row\.k-parameter\s*\{[^}]*--vscode-symbolIcon/.test(style), 'no parameter kind border');
+		assert.ok(!/\.row\.k-reference\s*\{[^}]*--vscode-symbolIcon/.test(style), 'no reference kind border');
 	});
 
 	test('AC14: value types, references and short names use their semantic scopes', () => {
@@ -126,6 +120,10 @@ suite('editor semantic colours (AC14)', () => {
 		);
 		assert.ok(!style.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
 		const hexes = [...style.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
-		assert.deepStrictEqual(hexes, ['#80808040'], 'the indent-guide fallback is still the only literal');
+		assert.deepStrictEqual(
+			hexes.sort(),
+			['#4EC9B0', '#80808040', '#DCDCAA'].sort(),
+			'the semantic guide/colour fallbacks are the only literals'
+		);
 	});
 });

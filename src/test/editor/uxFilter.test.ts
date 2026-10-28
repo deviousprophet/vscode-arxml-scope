@@ -11,7 +11,6 @@
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { LineIndex } from '../../core/text/offsets';
 import { buildFilterIndex, filterRows, flattenRows, haystack, matchRanges, matchesQuery } from '../../editor/filter';
 import { RowPayload, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
@@ -20,8 +19,7 @@ import { evaluateFunction, functionSource } from './scriptTestUtils';
 const FIXTURE = 'editor/render.arxml';
 
 function page(): string {
-	const source = fixtureText(FIXTURE);
-	return renderHtml(scanEcucValues(source), { nonce: 'test-nonce', lineIndex: new LineIndex(source) });
+	return renderHtml(scanEcucValues(fixtureText(FIXTURE)), { nonce: 'test-nonce' });
 }
 
 function payload(source = page()): RowPayload {

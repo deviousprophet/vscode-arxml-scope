@@ -8,8 +8,8 @@
  * from the caller so the CSS and the math can be asserted against the same
  * constants.
  *
- * Heights may be uniform (Document/brace lines) or two-valued (Tree rows with
- * and without a meta line); any non-negative function works. Cumulative
+ * Heights may be uniform (Document/brace lines) or any non-negative function; the
+ * caller owns the height policy. Cumulative
  * heights are cached for the latest state because a scroll pass asks for the
  * range, the spacers and sometimes a row offset from the same list; the cache
  * is keyed on row count, height function identity and `heightVersion`, so a
@@ -49,19 +49,6 @@ let cache: HeightCache | undefined;
 /** A constant height function, used by Document node/brace rows and by tests. */
 export function fixedRowHeight(height: number): RowHeight {
 	return () => height;
-}
-
-/**
- * A two-height function: rows where `isTall` is true use `tallHeight`, the rest
- * use `shortHeight`. The Tree view uses this for rows with and without a
- * one-line `.row-meta`; both heights are fixed, never measured per row.
- */
-export function twoHeightRowHeight(
-	shortHeight: number,
-	tallHeight: number,
-	isTall: (index: number) => boolean
-): RowHeight {
-	return (index) => (isTall(index) ? tallHeight : shortHeight);
 }
 
 /**

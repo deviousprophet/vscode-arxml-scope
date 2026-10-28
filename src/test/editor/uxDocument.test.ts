@@ -1,17 +1,15 @@
 /**
- * AC1–AC6 — the quiet-source document view: default view, hidden details, the editor surface,
- * real source line numbers, the gutter/fold column, the restrained token system, selection/focus,
- * content parity, the strip and the state toggles.
+ * The Document-only quiet-source surface: no Tree toggle or Tree CSS, no source-line gutter,
+ * bracket guides and selected-subtree highlighting, the editor surface/tokens, selection/focus,
+ * details width, the details value editor and the state defaults.
  *
- * There is no webview DOM in the test host. The page's own `applyView` and
- * `applyInspectorVisibility` are driven with stub DOM objects; the rest is asserted on the
- * row data, the shell, its styles and the inlined script. The browser pass is the rendered
- * evidence.
+ * There is no webview DOM in the test host. The page's own `applyInspectorVisibility` is
+ * driven with stub DOM objects; the rest is asserted on the row data, the shell, its styles
+ * and the inlined script. The browser pass is the rendered evidence.
  */
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { LineIndex } from '../../core/text/offsets';
 import { RowPayload, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
 import { functionSource } from './scriptTestUtils';
@@ -23,8 +21,7 @@ function text(): string {
 }
 
 function page(): string {
-	const source = text();
-	return renderHtml(scanEcucValues(source), { nonce: 'test-nonce', lineIndex: new LineIndex(source) });
+	return renderHtml(scanEcucValues(text()), { nonce: 'test-nonce' });
 }
 
 function payload(source = page()): RowPayload {
@@ -39,13 +36,12 @@ function styleOf(html: string): string {
 	return match[1];
 }
 
-suite('editor document view (AC1–AC6)', () => {
-	test('AC2/AC6: Document is the default; the strip and toggles exist', () => {
+suite('editor document view', () => {
+	test('Document is the only view; the strip and details exist', () => {
 		const html = page();
 		assert.ok(html.includes('<body data-view="document">'));
-		assert.ok(/id="view-toggle"[^>]*aria-pressed="true"/.test(html));
-		assert.ok(html.includes('<span class="view-document">Document</span>'));
-		assert.ok(html.includes('<span class="view-tree">Tree</span>'));
+		assert.ok(!html.includes('id="view-toggle"'), 'the Tree view toggle is gone');
+		assert.ok(!html.includes('view-document') && !html.includes('view-tree'), 'no view switch labels');
 		assert.ok(/id="details-toggle"[^>]*aria-pressed="false"/.test(html));
 		assert.ok(html.includes('aria-controls="inspector"'));
 		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>'));
@@ -53,9 +49,13 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(html.includes('Click a line or press Space.'));
 		assert.ok(html.includes('<div id="notice" class="notice" role="status" aria-live="polite"></div>'));
 		assert.equal(html.match(/id="notice"/g)?.length, 1, 'the notice id is unique');
+		assert.ok(!html.includes('data-ln-digits'), 'no line-number gutter width');
+		assert.ok(!html.includes('data-line='), 'no source-line display data');
+		assert.ok(!html.includes('class="glyph"'), 'no Tree glyph column');
+		assert.ok(!html.includes('class="view-switch"'), 'no Tree view CSS');
 	});
 
-	test('AC2: the document CSS is one editor surface with the quiet-source tokens', () => {
+	test('the document CSS is one editor surface with the quiet-source tokens', () => {
 		const style = styleOf(page());
 		assert.ok(/body\[data-view\]\s*\{[^}]*--ecuc-fs:\s*var\(--vscode-editor-font-size, 13px\)/.test(style));
 		assert.ok(/body\[data-view\]\s*\{[^}]*--ecuc-lh:\s*calc\(var\(--ecuc-fs\) \* 1\.55\)/.test(style));
@@ -76,36 +76,28 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*font-family:\s*var\(--vscode-editor-font-family/.test(style));
 		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*font-size:\s*var\(--ecuc-fs\)/.test(style));
 		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*line-height:\s*var\(--ecuc-lh\)/.test(style));
-		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*font-variant-ligatures:\s*none/.test(style));
-		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*tab-size:\s*4/.test(style));
 		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*white-space:\s*pre/.test(style));
-		assert.ok(
-			/body\[data-view="document"\] #tree\s*\{[^}]*padding:\s*calc\(var\(--ecuc-lh\) \* 0\.5\) 2ch calc\(var\(--ecuc-lh\) \* 3\) var\(--gut\)/.test(
-				style
-			)
-		);
-		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*display:\s*flex/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*gap:\s*1ch/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*padding:\s*0 0 0 var\(--gut\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*border:\s*0/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*background-color:\s*transparent/.test(style));
-		assert.ok(/body\[data-view="document"\] \.glyph\s*\{[^}]*display:\s*none/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row-meta\s*\{[^}]*display:\s*flex/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row-meta\s*\{[^}]*flex-wrap:\s*nowrap/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row-meta\s*\{[^}]*font-size:\s*inherit/.test(style));
-		// The flat list indents rows by `data-level` rather than nested `.children` wrappers.
-		assert.ok(
-			/body\[data-view="document"\] \.row\[data-level="3"\]\s*\{[^}]*margin-left:\s*calc\(-1 \* var\(--gut\)\)/.test(
-				style
-			)
-		);
-		assert.ok(
-			/body\[data-view="document"\] \.row\[data-level="3"\]\s*\{[^}]*padding-left:\s*calc\(var\(--gut\) \+ var\(--indent\) \* 2\)/.test(
-				style
-			)
-		);
+		assert.ok(/\.row\s*\{[^}]*display:\s*flex/.test(style));
+		assert.ok(/\.row\s*\{[^}]*gap:\s*1ch/.test(style));
+		assert.ok(/\.row\s*\{[^}]*padding:\s*0 0 0 var\(--doc-pad\)/.test(style));
+		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--doc-pad:\s*3ch/.test(style));
 		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--indent:\s*4ch/.test(style));
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--indent:\s*3ch/.test(style));
+		assert.ok(
+			/body\[data-view="document"\] \.row\[data-level="3"\]\s*\{[^}]*padding-left:\s*calc\(var\(--doc-pad\) \+ var\(--indent\) \* 2\)/.test(
+				style
+			)
+		);
+		assert.ok(!/--ln-w|--ln-digits|--gut/.test(style), 'no line-number/gutter variables');
+		assert.ok(!/row::before\s*\{[^}]*attr\(data-line\)/.test(style), 'no line-number pseudo-element');
+		assert.ok(!/repeating-linear-gradient/.test(style), 'no continuous indent guides');
+		assert.ok(/\.guide\s*\{[^}]*opacity:\s*0\.28/.test(style), 'bracket guides start faded');
+		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(style), 'hover makes the guide clearer');
+		assert.ok(
+			/body\[data-view="document"\] \.guide\[data-level="3"\]\s*\{[^}]*left:\s*calc\(var\(--doc-pad\) \+ var\(--indent\) \* 2 \+ 3\.5ch\)/.test(
+				style
+			)
+		);
+		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(style));
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-gap="true"\]\s*\{[^}]*padding-top:\s*var\(--ecuc-lh\)/.test(style)
 		);
@@ -113,74 +105,50 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(/body\[data-view="document"\] \.condition,[\s\S]*?border:\s*0/.test(style));
 		assert.ok(/body\[data-view="document"\] \.annotation::before\s*\{[^}]*content:\s*"\/\*/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*content:\s*"module /.test(style));
-		// The Tree view is still the base presentation; document selectors are scoped.
-		assert.ok(/\.row\s*\{[^}]*display:\s*grid/.test(style));
 		assert.ok(!/body\[data-view="document"\] \.row-meta\s*\{[^}]*display:\s*none/.test(style), 'metadata is not hidden');
+		assert.ok(!/body\[data-view="tree"\]/.test(style), 'no Tree scoped CSS');
 	});
 
-	test('AC2: the review fixes keep the contrast tiers and indent guides', () => {
+	test('the review fixes keep the dark-only contrast tiers', () => {
 		const style = styleOf(page());
-		assert.ok(/repeating-linear-gradient/.test(style), 'the Document indent guides stay');
-		assert.ok(
-			/var\(--vscode-tree-indentGuidesStroke, var\(--vscode-panel-border, #80808040\)\)/.test(style)
-		);
 		assert.ok(/@supports \(color: color-mix\(in srgb, currentColor 50%, transparent\)\)/.test(style));
-		assert.ok(/body\.vscode-dark\[data-view\]\s*\{[^}]*--sel-bg: color-mix\([^;]*10%/.test(style));
-		assert.ok(
-			/body\.vscode-light\[data-view\]\s*\{[^}]*--sel-bg: var\(--vscode-editor-background\)/.test(style)
-		);
+		assert.ok(/body\[data-view\]\s*\{[^}]*--sel-bg: color-mix\([^;]*10%/.test(style));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--subtree-bg:/.test(style));
+		assert.ok(!/body\.vscode-light/.test(style), 'light theme is not supported');
 	});
 
-	test('AC2: rows carry real 1-based source line numbers and the gutter width', () => {
-		const source = text();
-		const model = scanEcucValues(source);
-		const index = new LineIndex(source);
-		const html = renderHtml(model, { nonce: 'test-nonce', lineIndex: index });
-		const rows = payload(html).rows;
-		const digits = payload(html).digits;
-		assert.ok(new RegExp(`id="tree"[^>]*data-ln-digits="${digits}"`).test(html));
-		assert.ok(!html.includes('style="--ln-digits'), 'no CSP-blocked style attribute');
-
-		const module = model.modules[0];
-		const parameter = module.containers[0].parameters.find((candidate) => candidate.name === 'IniValue');
-		assert.ok(parameter, 'the fixture has IniValue');
-		const moduleLine = index.positionAt(module.range.start).line + 1;
-		const parameterLine = index.positionAt(parameter.range.start).line + 1;
-		assert.strictEqual(rows.find((row) => row.label === 'PkgA.PkgB.ModDefs.ModX')!.sourceLine, moduleLine);
-		assert.strictEqual(rows.find((row) => row.label === 'IniValue')!.sourceLine, parameterLine);
-
-		const build = functionSource(html, 'buildNodeRow');
-		assert.ok(build.includes('rowElement.dataset.line = String(row.sourceLine)'), 'the gutter line is 1-based');
-		const brace = functionSource(html, 'buildBraceRow');
-		assert.ok(!brace.includes('dataset.line'), 'header and braces stay unnumbered');
-		assert.ok(!/<div class="meta"[^>]*data-line=/.test(html));
-
-		const style = styleOf(html);
-		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--ln-w:\s*calc\(var\(--ln-digits, 4\) \* 1ch \+ 1ch\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--gut:\s*calc\(var\(--ln-w\) \+ 4ch\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row::before\s*\{[^}]*content:\s*attr\(data-line\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row::before\s*\{[^}]*position:\s*absolute[^}]*width:\s*var\(--ln-w\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row::before\s*\{[^}]*--vscode-editorLineNumber-foreground/.test(style));
-		assert.ok(
-			/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row::before,[\s\S]*?--vscode-editorLineNumber-activeForeground/.test(
-				style
-			)
-		);
-		assert.ok(/body\[data-view="document"\] \.document:has\(#tree\[data-ln-digits="2"\]\)/.test(style));
-		assert.ok(
-			/body\[data-view="document"\] \.twisty,\nbody\[data-view="document"\] \.spacer\s*\{[^}]*position:\s*absolute[^}]*left:\s*calc\(var\(--ln-w\) \+ 1ch\)/.test(
-				style
-			)
-		);
-		assert.ok(/body\[data-view="document"\] \.node\[aria-expanded="false"\] > \.row::after\s*\{[^}]*content:\s*" \{ … \}"/.test(style));
-		assert.ok(/body\[data-view="document"\] \.node\[data-kind="parameter"\]\[data-selected="true"\] > \.row::after\s*\{[^}]*content:\s*"  F2"/.test(style));
+	test('rows carry no display-only source positions or line-number width', () => {
+		const rows = payload().rows;
+		for (const row of rows) {
+			assert.ok(!('sourceLine' in row), 'no source line');
+			assert.ok(!('line' in row), 'no 0-based line');
+			assert.ok(!('column' in row), 'no column');
+			assert.ok(!('endLine' in row), 'no end line');
+			assert.ok(!('endColumn' in row), 'no end column');
+		}
+		assert.ok(!('digits' in payload()), 'no gutter width');
+		const build = functionSource(page(), 'buildNodeRow');
+		assert.ok(!build.includes('dataset.line'), 'the row has no line-number data');
+		const brace = functionSource(page(), 'buildBraceRow');
+		assert.ok(!brace.includes('dataset.line'), 'braces stay unnumbered');
 	});
 
-	test('AC1: document labels are neutral and only the semantic tokens carry accent', () => {
+	test('document labels and reference values use the dark semantic accents', () => {
 		const style = styleOf(page());
 		assert.ok(/body\[data-view="document"\] \.label\s*\{[^}]*color:\s*var\(--vscode-editor-foreground\)/.test(style));
 		assert.ok(!/body\[data-view="document"\] \.row\.k-module \.label\s*\{/.test(style), 'no module-path label colour');
-		assert.ok(!/body\[data-view="document"\] \.row\.k-container \.label\s*\{/.test(style), 'no container label colour');
+		assert.ok(
+			/body\[data-view="document"\] \.node\[data-kind="container"\] > \.row > \.label\s*\{[^}]*--vscode-symbolIcon-namespaceForeground/.test(
+				style
+			),
+			'a container is green like a type'
+		);
+		assert.ok(
+			/body\[data-view="document"\] \.node\[data-kind="reference"\] > \.row > \.value \.value-text\s*\{[^}]*--vscode-symbolIcon-functionForeground[^}]*font-style:\s*italic/.test(
+				style
+			),
+			'a reference value is yellow and italic'
+		);
 		assert.ok(!/body\[data-view="document"\] \.row\.k-parameter \.label,[\s\S]*?--vscode-symbolIcon-variableForeground/.test(style));
 		assert.ok(/body\[data-view="document"\] \.node\[data-kind="parameter"\] > \.row > \.label,[\s\S]*?--tok-key/.test(style));
 		assert.ok(/body\[data-view="document"\] \.meta \.keyword\s*\{[^}]*--tok-keyword/.test(style));
@@ -201,7 +169,7 @@ suite('editor document view (AC1–AC6)', () => {
 		);
 	});
 
-	test('AC3/AC5: quiet selection, focus rail and plain values', () => {
+	test('quiet selection, focus rail and read-only values', () => {
 		const style = styleOf(page());
 		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(style));
@@ -212,12 +180,26 @@ suite('editor document view (AC1–AC6)', () => {
 		);
 		assert.ok(/body\[data-view="document"\] \.node:focus-visible > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(style));
 		assert.ok(!style.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
-		assert.ok(/body\[data-view="document"\] \.row\.k-parameter > \.value\s*\{[^}]*border-bottom:\s*0/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\.k-parameter:hover > \.value::after\s*\{[^}]*content:\s*none/.test(style));
-		assert.ok(/body\[data-view="document"\] \.node\[data-kind="parameter"\] > \.row > \.value:hover\s*\{[^}]*cursor:\s*text/.test(style));
+		assert.ok(!/body\[data-view="document"\] \.row\.k-parameter > \.value\s*\{[^}]*border-bottom/.test(style), 'no edit underline');
+		assert.ok(!style.includes('.value-edit'), 'no inline document editor');
+		assert.ok(
+			/body\[data-view="document"\] \.node\[data-kind="parameter"\] > \.row > \.value > \.value-text\s*\{[^}]*cursor:\s*pointer/.test(
+				style
+			)
+		);
+		assert.ok(
+			/body\[data-view="document"\] \.node\[data-subtree="true"\] > \.row,/.test(style),
+			'a selected container tints its subtree'
+		);
+		assert.ok(
+			/body\[data-view="document"\] \.node\[data-kind="parameter"\]\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)[^}]*--sel-outline/.test(
+				style
+			),
+			'a selected parameter has a stronger outline'
+		);
 	});
 
-	test('AC4: the strip is compact and flat', () => {
+	test('the strip is compact and flat', () => {
 		const style = styleOf(page());
 		assert.ok(/\.toolbar\s*\{[^}]*height:\s*26px/.test(style));
 		assert.ok(/\.toolbar\s*\{[^}]*padding:\s*0 8px/.test(style));
@@ -225,18 +207,22 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(/\.filter-wrap\s*\{[^}]*flex:\s*0 1 28ch/.test(style));
 		assert.ok(/\.filter:not\(:placeholder-shown\)\s*\{[^}]*var\(--vscode-input-background\)/.test(style));
 		assert.ok(/\.tool\s*\{[^}]*background:\s*transparent[^}]*border:\s*0/.test(style));
-		assert.ok(/\.view-switch\[aria-pressed="true"\] \.view-document/.test(style));
+		assert.ok(!style.includes('.view-switch'), 'no view switch');
 	});
 
-	test('AC4: the strip keeps the collapse/expand, view and details controls', () => {
+	test('the strip keeps the collapse/expand and details controls', () => {
 		const html = page();
-		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"[^>]*><svg/.test(html));
-		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"[^>]*><svg/.test(html));
-		assert.ok(/id="view-toggle"[^>]*aria-pressed="true"[^>]*>.*view-document/.test(html));
+		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"[^>]*>[\s\S]*?<span class="lbl">Collapse<\/span>/.test(html));
+		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"[^>]*>[\s\S]*?<span class="lbl">Expand<\/span>/.test(html));
+		assert.ok(/\.icon-tool\s*\{[^}]*min-width:\s*28px[^}]*padding:\s*0 8px/.test(styleOf(html)));
+		assert.ok(/\.twisty\s*\{[^}]*opacity:\s*0\.7/.test(styleOf(html)), 'the fold control is visible at rest');
+		assert.ok(/\.twisty\s*\{[^}]*align-self:\s*stretch/.test(styleOf(html)), 'the twisty keeps the full row-height hit area');
+		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(styleOf(html)));
 		assert.ok(/id="details-toggle"[^>]*aria-label="Show node details"[^>]*><svg/.test(html));
+		assert.ok(!html.includes('id="view-toggle"'));
 	});
 
-	test('AC3/AC4: the document keeps every parent §6 field and the direct .value', () => {
+	test('the document keeps every parent §6 field and the direct .value', () => {
 		const rows = payload().rows;
 		const contA = rows.find((row) => row.label === 'ContA')!;
 		assert.ok(contA.meta.some((part) => part.cls === 'short' && part.text === '"ContA"'));
@@ -253,9 +239,10 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(script.includes('appendHighlighted(label, row.label)'), 'the label');
 		assert.ok(script.includes('valueSpan(row)'), 'the value');
 		assert.ok(script.includes('metaSpan(row)'), 'the metadata line');
+		assert.ok(script.includes('rowElement.appendChild(valueSpan(row))'), 'the value stays a direct row child');
 	});
 
-	test('AC2: the value separator is muted punctuation and stays out of the value token', () => {
+	test('the value separator is muted punctuation and stays out of the value token', () => {
 		const script = page();
 		const value = functionSource(script, 'valueSpan');
 		assert.ok(value.includes("punct.className = 'punct'"));
@@ -266,73 +253,42 @@ suite('editor document view (AC1–AC6)', () => {
 		assert.ok(/body\[data-view="document"\] \.value\s*\{[^}]*flex:\s*0 0 auto/.test(style));
 	});
 
-	test('AC5/AC7: the details width and narrow layout are specified', () => {
+	test('the details width and narrow layout are specified', () => {
 		const style = styleOf(page());
 		assert.ok(/#inspector\s*\{[^}]*flex:\s*0 0 clamp\(260px, 30%, 340px\)/.test(style));
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?body\[data-view="document"\] \.row::before\s*\{[^}]*display:\s*none/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.details-toggle \.lbl[\s\S]*?display:\s*none/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.grow[\s\S]*?display:\s*none/.test(style));
 		assert.ok(/\.inspector-code\s*\{[^}]*white-space:\s*normal/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?#inspector\s*\{[^}]*max-height:\s*45vh/.test(style));
-		assert.ok(/#main\s*\{[^}]*scroll-padding-left:\s*9ch/.test(style));
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?#main\s*\{[^}]*scroll-padding-left:\s*3ch/.test(style));
+		assert.ok(/#main\s*\{[^}]*scroll-padding-left:\s*var\(--doc-pad\)/.test(style));
+		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(style));
 		assert.ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?steps\(1, end\)/.test(style));
 		assert.ok(/@media \(forced-colors: active\)[\s\S]*?body\[data-view\] mark/.test(style));
 		assert.ok(/body\.vscode-high-contrast\[data-view\] \.node\.flash/.test(style));
-	});
-
-	test('AC2: Tree view shares the quiet-source surface tokens', () => {
-		const style = styleOf(page());
-		assert.ok(/\.tree\s*\{[^}]*font-family:\s*var\(--vscode-editor-font-family/.test(style));
-		assert.ok(/\.tree\s*\{[^}]*font-size:\s*var\(--ecuc-fs\)/.test(style));
-		assert.ok(/\.target\s*\{[^}]*color:\s*var\(--vscode-editor-foreground\)/.test(style));
-		assert.ok(!/\.target\s*\{[^}]*text-decoration:\s*underline/.test(style), 'targets are hover-only underlined');
-		assert.ok(/\.target:hover \.value-text\s*\{[^}]*text-decoration:\s*underline/.test(style));
-	});
-
-	test('AC4: an invalid edit keeps the text and adds an inline comment reason', () => {
-		const html = page();
-		assert.ok(html.includes('value-error'));
-		assert.ok(html.includes("error.textContent = '/* ' + reason + ' */'"));
-		assert.ok(html.includes('valueEdit.input.after(error)'), 'the reason sits beside the input');
-		assert.ok(html.includes("valueEdit.input.setAttribute('aria-invalid', 'true')"));
-		const style = styleOf(html);
-		assert.ok(/\.value-error\s*\{[^}]*--vscode-errorForeground/.test(style));
 		assert.ok(
-			/\.value-edit\[aria-invalid="true"\]\s*\{[^}]*--vscode-inputValidation-errorBorder/.test(style)
+			/body\.vscode-high-contrast\[data-view\] \.node\[data-subtree="true"\] > \.row[\s\S]*?background:\s*transparent/.test(style),
+			'high contrast uses an outline, not the subtree fill'
+		);
+		assert.ok(
+			/@media \(forced-colors: active\)[\s\S]*?data-subtree="true"[\s\S]*?outline:/.test(style),
+			'forced colors also replaces the subtree fill'
 		);
 	});
 
-	test('AC5: the page’s own applyView/applyInspectorVisibility drive the stubs', () => {
+	test('an invalid edit keeps the text and adds a details comment reason', () => {
 		const html = page();
-		const viewState = { view: 'document', inspectorHidden: true };
-		const body = { dataset: {} as Record<string, string> };
-		const viewToggle = {
-			attrs: {} as Record<string, string>,
-			textContent: '',
-			title: '',
-			setAttribute(name: string, value: string) {
-				this.attrs[name] = value;
-			},
-		};
-		const applyView = new Function(
-			'viewState',
-			'document',
-			'viewToggle',
-			`${functionSource(html, 'applyView')}\napplyView();`
-		) as (state: unknown, doc: unknown, toggle: unknown) => void;
-		applyView(viewState, { body }, viewToggle);
-		assert.strictEqual((body.dataset as Record<string, string>).view, 'document');
-		assert.strictEqual(viewToggle.attrs['aria-pressed'], 'true');
-		assert.strictEqual(viewToggle.title, 'Switch to tree view');
-		assert.strictEqual(viewToggle.textContent, '', 'the Document|Tree spans are static');
+		assert.ok(html.includes('details-value'));
+		assert.ok(html.includes('details-value-error'));
+		assert.ok(html.includes("error.textContent = '/* ' + reason + ' */'"));
+		assert.ok(html.includes("'aria-invalid', 'true'"));
+		assert.ok(html.includes('detailsEdit.input.focus()'));
+		const style = styleOf(html);
+		assert.ok(/\.details-value-error\s*\{[^}]*--vscode-errorForeground/.test(style));
+		assert.ok(/\.details-value\[aria-invalid="true"\]\s*\{[^}]*--vscode-inputValidation-errorBorder/.test(style));
+	});
 
-		const treeState = { view: 'tree', inspectorHidden: true };
-		applyView(treeState, { body }, viewToggle);
-		assert.strictEqual((body.dataset as Record<string, string>).view, 'tree');
-		assert.strictEqual(viewToggle.attrs['aria-pressed'], 'false');
-		assert.strictEqual(viewToggle.title, 'Switch to document view');
-
+	test('the page details visibility drives the stubs', () => {
+		const html = page();
 		const inspector = { hidden: false };
 		const details = {
 			attrs: {} as Record<string, string>,
@@ -342,32 +298,30 @@ suite('editor document view (AC1–AC6)', () => {
 			},
 		};
 		const applyInspector = new Function(
-			'viewState',
+			'uiState',
 			'inspector',
 			'detailsToggle',
 			`${functionSource(html, 'applyInspectorVisibility')}\napplyInspectorVisibility();`
 		) as (state: unknown, panel: unknown, toggle: unknown) => void;
-		applyInspector({ view: 'document', inspectorHidden: true }, inspector, details);
+		applyInspector({ inspectorHidden: true }, inspector, details);
 		assert.strictEqual(inspector.hidden, true);
 		assert.strictEqual(details.attrs['aria-pressed'], 'false');
 		assert.strictEqual(details.attrs['aria-label'], 'Show node details');
 		assert.strictEqual(details.title, 'Show node details');
-		applyInspector({ view: 'document', inspectorHidden: false }, inspector, details);
+		applyInspector({ inspectorHidden: false }, inspector, details);
 		assert.strictEqual(inspector.hidden, false);
 		assert.strictEqual(details.attrs['aria-pressed'], 'true');
 		assert.strictEqual(details.attrs['aria-label'], 'Hide node details');
 		assert.strictEqual(details.title, 'Hide node details');
 	});
 
-	test('AC5/AC6: the defaults and persistence path are present', () => {
+	test('the defaults and persistence path are present', () => {
 		const script = page();
-		assert.ok(script.includes("viewState.view = 'document'"));
-		assert.ok(script.includes('viewState.inspectorHidden = true'));
-		assert.ok(script.includes('viewToggle.addEventListener'));
-		assert.ok(script.includes('viewState.view = viewState.view ==='));
-		assert.ok(script.includes('viewState.inspectorHidden = !viewState.inspectorHidden'));
-		assert.ok(script.includes('document.body.dataset.view'));
+		assert.ok(script.includes('let uiState = { inspectorHidden: true }'));
+		assert.ok(script.includes("uiState.inspectorHidden = !uiState.inspectorHidden"));
 		assert.ok(script.includes('vscode.getState()'));
-		assert.ok(script.includes('vscode.setState(viewState)'));
+		assert.ok(script.includes('vscode.setState(uiState)'));
+		assert.ok(!script.includes('uiState.view'));
+		assert.ok(!script.includes('viewToggle'));
 	});
 });

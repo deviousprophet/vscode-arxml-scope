@@ -1,6 +1,6 @@
 /**
  * Task design §2 — the host row model is the single source of the display
- * order, meta/value/target fields, source positions and search haystacks.
+ * order, meta/value/target fields and search haystacks.
  *
  * The assertions are on values, not markup: a row must not carry HTML, the
  * display order must match the existing order/meta rules (including the
@@ -11,15 +11,13 @@ import * as assert from 'assert';
 
 import { ContainerNode, EcucDocumentModel, ModuleNode, ParameterNode, ReferenceNode } from '../../core/ecuc/model';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { LineIndex } from '../../core/text/offsets';
 import { buildRows } from '../../editor/renderRows';
 import { fixtureText } from '../core/modelTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
 function fixtureRows(): ReturnType<typeof buildRows> {
-	const text = fixtureText(FIXTURE);
-	return buildRows(scanEcucValues(text), { lineIndex: new LineIndex(text) });
+	return buildRows(scanEcucValues(fixtureText(FIXTURE)));
 }
 
 suite('editor row model (design §2)', () => {
@@ -141,10 +139,19 @@ suite('editor row model (design §2)', () => {
 		assert.strictEqual(peer.value, 'PkgA.PkgB.ModX.ContA.ContB', 'the dotted target is displayed');
 		assert.strictEqual(peer.shownValue, 'PkgA.PkgB.ModX.ContA.ContB');
 		assert.strictEqual(peer.target, '/PkgA/PkgB/ModX/ContA/ContB', 'the raw target is kept for follow');
+		assert.strictEqual(peer.followable, true, 'a same-file target is followable');
 		assert.deepStrictEqual(peer.contextPaths, ['PkgA.PkgB.ModX.ContA']);
 		assert.deepStrictEqual(peer.meta.map((part) => `${part.cls}:${part.text}`), [
 			'context:context PkgA.PkgB.ModX.ContA',
 		]);
+	});
+
+	test('design §2: reference followability is same-file only', () => {
+		const rows = buildRows(scanEcucValues(fixtureText('editor/navigation.arxml'))).rows;
+		const byLabel = (label: string) => rows.find((row) => row.label === label);
+		assert.strictEqual(byLabel('Good')?.followable, true);
+		assert.strictEqual(byLabel('Missing')?.followable, false);
+		assert.strictEqual(byLabel('Ambiguous')?.followable, false);
 	});
 
 	test('design §2: haystacks are lower-cased label + short name + value', () => {
@@ -157,70 +164,16 @@ suite('editor row model (design §2)', () => {
 		assert.strictEqual(byLabel('PeerRef'), 'peerref pkga.pkgb.modx.conta.contb');
 	});
 
-	test('design §2: source lines are 1-based and inspector positions are 0-based', () => {
+	test('design §2: rows carry no display-only source position or digit width', () => {
 		const doc = fixtureRows();
-		const ini = doc.rows.find((row) => row.label === 'IniValue');
-		assert.ok(ini);
-		assert.strictEqual(ini.sourceLine, 54, 'the ECUC-NUMERICAL-PARAM-VALUE line (1-based)');
-		assert.strictEqual(ini.line, 53, 'the inspector line is 0-based');
-		assert.strictEqual(ini.column, 40);
-		assert.strictEqual(ini.endLine, 56);
-		assert.strictEqual(ini.endColumn, 69);
-		assert.strictEqual(doc.digits, 2, 'the widest source line has two digits');
-	});
-
-	test('design §2: without a line index the row is well formed and digit width is 1', () => {
-		const doc = buildRows(scanEcucValues(fixtureText(FIXTURE)));
-		assert.strictEqual(doc.digits, 1);
 		for (const row of doc.rows) {
-			assert.strictEqual(row.sourceLine, 0);
-			assert.strictEqual(row.line, 0);
-			assert.strictEqual(row.column, 0);
-			assert.strictEqual(row.endLine, 0);
-			assert.strictEqual(row.endColumn, 0);
+			assert.ok(!('sourceLine' in row), 'no source line');
+			assert.ok(!('line' in row), 'no 0-based line');
+			assert.ok(!('column' in row), 'no column');
+			assert.ok(!('endLine' in row), 'no end line');
+			assert.ok(!('endColumn' in row), 'no end column');
 		}
-	});
-
-	test('design §2: a hand-authored source maps start and end without a display guess', () => {
-		const lines = [
-			'<AUTOSAR>',
-			'  <AR-PACKAGES>',
-			'    <AR-PACKAGE>',
-			'      <SHORT-NAME>P</SHORT-NAME>',
-			'      <ELEMENTS>',
-			'        <ECUC-MODULE-CONFIGURATION-VALUES>',
-			'          <SHORT-NAME>M</SHORT-NAME>',
-			'          <DEFINITION-REF>/D/M</DEFINITION-REF>',
-			'          <CONTAINERS>',
-			'            <ECUC-CONTAINER-VALUE>',
-			'              <SHORT-NAME>C</SHORT-NAME>',
-			'              <DEFINITION-REF>/D/C</DEFINITION-REF>',
-			'              <PARAMETER-VALUES>',
-			'                <ECUC-NUMERICAL-PARAM-VALUE>',
-			'                  <DEFINITION-REF>/D/C/P</DEFINITION-REF>',
-			'                  <VALUE>1</VALUE>',
-			'                </ECUC-NUMERICAL-PARAM-VALUE>',
-			'              </PARAMETER-VALUES>',
-			'            </ECUC-CONTAINER-VALUE>',
-			'          </CONTAINERS>',
-			'        </ECUC-MODULE-CONFIGURATION-VALUES>',
-			'      </ELEMENTS>',
-			'    </AR-PACKAGE>',
-			'  </AR-PACKAGES>',
-			'</AUTOSAR>',
-		];
-		const text = lines.join('\n');
-		const doc = buildRows(scanEcucValues(text), { lineIndex: new LineIndex(text) });
-		const row = doc.rows.find((candidate) => candidate.label === 'P');
-		assert.ok(row, 'the parameter row exists');
-		const start = lines.findIndex((line) => line.includes('<ECUC-NUMERICAL-PARAM-VALUE>'));
-		const end = lines.findIndex((line) => line.includes('</ECUC-NUMERICAL-PARAM-VALUE>'));
-		assert.strictEqual(row.sourceLine, start + 1);
-		assert.strictEqual(row.line, start);
-		assert.strictEqual(row.column, lines[start].indexOf('<'));
-		assert.strictEqual(row.endLine, end);
-		assert.strictEqual(row.endColumn, lines[end].indexOf('</') + '</ECUC-NUMERICAL-PARAM-VALUE>'.length);
-		assert.strictEqual(doc.digits, 2);
+		assert.ok(!('digits' in doc), 'no line-number gutter width');
 	});
 
 	test('design §2: sort all uses the exception list, declaration keeps the authored order', () => {

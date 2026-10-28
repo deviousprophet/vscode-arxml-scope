@@ -12,7 +12,6 @@ import {
 	calcTotalHeight,
 	calcVisibleRange,
 	fixedRowHeight,
-	twoHeightRowHeight,
 } from '../../editor/virtualScroll';
 
 function state(overrides: Partial<VirtualState> = {}): VirtualState {
@@ -81,12 +80,12 @@ suite('virtual scroll (design §5)', () => {
 		assert.deepStrictEqual(calcVisibleRange(state({ scrollTop: 40, containerHeight: Number.NaN, bufferSize: 0 })), [2, 3]);
 	});
 
-	test('design §5: fixed and two-height row functions compose with the maths', () => {
+	test('design §5: fixed and variable row functions compose with the maths', () => {
 		const fixed = fixedRowHeight(20);
 		assert.strictEqual(fixed(0), 20);
 		assert.strictEqual(fixed(999), 20);
 
-		const twoHeight = twoHeightRowHeight(20, 40, (index) => index % 2 === 1);
+		const twoHeight = (index: number): number => (index % 2 === 1 ? 40 : 20);
 		assert.strictEqual(twoHeight(0), 20);
 		assert.strictEqual(twoHeight(1), 40);
 

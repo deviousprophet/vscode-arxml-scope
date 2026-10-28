@@ -57,7 +57,6 @@ function main() {
 	const renderer = outModule(path.join('editor', 'renderHtml.js'));
 	const rowBuilder = outModule(path.join('editor', 'renderRows.js'));
 	const nodeId = outModule(path.join('editor', 'nodeId.js'));
-	const offsets = outModule(path.join('core', 'text', 'offsets.js'));
 
 	const heapBefore = process.memoryUsage();
 	const scan = measure('scan', () => scanner.scanEcucValues(text));
@@ -67,9 +66,8 @@ function main() {
 	}
 	const index = measure('index', () => nodeId.buildNodeIndex(model));
 	const nodes = index.last.byId.size;
-	const lineIndex = new offsets.LineIndex(text);
-	const rows = measure('rows', () => rowBuilder.buildRows(model, { lineIndex }));
-	const page = measure('page', () => renderer.renderHtml(model, { nonce: 'bench', lineIndex }));
+	const rows = measure('rows', () => rowBuilder.buildRows(model));
+	const page = measure('page', () => renderer.renderHtml(model, { nonce: 'bench' }));
 	const heapAfter = process.memoryUsage();
 
 	console.log('ECUC benchmark');

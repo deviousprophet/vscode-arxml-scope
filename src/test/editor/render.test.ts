@@ -110,14 +110,17 @@ suite('editor rendering (AC1)', () => {
 		assert.ok(!source.includes('data-node-id="'), 'the initial markup has no tree rows');
 		assert.ok(!source.includes('<div class="node" role="treeitem"'), 'no full-tree DOM');
 		assert.ok(source.includes('id="ecuc-rows"'), 'the rows are data');
-		assert.ok(source.includes('setRows(message.rows, message.digits, message.selectedId)'));
+		assert.ok(source.includes('setRows(message.rows, message.selectedId)'));
+		assert.ok(!source.includes('id="view-toggle"'), 'the Tree view toggle is gone');
+		assert.ok(!source.includes('data-ln-digits'), 'there is no line-number gutter');
+		assert.ok(!source.includes('data-line='), 'rows carry no source-line display data');
+		assert.ok(!source.includes('class="glyph"'), 'the Tree glyph column is gone');
 	});
 
 	test('AC1: the initial row JSON escapes model text so it cannot close the script', () => {
 		const module = payload().rows.find((row) => row.kind === 'module')!;
 		const encoded = encodeRowDocument({
 			rows: [{ ...module, label: '</script><script>alert(1)</script>', definitionRef: '</script>' }],
-			digits: 1,
 		});
 		assert.ok(!encoded.includes('</script>'), 'no raw closing tag');
 		const decoded = JSON.parse(encoded) as RowPayload;
@@ -130,7 +133,13 @@ suite('editor rendering (AC1)', () => {
 		const style = /<style[^>]*>([\s\S]*?)<\/style>/.exec(page);
 		assert.ok(style, 'one inlined style block');
 		assert.ok(style[1].includes('var(--vscode-'), 'theming through CSS custom properties');
-		assert.ok(!/#[0-9a-fA-F]{3,6}\b/.test(style[1]), 'no hard-coded colour');
+		const hexes = [...style[1].matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
+		for (const hex of hexes) {
+			assert.ok(
+				['#4EC9B0', '#80808040', '#DCDCAA'].includes(hex),
+				`${hex} is a semantic fallback inside a --vscode-* variable`
+			);
+		}
 		assert.ok(page.includes('nonce="test-nonce"'), 'style and script carry the nonce');
 		assert.ok(page.includes("default-src 'none'"), 'a CSP meta is present');
 		assert.ok(!/<script[^>]+src=/.test(page), 'nothing is loaded remotely');

@@ -69,6 +69,27 @@ export function innermostNodeIdAt(index: NodeIndex, offset: number): string | un
 export type FollowResult = { ok: true; range: Range } | { ok: false; reason: string };
 
 /**
+ * The node a follow result points at: an exact range match first, then the
+ * smallest indexed node containing the range. The returned id is what the
+ * webview selects, so following stays in the ECUC editor instead of opening
+ * the text editor.
+ */
+export function nodeIdForRange(index: NodeIndex, range: Range): string | undefined {
+	let best: NodeEntry | undefined;
+	for (const entry of index.byId.values()) {
+		if (entry.range.start === range.start && entry.range.end === range.end) {
+			return entry.id;
+		}
+		if (entry.range.start <= range.start && entry.range.end >= range.end) {
+			if (!best || entry.range.end - entry.range.start < best.range.end - best.range.start) {
+				best = entry;
+			}
+		}
+	}
+	return best?.id;
+}
+
+/**
  * Same-file reference following (parent design §7, R10). Resolution reads the verbatim
  * `targetRawPath`, never the dotted display form. An absent path and an ambiguous
  * suffix both resolve to nothing; the reason covers both, because the resolver

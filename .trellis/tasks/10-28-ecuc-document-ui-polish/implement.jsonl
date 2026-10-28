@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend guide index and layer entry points."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Webview shell, DOM/value contracts, event ownership, state, theme and accessibility conventions."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Forbidden patterns, CSP/colour rules, DOM contracts and finish criteria."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Assertion, no-DOM, browser-harness, reference and mutation conventions."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Host/webview state, re-scan survival and persistence contracts."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Where the renderer/details editor/tests belong; core/vscode boundary."}
+{"file": "docs/ECUC_EDITOR.md", "reason": "Current ECUC behavior to update: views, line gutter, editing, details, harness and limits."}
+{"file": "docs/ECUC_EDITOR_DESIGN_SPEC.md", "reason": "Current visual contract for Document-only, no line numbers, bracket guides, selection hierarchy, dark accents, follow and details editing."}
+{"file": "docs/ECUC_EDITOR_DESIGN_CONTEXT.md", "reason": "Historical design context; do not treat its Tree/line-number sections as current."}
+{"file": ".trellis/tasks/10-28-ecuc-document-ui-polish/prd.md", "reason": "UI-polish requirements and acceptance criteria."}
+{"file": ".trellis/tasks/10-28-ecuc-document-ui-polish/design.md", "reason": "Document-only geometry, bracket guides, selection hierarchy, follow, details editor and data-contract design."}
+{"file": ".trellis/tasks/10-28-ecuc-document-ui-polish/implement.md", "reason": "Ordered implementation, tests, mutations, performance and review gate."}
+{"file": ".trellis/tasks/archive/2026-10/10-28-ecuc-virtualized-render-search/design.md", "reason": "The current flat row/window/filter design that this task builds on."}
+{"file": ".trellis/tasks/archive/2026-10/10-28-ecuc-virtualized-render-search/implement.md", "reason": "Performance baseline, visual captures and known limitations from the virtual-render task."}
