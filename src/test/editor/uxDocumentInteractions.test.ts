@@ -146,7 +146,8 @@ suite('editor Document interactions', () => {
 
 		const rebuild = functionSource(script, 'rebuildDisplay');
 		assert.ok(rebuild.includes('expandedIds = new Set()'), 'the displayed expansion set is rebuilt');
-		assert.ok(rebuild.includes('row.hasChildren && descendantShown'), 'expansion follows the displayed list');
+		assert.ok(rebuild.includes('flat.expanded'), 'expansion comes from the display list');
+		assert.ok(!rebuild.includes('descendantShown'), 'the page does not re-derive expansion from neighbours');
 		assert.ok(
 			!rebuild.includes('!collapsed.has(row.id)'),
 			'a filtered container cannot claim expansion when it has no displayed child'

@@ -10,6 +10,7 @@ import * as assert from 'assert';
 import {
 	FilterIndex,
 	FilterRow,
+	ancestorIds,
 	buildFilterIndex,
 	createFilterDebouncer,
 	filterRows,
@@ -231,5 +232,45 @@ suite('row filter engine (design §4, §7)', () => {
 		assert.strictEqual(debouncer.isCurrent(third), false, 'cancel invalidates dispatched work');
 		fire();
 		assert.deepStrictEqual(runs, [['second', 2]], 'a cancelled query never runs');
+	});
+
+	test('design §4: flattenRows reports its own expansion decision', () => {
+		const expandedFor = (collapsed?: ReadonlySet<string>, visible?: readonly boolean[]): Record<string, boolean> => {
+			const out: Record<string, boolean> = {};
+			for (const row of flattenRows(ROWS, { collapsed, visible })) {
+				if (row.type === 'node') {
+					out[ROWS[row.rowIndex].id] = row.expanded;
+				}
+			}
+			return out;
+		};
+
+		const open = expandedFor();
+		assert.strictEqual(open.m, true, 'an uncollapsed parent is expanded');
+		assert.strictEqual(open.a, true);
+		assert.strictEqual(open.p1, false, 'a leaf is never expanded');
+
+		const closed = expandedFor(new Set(['m']));
+		assert.strictEqual(closed.m, false, 'a collapsed parent is not expanded');
+		assert.strictEqual(closed.a, undefined, 'its subtree is not displayed');
+
+		const forced = expandedFor(new Set(['m']), filterRows(ROWS, 'inivalue').visible);
+		assert.strictEqual(forced.m, true, 'an active filter force-expands the collapsed ancestor');
+		assert.strictEqual(forced.a, true);
+
+		const noVisibleChild = expandedFor(undefined, filterRows(ROWS, 'conta').visible);
+		assert.strictEqual(noVisibleChild.a, false, 'a filter-visible container with no visible child is not expanded');
+	});
+
+	test('design §4: ancestorIds is the one owner of the parent walk', () => {
+		assert.deepStrictEqual(ancestorIds(ROWS, 'p1'), ['a', 'm'], 'nearest parent first');
+		assert.deepStrictEqual(ancestorIds(ROWS, 'm'), [], 'a root has no ancestors');
+		assert.deepStrictEqual(ancestorIds(ROWS, 'missing'), [], 'an unknown id resolves to nothing');
+
+		const cyclic: FilterRow[] = [
+			{ id: 'x', parentId: 'y', level: 1, subtreeSize: 0, hasChildren: false, haystack: 'x' },
+			{ id: 'y', parentId: 'x', level: 2, subtreeSize: 0, hasChildren: false, haystack: 'y' },
+		];
+		assert.deepStrictEqual(ancestorIds(cyclic, 'x'), ['y'], 'a parent cycle stops instead of looping');
 	});
 });

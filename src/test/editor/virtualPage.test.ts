@@ -10,7 +10,7 @@
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { buildFilterIndex, filterRows, flattenRows, FilterRow } from '../../editor/filter';
+import { buildFilterIndex, filterRows, flattenRows, ancestorIds, FilterRow, FlatNodeRow } from '../../editor/filter';
 import {
 	RowPayload,
 	encodeRowDocument,
@@ -211,11 +211,11 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.deepStrictEqual(subtreeRowIds(undefined, rows), []);
 
 		const display = [
-			{ type: 'node' as const, rowIndex: 0, depth: 0, level: 1 },
+			{ type: 'node' as const, rowIndex: 0, depth: 0, level: 1, expanded: true },
 			{ type: 'brace-open' as const, rowIndex: 0, level: 1 },
-			{ type: 'node' as const, rowIndex: 1, depth: 1, level: 2 },
+			{ type: 'node' as const, rowIndex: 1, depth: 1, level: 2, expanded: true },
 			{ type: 'brace-open' as const, rowIndex: 1, level: 2 },
-			{ type: 'node' as const, rowIndex: 2, depth: 2, level: 3 },
+			{ type: 'node' as const, rowIndex: 2, depth: 2, level: 3, expanded: false },
 			{ type: 'brace-close' as const, rowIndex: 1, level: 2 },
 			{ type: 'brace-close' as const, rowIndex: 0, level: 1 },
 		];
@@ -332,5 +332,48 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.strictEqual(JSON.parse(escaped).rows[0].label, '</script><script>alert(1)</script>');
 		assert.ok(!html.includes('data-node-id='), 'the initial page has no tree rows');
 		assert.ok(html.includes('id="ecuc-rows"'));
+	});
+
+	test('design §4: the page consumes expansion instead of inferring it', () => {
+		const html = page();
+		const flatten = evaluateFunction<typeof flattenRows>(html, 'flattenRows');
+		const rows = syntheticRows(12);
+		const nodes = (list: ReturnType<typeof flattenRows>): FlatNodeRow[] =>
+			list.filter((row): row is FlatNodeRow => row.type === 'node');
+
+		assert.strictEqual(nodes(flatten(rows))[0].expanded, true, 'the display list reports expansion on the row');
+		assert.strictEqual(
+			nodes(flatten(rows, { collapsed: new Set([rows[0].id]) }))[0].expanded,
+			false,
+			'a collapsed row reports no expansion'
+		);
+
+		const rebuild = functionSource(html, 'rebuildDisplay');
+		assert.ok(!rebuild.includes('next.type'), 'the page no longer reads the next display row');
+		assert.ok(rebuild.includes('flat.expanded'), 'the page takes expansion from the flat row');
+
+		const ancestors = evaluateFunction<typeof ancestorIds>(html, 'ancestorIds');
+		assert.deepStrictEqual(ancestors(rows, 'row-4'), ['row-3', 'row-2', 'row-1', 'row-0'], 'nearest parent first');
+	});
+
+	test('design §4: expandAncestors expands exactly the ids ancestorIds reports', () => {
+		const html = page();
+		const rows = syntheticRows(6);
+		const collapsed = new Set(['row-1', 'row-3']);
+		const globals = globalThis as unknown as { rows?: unknown; collapsed?: unknown; ancestorIds?: unknown };
+		const saved = { rows: globals.rows, collapsed: globals.collapsed, ancestorIds: globals.ancestorIds };
+		globals.rows = rows;
+		globals.collapsed = collapsed;
+		globals.ancestorIds = evaluateFunction<typeof ancestorIds>(html, 'ancestorIds');
+		try {
+			const expandAncestors = evaluateFunction<(id: string) => boolean>(html, 'expandAncestors');
+			assert.strictEqual(expandAncestors('row-4'), true, 'a collapsed ancestor is expanded');
+			assert.deepStrictEqual(Array.from(collapsed), [], 'exactly the ancestors were removed');
+			assert.strictEqual(expandAncestors('row-4'), false, 'a second reveal changes nothing');
+		} finally {
+			globals.rows = saved.rows;
+			globals.collapsed = saved.collapsed;
+			globals.ancestorIds = saved.ancestorIds;
+		}
 	});
 });

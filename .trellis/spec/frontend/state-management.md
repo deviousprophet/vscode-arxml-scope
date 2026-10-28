@@ -37,14 +37,17 @@ are path-based and include a declaration-order ordinal (see `nodeId.ts`); prunin
 new row set no longer contains. The filter never writes the collapsed set: `filterRows` marks
 matches/ancestors and `flattenRows` force-expands a collapsed ancestor for as long as a visible
 descendant exists. Clearing the filter therefore restores exactly what the user had. `expandedIds`
-is derived from the displayed list, so a filter-forced ancestor reports `aria-expanded="true"` and
-does not show the collapsed stub.
+is read from the display list's own `expanded` flag — the same expression that decides whether
+`flattenRows` descends — so it cannot disagree with what is on screen: a filter-forced ancestor
+reports `aria-expanded="true"` and does not show the collapsed stub. Do not re-derive expansion
+from the next displayed row; that is a second owner of the rule, and the reason the flag exists.
 
 ## Pure helpers, serialized once
 
 `pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`, `reconcileRowState`,
-`resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`, the virtual-scroll functions and the
-filter/flatten functions live in `renderHtml.ts`, `virtualScroll.ts`, `renderRows.ts` and `filter.ts`.
+`resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`, `ancestorIds`, the virtual-scroll
+functions and the filter/flatten functions live in `renderHtml.ts`, `virtualScroll.ts`,
+`renderRows.ts` and `filter.ts`.
 The page emits them with `Function.prototype.toString()` (the virtual math through
 `virtualScrollScript()`). Tests extract the page's own copy with `scriptTestUtils` and compile it, so
 "the page and the tests share one definition" is an assertion rather than a claim. Do not add a

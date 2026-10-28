@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend spec index; entry point for the coding conventions that govern new extension code."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Code standards and forbidden patterns for the extension, applying to every new module."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Type patterns for the model and core modules; the scanner is strictly typed and leaks no implicit any."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "The feature spans core scanner -> editor provider -> webview message protocol; layer boundaries are where this design is most likely to go wrong."}
-{"file": ".trellis/tasks/10-14-ecuc-artext-editor/research/legacy-artext-analysis.md", "reason": "Authoritative semantics of the legacy arxml2artext mapping that the model must preserve; every display and ordering rule is derived from it."}
-{"file": "reference/legacy-arxml2artext/Arxml2Artext.mm", "reason": "The vendored original mapping script behind that digest — consult it directly to settle a tag, sort-key or output-shape question."}

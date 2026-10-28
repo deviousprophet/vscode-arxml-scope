@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Dirty state, re-scan after every write, and the undo/redo lifecycle are all state concerns."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Code standards and forbidden patterns for the document and edit code."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "The edit record and region resolution are type-sensitive; a wrong region kind writes to the wrong bytes."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "An edit crosses webview -> extension -> TextDocument -> re-scan -> webview; that round-trip is where staleness and double-firing appear."}
-{"file": ".trellis/tasks/10-14-ecuc-artext-editor/research/legacy-artext-analysis.md", "reason": "Validation and escaping rules for parameter kinds are recorded here."}

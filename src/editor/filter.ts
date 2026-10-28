@@ -205,6 +205,11 @@ export interface FlatNodeRow {
 	depth: number;
 	/** 1-based tree level. */
 	level: number;
+	/**
+	 * The module's own descend decision: this row's children are shown below it.
+	 * Callers read expansion here; they must not re-derive it from neighbouring rows.
+	 */
+	expanded: boolean;
 }
 
 /** A Document brace row around the visible descendants of `rowIndex`. */
@@ -291,12 +296,18 @@ export function flattenRows(rows: readonly FilterRow[], options: FlattenOptions 
 			continue;
 		}
 		const row = rows[i];
-		out.push({ type: 'node', rowIndex: i, depth: Math.max(0, row.level - 1), level: row.level });
 		const hasVisible = hasVisibleDescendant(i);
 		// While a filter is active its visible descendants force a collapsed
 		// ancestor open; the saved collapsed set is only read, never written.
 		const expanded =
 			row.hasChildren && hasVisible && (filterActive || !(collapsed ? collapsed.has(row.id) : false));
+		out.push({
+			type: 'node',
+			rowIndex: i,
+			depth: Math.max(0, row.level - 1),
+			level: row.level,
+			expanded,
+		});
 		if (expanded) {
 			if (braces) {
 				out.push({ type: 'brace-open', rowIndex: i, level: row.level });
@@ -310,6 +321,31 @@ export function flattenRows(rows: readonly FilterRow[], options: FlattenOptions 
 	while (open.length > 0) {
 		const closed = open.pop() as { end: number; level: number; rowIndex: number };
 		out.push({ type: 'brace-close', rowIndex: closed.rowIndex, level: closed.level });
+	}
+	return out;
+}
+
+/**
+ * The ancestors of `id` used to expand a revealed row, nearest parent first. A root
+ * row or an id that is not in the list yields `[]`; a malformed parent cycle stops
+ * instead of looping. This is the one owner of the walk expansion performs — the
+ * display list decides what stays open, and nothing re-walks parents to find out.
+ */
+export function ancestorIds(rows: readonly FilterRow[], id: string): string[] {
+	const byId = new Map<string, FilterRow>();
+	for (const row of rows) {
+		byId.set(row.id, row);
+	}
+	const out: string[] = [];
+	const seen = new Set<string>([id]);
+	let current = byId.get(id);
+	while (current && current.parentId !== null) {
+		if (seen.has(current.parentId)) {
+			break;
+		}
+		seen.add(current.parentId);
+		out.push(current.parentId);
+		current = byId.get(current.parentId);
 	}
 	return out;
 }
