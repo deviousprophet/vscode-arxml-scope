@@ -61,15 +61,20 @@ interface Rec {
 	containers?: Rec[];
 }
 
-/** Element stack entry; `text` accumulates the raw characters of the open element. */
+/**
+ * Element stack entry; `text` accumulates the open element's text. For
+ * `SW-SYSCOND` that text is the joined condition (trimmed runs and the path tail
+ * of each inline `SYSC-REF`), so `textStart`/`textEnd` bound that text rather
+ * than the element's raw characters.
+ */
 interface Entry {
 	name: string;
 	/** Offset of the element's `<`. */
 	start: number;
 	text: string;
-	/** Offset of the first raw text character, or -1. */
+	/** Offset of the first character of `text`, or -1. */
 	textStart: number;
-	/** Offset just past the last raw text character, or -1. */
+	/** Offset just past the last character of `text`, or -1. */
 	textEnd: number;
 	rec?: Rec;
 	/** Attributes retained for `DEFINITION-REF` (its `DEST` type). */
@@ -118,12 +123,19 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		if (e.name === 'SW-SYSCOND') {
 			// The formatting whitespace between a condition's parts is not part of the
 			// condition: the legacy text joins the trimmed parts, so
-			// `(\n <SYSC-REF/> \n ==0)` reads `(CANIPCORETYPE_SC==0)`.
-			const left = raw.length - raw.replace(/^\s+/, '').length;
-			const right = raw.length - raw.replace(/\s+$/, '').length;
-			chunk = raw.slice(left, raw.length - right);
-			start = from + left;
-			end = to - right;
+			// `(\n <SYSC-REF/> \n ==0)` reads `(CANIPCORETYPE_SC==0)`. XML whitespace
+			// only, matching `isWs`, so a condition's own characters are never dropped.
+			let leading = 0;
+			while (leading < raw.length && isWs(raw[leading])) {
+				leading++;
+			}
+			let trailing = 0;
+			while (trailing < raw.length - leading && isWs(raw[raw.length - 1 - trailing])) {
+				trailing++;
+			}
+			chunk = raw.slice(leading, raw.length - trailing);
+			start = from + leading;
+			end = to - trailing;
 			if (chunk === '') {
 				return;
 			}
@@ -258,11 +270,18 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 			// the legacy text uses the path tail, not the full path.
 			const holder = ancestors[ancestors.length - 1];
 			if (holder && holder.name === 'SW-SYSCOND') {
-				holder.text += lastShortName(entry.text.trim());
+				const tail = lastShortName(entry.text.trim());
+				holder.text += tail;
+				// The range must bound the condition text, not the reference's markup:
+				// when nothing precedes the reference the condition text starts with the
+				// tail, so the anchor is the tail inside the captured path. A range over
+				// `<SYSC-REF …>` would make reveal/selection highlight markup.
+				const at = tail === '' ? -1 : entry.text.lastIndexOf(tail);
+				const start = entry.textStart >= 0 && at >= 0 ? entry.textStart + at : entry.start;
 				if (holder.textStart < 0) {
-					holder.textStart = entry.start;
+					holder.textStart = start;
 				}
-				holder.textEnd = end;
+				holder.textEnd = start + tail.length;
 			}
 			return;
 		}

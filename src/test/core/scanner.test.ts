@@ -27,7 +27,7 @@ suite('scanner (core)', () => {
 	});
 
 	test('AC: an inline SYSC-REF in SW-SYSCOND keeps the constant name and drops formatting', () => {
-		const model = scanEcucValues(`<AUTOSAR>
+		const source = `<AUTOSAR>
   <AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>
     <ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>
       <CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME>
@@ -44,14 +44,35 @@ suite('scanner (core)', () => {
               ==0)
             </SW-SYSCOND></VARIATION-POINT>
           </ECUC-NUMERICAL-PARAM-VALUE>
+          <ECUC-NUMERICAL-PARAM-VALUE>
+            <DEFINITION-REF DEST="ECUC-BOOLEAN-PARAM-DEF">/D/P/LeadingRef</DEFINITION-REF>
+            <VARIATION-POINT><SW-SYSCOND><SYSC-REF DEST="SW-SYSTEMCONST">/P/SwSystemconsts/CANIPCORETYPE_SC</SYSC-REF>==0</SW-SYSCOND></VARIATION-POINT>
+          </ECUC-NUMERICAL-PARAM-VALUE>
         </PARAMETER-VALUES>
       </ECUC-CONTAINER-VALUE></CONTAINERS>
     </ECUC-MODULE-CONFIGURATION-VALUES>
   </ELEMENTS></AR-PACKAGE></AR-PACKAGES>
-</AUTOSAR>`);
+</AUTOSAR>`;
+		const model = scanEcucValues(source);
 		const parameters = model.modules[0].containers[0].parameters;
 		assert.strictEqual(parameters[0].syscond, '(A == B)', 'a plain condition keeps its own spacing');
 		assert.strictEqual(parameters[1].syscond, '(CANIPCORETYPE_SC==0)', 'the inline reference is its path tail');
+		assert.strictEqual(
+			parameters[2].syscond,
+			'CANIPCORETYPE_SC==0',
+			'a condition that opens with the reference keeps the trailing part'
+		);
+		const range = parameters[2].syscondRange;
+		assert.ok(range, 'the condition carries a range');
+		assert.strictEqual(
+			source.slice(range.start, range.start + 'CANIPCORETYPE_SC'.length),
+			'CANIPCORETYPE_SC',
+			'the range starts at the reference tail, not at the `<SYSC-REF>` markup'
+		);
+		assert.ok(
+			source.slice(range.start, range.end).endsWith('==0'),
+			'the range ends past the trailing part of the condition'
+		);
 	});
 
 	test('AC1: parameter DEFINITION-REF DEST is captured, including namespace prefixes', () => {
