@@ -81,17 +81,17 @@ suite('editor reveal (AC4, AC5)', () => {
 		assert.strictEqual(activeViewType(), VIEW_TYPE, 'the custom editor is open');
 	});
 
-	test('AC5: the requested selection is the marked node in the rendered tree', () => {
+	test('AC5: the requested selection is the marked row in the initial data', () => {
 		const model = scanEcucValues(fixtureText(FIXTURE));
 		const index = buildNodeIndex(model);
 		const id = index.idOf(model.modules[0].containers[0].parameters[0])!;
 		const page = renderHtml(model, { nonce: 'test-nonce', selectedId: id });
 
-		// Scoped to the tree: the stylesheet also mentions the attribute.
-		const tree = page.slice(page.indexOf('id="tree"'));
-		const marked = tree.split('<div class="node"').find((part) => part.includes('data-selected="true"'));
-		assert.ok(marked, 'exactly one node is marked');
-		assert.ok(marked.includes(`data-node-id="${id}"`));
-		assert.strictEqual(tree.split('data-selected="true"').length - 1, 1);
+		const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(page);
+		assert.ok(match, 'the page embeds the row document');
+		const payload = JSON.parse(match[1]) as { rows: Array<{ id: string }>; selectedId?: string };
+		assert.strictEqual(payload.selectedId, id, 'exactly one selection is requested');
+		assert.ok(payload.rows.some((row) => row.id === id), 'the selected row is in the data');
+		assert.ok(page.includes("node.dataset.selected = 'true'"), 'the row builder marks it');
 	});
 });

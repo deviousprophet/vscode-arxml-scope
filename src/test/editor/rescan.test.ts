@@ -20,13 +20,14 @@ import { scanEcucValues } from '../../core/ecuc/scanner';
 import { LineIndex } from '../../core/text/offsets';
 import { EcucEditorProvider } from '../../editor/ecucEditorProvider';
 import { buildNodeIndex } from '../../editor/nodeId';
-import { renderTree } from '../../editor/renderHtml';
+import { EcucRow, buildRows } from '../../editor/renderRows';
 import { fixtureText } from '../core/modelTestUtils';
 import { sleep } from './editorTestUtils';
 
 interface StubMessage {
 	type?: string;
-	tree?: string;
+	rows?: EcucRow[];
+	digits?: number;
 	selectedId?: string;
 	nodeId?: string;
 }
@@ -176,15 +177,27 @@ function containerNamed(model: EcucDocumentModel, name: string) {
 	return found;
 }
 
+/** The escaped initial row document, parsed exactly as the page does. */
+function initialPayload(html: string): { rows: EcucRow[]; digits: number; selectedId?: string } {
+	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(html);
+	assert.ok(match, 'the page embeds the row document');
+	return JSON.parse(match[1]) as { rows: EcucRow[]; digits: number; selectedId?: string };
+}
+
 suite('editor re-scan (design §1.5, §2.2)', () => {
-	test('§1.5: a document change re-scans and pushes the refreshed tree', async () => {
+	test('§1.5: a document change re-scans and pushes the refreshed rows', async () => {
 		await withScratchDocument('rescan.arxml', async (uri, document) => {
 			const provider = new EcucEditorProvider();
 			const stub = stubPanel();
 			provider.resolveCustomTextEditor(document, stub.panel, new vscode.CancellationTokenSource().token);
 
-			assert.ok(stub.raw.webview.html.includes('NavCont'), 'the first paint renders the tree');
-			assert.ok(stub.raw.webview.html.includes('= 7'), 'the first paint carries the value');
+			const initial = initialPayload(stub.raw.webview.html);
+			assert.ok(initial.rows.some((row) => row.label === 'NavCont'), 'the first paint receives the rows');
+			assert.ok(
+				initial.rows.some((row) => row.kind === 'parameter' && row.value === '7'),
+				'the first paint carries the value'
+			);
+			assert.strictEqual(initial.digits, 2);
 			assert.strictEqual(stub.messages.length, 0, 'nothing is pushed before the document changes');
 
 			// Count the platform's own change events for this document, so "one refresh
@@ -204,10 +217,10 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 			assert.strictEqual(stub.messages.length, events, 'exactly one push per document change');
 			const pushed = stub.messages.at(-1)!;
 			assert.strictEqual(pushed.type, 'model');
-			const tree = pushed.tree ?? '';
-			assert.ok(tree.includes('id="tree"'), 'the payload is the refreshable tree region');
-			assert.ok(tree.includes('= 8'), 'the pushed tree carries the new value');
-			assert.ok(!tree.includes('= 7'), 'the pushed tree is not the stale one');
+			assert.ok(Array.isArray(pushed.rows), 'the payload is row data, not a tree string');
+			assert.ok(pushed.rows!.some((row) => row.kind === 'parameter' && row.value === '8'), 'the new value');
+			assert.ok(!pushed.rows!.some((row) => row.kind === 'parameter' && row.value === '7'), 'not the stale one');
+			assert.strictEqual(pushed.digits, 2);
 
 			// The subscription must not outlive the panel.
 			stub.dispose();
@@ -258,9 +271,7 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 			const refreshed = stub.messages.filter((message) => message.type === 'model').at(-1);
 			assert.ok(refreshed, 'the re-scan is pushed');
 			assert.strictEqual(refreshed.selectedId, id, 'the selection survives the re-scan');
-			const tree = refreshed.tree ?? '';
-			assert.ok(tree.includes(`data-node-id="${id}"`), 'the node is still in the tree');
-			assert.strictEqual(tree.split('data-selected="true"').length - 1, 1, 'exactly one node is marked');
+			assert.ok(refreshed.rows?.some((row) => row.id === id), 'the node is still in the row data');
 		});
 	});
 
@@ -278,8 +289,9 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 			try {
 				await config.update('sort', 'declaration', vscode.ConfigurationTarget.Global);
 				await waitFor('the settings re-render', () => stub.messages.some((message) => message.type === 'model'));
-				const tree = stub.messages.filter((message) => message.type === 'model').at(-1)!.tree ?? '';
-				assert.ok(tree.indexOf('ContZ') < tree.indexOf('ContA'), 'declaration order is rendered now');
+				const rows = stub.messages.filter((message) => message.type === 'model').at(-1)!.rows ?? [];
+				const order = rows.map((row) => row.label);
+				assert.ok(order.indexOf('ContZ') < order.indexOf('ContA'), 'declaration order is pushed now');
 			} finally {
 				await config.update('sort', undefined, vscode.ConfigurationTarget.Global);
 			}
@@ -321,8 +333,8 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 		assert.deepStrictEqual(declaredContainers, ['ContZ', 'ContA'], 'the fixture is in declaration order');
 		assert.deepStrictEqual(declaredParameters, ['ContZZeta', 'ContZAlpha'], 'and so are its parameters');
 
-		renderTree(model, { sort: 'all' });
-		renderTree(model, { sort: 'declaration' });
+		buildRows(model, { sort: 'all' });
+		buildRows(model, { sort: 'declaration' });
 
 		assert.deepStrictEqual(
 			model.modules[0].containers.map((container) => container.shortName),

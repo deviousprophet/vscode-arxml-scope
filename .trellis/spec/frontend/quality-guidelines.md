@@ -16,6 +16,8 @@ that is not obvious from the code.
 | Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. |
 | A second renderer or copied markup for a preview/harness | It diverges from the product; wrap the production `renderHtml` and assert containment. |
 | Reading a real customer file from a test | The repository is public. Fixtures are synthetic. |
+| Building the whole row list into the DOM | It restores the large-file lag; render the viewport window plus overscan only. |
+| Setting row depth or spacer heights with a style attribute | The CSP blocks inline styles; use `data-level` CSS and the nonce-carrying `#virtual-style` sheet. |
 
 ## Rules the write path must keep
 
@@ -41,8 +43,15 @@ that is not obvious from the code.
   to survive.
 - **The value widget's listeners stay first, and claim their events with `stopImmediatePropagation`.**
   The tree and the filter must not act on a click or key the widget owns; the ordering is asserted.
-- **Anything that must survive a re-scan lives outside `#main`.** The shell, toolbar and inspector are
-  not swapped; the filter's empty state is inside the tree because it describes the filtered tree.
+- **Anything that must survive a re-scan lives outside the row window.** The shell, toolbar and
+  inspector are not rebuilt; the row store, display list and window are. The filter's empty state is
+  beside the tree because it describes the filtered list.
+- **Only the viewport window is in the DOM.** `calcVisibleRange` over `displayRows` plus the small
+  overscan drives `renderWindow`; top/bottom spacers carry the rest of `calcTotalHeight`. Do not
+  "hide" offscreen rows — they were never built.
+- **Rows are data, then text nodes.** The host emits `EcucRow` values; the page builds labels and
+  values with `textContent`. Never use `innerHTML` for model text, and never reuse a full-tree HTML
+  string as the re-scan payload.
 - **Selection never recolours syntax.** Tree and Document selection use the translucent `--sel-bg`/
   `--sel-bg-focus` tint and the 2px `--rail` focus edge; the token colours stay. The light theme uses
   no fill because the light key accent measures 4.51:1 on white — the active line number (Document)
@@ -57,10 +66,10 @@ that is not obvious from the code.
   label sizes to content and breaks the column. Document view deliberately drops the fixed track and
   the two-line grid; do not reintroduce chips, cards, ellipsized values or per-row accents there.
 - **Document view is a presentation mode, not a data mode.** It is one `data-view` attribute and CSS
-  scoped under `body[data-view="document"]`, over the same tree DOM. The same rows, roles, ids,
-  `matchRanges`, filter/collapse state and `.value` direct-child contract apply. Never hide metadata
-  (`.row-meta`) to make the document look clean; inline it. The product never reads or writes
-  `.artext` and never runs `mmx`.
+  scoped under `body[data-view="document"]`, over the same rows and virtual window. The same rows,
+  roles, ids, `matchRanges`, filter/collapse state and `.value` direct-child contract apply. Never
+  hide metadata (`.row-meta`) to make the document look clean; inline it. The product never reads or
+  writes `.artext` and never runs `mmx`.
 - **The Document surface is text first.** Structural labels are neutral; only `--tok-*` keywords,
   strings, numbers, meta, comments and the single key accent carry colour. Reference targets are plain
   until hover; values have no dotted underline or hover pencil. Use real source line numbers
@@ -76,6 +85,12 @@ that is not obvious from the code.
   short names use `--tok-string`; targets are neutral with a hover link/underline. Do not paint every
   value with one token. The Tree kinds keep module/namespace/field/reference `symbolIcon` accents,
   glyphs, chips and dotted values. Document view uses the restrained palette above.
+- **A re-scan keeps state, not markup.** The host posts rows; the page reconciles selection, collapse,
+  query, view and scroll, rebuilds the display list and renders the window. There is no `innerHTML`
+  tree swap and no second refresh path.
+- **The filter scans the row index, never the DOM.** `filterRows`/`flattenRows` provide the matches,
+  their ancestors and the displayed list; only rendered rows get `<mark>` elements. The input
+  debounces and a stale generation is discarded.
 - **Samples and benchmarks are dev-only.** The sample directory is outside the repository and
   synthetic; `preview:check` excludes it. A benchmark is evidence, not a performance promise.
 

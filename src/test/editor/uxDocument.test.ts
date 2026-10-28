@@ -5,13 +5,14 @@
  *
  * There is no webview DOM in the test host. The page's own `applyView` and
  * `applyInspectorVisibility` are driven with stub DOM objects; the rest is asserted on the
- * rendered markup/styles and the inlined script. The browser pass is the rendered evidence.
+ * row data, the shell, its styles and the inlined script. The browser pass is the rendered
+ * evidence.
  */
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { LineIndex } from '../../core/text/offsets';
-import { renderHtml, renderTree } from '../../editor/renderHtml';
+import { RowPayload, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
 import { functionSource } from './scriptTestUtils';
 
@@ -22,11 +23,14 @@ function text(): string {
 }
 
 function page(): string {
-	return renderHtml(scanEcucValues(text()), { nonce: 'test-nonce' });
+	const source = text();
+	return renderHtml(scanEcucValues(source), { nonce: 'test-nonce', lineIndex: new LineIndex(source) });
 }
 
-function tree(): string {
-	return renderTree(scanEcucValues(text()), {});
+function payload(source = page()): RowPayload {
+	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(source);
+	assert.ok(match, 'the page embeds the row document');
+	return JSON.parse(match[1]) as RowPayload;
 }
 
 function styleOf(html: string): string {
@@ -82,27 +86,29 @@ suite('editor document view (AC1–AC6)', () => {
 		);
 		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*display:\s*flex/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*gap:\s*1ch/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*padding:\s*0/.test(style));
+		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*padding:\s*0 0 0 var\(--gut\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*border:\s*0/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*background:\s*transparent/.test(style));
+		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*background-color:\s*transparent/.test(style));
 		assert.ok(/body\[data-view="document"\] \.glyph\s*\{[^}]*display:\s*none/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row-meta\s*\{[^}]*display:\s*flex/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row-meta\s*\{[^}]*flex-wrap:\s*nowrap/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row-meta\s*\{[^}]*font-size:\s*inherit/.test(style));
-		assert.ok(/body\[data-view="document"\] \.children\s*\{[^}]*margin-left:\s*var\(--indent\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.children::before\s*\{[^}]*content:\s*"\{"\s*;/.test(style));
-		assert.ok(/body\[data-view="document"\] \.children::after\s*\{[^}]*content:\s*"\}"\s*;/.test(style));
-		assert.ok(/body\[data-view="document"\] \.children::before[\s\S]*?margin-left:\s*calc\(-1 \* var\(--indent\)\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*margin-left:\s*calc\(-1 \* var\(--gut\)\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\s*\{[^}]*padding-left:\s*var\(--gut\)/.test(style));
+		// The flat list indents rows by `data-level` rather than nested `.children` wrappers.
 		assert.ok(
-			/body\[data-view="document"\] \.children \.row\s*\{[^}]*margin-left:\s*calc\(-1 \* \(var\(--gut\) \+ var\(--indent\)\)\)/.test(
+			/body\[data-view="document"\] \.row\[data-level="3"\]\s*\{[^}]*margin-left:\s*calc\(-1 \* var\(--gut\)\)/.test(
+				style
+			)
+		);
+		assert.ok(
+			/body\[data-view="document"\] \.row\[data-level="3"\]\s*\{[^}]*padding-left:\s*calc\(var\(--gut\) \+ var\(--indent\) \* 2\)/.test(
 				style
 			)
 		);
 		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--indent:\s*4ch/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--indent:\s*3ch/.test(style));
-		assert.ok(/body\[data-view="document"\] #tree > \.node \+ \.node\s*\{[^}]*margin-top:\s*var\(--ecuc-lh\)/.test(style));
+		assert.ok(
+			/body\[data-view="document"\] \.node\[data-gap="true"\]\s*\{[^}]*padding-top:\s*var\(--ecuc-lh\)/.test(style)
+		);
 		assert.ok(/body\[data-view="document"\] \.meta\s*\{[^}]*margin-bottom:\s*calc\(var\(--ecuc-lh\) \* 0\.5\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.condition,[\s\S]*?border:\s*0/.test(style));
 		assert.ok(/body\[data-view="document"\] \.annotation::before\s*\{[^}]*content:\s*"\/\*/.test(style));
@@ -114,9 +120,9 @@ suite('editor document view (AC1–AC6)', () => {
 
 	test('AC2: the review fixes keep the contrast tiers and indent guides', () => {
 		const style = styleOf(page());
+		assert.ok(/repeating-linear-gradient/.test(style), 'the Document indent guides stay');
 		assert.ok(
-			!/body\[data-view="document"\] \.children\s*\{[^}]*border-left:\s*0/.test(style),
-			'the Document indent guides stay'
+			/var\(--vscode-tree-indentGuidesStroke, var\(--vscode-panel-border, #80808040\)\)/.test(style)
 		);
 		assert.ok(/@supports \(color: color-mix\(in srgb, currentColor 50%, transparent\)\)/.test(style));
 		assert.ok(/body\.vscode-dark\[data-view\]\s*\{[^}]*--sel-bg: color-mix\([^;]*10%/.test(style));
@@ -129,21 +135,27 @@ suite('editor document view (AC1–AC6)', () => {
 		const source = text();
 		const model = scanEcucValues(source);
 		const index = new LineIndex(source);
-		const region = renderTree(model, { lineIndex: index });
-		assert.ok(region.startsWith('<div class="document">'));
-		assert.ok(/id="tree"[^>]*data-ln-digits="\d+"/.test(region));
-		assert.ok(!region.includes('style="--ln-digits'), 'no CSP-blocked style attribute');
+		const html = renderHtml(model, { nonce: 'test-nonce', lineIndex: index });
+		const rows = payload(html).rows;
+		const digits = payload(html).digits;
+		assert.ok(new RegExp(`id="tree"[^>]*data-ln-digits="${digits}"`).test(html));
+		assert.ok(!html.includes('style="--ln-digits'), 'no CSP-blocked style attribute');
+
 		const module = model.modules[0];
 		const parameter = module.containers[0].parameters.find((candidate) => candidate.name === 'IniValue');
 		assert.ok(parameter, 'the fixture has IniValue');
 		const moduleLine = index.positionAt(module.range.start).line + 1;
 		const parameterLine = index.positionAt(parameter.range.start).line + 1;
-		assert.ok(region.includes(`class="row k-module no-value" data-line="${moduleLine}"`));
-		assert.ok(region.includes(`class="row k-parameter has-value" data-line="${parameterLine}"`));
-		// Header and braces stay unnumbered; only entity rows carry data-line.
-		assert.ok(!/<div class="meta"[^>]*data-line=/.test(region));
-		assert.ok(!/class="children"[^>]*data-line=/.test(region));
-		const style = styleOf(page());
+		assert.strictEqual(rows.find((row) => row.label === 'PkgA.PkgB.ModDefs.ModX')!.sourceLine, moduleLine);
+		assert.strictEqual(rows.find((row) => row.label === 'IniValue')!.sourceLine, parameterLine);
+
+		const build = functionSource(html, 'buildNodeRow');
+		assert.ok(build.includes('rowElement.dataset.line = String(row.sourceLine)'), 'the gutter line is 1-based');
+		const brace = functionSource(html, 'buildBraceRow');
+		assert.ok(!brace.includes('dataset.line'), 'header and braces stay unnumbered');
+		assert.ok(!/<div class="meta"[^>]*data-line=/.test(html));
+
+		const style = styleOf(html);
 		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--ln-w:\s*calc\(var\(--ln-digits, 4\) \* 1ch \+ 1ch\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--gut:\s*calc\(var\(--ln-w\) \+ 4ch\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row::before\s*\{[^}]*content:\s*attr\(data-line\)/.test(style));
@@ -191,10 +203,10 @@ suite('editor document view (AC1–AC6)', () => {
 
 	test('AC3/AC5: quiet selection, focus rail and plain values', () => {
 		const style = styleOf(page());
-		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg\)/.test(style));
+		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(style));
 		assert.ok(
-			/body\[data-view="document"\] #tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg-focus\)/.test(
+			/body\[data-view="document"\] #tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
 				style
 			)
 		);
@@ -225,28 +237,31 @@ suite('editor document view (AC1–AC6)', () => {
 	});
 
 	test('AC3/AC4: the document keeps every parent §6 field and the direct .value', () => {
-		const html = tree();
-		for (const needle of [
-			'<span class="label">ContA</span>',
-			'<span class="short" title="ContA">"ContA"</span>',
-			'class="variant"',
-			'class="hex"',
-			'class="context"',
-			'<span class="keyword">context</span>',
-			'class="condition"',
-			'class="annotation"',
-			'<span class="label">IniValue</span><span class="value"',
-		]) {
-			assert.ok(html.includes(needle), needle);
-		}
-		assert.ok(html.includes('data-value="63"'));
-		assert.ok(html.includes('(= 0x3F)'));
+		const rows = payload().rows;
+		const contA = rows.find((row) => row.label === 'ContA')!;
+		assert.ok(contA.meta.some((part) => part.cls === 'short' && part.text === '"ContA"'));
+		const module = rows.find((row) => row.kind === 'module')!;
+		assert.ok(module.meta.some((part) => part.cls === 'variant'));
+		const ini = rows.find((row) => row.label === 'IniValue')!;
+		assert.ok(ini.meta.some((part) => part.cls === 'hex' && part.text === '(= 0x3F)'));
+		const peer = rows.find((row) => row.label === 'PeerIref')!;
+		assert.ok(peer.meta.some((part) => part.cls === 'context'));
+		assert.ok(module.meta.some((part) => part.cls === 'condition'));
+		assert.ok(module.meta.some((part) => part.cls === 'annotation'));
+
+		const script = functionSource(page(), 'buildNodeRow');
+		assert.ok(script.includes('appendHighlighted(label, row.label)'), 'the label');
+		assert.ok(script.includes('valueSpan(row)'), 'the value');
+		assert.ok(script.includes('metaSpan(row)'), 'the metadata line');
 	});
 
 	test('AC2: the value separator is muted punctuation and stays out of the value token', () => {
-		const html = tree();
-		assert.ok(html.includes('<span class="punct">=</span> <span class="value-text">63</span>'));
-		const style = styleOf(page());
+		const script = page();
+		const value = functionSource(script, 'valueSpan');
+		assert.ok(value.includes("punct.className = 'punct'"));
+		assert.ok(value.includes("punct.textContent = '='"));
+		assert.ok(value.includes("text.className = 'value-text'"));
+		const style = styleOf(script);
 		assert.ok(/\.punct\s*\{[^}]*--tok-punct/.test(style));
 		assert.ok(/body\[data-view="document"\] \.value\s*\{[^}]*flex:\s*0 0 auto/.test(style));
 	});

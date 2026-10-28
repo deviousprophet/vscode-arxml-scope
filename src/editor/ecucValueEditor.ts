@@ -15,8 +15,9 @@
  *
  * A refusal no longer discards the typed text (UX child design §6): the host answers a
  * refused write with a `notice`, and the open input is marked invalid instead of being
- * removed. Only Escape, a click outside, a successful commit (the re-scan swaps the tree)
- * or a `Tab` move close it.
+ * removed. Only Escape, a click outside, a successful commit (the re-scan swaps the tree),
+ * a `Tab` move, or the edited row leaving the virtual window closes it. A window rebuild
+ * with the row still visible moves the input to the rebuilt row.
  */
 export function valueEditorScript(): string {
 	return `
@@ -61,6 +62,69 @@ function closeValueEdit() {
 	text.style.display = '';
 }
 
+/**
+ * The window renderer replaces the rows it renders. Before it clears the old
+ * window, take the open input (and its typed text, pending state, error and
+ * caret) out of the old row; reattachValueEdit puts it into the rebuilt row
+ * when the same node is still in the window. Without this a scroll could leave
+ * Enter committing a detached, invisible field.
+ */
+function detachValueEdit() {
+	if (!valueEdit) {
+		return null;
+	}
+	const { item, text, input } = valueEdit;
+	const state = {
+		id: item.dataset.nodeId,
+		value: input.value,
+		pending: valueEdit.pending,
+		error: valueEdit.error ? valueEdit.error.textContent : null,
+		focused: document.activeElement === input,
+		selectionStart: input.selectionStart,
+		selectionEnd: input.selectionEnd,
+	};
+	if (valueEdit.error) {
+		valueEdit.error.remove();
+	}
+	input.remove();
+	text.style.display = '';
+	valueEdit = null;
+	return state;
+}
+
+function reattachValueEdit(item, state) {
+	if (!item || !state || valueEdit) {
+		return false;
+	}
+	const span = item.querySelector(':scope > .row > .value');
+	if (!span) {
+		return false;
+	}
+	const text = span.querySelector('.value-text') ?? span;
+	const input = document.createElement('input');
+	input.type = 'text';
+	input.className = 'value-edit';
+	input.value = state.value;
+	input.setAttribute('aria-label', 'Value of ' + item.dataset.nodeId);
+	text.style.display = 'none';
+	text.after(input);
+	let error = null;
+	if (state.error) {
+		error = document.createElement('span');
+		error.className = 'value-error';
+		error.textContent = state.error;
+		input.after(error);
+	}
+	valueEdit = { item, span, text, input, pending: state.pending, error };
+	if (state.focused) {
+		input.focus({ preventScroll: true });
+		const start = state.selectionStart === null ? input.value.length : state.selectionStart;
+		const end = state.selectionEnd === null ? start : state.selectionEnd;
+		input.setSelectionRange(start, end);
+	}
+	return true;
+}
+
 /** Posts the edit but keeps the input open until the host answers (design §6). */
 function commitValueEdit() {
 	if (!valueEdit || valueEdit.pending) {
@@ -79,25 +143,22 @@ function commitValueEdit() {
 
 /** Briefly highlights the row the host re-rendered after a successful write (design §6). */
 function flashRow(nodeId) {
-	for (const item of document.querySelectorAll('#tree [role="treeitem"]')) {
-		if (item.dataset.nodeId === nodeId) {
-			item.classList.add('flash');
-			setTimeout(() => item.classList.remove('flash'), 1000);
-			return;
-		}
+	const item = renderedItemFor(nodeId);
+	if (!item) {
+		return;
 	}
+	item.classList.add('flash');
+	setTimeout(() => item.classList.remove('flash'), 1000);
 }
 
 /** Tab / Shift+Tab: the next or previous parameter's value, after a successful commit. */
 function beginAdjacentValueEdit(move) {
-	const items = Array.from(document.querySelectorAll('#tree [data-kind="parameter"]'));
-	const at = items.findIndex((item) => item.dataset.nodeId === move.from);
-	if (at === -1) {
-		return;
-	}
-	const next = items[move.dir === 'next' ? at + 1 : at - 1];
-	if (next) {
-		beginValueEdit(next);
+	// The row window only holds the viewport, so the page's row order (not the DOM)
+	// chooses the neighbour; the page renders it before the editor starts.
+	const id = focusAdjacentParameter(move.from, move.dir);
+	const item = id ? renderedItemFor(id) : undefined;
+	if (item) {
+		beginValueEdit(item);
 	}
 }
 

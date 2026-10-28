@@ -10,11 +10,13 @@ src/
     ecuc/             detect.ts  scanner.ts  model.ts  order.ts  resolve.ts  validate.ts
     text/             offsets.ts (line/offset index)
   editor/             the custom editor. May import `vscode`.
-    ecucEditorProvider.ts   provider: gate, scan, render, wire, re-scan
-    renderHtml.ts           the rendered page and the refreshable tree region
+    ecucEditorProvider.ts   provider: gate, scan, build rows, wire, re-scan
+    renderRows.ts           host row document: display order, meta, source, haystack
+    virtualScroll.ts        pure cumulative heights, visible range, offsets, total
+    renderHtml.ts           the page shell, row window, row builder, page script
     navigation.ts           node <-> source range, reference following
     nodeId.ts               path-based node ids, stable across a re-scan
-    filter.ts               filter matching, shared by both halves
+    filter.ts               row index/filter/flatten and shared match ranges
     ecucEdit.ts             the edit record, region resolution, applyEdit
     ecucValueEditor.ts      the in-tree value widget (webview half)
   test/

@@ -5,16 +5,18 @@ tree — the same information the legacy `arxml2artext` tool's ARTEXT output car
 parameter values in place, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
-> validation, offset index) and `src/editor/` (custom editor provider, rendering, filter, navigation,
-> value editing, details inspector) are in place with 166 passing tests. Two things are deliberately
-> not implemented and are listed under *Limitations*: CDATA-backed values are refused rather than edited, and reference
-> resolution is single-file. The plan lives in `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`,
-> `design.md`, `implement.md`) with the reference analysis in its
-> `research/legacy-artext-analysis.md`, and the legacy transform is vendored as text under
-> `reference/legacy-arxml2artext/`. The reading-experience overhaul (interaction model, collapse,
-> hierarchy, filter feedback, node identity) is `.trellis/tasks/10-14-ecuc-editor-ux/`; the
-> document-style default is archived under `.trellis/tasks/archive/2026-10/`, and the current
-> quiet-source implementation is `.trellis/tasks/10-27-ecuc-editor-quiet-source/` with the design in
+> validation, offset index) and `src/editor/` (custom editor provider, row model, virtual renderer,
+> filter, navigation, value editing, details inspector) are in place with 212 passing tests. Two
+> things are deliberately not implemented and are listed under *Limitations*: CDATA-backed values
+> are refused rather than edited, and reference resolution is single-file. The plan lives in
+> `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`, `design.md`, `implement.md`) with the
+> reference analysis in its `research/legacy-artext-analysis.md`, and the legacy transform is
+> vendored as text under `reference/legacy-arxml2artext/`. The reading-experience overhaul
+> (interaction model, collapse, hierarchy, filter feedback, node identity) is
+> `.trellis/tasks/10-14-ecuc-editor-ux/`; the document-style default is archived under
+> `.trellis/tasks/archive/2026-10/`, the quiet-source implementation is
+> `.trellis/tasks/10-27-ecuc-editor-quiet-source/`, and the virtualised renderer/search is
+> `.trellis/tasks/10-28-ecuc-virtualized-render-search/` with the design in
 > `docs/ECUC_EDITOR_DESIGN_SPEC.md`.
 
 ## Why it exists
@@ -52,6 +54,14 @@ carry the semantic tokens. The `=` is muted punctuation. Reference targets are p
 values have no dotted underline (click or `F2` still edits them). A 26px strip holds the filter,
 count, collapse/expand icons, the **Document | Tree** switch and **Details**; the details panel is a
 docked 260–340px panel, or a bottom sheet at narrow widths. The view and details state persist.
+
+The host emits a compact row document (display order, parent/subtree, level/position, display fields,
+source position and search haystack), not a full-tree HTML string. The page flattens that row list
+through the collapsed set and any active filter, then renders only the viewport plus a small
+overscan inside a `role="tree"` window; top/bottom spacers preserve the full scroll height. Document
+rows are one line high; Tree rows have fixed short/tall heights for the one-line metadata area. The
+same row data drives selection, focus, the inspector, editing and a re-scan, so a selected row that
+is outside the window still shows its details.
 
 | Entity | Shown as |
 |---|---|
@@ -126,7 +136,14 @@ The filter box narrows the tree by label, short-name or value and reports `shown
 `No matches` when nothing matches. It has a clear button and a count badge; a zero-match filter shows
 an empty state with its own **Clear filter** action. Matched text is highlighted, and a collapsed
 ancestor of a match is shown for as long as the filter is active — clearing the filter (or pressing
-`Escape` in the box) restores exactly the collapsed set you had.
+`Escape` in the box) restores exactly the collapsed set you had. The input is debounced; the filter
+scans the precomputed row haystacks and only rendered rows get `<mark>` elements.
+
+The tree is a flat, virtual `role="tree"`: treeitems carry `aria-level`, `aria-posinset`,
+`aria-setsize`, `aria-expanded` and `aria-selected`, and the spacers are presentational. The
+accessibility tree therefore exposes the rendered window, not every offscreen row; arrow keys and
+type-ahead render the target before focusing it. This is a deliberate virtual-tree limitation, not
+full-tree exposure to a screen reader.
 
 The whole tree is keyboard-navigable: the arrow keys traverse and collapse, `Home`/`End` and
 `PageUp`/`PageDown` move through the visible rows, and typing a letter jumps to the next label
@@ -152,7 +169,9 @@ Only the text content of a parameter's `<VALUE>` element is ever written.
 - Click a parameter's value (or press `F2` while it is focused) to edit it, `Enter` to commit,
   `Escape` to cancel. A parameter's value shows a tooltip and a hover affordance saying it is editable;
   clicking the label selects the node, it does not reveal it. `Tab` and `Shift`+`Tab` commit and move
-  to the next or previous parameter's value.
+  to the next or previous parameter's value. Scrolling with the editor open moves the input to the
+  rebuilt row while that row stays in the window; if it leaves the window the edit closes without
+  writing, so a later `Enter` cannot commit an invisible stale value.
 - A refused value — one that is invalid for its parameter kind, or that XML cannot represent — keeps
   **the text you typed**, marks the field invalid, and says why. Nothing is discarded.
 - A value with content has **just that content** replaced; a self-closing or empty `<VALUE/>` becomes
@@ -204,12 +223,13 @@ npm run preview:check    # render every fixture x theme and hit the server; no b
 ```
 
 The harness wraps the **production** `renderHtml` output with a stubbed `acquireVsCodeApi`, a theme
-preset (light, dark, high contrast), fixture/theme/sort switches, a simulated re-scan, notice
-injection and a message log. It binds to `127.0.0.1`, reads the committed fixtures (and, for manual
-viewing, the optional local `../sample` directory described below), adds no runtime dependency and is
-never imported by the extension. `?chrome=0` hides the preview panel for clean screenshots;
+preset (light, dark, high contrast), fixture/theme/sort switches, a simulated row-data re-scan,
+notice injection and a message log. It binds to `127.0.0.1`, reads the committed fixtures (and, for
+manual viewing, the optional local `../sample` directory described below), adds no runtime dependency
+and is never imported by the extension. `?chrome=0` hides the preview panel for clean screenshots;
 `?view=document` or `?view=tree` seeds the saved view state so either presentation can be captured
-without clicking or relying on `localStorage`.
+without clicking or relying on `localStorage`. `preview:check` asserts the production row JSON and the
+virtual shell (spacers, window, inspector, empty state), not a full-tree HTML string.
 
 It is a development tool, not a substitute for a VS Code webview: it cannot prove VS Code's own theme
 variable resolution, the real custom-editor tab/focus behaviour or host clipboard permissions. Those
@@ -228,18 +248,25 @@ npm run perf:ecuc -- <file>          # scanner/index/render benchmark, no browse
 The generator writes `minimal.arxml`, `display-rules.arxml`, `references.arxml`, `deep.arxml`,
 `large.arxml` (~4,000 nodes) and `huge.arxml` (~12,000 nodes) plus a README. They are synthetic, live
 outside the repository and are never committed. The benchmark reports file size, node count, scanner,
-node-index, `renderTree` and `renderHtml` medians and a post-run heap-used/RSS estimate (not a peak).
+node-index, `buildRows` and `renderHtml` medians and a post-run heap-used/RSS estimate (not a peak).
 It does not measure browser layout/paint or a real VS Code webview; treat the numbers as evidence, not
-a performance promise. Do not add virtualisation from one run.
+a performance promise.
 
-Local runs on 2026-10-27: `large` scanned and rendered in tens of milliseconds; `huge` took roughly
-0.09–0.12 s to scan and 0.15–0.20 s to render. In the browser harness (Document view, dark theme)
-the page finished loading after ~0.8 s (`large`, 4,001 rows) and ~2.2 s (`huge`, 12,001 rows), and
-the filter pass took ~56 ms / ~120 ms; an earlier run observed ~0.6 s / ~1.6 s and ~54 ms / ~134 ms.
-The earlier Tree-view observations were ~1.3 s / ~7.3 s and ~45 ms / ~125 ms; Document view is one
-CSS mode over the same DOM and no second render pass was added. These are this machine's
-observations; timings vary with load and are not a guarantee. The real VS Code webview also pays
-layout and paint.
+Local runs on 2026-10-27 (pre-virtualisation baseline): `large` scanned and rendered in tens of
+milliseconds; `huge` took roughly 0.09–0.12 s to scan and 0.15–0.20 s to render. In the browser
+harness a full-DOM page finished loading after ~0.8 s (`large`, 4,001 rows) and ~3.8 s (`huge`,
+12,001 rows), and the filter pass took ~56 ms / ~102 ms.
+
+After the virtualised renderer (2026-10-28, headless Edge via CDP, Document/Tree, dark, this machine):
+`large` `DOMContentLoaded`/load 127–155 ms with a 1.8–2.2 ms row-filter scan; `huge` 253–259 ms with
+a 5.6–8.6 ms scan; the window held 27–33 treeitems (27–44 nodes including Document braces), and the
+top spacer, rendered rows and bottom spacer summed exactly to the virtual total at every sampled scroll
+position with no inter-row gap. The `sample/huge` page payload is ~6.5 MiB of escaped row JSON and
+`performance.memory.usedJSHeapSize` was ~14–15 MB after load. The filter input deliberately waits
+120 ms (debounce) before running the scan; the scan itself is the 1.8–8.6 ms above. Node-side
+`buildRows`/`renderHtml` medians were 15/20 ms for `large` and 41/57 ms for `huge`. These are harness
+observations, not VS Code webview timings; timings vary with load and the real webview also pays its
+own layout and paint.
 
 ## Limitations
 
@@ -250,8 +277,11 @@ layout and paint.
   semantic comparison needs the AR-path matching planned for the broader roadmap and should not be
   reintroduced as a text diff.
 - Large-file performance is measured only on the synthetic samples; a real customer file is not
-  measured. The scanner is a single pass but the view renders the whole tree (no virtualisation), so
-  measure a real file before optimising.
+  measured. The page renders a virtual window, so performance scales with the viewport, but the
+  real VS Code webview still needs an Extension Development Host check.
+- The accessibility tree exposes the rendered virtual window, not every offscreen row. Levels,
+  positions, sizes, expansion and selection are on the treeitems, and keyboard navigation renders a
+  target before focusing it; a screen reader cannot browse an offscreen row without scrolling it in.
 
 ## Relationship to the legacy `arxml2artext`
 
@@ -267,6 +297,8 @@ rendered output.
 - `src/core/ecuc/` — detection, scanner, model, ordering, resolution, validation. **No `vscode`
   imports**, so the same code can later serve a workspace index or a language server.
 - `src/core/text/offsets.ts` — the line/offset index.
-- `src/editor/` — the custom editor provider, rendering, filter, navigation, and the value-edit path.
+- `src/editor/` — the custom editor provider, row model (`renderRows.ts`), virtual-scroll math
+  (`virtualScroll.ts`), page/row rendering (`renderHtml.ts`), filter, navigation, and the value-edit
+  path.
 - `src/commands.ts` — the commands and the activation gate.
 - `src/spikes/` — throwaway Step 0 scaffolding, awaiting a manual run and then deletion.

@@ -55,6 +55,7 @@ function main() {
 	const fileBytes = fs.statSync(file).size;
 	const scanner = outModule(path.join('core', 'ecuc', 'scanner.js'));
 	const renderer = outModule(path.join('editor', 'renderHtml.js'));
+	const rowBuilder = outModule(path.join('editor', 'renderRows.js'));
 	const nodeId = outModule(path.join('editor', 'nodeId.js'));
 	const offsets = outModule(path.join('core', 'text', 'offsets.js'));
 
@@ -67,7 +68,7 @@ function main() {
 	const index = measure('index', () => nodeId.buildNodeIndex(model));
 	const nodes = index.last.byId.size;
 	const lineIndex = new offsets.LineIndex(text);
-	const tree = measure('tree', () => renderer.renderTree(model, { lineIndex }));
+	const rows = measure('rows', () => rowBuilder.buildRows(model, { lineIndex }));
 	const page = measure('page', () => renderer.renderHtml(model, { nonce: 'bench', lineIndex }));
 	const heapAfter = process.memoryUsage();
 
@@ -77,7 +78,15 @@ function main() {
 	console.log('  nodes:       ' + nodes + ' indexed nodes (' + model.modules.length + ' modules)');
 	console.log('  scan:        ' + scan.median.toFixed(2) + ' ms (median of 3)');
 	console.log('  index:       ' + index.median.toFixed(2) + ' ms');
-	console.log('  renderTree:  ' + tree.median.toFixed(2) + ' ms (' + formatBytes(Buffer.byteLength(tree.last)) + ')');
+	console.log(
+		'  buildRows:   ' +
+			rows.median.toFixed(2) +
+			' ms (' +
+			rows.last.rows.length +
+			' rows, ' +
+			formatBytes(Buffer.byteLength(JSON.stringify(rows.last))) +
+			')'
+	);
 	console.log('  renderHtml:  ' + page.median.toFixed(2) + ' ms (' + formatBytes(Buffer.byteLength(page.last)) + ')');
 	console.log(
 		'  heapUsed:    ' +
@@ -86,9 +95,9 @@ function main() {
 			formatBytes(heapAfter.rss) +
 			' after the run; neither is a peak)'
 	);
-	console.log('\nrenderTree and renderHtml call buildNodeIndex themselves, and renderHtml calls renderTree;');
-	console.log('these are separate warm runs, so the phases are not additive.');
-	console.log('This does not measure browser layout/paint or the real VS Code webview.');
+	console.log('\nbuildRows and renderHtml call buildNodeIndex themselves; these are separate warm runs,');
+	console.log('so the phases are not additive. buildRows emits data, not HTML; the page builds only');
+	console.log('the viewport window. This does not measure browser layout/paint or a real VS Code webview.');
 }
 
 try {

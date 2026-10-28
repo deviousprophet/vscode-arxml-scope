@@ -11,7 +11,8 @@ import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { LineIndex } from '../../core/text/offsets';
-import { renderHtml, renderTree } from '../../editor/renderHtml';
+import { renderHtml } from '../../editor/renderHtml';
+import { buildRows } from '../../editor/renderRows';
 import { fixtureText } from '../core/modelTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
@@ -49,9 +50,9 @@ const BOOLEAN_CASE_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
 </AUTOSAR>`;
 
 
-function tree(): string {
+function rows(): ReturnType<typeof buildRows>['rows'] {
 	const text = fixtureText(FIXTURE);
-	return renderTree(scanEcucValues(text), { lineIndex: new LineIndex(text) });
+	return buildRows(scanEcucValues(text), { lineIndex: new LineIndex(text) }).rows;
 }
 
 function page(): string {
@@ -65,15 +66,13 @@ function styleOf(html: string): string {
 	return match[1];
 }
 
-/** The `data-value-kind` of the parameter named `name`, scoped to its own node. */
+/** The `data-value-kind` the row builder will use for the parameter named `name`. */
 function kindFor(name: string): string | undefined {
-	const html = tree();
-	const at = html.indexOf(`data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContA/${name}"`);
-	assert.notStrictEqual(at, -1, `the ${name} node is rendered`);
-	const end = html.indexOf('</div>', at);
-	const snippet = html.slice(at, end);
-	const match = /<span class="value" data-value-kind="([^"]+)"/.exec(snippet);
-	return match ? match[1] : undefined;
+	const row = rows().find(
+		(candidate) => candidate.definitionRef === `/PkgA/PkgB/ModDefs/ModX/ContA/${name}`
+	);
+	assert.ok(row, `the ${name} row exists`);
+	return row.valueKind;
 }
 
 suite('editor semantic colours (AC14)', () => {
@@ -82,10 +81,10 @@ suite('editor semantic colours (AC14)', () => {
 		assert.strictEqual(kindFor('Title'), 'textual');
 		assert.strictEqual(kindFor('Flag'), 'boolean');
 		// The class contract is unchanged; the widget and filter still select `.value`.
-		assert.ok(tree().includes('<span class="value" data-value-kind="numeric"'));
-		const upper = renderTree(scanEcucValues(BOOLEAN_CASE_FIXTURE), {});
+		assert.ok(page().includes("value.className = row.kind === 'reference' ? 'value target' : 'value'"));
+		const upper = buildRows(scanEcucValues(BOOLEAN_CASE_FIXTURE), {}).rows;
 		assert.strictEqual(
-			(upper.match(/data-value-kind="boolean"/g) ?? []).length,
+			upper.filter((row) => row.valueKind === 'boolean').length,
 			2,
 			'boolean detection is case-insensitive (TRUE / False)'
 		);
@@ -118,10 +117,10 @@ suite('editor semantic colours (AC14)', () => {
 		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(style));
 		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(style));
 		assert.ok(
-			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg\)/.test(style)
+			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg\)/.test(style)
 		);
 		assert.ok(
-			/#tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg-focus\)/.test(
+			/#tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
 				style
 			)
 		);

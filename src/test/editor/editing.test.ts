@@ -23,13 +23,15 @@ import { LineIndex } from '../../core/text/offsets';
 import { EcucEditorProvider } from '../../editor/ecucEditorProvider';
 import { applyEdit, buildEdit, parameterFor, regionOf, wrapElement } from '../../editor/ecucEdit';
 import { buildNodeIndex } from '../../editor/nodeId';
-import { renderHtml, renderTree } from '../../editor/renderHtml';
+import { EcucRow, buildRows } from '../../editor/renderRows';
+import { renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
 import { repoRoot, sleep } from './editorTestUtils';
 
 interface StubMessage {
 	type?: string;
-	tree?: string;
+	rows?: EcucRow[];
+	digits?: number;
 	message?: string;
 	nodeId?: string;
 	selectedId?: string;
@@ -126,21 +128,15 @@ function parameterId(text: string, name: string): string {
 }
 
 /**
- * The id the **rendered tree** gives the parameter labelled `name`.
+ * The id the **row data** gives the parameter labelled `name`.
  *
  * This is the widget's own source of truth (`item.dataset.nodeId`), so a test that uses
  * it exercises the contract the two children share: the id rendered after a re-scan is
  * the id the write path resolves. Deriving it with `parameterId` instead would let the
  * two sides disagree without any test noticing.
  */
-function nodeIdInTree(tree: string, name: string): string | undefined {
-	for (const item of tree.split('<div class="node"').slice(1)) {
-		const label = /<span class="label">([^<]*)<\/span>/.exec(item)?.[1];
-		if (label === name) {
-			return /data-node-id="([^"]*)"/.exec(item)?.[1];
-		}
-	}
-	return undefined;
+function nodeIdInRows(rows: readonly EcucRow[], name: string): string | undefined {
+	return rows.find((row) => row.label === name)?.id;
 }
 
 function notices(stub: StubPanel): StubMessage[] {
@@ -155,15 +151,19 @@ function lastModel(stub: StubPanel): StubMessage {
 	return stub.messages.filter((message) => message.type === 'model').at(-1) ?? {};
 }
 
+function lastRows(stub: StubPanel): EcucRow[] {
+	return lastModel(stub).rows ?? [];
+}
+
 /** A fresh scan rendered exactly as the provider renders it, for the staleness check. */
-function expectedTree(text: string): string {
-	// The provider now passes the document's LineIndex, so the tree carries its source
-	// positions; the expected tree must be built from the same document text.
-	return renderTree(scanEcucValues(text), {
+function expectedRows(text: string): EcucRow[] {
+	// The provider passes the document's LineIndex, so the rows carry their source
+	// positions; the expected rows must be built from the same document text.
+	return buildRows(scanEcucValues(text), {
 		sort: 'all',
 		sortExcept: [...SORT_EXCEPTIONS],
 		lineIndex: new LineIndex(text),
-	});
+	}).rows;
 }
 
 function open(document: vscode.TextDocument): { provider: EcucEditorProvider; stub: StubPanel } {
@@ -339,8 +339,8 @@ suite('editor value editing (AC1–AC9)', () => {
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), fixtureText('editing/numeric.expected.arxml'));
 
 			await waitFor('the view to be re-rendered after the revert', () => {
-				const tree = lastModel(stub).tree ?? '';
-				return tree.includes('= 42') && !tree.includes('= 99');
+				const rows = lastRows(stub);
+				return rows.some((row) => row.value === '42') && !rows.some((row) => row.value === '99');
 			});
 		});
 	});
@@ -458,17 +458,17 @@ suite('editor value editing (AC1–AC9)', () => {
 			await vscode.window.showTextDocument(document);
 
 			await stub.send({ type: 'edit', nodeId: parameterId(original, 'Count'), value: '42' });
-			await waitFor('the pushed edit', () => (lastModel(stub).tree ?? '').includes('= 42'));
-			assert.strictEqual(lastModel(stub).tree, expectedTree(document.getText()), 'after the edit');
+			await waitFor('the pushed edit', () => lastRows(stub).some((row) => row.value === '42'));
+			assert.deepStrictEqual(lastRows(stub), expectedRows(document.getText()), 'after the edit');
 
 			await vscode.commands.executeCommand('undo');
-			await waitFor('the pushed undo', () => (lastModel(stub).tree ?? '').includes('= 7'));
-			assert.strictEqual(lastModel(stub).tree, expectedTree(document.getText()), 'after the undo');
-			assert.ok(!(lastModel(stub).tree ?? '').includes('= 42'), 'no stale value is on screen');
+			await waitFor('the pushed undo', () => lastRows(stub).some((row) => row.value === '7'));
+			assert.deepStrictEqual(lastRows(stub), expectedRows(document.getText()), 'after the undo');
+			assert.ok(!lastRows(stub).some((row) => row.value === '42'), 'no stale value is on screen');
 
 			await vscode.commands.executeCommand('redo');
-			await waitFor('the pushed redo', () => (lastModel(stub).tree ?? '').includes('= 42'));
-			assert.strictEqual(lastModel(stub).tree, expectedTree(document.getText()), 'after the redo');
+			await waitFor('the pushed redo', () => lastRows(stub).some((row) => row.value === '42'));
+			assert.deepStrictEqual(lastRows(stub), expectedRows(document.getText()), 'after the redo');
 		});
 	});
 
@@ -559,12 +559,13 @@ suite('editor value editing (AC1–AC9)', () => {
 		});
 	});
 
-	test('§9: the tree carries the value the widget edits, and the widget is inlined', () => {
+	test('§9: the rows carry the value the widget edits, and the widget is inlined', () => {
 		const model = scanEcucValues(fixtureText('editing/numeric.arxml'));
-		const tree = renderTree(model, {});
-		assert.ok(tree.includes('data-kind="parameter"'));
-		assert.ok(tree.includes('data-value="7"'), 'the current value is what the editor starts from');
-		assert.ok(tree.includes('(= 0x7)'), 'the model’s secondary hex stays beside it');
+		const rows = buildRows(model, {}).rows;
+		const parameter = rows.find((row) => row.kind === 'parameter')!;
+		assert.strictEqual(parameter.id.includes('param:Count'), true, 'the row is the parameter');
+		assert.strictEqual(parameter.value, '7', 'the current value is what the editor starts from');
+		assert.ok(parameter.meta.some((part) => part.text === '(= 0x7)'), 'the model’s secondary hex stays beside it');
 
 		const page = renderHtml(model, { nonce: 'test-nonce' });
 		assert.ok(page.includes('.value-edit'), 'the editor is styled from --vscode-* variables');
@@ -633,11 +634,11 @@ suite('editor value editing (AC1–AC9)', () => {
 		assert.strictEqual(plan.record.newText, '<VALUE DEST="a>b">42</VALUE>');
 	});
 
-	test('§2.2: the id in the re-scanned tree is the id the next edit resolves', async () => {
+	test('§2.2: the id in the re-scanned rows is the id the next edit resolves', async () => {
 		// The seam the editing child rests on: after a change — an edit, an undo, an
-		// external write — the tree the user clicks is a re-scan, so the id in it must be
-		// the id `buildEdit` resolves. The id is taken from the rendered tree, exactly as
-		// the widget takes it from `data-node-id`, and never re-derived by the test.
+		// external write — the rows the user clicks are a re-scan, so the id in them must
+		// be the id `buildEdit` resolves. The id is taken from the rendered row data,
+		// exactly as the widget takes it from `data-node-id`, and never re-derived by the test.
 		await withEditingFixture('numeric.arxml', async (_uri, document) => {
 			const original = document.getText();
 			const { stub } = open(document);
@@ -646,17 +647,17 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(original, 'Count'), value: '42' });
 			await waitFor('the first edit', () => document.getText().includes('<VALUE>42</VALUE>'));
 			await vscode.commands.executeCommand('undo');
-			await waitFor('the pushed undo', () => (lastModel(stub).tree ?? '').includes('= 7'));
+			await waitFor('the pushed undo', () => lastRows(stub).some((row) => row.value === '7'));
 			assert.strictEqual(document.getText(), original, 'one press restores the bytes');
 
-			const id = nodeIdInTree(lastModel(stub).tree ?? '', 'Count');
-			assert.ok(id, 'the re-scanned tree still carries the parameter');
+			const id = nodeIdInRows(lastRows(stub), 'Count');
+			assert.ok(id, 'the re-scanned rows still carry the parameter');
 			assert.strictEqual(id, parameterId(original, 'Count'), 'and it is the id the write path resolves');
 
 			await stub.send({ type: 'edit', nodeId: id!, value: '9' });
 			await waitFor('the second edit', () => document.getText().includes('<VALUE>9</VALUE>'));
 			assert.strictEqual(document.getText(), original.replace('<VALUE>7</VALUE>', '<VALUE>9</VALUE>'));
-			await waitFor('the pushed second edit', () => (lastModel(stub).tree ?? '').includes('= 9'));
+			await waitFor('the pushed second edit', () => lastRows(stub).some((row) => row.value === '9'));
 		});
 	});
 });

@@ -1,30 +1,18 @@
 /**
  * AC1, AC3–AC8 and AC10–AC12 — the interaction model, collapse, hierarchy, the widget's
- * affordance, the key map and the guardrails, asserted on the string `renderHtml`
- * returns.
+ * affordance, the key map and the guardrails, asserted on the row data the page receives
+ * and on the page's own serialized functions.
  *
  * `@vscode/test-electron` exposes no webview DOM, so a click cannot be performed here.
- * The markup is asserted, and the inlined script is located by name and then **compiled
- * and driven**, so the page's own copy of each helper is what the test exercises rather
- * than the host-side twin it was serialized from. What that still leaves unverified — the
- * real hit area of a twisty, hover, and a scroll that survives a re-scan in a live
- * webview — is recorded in `implement.md` §Manual verification and is not implied here.
+ * The inlined script is located by name and then **compiled and driven** where it is
+ * self-contained; the DOM pass remains the browser harness's evidence.
  */
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import {
-	ReRenderHooks,
-	collapsedIdsFor,
-	moveTarget,
-	pruneCollapsed,
-	reRenderTree,
-	renderHtml,
-	renderTree,
-	toggleCollapsed,
-} from '../../editor/renderHtml';
+import { RowPayload, collapsedIdsFor, moveTarget, pruneCollapsed, renderHtml, toggleCollapsed } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
 import { repoRoot } from './editorTestUtils';
 import { evaluateFunction, functionSource } from './scriptTestUtils';
@@ -35,19 +23,16 @@ function page(): string {
 	return renderHtml(scanEcucValues(fixtureText(FIXTURE)), { nonce: 'test-nonce' });
 }
 
+function payload(source = page()): RowPayload {
+	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(source);
+	assert.ok(match, 'the page embeds the row document');
+	return JSON.parse(match[1]) as RowPayload;
+}
+
 function styleOf(html: string): string {
 	const match = /<style[^>]*>([\s\S]*?)<\/style>/.exec(html);
 	assert.ok(match, 'one inlined style block');
 	return match[1];
-}
-
-/** The opening tag of the node that owns the first `.row k-<kind>` in `tree`. */
-function nodeTagFor(tree: string, kind: string): string {
-	const at = tree.indexOf(`<span class="row k-${kind}`);
-	assert.notStrictEqual(at, -1, `a ${kind} row is rendered`);
-	const open = tree.lastIndexOf('<div class="node"', at);
-	assert.notStrictEqual(open, -1, `the ${kind} row belongs to a node`);
-	return tree.slice(open, tree.indexOf('>', open) + 1);
 }
 
 suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)', () => {
@@ -57,8 +42,6 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		assert.ok(!click.includes('revealItem'), 'and opens no text editor');
 		assert.ok(click.includes('flipCollapsed'), 'the twisty toggles instead');
 		assert.ok(click.includes('followItem'), 'the reference target follows instead');
-		// One interaction, one effect: the toggle and the follow each return before the
-		// select, so a toggle cannot also move the selection.
 		assert.ok(click.indexOf('flipCollapsed') < click.indexOf('selectItem(item)'));
 		assert.ok(click.indexOf('followItem') < click.indexOf('selectItem(item)'));
 		assert.ok(!click.includes('stopImmediatePropagation'), 'the tree does not steal an event the widget claimed');
@@ -68,69 +51,63 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		const script = page();
 		const double = functionSource(script, 'onRowDoubleClick');
 		assert.ok(double.includes('revealItem(item)'), 'a double click reveals');
-		assert.ok(
-			double.includes('.twisty') && double.includes('[data-follow]'),
-			'a toggle or a follow is not also a reveal'
-		);
+		assert.ok(double.includes('.twisty') && double.includes('[data-follow]'), 'a toggle or a follow is not also a reveal');
 
 		const keys = functionSource(script, 'onTreeKeydown');
 		assert.ok(keys.includes('event.ctrlKey || event.altKey'), 'Ctrl/Alt+Enter is the deliberate key');
-		assert.ok(keys.includes('revealItem(item)'));
+		assert.ok(keys.includes('revealItem(id)'));
 
-		// Space selects only: it must not toggle and must not reveal.
 		const space = keys.slice(keys.indexOf("event.key === ' '"), keys.indexOf('event.key.length === 1'));
 		assert.ok(space.includes('selectItem(item)'), 'Space selects');
 		assert.ok(!space.includes('revealItem') && !space.includes('flipCollapsed'), 'and does nothing else');
 
-		// The selection is the host's too, so a re-scan cannot move it back (AC4).
-		assert.ok(script.includes("vscode.postMessage({ type: 'select', nodeId: item.dataset.nodeId })"));
+		assert.ok(script.includes("vscode.postMessage({ type: 'select', nodeId: id })"));
 	});
 
-	test('AC3: a toggle is rendered only where there is something to toggle', () => {
-		const tree = renderTree(scanEcucValues(fixtureText(FIXTURE)), {});
-		assert.ok(/class="row k-module[^"]*"[^>]*><span class="twisty"/.test(tree), 'a module has a toggle');
-		assert.ok(/class="row k-container[^"]*"[^>]*><span class="twisty"/.test(tree), 'a container has a toggle');
-		assert.ok(/class="row k-parameter[^"]*"[^>]*><span class="spacer"/.test(tree), 'a parameter gets a spacer');
-		assert.ok(/class="row k-reference[^"]*"[^>]*><span class="spacer"/.test(tree), 'a reference gets a spacer');
-		assert.ok(tree.includes('aria-hidden="true"'), 'the marker is not announced twice');
-		assert.ok(tree.includes('class="twisty" aria-hidden="true"><svg'), 'the twisty is inline SVG, not an asset');
-
-		const module = nodeTagFor(tree, 'module');
-		const parameter = nodeTagFor(tree, 'parameter');
-		assert.ok(module.includes('aria-expanded="true"'), 'a toggle carries the state');
-		assert.ok(!parameter.includes('aria-expanded'), 'a leaf carries none');
-
-		// The rule that actually hides a collapsed subtree. Without it the toggle would
-		// only flip an attribute and the children would stay on screen (design §4.2).
-		assert.ok(
-			/\.node\[aria-expanded="false"\]\s*>\s*\.children\s*\{[^}]*display:\s*none/.test(styleOf(page())),
-			'a collapsed node hides its children'
-		);
-	});
-
-	test('AC3: aria-expanded is decided in one place, from the collapsed set', () => {
+	test('AC3: a toggle is built only where the row has children', () => {
 		const script = page();
-		const apply = functionSource(script, 'applyCollapsed');
-		assert.ok(apply.includes("setAttribute('aria-expanded'"), 'the attribute follows the state');
-		assert.ok(apply.includes("'false'"), 'a collapsed node renders as false');
-		assert.ok(apply.includes('itemHasChildren(item)'), 'a leaf is skipped, so it never gains the attribute');
-		assert.ok(apply.includes('collapsed.has(id)'), 'the state is the collapsed set');
-		assert.ok(apply.includes('expandedOverride'), 'a filter override is honoured');
+		const build = functionSource(script, 'buildNodeRow');
+		assert.ok(build.includes('row.hasChildren ? twistySpan() : spacerSpan()'), 'a leaf gets a spacer');
+		assert.ok(!build.includes('innerHTML'), 'model text is never inserted as markup');
+		assert.ok(!build.includes('.style'), 'depth is attribute CSS, not an inline style');
+		assert.ok(functionSource(script, 'twistySpan').includes("className = 'twisty'"));
+		assert.ok(functionSource(script, 'spacerSpan').includes("className = 'spacer'"));
+		const svg = functionSource(script, 'svgIcon');
+		assert.ok(svg.includes('createElementNS'), 'inline SVG, not an asset');
+		assert.ok(svg.includes("setAttribute('class', 'g-' + kind)"), 'the kind class');
+
+		const rows = payload().rows;
+		assert.strictEqual(rows.find((row) => row.label === 'ContA')!.hasChildren, true);
+		assert.strictEqual(rows.find((row) => row.label === 'IniValue')!.hasChildren, false);
+
+		const style = styleOf(script);
+		assert.ok(/\.node\[aria-expanded="true"\] > \.row > \.twisty svg\s*\{[^}]*transform:\s*rotate\(90deg\)/.test(style));
+		assert.ok(/\.node\[aria-expanded="false"\] > \.row > \.twisty\s*\{[^}]*opacity:\s*1/.test(styleOf(script)));
+	});
+
+	test('AC3: aria-expanded follows the displayed list, including a filter force-expand', () => {
+		const script = page();
+		const build = functionSource(script, 'buildNodeRow');
+		assert.ok(build.includes("setAttribute('aria-expanded', expandedIds.has(row.id) ? 'true' : 'false')"));
+		assert.ok(build.includes('if (row.hasChildren)'), 'a leaf never gains aria-expanded');
+
+		const rebuild = functionSource(script, 'rebuildDisplay');
+		assert.ok(rebuild.includes('expandedIds = new Set()'), 'the displayed expansion set is rebuilt');
+		assert.ok(rebuild.includes('row.hasChildren && descendantShown'), 'expansion follows the displayed list');
+		assert.ok(
+			!rebuild.includes('!collapsed.has(row.id)'),
+			'a filtered container cannot claim expansion when it has no displayed child'
+		);
+		assert.ok(rebuild.includes('filterActive: active'), 'the active filter is passed to the flatten pass');
+		assert.ok(rebuild.includes('visible: active && filterResult'), 'and its visibility drives the display list');
+		assert.ok(rebuild.includes("tree.dataset.empty"), 'and the empty state follows the display list');
 
 		const flip = functionSource(script, 'flipCollapsed');
 		assert.ok(flip.includes('toggleCollapsed('), 'the toggle flips membership');
-		assert.ok(flip.includes('applyCollapsed()'), 'and re-decides visibility');
+		assert.ok(flip.includes('rebuildDisplay()'), 'and rebuilds the flat display list');
+		assert.ok(flip.includes('renderWindow(true)'));
 		assert.ok(!flip.includes('setSelection'), 'without moving the selection');
-
-		// The page's own toggleCollapsed behaves as the host's, for the same inputs.
-		const inlined = evaluateFunction<typeof toggleCollapsed>(script, 'toggleCollapsed');
-		for (const [collapsed, id, hasChildren] of [
-			[[], 'a', true],
-			[['a', 'b'], 'a', true],
-			[['a'], 'a', false],
-		] as Array<[string[], string, boolean]>) {
-			assert.deepStrictEqual(inlined(collapsed, id, hasChildren), toggleCollapsed(collapsed, id, hasChildren));
-		}
+		assert.ok(!flip.includes('.style'), 'visibility is not a DOM hide');
 	});
 
 	test('AC3: toggling flips membership and never collapses a leaf', () => {
@@ -151,105 +128,45 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		assert.deepStrictEqual(inlined(['a', 'b', 'c'], ['b', 'c', 'd']), ['b', 'c']);
 	});
 
-	test('AC4: a re-render reads the scroll first and writes it back last', () => {
-		const calls: string[] = [];
-		let written = '';
-		const hooks: ReRenderHooks = {
-			readScrollTop: () => {
-				calls.push('readScrollTop');
-				return 42;
-			},
-			writeHtml: (tree) => {
-				written = tree;
-				calls.push('writeHtml');
-			},
-			pruneCollapsed: () => calls.push('pruneCollapsed'),
-			applyCollapsed: () => calls.push('applyCollapsed'),
-			applyFilter: () => calls.push('applyFilter'),
-			prepareFocus: () => calls.push('prepareFocus'),
-			writeScrollTop: (top) => calls.push(`writeScrollTop:${top}`),
-		};
-
-		reRenderTree('<div id="tree"></div>', hooks);
-
-		assert.strictEqual(written, '<div id="tree"></div>', 'the swapped region is the re-scanned tree');
-		assert.deepStrictEqual(calls, [
-			'readScrollTop',
-			'writeHtml',
-			'pruneCollapsed',
-			'applyCollapsed',
-			'applyFilter',
-			'prepareFocus',
-			'writeScrollTop:42',
-		]);
-	});
-
-	test('AC4: the page re-renders through the same sequence, over the #main scroll box', () => {
+	test('AC4: the page re-renders from rows, keeping #main as the scroll box without a DOM swap', () => {
 		const script = page();
-		assert.ok(script.includes('reRenderTree(message.tree, {'), 'the model message uses the one sequence');
-		assert.ok(script.includes('readScrollTop: () => main.scrollTop'));
-		assert.ok(script.includes('main.innerHTML = tree'));
-		assert.ok(script.includes('main.scrollTop = top'));
+		assert.ok(script.includes('setRows(message.rows, message.digits, message.selectedId)'));
+		assert.ok(!script.includes('main.innerHTML'), 'the full-tree DOM swap is gone');
+		assert.ok(!script.includes('reRenderTree'), 'the old sequence is gone');
 		assert.ok(script.includes("const main = document.getElementById('main')"));
+		assert.ok(script.includes('const treeWindow = document.getElementById(\'tree-window\')'));
+		assert.ok(script.includes('main.addEventListener(\'scroll\''), 'scroll updates the window');
+		assert.ok(script.includes('requestAnimationFrame'), 'through one rAF frame');
+		assert.ok(script.includes('renderWindow(false)'), 'a scroll within the buffer does not force a render');
+		assert.ok(/bufferSize:\s*bufferRows/.test(script), 'the window keeps a small overscan');
 
-		// The handler has to *wire* every step, not merely call the sequence: dropping the
-		// prune or the re-apply leaves the shape intact and the collapse state broken.
-		const handler = script.slice(script.indexOf('reRenderTree(message.tree, {'));
-		for (const hook of [
-			'readScrollTop: () => main.scrollTop',
-			'main.innerHTML = tree',
-			'pruneCollapsed: prune',
-			'applyCollapsed: () => applyCollapsed()',
-			'applyFilter: applyFilter',
-			'prepareFocus: prepareFocus',
-			'main.scrollTop = top',
-		]) {
-			assert.ok(handler.includes(hook), `the model handler wires ${hook}`);
-		}
-
-		// `main.scrollTop` is only meaningful if #main is the scroll container.
 		const style = styleOf(script);
 		assert.ok(/#main\s*\{[^}]*overflow:\s*auto/.test(style), '#main scrolls');
 		assert.ok(/body\s*\{[^}]*overflow:\s*hidden/.test(style), 'and the page does not scroll behind it');
+		assert.ok(
+			/#main\s*\{[^}]*overflow-anchor:\s*none/.test(style),
+			'scroll anchoring cannot fight the virtual range'
+		);
 
-		// The filter box sits outside the swapped region, which is what keeps what the
-		// user typed across a re-scan (R-UX4).
 		const filterAt = script.indexOf('id="filter"');
 		const mainAt = script.indexOf('id="main"');
-		assert.ok(filterAt !== -1 && mainAt !== -1, 'both the filter box and the swapped region exist');
-		assert.ok(filterAt < mainAt, 'the filter box is not inside the region the re-scan replaces');
-
-		// The page's own reRenderTree runs the sequence the host test above asserts.
-		const calls: string[] = [];
-		const inlined = evaluateFunction<typeof reRenderTree>(script, 'reRenderTree');
-		inlined('tree', {
-			readScrollTop: () => {
-				calls.push('read');
-				return 7;
-			},
-			writeHtml: () => calls.push('writeHtml'),
-			pruneCollapsed: () => calls.push('prune'),
-			applyCollapsed: () => calls.push('applyCollapsed'),
-			applyFilter: () => calls.push('applyFilter'),
-			prepareFocus: () => calls.push('prepareFocus'),
-			writeScrollTop: (top) => calls.push(`write:${top}`),
-		});
-		assert.deepStrictEqual(calls, ['read', 'writeHtml', 'prune', 'applyCollapsed', 'applyFilter', 'prepareFocus', 'write:7']);
+		assert.ok(filterAt !== -1 && mainAt !== -1, 'both the filter box and the scroll region exist');
+		assert.ok(filterAt < mainAt, 'the filter box is not inside the region a re-scan replaces');
 	});
 
-	test('AC5: expand-all and collapse-all are offered and touch nothing but the collapsed set', () => {
+	test('AC5: expand-all and collapse-all touch nothing but the collapsed set', () => {
 		const script = page();
 		assert.ok(script.includes('id="expand-all"') && script.includes('id="collapse-all"'));
 		assert.ok(script.includes("getElementById('collapse-all').addEventListener('click', collapseAll)"));
 		assert.ok(script.includes("getElementById('expand-all').addEventListener('click', expandAll)"));
 
 		const collapse = functionSource(script, 'collapseAll');
-		assert.ok(collapse.includes('collapsedIdsFor('), 'collapse-all is every node that has children');
-		assert.ok(collapse.includes('applyCollapsed()'), 'and re-decides visibility');
+		assert.ok(collapse.includes('collapsedIdsFor(rows)'), 'collapse-all is every row that has children');
+		assert.ok(collapse.includes('rebuildDisplay()'));
 		assert.ok(!collapse.includes('setSelection') && !collapse.includes('selectedId'), 'the selection is intact');
 
 		const expand = functionSource(script, 'expandAll');
-		assert.ok(expand.includes('collapsed = new Set()'), 'expand-all is the empty collapsed set');
+		assert.ok(expand.includes('collapsed = new Set()'));
 		assert.ok(!expand.includes('setSelection') && !expand.includes('selectedId'));
 
 		assert.deepStrictEqual(
@@ -265,19 +182,19 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		assert.deepStrictEqual(inlined([{ id: 'a', hasChildren: true }, { id: 'b', hasChildren: false }]), ['a']);
 	});
 
-	test('AC6: each kind has its own class, its own marker shape and its own accent', () => {
-		const tree = renderTree(scanEcucValues(fixtureText(FIXTURE)), {});
+	test('AC6: each kind has its own class, marker shape and accent', () => {
+		const script = page();
+		const build = functionSource(script, 'buildNodeRow');
+		assert.ok(build.includes("'row k-' + row.kind"), 'the kind class');
+		const svg = functionSource(script, 'svgIcon');
 		for (const kind of ['module', 'container', 'parameter', 'reference']) {
-			assert.ok(tree.includes(`class="row k-${kind}`), `the ${kind} class`);
-			assert.ok(tree.includes(`class="g-${kind}"`), `the ${kind} marker`);
+			assert.ok(svg.includes(`kind === '${kind}'`), kind);
 		}
-		// Distinct shapes, so the kinds are told apart without colour (high-contrast safe).
-		assert.ok(/class="g-module"[^>]*><rect/.test(tree), 'a filled square');
-		assert.ok(/class="g-container"[^>]*fill="none"[^>]*><rect/.test(tree), 'a hollow square');
-		assert.ok(/class="g-parameter"[^>]*><circle/.test(tree), 'a dot');
-		assert.ok(/class="g-reference"[^>]*><path/.test(tree), 'an arrow');
+		assert.ok(svg.includes("createElementNS(svgNamespace, 'rect')"), 'square shapes');
+		assert.ok(svg.includes("createElementNS(svgNamespace, 'circle')"), 'a dot for a parameter');
+		assert.ok(svg.includes("setAttribute('d', 'M2.5 8h8M8 5l3 3-3 3')"), 'an arrow for a reference');
 
-		const style = styleOf(page());
+		const style = styleOf(script);
 		assert.ok(/\.row\.k-module\s*\{[^}]*--vscode-symbolIcon-moduleForeground/.test(style));
 		assert.ok(/\.row\.k-container\s*\{[^}]*--vscode-symbolIcon-namespaceForeground/.test(style));
 		assert.ok(/\.row\.k-parameter\s*\{[^}]*var\(--vscode-symbolIcon-fieldForeground/.test(style));
@@ -286,34 +203,25 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 
 	test('AC7: the indent guide falls back to a visible colour, never transparent', () => {
 		const style = styleOf(page());
-		const rule = /\.children\s*\{([^}]*)\}/.exec(style);
-		assert.ok(rule, 'the children group carries the guide');
-		const border = /border-left:\s*1px solid ([^;]+);/.exec(rule![1]);
-		assert.ok(border, 'a border draws the guide');
-		assert.strictEqual(
-			border![1].trim(),
-			'var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, #80808040))',
+		const rule = /body\[data-view="document"\] \.row\s*\{([^}]*)\}/.exec(style);
+		assert.ok(rule, 'the flat document row carries the guide');
+		assert.ok(/repeating-linear-gradient/.test(rule![1]), 'a guide every indent step');
+		assert.ok(
+			rule![1].includes('var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, #80808040))'),
 			'the chain falls through to a colour when the theme defines neither variable'
 		);
-		assert.ok(!/transparent/.test(border![1]), 'transparent is the defect this exists for');
+		assert.ok(!/transparent 0 100%/.test(rule![1]));
 	});
 
 	test('AC6: the row states come from the theme, including the unfocused selection', () => {
 		const style = styleOf(page());
-		// Design §1.3 lists these as defects of the flat tree, so they are asserted rather
-		// than assumed: a hover state, and a selection tint that keeps the token colours.
+		assert.ok(/\.row:hover\s*\{[^}]*var\(--hover-bg\)/.test(style), 'a row has a hover state');
 		assert.ok(
-			/\.row:hover\s*\{[^}]*var\(--hover-bg\)/.test(style),
-			'a row has a hover state'
-		);
-		assert.ok(
-			/\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*var\(--sel-bg\)/.test(style),
+			/\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*background-color:\s*var\(--sel-bg\)/.test(style),
 			'an unfocused selection uses the quiet tint'
 		);
 		assert.ok(
-			/\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(
-				style
-			),
+			/\.node\[data-selected="true"\]\s*>\s*\.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(style),
 			'an unfocused selection keeps a non-colour rail cue'
 		);
 		assert.ok(
@@ -327,9 +235,10 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 
 	test('AC8: a value advertises that it is editable, by tooltip and by hover', () => {
 		const script = page();
-		assert.ok(script.includes('<span class="value" data-value-kind="numeric"'), 'the value kind');
-		assert.ok(script.includes('title="Click to edit, or press F2:'), 'the tooltip');
-		assert.ok(script.includes('>"hello"</span>'), 'and it carries the full value for a clipped cell');
+		const value = functionSource(script, 'valueSpan');
+		assert.ok(value.includes("value.dataset.valueKind"), 'the value kind is data');
+		assert.ok(value.includes("'Click to edit, or press F2: = '"), 'the tooltip');
+		assert.ok(value.includes("text.className = 'value-text'"), 'the direct value text');
 		const style = styleOf(script);
 		assert.ok(/\.row\.k-parameter\s*>\s*\.value\s*\{[^}]*cursor:\s*text/.test(style), 'the caret');
 		assert.ok(/\.row\.k-parameter:hover\s*>\s*\.value::after/.test(style), 'the hover affordance');
@@ -353,7 +262,6 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		assert.ok(refusal.includes('valueEdit.pending = false'), 'and lets the user fix it');
 		assert.ok(/\.value-edit\[aria-invalid="true"\]/.test(styleOf(script)), 'and it is visible');
 
-		// The widget's listeners are registered before the tree's, and claim their events.
 		const widgetClick = script.indexOf("document.addEventListener('click', (event) => {");
 		const treeClick = script.indexOf("document.addEventListener('click', onRowClick)");
 		const firstClick = script.indexOf("document.addEventListener('click', ");
@@ -366,19 +274,35 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		);
 	});
 
-	test('AC10: an item carries its position, its group size and its selection state', () => {
-		const tree = renderTree(scanEcucValues(fixtureText(FIXTURE)), {});
-		assert.ok(tree.includes('aria-posinset="1"') && tree.includes('aria-setsize='));
-		assert.ok(tree.includes('aria-selected="false"'), 'an unselected item says so');
-		assert.ok(
-			/role="treeitem" aria-level="1" aria-posinset="1" aria-setsize="1" aria-selected="false"/.test(tree),
+	test('AC10: a treeitem carries its level, position, group size and selection state', () => {
+		const script = page();
+		const build = functionSource(script, 'buildNodeRow');
+		for (const attribute of ['aria-level', 'aria-posinset', 'aria-setsize', 'aria-selected']) {
+			assert.ok(build.includes(`setAttribute('${attribute}'`), attribute);
+		}
+		assert.ok(build.includes("setAttribute('role', 'treeitem')"));
+		assert.ok(script.includes('role="tree"'), 'the container is a real tree');
+		assert.ok(!script.includes('role="group"'), 'the flat tree deliberately drops group wrappers');
+
+		const rows = payload().rows;
+		const module = rows[0];
+		assert.deepStrictEqual(
+			{ pos: module.posinset, size: module.setsize },
+			{ pos: 1, size: 1 },
 			'one module, so the group of modules is a single item'
 		);
-		assert.ok(
-			/aria-level="3" aria-posinset="6" aria-setsize="6"/.test(tree),
-			'the last of ContA’s six members knows it is sixth of six'
+		const contAChildren = rows.filter((row) => row.parentId === rows.find((row) => row.label === 'ContA')!.id);
+		assert.deepStrictEqual(
+			contAChildren.map((row) => [row.label, row.posinset, row.setsize]),
+			[
+				['Flag', 1, 6],
+				['IniValue', 2, 6],
+				['Title', 3, 6],
+				['PeerIref', 4, 6],
+				['PeerRef', 5, 6],
+				['ContB', 6, 6],
+			]
 		);
-		assert.ok(/aria-level="4" aria-posinset="1" aria-setsize="1"/.test(tree), 'the nested parameter');
 	});
 
 	test('AC10: Home, End, PageUp and PageDown move focus as expected', () => {
@@ -393,8 +317,6 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		assert.strictEqual(moveTarget('x', 0, 10, 3), undefined, 'a printable key is type-ahead, not a move');
 		assert.strictEqual(moveTarget('Home', 0, 0, 3), undefined, 'an empty tree moves nowhere');
 
-		// The page runs the same function, so the branches above are the branches the
-		// keyboard reaches.
 		const inlined = evaluateFunction<typeof moveTarget>(page(), 'moveTarget');
 		for (const [key, from, count, size] of [
 			['Home', 5, 10, 3],
@@ -412,7 +334,7 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 	test('AC10: the key handler wires movement, expansion, type-ahead and the live count', () => {
 		const script = page();
 		const keys = functionSource(script, 'onTreeKeydown');
-		assert.ok(keys.includes('moveTarget(event.key, at, items.length, page)'), 'the move keys share one map');
+		assert.ok(keys.includes('moveTarget(event.key, at, visibleNodeIds.length, page)'), 'one key map');
 		assert.ok(keys.includes('event.preventDefault()'), 'the default scroll is suppressed');
 		assert.ok(keys.includes("event.key === 'ArrowRight'"), 'expand');
 		assert.ok(keys.includes("event.key === 'ArrowLeft'"), 'collapse');
@@ -430,7 +352,6 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		assert.ok(!/<link\b/.test(html), 'no stylesheet link');
 		assert.ok(!/url\(\s*['"]?(https?:|\/\/)/.test(html), 'no remote url()');
 
-		// No asset file was added beside the editor sources.
 		const sources = fs.readdirSync(path.join(repoRoot, 'src', 'editor'));
 		assert.deepStrictEqual(
 			sources.filter((name) => !name.endsWith('.ts')),
@@ -469,7 +390,6 @@ suite('editor interaction, collapse and hierarchy (AC1, AC3–AC8, AC10–AC12)'
 		}
 		assert.strictEqual(writes, 1, 'the value editor’s single WorkspaceEdit is still the only write');
 
-		// And the page posts exactly one kind of edit message.
 		assert.strictEqual((page().match(/type: 'edit'/g) ?? []).length, 1);
 	});
 });

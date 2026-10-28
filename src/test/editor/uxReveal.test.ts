@@ -24,7 +24,7 @@ import { activeViewType, fixtureUri, sleep } from './editorTestUtils';
 interface StubMessage {
 	type?: string;
 	nodeId?: string;
-	tree?: string;
+	rows?: Array<{ id: string }>;
 	selectedId?: string;
 }
 
@@ -177,7 +177,7 @@ suite('editor reveal (AC1, AC2)', () => {
 			const pushed = stub.messages.filter((message) => message.type === 'model').at(-1);
 			assert.ok(pushed, 'the re-scan is pushed');
 			assert.strictEqual(pushed.selectedId, id, 'the click’s selection survives the re-scan');
-			assert.ok((pushed.tree ?? '').includes(`data-node-id="${id}"`), 'and the node is still in the tree');
+			assert.ok(pushed.rows?.some((row) => row.id === id), 'and the node is still in the row data');
 		});
 	});
 

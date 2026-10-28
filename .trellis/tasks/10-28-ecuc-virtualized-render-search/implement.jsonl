@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend guide index and layer entry points."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Webview shell, DOM/value contracts, event ownership, state, theme and accessibility conventions."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Forbidden patterns, CSP/colour rules, DOM contracts and finish criteria."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Assertion, no-DOM, browser-harness, reference and mutation conventions."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Host/webview state, re-scan survival and persistence contracts."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Where the renderer/filter/virtual modules and tests belong; core/vscode boundary."}
+{"file": "docs/ECUC_EDITOR.md", "reason": "Current ECUC behavior, editing/navigation/state contracts, harness and limits."}
+{"file": "docs/ECUC_EDITOR_DESIGN_SPEC.md", "reason": "Read-only quiet-source visual contract the virtual renderer must preserve."}
+{"file": ".trellis/tasks/10-28-ecuc-virtualized-render-search/research/reference-patterns.md", "reason": "Reference virtual-scroll/search patterns and current baseline measurements."}
+{"file": ".trellis/tasks/archive/2026-10/10-27-ecuc-editor-quiet-source/design.md", "reason": "The current Document/Tree visual and interaction implementation that must be preserved."}
+{"file": ".trellis/tasks/archive/2026-10/10-27-ecuc-editor-quiet-source/implement.md", "reason": "The quiet-source review findings, performance baseline and known limits."}
+{"file": ".trellis/tasks/10-28-ecuc-virtualized-render-search/prd.md", "reason": "Performance/virtualization/filter requirements and acceptance criteria."}
+{"file": ".trellis/tasks/10-28-ecuc-virtualized-render-search/design.md", "reason": "Row model, flattening, virtual window, filter engine, state/a11y and risk design."}
+{"file": ".trellis/tasks/10-28-ecuc-virtualized-render-search/implement.md", "reason": "Ordered implementation, tests, mutations, performance commands and review gate."}

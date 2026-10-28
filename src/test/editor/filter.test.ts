@@ -10,8 +10,14 @@ import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { FilterNode, filterTree, haystack, matchesQuery } from '../../editor/filter';
-import { renderHtml } from '../../editor/renderHtml';
+import { RowPayload, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
+
+function payload(page: string): RowPayload {
+	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(page);
+	assert.ok(match, 'the page embeds the row document');
+	return JSON.parse(match[1]) as RowPayload;
+}
 
 const TREE: FilterNode[] = [
 	{
@@ -58,12 +64,14 @@ suite('editor filter (AC7)', () => {
 		assert.deepStrictEqual(filterTree(TREE, '   '), TREE);
 	});
 
-	test('AC7: the rendered tree carries the filter box and a haystack per node', () => {
+	test('AC7: the page carries the filter box and a haystack per row', () => {
 		const page = renderHtml(scanEcucValues(fixtureText('editor/render.arxml')), { nonce: 'test-nonce' });
 		assert.ok(page.includes('id="filter"'));
 		assert.ok(page.includes('aria-label="Filter the ECUC tree"'));
-		assert.ok(page.includes('data-haystack="inivalue 63"'), 'the value is searchable');
-		assert.ok(page.includes('data-haystack="conta conta"'), 'the short name is searchable');
-		assert.ok(page.includes('applyFilter()'));
+		const rows = payload(page).rows;
+		assert.strictEqual(rows.find((row) => row.label === 'IniValue')!.haystack, 'inivalue 63', 'the value is searchable');
+		assert.strictEqual(rows.find((row) => row.label === 'ContA')!.haystack, 'conta conta', 'the short name is searchable');
+		assert.ok(page.includes('filterRows('), 'the page filters row data');
+		assert.ok(page.includes('applyFilterQuery('));
 	});
 });

@@ -228,11 +228,13 @@ const THEMES = {
 
 let scanner;
 let renderer;
+let rowBuilder;
 let offsets;
 
 function loadProduction() {
 	scanner = outModule(path.join('core', 'ecuc', 'scanner.js'));
 	renderer = outModule(path.join('editor', 'renderHtml.js'));
+	rowBuilder = outModule(path.join('editor', 'renderRows.js'));
 	offsets = outModule(path.join('core', 'text', 'offsets.js'));
 }
 
@@ -454,27 +456,34 @@ const PANEL_JS = `
 		var selected = document.querySelector('#tree [aria-selected="true"]');
 		return selected ? selected.getAttribute('data-node-id') : undefined;
 	}
+	function rowPayload() {
+		var script = document.getElementById('ecuc-rows');
+		if (!script) { return { rows: [], digits: 1 }; }
+		try {
+			return JSON.parse(script.textContent || '{}');
+		} catch (error) {
+			return { rows: [], digits: 1 };
+		}
+	}
 	function rescan() {
-		preview.hostMessage({ type: 'model', tree: main().innerHTML, selectedId: currentSelection() });
+		var payload = rowPayload();
+		preview.hostMessage({ type: 'model', rows: payload.rows || [], digits: payload.digits, selectedId: currentSelection() });
 	}
 	function rescanChanged() {
-		var clone = main().cloneNode(true);
-		var item = clone.querySelector('[data-kind="parameter"]');
-		if (!item) {
+		var payload = rowPayload();
+		var rows = (payload.rows || []).slice();
+		var row = rows.find(function (candidate) { return candidate.kind === 'parameter'; });
+		if (!row) {
 			preview.hostMessage({ type: 'notice', message: 'No parameter to change in this fixture.', kind: 'warn' });
 			return;
 		}
-		var value = item.querySelector(':scope > .row > .value');
-		if (!value) {
-			preview.hostMessage({ type: 'notice', message: 'The first parameter has no value span.', kind: 'warn' });
-			return;
-		}
-		var before = value.textContent;
-		var after = before.replace(/(-?\\d+)/, function (match) { return String(Number(match) + 1); });
-		if (after === before) { after = before + ' '; }
-		value.textContent = after;
-		value.title = 'Simulated re-scan value (was ' + before + ')';
-		preview.hostMessage({ type: 'model', tree: clone.innerHTML, selectedId: currentSelection() });
+		var before = row.shownValue == null ? row.value : row.shownValue;
+		var after = String(before).replace(/(-?\\d+)/, function (match) { return String(Number(match) + 1); });
+		if (after === before) { after = String(before) + ' '; }
+		row.value = after;
+		row.shownValue = after;
+		row.haystack = String(row.haystack || '').replace(String(before).toLowerCase(), after.toLowerCase());
+		preview.hostMessage({ type: 'model', rows: rows, digits: payload.digits, selectedId: currentSelection() });
 		preview.hostMessage({ type: 'notice', message: 'Simulated a document change (value only).', kind: 'info' });
 	}
 	function notice(kind, text) {
@@ -737,15 +746,18 @@ async function runCheck() {
 		}
 	};
 
-	// The exact region the provider would swap in: the wrapper must not alter it.
-	const treeFor = (fixture) =>
-		renderer.renderTree(fixture.model, {
+	// The exact initial row payload the production renderer embeds: the wrapper
+	// must not alter it, and it must match the production row builder.
+	const payloadFor = (fixture) => {
+		const rows = rowBuilder.buildRows(fixture.model, {
 			sort: 'all',
 			lineIndex: new offsets.LineIndex(fixture.text),
 		});
+		return renderer.encodeRowDocument({ rows: rows.rows, digits: rows.digits });
+	};
 
 	for (const fixture of fixtures) {
-		const expectedTree = treeFor(fixture);
+		const expectedRows = payloadFor(fixture);
 		for (const theme of THEME_ORDER) {
 			try {
 				const page = buildPage(fixture, { theme, sort: 'all', chrome: true }, fixtures);
@@ -762,17 +774,20 @@ async function runCheck() {
 						'--vscode-editorLineNumber-activeForeground: ' +
 							THEMES[theme].vars['editorLineNumber-activeForeground']
 					) &&
-					page.includes(expectedTree) &&
-					page.includes('role="treeitem"') &&
+					page.includes(expectedRows) &&
+					page.includes('id="ecuc-rows"') &&
+					page.includes('id="tree-top"') &&
+					page.includes('id="tree-window"') &&
+					page.includes('id="tree-bottom"') &&
 					page.includes('id="inspector"') &&
 					page.includes('id="empty"') &&
 					page.includes('window.__preview') &&
 					page.includes('id="preview-panel"') &&
-					!expectedTree.includes('undefined');
+					!expectedRows.includes('undefined');
 				check(
 					fixture.id + ' / ' + theme,
 					ok,
-					ok ? '' : 'missing production tree, stub, theme class/tokens, inspector or empty state'
+					ok ? '' : 'missing production row payload, virtual shell/spacers, stub, theme class/tokens, inspector or empty state'
 				);
 			} catch (error) {
 				check(fixture.id + ' / ' + theme, false, error && error.message ? error.message : String(error));
@@ -784,7 +799,7 @@ async function runCheck() {
 		const clean = buildPage(fixtures[0], { theme: 'dark', sort: 'all', chrome: false }, fixtures);
 		check(
 			'chrome=0 omits the panel',
-			!clean.includes('id="preview-panel"') && clean.includes(treeFor(fixtures[0]))
+			!clean.includes('id="preview-panel"') && clean.includes(payloadFor(fixtures[0]))
 		);
 	} catch (error) {
 		check('chrome=0 omits the panel', false, error.message);
@@ -814,7 +829,7 @@ async function runCheck() {
 		check(
 			'GET /preview',
 			page.status === 200 &&
-				pageText.includes(treeFor(fixtures[0])) &&
+				pageText.includes(payloadFor(fixtures[0])) &&
 				pageText.includes('data-preview-theme="light"')
 		);
 

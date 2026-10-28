@@ -11,25 +11,82 @@
 import * as assert from 'assert';
 
 /**
- * The source of `function name(...) { ... }` in `page`, by brace matching.
+ * The index after a string or comment starting at `at`, or `at` when there is none.
+ * Page helpers are plain script, but comments (with apostrophes) and literals keep
+ * brace matching honest for a function that mentions `{` or `}` in text.
+ */
+function skipNonCode(source: string, at: number): number {
+	const character = source[at];
+	if (character === '/' && source[at + 1] === '/') {
+		const end = source.indexOf('\n', at + 2);
+		return end === -1 ? source.length : end;
+	}
+	if (character === '/' && source[at + 1] === '*') {
+		const end = source.indexOf('*/', at + 2);
+		return end === -1 ? source.length : end + 2;
+	}
+	if (character !== '"' && character !== "'" && character !== '`') {
+		return at;
+	}
+	const quote = character;
+	for (let cursor = at + 1; cursor < source.length; cursor++) {
+		if (source[cursor] === '\\') {
+			cursor++;
+		} else if (source[cursor] === quote) {
+			return cursor + 1;
+		}
+	}
+	return source.length;
+}
+
+/**
+ * The source of `function name(...) { ... }` in `page`.
  *
- * A bundler may reformat the function, so callers that compare it against the host-side
- * twin should compare behaviour, not text; use `evaluateFunction` for that.
+ * The parameter list is matched first so a default object parameter (`options = {}`)
+ * cannot be mistaken for the function body. A bundler may reformat the function, so
+ * callers that compare it against the host-side twin should compare behaviour, not
+ * text; use `evaluateFunction` for that.
  */
 export function functionSource(page: string, name: string): string {
 	const marker = `function ${name}(`;
 	const start = page.indexOf(marker);
 	assert.notStrictEqual(start, -1, `the page inlines function ${name}`);
-	const open = page.indexOf('{', start);
+	const parameters = page.indexOf('(', start);
 	let depth = 0;
-	for (let at = open; at < page.length; at++) {
+	let at = parameters;
+	for (; at < page.length; at++) {
+		const skipped = skipNonCode(page, at);
+		if (skipped !== at) {
+			at = skipped - 1;
+			continue;
+		}
 		const character = page[at];
+		if (character === '(') {
+			depth++;
+		} else if (character === ')') {
+			depth--;
+			if (depth === 0) {
+				at++;
+				break;
+			}
+		}
+	}
+	const open = page.indexOf('{', at);
+	assert.notStrictEqual(open, -1, `function ${name} has a body`);
+	depth = 0;
+	for (let cursor = open; cursor < page.length; cursor++) {
+		const skipped = skipNonCode(page, cursor);
+		if (skipped !== cursor) {
+			cursor = skipped - 1;
+			continue;
+		}
+		const character = page[cursor];
 		if (character === '{') {
 			depth++;
 		} else if (character === '}') {
 			depth--;
 			if (depth === 0) {
-				return page.slice(start, at + 1);
+				return page.slice(start, cursor + 1);
 			}
 		}
 	}

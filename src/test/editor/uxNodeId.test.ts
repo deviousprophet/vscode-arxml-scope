@@ -14,7 +14,7 @@ import { ContainerNode, EcucDocumentModel } from '../../core/ecuc/model';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { innermostNodeIdAt } from '../../editor/navigation';
 import { buildNodeIndex } from '../../editor/nodeId';
-import { renderTree } from '../../editor/renderHtml';
+import { buildRows } from '../../editor/renderRows';
 import { fixtureText, slice } from '../core/modelTestUtils';
 
 const FIXTURE = 'editor/sibling-collision.arxml';
@@ -90,16 +90,19 @@ suite('editor node identity (AC13)', () => {
 		const a = before.idOf(first)!;
 		const b = before.idOf(second)!;
 
-		renderTree(model, { sort: 'all' });
-		renderTree(model, { sort: 'declaration' });
+		buildRows(model, { sort: 'all' });
+		buildRows(model, { sort: 'declaration' });
 
 		const after = buildNodeIndex(model);
 		assert.deepStrictEqual([...after.byId.keys()], keys, 'ordering is pure: the ids did not move');
 		assert.strictEqual(after.idOf(first), a, 'the first twin keeps its id');
 		assert.strictEqual(after.idOf(second), b, 'and the second keeps its own');
 
-		for (const tree of [renderTree(model, { sort: 'all' }), renderTree(model, { sort: 'declaration' })]) {
-			assert.ok(tree.includes(`data-node-id="${a}"`) && tree.includes(`data-node-id="${b}"`));
+		for (const rows of [
+			buildRows(model, { sort: 'all' }).rows,
+			buildRows(model, { sort: 'declaration' }).rows,
+		]) {
+			assert.ok(rows.some((row) => row.id === a) && rows.some((row) => row.id === b));
 		}
 	});
 
@@ -124,9 +127,9 @@ suite('editor node identity (AC13)', () => {
 
 		// The display order really is the other way round, which is what makes the
 		// assertion above falsifiable rather than a restatement of the input.
-		const at = (tree: string, id: string): number => tree.indexOf(`data-node-id="${id}"`);
-		const byDeclaration = renderTree(model, { sort: 'declaration' });
-		const sorted = renderTree(model, { sort: 'all' });
+		const at = (rows: readonly { id: string }[], id: string): number => rows.findIndex((row) => row.id === id);
+		const byDeclaration = buildRows(model, { sort: 'declaration' }).rows;
+		const sorted = buildRows(model, { sort: 'all' }).rows;
 		assert.ok(at(byDeclaration, a) < at(byDeclaration, b), 'declaration order shows the first twin first');
 		assert.ok(at(sorted, b) < at(sorted, a), 'the sorted order shows them the other way round');
 

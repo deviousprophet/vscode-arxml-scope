@@ -1,63 +1,183 @@
 /**
- * Webview HTML for the ECUC tree (child design §2.6, parent design §6; UX child design
- * §2, §4, §5, §7, §8, §9).
+ * Webview HTML for the virtualised ECUC views (task design §3, §5, §6).
  *
- * Everything is inlined — no asset files, no remote loads — because the CSP forbids
- * them and `esbuild.js` has no asset-copy step. Every colour is a `--vscode-*` custom
- * property (or a fallback inside one), so light, dark and high-contrast themes all work
- * (parent R16). Kind glyphs and the twisty are inline SVG for the same reason: inline
- * SVG is not a fetch, so the CSP needs no change.
+ * The host no longer builds one DOM node per entity. `renderHtml` embeds a
+ * compact row document (`buildRows`) as escaped JSON, plus a static shell: the
+ * toolbar, the schema/package header, the `role="tree"` container with its
+ * virtual spacers, the empty state and the details inspector. The inlined page
+ * script flattens the rows (collapse/filter), asks the pure virtual-scroll math
+ * for a viewport window and builds only those rows with DOM APIs. The same
+ * script survives a re-scan: the host sends a new row array and the page keeps
+ * its selection, collapsed set, query, view and scroll where it can.
  *
- * `renderTree` returns the region the provider swaps on a re-scan; `renderHtml` wraps
- * it in the page (toolbar, CSP, nonce, script).
+ * Everything is inlined — no asset files, no remote loads — because the CSP
+ * forbids them and `esbuild.js` has no asset-copy step. Every colour is a
+ * `--vscode-*` custom property (or a fallback inside one). The page never uses
+ * a style attribute: row depth is `data-level` CSS and the virtual spacer
+ * heights come from a nonce-carrying stylesheet whose text is updated.
  *
- * The state that has to survive a re-scan — the collapsed set and the scroll position —
- * lives in the webview (UX child design §4.1). The handful of pure helpers that decide
- * it are defined here as real functions and serialized into the page with
- * `toString()`, so the page and the tests share one definition instead of two.
+ * The pure helpers that decide re-scan state, the inspector and focus are
+ * defined here as real functions and serialized into the page with
+ * `toString()`, so the page and the tests share one definition.
  */
 import { randomBytes } from 'crypto';
-import {
-	ContainerNode,
-	EcucDocumentModel,
-	ModuleNode,
-	ParameterNode,
-	Range,
-	ReferenceNode,
-	SortMode,
-	Suffixes,
-	lastShortName,
-} from '../core/ecuc/model';
-import { SORT_EXCEPTIONS, orderContainers, orderMembers, orderModules } from '../core/ecuc/order';
+import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
 import { LineIndex } from '../core/text/offsets';
-import { filterScript, haystack } from './filter';
+import { buildFilterIndex, createFilterDebouncer, filterRows, flattenRows, matchRanges } from './filter';
+import { EcucRow, MetaPart, buildRows } from './renderRows';
+import { virtualScrollScript } from './virtualScroll';
 import { valueEditorScript } from './ecucValueEditor';
-import { NodeIndex, buildNodeIndex } from './nodeId';
 
 export interface RenderOptions {
 	/** Inline-script nonce; generated when absent. */
 	nonce?: string;
 	sort?: SortMode;
 	sortExcept?: readonly string[];
-	/** Node to mark and focus on load (child design §2.4, source → editor). */
+	/** Node to select on load (child design §2.4, source → editor). */
 	selectedId?: string;
 	/**
-	 * The current document text's line index. When present, every node carries its
-	 * 0-based source position as data attributes; the details inspector adds one for
-	 * display. The renderer never guesses a position from the displayed order.
+	 * The current document text's line index. When present, every row carries
+	 * its source position; the details inspector adds one for display. The
+	 * renderer never guesses a position from the displayed order.
 	 */
 	lineIndex?: LineIndex;
+}
+
+/** The initial row payload the page parses before its first render. */
+export interface RowPayload {
+	rows: EcucRow[];
+	digits: number;
+	selectedId?: string;
+}
+
+/**
+ * Serialises the row document for a `<script type="application/json">` block.
+ * `<` is escaped so model text can never close the script element; the page
+ * calls `JSON.parse` and never evaluates it.
+ */
+export function encodeRowDocument(payload: RowPayload): string {
+	return JSON.stringify(payload)
+		.replace(/</g, '\\u003c')
+		.replace(/\u2028/g, '\\u2028')
+		.replace(/\u2029/g, '\\u2029');
+}
+
+/** The state a re-scan keeps, pruned to the rows that still exist. */
+export interface RowState {
+	selectedId?: string;
+	collapsed: string[];
+	query: string;
+	view: 'document' | 'tree';
+}
+
+/**
+ * Keeps the selection when its row survived, prunes collapse ids that are gone,
+ * and leaves the query/view alone. This is the whole re-scan policy, in one
+ * place the page serialises and the tests drive.
+ */
+export function reconcileRowState(state: RowState, rows: readonly { id: string }[]): RowState {
+	const present = new Set(rows.map((row) => row.id));
+	const selectedId =
+		state.selectedId !== undefined && present.has(state.selectedId) ? state.selectedId : undefined;
+	return {
+		selectedId,
+		collapsed: pruneCollapsed(state.collapsed, rows.map((row) => row.id)),
+		query: state.query,
+		view: state.view,
+	};
+}
+
+/**
+ * The roving/focused row after a window update: keep the previous focus if it
+ * is still rendered, else the selected row if it is, else the first rendered
+ * row. `undefined` only when nothing is rendered.
+ */
+export function resolveFocusId(
+	previousFocusId: string | undefined,
+	renderedIds: readonly string[],
+	preferredId?: string
+): string | undefined {
+	if (previousFocusId !== undefined && renderedIds.includes(previousFocusId)) {
+		return previousFocusId;
+	}
+	if (preferredId !== undefined && renderedIds.includes(preferredId)) {
+		return preferredId;
+	}
+	return renderedIds.length > 0 ? renderedIds[0] : undefined;
+}
+
+/** The fields the details panel shows, read from a row (not from a DOM node). */
+export interface InspectorFields {
+	kind: string;
+	label: string;
+	definitionRef: string;
+	shortName: string;
+	variant: string;
+	value: string;
+	hex: string;
+	target: string;
+	context: string;
+	conditions: string;
+	annotations: string;
+	source?: { line: number; column: number; endLine: number; endColumn: number };
+}
+
+/**
+ * Reads the inspector's fields from the row data. The panel therefore works
+ * for a selected row that is outside the rendered window; it never queries the
+ * tree DOM. Serialized into the page so the test and the panel share one
+ * definition.
+ */
+export function inspectorFields(row: EcucRow): InspectorFields {
+	const parts = (cls: MetaPart['cls']): string[] =>
+		row.meta.filter((part) => part.cls === cls).map((part) => part.text);
+	const contextText = parts('context')[0] ?? '';
+	const context =
+		row.contextPaths && row.contextPaths.length > 0
+			? row.contextPaths.join(', ')
+			: contextText.startsWith('context ')
+				? contextText.slice('context '.length)
+				: contextText;
+	return {
+		kind: row.kind,
+		label: row.label,
+		definitionRef: row.definitionRef,
+		shortName: row.shortName ?? '',
+		variant: parts('variant')[0] ?? '',
+		value: row.value ?? '',
+		hex: parts('hex')[0] ?? '',
+		target: row.target ?? '',
+		context,
+		conditions: parts('condition').join('\n'),
+		annotations: parts('annotation').join('\n'),
+		source:
+			row.sourceLine > 0
+				? { line: row.line, column: row.column, endLine: row.endLine, endColumn: row.endColumn }
+				: undefined,
+	};
 }
 
 /** Builds the whole page. */
 export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}): string {
 	const nonce = options.nonce ?? randomBytes(16).toString('base64');
+	const document = buildRows(model, {
+		sort: options.sort,
+		sortExcept: options.sortExcept,
+		lineIndex: options.lineIndex,
+	});
+	const payload = encodeRowDocument({
+		rows: document.rows,
+		digits: document.digits,
+		selectedId: options.selectedId,
+	});
+	const meta = headerHtml(model);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <style nonce="${nonce}">${STYLE}</style>
+<style id="virtual-style" nonce="${nonce}">#tree-top{height:0px}#tree-bottom{height:0px}</style>
 </head>
 <body data-view="document">
 <div class="toolbar">
@@ -74,7 +194,14 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </div>
 <div id="notice" class="notice" role="status" aria-live="polite"></div>
 <div id="content">
-<div id="main">${renderTree(model, options)}</div>
+<div id="main">
+<div class="document">
+<div class="meta">${meta}</div>
+<div id="tree-measure" aria-hidden="true"><div class="node probe-doc"><span class="row k-parameter has-value"><span class="spacer"></span><span class="glyph"></span><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div><div class="node probe-tree-short"><span class="row k-parameter has-value"><span class="spacer"></span><span class="glyph"></span><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div><div class="node has-meta probe-tree-tall"><span class="row k-parameter has-value"><span class="spacer"></span><span class="glyph"></span><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span><span class="row-meta"><span class="hex">(= 0x0)</span></span></span></div></div>
+<div id="tree" class="tree" role="tree" aria-label="ECUC values" data-ln-digits="${document.digits}"><div id="tree-top" class="v-spacer" role="presentation" aria-hidden="true"></div><div id="tree-window" role="presentation"></div><div id="tree-bottom" class="v-spacer" role="presentation" aria-hidden="true"></div></div>
+<div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div>
+</div>
+</div>
 <aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>
 <div class="inspector-empty">
 <p>Select a line to see its details.</p>
@@ -82,28 +209,18 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </div>
 </aside>
 </div>
+<script type="application/json" id="ecuc-rows" nonce="${nonce}">${payload}</script>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 ${valueEditorScript()}
-${filterScript()}
 ${TREE_SCRIPT}
 </script>
 </body>
 </html>`;
 }
 
-/** Builds the refreshable region: schema release, packages, and the tree itself. */
-export function renderTree(model: EcucDocumentModel, options: RenderOptions = {}): string {
-	const ctx: Ctx = {
-		index: buildNodeIndex(model),
-		sort: options.sort ?? 'all',
-		except: options.sortExcept ?? SORT_EXCEPTIONS,
-		selectedId: options.selectedId,
-		lineIndex: options.lineIndex,
-		maxLine: 0,
-		first: true,
-	};
-
+/** The small schema/package header that aligns with the gutter. */
+function headerHtml(model: EcucDocumentModel): string {
 	const meta: string[] = [];
 	if (model.schema) {
 		meta.push(
@@ -115,311 +232,7 @@ export function renderTree(model: EcucDocumentModel, options: RenderOptions = {}
 	for (const pkg of model.packages) {
 		meta.push(`<div class="package"><span class="keyword">package</span> ${escapeHtml(pkg.path.join('.'))}</div>`);
 	}
-
-	const modules = orderModules(model.modules, ctx.sort, ctx.except);
-	const items = modules.map((module, at) => moduleItem(ctx, module, 1, at + 1, modules.length));
-	const digits = String(Math.max(1, ctx.maxLine)).length;
-	return (
-		`<div class="document">` +
-		`<div class="meta">${meta.join('')}</div>` +
-		`<div id="tree" class="tree" role="tree" aria-label="ECUC values" data-ln-digits="${digits}">${items.join('')}</div>` +
-		`<div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div>` +
-		`</div>`
-	);
-}
-
-interface Ctx {
-	index: NodeIndex;
-	sort: SortMode;
-	except: readonly string[];
-	selectedId?: string;
-	/** Source line/column for the inspector; absent when the caller has no document text. */
-	lineIndex?: LineIndex;
-	/** Largest 1-based entity source line, used for the gutter width. */
-	maxLine: number;
-	/** True until the first item is written; it carries the roving `tabindex="0"`. */
-	first: boolean;
-}
-
-interface ItemSpec {
-	id: string;
-	kind: string;
-	label: string;
-	shortName?: string;
-	/** Full slash-delimited `DEFINITION-REF`, for the inspector and Copy path. */
-	definitionRef: string;
-	/** The raw value Copy value should carry, where the entity has one. */
-	value?: string;
-	/** The raw reference target, where the entity has one. */
-	target?: string;
-	/** The rendered value cell; absent for modules and containers. */
-	valueHtml?: string;
-	/** Hover text: the full `DEFINITION-REF` path where there is one (design §2.7). */
-	title: string;
-	level: number;
-	/** Position within its group, and the group's size, for `aria-posinset` / `aria-setsize`. */
-	posinset: number;
-	setsize: number;
-	meta: string[];
-	children: string[];
-	/** The node's own source range, for the line/column the inspector shows. */
-	range: Range;
-}
-
-/** The inline-SVG kind markers: shape as well as colour, so high-contrast themes work. */
-const GLYPHS: Record<string, string> = {
-	module:
-		'<svg class="g-module" viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><rect x="3" y="3" width="10" height="10"/></svg>',
-	container:
-		'<svg class="g-container" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="3.5" width="9" height="9"/></svg>',
-	parameter:
-		'<svg class="g-parameter" viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><circle cx="8" cy="8" r="3"/></svg>',
-	reference:
-		'<svg class="g-reference" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8h8M8 5l3 3-3 3"/></svg>',
-};
-
-const TWISTY_SVG =
-	'<svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><path d="M6 4l4 4-4 4z"/></svg>';
-
-function item(ctx: Ctx, spec: ItemSpec): string {
-	const selected = ctx.selectedId !== undefined && spec.id === ctx.selectedId;
-	// One item carries `tabindex="0"`; the script moves it as focus moves.
-	const focusable = selected || (ctx.selectedId === undefined && ctx.first);
-	ctx.first = false;
-	const hasChildren = spec.children.length > 0;
-	const expanded = hasChildren ? ' aria-expanded="true"' : '';
-	// The value the in-tree editor starts from, so the webview never re-derives it from
-	// the rendered text (parent design §9, `ecucValueEditor.ts`).
-	const editable = spec.kind === 'parameter' ? ` data-value="${escapeAttr(spec.value ?? '')}"` : '';
-	const target = spec.kind === 'reference' ? ` data-target="${escapeAttr(spec.target ?? '')}"` : '';
-	// The source position is carried as data, not hover text, so the inspector can show it
-	// without a host round-trip. `LineIndex` is 0-based like a VS Code Position; the
-	// inspector adds one for display.
-	const start = ctx.lineIndex?.positionAt(spec.range.start);
-	const end = ctx.lineIndex?.positionAt(spec.range.end);
-	const sourceLine = start ? start.line + 1 : 0;
-	if (sourceLine > ctx.maxLine) {
-		ctx.maxLine = sourceLine;
-	}
-	const position =
-		start && end
-			? ` data-line="${start.line}" data-column="${start.character}"` +
-				` data-end-line="${end.line}" data-end-column="${end.character}"`
-			: '';
-	const group = hasChildren ? `<div role="group" class="children">${spec.children.join('')}</div>` : '';
-	// A toggle only where there is something to toggle; a leaf gets a spacer instead, so
-	// the labels of leaves and containers line up (UX child design §4.2).
-	const twisty = hasChildren
-		? `<span class="twisty" aria-hidden="true">${TWISTY_SVG}</span>`
-		: '<span class="spacer" aria-hidden="true"></span>';
-	const rowClass = `row k-${spec.kind}${spec.valueHtml ? ' has-value' : ' no-value'}`;
-	const meta = spec.meta.length > 0 ? `<span class="row-meta">${spec.meta.join('')}</span>` : '';
-	return (
-		`<div class="node" role="treeitem" aria-level="${spec.level}" aria-posinset="${spec.posinset}"` +
-		` aria-setsize="${spec.setsize}" aria-selected="${selected ? 'true' : 'false'}"${expanded}` +
-		` tabindex="${focusable ? '0' : '-1'}"` +
-		` data-node-id="${escapeAttr(spec.id)}" data-kind="${escapeAttr(spec.kind)}"` +
-		` data-definition-ref="${escapeAttr(spec.definitionRef)}"` +
-		` data-short-name="${escapeAttr(spec.shortName ?? '')}"` +
-		` data-haystack="${escapeAttr(haystack(spec))}"${editable}${target}${position}` +
-		`${selected ? ' data-selected="true"' : ''}` +
-		` title="${escapeAttr(spec.title)}">` +
-		`<span class="${rowClass}"${sourceLine ? ` data-line="${sourceLine}"` : ''}>${twisty}<span class="glyph" aria-hidden="true">${GLYPHS[spec.kind] ?? ''}</span>` +
-		`<span class="label">${escapeHtml(spec.label)}</span>${spec.valueHtml ?? ''}${meta}</span>${group}</div>`
-	);
-}
-
-function moduleItem(ctx: Ctx, module: ModuleNode, level: number, posinset: number, setsize: number): string {
-	const containers = orderContainers(module.containers, ctx.sort, ctx.except);
-	return item(ctx, {
-		id: ctx.index.idOf(module) ?? '',
-		kind: 'module',
-		label: dotted(module.definitionRef),
-		shortName: module.shortName,
-		definitionRef: module.definitionRef,
-		title: module.definitionRef,
-		level,
-		posinset,
-		setsize,
-		range: module.range,
-		meta: [
-			`<span class="short" title="${escapeAttr(module.shortName)}">"${escapeHtml(module.shortName)}"</span>`,
-			module.variant
-				? `<span class="variant" title="${escapeAttr(camelize(module.variant))}">(${escapeHtml(
-						camelize(module.variant)
-					)})</span>`
-				: '',
-			...suffixSpans(module),
-		].filter(Boolean),
-		children: containers.map((c, at) => containerItem(ctx, c, level + 1, at + 1, containers.length)),
-	});
-}
-
-function containerItem(
-	ctx: Ctx,
-	container: ContainerNode,
-	level: number,
-	posinset: number,
-	setsize: number
-): string {
-	const members = orderMembers(container.parameters, container.references, ctx.sort, ctx.except);
-	const nested = orderContainers(container.containers, ctx.sort, ctx.except);
-	// One group per container: parameters, then references, then child containers, so the
-	// positions stay contiguous (parent design §6).
-	const total = members.parameters.length + members.references.length + nested.length;
-	const children: string[] = [];
-	for (const parameter of members.parameters) {
-		children.push(parameterItem(ctx, parameter, level + 1, children.length + 1, total));
-	}
-	for (const reference of members.references) {
-		children.push(referenceItem(ctx, reference, level + 1, children.length + 1, total));
-	}
-	for (const child of nested) {
-		children.push(containerItem(ctx, child, level + 1, children.length + 1, total));
-	}
-	return item(ctx, {
-		id: ctx.index.idOf(container) ?? '',
-		kind: 'container',
-		label: lastShortName(container.definitionRef),
-		shortName: container.shortName,
-		definitionRef: container.definitionRef,
-		title: container.definitionRef,
-		level,
-		posinset,
-		setsize,
-		range: container.range,
-		meta: [
-			`<span class="short" title="${escapeAttr(container.shortName)}">"${escapeHtml(container.shortName)}"</span>`,
-			...suffixSpans(container),
-		],
-		children,
-	});
-}
-
-function parameterItem(
-	ctx: Ctx,
-	parameter: ParameterNode,
-	level: number,
-	posinset: number,
-	setsize: number
-): string {
-	const value = parameter.displayValue ?? '';
-	// The legacy form quotes a textual value and leaves a numerical one bare, which is
-	// what tells the two apart at a glance.
-	const shown = parameter.numeric ? value : `"${value}"`;
-	// The reference ARTEXT grammar distinguishes strings, numeric literals and booleans.
-	// Keep that split for parameter values instead of painting every value with the numeric
-	// token; reference targets get the link colour in `referenceItem`.
-	const valueKind = parameter.numeric
-		? /^(true|false)$/i.test(value)
-			? 'boolean'
-			: 'numeric'
-		: 'textual';
-	return item(ctx, {
-		id: ctx.index.idOf(parameter) ?? '',
-		kind: 'parameter',
-		label: parameter.name,
-		definitionRef: parameter.definitionRef,
-		value,
-		// The value is the first line's fourth column, so it stays aligned across
-		// siblings; the hex and the suffixes move to the quieter second line.
-		valueHtml: `<span class="value" data-value-kind="${valueKind}" title="${escapeAttr(
-			'Click to edit, or press F2: = ' + shown
-		)}"><span class="punct">=</span> <span class="value-text">${escapeHtml(shown)}</span></span>`,
-		title: parameter.definitionRef,
-		level,
-		posinset,
-		setsize,
-		range: parameter.range,
-		meta: [
-			parameter.hexValue
-				? `<span class="hex" title="${escapeAttr('(= ' + parameter.hexValue + ')')}">(= ${escapeHtml(
-						parameter.hexValue
-					)})</span>`
-				: '',
-			...suffixSpans(parameter),
-		].filter(Boolean),
-		children: [],
-	});
-}
-
-function referenceItem(
-	ctx: Ctx,
-	reference: ReferenceNode,
-	level: number,
-	posinset: number,
-	setsize: number
-): string {
-	const target = reference.targetPath ?? reference.targetRawPath ?? '';
-	const rawTarget = reference.targetRawPath ?? target;
-	const context = reference.instance && reference.contextPaths.length > 0
-		? `<span class="context" title="${escapeAttr(
-				'context ' + reference.contextPaths.join(', ')
-			)}"><span class="keyword">context</span> ${escapeHtml(reference.contextPaths.join(', '))}</span>`
-		: '';
-	return item(ctx, {
-		id: ctx.index.idOf(reference) ?? '',
-		kind: 'reference',
-		label: reference.name,
-		definitionRef: reference.definitionRef,
-		value: target,
-		target: rawTarget,
-		// The target is the row's follow affordance — not the whole row, which selects
-		// now (UX child design §2, §5).
-		valueHtml: `<span class="value target" data-follow="true" title="${escapeAttr(
-			'Follow to the target: = ' + target
-		)}"><span class="punct">=</span> <span class="value-text">${escapeHtml(target)}</span></span>`,
-		title: reference.definitionRef,
-		level,
-		posinset,
-		setsize,
-		range: reference.range,
-		meta: [context, ...suffixSpans(reference)].filter(Boolean),
-		children: [],
-	});
-}
-
-/** Conditions and annotations, in the legacy order: syscond, variant conditions, annotations. */
-function suffixSpans(node: Suffixes): string[] {
-	const spans: string[] = [];
-	if (node.syscond) {
-		spans.push(
-			`<span class="condition" title="${escapeAttr('[' + node.syscond + ']')}">[${escapeHtml(
-				node.syscond
-			)}]</span>`
-		);
-	}
-	if (node.postBuildVariants && node.postBuildVariants.length > 0) {
-		const text = node.postBuildVariants.map((v) => `${v.criterion} ${v.operator} ${v.value}`).join(' && ');
-		spans.push(
-			`<span class="condition" title="${escapeAttr('<' + text + '>')}">&lt;${escapeHtml(text)}&gt;</span>`
-		);
-	}
-	for (const annotation of node.annotations ?? []) {
-		const label = annotation.label ? `[${annotation.label}] ` : '';
-		const text = annotation.text ?? '';
-		if (label === '' && text === '') {
-			continue;
-		}
-		spans.push(
-			`<span class="annotation" title="${escapeAttr(label + text)}">${escapeHtml(label + text)}</span>`
-		);
-	}
-	return spans;
-}
-
-/** `/A/B/C` → `A.B.C`, the legacy `\structify`. */
-function dotted(path: string): string {
-	const parts = path.split('/');
-	return parts.length <= 1 ? path : parts.slice(1).join('.');
-}
-
-/** `VARIANT-PRE-COMPILE` → `VariantPreCompile`, the legacy `\camelize`. */
-function camelize(value: string): string {
-	return value
-		.split('-')
-		.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-		.join('');
+	return meta.join('');
 }
 
 /** Text-content escaping; quotes are safe in text. */
@@ -427,16 +240,9 @@ function escapeHtml(text: string): string {
 	return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** Attribute-value escaping, which must also cover the quote. */
-function escapeAttr(text: string): string {
-	return escapeHtml(text).replace(/"/g, '&quot;');
-}
-
 /* ---------------------------------------------------------------------------------
- * Re-render state (UX child design §4.1). Serialized into the page with `toString()`
- * so the webview and the tests run the same code, and so the ordering — capture the
- * scroll *before* the `innerHTML` swap, restore it *after* everything else — is
- * asserted rather than assumed.
+ * Re-scan state (design §8). Serialized into the page with `toString()` so the
+ * webview and the tests run the same code.
  * ------------------------------------------------------------------------------- */
 
 /** Drops the ids that no longer exist, leaving the rest of the set alone. */
@@ -459,9 +265,9 @@ export function collapsedIdsFor(items: readonly { id: string; hasChildren: boole
 }
 
 /**
- * The index a movement key moves focus to, or `undefined` when the key is not a move
- * (UX child design §8). `page` is how many rows fit in the viewport, so PageUp/PageDown
- * move by a screen rather than a fixed count.
+ * The index a movement key moves focus to, or `undefined` when the key is not a
+ * move (UX child design §8). `page` is how many rows fit in the viewport, so
+ * PageUp/PageDown move by a screen rather than a fixed count.
  */
 export function moveTarget(key: string, from: number, count: number, page: number): number | undefined {
 	if (count === 0) {
@@ -488,31 +294,14 @@ export function moveTarget(key: string, from: number, count: number, page: numbe
 	return undefined;
 }
 
-/** The view operations a re-render needs, so the sequence is testable without a DOM. */
-export interface ReRenderHooks {
-	readScrollTop(): number;
-	writeHtml(tree: string): void;
-	pruneCollapsed(): void;
-	applyCollapsed(): void;
-	applyFilter(): void;
-	prepareFocus(): void;
-	writeScrollTop(scrollTop: number): void;
-}
-
-/**
- * The re-render sequence for one `model` message. The scroll is read before the swap and
- * written back after every other step, so neither the swap nor `scrollIntoView` in
- * `prepareFocus` can move the viewport while the user is typing in the XML.
- */
-export function reRenderTree(tree: string, hooks: ReRenderHooks): void {
-	const scrollTop = hooks.readScrollTop();
-	hooks.writeHtml(tree);
-	hooks.pruneCollapsed();
-	hooks.applyCollapsed();
-	hooks.applyFilter();
-	hooks.prepareFocus();
-	hooks.writeScrollTop(scrollTop);
-}
+const DOCUMENT_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
+	const level = at + 1;
+	// The row itself stays anchored at the gutter edge so its tint/rail cover the
+	// gutter; depth is padding, not a parent margin (the flat list has no wrappers).
+	const indent = level === 1 ? 'var(--gut)' : `calc(var(--gut) + var(--indent) * ${level - 1})`;
+	const guideWidth = level === 1 ? '0' : `calc(var(--indent) * ${level - 1} + 1px)`;
+	return `body[data-view="document"] .row[data-level="${level}"] { margin-left: calc(-1 * var(--gut)); padding-left: ${indent}; background-size: ${guideWidth} 100%; }`;
+}).join('\n');
 
 const STYLE = `
 html, body {
@@ -534,6 +323,8 @@ body {
 body[data-view] {
 	--ecuc-fs: var(--vscode-editor-font-size, 13px);
 	--ecuc-lh: calc(var(--ecuc-fs) * 1.55);
+	--tree-row-h: calc(var(--ecuc-lh) + 5px);
+	--tree-row-h-meta: calc(var(--ecuc-lh) * 2 + 5px);
 	--tok-keyword: var(--vscode-debugTokenExpression-boolean, var(--vscode-editor-foreground));
 	--tok-string: var(--vscode-debugTokenExpression-string, var(--vscode-editor-foreground));
 	--tok-number: var(--vscode-debugTokenExpression-number, var(--vscode-editor-foreground));
@@ -730,6 +521,9 @@ body[data-view] {
 	min-width: 0;
 	overflow: auto;
 	scroll-padding-left: 9ch;
+	/* The window swaps spacer heights; browser scroll anchoring would fight the
+	 * virtual range and snap the viewport back to the top. */
+	overflow-anchor: none;
 }
 #inspector {
 	flex: 0 0 clamp(260px, 30%, 340px);
@@ -741,6 +535,9 @@ body[data-view] {
 }
 #inspector[hidden] {
 	display: none;
+}
+.document {
+	position: relative;
 }
 .meta {
 	padding: 6px 10px;
@@ -764,6 +561,24 @@ body[data-view] {
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 }
+#tree[data-empty="true"] {
+	padding-top: 0;
+	padding-bottom: 0;
+}
+#tree-window {
+	display: flow-root;
+}
+.v-spacer {
+	pointer-events: none;
+}
+#tree-measure {
+	position: absolute;
+	left: -10000px;
+	top: 0;
+	width: 240px;
+	visibility: hidden;
+	pointer-events: none;
+}
 .node {
 	outline: none;
 }
@@ -773,10 +588,21 @@ body[data-view] {
 	column-gap: 6px;
 	row-gap: 1px;
 	align-items: center;
+	box-sizing: border-box;
 	padding: 2px 8px 2px 4px;
+	position: relative;
 }
 .row:hover {
-	background: var(--hover-bg);
+	background-color: var(--hover-bg);
+}
+body[data-view="tree"] .node {
+	height: var(--tree-row-h);
+}
+body[data-view="tree"] .node.has-meta {
+	height: var(--tree-row-h-meta);
+}
+body[data-view="tree"] .row {
+	height: 100%;
 }
 .twisty {
 	grid-column: 1;
@@ -885,27 +711,20 @@ body[data-view] {
 	box-shadow: inset 2px 0 0 var(--rail);
 }
 .node[data-selected="true"] > .row {
-	background: var(--sel-bg);
+	background-color: var(--sel-bg);
 	box-shadow: inset 2px 0 0 var(--rail);
 }
 #tree:focus-within .node[data-selected="true"] > .row {
-	background: var(--sel-bg-focus);
+	background-color: var(--sel-bg-focus);
 	box-shadow: inset 2px 0 0 var(--rail);
 }
 /* Selection never recolours syntax; the tint, active line number and rail carry the state. */
-.children {
-	margin-left: 14px;
-	border-left: 1px solid var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, #80808040));
-}
-.node[aria-expanded="false"] > .children {
-	display: none;
-}
 .node.flash > .row {
 	animation: ecuc-flash 1s ease-out;
 }
 @keyframes ecuc-flash {
-	from { background: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground)); }
-	to { background: transparent; }
+	from { background-color: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground)); }
+	to { background-color: transparent; }
 }
 .short {
 	color: var(--tok-string);
@@ -1099,51 +918,38 @@ body[data-view="document"] .meta .number {
 	color: var(--tok-number);
 }
 body[data-view="document"] .row {
+	--indent-guide: var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, #80808040));
 	display: flex;
 	flex-wrap: nowrap;
 	gap: 1ch;
 	align-items: baseline;
-	padding: 0;
+	height: var(--ecuc-lh);
 	margin-left: calc(-1 * var(--gut));
-	padding-left: var(--gut);
+	padding: 0 0 0 var(--gut);
 	border: 0;
-	background: transparent;
+	background-color: transparent;
+	/* Indent guides: one hairline every 4ch from the text edge. */
+	background-image: repeating-linear-gradient(
+		to right,
+		transparent 0,
+		transparent calc(var(--indent) - 1px),
+		var(--indent-guide) calc(var(--indent) - 1px),
+		var(--indent-guide) var(--indent)
+	);
+	background-origin: border-box;
+	background-position: var(--gut) 0;
+	background-repeat: no-repeat;
+	background-size: 0 100%;
 }
-body[data-view="document"] .children .row {
-	margin-left: calc(-1 * (var(--gut) + var(--indent)));
-	padding-left: calc(var(--gut) + var(--indent));
+${DOCUMENT_LEVEL_RULES}
+body[data-view="document"] .node[data-gap="true"] {
+	padding-top: var(--ecuc-lh);
 }
-body[data-view="document"] .children .children .row {
-	margin-left: calc(-1 * (var(--gut) + var(--indent) * 2));
-	padding-left: calc(var(--gut) + var(--indent) * 2);
+body[data-view="document"] .brace {
+	height: var(--ecuc-lh);
 }
-body[data-view="document"] .children .children .children .row {
-	margin-left: calc(-1 * (var(--gut) + var(--indent) * 3));
-	padding-left: calc(var(--gut) + var(--indent) * 3);
-}
-body[data-view="document"] .children .children .children .children .row {
-	margin-left: calc(-1 * (var(--gut) + var(--indent) * 4));
-	padding-left: calc(var(--gut) + var(--indent) * 4);
-}
-body[data-view="document"] .children .children .children .children .children .row {
-	margin-left: calc(-1 * (var(--gut) + var(--indent) * 5));
-	padding-left: calc(var(--gut) + var(--indent) * 5);
-}
-body[data-view="document"] .children .children .children .children .children .children .row {
-	margin-left: calc(-1 * (var(--gut) + var(--indent) * 6));
-	padding-left: calc(var(--gut) + var(--indent) * 6);
-}
-body[data-view="document"] .children .children .children .children .children .children .children .row {
-	margin-left: calc(-1 * (var(--gut) + var(--indent) * 7));
-	padding-left: calc(var(--gut) + var(--indent) * 7);
-}
-body[data-view="document"] .children .children .children .children .children .children .children .children .row {
-	margin-left: calc(-1 * (var(--gut) + var(--indent) * 8));
-	padding-left: calc(var(--gut) + var(--indent) * 8);
-}
-body[data-view="document"] .children .children .children .children .children .children .children .children .children .row {
-	margin-left: calc(-1 * (var(--gut) + var(--indent) * 9));
-	padding-left: calc(var(--gut) + var(--indent) * 9);
+body[data-view="document"] .brace .row {
+	color: var(--tok-punct);
 }
 body[data-view="document"] .row::before {
 	content: attr(data-line);
@@ -1160,7 +966,7 @@ body[data-view="document"] .node:focus-visible > .row::before {
 	color: var(--vscode-editorLineNumber-activeForeground, var(--tok-keyword));
 }
 body[data-view="document"] .node:hover > .row {
-	background: var(--hover-bg);
+	background-color: var(--hover-bg);
 }
 body[data-view="document"] .row.k-module,
 body[data-view="document"] .row.k-container,
@@ -1223,7 +1029,7 @@ body[data-view="document"] .value {
 	white-space: pre;
 }
 body[data-view="document"] .node[data-kind="parameter"] > .row > .value:hover {
-	background: var(--vscode-toolbar-hoverBackground, var(--hover-bg));
+	background-color: var(--vscode-toolbar-hoverBackground, var(--hover-bg));
 	border-radius: 2px;
 	cursor: text;
 }
@@ -1283,31 +1089,12 @@ body[data-view="document"] .row.k-module .label::before {
 	content: "module ";
 	color: var(--tok-keyword);
 }
-body[data-view="document"] .children {
-	margin-left: var(--indent);
-}
-body[data-view="document"] .children::before,
-body[data-view="document"] .children::after {
-	display: block;
-	margin-left: calc(-1 * var(--indent));
-	color: var(--tok-punct);
-	white-space: pre;
-}
-body[data-view="document"] .children::before {
-	content: "{";
-}
-body[data-view="document"] .children::after {
-	content: "}";
-}
-body[data-view="document"] #tree > .node + .node {
-	margin-top: var(--ecuc-lh);
-}
 body[data-view="document"] .node[data-selected="true"] > .row {
-	background: var(--sel-bg);
+	background-color: var(--sel-bg);
 	box-shadow: inset 2px 0 0 var(--rail);
 }
 body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
-	background: var(--sel-bg-focus);
+	background-color: var(--sel-bg-focus);
 	box-shadow: inset 2px 0 0 var(--rail);
 }
 body[data-view="document"] .node:focus-visible > .row {
@@ -1340,7 +1127,7 @@ body[data-view="document"] .empty .tool {
 	margin-left: 1ch;
 	font-style: normal;
 }
-body[data-view="document"] #tree:not(:has([role="treeitem"]:not([style*="display: none"]))) {
+body[data-view="document"] #tree[data-empty="true"] {
 	padding-top: 0;
 	padding-bottom: 0;
 }
@@ -1450,22 +1237,27 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 `;
 
 /**
- * Keyboard traversal, activation, collapse and the message bridge. There is no `ready`
- * message: the initial model is already in the HTML, and a re-scan swaps the region
- * whole, so a first-paint push would only be a second update path (design §3). `vscode`
- * is declared once above, because `acquireVsCodeApi` may only be called once per page.
- *
- * Interaction model (UX child design §2): a click selects, the twisty toggles, a double
- * click or Ctrl/Alt+Enter reveals, Enter is toggle-or-reveal, Space selects only. The
- * value widget's handlers are registered before these and claim their events with
- * `stopImmediatePropagation`, so nothing here runs for an interaction it owns.
+ * The page: the row store, flatten/collapse/filter, the virtual window, row
+ * building, selection/focus, the inspector and the message bridge. The value
+ * widget's script is emitted before this one and its document listeners claim
+ * their events first; nothing here runs for an interaction it owns.
  */
 const TREE_SCRIPT = `
 const main = document.getElementById('main');
+const tree = document.getElementById('tree');
+const treeWindow = document.getElementById('tree-window');
+const virtualStyle = document.getElementById('virtual-style');
 const notice = document.getElementById('notice');
 const inspector = document.getElementById('inspector');
 const detailsToggle = document.getElementById('details-toggle');
 const viewToggle = document.getElementById('view-toggle');
+const filterInput = document.getElementById('filter');
+const countLabel = document.getElementById('count');
+const clearButton = document.getElementById('filter-clear');
+const empty = document.getElementById('empty');
+const emptyText = document.getElementById('empty-text');
+const svgNamespace = 'http://www.w3.org/2000/svg';
+const bufferRows = 10;
 const savedState = vscode.getState();
 // Only the object shape this page writes is accepted; anything else starts clean.
 let viewState =
@@ -1476,57 +1268,870 @@ if (viewState.view !== 'tree' && viewState.view !== 'document') {
 if (typeof viewState.inspectorHidden !== 'boolean') {
 	viewState.inspectorHidden = true;
 }
-let selectedId;
-let collapsed = new Set();
-let typeAhead = { text: '', at: 0 };
 
 ${pruneCollapsed.toString()}
 ${toggleCollapsed.toString()}
 ${collapsedIdsFor.toString()}
 ${moveTarget.toString()}
-${reRenderTree.toString()}
+${virtualScrollScript()}
+${matchRanges.toString()}
+${buildFilterIndex.toString()}
+${filterRows.toString()}
+${flattenRows.toString()}
+${createFilterDebouncer.toString()}
+${inspectorFields.toString()}
+${resolveFocusId.toString()}
+${reconcileRowState.toString()}
 
-function allItems() {
-	return Array.from(document.querySelectorAll('#tree [role="treeitem"]'));
+let rows = [];
+let rowById = new Map();
+let displayRows = [];
+let displayIndexById = new Map();
+let visibleNodeIds = [];
+let expandedIds = new Set();
+let collapsed = new Set();
+let selectedId;
+let focusId;
+let filterQuery = '';
+let filterResult = null;
+let filterIndex = { haystacks: [] };
+let filterDebouncer = createFilterDebouncer(120);
+let windowRange = [0, 0];
+let renderedDataVersion = -1;
+let dataVersion = 0;
+let renderedById = new Map();
+let heights = { document: 20, treeShort: 20, treeTall: 42 };
+let heightFn = function () { return heights.document; };
+let heightVersion = 0;
+let scrollFrame = 0;
+let typeAhead = { text: '', at: 0 };
+
+function readInitialRows() {
+	const script = document.getElementById('ecuc-rows');
+	if (!script) {
+		return { rows: [], digits: 1 };
+	}
+	try {
+		return JSON.parse(script.textContent || '{}');
+	} catch (error) {
+		return { rows: [], digits: 1 };
+	}
 }
 
-function treeItems() {
-	return allItems().filter((el) => el.offsetParent !== null);
+function indexRows() {
+	rowById = new Map();
+	for (let at = 0; at < rows.length; at++) {
+		rowById.set(rows[at].id, rows[at]);
+	}
+	filterIndex = buildFilterIndex(rows);
 }
 
-function itemHasChildren(item) {
-	return item.querySelector(':scope > [role="group"]') !== null;
+function refreshFilter() {
+	const query = filterQuery.trim();
+	filterResult = query === '' ? null : filterRows(rows, query, filterIndex);
 }
 
-function focusItem(target) {
-	if (!target) {
+function buildHeightFn() {
+	if (viewState.view === 'document') {
+		const base = heights.document;
+		heightFn = function (index) {
+			const flat = displayRows[index];
+			const row = flat && flat.type === 'node' ? rows[flat.rowIndex] : undefined;
+			const gap = row && row.kind === 'module' && index > 0;
+			return base + (gap ? base : 0);
+		};
+	} else {
+		const short = heights.treeShort;
+		const tall = heights.treeTall;
+		heightFn = function (index) {
+			const flat = displayRows[index];
+			const row = flat && flat.type === 'node' ? rows[flat.rowIndex] : undefined;
+			return row && row.meta.length > 0 ? tall : short;
+		};
+	}
+	heightVersion++;
+}
+
+function measureHeights() {
+	const measure = document.getElementById('tree-measure');
+	if (!measure) {
+		buildHeightFn();
 		return;
 	}
-	for (const item of allItems()) {
-		item.tabIndex = -1;
-	}
-	target.tabIndex = 0;
-	target.focus();
-	target.scrollIntoView({ block: 'center' });
+	const read = function (selector, fallback) {
+		const element = measure.querySelector(selector);
+		if (!element) {
+			return fallback;
+		}
+		const height = element.getBoundingClientRect().height;
+		return height > 0 ? height : fallback;
+	};
+	heights = {
+		document: read('.probe-doc > .row', 20),
+		treeShort: read('.probe-tree-short > .row', 20),
+		treeTall: read('.probe-tree-tall > .row', 42)
+	};
+	buildHeightFn();
 }
 
-function setSelection(nodeId) {
-	selectedId = nodeId;
-	for (const item of allItems()) {
-		const on = item.dataset.nodeId === nodeId;
-		item.setAttribute('aria-selected', on ? 'true' : 'false');
-		if (on) {
-			item.dataset.selected = 'true';
+function rebuildDisplay() {
+	const active = filterQuery.trim() !== '';
+	displayRows = flattenRows(rows, {
+		collapsed: collapsed,
+		visible: active && filterResult ? filterResult.visible : undefined,
+		filterActive: active,
+		braces: viewState.view === 'document'
+	});
+	displayIndexById = new Map();
+	visibleNodeIds = [];
+	expandedIds = new Set();
+	for (let at = 0; at < displayRows.length; at++) {
+		const flat = displayRows[at];
+		if (flat.type === 'node') {
+			const row = rows[flat.rowIndex];
+			displayIndexById.set(row.id, at);
+			visibleNodeIds.push(row.id);
+			// Expansion follows the displayed list: a row is expanded only when the
+			// next displayed entry is its child/brace. This matches flattenRows,
+			// including the filter force-expand of an ancestor with a visible
+			// descendant, and never reports an expanded row with no children.
+			const next = displayRows[at + 1];
+			const descendantShown =
+				!!next &&
+				((next.type === 'brace-open' && next.rowIndex === flat.rowIndex) ||
+					(next.type === 'node' && next.level > flat.level));
+			if (row.hasChildren && descendantShown) {
+				expandedIds.add(row.id);
+			}
+		}
+	}
+	buildHeightFn();
+	tree.dataset.empty = displayRows.length === 0 ? 'true' : 'false';
+}
+
+function setRows(nextRows, nextDigits, nextSelectedId) {
+	const incoming = Array.isArray(nextRows) ? nextRows : [];
+	const state = reconcileRowState(
+		{
+			selectedId: nextSelectedId !== undefined ? nextSelectedId : selectedId,
+			collapsed: Array.from(collapsed),
+			query: filterQuery,
+			view: viewState.view
+		},
+		incoming
+	);
+	rows = incoming;
+	collapsed = new Set(state.collapsed);
+	selectedId = state.selectedId;
+	filterQuery = state.query;
+	indexRows();
+	if (focusId !== undefined && !rowById.has(focusId)) {
+		focusId = selectedId;
+	}
+	refreshFilter();
+	rebuildDisplay();
+	tree.dataset.lnDigits = String(Number.isFinite(nextDigits) && nextDigits > 0 ? nextDigits : 1);
+	measureHeights();
+	dataVersion++;
+}
+
+function treeWindowTop() {
+	// The rows region starts at #tree's content edge, before the top spacer. Using
+	// the window element's own position would move with that spacer, so a window
+	// update would look like a scroll back to the top; this offset is stable.
+	const mainRect = main.getBoundingClientRect();
+	const treeRect = tree.getBoundingClientRect();
+	const padding = parseFloat(getComputedStyle(tree).paddingTop) || 0;
+	return treeRect.top - mainRect.top + main.scrollTop + padding;
+}
+
+function virtualState() {
+	return {
+		rowCount: displayRows.length,
+		rowHeight: heightFn,
+		containerHeight: main.clientHeight,
+		scrollTop: Math.max(0, main.scrollTop - treeWindowTop()),
+		bufferSize: bufferRows,
+		heightVersion: heightVersion
+	};
+}
+
+function setSpacers(top, bottom) {
+	virtualStyle.textContent =
+		'#tree-top{height:' + Math.max(0, top) + 'px}' +
+		'#tree-bottom{height:' + Math.max(0, bottom) + 'px}';
+}
+
+function svgIcon(kind) {
+	const svg = document.createElementNS(svgNamespace, 'svg');
+	svg.setAttribute('viewBox', '0 0 16 16');
+	svg.setAttribute('width', '10');
+	svg.setAttribute('height', '10');
+	svg.setAttribute('aria-hidden', 'true');
+	svg.setAttribute('class', 'g-' + kind);
+	if (kind === 'module') {
+		svg.setAttribute('fill', 'currentColor');
+		const rect = document.createElementNS(svgNamespace, 'rect');
+		rect.setAttribute('x', '3');
+		rect.setAttribute('y', '3');
+		rect.setAttribute('width', '10');
+		rect.setAttribute('height', '10');
+		svg.appendChild(rect);
+	} else if (kind === 'container') {
+		svg.setAttribute('fill', 'none');
+		svg.setAttribute('stroke', 'currentColor');
+		svg.setAttribute('stroke-width', '1.5');
+		const rect = document.createElementNS(svgNamespace, 'rect');
+		rect.setAttribute('x', '3.5');
+		rect.setAttribute('y', '3.5');
+		rect.setAttribute('width', '9');
+		rect.setAttribute('height', '9');
+		svg.appendChild(rect);
+	} else if (kind === 'parameter') {
+		svg.setAttribute('fill', 'currentColor');
+		const circle = document.createElementNS(svgNamespace, 'circle');
+		circle.setAttribute('cx', '8');
+		circle.setAttribute('cy', '8');
+		circle.setAttribute('r', '3');
+		svg.appendChild(circle);
+	} else if (kind === 'reference') {
+		svg.setAttribute('fill', 'none');
+		svg.setAttribute('stroke', 'currentColor');
+		svg.setAttribute('stroke-width', '1.5');
+		const path = document.createElementNS(svgNamespace, 'path');
+		path.setAttribute('d', 'M2.5 8h8M8 5l3 3-3 3');
+		svg.appendChild(path);
+	} else {
+		svg.setAttribute('fill', 'currentColor');
+		const path = document.createElementNS(svgNamespace, 'path');
+		path.setAttribute('d', 'M6 4l4 4-4 4z');
+		svg.appendChild(path);
+	}
+	return svg;
+}
+
+function twistySpan() {
+	const span = document.createElement('span');
+	span.className = 'twisty';
+	span.setAttribute('aria-hidden', 'true');
+	span.appendChild(svgIcon('twisty'));
+	return span;
+}
+
+function spacerSpan() {
+	const span = document.createElement('span');
+	span.className = 'spacer';
+	span.setAttribute('aria-hidden', 'true');
+	return span;
+}
+
+function glyphSpan(kind) {
+	const span = document.createElement('span');
+	span.className = 'glyph';
+	span.setAttribute('aria-hidden', 'true');
+	span.appendChild(svgIcon(kind));
+	return span;
+}
+
+function appendHighlighted(parent, text, query) {
+	const needle = query === undefined ? filterQuery : query;
+	const ranges = needle.trim() === '' ? [] : matchRanges(text, needle);
+	if (ranges.length === 0) {
+		parent.appendChild(document.createTextNode(text));
+		return;
+	}
+	let at = 0;
+	for (const range of ranges) {
+		if (range.start > at) {
+			parent.appendChild(document.createTextNode(text.slice(at, range.start)));
+		}
+		const mark = document.createElement('mark');
+		mark.textContent = text.slice(range.start, range.end);
+		parent.appendChild(mark);
+		at = range.end;
+	}
+	if (at < text.length) {
+		parent.appendChild(document.createTextNode(text.slice(at)));
+	}
+}
+
+function valueSpan(row) {
+	const value = document.createElement('span');
+	value.className = row.kind === 'reference' ? 'value target' : 'value';
+	if (row.kind === 'parameter') {
+		value.dataset.valueKind = row.valueKind || 'textual';
+		value.title = 'Click to edit, or press F2: = ' + (row.shownValue || '');
+	} else {
+		value.dataset.follow = 'true';
+		value.title = 'Follow to the target: = ' + (row.shownValue || '');
+	}
+	const punct = document.createElement('span');
+	punct.className = 'punct';
+	punct.textContent = '=';
+	value.appendChild(punct);
+	value.appendChild(document.createTextNode(' '));
+	const text = document.createElement('span');
+	text.className = 'value-text';
+	appendHighlighted(text, row.shownValue || '');
+	value.appendChild(text);
+	return value;
+}
+
+function metaSpan(row) {
+	const meta = document.createElement('span');
+	meta.className = 'row-meta';
+	for (const part of row.meta) {
+		const span = document.createElement('span');
+		span.className = part.cls;
+		span.title = part.title;
+		if (part.cls === 'context' && part.text.indexOf('context ') === 0) {
+			const keyword = document.createElement('span');
+			keyword.className = 'keyword';
+			keyword.textContent = 'context';
+			span.appendChild(keyword);
+			span.appendChild(document.createTextNode(' ' + part.text.slice('context '.length)));
+		} else if (part.cls === 'short') {
+			appendHighlighted(span, part.text);
 		} else {
-			delete item.dataset.selected;
+			span.textContent = part.text;
+		}
+		meta.appendChild(span);
+	}
+	return meta;
+}
+
+function buildNodeRow(row, displayIndex) {
+	const node = document.createElement('div');
+	node.className = row.meta.length > 0 ? 'node has-meta' : 'node';
+	node.setAttribute('role', 'treeitem');
+	node.setAttribute('aria-level', String(row.level));
+	node.setAttribute('aria-posinset', String(row.posinset));
+	node.setAttribute('aria-setsize', String(row.setsize));
+	node.setAttribute('aria-selected', row.id === selectedId ? 'true' : 'false');
+	if (row.hasChildren) {
+		node.setAttribute('aria-expanded', expandedIds.has(row.id) ? 'true' : 'false');
+	}
+	node.tabIndex = -1;
+	node.dataset.nodeId = row.id;
+	node.dataset.kind = row.kind;
+	node.dataset.definitionRef = row.definitionRef;
+	node.dataset.shortName = row.shortName || '';
+	if (row.kind === 'parameter') {
+		node.dataset.value = row.value || '';
+	}
+	if (row.kind === 'reference') {
+		node.dataset.target = row.target || '';
+	}
+	if (row.sourceLine > 0) {
+		node.dataset.line = String(row.line);
+		node.dataset.column = String(row.column);
+		node.dataset.endLine = String(row.endLine);
+		node.dataset.endColumn = String(row.endColumn);
+	}
+	if (row.id === selectedId) {
+		node.dataset.selected = 'true';
+	}
+	if (viewState.view === 'document' && row.kind === 'module' && displayIndex > 0) {
+		node.dataset.gap = 'true';
+	}
+	node.title = row.title;
+
+	const rowElement = document.createElement('span');
+	rowElement.className =
+		'row k-' + row.kind + (row.shownValue !== undefined ? ' has-value' : ' no-value');
+	rowElement.dataset.level = String(row.level);
+	if (row.sourceLine > 0) {
+		rowElement.dataset.line = String(row.sourceLine);
+	}
+	rowElement.appendChild(row.hasChildren ? twistySpan() : spacerSpan());
+	rowElement.appendChild(glyphSpan(row.kind));
+	const label = document.createElement('span');
+	label.className = 'label';
+	appendHighlighted(label, row.label);
+	rowElement.appendChild(label);
+	if (row.kind === 'parameter' || row.kind === 'reference') {
+		rowElement.appendChild(valueSpan(row));
+	}
+	if (row.meta.length > 0) {
+		rowElement.appendChild(metaSpan(row));
+	}
+	node.appendChild(rowElement);
+	return node;
+}
+
+function buildBraceRow(flat) {
+	const node = document.createElement('div');
+	node.className = 'brace';
+	node.setAttribute('aria-hidden', 'true');
+	const rowElement = document.createElement('span');
+	rowElement.className = 'row brace-row';
+	rowElement.dataset.level = String(flat.level);
+	const mark = document.createElement('span');
+	mark.className = 'punct brace-mark';
+	mark.textContent = flat.type === 'brace-open' ? '{' : '}';
+	rowElement.appendChild(mark);
+	node.appendChild(rowElement);
+	return node;
+}
+
+function buildDisplayRow(flat, displayIndex) {
+	return flat.type === 'node' ? buildNodeRow(rows[flat.rowIndex], displayIndex) : buildBraceRow(flat);
+}
+
+function focusedNodeId() {
+	const active = document.activeElement;
+	if (active && active.closest) {
+		const item = active.closest('#tree [role="treeitem"]');
+		if (item) {
+			return item.dataset.nodeId;
+		}
+	}
+	return undefined;
+}
+
+function applyRoving(id) {
+	for (const [renderedId, element] of renderedById) {
+		element.tabIndex = renderedId === id ? 0 : -1;
+	}
+}
+
+function renderWindow(force) {
+	const state = virtualState();
+	const range = calcVisibleRange(state);
+	const start = range[0];
+	const end = range[1];
+	if (!force && start === windowRange[0] && end === windowRange[1] && renderedDataVersion === dataVersion) {
+		return;
+	}
+	const previousFocus = focusedNodeId();
+	windowRange = [start, end];
+	renderedDataVersion = dataVersion;
+	const total = calcTotalHeight(state);
+	setSpacers(calcRowOffset(start, state), Math.max(0, total - calcRowOffset(end, state)));
+	const fragment = document.createDocumentFragment();
+	renderedById = new Map();
+	for (let at = start; at < end; at++) {
+		const flat = displayRows[at];
+		if (!flat) {
+			continue;
+		}
+		const element = buildDisplayRow(flat, at);
+		if (flat.type === 'node') {
+			renderedById.set(rows[flat.rowIndex].id, element);
+		}
+		fragment.appendChild(element);
+	}
+	const editing = typeof detachValueEdit === 'function' ? detachValueEdit() : null;
+	treeWindow.textContent = '';
+	treeWindow.appendChild(fragment);
+	const rovingId = resolveFocusId(
+		previousFocus,
+		Array.from(renderedById.keys()),
+		focusId !== undefined ? focusId : selectedId
+	);
+	applyRoving(rovingId);
+	if (previousFocus !== undefined) {
+		const element = renderedById.get(previousFocus);
+		if (element) {
+			element.focus({ preventScroll: true });
+		}
+	}
+	// A window rebuild replaces the row the inline editor lived in. Move the
+	// open editor to the rebuilt row (same id) so scrolling cannot leave a
+	// detached input that later commits a hidden value; if the row left the
+	// window, the edit is dropped with its input.
+	if (editing && typeof reattachValueEdit === 'function') {
+		const item = renderedById.get(editing.id);
+		if (item) {
+			reattachValueEdit(item, editing);
+		}
+	}
+}
+
+function expandAncestors(id) {
+	let changed = false;
+	let current = rowById.get(id);
+	while (current && current.parentId !== null) {
+		if (collapsed.delete(current.parentId)) {
+			changed = true;
+		}
+		current = rowById.get(current.parentId);
+	}
+	return changed;
+}
+
+function ensureVisible(displayIndex) {
+	const state = virtualState();
+	const offset = calcRowOffset(displayIndex, state);
+	const height = heightFn(displayIndex);
+	const top = treeWindowTop();
+	const viewTop = main.scrollTop - top;
+	const viewBottom = viewTop + main.clientHeight;
+	if (offset < viewTop) {
+		main.scrollTop = top + offset;
+	} else if (offset + height > viewBottom) {
+		main.scrollTop = top + offset + height - main.clientHeight;
+	}
+}
+
+function captureWindowAnchor() {
+	if (displayRows.length === 0) {
+		return null;
+	}
+	const state = virtualState();
+	const scroll = Math.max(0, main.scrollTop - treeWindowTop());
+	for (let at = windowRange[0]; at < windowRange[1]; at++) {
+		const flat = displayRows[at];
+		if (flat && flat.type === 'node') {
+			return { id: rows[flat.rowIndex].id, delta: scroll - calcRowOffset(at, state) };
+		}
+	}
+	return null;
+}
+
+function restoreWindowAnchor(anchor) {
+	if (!anchor) {
+		renderWindow(true);
+		return;
+	}
+	const index = displayIndexById.get(anchor.id);
+	if (index === undefined) {
+		renderWindow(true);
+		return;
+	}
+	const state = virtualState();
+	main.scrollTop = treeWindowTop() + Math.max(0, calcRowOffset(index, state) + anchor.delta);
+	renderWindow(true);
+}
+
+function focusRow(id) {
+	const displayIndex = displayIndexById.get(id);
+	if (displayIndex === undefined) {
+		return false;
+	}
+	focusId = id;
+	ensureVisible(displayIndex);
+	renderWindow(true);
+	const element = renderedById.get(id);
+	if (!element) {
+		return false;
+	}
+	applyRoving(id);
+	element.focus({ preventScroll: true });
+	return true;
+}
+
+/**
+ * The value widget's focus seam. A rendered element is focused in place — the widget
+ * has already inserted its input into that row, so a re-render here would detach it —
+ * and an offscreen id is rendered (with its ancestors expanded) first.
+ */
+function focusItem(item) {
+	if (!item) {
+		return;
+	}
+	const id = item.dataset ? item.dataset.nodeId : undefined;
+	if (!id) {
+		item.focus({ preventScroll: true });
+		return;
+	}
+	focusId = id;
+	if (renderedById.get(id) === item) {
+		applyRoving(id);
+		item.focus({ preventScroll: true });
+		return;
+	}
+	focusRow(id);
+}
+
+function setSelection(id) {
+	selectedId = id;
+	for (const [renderedId, element] of renderedById) {
+		const on = renderedId === id;
+		element.setAttribute('aria-selected', on ? 'true' : 'false');
+		if (on) {
+			element.dataset.selected = 'true';
+		} else {
+			delete element.dataset.selected;
 		}
 	}
 	updateInspector();
 }
 
-function textOf(parent, selector) {
-	const element = parent.querySelector(selector);
-	return element ? element.textContent : '';
+function selectItem(item) {
+	if (!item) {
+		return;
+	}
+	const id = item.dataset.nodeId;
+	if (!id) {
+		return;
+	}
+	focusId = id;
+	applyRoving(id);
+	item.focus({ preventScroll: true });
+	setSelection(id);
+	vscode.postMessage({ type: 'select', nodeId: id });
+}
+
+function revealItem(item) {
+	const id = typeof item === 'string' ? item : item && item.dataset ? item.dataset.nodeId : undefined;
+	if (id) {
+		vscode.postMessage({ type: 'reveal', nodeId: id });
+	}
+}
+
+function followItem(item) {
+	const id = typeof item === 'string' ? item : item && item.dataset ? item.dataset.nodeId : undefined;
+	if (id) {
+		vscode.postMessage({ type: 'follow', nodeId: id });
+	}
+}
+
+function flipCollapsed(id, keepFocusId) {
+	const row = rowById.get(id);
+	if (!row || !row.hasChildren) {
+		return;
+	}
+	collapsed = new Set(toggleCollapsed(Array.from(collapsed), id, true));
+	rebuildDisplay();
+	renderWindow(true);
+	if (keepFocusId && displayIndexById.has(keepFocusId)) {
+		focusId = keepFocusId;
+		const element = renderedById.get(keepFocusId);
+		if (element) {
+			applyRoving(keepFocusId);
+			element.focus({ preventScroll: true });
+		}
+	}
+}
+
+function prepareFocus() {
+	if (selectedId !== undefined && rowById.has(selectedId)) {
+		// A host selection can point inside a collapsed subtree; expand its
+		// ancestors before deciding whether the row is displayable, then let the
+		// refreshed spacers take the new total height before scrolling to it.
+		if (expandAncestors(selectedId)) {
+			rebuildDisplay();
+			renderWindow(true);
+		}
+		if (displayIndexById.has(selectedId)) {
+			focusRow(selectedId);
+			return;
+		}
+	}
+	const first = visibleNodeIds.length > 0 ? visibleNodeIds[0] : undefined;
+	if (first !== undefined) {
+		focusId = first;
+		const element = renderedById.get(first);
+		if (element) {
+			applyRoving(first);
+		}
+	}
+}
+
+function typeAheadJump(character) {
+	const now = Date.now();
+	typeAhead.text = (now - typeAhead.at > 2000 ? '' : typeAhead.text) + character.toLowerCase();
+	typeAhead.at = now;
+	const start = focusId !== undefined ? visibleNodeIds.indexOf(focusId) : -1;
+	for (let step = 1; step <= visibleNodeIds.length; step++) {
+		const id = visibleNodeIds[(start + step + visibleNodeIds.length) % visibleNodeIds.length];
+		const row = rowById.get(id);
+		if (row && row.label.toLowerCase().indexOf(typeAhead.text) === 0) {
+			focusRow(id);
+			return;
+		}
+	}
+}
+
+function onRowClick(event) {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	if (event.target.closest('#empty-clear')) {
+		clearFilter(true);
+		return;
+	}
+	const item = event.target.closest('#tree [role="treeitem"]');
+	if (!item) {
+		return;
+	}
+	// One interaction, one effect: the twisty toggles without moving the selection,
+	// the target follows, everything else selects.
+	if (event.target.closest('.twisty')) {
+		flipCollapsed(item.dataset.nodeId);
+		return;
+	}
+	if (event.target.closest('[data-follow]')) {
+		followItem(item);
+		return;
+	}
+	selectItem(item);
+}
+
+function onRowDoubleClick(event) {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	const item = event.target.closest('#tree [role="treeitem"]');
+	if (!item || event.target.closest('.twisty') || event.target.closest('[data-follow]')) {
+		return;
+	}
+	revealItem(item);
+}
+
+function onTreeKeydown(event) {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	const item = event.target.closest('#tree [role="treeitem"]');
+	if (!item) {
+		return;
+	}
+	const id = item.dataset.nodeId;
+	const row = rowById.get(id);
+	if (!row) {
+		return;
+	}
+	const at = visibleNodeIds.indexOf(id);
+	const displayIndex = displayIndexById.get(id);
+	const page = Math.max(1, Math.floor(main.clientHeight / Math.max(1, heightFn(displayIndex === undefined ? 0 : displayIndex))));
+	const moved = moveTarget(event.key, at, visibleNodeIds.length, page);
+	if (moved !== undefined) {
+		event.preventDefault();
+		const nextId = visibleNodeIds[moved];
+		if (nextId) {
+			focusRow(nextId);
+		}
+		return;
+	}
+	if (event.key === 'ArrowRight') {
+		event.preventDefault();
+		if (row.hasChildren && collapsed.has(id)) {
+			flipCollapsed(id, id);
+		} else if (row.hasChildren) {
+			const child = visibleNodeIds[at + 1];
+			if (child) {
+				focusRow(child);
+			}
+		}
+	} else if (event.key === 'ArrowLeft') {
+		event.preventDefault();
+		if (row.hasChildren && !collapsed.has(id)) {
+			flipCollapsed(id, id);
+		} else if (row.parentId !== null) {
+			focusRow(row.parentId);
+		}
+	} else if (event.key === 'Enter') {
+		event.preventDefault();
+		// A leaf has nothing to toggle, so revealing it is the only useful action; a
+		// container is revealed with Ctrl/Alt+Enter or a double click (design §2).
+		if (event.ctrlKey || event.altKey) {
+			revealItem(id);
+		} else if (row.hasChildren) {
+			flipCollapsed(id, id);
+		} else {
+			revealItem(id);
+		}
+	} else if (event.key === ' ') {
+		event.preventDefault();
+		selectItem(item);
+	} else if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+		typeAheadJump(event.key);
+	}
+}
+
+function collapseAll() {
+	collapsed = new Set(collapsedIdsFor(rows));
+	rebuildDisplay();
+	renderWindow(true);
+}
+
+function expandAll() {
+	collapsed = new Set();
+	rebuildDisplay();
+	renderWindow(true);
+}
+
+function focusAdjacentParameter(fromId, direction) {
+	const parameters = visibleNodeIds.filter(function (id) {
+		const row = rowById.get(id);
+		return row && row.kind === 'parameter';
+	});
+	const at = parameters.indexOf(fromId);
+	if (at === -1) {
+		return undefined;
+	}
+	const nextId = parameters[direction === 'next' ? at + 1 : at - 1];
+	if (!nextId) {
+		return undefined;
+	}
+	return focusRow(nextId) ? nextId : undefined;
+}
+
+function renderedItemFor(id) {
+	return renderedById.get(id);
+}
+
+function updateFilterUi() {
+	if (clearButton) {
+		clearButton.hidden = filterInput.value.trim() === '';
+	}
+	if (!countLabel) {
+		return;
+	}
+	const active = filterQuery.trim() !== '';
+	if (!active) {
+		countLabel.textContent = '';
+		countLabel.dataset.state = 'none';
+		if (empty) {
+			empty.hidden = true;
+		}
+		return;
+	}
+	if (!filterResult || filterResult.matchCount === 0) {
+		countLabel.textContent = 'No matches';
+		countLabel.dataset.state = 'empty';
+		if (empty) {
+			empty.hidden = false;
+		}
+		if (emptyText) {
+			emptyText.textContent = '/* No entities match "' + filterInput.value.trim() + '". */';
+		}
+		return;
+	}
+	countLabel.textContent = filterResult.visibleCount + ' of ' + rows.length;
+	countLabel.dataset.state = 'filtered';
+	if (empty) {
+		empty.hidden = true;
+	}
+}
+
+function applyFilterQuery(query) {
+	const anchor = captureWindowAnchor();
+	const scrollTop = main.scrollTop;
+	filterQuery = query;
+	refreshFilter();
+	rebuildDisplay();
+	renderWindow(true);
+	if (anchor && displayIndexById.has(anchor.id)) {
+		restoreWindowAnchor(anchor);
+	} else {
+		main.scrollTop = scrollTop;
+		renderWindow(true);
+	}
+	updateFilterUi();
+}
+
+function clearFilter(focusInput) {
+	filterDebouncer.cancel();
+	if (filterInput) {
+		filterInput.value = '';
+	}
+	applyFilterQuery('');
+	if (focusInput && filterInput) {
+		filterInput.focus();
+	}
 }
 
 function inspectorElement(tag, className, text) {
@@ -1548,81 +2153,58 @@ function inspectorRow(key, value) {
 }
 
 /**
- * Rebuilds the details panel from the selected row. It reads the model-derived data
- * attributes and the rendered secondary spans; it never re-parses the source and never
- * uses innerHTML with model text. The panel lives outside #main, so a re-scan does not
- * destroy it.
+ * Rebuilds the details panel from the selected row's data. The selected row can
+ * be outside the rendered window; nothing here queries the tree DOM.
  */
 function updateInspector() {
 	if (!inspector || inspector.hidden) {
 		return;
 	}
 	inspector.textContent = '';
-	const item = selectedId === undefined
-		? undefined
-		: allItems().find((candidate) => candidate.dataset.nodeId === selectedId);
-	if (!item) {
-		const empty = inspectorElement('div', 'inspector-empty');
-		empty.appendChild(inspectorElement('p', '', 'Select a line to see its details.'));
-		empty.appendChild(inspectorElement('p', 'inspector-hint', 'Click a line or press Space.'));
-		inspector.appendChild(empty);
-		return;
-	}
-	const row = item.querySelector(':scope > .row');
+	const row = selectedId === undefined ? undefined : rowById.get(selectedId);
 	if (!row) {
+		const emptyPanel = inspectorElement('div', 'inspector-empty');
+		emptyPanel.appendChild(inspectorElement('p', '', 'Select a line to see its details.'));
+		emptyPanel.appendChild(inspectorElement('p', 'inspector-hint', 'Click a line or press Space.'));
+		inspector.appendChild(emptyPanel);
 		return;
 	}
-	const kind = item.dataset.kind || 'node';
-	const label = textOf(row, ':scope > .label');
-	const definitionRef = item.dataset.definitionRef || item.title || '';
-	const shortName = item.dataset.shortName || '';
-	const value = item.dataset.value || '';
-	const target = item.dataset.target || '';
-	const variant = textOf(row, '.row-meta .variant');
-	const hex = textOf(row, '.row-meta .hex');
-	const contextText = textOf(row, '.row-meta .context');
-	const context = contextText.startsWith('context ') ? contextText.slice('context '.length) : contextText;
-	const conditions = Array.from(row.querySelectorAll('.row-meta .condition')).map((element) => element.textContent).join('\\n');
-	const annotations = Array.from(row.querySelectorAll('.row-meta .annotation')).map((element) => element.textContent).join('\\n');
-	const line = item.dataset.line;
-	const column = item.dataset.column;
-	const endLine = item.dataset.endLine;
-	const endColumn = item.dataset.endColumn;
-
-	inspector.appendChild(inspectorElement('div', 'inspector-kind', kind));
-	inspector.appendChild(inspectorElement('div', 'inspector-label', label));
-	if (definitionRef) {
-		inspector.appendChild(inspectorRow('Definition', definitionRef));
+	const data = inspectorFields(row);
+	inspector.appendChild(inspectorElement('div', 'inspector-kind', data.kind));
+	inspector.appendChild(inspectorElement('div', 'inspector-label', data.label));
+	if (data.definitionRef) {
+		inspector.appendChild(inspectorRow('Definition', data.definitionRef));
 	}
-	if (shortName) {
-		inspector.appendChild(inspectorRow('Short name', shortName));
+	if (data.shortName) {
+		inspector.appendChild(inspectorRow('Short name', data.shortName));
 	}
-	if (variant) {
-		inspector.appendChild(inspectorRow('Variant', variant));
+	if (data.variant) {
+		inspector.appendChild(inspectorRow('Variant', data.variant));
 	}
-	if (kind === 'parameter') {
-		inspector.appendChild(inspectorRow('Value', value === '' ? '(empty)' : value));
+	if (data.kind === 'parameter') {
+		inspector.appendChild(inspectorRow('Value', data.value === '' ? '(empty)' : data.value));
 	}
-	if (hex) {
-		inspector.appendChild(inspectorRow('Hexadecimal', hex));
+	if (data.hex) {
+		inspector.appendChild(inspectorRow('Hexadecimal', data.hex));
 	}
-	if (target) {
-		inspector.appendChild(inspectorRow('Target', target));
+	if (data.target) {
+		inspector.appendChild(inspectorRow('Target', data.target));
 	}
-	if (context) {
-		inspector.appendChild(inspectorRow('Context', context));
+	if (data.context) {
+		inspector.appendChild(inspectorRow('Context', data.context));
 	}
-	if (conditions) {
-		inspector.appendChild(inspectorRow('Conditions', conditions));
+	if (data.conditions) {
+		inspector.appendChild(inspectorRow('Conditions', data.conditions));
 	}
-	if (annotations) {
-		inspector.appendChild(inspectorRow('Annotations', annotations));
+	if (data.annotations) {
+		inspector.appendChild(inspectorRow('Annotations', data.annotations));
 	}
-	if (line !== undefined && column !== undefined && endLine !== undefined && endColumn !== undefined) {
+	if (data.source) {
 		inspector.appendChild(
 			inspectorRow(
 				'Source',
-				'L' + (Number(line) + 1) + ':' + (Number(column) + 1) + ' - L' + (Number(endLine) + 1) + ':' + (Number(endColumn) + 1)
+				'L' + (data.source.line + 1) + ':' + (data.source.column + 1) +
+					' - L' + (data.source.endLine + 1) + ':' + (data.source.endColumn + 1)
 			)
 		);
 	}
@@ -1630,216 +2212,25 @@ function updateInspector() {
 	const actions = inspectorElement('div', 'inspector-actions');
 	const reveal = inspectorElement('button', 'tool', 'Reveal in source');
 	reveal.type = 'button';
-	reveal.addEventListener('click', () => revealItem(item));
+	reveal.addEventListener('click', function () { revealItem(row.id); });
 	actions.appendChild(reveal);
-	const path = definitionRef || label;
+	const path = data.definitionRef || data.label;
 	if (path) {
 		const copyPath = inspectorElement('button', 'tool', 'Copy path');
 		copyPath.type = 'button';
-		copyPath.addEventListener('click', () => vscode.postMessage({ type: 'copy', text: path }));
+		copyPath.addEventListener('click', function () { vscode.postMessage({ type: 'copy', text: path }); });
 		actions.appendChild(copyPath);
 	}
-	const valueText = target || value;
+	const valueText = data.target || data.value;
 	if (valueText) {
-		const copyValue = inspectorElement('button', 'tool', target ? 'Copy target' : 'Copy value');
+		const copyValue = inspectorElement('button', 'tool', data.target ? 'Copy target' : 'Copy value');
 		copyValue.type = 'button';
-		copyValue.addEventListener('click', () => vscode.postMessage({ type: 'copy', text: valueText }));
+		copyValue.addEventListener('click', function () { vscode.postMessage({ type: 'copy', text: valueText }); });
 		actions.appendChild(copyValue);
 	}
 	inspector.appendChild(actions);
 }
 
-function prepareFocus() {
-	// A host-rendered selection (source -> editor, or a pending selection) arrives as
-	// markup, not as a message. Adopt it before the first paint so the details panel is
-	// not empty until the user clicks.
-	if (selectedId === undefined) {
-		const marked = document.querySelector('#tree [aria-selected="true"]');
-		if (marked) {
-			selectedId = marked.dataset.nodeId;
-		}
-	}
-	if (selectedId !== undefined) {
-		for (const item of allItems()) {
-			if (item.dataset.nodeId === selectedId) {
-				focusItem(item);
-				return;
-			}
-		}
-	}
-	const first = document.querySelector('#tree [role="treeitem"]');
-	if (first && !document.querySelector('#tree [tabindex="0"]')) {
-		first.tabIndex = 0;
-	}
-}
-
-/** Drop ids that the re-scan removed; everything else stays collapsed. */
-function prune() {
-	collapsed = new Set(pruneCollapsed(Array.from(collapsed), allItems().map((item) => item.dataset.nodeId)));
-}
-
-/**
- * The one place that writes \`aria-expanded\`, and therefore the one place that decides
- * what is visible. \`expandedOverride\` carries the ancestors of filter matches, which are
- * shown while a filter is active without touching the collapsed set (design §4.4).
- */
-function applyCollapsed(expandedOverride) {
-	for (const item of allItems()) {
-		if (!itemHasChildren(item)) {
-			continue;
-		}
-		const id = item.dataset.nodeId;
-		const closed = collapsed.has(id) && !(expandedOverride && expandedOverride.has(id));
-		item.setAttribute('aria-expanded', closed ? 'false' : 'true');
-	}
-}
-
-function flipCollapsed(nodeId) {
-	collapsed = new Set(toggleCollapsed(Array.from(collapsed), nodeId, true));
-	applyCollapsed();
-}
-
-function selectItem(item) {
-	focusItem(item);
-	setSelection(item.dataset.nodeId);
-	vscode.postMessage({ type: 'select', nodeId: item.dataset.nodeId });
-}
-
-function revealItem(item) {
-	vscode.postMessage({ type: 'reveal', nodeId: item.dataset.nodeId });
-}
-
-function followItem(item) {
-	vscode.postMessage({ type: 'follow', nodeId: item.dataset.nodeId });
-}
-
-function rowHeight() {
-	const row = document.querySelector('#tree [role="treeitem"] > .row');
-	const measured = row && row.getBoundingClientRect ? row.getBoundingClientRect().height : 0;
-	return measured > 0 ? measured : 20;
-}
-
-/** Type-ahead over the visible labels, with a 2 s window (design §8). */
-function typeAheadJump(character) {
-	const now = Date.now();
-	typeAhead.text = (now - typeAhead.at > 2000 ? '' : typeAhead.text) + character.toLowerCase();
-	typeAhead.at = now;
-	const items = treeItems();
-	const at = items.indexOf(document.activeElement);
-	for (let step = 1; step <= items.length; step++) {
-		const candidate = items[(at + step + items.length) % items.length];
-		const label = candidate.querySelector(':scope > .row > .label');
-		if (label && label.textContent.toLowerCase().startsWith(typeAhead.text)) {
-			focusItem(candidate);
-			return;
-		}
-	}
-}
-
-/** A click selects; the twisty toggles; the target follows (UX child design §2). */
-function onRowClick(event) {
-	if (!(event.target instanceof Element)) {
-		return;
-	}
-	const item = event.target.closest('#tree [role="treeitem"]');
-	if (!item) {
-		return;
-	}
-	// One interaction, one effect: the twisty toggles without moving the selection, the
-	// target follows, everything else selects.
-	if (event.target.closest('.twisty')) {
-		flipCollapsed(item.dataset.nodeId);
-		return;
-	}
-	if (event.target.closest('[data-follow]')) {
-		followItem(item);
-		return;
-	}
-	selectItem(item);
-}
-
-/** A double click is the deliberate reveal (UX child design §2). */
-function onRowDoubleClick(event) {
-	if (!(event.target instanceof Element)) {
-		return;
-	}
-	const item = event.target.closest('#tree [role="treeitem"]');
-	if (!item || event.target.closest('.twisty') || event.target.closest('[data-follow]')) {
-		return;
-	}
-	revealItem(item);
-}
-
-function onTreeKeydown(event) {
-	if (!(event.target instanceof Element)) {
-		return;
-	}
-	const item = event.target.closest('#tree [role="treeitem"]');
-	if (!item) {
-		return;
-	}
-	const items = treeItems();
-	const at = items.indexOf(item);
-	const group = item.querySelector(':scope > [role="group"]');
-	const page = Math.max(1, Math.floor(main.clientHeight / rowHeight()));
-	const moved = moveTarget(event.key, at, items.length, page);
-	if (moved !== undefined) {
-		event.preventDefault();
-		focusItem(items[moved]);
-		return;
-	}
-	if (event.key === 'ArrowRight') {
-		event.preventDefault();
-		if (group && item.getAttribute('aria-expanded') !== 'true') {
-			flipCollapsed(item.dataset.nodeId);
-		} else if (group) {
-			focusItem(group.firstElementChild);
-		}
-	} else if (event.key === 'ArrowLeft') {
-		event.preventDefault();
-		if (group && item.getAttribute('aria-expanded') === 'true') {
-			flipCollapsed(item.dataset.nodeId);
-		} else {
-			focusItem(item.parentElement.closest('#tree [role="treeitem"]'));
-		}
-	} else if (event.key === 'Enter') {
-		event.preventDefault();
-		// A leaf has nothing to toggle, so revealing it is the only useful action; a
-		// container is revealed with Ctrl/Alt+Enter or a double click (design §2).
-		if (event.ctrlKey || event.altKey) {
-			revealItem(item);
-		} else if (group) {
-			flipCollapsed(item.dataset.nodeId);
-		} else {
-			revealItem(item);
-		}
-	} else if (event.key === ' ') {
-		event.preventDefault();
-		selectItem(item);
-	} else if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
-		typeAheadJump(event.key);
-	}
-}
-
-/** Collapse-all: hide every subtree, leaving the selection and the scroll alone. */
-function collapseAll() {
-	collapsed = new Set(
-		collapsedIdsFor(allItems().map((item) => ({ id: item.dataset.nodeId, hasChildren: itemHasChildren(item) })))
-	);
-	applyCollapsed();
-}
-
-/** Expand-all: the same, the other way. Selection and scroll are untouched. */
-function expandAll() {
-	collapsed = new Set();
-	applyCollapsed();
-}
-
-document.addEventListener('click', onRowClick);
-document.addEventListener('dblclick', onRowDoubleClick);
-document.addEventListener('keydown', onTreeKeydown);
-document.getElementById('collapse-all').addEventListener('click', collapseAll);
-document.getElementById('expand-all').addEventListener('click', expandAll);
 function applyView() {
 	document.body.dataset.view = viewState.view;
 	if (!viewToggle) {
@@ -1860,16 +2251,39 @@ function applyInspectorVisibility() {
 	detailsToggle.setAttribute('aria-label', inspector.hidden ? 'Show node details' : 'Hide node details');
 }
 
+function toggleView() {
+	const anchor = captureWindowAnchor();
+	viewState.view = viewState.view === 'document' ? 'tree' : 'document';
+	applyView();
+	measureHeights();
+	rebuildDisplay();
+	renderWindow(true);
+	restoreWindowAnchor(anchor);
+	vscode.setState(viewState);
+}
+
+document.addEventListener('click', onRowClick);
+document.addEventListener('dblclick', onRowDoubleClick);
+document.addEventListener('keydown', onTreeKeydown);
+document.addEventListener('focusin', function (event) {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	const item = event.target.closest('#tree [role="treeitem"]');
+	if (item) {
+		focusId = item.dataset.nodeId;
+		applyRoving(focusId);
+	}
+});
+document.getElementById('collapse-all').addEventListener('click', collapseAll);
+document.getElementById('expand-all').addEventListener('click', expandAll);
+
 if (viewToggle) {
-	viewToggle.addEventListener('click', () => {
-		viewState.view = viewState.view === 'document' ? 'tree' : 'document';
-		applyView();
-		vscode.setState(viewState);
-	});
+	viewToggle.addEventListener('click', toggleView);
 }
 
 if (detailsToggle && inspector) {
-	detailsToggle.addEventListener('click', () => {
+	detailsToggle.addEventListener('click', function () {
 		viewState.inspectorHidden = !viewState.inspectorHidden;
 		applyInspectorVisibility();
 		vscode.setState(viewState);
@@ -1879,36 +2293,78 @@ if (detailsToggle && inspector) {
 	});
 }
 
-// The view and panel preferences survive a re-scan (the shell is not swapped) and a
-// full webview reload (the host state); the harness persists the same state in
-// localStorage so the browser loop can exercise it.
-applyView();
-applyInspectorVisibility();
+if (filterInput) {
+	filterInput.addEventListener('input', function () {
+		if (clearButton) {
+			clearButton.hidden = filterInput.value.trim() === '';
+		}
+		filterDebouncer.schedule(filterInput.value, function (query, generation) {
+			if (!filterDebouncer.isCurrent(generation)) {
+				return;
+			}
+			applyFilterQuery(query);
+		});
+	});
+	filterInput.addEventListener('keydown', function (event) {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			clearFilter(true);
+		}
+	});
+}
+if (clearButton) {
+	clearButton.addEventListener('click', function () {
+		clearFilter(true);
+	});
+}
 
-window.addEventListener('message', (event) => {
+main.addEventListener('scroll', function () {
+	if (scrollFrame !== 0) {
+		return;
+	}
+	scrollFrame = requestAnimationFrame(function () {
+		scrollFrame = 0;
+		renderWindow(false);
+	});
+});
+window.addEventListener('resize', function () {
+	measureHeights();
+	renderWindow(true);
+});
+
+window.addEventListener('message', function (event) {
 	const message = event.data;
 	if (!message) {
 		return;
 	}
 	if (message.type === 'model') {
-		selectedId = message.selectedId;
-		reRenderTree(message.tree, {
-			readScrollTop: () => main.scrollTop,
-			writeHtml: (tree) => {
-				main.innerHTML = tree;
-			},
-			pruneCollapsed: prune,
-			applyCollapsed: () => applyCollapsed(),
-			applyFilter: applyFilter,
-			prepareFocus: prepareFocus,
-			writeScrollTop: (top) => {
-				main.scrollTop = top;
-			},
-		});
+		const scrollTop = main.scrollTop;
+		const previousFocus = focusedNodeId() || focusId;
+		setRows(message.rows, message.digits, message.selectedId);
+		renderWindow(true);
+		main.scrollTop = scrollTop;
+		if (selectedId !== undefined && displayIndexById.has(selectedId)) {
+			focusId = selectedId;
+			const index = displayIndexById.get(selectedId);
+			if (index < windowRange[0] || index >= windowRange[1]) {
+				ensureVisible(index);
+			}
+		} else if (previousFocus !== undefined && displayIndexById.has(previousFocus)) {
+			focusId = previousFocus;
+		}
+		renderWindow(true);
 		updateInspector();
+		updateFilterUi();
 	} else if (message.type === 'select') {
+		if (typeof message.nodeId !== 'string' || !rowById.has(message.nodeId)) {
+			return;
+		}
+		if (expandAncestors(message.nodeId)) {
+			rebuildDisplay();
+			renderWindow(true);
+		}
+		focusRow(message.nodeId);
 		setSelection(message.nodeId);
-		prepareFocus();
 	} else if (message.type === 'notice') {
 		notice.textContent = message.message;
 		if (message.kind) {
@@ -1919,7 +2375,15 @@ window.addEventListener('message', (event) => {
 	}
 });
 
-applyFilter();
+// The view and panel preferences survive a re-scan (the shell is not swapped) and a
+// full webview reload (the host state); the harness persists the same state in
+// localStorage so the browser loop can exercise it.
+applyView();
+applyInspectorVisibility();
+const initial = readInitialRows();
+setRows(initial.rows, initial.digits, initial.selectedId);
+renderWindow(true);
 prepareFocus();
+updateFilterUi();
 updateInspector();
 `;

@@ -1,0 +1,9 @@
+{"file": ".trellis/tasks/10-28-ecuc-virtualized-render-search/prd.md", "reason": "Verify AC1-AC10 and the in/out scope."}
+{"file": ".trellis/tasks/10-28-ecuc-virtualized-render-search/design.md", "reason": "Verify the row model, virtual math, flatten/filter, state/a11y and risks."}
+{"file": ".trellis/tasks/10-28-ecuc-virtualized-render-search/implement.md", "reason": "Verify the checklist, tests, mutations and performance evidence."}
+{"file": ".trellis/tasks/10-28-ecuc-virtualized-render-search/research/reference-patterns.md", "reason": "Check the reference patterns were adapted, not copied, and the baseline is recorded."}
+{"file": "docs/ECUC_EDITOR_DESIGN_SPEC.md", "reason": "Check the virtual renderer preserves the read-only quiet-source visual contract."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check DOM/value contracts, event ownership, state and accessibility."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check no forbidden patterns, CSP violations, literals or core/write changes."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Check pure/window/filter tests and mutation coverage."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Check re-scan/selection/collapse/filter/view/scroll persistence."}

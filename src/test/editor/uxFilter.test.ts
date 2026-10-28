@@ -3,24 +3,31 @@
  * matches highlighted, and the ancestors of a match shown while the collapsed set is
  * restored when the filter is cleared.
  *
- * There is no webview DOM here, so the assertions are on `matchRanges` itself and on the
- * inlined script, with the inlined `matchRanges` compiled and driven so the view's copy
- * is the one under test. The `<mark>` elements a live webview would build, and the
- * visibility pass it would run, are not exercised — that is recorded in
- * `implement.md` §Manual verification.
+ * There is no webview DOM here, so the assertions are on `matchRanges`/`filterRows`
+ * themselves and on the inlined page script, with the page's own filtered/flattened
+ * copy compiled and driven. The `<mark>` elements a live webview would build are
+ * recorded in `implement.md` as browser-observed.
  */
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { filterScript, haystack, matchRanges, matchesQuery } from '../../editor/filter';
-import { renderHtml } from '../../editor/renderHtml';
+import { LineIndex } from '../../core/text/offsets';
+import { buildFilterIndex, filterRows, flattenRows, haystack, matchRanges, matchesQuery } from '../../editor/filter';
+import { RowPayload, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
 import { evaluateFunction, functionSource } from './scriptTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
 function page(): string {
-	return renderHtml(scanEcucValues(fixtureText(FIXTURE)), { nonce: 'test-nonce' });
+	const source = fixtureText(FIXTURE);
+	return renderHtml(scanEcucValues(source), { nonce: 'test-nonce', lineIndex: new LineIndex(source) });
+}
+
+function payload(source = page()): RowPayload {
+	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(source);
+	assert.ok(match, 'the page embeds the row document');
+	return JSON.parse(match[1]) as RowPayload;
 }
 
 suite('editor filter feedback (AC9)', () => {
@@ -54,8 +61,6 @@ suite('editor filter feedback (AC9)', () => {
 		assert.ok(matchesQuery(node, '   '), 'an empty query keeps everything');
 		assert.ok(!matchesQuery(node, 'zzz'));
 
-		// The page's own matchRanges is the same function, so the highlight cannot
-		// disagree with the visibility pass about why a row is shown.
 		const inlined = evaluateFunction<typeof matchRanges>(page(), 'matchRanges');
 		for (const [text, query] of [
 			['IniValue', 'i'],
@@ -67,51 +72,67 @@ suite('editor filter feedback (AC9)', () => {
 		}
 	});
 
-	test('AC9: the view reports shown-of-total and an explicit empty state', () => {
-		const apply = functionSource(filterScript(), 'applyFilter');
-		assert.ok(apply.includes("'No matches'"), 'an empty result says so');
-		assert.ok(apply.includes("shown + ' of ' + items.length"), 'otherwise shown of total');
-		assert.ok(
-			apply.includes("document.querySelectorAll('#tree [role=\"treeitem\"]')"),
-			'the total is every item, not the number of matches'
-		);
-		assert.ok(apply.includes('if (shown === 0)'), 'the empty state is its own branch');
-		assert.ok(apply.includes("if (needle === '')"), 'and an empty filter clears the count');
-
+	test('AC9: the page reports shown-of-total and an explicit empty state', () => {
 		const html = page();
+		const apply = functionSource(html, 'updateFilterUi');
+		assert.ok(apply.includes("'No matches'"), 'an empty result says so');
+		assert.ok(apply.includes("filterResult.visibleCount + ' of ' + rows.length"), 'otherwise shown of total');
+		assert.ok(apply.includes('filterResult.matchCount === 0'), 'the empty state is its own branch');
+		assert.ok(apply.includes("if (!active)"), 'and an empty filter clears the count');
 		assert.ok(html.includes('id="count"'), 'the count has a home');
 		assert.ok(html.includes('role="status" aria-live="polite"'), 'and is announced politely');
+
+		// The row engine's visible count is what that label shows: matches + ancestors.
+		const rows = payload(html).rows;
+		const result = filterRows(rows, 'IniValue', buildFilterIndex(rows));
+		assert.strictEqual(result.matchCount, 1);
+		assert.strictEqual(result.visibleCount, 3, 'the module and container are ancestors of the match');
 	});
 
-	test('AC9: matches are wrapped in a highlight element, and the original is kept', () => {
-		const highlight = functionSource(filterScript(), 'highlightSpan');
-		assert.ok(highlight.includes("document.createElement('mark')"), 'a real highlight element');
+	test('AC9: matches are wrapped in a highlight element only while rendering rows', () => {
+		const html = page();
+		const highlight = functionSource(html, 'appendHighlighted');
 		assert.ok(highlight.includes('matchRanges('), 'the ranges come from the shared definition');
-		assert.ok(highlight.includes('span.dataset.text'), 'the original text is preserved');
-		assert.ok(highlight.includes('span.dataset.highlighted'), 'so re-applying does not wrap twice');
-		assert.ok(highlight.includes('delete span.dataset.highlighted'), 'and clearing restores the text');
+		assert.ok(highlight.includes("document.createElement('mark')"), 'a real highlight element');
+		const render = functionSource(html, 'renderWindow');
+		assert.ok(render.includes('buildDisplayRow('), 'highlights are applied while the window is built');
+		assert.ok(!html.includes('dataset.highlighted'), 'offscreen rows are never touched');
+		const refresh = functionSource(html, 'refreshFilter');
+		assert.ok(refresh.includes('filterRows(rows, query, filterIndex)'), 'the filter scans the row index');
+		assert.ok(
+			!refresh.includes('querySelectorAll') && !refresh.includes('getElementById'),
+			'the filter never walks or toggles the rendered DOM'
+		);
 	});
 
 	test('AC9: the ancestors of a match are shown, and the collapsed set is left alone', () => {
-		const script = filterScript();
-		const apply = functionSource(script, 'applyFilter');
-		assert.ok(apply.includes('ancestors.add('), 'an ancestor of a match is collected');
-		assert.ok(apply.includes('applyCollapsed(ancestors)'), 'and expanded through the override');
-		assert.ok(apply.includes('if (show && descendant && !self)'), 'only a pure ancestor is overridden');
-		assert.ok(
-			!/\bcollapsed\s*=/.test(script),
-			'the filter never writes the collapsed set, which is what makes clearing restore it'
-		);
-		// The override is passed on every pass, so clearing it (the empty query) restores
-		// exactly the collapsed set the user built.
-		assert.strictEqual((apply.match(/applyCollapsed\(/g) ?? []).length, 1, 'one visibility pass, one override');
+		const html = page();
+		const rows = payload(html).rows;
+		const collapsed = new Set([rows[0].id]);
+		const result = filterRows(rows, 'IniValue', buildFilterIndex(rows));
+		const flat = flattenRows(rows, { collapsed, visible: result.visible });
+		const matchIndex = rows.findIndex((row) => row.label === 'IniValue');
+		assert.ok(matchIndex >= 0);
+		assert.ok(flat.some((row) => row.type === 'node' && row.rowIndex === matchIndex), 'the match is reachable');
+		assert.deepStrictEqual(Array.from(collapsed), [rows[0].id], 'the saved collapsed set is untouched');
+
+		const inlined = evaluateFunction<typeof filterRows>(html, 'filterRows');
+		assert.deepStrictEqual(inlined(rows, 'IniValue', buildFilterIndex(rows)).visible, result.visible);
+
+		const apply = functionSource(html, 'applyFilterQuery');
+		assert.ok(!/\bcollapsed\s*=/.test(apply), 'the filter never writes the collapsed set');
+		const clear = functionSource(html, 'clearFilter');
+		assert.ok(clear.includes("filterInput.value = ''"), 'clearing restores the box');
+		assert.ok(clear.includes("applyFilterQuery('')"), 'and re-runs the empty query');
 	});
 
-	test('AC9: Escape clears the filter and the filter runs on load', () => {
-		const script = filterScript();
-		assert.ok(script.includes("event.key === 'Escape'"));
-		assert.ok(script.includes("filterInput.value = ''"), 'Escape empties the box');
-		assert.ok(script.includes('filterInput.addEventListener('), 'and the clear re-runs the pass');
-		assert.ok(page().includes('applyFilter();'), 'the filter is applied when the page loads');
+	test('AC9: Escape clears the filter and the input is debounced before it runs', () => {
+		const html = page();
+		assert.ok(html.includes("event.key === 'Escape'"));
+		assert.ok(html.includes("filterInput.value = ''"), 'Escape empties the box');
+		assert.ok(html.includes('filterDebouncer.schedule(filterInput.value'), 'typing is debounced');
+		assert.ok(html.includes('createFilterDebouncer(120)'), 'with the 120 ms window');
+		assert.ok(html.includes('filterDebouncer.isCurrent(generation)'), 'and stale generations are discarded');
+		assert.ok(html.includes("event.target.closest('#empty-clear')"), 'the empty action clears the filter');
 	});
 });

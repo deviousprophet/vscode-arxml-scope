@@ -2,10 +2,10 @@
  * AC4, AC6–AC9 — the details inspector, the two-line grid, the source positions, the
  * details toggle and the filter/empty-state feedback.
  *
- * There is no webview DOM in the test host, so the assertions are on the rendered markup,
- * the model-derived data attributes and the page's own inline script. The DOM pass — a
- * click filling the panel, a re-scan not destroying it, hover/focus — is observed in the
- * browser harness and recorded in `implement.md`; it is not implied here.
+ * There is no webview DOM in the test host, so the assertions are on the row data, the
+ * shell, and the page's own inline script. The DOM pass — a click filling the panel, a
+ * re-scan not destroying it, hover/focus — is observed in the browser harness and
+ * recorded in `implement.md`; it is not implied here.
  */
 import * as assert from 'assert';
 import * as fs from 'fs';
@@ -13,8 +13,7 @@ import * as path from 'path';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { LineIndex } from '../../core/text/offsets';
-import { filterScript } from '../../editor/filter';
-import { renderHtml, renderTree } from '../../editor/renderHtml';
+import { RowPayload, inspectorFields, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
 import { repoRoot } from './editorTestUtils';
 import { functionSource } from './scriptTestUtils';
@@ -30,9 +29,10 @@ function page(): string {
 	return renderHtml(scanEcucValues(source), { nonce: 'test-nonce', lineIndex: new LineIndex(source) });
 }
 
-function tree(): string {
-	const source = text();
-	return renderTree(scanEcucValues(source), { lineIndex: new LineIndex(source) });
+function payload(source = page()): RowPayload {
+	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(source);
+	assert.ok(match, 'the page embeds the row document');
+	return JSON.parse(match[1]) as RowPayload;
 }
 
 function styleOf(html: string): string {
@@ -42,7 +42,7 @@ function styleOf(html: string): string {
 }
 
 suite('editor visual polish (AC4, AC6–AC9)', () => {
-	test('AC4: the page has a details inspector outside the re-rendered tree region', () => {
+	test('AC4: the page has a details inspector outside the virtual tree region', () => {
 		const html = page();
 		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>'));
 		assert.ok(html.includes('id="details-toggle"'));
@@ -51,42 +51,63 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		assert.ok(/id="view-toggle"[^>]*aria-pressed="true"/.test(html));
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));
-		assert.ok(!renderTree(scanEcucValues(text()), {}).includes('id="inspector"'), 'the tree swap cannot remove it');
+		assert.ok(html.includes('id="tree-window"'), 'the tree region is the virtual window');
+		assert.ok(!html.slice(html.indexOf('id="ecuc-rows"')).includes('id="inspector"'), 'the row payload has no shell');
 	});
 
-	test('AC4: every node carries the definition path, short name and value the panel needs', () => {
-		const html = tree();
-		assert.ok(html.includes('data-definition-ref="/PkgA/PkgB/ModDefs/ModX"'));
-		assert.ok(html.includes('data-definition-ref="/PkgA/PkgB/ModDefs/ModX/ContA"'));
-		assert.ok(html.includes('data-short-name="ContA"'));
-		assert.ok(html.includes('data-value="63"'), 'a parameter carries the raw value');
-		assert.ok(html.includes('data-target="/PkgA/PkgB/ModX/ContA/ContB"'), 'a reference carries the raw target');
+	test('AC4: every row carries the definition path, short name and value the panel needs', () => {
+		const rows = payload().rows;
+		const contA = rows.find((row) => row.definitionRef === '/PkgA/PkgB/ModDefs/ModX/ContA')!;
+		assert.strictEqual(contA.shortName, 'ContA');
+		const ini = rows.find((row) => row.label === 'IniValue')!;
+		assert.strictEqual(ini.value, '63');
+		const peer = rows.find((row) => row.label === 'PeerRef')!;
+		assert.strictEqual(peer.target, '/PkgA/PkgB/ModX/ContA/ContB');
+
+		const script = page();
+		const build = functionSource(script, 'buildNodeRow');
+		for (const field of [
+			"node.dataset.definitionRef = row.definitionRef",
+			"node.dataset.shortName = row.shortName || ''",
+			"node.dataset.value = row.value || ''",
+			"node.dataset.target = row.target || ''",
+		]) {
+			assert.ok(build.includes(field), field);
+		}
 	});
 
 	test('AC4: the source range is derived from LineIndex, not from the displayed order', () => {
 		const source = text();
 		const model = scanEcucValues(source);
 		const index = new LineIndex(source);
-		const container = model.modules[0].containers[0];
-		const parameter = container.parameters.find((candidate) => candidate.name === 'IniValue');
+		const parameter = model.modules[0].containers[0].parameters.find((candidate) => candidate.name === 'IniValue');
 		assert.ok(parameter, 'the fixture has IniValue');
 		const start = index.positionAt(parameter.range.start);
 		const end = index.positionAt(parameter.range.end);
-		const html = renderTree(model, { lineIndex: index });
-		assert.ok(
-			html.includes(
-				`data-line="${start.line}" data-column="${start.character}"` +
-					` data-end-line="${end.line}" data-end-column="${end.character}"`
-			),
-			'the parameter carries its real source position'
-		);
-		assert.ok(!html.includes('data-range-start='), 'the unused raw range is not duplicated as data');
+		const row = payload().rows.find((candidate) => candidate.label === 'IniValue')!;
+		assert.strictEqual(row.sourceLine, start.line + 1, 'the gutter line is 1-based');
+		assert.strictEqual(row.line, start.line, 'the inspector line is 0-based');
+		assert.strictEqual(row.column, start.character);
+		assert.strictEqual(row.endLine, end.line);
+		assert.strictEqual(row.endColumn, end.character);
+		const build = functionSource(page(), 'buildNodeRow');
+		assert.ok(build.includes('node.dataset.line = String(row.line)'));
+		assert.ok(!build.includes('data-range-start'), 'the unused raw range is not duplicated');
 	});
 
-	test('AC4: the inspector reads the data and posts reveal/copy, with no innerHTML', () => {
-		// Source-level field list: the DOM pass is browser-observed (implement.md); driving the
-		// whole inspector would need a full DOM and is not claimed here.
+	test('AC4: the inspector reads row data and posts reveal/copy, with no innerHTML', () => {
 		const html = page();
+		const rows = payload(html).rows;
+		const parameter = rows.find((row) => row.label === 'IniValue')!;
+		const fields = inspectorFields(parameter);
+		assert.strictEqual(fields.definitionRef, '/PkgA/PkgB/ModDefs/ModX/ContA/IniValue');
+		assert.strictEqual(fields.value, '63');
+		assert.strictEqual(fields.hex, '(= 0x3F)');
+		assert.strictEqual(fields.source!.line, parameter.line);
+		const reference = rows.find((row) => row.label === 'PeerIref')!;
+		assert.deepStrictEqual(reference.contextPaths, ['PkgA.PkgB.ModX.ContA']);
+		assert.strictEqual(inspectorFields(reference).context, 'PkgA.PkgB.ModX.ContA');
+
 		const update = functionSource(html, 'updateInspector');
 		for (const field of [
 			'Definition',
@@ -105,10 +126,12 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		]) {
 			assert.ok(update.includes(`'${field}'`), field);
 		}
+		assert.ok(update.includes('rowById.get(selectedId)'), 'the panel selects from the row map');
+		assert.ok(!update.includes('querySelector'), 'and never from the rendered DOM');
 		assert.ok(update.includes("vscode.postMessage({ type: 'copy', text: path })"));
 		assert.ok(update.includes("vscode.postMessage({ type: 'copy', text: valueText })"));
-		assert.ok(update.includes('revealItem(item)'));
-		assert.ok(update.includes('Number(line) + 1'), 'the display line is one-based');
+		assert.ok(update.includes('revealItem(row.id)'));
+		assert.ok(update.includes('data.source.line + 1'), 'the display line is one-based');
 		assert.ok(update.includes("inspector.textContent = ''"), 'the panel is rebuilt from text nodes');
 		assert.ok(!update.includes('innerHTML'), 'model text is never inserted as markup');
 	});
@@ -117,67 +140,51 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		const html = page();
 		const select = functionSource(html, 'setSelection');
 		assert.ok(select.includes('updateInspector()'), 'a selection fills the panel');
-		// The page's own prepareFocus adopts a host-rendered selection on first paint, so
-		// the panel is not empty until the first click. Drive the page's copy, not a grep.
-		const marked = { dataset: { nodeId: 'node-1' } };
-		const focused: unknown[] = [];
-		const prepare = new Function(
-			'document',
-			'allItems',
-			'focusItem',
-			`let selectedId; ${functionSource(html, 'prepareFocus')}\nprepareFocus();\nreturn selectedId;`
-		) as (
-			document: { querySelector(selector: string): unknown },
-			allItems: () => unknown[],
-			focusItem: (item: unknown) => void
-		) => string | undefined;
-		const adopted = prepare(
-			{ querySelector: (selector: string) => (selector === '#tree [aria-selected="true"]' ? marked : null) },
-			() => [marked],
-			(item) => focused.push(item)
-		);
-		assert.strictEqual(adopted, 'node-1', 'the initial host selection fills the panel');
-		assert.deepStrictEqual(focused, [marked], 'and is focused');
-		const firstPaint = html.lastIndexOf('prepareFocus();');
-		assert.ok(
-			firstPaint !== -1 && html.indexOf('updateInspector();', firstPaint) > firstPaint,
-			'and the first paint fills the panel after adopting it'
-		);
+		assert.ok(select.includes('element.dataset.selected'), 'the row state is updated in the window');
+
+		// The initial selection is data in the payload, and prepareFocus scrolls/renders
+		// it before the first paint; the panel is filled from the row map.
+		const model = scanEcucValues(text());
+		const id = payload().rows.find((row) => row.label === 'IniValue')!.id;
+		const selectedPage = renderHtml(model, { nonce: 'test-nonce', selectedId: id });
+		assert.strictEqual(payload(selectedPage).selectedId, id);
+		const prepare = functionSource(selectedPage, 'prepareFocus');
+		assert.ok(prepare.includes('focusRow(selectedId)'), 'the host selection is rendered/focused');
+		assert.ok(selectedPage.lastIndexOf('prepareFocus();') > selectedPage.indexOf('setRows(initial.rows'));
+
 		const script = html;
-		// The value editor also has a model handler; the tree's is the last one. Scope the
-		// assertion to it so the trailing updateInspector() at page load cannot satisfy it.
 		const modelAt = script.lastIndexOf("if (message.type === 'model')");
-		const rerenderAt = script.indexOf('reRenderTree(message.tree', modelAt);
-		const updateAt = script.indexOf('updateInspector();', rerenderAt);
-		const nextBranchAt = script.indexOf("} else if (message.type", rerenderAt);
+		const applyAt = script.indexOf('setRows(message.rows', modelAt);
+		const updateAt = script.indexOf('updateInspector();', applyAt);
+		const nextBranchAt = script.indexOf('} else if (message.type', applyAt);
 		assert.ok(
-			modelAt !== -1 && rerenderAt !== -1 && updateAt !== -1 && nextBranchAt !== -1 && updateAt < nextBranchAt,
+			modelAt !== -1 && applyAt !== -1 && updateAt !== -1 && nextBranchAt !== -1 && updateAt < nextBranchAt,
 			'a re-scan refreshes the panel'
 		);
 		assert.ok(script.includes("detailsToggle.addEventListener('click'"));
 		assert.ok(script.includes('viewState.inspectorHidden = !viewState.inspectorHidden'));
 		assert.ok(script.includes('applyInspectorVisibility()'));
 		assert.ok(script.includes("detailsToggle.setAttribute('aria-pressed'"));
-		assert.ok(script.includes("viewToggle.addEventListener('click'"));
+		assert.ok(script.includes("viewToggle.addEventListener('click', toggleView)"));
 		assert.ok(script.includes('viewState.view'));
 		assert.ok(script.includes('vscode.getState()'), 'the panel preference is restored on a reload');
 		assert.ok(script.includes('vscode.setState(viewState)'), 'and saved through the host state');
-		assert.ok(script.includes('viewState.inspectorHidden'), 'the saved flag is the hidden state');
 	});
 
 	test('AC6: rows are a two-line grid and .value stays a direct child of .row', () => {
-		const html = tree();
-		assert.ok(html.includes('class="row k-module no-value"'));
-		assert.ok(html.includes('class="row k-container no-value"'));
-		assert.ok(html.includes('class="row k-parameter has-value"'));
-		assert.ok(html.includes('class="row k-reference has-value"'));
-		assert.ok(html.includes('<span class="label">IniValue</span><span class="value"'), 'the value is still a direct child');
-		assert.ok(html.includes('<span class="row-meta">'), 'the secondary fields have their own line');
-		assert.ok(html.includes('<span class="hex" title="(= 0x3F)">(= 0x3F)</span>'), 'metadata carries a tooltip');
-		assert.ok(html.includes('<span class="short" title="ModX">"ModX"</span>'), 'and a short-name tooltip');
-		assert.ok(html.includes('<span class="condition" title='), 'a condition carries a tooltip');
-		assert.ok(html.includes('<span class="annotation" title='), 'an annotation carries a tooltip');
-		const style = styleOf(page());
+		const script = page();
+		const build = functionSource(script, 'buildNodeRow');
+		const value = functionSource(script, 'valueSpan');
+		assert.ok(build.includes("'row k-' + row.kind"), 'the kind classes');
+		assert.ok(build.includes("row.shownValue !== undefined ? ' has-value' : ' no-value'"));
+		assert.ok(build.includes('rowElement.appendChild(valueSpan(row))'), 'the value is appended directly to .row');
+		assert.ok(value.includes("value.className = row.kind === 'reference' ? 'value target' : 'value'"));
+		assert.ok(value.includes("text.className = 'value-text'"));
+		assert.ok(build.includes("const meta = document.createElement('span')") || build.includes('metaSpan(row)'));
+		assert.ok(functionSource(script, 'metaSpan').includes("span.className = part.cls"));
+		assert.ok(functionSource(script, 'metaSpan').includes('span.title = part.title'));
+
+		const style = styleOf(script);
 		assert.ok(style.includes('grid-template-columns: 12px 12px 26ch minmax(0, 1fr)'));
 		assert.ok(/\.row\.no-value \.label\s*\{[^}]*grid-column:\s*3\s*\/\s*-1/.test(style));
 		assert.ok(/\.row-meta\s*\{[^}]*grid-column:\s*3\s*\/\s*-1/.test(style));
@@ -191,30 +198,28 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		assert.ok(html.includes('id="filter-clear"'));
 		assert.ok(html.includes('id="count"') && html.includes('data-state="none"'));
 		assert.ok(html.includes('id="empty"'));
-		assert.ok(tree().includes('id="empty"'), 'the empty block belongs to the swapped tree region');
 		assert.ok(html.includes('id="empty-text"'));
 		assert.ok(html.includes('id="empty-clear"'));
-		const script = filterScript();
-		const apply = functionSource(script, 'applyFilter');
-		assert.ok(apply.includes("getElementById('empty')"), 'the empty block is looked up after a swap');
-		assert.ok(apply.includes("getElementById('empty-text')"));
+		const apply = functionSource(html, 'updateFilterUi');
 		assert.ok(apply.includes("countLabel.dataset.state = 'none'"));
 		assert.ok(apply.includes("countLabel.dataset.state = 'empty'"));
 		assert.ok(apply.includes("countLabel.dataset.state = 'filtered'"));
 		assert.ok(apply.includes("clearButton.hidden = filterInput.value.trim() === ''"));
 		assert.ok(apply.includes("emptyText.textContent = '/* No entities match \"' + filterInput.value.trim() + '\". */'"));
-		assert.ok(script.includes('#empty-clear'), 'the clear action survives the tree swap by delegation');
+		assert.ok(html.includes("event.target.closest('#empty-clear')"), 'the empty clear is delegated');
 	});
 
-	test('AC7: the filter still highlights label, short name and value through the shared matchRanges', () => {
-		const script = filterScript();
-		assert.ok(
-			script.includes(
-				":scope > .row > .label, :scope > .row > .row-meta .short, :scope > .row > .value .value-text"
-			),
-			'the highlight set follows the new metadata line'
-		);
-		assert.ok(script.includes('matchRanges('), 'the one definition of a match is still used');
+	test('AC7: the filter highlights label, short name and value through the shared matchRanges', () => {
+		const html = page();
+		const highlight = functionSource(html, 'appendHighlighted');
+		assert.ok(highlight.includes('matchRanges('), 'the one definition of a match is used');
+		assert.ok(highlight.includes("document.createElement('mark')"), 'a real highlight element');
+		assert.ok(!highlight.includes('dataset.highlighted'), 'rows are rebuilt for each window, so no restore dance');
+		const build = functionSource(html, 'buildNodeRow');
+		assert.ok(build.includes('appendHighlighted(label, row.label)'));
+		assert.ok(functionSource(html, 'valueSpan').includes("appendHighlighted(text, row.shownValue || '')"));
+		assert.ok(functionSource(html, 'metaSpan').includes("appendHighlighted(span, part.text)"), 'the short name');
+		assert.ok(!html.includes("document.querySelectorAll('#tree [role=\"treeitem\"]')"), 'no DOM-wide scan');
 	});
 
 	test('AC9: selection uses a quiet tint and keeps token colours', () => {
@@ -222,10 +227,10 @@ suite('editor visual polish (AC4, AC6–AC9)', () => {
 		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(style));
 		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(style));
 		assert.ok(
-			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg\)/.test(style)
+			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg\)/.test(style)
 		);
 		assert.ok(
-			/#tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background:\s*var\(--sel-bg-focus\)/.test(
+			/#tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
 				style
 			)
 		);

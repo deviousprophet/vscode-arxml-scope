@@ -70,8 +70,10 @@ into `.vscode-test/` (gitignored). If that download is blocked by a proxy, the f
 with `suite is not defined`.
 
 There is no webview DOM in the test host. Webview behaviour is therefore asserted at the level of the
-rendered HTML string, and anything that depends on real DOM interaction has to be confirmed by hand —
-say so in the task notes rather than implying it was tested.
+rendered page: the static shell, the escaped row JSON, the CSS, and the page's own inlined functions
+extracted with `scriptTestUtils` and compiled. Pure row/flatten/filter/window behaviour is tested
+directly; anything that depends on real DOM interaction has to be confirmed by hand or in the browser
+harness — say so in the task notes rather than implying it was tested.
 
 ## A browser harness is not a webview
 
@@ -83,8 +85,9 @@ tab/column/focus behaviour, or host clipboard permissions. Record harness observ
 harness-observed, and keep the real-host rows in the task's manual table.
 
 The harness must wrap the production renderer; a second renderer is a test that agrees with itself.
-`npm run preview:check` asserts that each wrapped page contains the exact production `renderTree`
-output plus the stub, inspector and empty state.
+`npm run preview:check` asserts that each wrapped page contains the production row JSON and the
+virtual shell (spacers, window, inspector, empty state), plus the stub and theme variables. The row
+JSON is compared against `buildRows`, not against a full-tree string.
 
 ## The reference must be the post-processed output
 
@@ -114,6 +117,25 @@ browser pass. The quiet-source direction is prototyped in `docs/ecuc-editor-prot
 specified in `docs/ECUC_EDITOR_DESIGN_SPEC.md`; assertions and captures must match the production
 CSS, never the prototype file. `data-line` on `.row` is 1-based (the source line), while `.node`
 `data-line` stays 0-based for the inspector; do not conflate them.
+
+## Virtual page tests drive the page's serialized row code
+
+The virtual row renderer is tested at two levels. Pure modules (`renderRows`, `virtualScroll`,
+`filterRows`/`flattenRows`) have ordinary unit tests over values. The page's own copy is extracted
+from `renderHtml` with `scriptTestUtils` and compiled: `filterRows`, `flattenRows`,
+`inspectorFields`, `reconcileRowState`, `resolveFocusId` and the virtual math are driven with real row
+data, so the page does not get a second implementation. `virtualPage.test.ts` pins the window range
+and overscan, the bounded row count, collapse/filter display lists, the offscreen inspector source,
+focus restoration and the re-scan payload. Structural assertions (a window loop, spacers, no
+`innerHTML`/style attribute in the row builder, `data-level` CSS) are the regression guard; the real
+DOM pass is the browser harness.
+
+Mutation checks for this layer: render the full row list instead of `[start,end)`, remove the
+top/bottom spacers, zero the overscan, drop subtree collapse/filter-ancestor logic, drop the filter
+generation guard, use `innerHTML` for row text, use an inline depth style, remove
+`aria-level`/posinset/setsize, remove focus restore, send full HTML on re-scan, or use
+`#tree-window` as the offset; each must fail a test. Prefer the page's own functions over a grep-only
+assertion, and record which checks were browser-observed rather than unit-tested.
 
 ## A CSS rule is not a contrast measurement
 

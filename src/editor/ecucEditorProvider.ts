@@ -18,7 +18,8 @@ import { ReferenceNode, SortMode } from '../core/ecuc/model';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { LineIndex } from '../core/text/offsets';
-import { RenderOptions, renderHtml, renderTree } from './renderHtml';
+import { RenderOptions, renderHtml } from './renderHtml';
+import { buildRows } from './renderRows';
 import { buildNodeIndex } from './nodeId';
 import { applyEdit, buildEdit } from './ecucEdit';
 import { copyText } from './clipboard';
@@ -107,7 +108,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		});
 
 		// The single refresh path: any change to this document — an undo, an external
-		// edit, or the sibling child's write — re-scans and swaps the tree, so no range
+		// edit, or the sibling child's write — re-scans and pushes row data, so no range
 		// on screen can outlive the text it points at. The same push serves a settings
 		// change, which re-renders the model that is already scanned (parent AC3).
 		const push = (): void => {
@@ -117,7 +118,15 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				selectedId: current,
 				lineIndex: new LineIndex(document.getText()),
 			};
-			void panel.webview.postMessage({ type: 'model', tree: renderTree(model, options), selectedId: current });
+			const rowDocument = buildRows(model, options);
+			// `type: 'model'` is kept because the value widget clears its edit state on
+			// that message; the payload is row data, not full-tree HTML.
+			void panel.webview.postMessage({
+				type: 'model',
+				rows: rowDocument.rows,
+				digits: rowDocument.digits,
+				selectedId: current,
+			});
 		};
 
 		disposables.push(
