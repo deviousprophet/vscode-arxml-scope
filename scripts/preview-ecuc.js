@@ -647,7 +647,7 @@ async function startPreview() {
 	console.log('ECUC preview: http://127.0.0.1:' + port + '/');
 	console.log('Fixtures: ' + fixtures.length + ' (default editor/render); themes: ' + THEME_ORDER.join(', '));
 	if (fs.existsSync(SAMPLE_ROOT)) {
-		console.log('Local samples: ' + SAMPLE_ROOT + ' (listed as sample/<name>)');
+		console.log('Local samples: ' + SAMPLE_ROOT + ' (listed as sample/arxml/<name>)');
 	}
 	console.log('Add ?chrome=0 for a clean page. Stop with Ctrl+C.');
 }

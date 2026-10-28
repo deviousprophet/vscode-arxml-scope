@@ -255,12 +255,12 @@ variable resolution, the real custom-editor tab/focus behaviour or accessibility
 remain Extension Development Host checks.
 
 When `../sample` exists (by default `D:\workspace\sample` here), `preview:ecuc` lists its files as
-`sample/<name>`. `preview:check` never includes them, so CI stays deterministic.
+`sample/arxml/<name>`. `preview:check` never includes them, so CI stays deterministic.
 
 ## Synthetic samples and performance
 
 ```bash
-npm run samples:ecuc                 # writes ../sample, does not commit anything
+npm run samples:ecuc                 # writes ../sample/arxml, does not commit anything
 npm run perf:ecuc -- <file>          # scanner/index/render benchmark, no browser
 ```
 
@@ -280,8 +280,8 @@ After the Document-only pass (2026-10-28, headless Edge via CDP, dark, this mach
 `DOMContentLoaded`/load 124–139 ms with a 1.4–2.1 ms row-filter scan; `huge` 210–288 ms with a
 4.3–6.8 ms scan; the window held 32–33 treeitems (36–50 nodes including braces), and the top spacer,
 rendered rows and bottom spacer summed exactly to the virtual total at every sampled scroll position
-with no inter-row gap. The `sample/large` page payload is ~1.89 MB of escaped row JSON and
-`sample/huge` ~5.67 MB (down from ~6.5 MiB before source/digits were removed);
+with no inter-row gap. The `sample/arxml/large` page payload is ~1.89 MB of escaped row JSON and
+`sample/arxml/huge` ~5.67 MB (down from ~6.5 MiB before source/digits were removed);
 `performance.memory.usedJSHeapSize` was ~5.3–5.8 MB after `large` and ~13.4–14.7 MB after `huge`.
 Node-side `perf:ecuc` medians: `large` `buildRows` 14.1 ms / `renderHtml` 18.1 ms; `huge` 39.6 ms /
 54.6 ms with 5.40 MiB of row JSON. The filter input deliberately waits 120 ms (debounce) before

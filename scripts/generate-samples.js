@@ -17,6 +17,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const DEFAULT_OUT = path.resolve(ROOT, '..', 'sample');
 const OUT = path.resolve(process.argv[2] || DEFAULT_OUT);
+const ARXML_OUT = path.join(OUT, 'arxml');
 const FIXTURES = path.join(ROOT, 'src', 'test', 'fixtures');
 
 const PARAMS = [
@@ -135,7 +136,7 @@ function moduleXml({ containers, paramsPer }) {
 }
 
 function write(name, content, description, nodeCount) {
-	fs.writeFileSync(path.join(OUT, name), content, 'utf8');
+	fs.writeFileSync(path.join(ARXML_OUT, name), content, 'utf8');
 	const bytes = Buffer.byteLength(content, 'utf8');
 	console.log(`${name.padEnd(22)} ${String(nodeCount).padStart(6)} nodes  ${(bytes / 1024).toFixed(1)} KiB  ${description}`);
 	return { name, bytes, nodeCount, description };
@@ -153,7 +154,7 @@ function main() {
 				').\nThe generated files are synthetic build products and must stay outside the repository.'
 		);
 	}
-	fs.mkdirSync(OUT, { recursive: true });
+	fs.mkdirSync(ARXML_OUT, { recursive: true });
 	console.log('Generating synthetic ECUC samples in ' + OUT);
 	const rows = [];
 	rows.push(write('minimal.arxml', moduleXml({ containers: 1, paramsPer: 1 }), 'one module/container/parameter', 3));
@@ -202,14 +203,14 @@ function main() {
 		'',
 		'| File | Approx. nodes | Purpose |',
 		'|---|---:|---|',
-		...rows.map((row) => `| \`${row.name}\` | ${row.nodeCount} | ${row.description} |`),
+		...rows.map((row) => `| \`arxml/${row.name}\` | ${row.nodeCount} | ${row.description} |`),
 		'',
 		'## Manual check',
 		'',
-		'Open a file in VS Code and run **ARXML Scope: Open with ECUC Editor** (or use *Open With…*).',
-		'`large.arxml` and `huge.arxml` are the performance files; use `npm run perf:ecuc -- <file>`',
+		'Open a file in `arxml/` in VS Code and run **ARXML Scope: Open with ECUC Editor** (or use *Open With…*).',
+		'`arxml/large.arxml` and `arxml/huge.arxml` are the performance files; use `npm run perf:ecuc -- <file>`',
 		'for scanner/renderer timings and the preview harness (`npm run preview:ecuc`) to view them in a',
-		'browser. The harness lists this directory as `sample/<name>` when it exists.',
+		'browser. The harness lists this directory as `sample/arxml/<name>` when it exists.',
 		'',
 		'## Performance is measured, not promised',
 		'',

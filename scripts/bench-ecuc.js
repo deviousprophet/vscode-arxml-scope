@@ -3,7 +3,7 @@
  * Measures the production scanner, node index and renderer on an ECUC sample.
  *
  *   npm run perf:ecuc -- <file>
- *   node scripts/bench-ecuc.js ../sample/large.arxml
+ *   node scripts/bench-ecuc.js ../sample/arxml/large.arxml
  *
  * The benchmark is evidence, not a promise: it covers the Node-side work, not the browser or
  * VS Code layout/paint. The harness page load is a separate observation. No dependency.
