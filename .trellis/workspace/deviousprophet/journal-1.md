@@ -232,3 +232,41 @@ sweep 0–100% had maximum inter-row gap 0 and spacers summing to the virtual to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: ECUC Document-only UI polish
+<!-- trellis-session: v=2 fp=929b2d8910bbe127 -->
+
+**Date**: 2026-10-28
+**Task**: ECUC Document-only UI polish
+**Branch**: `feat/arxml-scope`
+
+### Summary
+
+Finished the Document-only ECUC editor: no Tree view or line numbers, bracket guides, details-panel editing, same-file follow, subtree/active selection, labelled collapse controls and dark semantic accents.
+
+### Main Changes
+
+- Document-only renderer and CSS: bracket guides, green containers, yellow-italic reference targets, larger labelled Collapse/Expand and a full-row-height twisty.
+- Details-panel value editor with Enter/Escape/Tab, refusal/error and pending-draft preservation; removed the F2 hint, Source block, copy actions and clipboard path.
+- Same-file follow selects the target container; selection tints containers/subtrees and strengthens the selected parameter; docs/specs and task artifacts updated.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1e84dc0` | feat(editor): finish the Document-only ECUC surface |
+| `09cbf7e` | chore(task): archive 10-28-ecuc-document-ui-polish |
+
+### Testing
+
+- [OK] npm run check-types, npm run lint, npm test (208 passing), npm run preview:check
+- [OK] Mutation table 21/21 caught; dark/HC harness captures and contrast measurements recorded
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Manual Extension Development Host check for real webview theme/focus and details input; no follow-up task opened
