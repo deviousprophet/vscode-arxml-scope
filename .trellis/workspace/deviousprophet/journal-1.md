@@ -270,3 +270,39 @@ Finished the Document-only ECUC editor: no Tree view or line numbers, bracket gu
 ### Next Steps
 
 - Manual Extension Development Host check for real webview theme/focus and details input; no follow-up task opened
+
+
+## Session 7: ECUC container selection and green accent fix
+<!-- trellis-session: v=2 fp=8159c14bcf65da4f -->
+
+**Date**: 2026-10-28
+**Task**: ECUC container selection and green accent fix
+**Branch**: `feat/arxml-scope`
+
+### Summary
+
+Fixed the selected-container hierarchy and the container-name colour reported after the Document UI pass.
+
+### Main Changes
+
+- Selected containers/modules now use the strong active fill, 2px rail and thin outline; the subtree tint is softer so the selected row reads first.
+- Container names use the fixed dark green #4EC9B0 instead of the theme symbol-icon variable, which some themes resolve to white; HC/forced colors use the editor foreground.
+- Updated docs/specs, tests and the container-selected capture.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ba668f3` | fix(editor): make container selection unmistakable |
+
+### Testing
+
+- [OK] npm run check-types, npm run lint, npm test (208 passing), npm run preview:check
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Manual Extension Development Host check remains for real webview theme/focus and details input
