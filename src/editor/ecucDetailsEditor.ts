@@ -11,8 +11,28 @@
  * The details input is outside `#tree`, so it does not need to pre-empt the
  * Document's click/key listeners; it only stops its own Enter/Escape/Tab keys.
  */
+/**
+ * True when `data` contains only characters the details control may accept for
+ * this type. This blocks obviously wrong characters at insertion time without
+ * rewriting text the user already typed; full grammar validation still happens
+ * on commit in the host.
+ */
+export function detailsInputAllowed(type: string, data: string): boolean {
+	if (!data) {
+		return true;
+	}
+	if (type === 'Integer') {
+		return !/[^0-9a-fA-FxXbB+-]/.test(data);
+	}
+	if (type === 'Float') {
+		return !/[^0-9eE+\-.]/.test(data);
+	}
+	return true;
+}
+
 export function detailsEditorScript(): string {
 	return `
+${detailsInputAllowed.toString()}
 let detailsEdit = null;
 let pendingMove = null;
 let flashId = null;
@@ -52,14 +72,28 @@ function detailsValueInput(row, data) {
 	const rowElement = document.createElement('div');
 	rowElement.className = 'inspector-row';
 	rowElement.appendChild(inspectorElement('span', 'inspector-key', 'Value'));
-	const input = document.createElement('input');
+	const type = row.parameterType || data.type || '';
+	const boolean = type === 'Boolean' && /^(true|false)$/i.test(String(row.value ?? ''));
+	const input = document.createElement(boolean ? 'select' : 'input');
 	input.id = 'details-value';
 	input.className = 'details-value';
-	input.type = 'text';
-	input.value = row.value ?? '';
-	input.spellcheck = false;
 	input.setAttribute('data-node-id', row.id);
+	input.setAttribute('data-value-type', type || row.valueKind || '');
 	input.setAttribute('aria-label', 'Value of ' + (row.label || data.label || 'parameter'));
+	const original = boolean ? (String(row.value ?? '').toLowerCase() === 'false' ? 'false' : 'true') : row.value ?? '';
+	if (boolean) {
+		for (const option of ['true', 'false']) {
+			const element = document.createElement('option');
+			element.value = option;
+			element.textContent = option;
+			input.appendChild(element);
+		}
+	} else {
+		input.type = 'text';
+		input.spellcheck = false;
+		input.inputMode = type === 'Integer' ? 'numeric' : type === 'Float' ? 'decimal' : 'text';
+	}
+	input.value = original;
 	const previous = detailsEdit && detailsEdit.rowId === row.id ? detailsEdit : null;
 	if (previous) {
 		input.value = previous.input.value;
@@ -70,7 +104,7 @@ function detailsValueInput(row, data) {
 	error.setAttribute('aria-live', 'polite');
 	rowElement.appendChild(input);
 	rowElement.appendChild(error);
-	const edit = { rowId: row.id, input, error, pending: previous ? previous.pending : false };
+	const edit = { rowId: row.id, input, error, pending: previous ? previous.pending : false, type, original };
 	detailsEdit = edit;
 	if (previous && previous.error && previous.error.textContent) {
 		edit.error.textContent = previous.error.textContent;
@@ -94,7 +128,15 @@ function detailsValueInput(row, data) {
 			}
 		}
 	});
+	input.addEventListener('beforeinput', function (event) {
+		if (event.data && !detailsInputAllowed(type, event.data)) {
+			event.preventDefault();
+		}
+	});
 	input.addEventListener('input', function () {
+		clearDetailsError(edit);
+	});
+	input.addEventListener('change', function () {
 		clearDetailsError(edit);
 	});
 	return rowElement;
@@ -106,7 +148,9 @@ function focusDetailsInput() {
 		return false;
 	}
 	input.focus();
-	input.select();
+	if (typeof input.select === 'function') {
+		input.select();
+	}
 	return true;
 }
 
@@ -139,8 +183,7 @@ function cancelDetailsEdit() {
 	if (!detailsEdit || detailsEdit.pending) {
 		return;
 	}
-	const row = rowById.get(detailsEdit.rowId);
-	detailsEdit.input.value = row ? row.value ?? '' : detailsEdit.input.value;
+	detailsEdit.input.value = detailsEdit.original;
 	clearDetailsError(detailsEdit);
 	detailsEdit.input.focus();
 }

@@ -65,10 +65,10 @@ that is not obvious from the code.
   Tree row height. Do not reintroduce a hidden second view.
 - **The Document surface is text first.** Structural labels are neutral; only `--tok-*` keywords,
   strings, numbers, meta, comments, the green container name, the yellow italic reference target and
-  the single key accent carry colour. Unresolved reference targets are not links; resolved targets
-  underline only on hover; values have no dotted underline or hover pencil. Use
-  `--fold-gutter`/`--content-pad`/`--doc-pad`/`--indent`; there is no line-number gutter. The `=` is
-  punctuation, not part of the value token.
+  the single key accent carry colour. Reference targets are plain text, not links; values have no
+  dotted underline or hover pencil. Empty containers show a muted `{ }` marker so they are distinct
+  from parameters. Use `--fold-gutter`/`--content-pad`/`--doc-pad`/`--indent`; there is no line-number
+  gutter. The `=` is punctuation, not part of the value token.
 - **No line-number gutter.** Do not add `data-line`, `data-ln-digits`, `--ln-*`, `--gut`, a digits
   payload or source-position fields back to the row model. Bracket guides are the only vertical
   rules; they run from opening to closing brace, fade at rest and activate on hover. A repeating
@@ -76,19 +76,25 @@ that is not obvious from the code.
 - **Defaults are Document and hidden details.** `renderHtml` writes `data-view="document"`, the
   inspector `hidden`, and `aria-pressed="false"`; only `inspectorHidden` is persisted. An old saved
   `view` is ignored.
-- **Details editing is the only value edit path.** A selected parameter's value input commits through
-  the existing `{ type: 'edit', nodeId, value }` message; Enter commits, Escape restores, Tab moves.
-  A refusal keeps the typed text, marks the input invalid and shows the reason. The panel exposes
-  Reveal in source only; there is no Source block or copy action.
+- **Details editing is the only value edit path.** The details control follows the AUTOSAR type:
+  integer/float/text use an input with type-specific filtering; Boolean uses a true/false select. It
+  commits through the existing `{ type: 'edit', nodeId, value }` message; Enter commits, Escape
+  restores, Tab moves. A refusal keeps the typed text, marks the control invalid and shows the
+  reason. The panel exposes Jump to target for a followable reference plus Reveal in source; there is
+  no Source block or copy action.
+- **Types and formats live in details.** `ParameterNode.definitionDest` feeds the details Type row;
+  integer values show Decimal/Hexadecimal/Binary (`0x0F`, `0b00001111`). Do not put `(= 0x…)` back
+  into the Document meta; the Document shows the value once.
 - **Dark is the supported theme for now.** Do not re-add a light-only selection/token branch or a
   light preview/capture; high contrast is the accessibility variant. High-contrast/forced-colors
   subtree rows use a dotted outline, not the fill.
 - **The fold gutter is fixed.** The 26px gutter and 16px chevron are the VS Code geometry; do not
   put the twisty back into the label flow. Expanded chevrons are hover/focus-only and collapsed
   chevrons stay visible. The twisty hit area spans the row height.
-- **Reference follow is same-file only.** Only a target resolved through `resolvePath(model.pathIndex)`
-  gets `followable`/`data-follow`. Following selects the target node in the ECUC editor; unresolved
-  targets are not links.
+- **Reference follow is same-file only and details-only.** Only a target resolved through
+  `resolvePath(model.pathIndex)` gets `followable`; the details panel shows Jump to target and posts
+  the existing follow message. The Document value is plain text (no `data-follow`/link); unresolved
+  targets get no button.
 - **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels at
   normal widths; labels may hide only at <=720px. The fixed gutter keeps the row control at the far
   left instead of indenting it with the label.

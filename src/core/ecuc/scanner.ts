@@ -31,6 +31,8 @@ interface Rec {
 	attrs?: Map<string, string>;
 	definitionRef?: string;
 	definitionRefRange?: Range;
+	/** `DEFINITION-REF DEST`, when present. */
+	definitionDest?: string;
 	shortName?: string;
 	shortNameRange?: Range;
 	variant?: string;
@@ -38,7 +40,6 @@ interface Rec {
 	containerPath?: string[];
 	displayValue?: string;
 	valueRange?: Range;
-	hexValue?: string;
 	numeric?: boolean;
 	instance?: boolean;
 	targetRaw?: string;
@@ -71,6 +72,8 @@ interface Entry {
 	/** Offset just past the last raw text character, or -1. */
 	textEnd: number;
 	rec?: Rec;
+	/** Attributes retained for `DEFINITION-REF` (its `DEST` type). */
+	attrs?: Map<string, string>;
 	/** Set on `<VALUE>`: which enclosing element decides its meaning (child design §2.1). */
 	valueRole?: 'param' | 'pb';
 }
@@ -198,6 +201,9 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		}
 
 		const entry: Entry = { name, start, text: '', textStart: -1, textEnd: -1 };
+		if (name === 'DEFINITION-REF') {
+			entry.attrs = attrs;
+		}
 		entry.rec = openRecord(name, attrs);
 		if (entry.rec?.kind === 'value') {
 			entry.valueRole = valueRole(stack);
@@ -249,9 +255,6 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 					// Only a `<VALUE>` child normally supplies the value; this covers a parameter
 					// written as bare text.
 					rec.displayValue = decode(entry.text).trim();
-				}
-				if (rec.numeric) {
-					rec.hexValue = hexOf(rec.displayValue);
 				}
 				attachChild(ancestors, rec);
 				return;
@@ -393,6 +396,10 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				if (parent) {
 					parent.definitionRef = raw.trim();
 					parent.definitionRefRange = range;
+					const dest = entry.attrs?.get('DEST');
+					if (dest) {
+						parent.definitionDest = dest.trim();
+					}
 				}
 				return;
 			}
@@ -486,11 +493,11 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		return compact<ParameterNode>({
 			kind: 'parameter',
 			numeric: rec.numeric === true,
+			definitionDest: rec.definitionDest,
 			definitionRef,
 			definitionRefRange: rec.definitionRefRange,
 			name: lastShortName(definitionRef),
 			displayValue: rec.displayValue,
-			hexValue: rec.hexValue,
 			valueRange: rec.valueRange,
 			range: rec.range!,
 			...suffixesOf(rec),
@@ -738,22 +745,6 @@ function structify(path: string): string {
 		return path.trim();
 	}
 	return parts.slice(1).join('.');
-}
-
-/** `dec2hex` secondary text: `0x` + uppercase hex, integers only. */
-function hexOf(value: string): string | undefined {
-	if (value === '' || value === 'true' || value === 'false') {
-		return undefined;
-	}
-	const n = Number(value);
-	if (!Number.isFinite(n) || !Number.isInteger(n)) {
-		return undefined;
-	}
-	if (Object.is(n, -0)) {
-		return '0x0';
-	}
-	const hex = Math.abs(n).toString(16).toUpperCase();
-	return n < 0 ? `-0x${hex}` : `0x${hex}`;
 }
 
 /** Decodes XML entity references, for display values only. */

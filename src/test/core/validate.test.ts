@@ -3,10 +3,11 @@ import * as assert from 'assert';
 import { ParameterNode } from '../../core/ecuc/model';
 import { escapeXml, isNumericLiteral, validateValue } from '../../core/ecuc/validate';
 
-function parameter(numeric: boolean, displayValue: string): ParameterNode {
+function parameter(numeric: boolean, displayValue: string, definitionDest?: string): ParameterNode {
 	return {
 		kind: 'parameter',
 		numeric,
+		definitionDest,
 		definitionRef: '/D/C/Value',
 		name: 'Value',
 		displayValue,
@@ -25,7 +26,7 @@ suite('validate (core)', () => {
 	});
 
 	test('AC8: other forms are refused for a numerical parameter', () => {
-		const refused = ['', 'abc', '1.5.2', '0x', '0xG1', 'trueish', ' 1', '1 ', '1e5', '+1', '1,5', '- 1', 'NaN'];
+		const refused = ['', 'abc', '1.5.2', '0x', '0xG1', 'trueish', ' 1', '1 ', '1e5', '+1', '1,5', '- 1', 'NaN', '0b1010'];
 		for (const value of refused) {
 			const result = validateValue(parameter(true, 'unrelated'), value);
 			assert.strictEqual(result.ok, false, value);
@@ -41,6 +42,35 @@ suite('validate (core)', () => {
 		assert.deepStrictEqual(validateValue(parameter(false, 'x'), ''), { ok: true, text: '' });
 		assert.deepStrictEqual(validateValue(parameter(false, 'x'), '1.5.2'), { ok: true, text: '1.5.2' });
 		assert.strictEqual(validateValue(parameter(false, 'x'), '\t tab and \n newline').ok, true);
+	});
+
+	test('AC8: AUTOSAR DEST types narrow the accepted literals', () => {
+		const integer = parameter(true, 'unrelated', 'ECUC-INTEGER-PARAM-DEF');
+		for (const value of ['0', '63', '-7', '0x3F', '0b00111111', '-0b10']) {
+			assert.strictEqual(validateValue(integer, value).ok, true, value);
+		}
+		for (const value of ['1.5', '1e5', 'true', 'abc', '0x']) {
+			assert.strictEqual(validateValue(integer, value).ok, false, value);
+		}
+
+		const float = parameter(true, 'unrelated', 'ECUC-FLOAT-PARAM-DEF');
+		for (const value of ['0', '1', '1.5', '-3.5', '1e5', '3.5e10']) {
+			assert.strictEqual(validateValue(float, value).ok, true, value);
+		}
+		for (const value of ['0x3F', '0b11', 'true', 'abc']) {
+			assert.strictEqual(validateValue(float, value).ok, false, value);
+		}
+
+		const boolean = parameter(true, 'unrelated', 'ECUC-BOOLEAN-PARAM-DEF');
+		assert.strictEqual(validateValue(boolean, 'true').ok, true);
+		assert.strictEqual(validateValue(boolean, 'false').ok, true);
+		for (const value of ['TRUE', 'False', '1', '0x1', 'yes']) {
+			assert.strictEqual(validateValue(boolean, value).ok, false, value);
+		}
+
+		const text = parameter(false, 'unrelated', 'ECUC-STRING-PARAM-DEF');
+		assert.strictEqual(validateValue(text, 'anything at all').ok, true);
+		assert.strictEqual(validateValue(text, '1.5.2').ok, true);
 	});
 
 	test('AC8: an unchanged value is refused', () => {

@@ -29,14 +29,19 @@ import { SORT_EXCEPTIONS, orderContainers, orderMembers, orderModules } from '..
 import { haystack } from './filter';
 import { NodeIndex, buildNodeIndex } from './nodeId';
 
-/** One quiet-source meta fragment (short name, variant, hex, context, condition, annotation). */
+/** One quiet-source meta fragment (short name, variant, context, condition, annotation). */
 export interface MetaPart {
-	cls: 'short' | 'variant' | 'hex' | 'context' | 'condition' | 'annotation';
+	cls: 'short' | 'variant' | 'context' | 'condition' | 'annotation';
 	text: string;
 	title: string;
 }
 
 /** One entity in DFS/display order. UI fields are values; no markup is carried. */
+export interface ParameterFormat {
+	label: 'Decimal' | 'Hexadecimal' | 'Binary';
+	value: string;
+}
+
 export interface EcucRow {
 	id: string;
 	kind: 'module' | 'container' | 'parameter' | 'reference';
@@ -45,6 +50,8 @@ export interface EcucRow {
 	parentId: string | null;
 	/** Number of descendants in display order; they occupy the next `subtreeSize` rows. */
 	subtreeSize: number;
+	/** True for a container with no parameters, references or sub-containers. */
+	empty?: boolean;
 	posinset: number;
 	setsize: number;
 	hasChildren: boolean;
@@ -52,6 +59,12 @@ export interface EcucRow {
 	label: string;
 	shortName?: string;
 	definitionRef: string;
+	/** `DEFINITION-REF DEST`, for the AUTOSAR type row. */
+	definitionDest?: string;
+	/** Normalized AUTOSAR type or Numeric/Textual/Boolean fallback. */
+	parameterType?: string;
+	/** Display formats derived from the parameter value. */
+	formats?: ParameterFormat[];
 	/** Raw value or reference target, for the details field and follow. */
 	value?: string;
 	valueKind?: 'numeric' | 'textual' | 'boolean';
@@ -108,6 +121,96 @@ export function buildRows(model: EcucDocumentModel, options: RowBuildOptions = {
 		moduleRow(ctx, rows, modules[at], 1, at + 1, modules.length, null);
 	}
 	return { rows };
+}
+
+/** Normalizes an AUTOSAR `DEFINITION-REF DEST` to the details Type row. */
+export function parameterType(
+	definitionDest: string | undefined,
+	valueKind: EcucRow['valueKind']
+): string {
+	if (definitionDest) {
+		const known = new Map<string, string>([
+			['ECUC-INTEGER-PARAM-DEF', 'Integer'],
+			['ECUC-FLOAT-PARAM-DEF', 'Float'],
+			['ECUC-BOOLEAN-PARAM-DEF', 'Boolean'],
+			['ECUC-STRING-PARAM-DEF', 'String'],
+			['ECUC-ENUMERATION-PARAM-DEF', 'Enumeration'],
+			['ECUC-FUNCTION-NAME-DEF', 'Function name'],
+			['ECUC-LINKER-SYMBOL-DEF', 'Linker symbol'],
+		]);
+		const mapped = known.get(definitionDest);
+		if (mapped) {
+			return mapped;
+		}
+		if (definitionDest.startsWith('ECUC-') && definitionDest.endsWith('-PARAM-DEF')) {
+			const middle = definitionDest.slice(5, -10).toLowerCase().replace(/-/g, ' ');
+			if (middle) {
+				return middle.charAt(0).toUpperCase() + middle.slice(1);
+			}
+		}
+	}
+	if (valueKind === 'boolean') {
+		return 'Boolean';
+	}
+	if (valueKind === 'numeric') {
+		return 'Numeric';
+	}
+	if (valueKind === 'textual') {
+		return 'Textual';
+	}
+	return 'Unknown';
+}
+
+/**
+ * Derives the display formats for a parameter. Integer values get all three;
+ * floats/unknown non-integers get Decimal only; Boolean/textual values get none.
+ */
+export function parameterFormats(value: string, type: string): ParameterFormat[] {
+	if (type === 'Boolean' || type === 'Textual' || type === 'String' || type === 'Enumeration' || type === 'Function name' || type === 'Linker symbol') {
+		return [];
+	}
+	const raw = value.trim();
+	if (raw === '') {
+		return [];
+	}
+	if (type === 'Float') {
+		return [{ label: 'Decimal', value: raw }];
+	}
+	const integer = integerValue(value);
+	if (integer !== undefined) {
+		const sign = integer < 0n ? '-' : '';
+		const magnitude = integer < 0n ? -integer : integer;
+		return [
+			{ label: 'Decimal', value: String(integer) },
+			{ label: 'Hexadecimal', value: `${sign}0x${magnitude.toString(16).toUpperCase().padStart(2, '0')}` },
+			{ label: 'Binary', value: `${sign}0b${magnitude.toString(2).padStart(8, '0')}` },
+		];
+	}
+	if (type === 'Numeric') {
+		return [{ label: 'Decimal', value: raw }];
+	}
+	return [];
+}
+
+/** Parses decimal, `0x` or `0b` integer literals; non-integers return undefined. */
+function integerValue(value: string): bigint | undefined {
+	const raw = value.trim();
+	if (raw === '') {
+		return undefined;
+	}
+	const negative = raw.startsWith('-');
+	const body = negative ? raw.slice(1) : raw;
+	let parsed: bigint;
+	if (/^0[xX][0-9A-Fa-f]+$/.test(body)) {
+		parsed = BigInt(`0x${body.slice(2)}`);
+	} else if (/^0[bB][01]+$/.test(body)) {
+		parsed = BigInt(`0b${body.slice(2)}`);
+	} else if (/^\d+$/.test(body)) {
+		parsed = BigInt(body);
+	} else {
+		return undefined;
+	}
+	return negative ? -parsed : parsed;
 }
 
 function moduleRow(
@@ -197,6 +300,7 @@ function containerRow(
 		child++;
 	}
 	row.hasChildren = total > 0;
+	row.empty = !row.hasChildren;
 	row.subtreeSize = rows.length - at - 1;
 }
 
@@ -213,6 +317,7 @@ function parameterRow(
 	// The legacy form quotes a textual value and leaves a numerical one bare.
 	const shown = parameter.numeric ? value : `"${value}"`;
 	const valueKind = parameter.numeric ? (/^(true|false)$/i.test(value) ? 'boolean' : 'numeric') : 'textual';
+	const type = parameterType(parameter.definitionDest, valueKind);
 	rows.push({
 		id: ctx.index.idOf(parameter) ?? '',
 		kind: 'parameter',
@@ -224,11 +329,14 @@ function parameterRow(
 		hasChildren: false,
 		label: parameter.name,
 		definitionRef: parameter.definitionRef,
+		definitionDest: parameter.definitionDest,
+		parameterType: type,
+		formats: parameterFormats(value, type),
 		value,
 		valueKind,
 		shownValue: shown,
 		title: parameter.definitionRef,
-		meta: [...(parameter.hexValue ? [hexPart(parameter.hexValue)] : []), ...suffixParts(parameter)],
+		meta: suffixParts(parameter),
 		haystack: haystack({ label: parameter.name, value }),
 	});
 }
@@ -281,10 +389,6 @@ function shortPart(shortName: string): MetaPart {
 function variantPart(variant: string): MetaPart {
 	const text = camelize(variant);
 	return { cls: 'variant', text: `(${text})`, title: text };
-}
-
-function hexPart(hexValue: string): MetaPart {
-	return { cls: 'hex', text: `(= ${hexValue})`, title: `(= ${hexValue})` };
 }
 
 function contextPart(contextPaths: readonly string[]): MetaPart {

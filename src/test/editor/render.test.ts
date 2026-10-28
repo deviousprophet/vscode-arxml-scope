@@ -56,14 +56,20 @@ suite('editor rendering (AC1)', () => {
 		assert.deepStrictEqual(labels, ['ContA', 'ContB']);
 	});
 
-	test('AC1: parameters show their tail, their value, and a numeric hex form', () => {
+	test('AC1: parameters show their tail, value and details formats', () => {
 		const rows = payload().rows;
 		const ini = rows.find((row) => row.label === 'IniValue')!;
 		assert.strictEqual(ini.kind, 'parameter');
 		assert.strictEqual(ini.value, '63');
 		assert.strictEqual(ini.shownValue, '63');
 		assert.strictEqual(ini.valueKind, 'numeric');
-		assert.ok(ini.meta.some((part) => part.cls === 'hex' && part.text === '(= 0x3F)'));
+		assert.strictEqual(ini.parameterType, 'Integer');
+		assert.deepStrictEqual(ini.formats, [
+			{ label: 'Decimal', value: '63' },
+			{ label: 'Hexadecimal', value: '0x3F' },
+			{ label: 'Binary', value: '0b00111111' },
+		]);
+		assert.ok(!ini.meta.some((part) => part.text.indexOf('(= 0x') === 0), 'no hex in the Document meta');
 		assert.strictEqual(rows.find((row) => row.label === 'Title')!.shownValue, '"hello"', 'text is quoted');
 		assert.strictEqual(rows.find((row) => row.label === 'Flag')!.shownValue, 'true', 'a boolean is bare');
 	});

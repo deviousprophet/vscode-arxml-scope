@@ -171,19 +171,9 @@ suite('editor document view', () => {
 		assert.ok(/body\[data-view="document"\] \.meta \.keyword\s*\{[^}]*--tok-keyword/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*--tok-keyword/.test(style));
 		assert.ok(/body\[data-view="document"\] \.variant,[\s\S]*?--tok-meta/.test(style));
-		assert.ok(/body\[data-view="document"\] \.hex\s*\{[^}]*--tok-number/.test(style));
-		assert.ok(
-			/body\[data-view="document"\] \.target\s*\{[^}]*color:\s*var\(--vscode-editor-foreground\)[^}]*text-decoration:\s*none/.test(
-				style
-			),
-			'the target is plain text, not a permanent blue underline'
-		);
-		assert.ok(
-			/body\[data-view="document"\] \.target:hover \.value-text\s*\{[^}]*text-decoration:\s*underline[^}]*text-decoration-color:\s*var\(--vscode-textLink-foreground/.test(
-				style
-			),
-			'the link affordance is hover-only'
-		);
+		assert.ok(!/body\[data-view="document"\] \.hex\s*\{/.test(style), 'the Document has no hex meta style');
+		assert.ok(!/body\[data-view="document"\] \.target\s*\{/.test(style), 'reference targets have no Document link style');
+		assert.ok(!/\.target:hover \.value-text/.test(style), 'reference targets have no hover underline');
 	});
 
 	test('quiet selection, focus rail and read-only values', () => {
@@ -259,6 +249,13 @@ suite('editor document view', () => {
 			),
 			'collapsed folds stay visible'
 		);
+		assert.ok(
+			/body\[data-view="document"\] \.node\[data-kind="container"\]\[data-empty="true"\] > \.row::after\s*\{[^}]*content:\s*" \{ \}"/.test(
+				styleOf(html)
+			),
+			'an empty container is marked at rest'
+		);
+		assert.ok(functionSource(html, 'buildNodeRow').includes("node.dataset.empty = 'true'"), 'the marker is data-driven');
 		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(styleOf(html)));
 		assert.ok(/id="details-toggle"[^>]*aria-label="Show node details"[^>]*><svg/.test(html));
 		assert.ok(!html.includes('id="view-toggle"'));
@@ -271,7 +268,13 @@ suite('editor document view', () => {
 		const module = rows.find((row) => row.kind === 'module')!;
 		assert.ok(module.meta.some((part) => part.cls === 'variant'));
 		const ini = rows.find((row) => row.label === 'IniValue')!;
-		assert.ok(ini.meta.some((part) => part.cls === 'hex' && part.text === '(= 0x3F)'));
+		assert.ok(!ini.meta.some((part) => part.text.indexOf('(= 0x') === 0), 'no hex meta in the Document');
+		assert.strictEqual(ini.parameterType, 'Integer');
+		assert.deepStrictEqual(ini.formats, [
+			{ label: 'Decimal', value: '63' },
+			{ label: 'Hexadecimal', value: '0x3F' },
+			{ label: 'Binary', value: '0b00111111' },
+		]);
 		const peer = rows.find((row) => row.label === 'PeerIref')!;
 		assert.ok(peer.meta.some((part) => part.cls === 'context'));
 		assert.ok(module.meta.some((part) => part.cls === 'condition'));

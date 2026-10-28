@@ -6,7 +6,7 @@ parameter values in the details panel, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, row model, virtual renderer,
-> filter, navigation, details editing, details inspector) are in place with 209 passing tests. Two
+> filter, navigation, details editing, details inspector) are in place with 217 passing tests. Two
 > things are deliberately not implemented and are listed under *Limitations*: CDATA-backed values
 > are refused rather than edited, and reference resolution is single-file. The plan lives in
 > `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`, `design.md`, `implement.md`) with the
@@ -53,14 +53,16 @@ the fold gutter holds only the 16px Codicon chevron, inset 2px, and the header, 
 after it. Expanded chevrons appear while the tree is hovered or focused, matching the editor's fold
 gutter; a collapsed container keeps its right chevron visible. Containers draw a vertical guide from
 their opening brace to their closing brace; it is faded at rest and becomes clearer while the pointer
-is over the container.
+is over the container. A container with no children ends in a muted `{ }` marker, so it is distinct
+from a parameter at a glance.
 Labels are neutral except the single key accent on parameter/reference names, the green container
-name, and the yellow italic reference target; keywords, strings, numbers/hex, conditions, annotations
-and booleans carry the semantic tokens. The `=` is muted punctuation. Parameter values are read-only
-on the document. The **dark theme is the supported theme for now** (high contrast is kept as an
-accessibility variant; there is no light-theme pass). A 26px strip holds the filter, count, larger
-**Collapse**/**Expand** controls and **Details**; the details panel is a docked 260–340px panel, or a
-bottom sheet at narrow widths. The details visibility persists.
+name, and the yellow italic reference target; keywords, strings, numbers, conditions, annotations and
+booleans carry the semantic tokens. The `=` is muted punctuation. Parameter values are read-only on
+the document and have no inline hex form; the details panel carries the formats. The **dark theme is
+the supported theme for now** (high contrast is kept as an accessibility variant; there is no
+light-theme pass). A 26px strip holds the filter, count, larger **Collapse**/**Expand** controls and
+**Details**; the details panel is a docked 260–340px panel, or a bottom sheet at narrow widths. The
+details visibility persists.
 
 Selection is stronger than a hover tint: a selected parameter gets the active selection fill plus a
 2px focus rail and a thin outline, so the edited row is unambiguous. Selecting a container or module
@@ -80,7 +82,7 @@ selected row that is outside the window still shows its details.
 | Package | the dotted package path |
 | Module | `module` keyword + its full `DEFINITION-REF` path, its short-name, and its variant when present |
 | Container | the `DEFINITION-REF` tail and its short-name, nested to any depth |
-| Parameter | the `DEFINITION-REF` tail, the value, and the hexadecimal form of a numeric value as secondary information |
+| Parameter | the `DEFINITION-REF` tail and value; the details panel adds the AUTOSAR type and integer formats |
 | Reference | the `DEFINITION-REF` tail, the target path, and the context of an instance reference |
 | Conditions | `[SW-SYSCOND]` and post-build-variant conditions as `<Ref == value && …>` |
 | Annotations | `[Label] text`, shown in comment form (`/* … */`) in Document view, without a label when absent |
@@ -89,8 +91,8 @@ The 26px fold gutter is fixed at the far left, so labels align on exact 4ch step
 with the row's text. A container with children reveals its 16px Codicon chevron while the tree is
 hovered or focused; a collapsed container keeps its right chevron and a `{ ... }` stub visible. There
 are no list bullets, per-row borders, chips or fixed label columns. Long lines scroll horizontally
-instead of wrapping; nothing is hidden — short-name, variant, hexadecimal form, context, conditions
-and annotations move inline after the value. The empty filter state is a source comment
+instead of wrapping; nothing is hidden — short-name, variant, context, conditions and annotations
+move inline after the value. The empty filter state is a source comment
 (`/* No entities match "…". */`) with a flat Clear filter action. The full text of any row remains
 available in the details panel.
 
@@ -100,13 +102,13 @@ locate a row in the file. Each container's guide runs from its opening brace to 
 with one line per nesting level; it is faded at rest and clearer while the container is hovered.
 
 Document colours are deliberately restrained. `schema`/`package`/`module` use the keyword token,
-short names and textual values the string token, numbers and hex the numeric token, conditions the
+short names and textual values the string token, numbers the numeric token, conditions the
 meta token, and annotations the comment token (italic). Container names are green
 (`--container-accent`, the fixed dark accent `#4EC9B0`; high contrast falls back to the editor
 foreground); reference targets are yellow and italic (`--vscode-symbolIcon-functionForeground`).
 Parameter and reference labels use the single key accent; module paths, context paths and
-`=`/braces/punctuation stay neutral/muted. Reference targets use the link underline only on hover and
-only when the target resolves in the same file. Selected parameters use the active selection fill, a 2px
+`=`/braces/punctuation stay neutral/muted. Reference targets are plain text, not links; the details
+panel carries the jump action. Selected parameters use the active selection fill, a 2px
 focus rail and a thin outline; a selected container/module uses the visible neutral highlight fill
 with the same rail and outline, while its visible descendants get a softer subtree tint. High
 contrast switches the tint to outlines. Bracket guides are structural one-pixel lines, not a second
@@ -135,12 +137,12 @@ below are the whole model; there is no second presentation.
 | Click the `=` before a parameter value, or its label | selects the node only; it does not edit |
 | Click a container's twisty | collapses or expands it; the selection does not move |
 | Double-click a row, or `Ctrl`/`Alt`+`Enter` | reveals the node in the source (see *Navigation*) |
-| Click a reference's target, or `Enter` on a followable reference | selects the same-file target container in the editor |
-| Reference target with no same-file match | is not a link; it stays read-only and `Enter` reveals the reference |
+| Click a reference target | selects it; the details panel has Jump to target for a same-file target |
+| Reference target with no same-file match | has no Jump to target; it stays read-only and `Enter` reveals the reference |
 | `Enter` on a parameter | opens/focuses its value in the details panel |
 | `F2` on a focused parameter | opens/focuses its value in the details panel |
 | `Enter` on a container | collapses or expands it |
-| `Enter` on a leaf reference | follows/reveals as above |
+| `Enter` on a leaf reference | reveals the reference in the source |
 | `Space` | selects the focused node, and nothing else |
 
 A container or module with children has a toggle and reports its state through `aria-expanded`; a leaf
@@ -168,13 +170,15 @@ starting with it.
 ## Details panel
 
 Selecting a node fills the **details** panel on the right. It shows the node's kind, primary label,
-full `DEFINITION-REF`, short name and variant, value (as an editable field for parameters),
-hexadecimal form, target and context (references), conditions and annotations. There is no Source
-block: **Reveal in source** is the deliberate way to locate the node in the file. The panel's only
-action is **Reveal in source**; the old Copy path/Copy value/Copy target actions and the host
-clipboard path are gone. The panel starts **hidden**, so the document gets the full width; the
-**Details** toolbar button shows or hides it. The preference is remembered through the webview state,
-so it survives a re-scan and a reload.
+full `DEFINITION-REF`, short name, variant and AUTOSAR type. A parameter's value is an editable field;
+integer parameters also show Decimal, Hexadecimal and Binary forms (`0x0F`, `0b00001111`), while
+float parameters show Decimal only. References show their target and context; conditions and
+annotations appear when present. There is no Source block: **Reveal in source** is the deliberate way
+to locate the node in the file. The actions are **Jump to target** for a followable reference and
+**Reveal in source**; the old Copy path/Copy value/Copy target actions and the host clipboard path are
+gone. The panel starts **hidden**, so the document gets the full width; the **Details** toolbar button
+shows or hides it. The preference is remembered through the webview state, so it survives a re-scan
+and a reload.
 
 ## Editing
 
@@ -184,15 +188,16 @@ Only the text content of a parameter's `<VALUE>` element is ever written.
   in the details panel; `Enter` commits, `Escape` restores the current value, and `Tab`/`Shift`+`Tab`
   commits and moves to the adjacent parameter. The document itself is read-only: clicking `=`, the
   label or a non-value part of the row selects without editing. There is no `F2` hint on the line.
-- A refused value — one that is invalid for its parameter kind, or that XML cannot represent — keeps
-  **the text you typed**, marks the details field invalid, and says why. Nothing is discarded.
+- Editing is type-aware. Integer parameters accept decimal, `0x` hexadecimal and `0b` binary integer
+  literals; float parameters accept decimal integers, fractions and exponents; Boolean parameters use
+  a `true`/`false` selector; textual parameters accept text. The details panel shows the type and the
+  integer formats; the document shows the value once. A refused value — one that is invalid for its
+  type, or that XML cannot represent — keeps **the text you typed**, marks the details field invalid,
+  and says why. Nothing is discarded.
 - A value with content has **just that content** replaced; a self-closing or empty `<VALUE/>` becomes
   `<VALUE>text</VALUE>`. Nothing else in the file changes — not indentation, not line endings, not
   attribute spacing, not sibling order.
 - Values are escaped on write, so `&`, `<` and `>` survive a round-trip.
-- Numerical parameters accept `true`/`false`, decimal integers, hexadecimal literals, and decimal
-  fractions with an optional exponent. A value that is invalid for its parameter kind, or that XML
-  cannot represent, is **refused with an explanation and the file is left untouched**.
 - A value backed by a CDATA section is shown but **not editable**: it is refused rather than risk
   writing into the section, because CDATA-aware escaping (splitting on `]]>`) is not implemented.
 - An edit that changes nothing does not mark the file dirty.
@@ -211,9 +216,10 @@ reference** (references are read-only — only parameter values are editable); r
   this (see *Settings*).
 - **Source → view:** with the cursor in the arxml text editor, the command opens the custom editor at
   the innermost node under the cursor.
-- **References:** a reference target is a link only when it resolves in the same file. Following it
-  selects the target container in the ECUC editor (scrolls/focuses it); an absent or ambiguous
-  target is not a link and produces no navigation. *Reveal in source* remains a separate action.
+- **References:** reference values are not links in the document. Select the reference and use
+  **Jump to target** in the details panel when the target resolves in the same file; it selects the
+  target container in the ECUC editor. An absent or ambiguous target has no jump action. *Reveal in
+  source* remains a separate action.
 
 ## Settings
 

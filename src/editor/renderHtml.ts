@@ -23,7 +23,7 @@
 import { randomBytes } from 'crypto';
 import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
 import { FlatRow, buildFilterIndex, createFilterDebouncer, filterRows, flattenRows, matchRanges } from './filter';
-import { EcucRow, MetaPart, buildRows } from './renderRows';
+import { EcucRow, MetaPart, ParameterFormat, buildRows } from './renderRows';
 import { virtualScrollScript } from './virtualScroll';
 import { detailsEditorScript } from './ecucDetailsEditor';
 
@@ -154,8 +154,9 @@ export interface InspectorFields {
 	definitionRef: string;
 	shortName: string;
 	variant: string;
+	type: string;
 	value: string;
-	hex: string;
+	formats: ParameterFormat[];
 	target: string;
 	context: string;
 	conditions: string;
@@ -184,8 +185,9 @@ export function inspectorFields(row: EcucRow): InspectorFields {
 		definitionRef: row.definitionRef,
 		shortName: row.shortName ?? '',
 		variant: parts('variant')[0] ?? '',
+		type: row.parameterType ?? '',
 		value: row.value ?? '',
-		hex: parts('hex')[0] ?? '',
+		formats: row.formats ?? [],
 		target: row.target ?? '',
 		context,
 		conditions: parts('condition').join('\n'),
@@ -721,24 +723,11 @@ body[data-view] {
 .punct {
 	color: var(--tok-punct);
 }
-.target {
-	color: var(--vscode-editor-foreground);
-	text-decoration: none;
-	cursor: pointer;
-}
-.target:hover .value-text {
-	text-decoration: underline;
-	text-decoration-color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
-	text-underline-offset: 3px;
-}
 .context {
 	color: var(--vscode-editor-foreground);
 }
 .context .keyword {
 	color: var(--tok-keyword);
-}
-.hex {
-	color: var(--tok-number);
 }
 mark {
 	color: var(--vscode-editor-findMatchForeground, var(--vscode-foreground));
@@ -920,6 +909,10 @@ body[data-view="document"] .node[aria-expanded="false"] > .row::after {
 	content: " { … }";
 	color: var(--tok-punct);
 }
+body[data-view="document"] .node[data-kind="container"][data-empty="true"] > .row::after {
+	content: " { }";
+	color: var(--tok-punct);
+}
 body[data-view="document"] .label {
 	flex: 0 0 auto;
 	overflow: visible;
@@ -979,20 +972,8 @@ body[data-view="document"] .annotation {
 	color: var(--tok-comment);
 	font-style: italic;
 }
-body[data-view="document"] .hex {
-	color: var(--tok-number);
-}
 body[data-view="document"] .context {
 	color: var(--vscode-editor-foreground);
-}
-body[data-view="document"] .target {
-	color: var(--vscode-editor-foreground);
-	text-decoration: none;
-}
-body[data-view="document"] .target:hover .value-text {
-	text-decoration: underline;
-	text-decoration-color: var(--vscode-textLink-foreground, var(--vscode-symbolIcon-referenceForeground, var(--vscode-foreground)));
-	text-underline-offset: 3px;
 }
 body[data-view="document"] .condition,
 body[data-view="document"] .annotation {
@@ -1440,16 +1421,12 @@ function appendHighlighted(parent, text, query) {
 
 function valueSpan(row) {
 	const value = document.createElement('span');
-	const followable = row.kind === 'reference' && row.followable === true;
-	value.className = followable ? 'value target' : 'value';
+	value.className = 'value';
 	if (row.kind === 'parameter') {
 		value.dataset.valueKind = row.valueKind || 'textual';
 		value.title = 'Value: ' + (row.shownValue || '') + ' - edit in Details';
-	} else if (followable) {
-		value.dataset.follow = 'true';
-		value.title = 'Follow to the target: ' + (row.shownValue || '');
 	} else {
-		value.title = 'Target not found in this file: ' + (row.shownValue || '');
+		value.title = 'Target: ' + (row.shownValue || '');
 	}
 	const punct = document.createElement('span');
 	punct.className = 'punct';
@@ -1516,6 +1493,9 @@ function buildNodeRow(row, displayIndex) {
 	}
 	if (row.kind === 'module' && displayIndex > 0) {
 		node.dataset.gap = 'true';
+	}
+	if (row.empty) {
+		node.dataset.empty = 'true';
 	}
 	node.title = row.title;
 
@@ -1847,13 +1827,9 @@ function onRowClick(event) {
 		return;
 	}
 	// One interaction, one effect: the twisty toggles without moving the selection,
-	// the target follows, everything else selects.
+	// everything else selects.
 	if (event.target.closest('.twisty')) {
 		flipCollapsed(item.dataset.nodeId);
-		return;
-	}
-	if (event.target.closest('[data-follow]')) {
-		followItem(item);
 		return;
 	}
 	selectItem(item);
@@ -1867,7 +1843,7 @@ function onRowDoubleClick(event) {
 		return;
 	}
 	const item = event.target.closest('#tree [role="treeitem"]');
-	if (!item || event.target.closest('.twisty') || event.target.closest('[data-follow]')) {
+	if (!item || event.target.closest('.twisty')) {
 		return;
 	}
 	revealItem(item);
@@ -1923,13 +1899,11 @@ function onTreeKeydown(event) {
 	} else if (event.key === 'Enter') {
 		event.preventDefault();
 		// Ctrl/Alt+Enter always reveals; a parameter opens its details editor,
-		// a container toggles, and a leaf/reference keeps the reveal action.
+		// a container toggles, and a leaf/reference reveals.
 		if (event.ctrlKey || event.altKey) {
 			revealItem(id);
 		} else if (row.kind === 'parameter') {
 			beginDetailsEdit(id);
-		} else if (row.kind === 'reference' && row.followable) {
-			followItem(id);
 		} else if (row.hasChildren) {
 			flipCollapsed(id, id);
 		} else {
@@ -2085,11 +2059,14 @@ function updateInspector() {
 	if (data.variant) {
 		inspector.appendChild(inspectorRow('Variant', data.variant));
 	}
+	if (data.type) {
+		inspector.appendChild(inspectorRow('Type', data.type));
+	}
 	if (data.kind === 'parameter') {
 		inspector.appendChild(detailsValueInput(row, data));
 	}
-	if (data.hex) {
-		inspector.appendChild(inspectorRow('Hexadecimal', data.hex));
+	for (const format of data.formats) {
+		inspector.appendChild(inspectorRow(format.label, format.value));
 	}
 	if (data.target) {
 		inspector.appendChild(inspectorRow('Target', data.target));
@@ -2105,6 +2082,12 @@ function updateInspector() {
 	}
 
 	const actions = inspectorElement('div', 'inspector-actions');
+	if (row.kind === 'reference' && row.followable === true) {
+		const jump = inspectorElement('button', 'tool', 'Jump to target');
+		jump.type = 'button';
+		jump.addEventListener('click', function () { followItem(row.id); });
+		actions.appendChild(jump);
+	}
 	const reveal = inspectorElement('button', 'tool', 'Reveal in source');
 	reveal.type = 'button';
 	reveal.addEventListener('click', function () { revealItem(row.id); });

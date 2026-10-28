@@ -11,7 +11,7 @@ import * as assert from 'assert';
 
 import { ContainerNode, EcucDocumentModel, ModuleNode, ParameterNode, ReferenceNode } from '../../core/ecuc/model';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { buildRows } from '../../editor/renderRows';
+import { buildRows, parameterFormats, parameterType } from '../../editor/renderRows';
 import { fixtureText } from '../core/modelTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
@@ -125,14 +125,25 @@ suite('editor row model (design §2)', () => {
 		assert.strictEqual(ini.value, '63');
 		assert.strictEqual(ini.valueKind, 'numeric');
 		assert.strictEqual(ini.shownValue, '63');
-		assert.deepStrictEqual(ini.meta.map((part) => `${part.cls}:${part.text}`), ['hex:(= 0x3F)']);
+		assert.strictEqual(ini.definitionDest, 'ECUC-INTEGER-PARAM-DEF');
+		assert.strictEqual(ini.parameterType, 'Integer');
+		assert.deepStrictEqual(ini.formats, [
+			{ label: 'Decimal', value: '63' },
+			{ label: 'Hexadecimal', value: '0x3F' },
+			{ label: 'Binary', value: '0b00111111' },
+		]);
+		assert.deepStrictEqual(ini.meta, [], 'the old (= 0x…) meta is gone');
 
 		const title = byLabel('Title');
 		assert.strictEqual(title.valueKind, 'textual');
+		assert.strictEqual(title.parameterType, 'String');
+		assert.deepStrictEqual(title.formats, []);
 		assert.strictEqual(title.shownValue, '"hello"', 'a textual value is quoted');
 
 		const flag = byLabel('Flag');
 		assert.strictEqual(flag.valueKind, 'boolean');
+		assert.strictEqual(flag.parameterType, 'Boolean');
+		assert.deepStrictEqual(flag.formats, []);
 		assert.strictEqual(flag.shownValue, 'true', 'a boolean value is left bare');
 
 		const peer = byLabel('PeerIref');
@@ -152,6 +163,65 @@ suite('editor row model (design §2)', () => {
 		assert.strictEqual(byLabel('Good')?.followable, true);
 		assert.strictEqual(byLabel('Missing')?.followable, false);
 		assert.strictEqual(byLabel('Ambiguous')?.followable, false);
+	});
+
+	test('an empty container is marked empty', () => {
+		const model = scanEcucValues(
+			'<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>' +
+				'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>' +
+				'<DEFINITION-REF>/D/M</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE>' +
+				'<SHORT-NAME>Empty</SHORT-NAME><DEFINITION-REF>/D/M/Empty</DEFINITION-REF>' +
+				'</ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES>' +
+				'</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
+		);
+		const row = buildRows(model).rows.find((candidate) => candidate.label === 'Empty')!;
+		assert.strictEqual(row.hasChildren, false);
+		assert.strictEqual(row.empty, true);
+	});
+
+	test('parameter types and formats follow the AUTOSAR DEST and value', () => {
+		assert.strictEqual(parameterType('ECUC-INTEGER-PARAM-DEF', 'numeric'), 'Integer');
+		assert.strictEqual(parameterType('ECUC-FLOAT-PARAM-DEF', 'numeric'), 'Float');
+		assert.strictEqual(parameterType('ECUC-BOOLEAN-PARAM-DEF', 'boolean'), 'Boolean');
+		assert.strictEqual(parameterType('ECUC-STRING-PARAM-DEF', 'textual'), 'String');
+		assert.strictEqual(parameterType('ECUC-ONE-OFF-PARAM-DEF', 'numeric'), 'One off');
+		assert.strictEqual(parameterType(undefined, 'numeric'), 'Numeric');
+
+		assert.deepStrictEqual(parameterFormats('15', 'Integer'), [
+			{ label: 'Decimal', value: '15' },
+			{ label: 'Hexadecimal', value: '0x0F' },
+			{ label: 'Binary', value: '0b00001111' },
+		]);
+		assert.deepStrictEqual(parameterFormats('0x3F', 'Integer'), [
+			{ label: 'Decimal', value: '63' },
+			{ label: 'Hexadecimal', value: '0x3F' },
+			{ label: 'Binary', value: '0b00111111' },
+		]);
+		assert.deepStrictEqual(parameterFormats('-15', 'Integer'), [
+			{ label: 'Decimal', value: '-15' },
+			{ label: 'Hexadecimal', value: '-0x0F' },
+			{ label: 'Binary', value: '-0b00001111' },
+		]);
+		assert.deepStrictEqual(parameterFormats('0', 'Integer'), [
+			{ label: 'Decimal', value: '0' },
+			{ label: 'Hexadecimal', value: '0x00' },
+			{ label: 'Binary', value: '0b00000000' },
+		]);
+		assert.deepStrictEqual(parameterFormats('1.5', 'Float'), [{ label: 'Decimal', value: '1.5' }]);
+		assert.deepStrictEqual(parameterFormats('5', 'Float'), [{ label: 'Decimal', value: '5' }]);
+		assert.deepStrictEqual(parameterFormats('hello', 'Add info'), []);
+		assert.deepStrictEqual(parameterFormats('true', 'Boolean'), []);
+		assert.deepStrictEqual(parameterFormats('hello', 'String'), []);
+		assert.deepStrictEqual(parameterFormats('9007199254740993', 'Integer'), [
+			{ label: 'Decimal', value: '9007199254740993' },
+			{ label: 'Hexadecimal', value: '0x20000000000001' },
+			{ label: 'Binary', value: '0b100000000000000000000000000000000000000000000000000001' },
+		]);
+		assert.deepStrictEqual(parameterFormats('0xFFFFFFFFFFFFFFFF', 'Integer'), [
+			{ label: 'Decimal', value: '18446744073709551615' },
+			{ label: 'Hexadecimal', value: '0xFFFFFFFFFFFFFFFF' },
+			{ label: 'Binary', value: '0b1111111111111111111111111111111111111111111111111111111111111111' },
+		]);
 	});
 
 	test('design §2: haystacks are lower-cased label + short name + value', () => {

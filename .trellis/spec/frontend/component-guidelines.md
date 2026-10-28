@@ -41,15 +41,15 @@ The details editor (`ecucDetailsEditor.ts`) is emitted **before** the page scrip
 lives in the details panel, outside `#tree`, and owns its own `Enter`/`Escape`/`Tab` keys:
 
 ```text
-details input keys  →  details editor commit/cancel/move
-page row click      →  select / twisty / follow / value-click opens details
-page key handler    →  navigation / F2/Enter opens details / type-ahead
+details control keys  →  details editor commit/cancel/move
+page row click        →  select / twisty / value-click opens details
+page key handler      →  navigation / F2/Enter opens details / type-ahead
 ```
 
 The page's `onRowClick` handles the delegated `#empty-clear` action and the row interactions. One
-interaction, one effect: the twisty toggles without moving selection, a reference target follows,
-clicking `=`/label selects only, and clicking a parameter's `.value-text` selects and opens the
-details editor.
+interaction, one effect: the twisty toggles without moving selection, a reference target is plain
+text in the Document, clicking `=`/label selects only, and clicking a parameter's `.value-text`
+selects and opens the details editor. Reference follow is the details **Jump to target** action.
 
 ## DOM contracts
 
@@ -69,6 +69,8 @@ details editor.
 - The row builder writes the inspector's primary identity as data: `data-node-id`, `data-kind`,
   `data-definition-ref`, `data-short-name`, `data-value` (parameters), `data-target` (references).
   There are no source line/column attributes and no `data-ln-digits`.
+- Empty containers carry `data-empty` and show a muted `{ }` marker; they remain leaves with no
+  fold control, so they cannot be mistaken for a parameter.
 - Each container draws bracket guides: one absolute `.guide` span per open ancestor per rendered row,
   with `data-level`/`data-container-id`. Guides run from opening to closing brace, fade at rest and
   activate on hover. Selection uses `data-subtree` on descendants and a stronger parameter row; it
@@ -80,8 +82,10 @@ details editor.
   the full `DEFINITION-REF`.
 - Rows are built with `document.createElement` / `textContent`; the only `innerHTML`-like SVG is the
   inline twisty created with `createElementNS`. Brace rows are `aria-hidden`.
-- The details value input is `<input class="details-value">`, with `aria-label`, `aria-invalid` on
-  refusal and a `.details-value-error` live status. It commits through the existing
+- The details control is `<input class="details-value">` for numeric/text types and a
+  `<select class="details-value">` for Boolean, with `aria-label`, `aria-invalid` on refusal and a
+  `.details-value-error` live status. The panel shows the AUTOSAR type and integer
+  Decimal/Hexadecimal/Binary formats. It commits through the existing
   `{ type:'edit', nodeId, value }` message.
 
 ## State
@@ -156,10 +160,10 @@ Host remains the acceptance environment.
 | Re-adding a repeating indent gradient | The bracket-guide contract fails |
 | Leaking bracket guides outside their container | `guidesFor` and the `.guide` tests fail |
 | Tinting rows outside the selected subtree | `subtreeRowIds`/`data-subtree` tests fail |
-| Making every reference followable | Unresolved targets get a link; the same-file follow test fails |
+| Making every reference show a jump action | Unresolved targets must not get the details button; the followability test fails |
 | Hiding the Collapse/Expand labels at normal widths | The labelled-control test fails |
 | Inserting an editor into `.value` | The Document is read-only; the `.value` direct-child/test contract and click semantics fail |
-| Adding a Source block or copy action | The details panel exposes Reveal only; provider copy code was deleted |
+| Adding a Source block or copy action | The details panel exposes Jump/Reveal only; provider copy code was deleted |
 | Moving the scroll container out of `#main` | The virtual range and scroll position become a no-op |
 | Using `#tree-window` as the rows offset | It moves with the top spacer, so a window update looks like scrolling to the top |
 | Setting spacer heights with a style attribute | The CSP blocks inline styles; update the nonce-carrying `#virtual-style` sheet |

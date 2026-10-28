@@ -26,6 +26,61 @@ suite('scanner (core)', () => {
 		}
 	});
 
+	test('AC1: parameter DEFINITION-REF DEST is captured, including namespace prefixes', () => {
+		const basic = scanFixture('basic.arxml');
+		const parameters = basic.modules[0].containers[0].parameters;
+		assert.strictEqual(parameters.find((p) => p.name === 'IniValue')?.definitionDest, 'ECUC-INTEGER-PARAM-DEF');
+		assert.strictEqual(parameters.find((p) => p.name === 'Title')?.definitionDest, 'ECUC-STRING-PARAM-DEF');
+
+		const namespaced = scanFixture('namespaced.arxml');
+		assert.strictEqual(
+			namespaced.modules[0].containers[0].parameters[0].definitionDest,
+			'ECUC-INTEGER-PARAM-DEF'
+		);
+
+		const noDest = scanEcucValues(
+			'<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>' +
+				'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>' +
+				'<DEFINITION-REF>/D/M</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE>' +
+				'<SHORT-NAME>C</SHORT-NAME><DEFINITION-REF>/D/C</DEFINITION-REF><PARAMETER-VALUES>' +
+				'<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF>/D/C/N</DEFINITION-REF><VALUE>1</VALUE>' +
+				'</ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS>' +
+				'</ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
+		);
+		assert.strictEqual(noDest.modules[0].containers[0].parameters[0].definitionDest, undefined);
+	});
+
+	test('AC1: every fixture parameter with a DEST carries it', () => {
+		for (const fixture of FIXTURES) {
+			const text = fixtureText(fixture);
+			const dests = new Map<string, string>();
+			const re = /<(?:[A-Za-z_][\w.-]*:)?DEFINITION-REF\b([^>]*)>([^<]+)<\/[^>]*>/g;
+			let match: RegExpExecArray | null;
+			while ((match = re.exec(text)) !== null) {
+				const dest = /\bDEST="([^"]+)"/.exec(match[1]);
+				if (dest) {
+					dests.set(match[2].trim(), dest[1]);
+				}
+			}
+			const model = scanFixture(fixture);
+			const visit = (containers: EcucDocumentModel['modules'][number]['containers']): void => {
+				for (const container of containers) {
+					for (const parameter of container.parameters) {
+						assert.strictEqual(
+							parameter.definitionDest,
+							dests.get(parameter.definitionRef),
+							`${fixture} ${parameter.definitionRef}`
+						);
+					}
+					visit(container.containers);
+				}
+			};
+			for (const module of model.modules) {
+				visit(module.containers);
+			}
+		}
+	});
+
 	test('AC1: the deep fixture nests a container six levels down', () => {
 		const model = scanFixture('deep.arxml');
 		let node = model.modules[0].containers[0];

@@ -29,7 +29,8 @@
     "10-27-ecuc-editor-quiet-source",
     "10-28-ecuc-virtualized-render-search",
     "10-28-ecuc-document-ui-polish",
-    "10-28-ecuc-fold-gutter-tooltips"
+    "10-28-ecuc-fold-gutter-tooltips",
+    "10-28-ecuc-parameter-details-formats"
   ],
   "parent": null,
   "relatedFiles": [],

@@ -64,7 +64,8 @@ second host-side implementation of a view rule.
 ## No derived artefacts
 
 Nothing is written beside the user's file. The only write is the user's `<VALUE>` text through one
-`WorkspaceEdit`; the details panel exposes Reveal only. The harness writes no files into the
+`WorkspaceEdit`; the details panel exposes Jump to target for a followable reference and Reveal in source.
+The harness writes no files into the
 workspace; it serves from memory, reads the committed fixtures, and for manual viewing may also read
 the optional local `../sample` directory. `preview:check` never includes that directory, so CI does
 not depend on a developer's disk.

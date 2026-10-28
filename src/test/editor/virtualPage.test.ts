@@ -161,7 +161,12 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.strictEqual(fields.kind, 'parameter');
 		assert.strictEqual(fields.definitionRef, '/PkgA/PkgB/ModDefs/ModX/ContA/IniValue');
 		assert.strictEqual(fields.value, '63');
-		assert.strictEqual(fields.hex, '(= 0x3F)');
+		assert.strictEqual(fields.type, 'Integer');
+		assert.deepStrictEqual(fields.formats, [
+			{ label: 'Decimal', value: '63' },
+			{ label: 'Hexadecimal', value: '0x3F' },
+			{ label: 'Binary', value: '0b00111111' },
+		]);
 		assert.ok(!('source' in fields), 'the details Source block is removed');
 		// The page's copy is the same function; updateInspector looks the row up by id
 		// and never queries the rendered tree.

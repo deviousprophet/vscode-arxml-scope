@@ -12,15 +12,34 @@ const BOOLEAN = /^(true|false)$/;
 const DECIMAL_INTEGER = /^-?\d+$/;
 const HEXADECIMAL = /^0[xX][0-9A-Fa-f]+$/;
 const DECIMAL_FRACTION = /^-?\d+\.\d+([eE][+-]?\d+)?$/;
+const INTEGER_LITERAL = /^-?(?:\d+|0[xX][0-9A-Fa-f]+|0[bB][01]+)$/;
+const FLOAT_LITERAL = /^-?(?:\d+|\d+\.\d+(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+)$/;
 
 /** XML 1.0 legal characters; anything else cannot be represented even escaped. */
 const ILLEGAL_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
 
 /**
  * Validates `input` for parameter `p` and returns the escaped text to write.
+ * A known AUTOSAR `DEFINITION-REF DEST` narrows the accepted literal forms;
+ * unknown/missing types keep the legacy numeric/text rule.
  */
 export function validateValue(p: ParameterNode, input: string): ValidationResult {
-	if (p.numeric && !isNumericLiteral(input)) {
+	if (p.definitionDest === 'ECUC-BOOLEAN-PARAM-DEF' && !BOOLEAN.test(input)) {
+		return { ok: false, reason: `"${input}" is not a boolean value (true or false)` };
+	}
+	if (p.definitionDest === 'ECUC-INTEGER-PARAM-DEF' && !INTEGER_LITERAL.test(input)) {
+		return { ok: false, reason: `"${input}" is not an integer (decimal, hexadecimal or binary)` };
+	}
+	if (p.definitionDest === 'ECUC-FLOAT-PARAM-DEF' && !FLOAT_LITERAL.test(input)) {
+		return { ok: false, reason: `"${input}" is not a decimal or floating-point value` };
+	}
+	if (
+		p.definitionDest !== 'ECUC-BOOLEAN-PARAM-DEF' &&
+		p.definitionDest !== 'ECUC-INTEGER-PARAM-DEF' &&
+		p.definitionDest !== 'ECUC-FLOAT-PARAM-DEF' &&
+		p.numeric &&
+		!isNumericLiteral(input)
+	) {
 		return { ok: false, reason: `"${input}" is not a valid numerical value (true, false, integer, hexadecimal or decimal fraction)` };
 	}
 	const illegal = ILLEGAL_XML.exec(input);

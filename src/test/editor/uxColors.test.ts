@@ -78,7 +78,7 @@ suite('editor semantic colours (AC14)', () => {
 		assert.strictEqual(kindFor('Title'), 'textual');
 		assert.strictEqual(kindFor('Flag'), 'boolean');
 		// The class contract is unchanged; the widget and filter still select `.value`.
-		assert.ok(page().includes("value.className = followable ? 'value target' : 'value'"));
+		assert.ok(page().includes("value.className = 'value'"));
 		const upper = buildRows(scanEcucValues(BOOLEAN_CASE_FIXTURE), {}).rows;
 		assert.strictEqual(
 			upper.filter((row) => row.valueKind === 'boolean').length,
@@ -101,8 +101,8 @@ suite('editor semantic colours (AC14)', () => {
 		assert.ok(/\.value\[data-value-kind="numeric"\]\s*\{[^}]*--tok-number/.test(style));
 		assert.ok(/\.value\[data-value-kind="textual"\]\s*\{[^}]*--tok-string/.test(style));
 		assert.ok(/\.value\[data-value-kind="boolean"\]\s*\{[^}]*--tok-keyword/.test(style));
-		assert.ok(/\.target\s*\{[^}]*--vscode-editor-foreground/.test(style));
-		assert.ok(/\.target:hover \.value-text\s*\{[^}]*text-decoration:\s*underline[^}]*text-decoration-color:\s*var\(--vscode-textLink-foreground/.test(style));
+		assert.ok(!/\.target\s*\{/.test(style), 'reference targets have no Document link style');
+		assert.ok(!/\.target:hover \.value-text/.test(style), 'reference targets have no hover underline');
 		assert.ok(/\.short\s*\{[^}]*--tok-string/.test(style));
 	});
 

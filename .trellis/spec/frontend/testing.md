@@ -112,8 +112,10 @@ re-add digits to the re-scan; switch the container accent; make every reference 
 selected subtree; remove the collapse/expand labels or the twisty's row-height hit area; re-add the
 gutter-era scroll padding; re-add the high-contrast subtree fill; discard a pending details draft;
 put the twisty back inline; replace the Codicon chevron with a filled triangle; shrink the 26px
-gutter; show expanded chevrons at rest; re-add the `=` to a reference tooltip; each mutation must
-fail a test. A CSS selector assertion
+gutter; show expanded chevrons at rest; re-add the `=` to a reference tooltip; drop the DEST capture;
+treat every numeric as integer; remove the format padding; put `(= 0x…)` back in a row; re-add a
+Document follow link; hide the details Jump button; use a text input for Boolean; drop the input
+sanitizer; each mutation must fail a test. A CSS selector assertion
 is still not a rendered-layout test, so pair it with the dark/HC/selected parameter/selected
 container/guide-hover/details/narrow/deep captures and a browser pass. Assertions and captures must
 match the production CSS, never the prototype file. There is no source-line gutter to conflate; the

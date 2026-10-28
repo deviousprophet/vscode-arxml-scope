@@ -81,7 +81,13 @@ suite('editor visual polish', () => {
 		const fields = inspectorFields(parameter);
 		assert.strictEqual(fields.definitionRef, '/PkgA/PkgB/ModDefs/ModX/ContA/IniValue');
 		assert.strictEqual(fields.value, '63');
-		assert.strictEqual(fields.hex, '(= 0x3F)');
+		assert.strictEqual(fields.type, 'Integer');
+		assert.deepStrictEqual(fields.formats, [
+			{ label: 'Decimal', value: '63' },
+			{ label: 'Hexadecimal', value: '0x3F' },
+			{ label: 'Binary', value: '0b00111111' },
+		]);
+		assert.strictEqual(inspectorFields(rows.find((row) => row.label === 'Title')!).type, 'String');
 		const reference = rows.find((row) => row.label === 'PeerIref')!;
 		assert.deepStrictEqual(reference.contextPaths, ['PkgA.PkgB.ModX.ContA']);
 		assert.strictEqual(inspectorFields(reference).context, 'PkgA.PkgB.ModX.ContA');
@@ -91,11 +97,12 @@ suite('editor visual polish', () => {
 			'Definition',
 			'Short name',
 			'Variant',
-			'Hexadecimal',
+			'Type',
 			'Target',
 			'Context',
 			'Conditions',
 			'Annotations',
+			'Jump to target',
 			'Reveal in source',
 		]) {
 			assert.ok(update.includes(`'${field}'`), field);
@@ -158,7 +165,7 @@ suite('editor visual polish', () => {
 		assert.ok(build.includes("row.shownValue !== undefined ? ' has-value' : ' no-value'"));
 		assert.ok(build.includes('rowElement.appendChild(valueSpan(row))'), 'the value is appended directly to .row');
 		assert.ok(!build.includes('glyphSpan'), 'no Tree glyph');
-		assert.ok(value.includes("value.className = followable ? 'value target' : 'value'"));
+		assert.ok(value.includes("value.className = 'value'"));
 		assert.ok(value.includes("text.className = 'value-text'"));
 		assert.ok(build.includes('metaSpan(row)'));
 		assert.ok(functionSource(script, 'metaSpan').includes("span.className = part.cls"));

@@ -52,14 +52,14 @@ export interface ContainerNode extends Suffixes {
 export interface ParameterNode extends Suffixes {
 	kind: 'parameter';
 	numeric: boolean;
+	/** `DEFINITION-REF DEST` value, when the document provides it. */
+	definitionDest?: string;
 	definitionRef: string;
 	definitionRefRange?: Range;
 	/** `DEFINITION-REF` tail. */
 	name: string;
 	/** Entity-decoded text for display. */
 	displayValue?: string;
-	/** Numeric and not `true`/`false` only. */
-	hexValue?: string;
 	/** Text content inside `<VALUE>`. */
 	valueRange?: Range;
 	range: Range;

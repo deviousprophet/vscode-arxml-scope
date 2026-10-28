@@ -3,8 +3,10 @@
 **Status:** current for the Document-only UI (2026-10-28). Supersedes the earlier Document/Tree,
 source-line gutter, inline-edit, F2-hint, Source-block and copy-action design.
 
-**Scope:** presentation only. The information model, interactions, DOM contracts, `src/core/**`, the
-write path and the manifest do not change.
+**Scope:** presentation and parameter type metadata. The ordering, DOM contracts, write path and
+manifest do not change. `src/core/**` changes are limited to `DEFINITION-REF DEST` capture,
+type-aware validation, and removing the now-unused `hexValue` computation; there is no schema
+database.
 
 ---
 
@@ -74,7 +76,7 @@ typeface and not by boxes.
   chevron is inset 2px and spans the full row height; leaves reserve the gutter without a child.
 - A container with children shows the chevron while the tree is hovered or focused; its resting
   opacity is 0, matching VS Code. A collapsed container always shows its right chevron and a
-  `{ ... }` stub.
+  `{ ... }` stub. An empty container ends in a muted `{ }` marker.
 - One blank line between modules; braces on their own lines.
 - No list bullets, per-row borders, chips, fixed label columns or vertical rules across the whole
   surface.
@@ -92,14 +94,13 @@ typeface and not by boxes.
 
 ### 2.4 Details panel
 
-- Selecting a node fills the panel: kind, primary label, full `DEFINITION-REF`, short name and
-  variant, value, hexadecimal form (parameters), target and context (references), conditions,
-  annotations.
-- For a parameter the **Value** row is an editable `<input class="details-value">`. The input is
-  visible whenever a parameter is selected, but is focused only by clicking the value, `F2` or
-  `Enter`.
-- The only action is **Reveal in source**. There is no Source block, Copy path, Copy value or Copy
-  target.
+- Selecting a node fills the panel: kind, primary label, full `DEFINITION-REF`, short name, variant
+  and AUTOSAR type, value, decimal/hex/binary formats for integer parameters, target and context
+  (references), conditions, annotations.
+- For a parameter the **Value** row is an editable control. Integer/float/text use an input; Boolean
+  uses a true/false `<select>`. The control is focused only by clicking the value, `F2` or `Enter`.
+- Actions are **Jump to target** for a followable reference and **Reveal in source**. There is no
+  Source block, Copy path, Copy value or Copy target.
 - The panel starts hidden and is toggled by the toolbar's Details button.
 
 ### 2.5 Widths
@@ -141,9 +142,9 @@ All colours come from `--vscode-*` variables (with fallbacks). No hard-coded pal
 
 Container names are green like a C typedef/type; the dark pass uses a fixed `#4EC9B0` accent because
 some themes map `symbolIcon.namespaceForeground` to the ordinary foreground. Reference targets are
-yellow italic. Other document labels are neutral; module paths, context paths and `=`/braces/punctuation
-stay neutral/muted. Reference targets underline on hover only. No per-kind glyph colours, no Tree
-chips, no line-number active colour.
+yellow italic and plain text; the details Jump to target is the follow affordance. Other document
+labels are neutral; module paths, context paths and `=`/braces/punctuation stay neutral/muted. No
+per-kind glyph colours, no Tree chips, no line-number active colour.
 
 ### State colours
 
@@ -162,8 +163,8 @@ chips, no line-number active colour.
 - **Toolbar**: filter, clear, count/status, labelled Collapse/Expand, Details.
 - **Document row**: fixed fold gutter, label, optional `= value`, inline metadata.
 - **Brace row**: `{` / `}` aligned with the owning row's text; no line number.
-- **Value**: `=`, `.value-text`; parameters read-only, references follow targets.
-- **Details**: kind/label, field rows, editable Value for parameters, Reveal action.
+- **Value**: `=`, `.value-text`; parameters read-only, reference targets are plain text.
+- **Details**: kind/label, AUTOSAR type, editable Value, integer formats, Jump/Reveal actions.
 - **Empty state**: source comment `/* No entities match "...". */` + Clear filter.
 
 ### State matrix
@@ -186,10 +187,9 @@ chips, no line-number active colour.
 - Click `=`/label: select only.
 - Click a container's chevron: collapses or expands it; the selection does not move.
 - Double-click / `Ctrl`/`Alt`+`Enter`: reveal in source.
-- Reference target: follows only when the target resolves in the same file; the target container is
-  selected in the ECUC editor. An unresolved target is not a link.
-- `Enter` on a parameter: open details edit; on a container: toggle; on a followable reference:
-  select its same-file target; otherwise reveal the reference.
+- Reference target: details-only **Jump to target** when the target resolves in the same file;
+  the Document value is not a link. An unresolved target has no jump action.
+- `Enter` on a parameter: open details edit; on a container: toggle; otherwise reveal.
 - Hovering a container (or a row in its subtree) makes its bracket guide clearer.
 - `F2` on a parameter: open details edit.
 - `Space`: select; arrows/Home/End/PageUp/PageDown/type-ahead traverse the visible rows.
@@ -238,8 +238,10 @@ chips, no line-number active colour.
 ### Data/provider mapping
 
 - `EcucRow` has no source-position fields; `RowDocument` has no `digits`.
-- `EcucRow.followable` is true only when the reference target resolves in this file; unresolved
-  targets get no target class, no `data-follow` and no hover link.
+- `ParameterNode.definitionDest` (from `DEFINITION-REF DEST`) feeds `EcucRow.definitionDest`,
+  `parameterType` and the Decimal/Hexadecimal/Binary `formats`.
+- `EcucRow.followable` is true only when the reference target resolves in this file; it drives the
+  details **Jump to target** action, not a Document link.
 - The webview `follow` message selects the same-file target node in the ECUC editor; `Reveal in
   source` remains a separate action.
 - `RowPayload` is `{ rows, selectedId? }`.
@@ -249,8 +251,10 @@ chips, no line-number active colour.
 
 ### Does not change
 
-- `src/core/**`, ordering, validation, the write path, manifest, dependencies, CSP and nonce model.
+- Ordering, the write path, manifest, dependencies, CSP and nonce model.
 - The virtual window, filter/flatten engine, selection/focus/reveal/re-scan policy.
+- `src/core/**` changes are limited to `DEFINITION-REF DEST` capture, type-aware validation, and
+  removing the now-unused `hexValue` computation/field.
 
 ## 9. Performance and risks
 
@@ -275,12 +279,17 @@ chips, no line-number active colour.
 5. `F2` keyboard shortcut retained; F2 decoration removed.
 6. Source block and copy actions removed; Reveal in source retained.
 7. Details value input commits through the existing `{ type:'edit' }` write path.
-8. Reference follow only for same-file targets; it selects the target container in the editor.
+8. Reference follow only for same-file targets; the action moves to **Jump to target** in details and
+   the Document value is not a link.
 9. Dark theme only for now; high contrast is the accessibility variant. No light-theme pass.
 10. Container names green; reference targets yellow italic; parameter selection stronger.
 11. Fixed 26px fold gutter with a 16px Codicon outline chevron; expanded chevrons are hover/focus
     only, collapsed chevrons always visible.
 12. Reference tooltips show the target text without the document's `=` punctuation.
+13. AUTOSAR parameter types come from `DEFINITION-REF DEST`; details shows Type plus integer
+    Decimal/Hexadecimal/Binary formats, with no `(= 0x…)` in the Document.
+14. Details editing is type-aware: integer/float literals, a Boolean selector and text otherwise.
+15. An empty container ends in a muted `{ }` marker so it is distinct from a parameter.
 
 ## 11. Acceptance checklist
 
@@ -291,7 +300,11 @@ chips, no line-number active colour.
 - [x] Document values are read-only; `.value` is a direct `.row` child.
 - [x] Value click/F2/Enter opens the details input; Enter/Escape/Tab/refusal work.
 - [x] No F2 hint, Source block or copy actions.
-- [x] Reference target is a link only when same-file, and follows to the target container.
+- [x] Reference target is not a Document link; details Jump to target selects the same-file container.
+- [x] AUTOSAR Type and integer Decimal/Hexadecimal/Binary formats show in details; the Document has no
+      `(= 0x…)` meta.
+- [x] Empty containers show a muted `{ }` marker at rest.
+- [x] Integer/float/Boolean/text editing follows the parameter type; refusals keep the text.
 - [x] Fixed 26px fold gutter, 16px Codicon chevron, hover-only expanded icons and always-visible
       collapsed icons.
 - [x] Reference tooltips do not include the display `=`.

@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/10-28-ecuc-parameter-details-formats/prd.md", "reason": "Verify each type/formats/edit/follow AC."}
+{"file": ".trellis/tasks/10-28-ecuc-parameter-details-formats/design.md", "reason": "Verify the design contracts and rollback limits."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Test layers, page-helper extraction and mutations."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Write path, CSP and no-dead-code checks."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Details/row DOM and accessibility checks."}

@@ -12,6 +12,7 @@ import * as path from 'path';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { RowPayload, collapsedIdsFor, moveTarget, pruneCollapsed, renderHtml, toggleCollapsed } from '../../editor/renderHtml';
+import { detailsInputAllowed } from '../../editor/ecucDetailsEditor';
 import { fixtureText } from '../core/modelTestUtils';
 import { repoRoot } from './editorTestUtils';
 import { functionSource } from './scriptTestUtils';
@@ -91,9 +92,50 @@ suite('editor Document interactions', () => {
 
 	test('reference tooltips show the target without display punctuation', () => {
 		const value = functionSource(page(), 'valueSpan');
-		assert.ok(value.includes("'Follow to the target: ' + (row.shownValue || '')"));
-		assert.ok(value.includes("'Target not found in this file: ' + (row.shownValue || '')"));
+		assert.ok(value.includes("'Target: ' + (row.shownValue || '')"));
+		assert.ok(!value.includes('Follow to the target'), 'the Document no longer advertises follow');
+		assert.ok(!value.includes("'Target not found in this file: '"), 'no follow-specific unresolved wording');
 		assert.ok(!value.includes(': = '), 'the display = is not part of the tooltip');
+		assert.ok(!value.includes('data-follow'), 'the Document value is not a link');
+	});
+
+	test('the details panel owns the reference jump action', () => {
+		const html = page();
+		const update = functionSource(html, 'updateInspector');
+		assert.ok(update.includes("'Jump to target'"));
+		assert.ok(update.includes("row.kind === 'reference' && row.followable === true"));
+		const value = functionSource(html, 'valueSpan');
+		assert.ok(!value.includes('target'), 'no target class on the Document value');
+		assert.ok(!functionSource(html, 'onRowClick').includes('followItem'), 'a Document click does not follow');
+		assert.ok(!functionSource(html, 'onTreeKeydown').includes('followItem'), 'Enter does not follow');
+	});
+
+	test('details controls follow the parameter type', () => {
+		const html = page();
+		const details = functionSource(html, 'detailsValueInput');
+		assert.ok(details.includes("boolean ? 'select' : 'input'"), 'Boolean gets a select');
+		assert.ok(details.includes("for (const option of ['true', 'false'])"), 'true/false options');
+		assert.ok(details.includes('input.inputMode'), 'numeric inputs set an input mode');
+		assert.ok(details.includes('detailsInputAllowed(type, event.data)'), 'input filtering uses the type');
+		assert.ok(!details.includes('filterDetailsInput'), 'no silent rewrite of existing text');
+		assert.ok(functionSource(html, 'focusDetailsInput').includes("typeof input.select === 'function'"));
+
+		assert.strictEqual(detailsInputAllowed('Integer', '1'), true);
+		assert.strictEqual(detailsInputAllowed('Integer', '0x3F'), true);
+		assert.strictEqual(detailsInputAllowed('Integer', '-7'), true);
+		assert.strictEqual(detailsInputAllowed('Integer', '1.5'), false);
+		assert.strictEqual(detailsInputAllowed('Integer', '1g'), false);
+		assert.strictEqual(detailsInputAllowed('Float', '1.5e-3'), true);
+		assert.strictEqual(detailsInputAllowed('Float', '0x3F'), false);
+		assert.strictEqual(detailsInputAllowed('Float', 'true'), false);
+		assert.strictEqual(detailsInputAllowed('String', 'anything at all'), true);
+	});
+
+	test('the details panel renders the type and value formats', () => {
+		const update = functionSource(page(), 'updateInspector');
+		assert.ok(update.includes("inspectorRow('Type', data.type)"));
+		assert.ok(update.includes('for (const format of data.formats)'));
+		assert.ok(update.includes('inspectorRow(format.label, format.value)'));
 	});
 
 	test('aria-expanded follows the displayed list, including a filter force-expand', () => {

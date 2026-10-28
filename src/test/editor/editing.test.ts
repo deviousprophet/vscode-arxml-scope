@@ -350,7 +350,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Count'), value: 'abc' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
 
-			assert.ok(lastNotice(stub).message?.includes('numerical'), lastNotice(stub).message);
+			assert.ok(lastNotice(stub).message?.includes('integer'), lastNotice(stub).message);
 			assert.strictEqual(document.getText(), before, 'the document is untouched');
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false, 'a refusal does not dirty the document');
@@ -561,7 +561,13 @@ suite('editor value editing (AC1–AC9)', () => {
 		const parameter = rows.find((row) => row.kind === 'parameter')!;
 		assert.strictEqual(parameter.id.includes('param:Count'), true, 'the row is the parameter');
 		assert.strictEqual(parameter.value, '7', 'the current value is what the editor starts from');
-		assert.ok(parameter.meta.some((part) => part.text === '(= 0x7)'), 'the model’s secondary hex stays beside it');
+		assert.strictEqual(parameter.parameterType, 'Integer', 'the AUTOSAR type comes from DEFINITION-REF DEST');
+		assert.deepStrictEqual(parameter.formats, [
+			{ label: 'Decimal', value: '7' },
+			{ label: 'Hexadecimal', value: '0x07' },
+			{ label: 'Binary', value: '0b00000111' },
+		]);
+		assert.ok(!parameter.meta.some((part) => part.text.indexOf('(= 0x') === 0), 'hex is no longer Document meta');
 
 		const page = renderHtml(model, { nonce: 'test-nonce' });
 		assert.ok(page.includes('.details-value'), 'the editor is styled from --vscode-* variables');
