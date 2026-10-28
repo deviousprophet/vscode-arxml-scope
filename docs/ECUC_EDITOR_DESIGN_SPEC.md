@@ -133,6 +133,7 @@ All colours come from `--vscode-*` variables (with fallbacks). No hard-coded pal
 | punctuation | `--vscode-editor-foreground` mixed down |
 | selection | `--vscode-list-inactiveSelectionBackground` / `activeSelectionBackground` |
 | selected subtree | `--vscode-editor-selectionHighlightBackground` mixed down |
+| selected container | same selection-highlight colour at a higher mix (`--sel-container-bg`) |
 | focus rail | `--vscode-focusBorder` |
 | bracket guide | `--vscode-tree-indentGuidesStroke` / `--vscode-panel-border` |
 
@@ -146,8 +147,8 @@ chips, no line-number active colour.
 
 - Hover: `--vscode-list-hoverBackground`; the hovered container's bracket guide rises from 0.28 to 0.85.
 - Selected parameter: active selection fill + 2px rail + 1px outline, so the row is unmistakable.
-- Selected container/module: the same strong fill + rail + outline on the selected row; visible
-  descendants get the softer subtree tint.
+- Selected container/module: the visible neutral selection-highlight fill + the same rail + outline;
+  visible descendants get the softer subtree tint.
 - Dark is the supported theme. High contrast/forced colors use outlines, no fills.
 - Flash after a successful edit: find-match highlight background fading out.
 - Invalid details field: input validation error border and an error comment below.

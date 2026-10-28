@@ -118,8 +118,10 @@ details editor.
   The token names mirror the reference branch's `artext.tmLanguage.json` scopes; that branch is a
   grammar, not a palette to copy. There are no Tree glyph/chip/per-kind accent colours.
 - **Selection never recolours syntax.** Document selection uses the `--sel-bg`/`--sel-bg-focus` tint
-  and a 2px `--rail` focus edge; the selected container tints its subtree and a selected parameter adds a 1px outline. High
-  contrast uses outlines, not fills: the subtree tint becomes a dotted outline in HC/forced colors.
+  and a 2px `--rail` focus edge; the selected container uses the visible neutral
+  `--sel-container-bg`, its subtree gets the softer tint, and a selected parameter adds a 1px
+  outline. High contrast uses outlines, not fills: the subtree tint becomes a dotted outline in
+  HC/forced colors.
 - The flat tree uses `role="tree"` with direct `role="treeitem"` children (window/spacers are
   `role="presentation"`/`aria-hidden`), `aria-level`, `aria-posinset`, `aria-setsize`,
   `aria-expanded`, `aria-selected` and a roving `tabindex`. This is a valid flat tree without

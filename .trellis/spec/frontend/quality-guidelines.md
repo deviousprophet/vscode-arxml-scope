@@ -54,9 +54,10 @@ that is not obvious from the code.
   values with `textContent`. Never use `innerHTML` for model text, and never reuse a full-tree HTML
   string as the re-scan payload.
 - **Selection never recolours syntax.** A selected parameter uses `--sel-bg-focus`, the 2px
-  `--rail` and a 1px `--sel-outline`; a selected container/module uses the same strong row and its
-  visible subtree gets the softer `--subtree-bg` tint. Tokens keep their colours; high contrast uses
-  outlines, not fills. Do not reintroduce `--ecuc-selection-fg` or a monochrome selected line.
+  `--rail` and a 1px `--sel-outline`; a selected container/module uses the visible neutral
+  `--sel-container-bg` with the same rail/outline, and its visible subtree gets the softer
+  `--subtree-bg` tint. Tokens keep their colours; high contrast uses outlines, not fills. Do not
+  reintroduce `--ecuc-selection-fg` or a monochrome selected line.
 - **`.value` stays a direct child of `.row`.** The filter and tests select `.row > .value`; a wrapper
   cell breaks them. The value contains a `--tok-punct` `=` and a `.value-text`; the document never
   inserts an input. The details input is a separate `.details-value` in the inspector.

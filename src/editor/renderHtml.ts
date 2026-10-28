@@ -371,6 +371,7 @@ body[data-view] {
 	--sel-bg: var(--vscode-editor-background);
 	--sel-bg-focus: var(--vscode-editor-background);
 	--subtree-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
+	--sel-container-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
 	--container-accent: #4EC9B0;
 	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
 }
@@ -382,6 +383,7 @@ body[data-view] {
 		--sel-bg: color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background)) 14%, var(--vscode-editor-background));
 		--sel-bg-focus: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 24%, var(--vscode-editor-background));
 		--subtree-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 18%, transparent);
+		--sel-container-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 45%, transparent);
 		--sel-outline: color-mix(in srgb, var(--rail) 55%, transparent);
 	}
 }
@@ -1025,11 +1027,19 @@ body[data-view="document"] .node[data-selected="true"] > .row {
 		inset 2px 0 0 var(--rail),
 		inset 0 0 0 1px var(--sel-outline, transparent);
 }
+body[data-view="document"] .node[data-kind="container"][data-selected="true"] > .row,
+body[data-view="document"] .node[data-kind="module"][data-selected="true"] > .row {
+	background-color: var(--sel-container-bg);
+}
 body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
 	background-color: var(--sel-bg-focus);
 	box-shadow:
 		inset 2px 0 0 var(--rail),
 		inset 0 0 0 1px var(--sel-outline, transparent);
+}
+body[data-view="document"] #tree:focus-within .node[data-kind="container"][data-selected="true"] > .row,
+body[data-view="document"] #tree:focus-within .node[data-kind="module"][data-selected="true"] > .row {
+	background-color: var(--sel-container-bg);
 }
 body[data-view="document"] #tree:focus-within .node[data-kind="parameter"][data-selected="true"] > .row {
 	box-shadow:

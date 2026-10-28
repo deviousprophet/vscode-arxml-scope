@@ -103,10 +103,11 @@ meta token, and annotations the comment token (italic). Container names are gree
 foreground); reference targets are yellow and italic (`--vscode-symbolIcon-functionForeground`).
 Parameter and reference labels use the single key accent; module paths, context paths and
 `=`/braces/punctuation stay neutral/muted. Reference targets use the link underline only on hover and
-only when the target resolves in the same file. Selected parameters and selected containers/modules
-use the strong active fill, a 2px focus rail and a thin outline; the selection stays unmistakable
-while its visible descendants get a softer subtree tint. High contrast switches the tint to
-outlines. Bracket guides are structural one-pixel lines, not a second selection colour.
+only when the target resolves in the same file. Selected parameters use the active selection fill, a 2px
+focus rail and a thin outline; a selected container/module uses the visible neutral highlight fill
+with the same rail and outline, while its visible descendants get a softer subtree tint. High
+contrast switches the tint to outlines. Bracket guides are structural one-pixel lines, not a second
+selection colour.
 
 The presentational reference is the post-processed ARTEXT output of the remote
 `ref/ecucvalues-for-vscode` branch: `mmx` + `Arxml2Artext.mm`, then the extension's

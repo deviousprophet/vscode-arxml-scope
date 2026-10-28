@@ -192,6 +192,19 @@ suite('editor document view', () => {
 			/body\[data-view="document"\] \.node\[data-subtree="true"\] > \.row,/.test(style),
 			'a selected container tints its subtree'
 		);
+		assert.ok(/--sel-container-bg: color-mix\([^;]*45%/.test(style), 'the selected container uses the visible neutral fill');
+		assert.ok(
+			/body\[data-view="document"\] \.node\[data-kind="container"\]\[data-selected="true"\] > \.row,[\s\S]*?background-color:\s*var\(--sel-container-bg\)/.test(
+				style
+			),
+			'a selected container keeps the visible fill'
+		);
+		assert.ok(
+			/body\[data-view="document"\] #tree:focus-within \.node\[data-kind="container"\]\[data-selected="true"\] > \.row,[\s\S]*?background-color:\s*var\(--sel-container-bg\)/.test(
+				style
+			),
+			'the focused container keeps the visible fill'
+		);
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-kind="parameter"\]\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)[^}]*--sel-outline/.test(
 				style
