@@ -405,3 +405,34 @@ Added AUTOSAR DEFINITION-REF DEST capture, type-aware validation and details, De
 ### Status
 
 [OK] **Completed**
+
+
+## Session 11: Manual ECUC all-cases sample and ARXML grouping
+<!-- trellis-session: v=2 fp=4c58306e5415a845 -->
+
+**Date**: 2026-10-28
+**Task**: Manual ECUC all-cases sample and ARXML grouping
+**Branch**: `feat/arxml-scope`
+
+### Summary
+
+Added a single manual-cases.arxml with all display/edit/reference cases plus 400 performance containers, and grouped the generated ARXML samples under sample/arxml.
+
+### Main Changes
+
+- Manual file includes types, dec/hex/bin formats, boolean/float/text/enum, CDATA/empty/entity values, nested/empty/ambiguous containers, available/missing/empty/instance references, and 4,045 rows for scrolling/filtering/performance.
+- Moved existing samples to D:\workspace\sample\arxml; generator, preview log, benchmark example and docs now use the arxml subfolder.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `10db025` | chore(samples): group ARXML samples under sample/arxml |
+
+### Testing
+
+- [OK] XML well-formed; scanned 4,045 rows; preview harness rendered sample/arxml/manual-cases
+
+### Status
+
+[OK] **Completed**

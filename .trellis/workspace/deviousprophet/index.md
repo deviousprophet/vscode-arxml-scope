@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
+- **Total Sessions**: 11
 - **Last Active**: 2026-10-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~407 | Active |
+| `journal-1.md` | ~438 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-10-28 | Manual ECUC all-cases sample and ARXML grouping | `10db025` | `feat/arxml-scope` |
 | 10 | 2026-10-28 | ECUC parameter types, formats and details-only follow | `8f83733`, `a8675f8` | `feat/arxml-scope` |
 | 9 | 2026-10-28 | VS Code fold gutter and clean reference tooltips | `fb50c0f`, `5a92204` | `feat/arxml-scope` |
 | 8 | 2026-10-28 | ECUC selected-container fill correction | `c1e4d28` | `feat/arxml-scope` |
