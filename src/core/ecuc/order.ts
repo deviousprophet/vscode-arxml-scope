@@ -11,7 +11,7 @@
  */
 import { ContainerNode, ModuleNode, ParameterNode, ReferenceNode, SortMode } from './model';
 
-/** The 15 entries hardcoded in the reference's `Arxml2Artext.cmd`, verbatim. */
+/** The 15 entries hardcoded in the legacy `Arxml2Artext.cmd`, verbatim. */
 export const SORT_EXCEPTIONS: readonly string[] = [
 	'DcmDspDidRef',
 	'DcmDspRequestRoutineResultsOutSignal',

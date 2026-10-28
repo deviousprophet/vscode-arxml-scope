@@ -34,10 +34,8 @@ A plain open still uses VS Code's text editor. The custom editor is opt-in.
 - The ECUC editor currently supports ECUC-Values files; files without ECUC values are handed back to
   the text editor.
 
-## Documentation
+## Project
 
-- [ECUC editor guide](docs/ECUC_EDITOR.md) — browsing, editing, navigation and settings
-- [Design specification](docs/ECUC_EDITOR_DESIGN_SPEC.md) — the current Document surface and details panel
 - [Changelog](CHANGELOG.md)
 - [License](LICENSE)
 

@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: ECUC editor guide
-    url: https://github.com/deviousprophet/vscode-arxml-scope/blob/main/docs/ECUC_EDITOR.md
-    about: Browsing, editing, navigation, and settings.
-  - name: Design specification
-    url: https://github.com/deviousprophet/vscode-arxml-scope/blob/main/docs/ECUC_EDITOR_DESIGN_SPEC.md
-    about: The current Document surface and details panel design.
+  - name: README
+    url: https://github.com/deviousprophet/vscode-arxml-scope#readme
+    about: Features, quick start, and limitations.

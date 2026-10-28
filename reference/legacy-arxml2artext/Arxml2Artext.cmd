@@ -1,2 +1,0 @@
-@set PATH=%0\..\bin;%PATH%
-mmx -M %0\..\Arxml2Artext.mm -S %1 -T %2 -A sort all except DcmDspDidRef,DcmDspRequestRoutineResultsOutSignal,DcmDspStartRoutineInSignal,DcmDspStartRoutineOutSignal,DcmDspStopRoutineInSignal,DcmDspStopRoutineOutSignal,DcmArgumentRef,DemDidDataElementClassRef,DemExtendedDataRecordClassRef,DemDataElementClassRef,DemDidClassRef,DemFreezeFrameRecordClassRef,DemSPNClassRef,EcuMDriverInitItem,EcuMRbCallOutItem

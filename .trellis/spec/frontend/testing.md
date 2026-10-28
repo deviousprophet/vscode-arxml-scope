@@ -18,7 +18,7 @@ was copied, not that the editor does not take over. Pair it with a behavioural t
 
 ## Fixtures are pinned, and line endings are part of the contract
 
-`src/test/fixtures/**` and `reference/**` are pinned with `-text` in `.gitattributes`. This machine has
+`src/test/fixtures/**` is pinned with `-text` in `.gitattributes`. This machine has
 `core.autocrlf=true`, so without the pin a fixture's LF/CRLF would flip between machines and tests that
 assert exact bytes would fail somewhere else but not here.
 
@@ -95,8 +95,8 @@ The remote `ref/ecucvalues-for-vscode` branch's `.artext` is produced by `mmx` +
 and then transformed by `postProcessArtextGen`, which collapses whitespace inside `[...]`
 (`[(A == B)]` → `[(A==B)]`). Comparing the raw `mmx` output is not comparing the reference. Capture
 the post-processed file and the exact command in the task research, and keep the raw/pre-processed
-state described in the README. The capture is evidence for the look; it is never a product fixture
-and is not read by the renderer.
+state described there. The capture is evidence for the look; it is never a product fixture and is
+not read by the renderer.
 
 ## Document view tests drive the page's own helpers
 

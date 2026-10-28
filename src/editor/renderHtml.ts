@@ -833,7 +833,7 @@ mark {
 }
 /* Document view: quiet source. One editor surface, a fixed fold gutter and
  * hover/focus affordances. Layout variables live on body[data-view] so #main's
- * scroll padding sees them. See docs/ECUC_EDITOR_DESIGN_SPEC.md. */
+ * scroll padding sees them. */
 body[data-view="document"] #tree {
 	position: relative;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
