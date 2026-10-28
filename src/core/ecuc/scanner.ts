@@ -112,11 +112,27 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		if (!e) {
 			return;
 		}
-		e.text += raw;
-		if (e.textStart < 0) {
-			e.textStart = from;
+		let chunk = raw;
+		let start = from;
+		let end = to;
+		if (e.name === 'SW-SYSCOND') {
+			// The formatting whitespace between a condition's parts is not part of the
+			// condition: the legacy text joins the trimmed parts, so
+			// `(\n <SYSC-REF/> \n ==0)` reads `(CANIPCORETYPE_SC==0)`.
+			const left = raw.length - raw.replace(/^\s+/, '').length;
+			const right = raw.length - raw.replace(/\s+$/, '').length;
+			chunk = raw.slice(left, raw.length - right);
+			start = from + left;
+			end = to - right;
+			if (chunk === '') {
+				return;
+			}
 		}
-		e.textEnd = to;
+		e.text += chunk;
+		if (e.textStart < 0) {
+			e.textStart = start;
+		}
+		e.textEnd = end;
 	};
 
 	/** Parses one tag at `at`; returns the offset just past it. */
@@ -236,6 +252,20 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 
 	/** Finalizes one element as its tags close. */
 	const finish = (entry: Entry, end: number, ancestors: Entry[]): void => {
+		if (entry.name === 'SYSC-REF') {
+			// A condition can name a system constant inline. The captured text is the
+			// raw runs only, so the reference has to be substituted where it stood —
+			// the legacy text uses the path tail, not the full path.
+			const holder = ancestors[ancestors.length - 1];
+			if (holder && holder.name === 'SW-SYSCOND') {
+				holder.text += lastShortName(entry.text.trim());
+				if (holder.textStart < 0) {
+					holder.textStart = entry.start;
+				}
+				holder.textEnd = end;
+			}
+			return;
+		}
 		const rec = entry.rec;
 		if (!rec) {
 			return;

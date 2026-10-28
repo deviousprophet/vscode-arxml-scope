@@ -26,6 +26,34 @@ suite('scanner (core)', () => {
 		}
 	});
 
+	test('AC: an inline SYSC-REF in SW-SYSCOND keeps the constant name and drops formatting', () => {
+		const model = scanEcucValues(`<AUTOSAR>
+  <AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>
+    <ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>
+      <CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME>
+        <PARAMETER-VALUES>
+          <ECUC-NUMERICAL-PARAM-VALUE>
+            <DEFINITION-REF DEST="ECUC-BOOLEAN-PARAM-DEF">/D/P/Plain</DEFINITION-REF>
+            <VARIATION-POINT><SW-SYSCOND>(A == B)</SW-SYSCOND></VARIATION-POINT>
+          </ECUC-NUMERICAL-PARAM-VALUE>
+          <ECUC-NUMERICAL-PARAM-VALUE>
+            <DEFINITION-REF DEST="ECUC-BOOLEAN-PARAM-DEF">/D/P/Ref</DEFINITION-REF>
+            <VARIATION-POINT><SW-SYSCOND BINDING-TIME="CODE-GENERATION-TIME">
+              (
+              <SYSC-REF DEST="SW-SYSTEMCONST">/P/SwSystemconsts/CANIPCORETYPE_SC</SYSC-REF>
+              ==0)
+            </SW-SYSCOND></VARIATION-POINT>
+          </ECUC-NUMERICAL-PARAM-VALUE>
+        </PARAMETER-VALUES>
+      </ECUC-CONTAINER-VALUE></CONTAINERS>
+    </ECUC-MODULE-CONFIGURATION-VALUES>
+  </ELEMENTS></AR-PACKAGE></AR-PACKAGES>
+</AUTOSAR>`);
+		const parameters = model.modules[0].containers[0].parameters;
+		assert.strictEqual(parameters[0].syscond, '(A == B)', 'a plain condition keeps its own spacing');
+		assert.strictEqual(parameters[1].syscond, '(CANIPCORETYPE_SC==0)', 'the inline reference is its path tail');
+	});
+
 	test('AC1: parameter DEFINITION-REF DEST is captured, including namespace prefixes', () => {
 		const basic = scanFixture('basic.arxml');
 		const parameters = basic.modules[0].containers[0].parameters;
