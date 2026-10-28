@@ -61,15 +61,20 @@ interface Rec {
 	containers?: Rec[];
 }
 
-/** Element stack entry; `text` accumulates the raw characters of the open element. */
+/**
+ * Element stack entry; `text` accumulates the open element's text. For
+ * `SW-SYSCOND` that text is the joined condition (trimmed runs and the path tail
+ * of each inline `SYSC-REF`), so `textStart`/`textEnd` bound that text rather
+ * than the element's raw characters.
+ */
 interface Entry {
 	name: string;
 	/** Offset of the element's `<`. */
 	start: number;
 	text: string;
-	/** Offset of the first raw text character, or -1. */
+	/** Offset of the first character of `text`, or -1. */
 	textStart: number;
-	/** Offset just past the last raw text character, or -1. */
+	/** Offset just past the last character of `text`, or -1. */
 	textEnd: number;
 	rec?: Rec;
 	/** Attributes retained for `DEFINITION-REF` (its `DEST` type). */
@@ -112,11 +117,34 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		if (!e) {
 			return;
 		}
-		e.text += raw;
-		if (e.textStart < 0) {
-			e.textStart = from;
+		let chunk = raw;
+		let start = from;
+		let end = to;
+		if (e.name === 'SW-SYSCOND') {
+			// The formatting whitespace between a condition's parts is not part of the
+			// condition: the legacy text joins the trimmed parts, so
+			// `(\n <SYSC-REF/> \n ==0)` reads `(CANIPCORETYPE_SC==0)`. XML whitespace
+			// only, matching `isWs`, so a condition's own characters are never dropped.
+			let leading = 0;
+			while (leading < raw.length && isWs(raw[leading])) {
+				leading++;
+			}
+			let trailing = 0;
+			while (trailing < raw.length - leading && isWs(raw[raw.length - 1 - trailing])) {
+				trailing++;
+			}
+			chunk = raw.slice(leading, raw.length - trailing);
+			start = from + leading;
+			end = to - trailing;
+			if (chunk === '') {
+				return;
+			}
 		}
-		e.textEnd = to;
+		e.text += chunk;
+		if (e.textStart < 0) {
+			e.textStart = start;
+		}
+		e.textEnd = end;
 	};
 
 	/** Parses one tag at `at`; returns the offset just past it. */
@@ -236,6 +264,27 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 
 	/** Finalizes one element as its tags close. */
 	const finish = (entry: Entry, end: number, ancestors: Entry[]): void => {
+		if (entry.name === 'SYSC-REF') {
+			// A condition can name a system constant inline. The captured text is the
+			// raw runs only, so the reference has to be substituted where it stood —
+			// the legacy text uses the path tail, not the full path.
+			const holder = ancestors[ancestors.length - 1];
+			if (holder && holder.name === 'SW-SYSCOND') {
+				const tail = lastShortName(entry.text.trim());
+				holder.text += tail;
+				// The range must bound the condition text, not the reference's markup:
+				// when nothing precedes the reference the condition text starts with the
+				// tail, so the anchor is the tail inside the captured path. A range over
+				// `<SYSC-REF …>` would make reveal/selection highlight markup.
+				const at = tail === '' ? -1 : entry.text.lastIndexOf(tail);
+				const start = entry.textStart >= 0 && at >= 0 ? entry.textStart + at : entry.start;
+				if (holder.textStart < 0) {
+					holder.textStart = start;
+				}
+				holder.textEnd = start + tail.length;
+			}
+			return;
+		}
 		const rec = entry.rec;
 		if (!rec) {
 			return;

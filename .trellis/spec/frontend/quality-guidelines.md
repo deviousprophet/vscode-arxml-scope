@@ -14,7 +14,7 @@ that is not obvious from the code.
 | Generating an expected fixture from the code under test | A snapshot agrees with the code by construction. See `testing.md`. |
 | Editing a committed fixture from a test | It passes once, then fails forever and silently rewrites the repository. |
 | Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. The fixed `--container-accent` is the documented dark-pass exception. |
-| A second renderer or copied markup for a preview/harness | It diverges from the product; wrap the production `renderHtml` and assert containment. |
+| A second renderer or copied markup for a preview | It diverges from the product; wrap the production `renderHtml` and assert containment. |
 | Reading a real customer file from a test | The repository is public. Fixtures are synthetic. |
 | Building the whole row list into the DOM | It restores the large-file lag; render the viewport window plus overscan only. |
 | Setting row depth or spacer heights with a style attribute | The CSP blocks inline styles; use `data-level` CSS and the nonce-carrying `#virtual-style` sheet. |
@@ -105,7 +105,7 @@ that is not obvious from the code.
   their ancestors and the displayed list; only rendered rows get `<mark>` elements. The input
   debounces and a stale generation is discarded.
 - **Samples and benchmarks are dev-only.** The sample directory is outside the repository and
-  synthetic; `preview:check` excludes it. A benchmark is evidence, not a performance promise.
+  synthetic; no committed script or CI step reads it. A benchmark is evidence, not a performance promise.
 
 ## Before calling work done
 

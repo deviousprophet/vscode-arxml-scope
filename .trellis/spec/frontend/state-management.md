@@ -56,16 +56,13 @@ second host-side implementation of a view rule.
   destroy it. The row store, flattening and window are rebuilt in place; there is no innerHTML swap.
 - **Across a webview reload:** the details panel uses
   `acquireVsCodeApi().getState()/setState()`. Validate the shape: a non-null, non-array object; hide
-  only when `inspectorHidden === true`. An old saved `view` is ignored; there is no second view.
-- **In the browser harness:** `scripts/preview-ecuc.js` stubs `getState()/setState()` with a
-  `localStorage` key, so the reload path can be observed without VS Code. The stub is a development
-  aid, not a production storage layer.
+  only when `inspectorHidden === true`. An old saved `view` is ignored; there is no second view. The
+  reload round trip is observed in the Extension Development Host, which is the only place the state
+  API exists.
 
 ## No derived artefacts
 
 Nothing is written beside the user's file. The only write is the user's `<VALUE>` text through one
 `WorkspaceEdit`; the details panel exposes Jump to target for a followable reference and Reveal in source.
-The harness writes no files into the
-workspace; it serves from memory, reads the committed fixtures, and for manual viewing may also read
-the optional local `../sample` directory. `preview:check` never includes that directory, so CI does
-not depend on a developer's disk.
+No script reads a local sample directory: the preview, sample and benchmark scripts were dev-only and
+have been removed, so no CI step depends on a developer's disk.

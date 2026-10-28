@@ -5,6 +5,13 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- A page that fails to start now reports the error in the ECUC editor notice and names the `Developer: Open Webview Developer Tools` command
+- Variation-point conditions that embed a `SYSC-REF` inline now show the constant name instead of `( ==0)`
+
 ## [0.2.0] - 2026-10-28
 
 ### Added

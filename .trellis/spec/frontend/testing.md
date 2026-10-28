@@ -72,22 +72,22 @@ with `suite is not defined`.
 There is no webview DOM in the test host. Webview behaviour is therefore asserted at the level of the
 rendered page: the static shell, the escaped row JSON, the CSS, and the page's own inlined functions
 extracted with `scriptTestUtils` and compiled. Pure row/flatten/filter/window behaviour is tested
-directly; anything that depends on real DOM interaction has to be confirmed by hand or in the browser
-harness — say so in the task notes rather than implying it was tested.
+directly; anything that depends on real DOM interaction has to be confirmed by hand in the Extension
+Development Host — say so in the task notes rather than implying it was tested.
 
-## A browser harness is not a webview
+## Manual checks happen in the Extension Development Host
 
-`npm run preview:ecuc` serves the production `renderHtml` page in the in-app browser with a stubbed
-`acquireVsCodeApi` and stubbed `--vscode-*` variables. That is enough to observe layout, hover, focus,
-scroll, filter passes and the inspector with a real DOM — much more than a string assertion. It is
-still **not** a VS Code webview: it cannot prove VS Code's own theme resolution, the real custom-editor
-tab/column/focus behaviour, or accessibility-tree exposure. Record harness observations as
-harness-observed, and keep the real-host rows in the task's manual table.
+The in-repo preview harness (`preview:ecuc`, `preview:check`) and the `scripts/` directory were removed,
+so the page is no longer served with a stubbed `acquireVsCodeApi`. Open a fixture or a local `.arxml`
+in the ECUC editor and observe the real webview: layout, hover, focus, scroll, filter passes, the
+inspector and the reload path all need that host.
 
-The harness must wrap the production renderer; a second renderer is a test that agrees with itself.
-`npm run preview:check` asserts that each wrapped page contains the production row JSON and the
-virtual shell (spacers, window, inspector, empty state), plus the stub and theme variables. The row
-JSON is compared against `buildRows`, not against a full-tree string.
+A host observation is not a repeatable check. It cannot run in CI, so record it as host-observed with
+the file and the steps that produced it, and keep the real-host rows in the task's manual table.
+
+If a preview harness is reintroduced, it must wrap the production renderer; a second renderer is a test
+that agrees with itself. The row JSON must be compared against `buildRows`, not against a full-tree
+string.
 
 ## The reference must be the post-processed output
 
@@ -117,7 +117,7 @@ treat every numeric as integer; remove the format padding; put `(= 0x…)` back 
 Document follow link; hide the details Jump button; use a text input for Boolean; drop the input
 sanitizer; each mutation must fail a test. A CSS selector assertion
 is still not a rendered-layout test, so pair it with the dark/HC/selected parameter/selected
-container/guide-hover/details/narrow/deep captures and a browser pass. Assertions and captures must
+container/guide-hover/details/narrow/deep captures and a real-webview pass. Assertions and captures must
 match the production CSS, never the prototype file. There is no source-line gutter to conflate; the
 row model carries no source-position fields.
 
@@ -132,7 +132,7 @@ virtual math are driven with real row data, so the page does not get a second im
 display lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan
 payload. Structural
 assertions (a window loop, spacers, no `innerHTML`/style attribute in the row builder, `data-level`
-CSS) are the regression guard; the real DOM pass is the browser harness.
+CSS) are the regression guard; the real DOM pass is the Extension Development Host.
 
 Mutation checks for this layer: render the full row list instead of `[start,end)`, remove the
 top/bottom spacers, zero the overscan, drop subtree collapse/filter-ancestor logic, drop the filter
@@ -140,15 +140,15 @@ generation guard, use `innerHTML` for row text, use an inline depth style, remov
 `aria-level`/posinset/setsize, remove focus restore, send full HTML on re-scan, use
 `#tree-window` as the offset, leak bracket guides outside their container, or leak the subtree tint
 to siblings; each must fail a test. Prefer the
-page's own functions over a grep-only assertion, and record which checks were browser-observed rather
-than unit-tested.
+page's own functions over a grep-only assertion, and record which checks were observed in the real
+webview rather than unit-tested.
 
 ## A CSS rule is not a contrast measurement
 
 Asserting that `.node[data-selected] .value` names a `--vscode-*` variable proves the rule exists, not
 that the text is readable. An earlier light-theme pass had a green value on the blue selection at
 **1.33:1** while the rule looked correct — one reason that pass was dropped. Measure the computed
-foreground/background in the browser harness and record the ratio; keep the CSS assertion as a
+foreground/background in the real webview and record the ratio; keep the CSS assertion as a
 regression guard.
 
 ## Source-level wiring assertions are a last resort
@@ -156,20 +156,18 @@ regression guard.
 The provider's `{ type: 'copy' }` branch and clipboard module were removed with the details Copy
 actions. The remaining source-level wiring is the details editor's `{ type: 'edit' }` post and the
 re-scan handler; the input's Enter/Escape/Tab and refusal behaviour are asserted through the page's
-own serialized functions and browser captures, while the provider write is behaviourally tested.
+own serialized functions and real-webview captures, while the provider write is behaviourally tested.
 When you use a source assertion, say so in the task notes; do not present it as a behavioural test.
 
 ## Samples and benchmarks are evidence
 
-`npm run samples:ecuc` writes synthetic ECUC files to `../sample` (outside the repository) and
-`npm run perf:ecuc -- <file>` measures the scanner, node index and renderers in Node. The sample files
-are not committed; the generator and benchmark are dev-only. `preview:check` must not include the
-local sample directory, or CI would depend on a developer's disk.
+The dev-only sample generator and benchmark were removed with the harness. Evidence they produced
+stays in the task's research; the sample files were never committed and nothing in the repository or
+CI reads a local sample directory.
 
 A benchmark is evidence, not a promise. It does not cover browser layout/paint or a real VS Code
-webview; record the browser page observation separately. A single huge-file run is not a reason to add
-virtualisation. The sample generator is deterministic and the generated files are synthetic; never
-point it at a real customer directory.
+webview; record the webview observation separately. A single huge-file run is not a reason to add
+virtualisation. Generated samples are synthetic; never point a generator at a real customer directory.
 
 ## The page's own helpers are the ones under test
 

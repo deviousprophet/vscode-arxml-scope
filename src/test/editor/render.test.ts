@@ -8,6 +8,7 @@ import * as assert from 'assert';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { RowPayload, encodeRowDocument, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
+import { evaluateFunction } from './scriptTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
@@ -26,6 +27,69 @@ suite('editor rendering (AC1)', () => {
 		const page = html();
 		assert.ok(page.includes('>schema</span> <span class="number">00048</span>'));
 		assert.ok(page.includes('>package</span> PkgA.PkgB'));
+	});
+
+	test('AC1: a boot failure is shown in the notice region instead of an empty tree', () => {
+		const page = html();
+		assert.ok(
+			page.indexOf('window.ecucReportError = show') !== -1 &&
+				page.indexOf('window.ecucReportError = show') < page.indexOf('acquireVsCodeApi'),
+			'the error surface is armed before the API is acquired'
+		);
+		assert.ok(page.includes("postMessage({ type: 'ready' })"), 'a live page tells the host it booted');
+	});
+
+	test('AC1: an uncaught error and a rejected promise both reach the notice, naming the DevTools', () => {
+		const page = html();
+		const listeners: Record<string, (event: unknown) => void> = {};
+		const notice = { textContent: '', dataset: {} as Record<string, string> };
+		const globals = globalThis as unknown as { document?: unknown; window?: unknown };
+		const savedDocument = globals.document;
+		const savedWindow = globals.window;
+		globals.document = { getElementById: () => notice };
+		globals.window = {
+			addEventListener: (type: string, listener: (event: unknown) => void) => {
+				listeners[type] = listener;
+			},
+		};
+		try {
+			evaluateFunction<() => void>(page, 'ecucInstallErrorSurface')();
+			assert.ok(listeners.error, 'uncaught errors are listened for');
+			assert.ok(listeners.unhandledrejection, 'rejected promises are listened for');
+			listeners.error({ message: 'boom', lineno: 12 });
+			assert.ok(notice.textContent.includes('boom'), notice.textContent);
+			assert.ok(notice.textContent.includes('(line 12)'), notice.textContent);
+			assert.ok(notice.textContent.includes('Webview Developer Tools'), 'R1: the error names the DevTools');
+			listeners.unhandledrejection({ reason: new Error('no boot') });
+			assert.ok(notice.textContent.includes('no boot'), notice.textContent);
+			assert.ok(notice.textContent.includes('Webview Developer Tools'), 'R1: a rejection names the DevTools too');
+			assert.strictEqual(notice.dataset.kind, 'warn');
+		} finally {
+			globals.document = savedDocument;
+			globals.window = savedWindow;
+		}
+	});
+
+	test('AC2: an unreadable row payload is reported instead of an empty tree', () => {
+		const page = html();
+		const reported: string[] = [];
+		const globals = globalThis as unknown as {
+			document?: unknown;
+			window?: { ecucReportError?: (text: string) => void };
+		};
+		const savedDocument = globals.document;
+		const savedWindow = globals.window;
+		globals.document = { getElementById: () => ({ textContent: '{ not json' }) };
+		globals.window = { ecucReportError: (text: string) => reported.push(text) };
+		try {
+			const readInitialRows = evaluateFunction<() => { rows: unknown[] }>(page, 'readInitialRows');
+			assert.deepStrictEqual(readInitialRows(), { rows: [] }, 'the caller still gets an empty page');
+		} finally {
+			globals.document = savedDocument;
+			globals.window = savedWindow;
+		}
+		assert.strictEqual(reported.length, 1, 'exactly one report');
+		assert.ok(reported[0].includes('could not be read'), reported[0]);
 	});
 
 	test('AC1: the module row carries its dotted DEFINITION-REF path, short name and variant', () => {
