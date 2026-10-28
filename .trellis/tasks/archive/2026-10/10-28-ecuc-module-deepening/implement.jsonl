@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Layer rules, dispose rules and the before-done checklist this refactor must keep."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Mutation-check and page-serialisation testing rules for flattenRows and the page copy."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "The structural row typing that lets the page and FilterRow share one shape."}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Where the display-list module and its tests live."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Host-to-page seam contract: what may cross it and what must stay behind it."}

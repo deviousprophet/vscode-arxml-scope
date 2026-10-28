@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check the new modules against the project's code standards before the child is accepted."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify the model types and that core modules stay free of implicit any and of vscode imports."}
-{"file": ".trellis/spec/guides/index.md", "reason": "Verification rules, including the AI-reviewer false-positive patterns to filter before raising findings."}
-{"file": ".trellis/tasks/10-14-ecuc-artext-editor/research/legacy-artext-analysis.md", "reason": "Ground truth for checking claimed model parity; acceptance criteria trace back to this analysis."}
