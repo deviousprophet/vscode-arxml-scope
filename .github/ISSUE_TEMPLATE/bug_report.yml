@@ -1,0 +1,71 @@
+name: Bug report
+description: Something in ARXML Scope is broken or behaves incorrectly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please [search existing issues](https://github.com/deviousprophet/vscode-arxml-scope/issues?q=is%3Aissue) first.
+        A minimal sample file and clear reproduction steps make bugs much faster to fix. **Do not share proprietary or confidential AUTOSAR configuration.**
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you expected, what actually happened, and any error message.
+      placeholder: |
+        I expected ...
+        Instead ...
+        Error: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Right-click `sample.arxml` -> Open with ECUC Editor
+        2. Select a parameter in the Document view
+        3. Edit the value in the details panel and press Enter
+        4. See error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of ARXML Scope is affected?
+      options:
+        - ECUC editor / Document view
+        - Parameter details
+        - Value editing / validation
+        - Filtering / folding / collapse
+        - Navigation / reveal in source
+        - Rendering / performance
+        - Extension activation / commands
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: ARXML Scope version (Extensions view), VS Code version, and OS.
+      placeholder: "ARXML Scope 0.1.0 | VS Code 1.125.0 | Windows 11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Sample file, logs, or screenshots (optional)
+      description: |
+        Drag a minimal `.arxml` file here (rename to `.txt` if GitHub rejects the extension), drop a screenshot, or paste the relevant XML and errors inside a code fence.
+        For UI problems, open the webview console with **Developer: Open Webview Developer Tools**; for extension errors use **Help -> Toggle Developer Tools -> Console**.
+        Remove customer names, proprietary parameter values, and any other confidential data before posting.
+    validations:
+      required: false

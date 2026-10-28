@@ -1,0 +1,64 @@
+{
+	"schema": { "release": "00048" },
+	"packages": [{ "path": ["P"], "range": { "start": 229, "end": 1425 } }],
+	"modules": [
+		{
+			"kind": "module",
+			"definitionRef": "/D/M",
+			"definitionRefRange": { "start": 443, "end": 447 },
+			"shortName": "M",
+			"shortNameRange": { "start": 389, "end": 390 },
+			"range": { "start": 332, "end": 1389 },
+			"containers": [
+				{
+					"kind": "container",
+					"definitionRef": "/D/C",
+					"definitionRefRange": { "start": 594, "end": 598 },
+					"shortName": "C",
+					"shortNameRange": { "start": 549, "end": 550 },
+					"range": { "start": 500, "end": 1321 },
+					"containerPath": ["P", "M"],
+					"parameters": [
+						{
+							"kind": "parameter",
+							"numeric": false,
+							"definitionRef": "/D/C/Expr",
+							"definitionRefRange": { "start": 726, "end": 735 },
+							"name": "Expr",
+							"displayValue": "if a<b && c>d",
+							"valueRange": { "start": 787, "end": 800 },
+							"range": { "start": 665, "end": 855 }
+						},
+						{
+							"kind": "parameter",
+							"numeric": false,
+							"definitionRef": "/D/C/Html",
+							"definitionRefRange": { "start": 933, "end": 942 },
+							"name": "Html",
+							"displayValue": "<b>bold</b> & more",
+							"valueRange": { "start": 985, "end": 1019 },
+							"range": { "start": 872, "end": 1071 }
+						},
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/D/C/Empty",
+							"definitionRefRange": { "start": 1151, "end": 1161 },
+							"name": "Empty",
+							"displayValue": "",
+							"valueRange": { "start": 1197, "end": 1205 },
+							"range": { "start": 1088, "end": 1251 }
+						}
+					],
+					"references": [],
+					"containers": []
+				}
+			]
+		}
+	],
+	"pathIndex": [
+		["/P/M/C", { "start": 500, "end": 1321 }],
+		["/P/M", { "start": 332, "end": 1389 }],
+		["/P", { "start": 229, "end": 1425 }]
+	]
+}

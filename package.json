@@ -1,0 +1,157 @@
+{
+  "name": "vscode-arxml-scope",
+  "displayName": "ARXML Scope",
+  "description": "Browse and edit AUTOSAR ECUC-Values ARXML files in VS Code.",
+  "version": "0.1.0",
+  "publisher": "deviousprophet",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deviousprophet/vscode-arxml-scope"
+  },
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscode-arxml-scope.openEcucEditor",
+        "title": "Open with ECUC Editor",
+        "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.revealInSource",
+        "title": "Reveal in ARXML Source",
+        "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.revealInEcucEditor",
+        "title": "Reveal in ECUC Editor",
+        "category": "ARXML Scope"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "vscode-arxml-scope.ecucEditor",
+        "displayName": "ECUC Values Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.arxml"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "vscode-arxml-scope.openEcucEditor",
+          "when": "resourceExtname == .arxml",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "vscode-arxml-scope.openEcucEditor",
+          "when": "resourceExtname == .arxml",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-arxml-scope.revealInEcucEditor",
+          "when": "resourceExtname == .arxml",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ARXML Scope",
+      "properties": {
+        "arxmlScope.ecuc.editor.sort": {
+          "type": "string",
+          "enum": [
+            "all",
+            "declaration"
+          ],
+          "default": "all",
+          "description": "Order of modules, containers, parameters and references in the ECUC editor. \"declaration\" keeps the file's own order."
+        },
+        "arxmlScope.ecuc.editor.sortExcept": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "DcmDspDidRef",
+            "DcmDspRequestRoutineResultsOutSignal",
+            "DcmDspStartRoutineInSignal",
+            "DcmDspStartRoutineOutSignal",
+            "DcmDspStopRoutineInSignal",
+            "DcmDspStopRoutineOutSignal",
+            "DcmArgumentRef",
+            "DemDidDataElementClassRef",
+            "DemExtendedDataRecordClassRef",
+            "DemDataElementClassRef",
+            "DemDidClassRef",
+            "DemFreezeFrameRecordClassRef",
+            "DemSPNClassRef",
+            "EcuMDriverInitItem",
+            "EcuMRbCallOutItem"
+          ],
+          "description": "DEFINITION-REF tails that keep declaration order under \"all\". Defaults to the list from the legacy Arxml2Artext.cmd."
+        },
+        "arxmlScope.ecuc.editor.revealMode": {
+          "type": "string",
+          "enum": [
+            "beside",
+            "focus",
+            "replace"
+          ],
+          "default": "beside",
+          "description": "Where \"Reveal in ARXML Source\" shows the file. \"beside\" opens the source next to the ECUC editor and keeps focus in the tree; \"focus\" opens it beside and moves focus there; \"replace\" swaps the ECUC editor's tab for the text editor, as older versions did."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test",
+    "preview:ecuc": "npm run compile-tests && node scripts/preview-ecuc.js",
+    "preview:check": "npm run compile-tests && node scripts/preview-ecuc.js --check",
+    "samples:ecuc": "node scripts/generate-samples.js",
+    "perf:ecuc": "npm run compile-tests && node scripts/bench-ecuc.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.125.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "typescript-eslint": "^8.61.1",
+    "eslint": "^10.5.0",
+    "esbuild": "^0.28.1",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.3",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

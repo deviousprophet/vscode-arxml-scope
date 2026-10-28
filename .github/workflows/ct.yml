@@ -1,0 +1,79 @@
+name: CT Workflow
+
+env:
+  NODE_VERSION: '24'
+
+on:
+  workflow_call:
+
+jobs:
+  UT_Test:
+    name: Unit Test Execution
+    runs-on: ubuntu-latest
+    outputs:
+      run-tests-outcome: ${{ steps.run-tests.outcome }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Compile Tests
+        run: npm run compile-tests
+
+      - name: Compile Extension
+        run: npm run compile
+
+      - name: Run Tests
+        id: run-tests
+        run: |
+          set -o pipefail
+          xvfb-run -a npm test 2>&1 | tee unit-test-output.log
+
+      - name: Upload Test Results Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          path: unit-test-output.log
+          name: unit-test-output-${{ github.sha }}
+          overwrite: true
+
+  Finalize:
+    name: Finalize Workflow
+    needs: [UT_Test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check Job Results
+        run: |
+          UT_RESULT="${{ needs.UT_Test.result }}"
+          if [[ "$UT_RESULT" != "success" ]]; then
+            echo "Unit Test job: $UT_RESULT"
+            exit 1
+          fi
+          echo "Unit Test job: $UT_RESULT"
+
+      - name: Download UT Test Log
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: unit-test-output-${{ github.sha }}
+          path: .
+
+      - name: Unit Test Summary
+        if: always()
+        env:
+          RUN_TESTS_OUTCOME: ${{ needs.UT_Test.outputs.run-tests-outcome }}
+          LOG_FILE: unit-test-output.log
+          SUITE_NAME: Unit Test Results
+        run: node .github/scripts/summarize-tests.mjs

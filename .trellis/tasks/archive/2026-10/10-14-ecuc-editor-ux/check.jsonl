@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Check that each markup assertion would fail if the feature were deleted, and that the manually-verified rows are recorded as manual rather than claimed as tested."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify no colour literal escaped as anything but a var() fallback, no dependency or asset was added, and the read-only invariant still holds."}
+{"file": ".trellis/tasks/10-14-artext-custom-editor/prd.md", "reason": "Its AC3 (a normally-opened .arxml still uses the text editor) and its reveal tests are the most likely regression from a new click model and a new reveal mechanism."}
+{"file": ".trellis/tasks/10-14-ecuc-value-editing/prd.md", "reason": "Its AC6 refusal path and the widget's click/key handling must still work; the click model changed underneath it."}
+{"file": ".trellis/spec/guides/index.md", "reason": "The verification rules for cross-review findings: confirm each against the code, and apply the tautological-test check before accepting any assertion."}

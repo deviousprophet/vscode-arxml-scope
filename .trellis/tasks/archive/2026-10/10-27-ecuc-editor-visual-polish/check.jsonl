@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Quality-check entry point and the guidelines index."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Every new assertion must fail when its feature is deleted; the check must run the mutation table."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Forbidden patterns and the editor/write-path rules the check must verify."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Verify the harness stays outside the extension bundle and src/core stays free of vscode imports."}
+{"file": ".trellis/tasks/10-27-ecuc-editor-visual-polish/research/ux-verification-gap.md", "reason": "The prior check's findings, deviations and the manual rows that must not be overclaimed."}
+{"file": ".trellis/tasks/10-27-ecuc-editor-visual-polish/design.md", "reason": "The contracts and verification limits the check is measuring against."}
+{"file": ".trellis/tasks/10-27-ecuc-editor-visual-polish/implement.md", "reason": "The ordered checklist, mutation table and visual matrix to verify."}

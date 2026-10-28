@@ -1,0 +1,16 @@
+# Trellis: append-only developer journals should merge cleanly across
+# parallel sessions/worktrees — each session only appends a new block, so
+# there is nothing to actually conflict on.
+#
+# Do NOT add a rule for workspace/*/index.md here — it is fully regenerated
+# every session, so a real conflict there is expected and safe to resolve by
+# picking either side (task state lives in task.json, not index.md). See
+# .trellis/spec/cli/backend/directory-structure.md for details.
+.trellis/workspace/*/journal-*.md merge=union
+
+# Test fixtures are pinned byte-for-byte. Their line endings are part of what
+# they test - basic.arxml must be LF and formatting.arxml must be CRLF, and
+# scanner.test.ts asserts exactly that - and core.autocrlf=true would otherwise
+# normalise them in the index and hand a different byte stream to a clone on
+# another machine.
+src/test/fixtures/** -text

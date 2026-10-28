@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>P</SHORT-NAME>
+      <ELEMENTS>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>M</SHORT-NAME>
+          <DEFINITION-REF>/D/M</DEFINITION-REF>
+          <ANNOTATIONS>
+            <ANNOTATION>
+              <LABEL>
+                <L-4 L="EN"> Note </L-4>
+                <L-4 L="DE">Hinweis</L-4>
+              </LABEL>
+              <ANNOTATION-TEXT>
+                <VERBATIM>
+                  <L-5 L="EN"> module note </L-5>
+                  <L-5 L="DE">Modulnotiz</L-5>
+                </VERBATIM>
+              </ANNOTATION-TEXT>
+            </ANNOTATION>
+          </ANNOTATIONS>
+          <VARIATION-POINT>
+            <SW-SYSCOND>(A == B)</SW-SYSCOND>
+            <POST-BUILD-VARIANT-CONDITIONS>
+              <POST-BUILD-VARIANT-CONDITION>
+                <MATCHING-CRITERION-REF>/D/Crit1</MATCHING-CRITERION-REF>
+                <VALUE>1</VALUE>
+              </POST-BUILD-VARIANT-CONDITION>
+              <POST-BUILD-VARIANT-CONDITION>
+                <MATCHING-CRITERION-REF>/D/Crit2</MATCHING-CRITERION-REF>
+                <VALUE>2</VALUE>
+              </POST-BUILD-VARIANT-CONDITION>
+            </POST-BUILD-VARIANT-CONDITIONS>
+          </VARIATION-POINT>
+          <CONTAINERS>
+            <ECUC-CONTAINER-VALUE>
+              <SHORT-NAME>C</SHORT-NAME>
+              <DEFINITION-REF>/D/C</DEFINITION-REF>
+              <ANNOTATIONS>
+                <ANNOTATION>
+                  <ANNOTATION-TEXT>
+                    <VERBATIM>
+                      <L-5 L="EN">no label here</L-5>
+                    </VERBATIM>
+                  </ANNOTATION-TEXT>
+                </ANNOTATION>
+              </ANNOTATIONS>
+              <PARAMETER-VALUES>
+                <ECUC-NUMERICAL-PARAM-VALUE>
+                  <DEFINITION-REF>/D/C/P</DEFINITION-REF>
+                  <VARIATION-POINT>
+                    <SW-SYSCOND>(X &lt; Y)</SW-SYSCOND>
+                  </VARIATION-POINT>
+                  <VALUE>7</VALUE>
+                </ECUC-NUMERICAL-PARAM-VALUE>
+              </PARAMETER-VALUES>
+            </ECUC-CONTAINER-VALUE>
+          </CONTAINERS>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Composition patterns for the editor provider and its rendered view."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "The provider holds per-panel state and must re-scan on every document change; stale state is this child's main failure mode."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Code standards and forbidden patterns for the editor and webview code."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "The webview <-> extension message protocol is a layer boundary; its payload shape must not be improvised in the view."}
+{"file": ".trellis/tasks/10-14-ecuc-artext-editor/research/legacy-artext-analysis.md", "reason": "Display rules, labels and suffixes that the rendering must reproduce come from this analysis."}

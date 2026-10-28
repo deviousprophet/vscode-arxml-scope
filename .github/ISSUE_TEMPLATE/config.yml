@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: README
+    url: https://github.com/deviousprophet/vscode-arxml-scope#readme
+    about: Features, quick start, and limitations.

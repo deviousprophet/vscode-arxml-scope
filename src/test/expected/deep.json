@@ -1,0 +1,103 @@
+{
+	"schema": { "release": "00048" },
+	"packages": [{ "path": ["P"], "range": { "start": 145, "end": 2943 } }],
+	"modules": [
+		{
+			"kind": "module",
+			"definitionRef": "/D/M",
+			"definitionRefRange": { "start": 354, "end": 358 },
+			"shortName": "M",
+			"shortNameRange": { "start": 303, "end": 304 },
+			"range": { "start": 236, "end": 2897 },
+			"containers": [
+				{
+					"kind": "container",
+					"definitionRef": "/D/C1",
+					"definitionRefRange": { "start": 556, "end": 561 },
+					"shortName": "C1",
+					"shortNameRange": { "start": 496, "end": 498 },
+					"range": { "start": 433, "end": 2811 },
+					"containerPath": ["P", "M"],
+					"parameters": [],
+					"references": [],
+					"containers": [
+						{
+							"kind": "container",
+							"definitionRef": "/D/C2",
+							"definitionRefRange": { "start": 795, "end": 800 },
+							"shortName": "C2",
+							"shortNameRange": { "start": 727, "end": 729 },
+							"range": { "start": 656, "end": 2717 },
+							"containerPath": ["P", "M", "C1"],
+							"parameters": [],
+							"references": [],
+							"containers": [
+								{
+									"kind": "container",
+									"definitionRef": "/D/C3",
+									"definitionRefRange": { "start": 1066, "end": 1071 },
+									"shortName": "C3",
+									"shortNameRange": { "start": 990, "end": 992 },
+									"range": { "start": 911, "end": 2607 },
+									"containerPath": ["P", "M", "C1", "C2"],
+									"parameters": [],
+									"references": [],
+									"containers": [
+										{
+											"kind": "container",
+											"definitionRef": "/D/C4",
+											"definitionRefRange": { "start": 1369, "end": 1374 },
+											"shortName": "C4",
+											"shortNameRange": { "start": 1285, "end": 1287 },
+											"range": { "start": 1198, "end": 2481 },
+											"containerPath": ["P", "M", "C1", "C2", "C3"],
+											"parameters": [],
+											"references": [],
+											"containers": [
+												{
+													"kind": "container",
+													"definitionRef": "/D/C5",
+													"definitionRefRange": { "start": 1704, "end": 1709 },
+													"shortName": "C5",
+													"shortNameRange": { "start": 1612, "end": 1614 },
+													"range": { "start": 1517, "end": 2339 },
+													"containerPath": ["P", "M", "C1", "C2", "C3", "C4"],
+													"parameters": [],
+													"references": [],
+													"containers": [
+														{
+															"kind": "container",
+															"definitionRef": "/D/C6",
+															"definitionRefRange": { "start": 2071, "end": 2076 },
+															"shortName": "C6",
+															"shortNameRange": { "start": 1971, "end": 1973 },
+															"range": { "start": 1868, "end": 2181 },
+															"containerPath": ["P", "M", "C1", "C2", "C3", "C4", "C5"],
+															"parameters": [],
+															"references": [],
+															"containers": []
+														}
+													]
+												}
+											]
+										}
+									]
+								}
+							]
+						}
+					]
+				}
+			]
+		}
+	],
+	"pathIndex": [
+		["/P/M/C1/C2/C3/C4/C5/C6", { "start": 1868, "end": 2181 }],
+		["/P/M/C1/C2/C3/C4/C5", { "start": 1517, "end": 2339 }],
+		["/P/M/C1/C2/C3/C4", { "start": 1198, "end": 2481 }],
+		["/P/M/C1/C2/C3", { "start": 911, "end": 2607 }],
+		["/P/M/C1/C2", { "start": 656, "end": 2717 }],
+		["/P/M/C1", { "start": 433, "end": 2811 }],
+		["/P/M", { "start": 236, "end": 2897 }],
+		["/P", { "start": 145, "end": 2943 }]
+	]
+}

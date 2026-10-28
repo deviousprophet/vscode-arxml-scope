@@ -1,0 +1,100 @@
+{
+	"schema": { "release": "00048" },
+	"packages": [{ "path": ["P"], "range": { "start": 139, "end": 1837 } }],
+	"modules": [
+		{
+			"kind": "module",
+			"definitionRef": "/D/M",
+			"definitionRefRange": { "start": 308, "end": 312 },
+			"shortName": "M",
+			"shortNameRange": { "start": 267, "end": 268 },
+			"range": { "start": 210, "end": 1801 },
+			"containers": [
+				{
+					"kind": "container",
+					"definitionRef": "/D/C",
+					"definitionRefRange": { "start": 459, "end": 463 },
+					"shortName": "C",
+					"shortNameRange": { "start": 414, "end": 415 },
+					"range": { "start": 365, "end": 1733 },
+					"containerPath": ["P", "M"],
+					"parameters": [
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/D/C/Zeta",
+							"definitionRefRange": { "start": 593, "end": 602 },
+							"name": "Zeta",
+							"displayValue": "63",
+							"hexValue": "0x3F",
+							"valueRange": { "start": 645, "end": 647 },
+							"range": { "start": 530, "end": 701 }
+						},
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/D/C/DcmDspDidRef",
+							"definitionRefRange": { "start": 781, "end": 798 },
+							"name": "DcmDspDidRef",
+							"displayValue": "2",
+							"hexValue": "0x2",
+							"valueRange": { "start": 841, "end": 842 },
+							"range": { "start": 718, "end": 896 }
+						},
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/D/C/Alpha",
+							"definitionRefRange": { "start": 976, "end": 986 },
+							"name": "Alpha",
+							"displayValue": "7",
+							"hexValue": "0x7",
+							"valueRange": { "start": 1029, "end": 1030 },
+							"range": { "start": 913, "end": 1084 }
+						},
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/D/C/DemDidClassRef",
+							"definitionRefRange": { "start": 1164, "end": 1183 },
+							"name": "DemDidClassRef",
+							"displayValue": "5",
+							"hexValue": "0x5",
+							"valueRange": { "start": 1226, "end": 1227 },
+							"range": { "start": 1101, "end": 1281 }
+						},
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/D/C/DcmDspDidRef",
+							"definitionRefRange": { "start": 1361, "end": 1378 },
+							"name": "DcmDspDidRef",
+							"displayValue": "1",
+							"hexValue": "0x1",
+							"valueRange": { "start": 1421, "end": 1422 },
+							"range": { "start": 1298, "end": 1476 }
+						},
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/D/C/Beta",
+							"definitionRefRange": { "start": 1556, "end": 1565 },
+							"name": "Beta",
+							"displayValue": "8",
+							"hexValue": "0x8",
+							"valueRange": { "start": 1608, "end": 1609 },
+							"range": { "start": 1493, "end": 1663 }
+						}
+					],
+					"references": [],
+					"containers": []
+				}
+			]
+		}
+	],
+	"pathIndex": [
+		["/P/M/C", { "start": 365, "end": 1733 }],
+		["/P/M", { "start": 210, "end": 1801 }],
+		["/P", { "start": 139, "end": 1837 }]
+	]
+}

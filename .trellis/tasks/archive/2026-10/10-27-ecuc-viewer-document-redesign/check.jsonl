@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Quality-check entry point and layer index."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check the document CSS/tokens against the webview DOM and state contracts."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check no forbidden patterns, no hard-coded colours, no core/write-path changes."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify every new assertion fails when deleted; check the visual/benchmark limits."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify the view/details state defaults and persistence."}
+{"file": ".trellis/tasks/10-27-ecuc-viewer-document-redesign/research/reference-artext/README.md", "reason": "The post-processed reference and scope mapping used to judge the design."}
+{"file": ".trellis/tasks/10-27-ecuc-viewer-document-redesign/design.md", "reason": "The document-view contracts and verification plan."}
+{"file": ".trellis/tasks/10-27-ecuc-viewer-document-redesign/implement.md", "reason": "The ordered checklist, test table, visual matrix and mutations to verify."}

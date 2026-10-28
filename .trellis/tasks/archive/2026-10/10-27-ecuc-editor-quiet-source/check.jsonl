@@ -1,0 +1,9 @@
+{"file": "docs/ECUC_EDITOR_DESIGN_SPEC.md", "reason": "Check the implementation line by line against the read-only design spec and its acceptance checklist."}
+{"file": "docs/ecuc-editor-prototype.html", "reason": "Compare the rendered capture against the prototype's states/layout."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify DOM contracts, event ownership, state, theme variables and accessibility."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify no forbidden patterns, literals, dependencies or core/write-path changes."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify assertions fail when features are removed; check harness/mutation limits."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify view/details state and re-scan survival."}
+{"file": ".trellis/tasks/10-27-ecuc-editor-quiet-source/design.md", "reason": "Verify the adopted decisions, token/gutter/strip mapping and risks."}
+{"file": ".trellis/tasks/10-27-ecuc-editor-quiet-source/implement.md", "reason": "Verify every checklist item, test, mutation and review gate is complete."}
+{"file": ".trellis/tasks/10-27-ecuc-editor-quiet-source/prd.md", "reason": "Verify AC1-AC10 and the out-of-scope list."}

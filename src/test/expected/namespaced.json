@@ -1,0 +1,45 @@
+{
+	"schema": { "release": "00048" },
+	"packages": [{ "path": ["P"], "range": { "start": 244, "end": 1154 } }],
+	"modules": [
+		{
+			"kind": "module",
+			"definitionRef": "/P/M",
+			"definitionRefRange": { "start": 460, "end": 464 },
+			"shortName": "M",
+			"shortNameRange": { "start": 390, "end": 391 },
+			"range": { "start": 327, "end": 1112 },
+			"containers": [
+				{
+					"kind": "container",
+					"definitionRef": "/P/M/C",
+					"definitionRefRange": { "start": 666, "end": 672 },
+					"shortName": "C",
+					"shortNameRange": { "start": 578, "end": 579 },
+					"range": { "start": 523, "end": 1038 },
+					"containerPath": ["P", "M"],
+					"parameters": [
+						{
+							"kind": "parameter",
+							"numeric": true,
+							"definitionRef": "/P/M/C/N",
+							"definitionRefRange": { "start": 844, "end": 852 },
+							"name": "N",
+							"displayValue": "1",
+							"hexValue": "0x1",
+							"valueRange": { "start": 901, "end": 902 },
+							"range": { "start": 745, "end": 962 }
+						}
+					],
+					"references": [],
+					"containers": []
+				}
+			]
+		}
+	],
+	"pathIndex": [
+		["/P/M/C", { "start": 523, "end": 1038 }],
+		["/P/M", { "start": 327, "end": 1112 }],
+		["/P", { "start": 244, "end": 1154 }]
+	]
+}

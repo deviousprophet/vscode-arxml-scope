@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns:AUTOSAR xmlns:ns="http://autosar.org/schema/r4.0" ns:xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ns:AR-PACKAGES>
+    <ns:AR-PACKAGE>
+      <ns:SHORT-NAME>P</ns:SHORT-NAME>
+      <ns:ELEMENTS>
+        <ns:ECUC-MODULE-CONFIGURATION-VALUES>
+          <ns:SHORT-NAME>M</ns:SHORT-NAME>
+          <ns:DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/M</ns:DEFINITION-REF>
+          <ns:CONTAINERS>
+            <ns:ECUC-CONTAINER-VALUE>
+              <ns:SHORT-NAME>C</ns:SHORT-NAME>
+              <ns:DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/M/C</ns:DEFINITION-REF>
+              <ns:PARAMETER-VALUES>
+                <ns:ECUC-NUMERICAL-PARAM-VALUE>
+                  <ns:DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/M/C/N</ns:DEFINITION-REF>
+                  <ns:VALUE>1</ns:VALUE>
+                </ns:ECUC-NUMERICAL-PARAM-VALUE>
+              </ns:PARAMETER-VALUES>
+            </ns:ECUC-CONTAINER-VALUE>
+          </ns:CONTAINERS>
+        </ns:ECUC-MODULE-CONFIGURATION-VALUES>
+      </ns:ELEMENTS>
+    </ns:AR-PACKAGE>
+  </ns:AR-PACKAGES>
+</ns:AUTOSAR>

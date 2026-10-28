@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/10-28-ecuc-fold-gutter-tooltips/prd.md", "reason": "Verify each fold-gutter and tooltip AC."}
+{"file": "docs/ECUC_EDITOR.md", "reason": "User-facing behavior and tooltip wording."}
+{"file": "docs/ECUC_EDITOR_DESIGN_SPEC.md", "reason": "Visual contract for the gutter, guides and selection."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Test layers, page-helper extraction and mutation expectations."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "CSP, selection and no-dead-code checks."}
+{"file": ".trellis/tasks/10-28-ecuc-fold-gutter-tooltips/research/vscode-fold-gutter.md", "reason": "Verify geometry and icon visibility against the researched source."}

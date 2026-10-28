@@ -1,0 +1,66 @@
+name: Feature request
+description: Suggest an idea or an improvement for ARXML Scope
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please [search existing issues](https://github.com/deviousprophet/vscode-arxml-scope/issues?q=is%3Aissue) and check the [README](https://github.com/deviousprophet/vscode-arxml-scope#readme) first.
+        Describing the problem you are trying to solve helps more than describing a specific implementation.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What are you trying to do, and what gets in your way today?
+      placeholder: "When I review an ECUC configuration, I often need to ... but currently I have to ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like ARXML Scope to do? Workarounds or alternatives you have tried are welcome too.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of ARXML Scope would this touch?
+      options:
+        - ECUC editor / Document view
+        - Parameter details / editing
+        - Outline / navigation
+        - References / Go to Definition
+        - Validation / diagnostics
+        - Semantic search
+        - Completion / hover
+        - Classic / Adaptive Platform support
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Examples or references (optional)
+      description: |
+        Sketches, screenshots, sample data, or AUTOSAR specification references are welcome.
+        **Do not share proprietary or confidential AUTOSAR configuration.**
+    validations:
+      required: false
+
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you like to help implement this?
+      options:
+        - "No, I'm just suggesting"
+        - "Maybe, with some guidance"
+        - "Yes, I'd open a pull request"
+    validations:
+      required: false

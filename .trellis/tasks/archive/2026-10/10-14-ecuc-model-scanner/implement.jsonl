@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "The scanner and model are the most type-dense part of the feature; strict typing is required here."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Where core modules belong relative to the extension entry point, so the no-vscode core stays separable."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Search before adding an offset or parsing helper; the reference implementation's duplicated index/offset logic is the cautionary case."}
+{"file": ".trellis/tasks/10-14-ecuc-artext-editor/research/legacy-artext-analysis.md", "reason": "The tag list, ordering rule and the 15-entry exception list are defined only here."}

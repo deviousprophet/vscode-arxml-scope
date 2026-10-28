@@ -1,0 +1,87 @@
+{
+	"schema": { "release": "00048" },
+	"packages": [{ "path": ["P"], "range": { "start": 139, "end": 1448 } }],
+	"modules": [
+		{
+			"kind": "module",
+			"definitionRef": "/D/M",
+			"definitionRefRange": { "start": 308, "end": 312 },
+			"shortName": "M",
+			"shortNameRange": { "start": 267, "end": 268 },
+			"range": { "start": 210, "end": 1412 },
+			"containers": [
+				{
+					"kind": "container",
+					"definitionRef": "/D/C1",
+					"definitionRefRange": { "start": 460, "end": 465 },
+					"shortName": "C1",
+					"shortNameRange": { "start": 414, "end": 416 },
+					"range": { "start": 365, "end": 518 },
+					"containerPath": ["P", "M"],
+					"parameters": [],
+					"references": [],
+					"containers": []
+				},
+				{
+					"kind": "container",
+					"definitionRef": "/D/X",
+					"definitionRefRange": { "start": 625, "end": 629 },
+					"shortName": "X",
+					"shortNameRange": { "start": 580, "end": 581 },
+					"range": { "start": 531, "end": 931 },
+					"containerPath": ["P", "M"],
+					"parameters": [],
+					"references": [],
+					"containers": [
+						{
+							"kind": "container",
+							"definitionRef": "/D/X/Dup",
+							"definitionRefRange": { "start": 798, "end": 806 },
+							"shortName": "Dup",
+							"shortNameRange": { "start": 747, "end": 750 },
+							"range": { "start": 694, "end": 863 },
+							"containerPath": ["P", "M", "X"],
+							"parameters": [],
+							"references": [],
+							"containers": []
+						}
+					]
+				},
+				{
+					"kind": "container",
+					"definitionRef": "/D/Y",
+					"definitionRefRange": { "start": 1038, "end": 1042 },
+					"shortName": "Y",
+					"shortNameRange": { "start": 993, "end": 994 },
+					"range": { "start": 944, "end": 1344 },
+					"containerPath": ["P", "M"],
+					"parameters": [],
+					"references": [],
+					"containers": [
+						{
+							"kind": "container",
+							"definitionRef": "/D/Y/Dup",
+							"definitionRefRange": { "start": 1211, "end": 1219 },
+							"shortName": "Dup",
+							"shortNameRange": { "start": 1160, "end": 1163 },
+							"range": { "start": 1107, "end": 1276 },
+							"containerPath": ["P", "M", "Y"],
+							"parameters": [],
+							"references": [],
+							"containers": []
+						}
+					]
+				}
+			]
+		}
+	],
+	"pathIndex": [
+		["/P/M/C1", { "start": 365, "end": 518 }],
+		["/P/M/X/Dup", { "start": 694, "end": 863 }],
+		["/P/M/X", { "start": 531, "end": 931 }],
+		["/P/M/Y/Dup", { "start": 1107, "end": 1276 }],
+		["/P/M/Y", { "start": 944, "end": 1344 }],
+		["/P/M", { "start": 210, "end": 1412 }],
+		["/P", { "start": 139, "end": 1448 }]
+	]
+}

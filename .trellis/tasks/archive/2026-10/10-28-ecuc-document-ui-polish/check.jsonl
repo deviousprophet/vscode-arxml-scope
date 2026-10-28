@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/10-28-ecuc-document-ui-polish/prd.md", "reason": "Verify AC1-AC13 and the Document-only scope."}
+{"file": ".trellis/tasks/10-28-ecuc-document-ui-polish/design.md", "reason": "Verify Tree removal, no-line-number geometry, bracket guides, selection hierarchy, follow, details editor, data/provider contracts and risks."}
+{"file": ".trellis/tasks/10-28-ecuc-document-ui-polish/implement.md", "reason": "Verify the ordered checklist, tests, mutations, performance and review gate."}
+{"file": "docs/ECUC_EDITOR_DESIGN_SPEC.md", "reason": "Check the design spec is updated and matches the Document-only/no-gutter/details-edit UI."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check DOM/value contracts, event ownership, state and accessibility after removing Tree and inline editing."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check no forbidden patterns, CSP violations, dead copy/clipboard paths or core/write changes."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Check details/editor/bracket/subtree/follow/Document tests and 21-mutation coverage."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Check inspector visibility, selection, collapse, query and re-scan persistence."}

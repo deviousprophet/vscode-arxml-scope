@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/10-28-ecuc-parameter-details-formats/prd.md", "reason": "Type/formats/editing/follow requirements and ACs."}
+{"file": ".trellis/tasks/10-28-ecuc-parameter-details-formats/design.md", "reason": "DEST data flow, type mapping, formats, controls and follow design."}
+{"file": "docs/ECUC_EDITOR.md", "reason": "Current user-facing Document and details behavior."}
+{"file": "docs/ECUC_EDITOR_DESIGN_SPEC.md", "reason": "Current visual and interaction contract."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Row/details DOM and event contracts."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Write path, selection and forbidden-pattern rules."}

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>P</SHORT-NAME>
+      <ELEMENTS>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>M</SHORT-NAME>
+          <DEFINITION-REF>/D/M</DEFINITION-REF>
+          <CONTAINERS>
+            <ECUC-CONTAINER-VALUE>
+              <SHORT-NAME>C</SHORT-NAME>
+              <DEFINITION-REF>/D/C</DEFINITION-REF>
+              <PARAMETER-VALUES>
+                <ECUC-NUMERICAL-PARAM-VALUE>
+                  <DEFINITION-REF>/D/C/IniValue</DEFINITION-REF>
+                  <VALUE>63</VALUE>
+                </ECUC-NUMERICAL-PARAM-VALUE>
+              </PARAMETER-VALUES>
+              <VARIATION-POINT>
+                <POST-BUILD-VARIANT-CONDITIONS>
+                  <POST-BUILD-VARIANT-CONDITION>
+                    <MATCHING-CRITERION-REF>/D/Crit1</MATCHING-CRITERION-REF>
+                    <VALUE>63</VALUE>
+                  </POST-BUILD-VARIANT-CONDITION>
+                </POST-BUILD-VARIANT-CONDITIONS>
+              </VARIATION-POINT>
+            </ECUC-CONTAINER-VALUE>
+          </CONTAINERS>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>
