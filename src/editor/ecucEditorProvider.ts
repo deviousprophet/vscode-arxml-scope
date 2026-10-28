@@ -102,6 +102,19 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			selectedId,
 		});
 
+		// A page whose script never runs cannot say so. If the boot message does not
+		// arrive, say it here — otherwise a dead page is just a header and an empty
+		// tree with no explanation (see the task's PRD).
+		let ready = false;
+		const readyTimer = setTimeout(() => {
+			if (ready) {
+				return;
+			}
+			void vscode.window.showWarningMessage(
+				`"${path.basename(document.uri.fsPath)}" opened, but the ECUC editor page did not start. Run "Developer: Open Webview Developer Tools" to see the error.`
+			);
+		}, 10000);
+
 		// The single refresh path: any change to this document — an undo, an external
 		// edit, or the sibling child's write — re-scans and pushes row data, so no range
 		// on screen can outlive the text it points at. The same push serves a settings
@@ -148,6 +161,11 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				if (!message) {
 					return;
 				}
+				if (message.type === 'ready') {
+					ready = true;
+					clearTimeout(readyTimer);
+					return;
+				}
 				if (typeof message.nodeId !== 'string') {
 					return;
 				}
@@ -167,6 +185,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		);
 
 		panel.onDidDispose(() => {
+			clearTimeout(readyTimer);
 			for (const disposable of disposables) {
 				disposable.dispose();
 			}

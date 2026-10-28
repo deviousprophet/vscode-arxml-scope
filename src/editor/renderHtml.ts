@@ -246,6 +246,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </div>
 <script type="application/json" id="ecuc-rows" nonce="${nonce}">${payload}</script>
 <script nonce="${nonce}">
+${PAGE_ERROR_SCRIPT}
 const vscode = acquireVsCodeApi();
 ${detailsEditorScript()}
 ${TREE_SCRIPT}
@@ -1164,6 +1165,35 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 `;
 
 /**
+ * Boot error surface. Emitted first, so it is armed before anything that can throw:
+ * without it a page that dies while booting shows the schema header and an empty
+ * tree with no explanation (the failure mode that is worst to diagnose).
+ *
+ * `$` is avoided in this block: the whole page is a template literal.
+ */
+const PAGE_ERROR_SCRIPT = `
+(function () {
+	function show(text) {
+		var notice = document.getElementById('notice');
+		if (!notice) {
+			return;
+		}
+		notice.textContent = text;
+		notice.dataset.kind = 'warn';
+	}
+	window.ecucReportError = show;
+	window.addEventListener('error', function (event) {
+		show('The ECUC editor page failed: ' + (event.message || 'unknown error') +
+			(event.lineno ? ' (line ' + event.lineno + ')' : '') +
+			'. Open Developer: Open Webview Developer Tools for the stack.');
+	});
+	window.addEventListener('unhandledrejection', function (event) {
+		show('The ECUC editor page failed: ' + String(event.reason));
+	});
+})();
+`;
+
+/**
  * The page: the row store, flatten/collapse/filter, the virtual window, row
  * building, selection/focus, the inspector and the message bridge. The value
  * widget's script is emitted before this one and its document listeners claim
@@ -1241,11 +1271,13 @@ let typeAhead = { text: '', at: 0 };
 function readInitialRows() {
 	const script = document.getElementById('ecuc-rows');
 	if (!script) {
+		window.ecucReportError('The row data is missing from this page.');
 		return { rows: [] };
 	}
 	try {
 		return JSON.parse(script.textContent || '{}');
 	} catch (error) {
+		window.ecucReportError('The row data could not be read: ' + error.message);
 		return { rows: [] };
 	}
 }
@@ -2255,4 +2287,7 @@ renderWindow(true);
 prepareFocus();
 updateFilterUi();
 updateInspector();
+// The host warns when this never arrives: a page whose script is blocked cannot
+// report its own failure, so the absence of this message is the only signal.
+vscode.postMessage({ type: 'ready' });
 `;
