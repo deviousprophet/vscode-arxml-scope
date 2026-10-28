@@ -2,7 +2,7 @@
   "name": "vscode-arxml-scope",
   "displayName": "ARXML Scope",
   "description": "Browse and edit AUTOSAR ECUC-Values ARXML files in VS Code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "deviousprophet",
   "license": "MIT",
   "repository": {
