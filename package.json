@@ -130,11 +130,7 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "node eslint-rules/require-escaped-html.test.mjs && eslint src",
-    "test": "vscode-test",
-    "preview:ecuc": "npm run compile-tests && node scripts/preview-ecuc.js",
-    "preview:check": "npm run compile-tests && node scripts/preview-ecuc.js --check",
-    "samples:ecuc": "node scripts/generate-samples.js",
-    "perf:ecuc": "npm run compile-tests && node scripts/bench-ecuc.js"
+    "test": "vscode-test"
   },
   "devDependencies": {
     "@types/vscode": "^1.125.0",
