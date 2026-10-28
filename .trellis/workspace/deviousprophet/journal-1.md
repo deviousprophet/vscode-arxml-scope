@@ -167,3 +167,68 @@ Implemented the quiet-source design spec on the ECUC Document view: real source 
 ### Status
 
 [OK] **Completed**
+
+## Session 5: Virtualized ECUC rendering and indexed filtering
+
+### Summary
+
+Replaced the full ECUC tree DOM (12,001 rows on `sample/huge`) with a host row document plus a
+flat, windowed viewport renderer, and replaced the DOM-scanning filter with a row-indexed,
+debounced/cancellable engine. Document/Tree visuals, selection/focus/collapse/inspector/editing/
+reveal/follow/copy/re-scan and the `.value` direct-child contract are preserved.
+
+### Main Changes
+
+- `src/editor/renderRows.ts`: compact `EcucRow`/`RowDocument` data (display order, parent/subtree,
+  level/posinset/setsize, meta/value/target/context, source, haystack, digits).
+- `src/editor/virtualScroll.ts`: pure cumulative-height range/offset/total math, serialized into
+  the page; fixed Document heights and two Tree heights.
+- `src/editor/filter.ts`: `buildFilterIndex`/`filterRows` (matches + ancestors), `flattenRows`
+  (collapse/filter/braces), generation-guarded debouncer; no DOM scan.
+- `src/editor/renderHtml.ts`: static virtual shell, escaped row JSON, viewport window + spacers,
+  rAF scroll, flat ARIA tree, row-data inspector, keyboard/type-ahead/reveal/follow/copy/editing,
+  re-scan and view toggle.
+- Provider re-scan now posts rows; `ecucValueEditor` uses the page's flat row order and reattaches
+  an open edit across a window rebuild.
+- Docs/frontend specs updated; `docs/ECUC_EDITOR_DESIGN_SPEC.md`, `src/core/**`, manifest and
+  dependencies untouched. No worker/new dependency/CSP change.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a7b93c4` | feat(editor): virtualize ECUC rows and index filtering |
+| `bcc1fd5` | chore(task): archive 10-28-ecuc-virtualized-render-search |
+
+### Testing
+
+- [OK] `npm run check-types`, `npm run lint`
+- [OK] 212 passing; `preview:check` ok
+- [OK] 12/12 mutation checks caught
+- [OK] `@code-review` findings fixed (filtered `aria-expanded`, detached value edit, host-select
+  spacer refresh, duplicate roving, preview shell assertions, spec drift)
+- [OK] Document/Tree captures: light/dark/HC, selected/focused, filtered, empty, details, narrow,
+  large, huge, deep
+
+### Performance (headless Edge via CDP, dark)
+
+| Sample | View | load | filter scan | treeitems |
+|---|---|---|---|---|
+| `sample/large` | Document | 155 ms | 2.2 ms | 32 |
+| `sample/huge` | Document | 256 ms | 8.6 ms | 33 |
+| `sample/large` | Tree | 129 ms | 1.8 ms | 27 |
+| `sample/huge` | Tree | 259 ms | 5.6 ms | 27 |
+
+Baseline was ~823 ms / ~3,855 ms load and ~56 ms / ~102 ms filter with the full 12k-row DOM. Scroll
+sweep 0–100% had maximum inter-row gap 0 and spacers summing to the virtual total.
+
+### Known Follow-ups
+
+- Real VS Code webview check (theme/font/focus/clipboard) remains manual.
+- The accessibility tree exposes the rendered window; offscreen rows must be scrolled in.
+- Filter input has a deliberate 120 ms debounce; scan numbers above are engine time.
+- Initial row JSON grows linearly (~6.5 MiB for `sample/huge`).
+
+### Status
+
+[OK] **Completed**
