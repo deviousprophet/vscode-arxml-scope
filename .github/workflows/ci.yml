@@ -1,0 +1,28 @@
+name: CI Workflow
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  CT_After_Commit:
+    name: Test After Commit
+    uses: ./.github/workflows/ct.yml
+    permissions:
+      contents: read
+      pull-requests: write
+
+  Package:
+    name: Package VSIX
+    needs: [CT_After_Commit]
+    if: ${{ needs.CT_After_Commit.result == 'success' }}
+    uses: ./.github/workflows/package.yml
+    permissions:
+      contents: read

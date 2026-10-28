@@ -1,0 +1,26 @@
+name: Fallow Analysis
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  Fallow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run Fallow Analysis
+        uses: fallow-rs/fallow@v3
+        with:
+          config: .fallowrc.json
+          format: sarif
+          # The repository still carries a pre-existing backlog, so keep the
+          # analysis advisory until that backlog is cleared.
+          fail-on-issues: false

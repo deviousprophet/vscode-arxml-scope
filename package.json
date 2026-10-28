@@ -1,8 +1,14 @@
 {
   "name": "vscode-arxml-scope",
   "displayName": "ARXML Scope",
-  "description": "Navigate, validate and explore AUTOSAR ARXML files: reference navigation, ECUC viewer and semantic search.",
+  "description": "Browse and edit AUTOSAR ECUC-Values ARXML files in VS Code.",
   "version": "0.1.0",
+  "publisher": "deviousprophet",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deviousprophet/vscode-arxml-scope"
+  },
   "engines": {
     "vscode": "^1.125.0"
   },

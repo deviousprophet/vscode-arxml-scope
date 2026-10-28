@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": [
+    "src/extension.ts",
+    "src/test/**/*.test.ts",
+    ".vscode-test.mjs",
+    "esbuild.js",
+    ".github/scripts/*.mjs",
+    "scripts/*.js"
+  ],
+  "ignorePatterns": [
+    "out/**",
+    "dist/**",
+    ".opencode/**",
+    ".agents/**",
+    ".codegraph/**",
+    ".fallow/**",
+    "reference/**",
+    "sample/**"
+  ],
+  "ignoreDependencies": [
+    "@vscode/test-electron"
+  ],
+  "usedClassMembers": [
+    {
+      "implements": "vscode.CustomTextEditorProvider",
+      "members": [
+        "openCustomDocument",
+        "resolveCustomEditor"
+      ]
+    }
+  ]
+}
