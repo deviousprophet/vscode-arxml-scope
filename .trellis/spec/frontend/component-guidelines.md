@@ -101,8 +101,8 @@ selects and opens the details editor. Reference follow is the details **Jump to 
   needed, scrolls it into the rendered window and fills the inspector.
 - Only the details visibility is persisted through `acquireVsCodeApi().getState()/setState()`
   (validated as a non-array object; missing/invalid hides the inspector `=== true`). The first paint
-  is Document with the inspector hidden; an old saved `view` is ignored. The browser harness stubs
-  the same API with `localStorage`.
+  is Document with the inspector hidden; an old saved `view` is ignored. There is no browser harness
+  stub any more; the reload round trip is observed in the Extension Development Host.
 - The pure state helpers (`pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`,
   `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`) are real functions
   serialized into the page with `toString()`. The tests extract and drive the page's copy; do not
@@ -137,17 +137,19 @@ selects and opens the details editor. Reference follow is the details **Jump to 
 - Document node/brace rows use `--ecuc-lh` plus a module gap attribute; there are no Tree row heights.
   The CSS and the page's `heightFn` must agree.
 
-## Preview harness
+## Manual previews
 
-`npm run preview:ecuc` serves the **production** `renderHtml` output on `127.0.0.1` with a stubbed
-`acquireVsCodeApi`, theme presets and a preview panel. `npm run preview:check` asserts each wrapper
-contains the exact production row JSON and Document virtual shell, the stub, the inspector, the empty
-state and a theme variable. `?chrome=0` produces a clean page for captures. There is no
-`?view=tree`/view seed. The harness is dev-only, outside `src/`, and never imported by the extension.
+The in-repo preview harness (`preview:ecuc`, `preview:check` and `scripts/`) has been removed, together
+with the sample generator and benchmark. The production `renderHtml` page is therefore observed in the
+Extension Development Host: open a fixture or a local `.arxml` in the ECUC editor and inspect the real
+webview.
 
-It is not a VS Code webview: it cannot prove VS Code's own theme/font resolution, tab/focus behaviour
-or accessibility-tree exposure. Label its results as harness-observed; the Extension Development
-Host remains the acceptance environment.
+The host is not a repeatable check: its observations cannot run in CI, so record them as
+host-observed with the file and the steps that produced them. If a preview harness is reintroduced, it
+must wrap the production renderer — a second renderer is a test that agrees with itself.
+
+The Development Host remains the acceptance environment: it can prove VS Code's own theme/font
+resolution, tab/focus behaviour and accessibility-tree exposure, which no string assertion can.
 
 ## Common mistakes
 
@@ -170,4 +172,4 @@ Host remains the acceptance environment.
 | Using an inline `style` instead of `data-level` | The CSP blocks style attributes and the depth CSS cannot follow |
 | `innerHTML` with a model value | The value is text, not markup; use `textContent` |
 | Reading the inspector from the rendered row | An offscreen selection has no rendered row; use `rowById` |
-| Calling a browser harness run a webview pass | The variables and host are stubbed; the real host still needs a check |
+| Calling a string assertion or a test-host render a webview pass | Neither is a VS Code webview; the Extension Development Host still needs a check |
