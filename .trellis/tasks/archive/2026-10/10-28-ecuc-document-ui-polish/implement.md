@@ -147,11 +147,11 @@ the provider write path, manifest and dependencies untouched.
 - [x] Full gates green; mutation checks fail their intended tests.
 - [x] Docs/specs are updated; `src/core/**`, manifest and dependencies untouched.
 - [x] Preview server stopped; generated capture `.html` files removed.
-- [ ] Task committed and archived.
+- [x] Task committed and archived.
 
 ## Implementation record (2026-10-28)
 
-Status: implementation and verification complete; code review fixes applied; commit/archive pending.
+Status: implementation, verification, review, commit and archive complete.
 
 ### Delivered
 
@@ -219,6 +219,7 @@ Status: implementation and verification complete; code review fixes applied; com
 - `npm run lint`: pass.
 - `npm test`: **208 passing**.
 - `npm run preview:check`: pass.
+- Feature commit: `1e84dc0` (`feat(editor): finish the Document-only ECUC surface`).
 - Mutation table: **21/21 caught** (list above).
 - Browser contrast on the dark editor background `#1e1e1e`: container `#4EC9B0` **8.18:1**,
   reference target `#DCDCAA` **11.8:1**, parameter key `#75BEFF` **8.39:1**.
