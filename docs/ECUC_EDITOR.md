@@ -324,4 +324,3 @@ rendered output.
   (`virtualScroll.ts`), page/row rendering (`renderHtml.ts`), filter, navigation, and the
   details-panel value editor (`ecucDetailsEditor.ts`).
 - `src/commands.ts` — the commands and the activation gate.
-- `src/spikes/` — throwaway Step 0 scaffolding, awaiting a manual run and then deletion.

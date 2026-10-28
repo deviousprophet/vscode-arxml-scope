@@ -8,8 +8,8 @@
  *
  * The provider is driven through its own entry point with a stub panel that captures the
  * message listener, because `@vscode/test-electron` exposes no webview DOM. The write it
- * performs is real, so undo, redo, dirty state and save are the platform's own — the same
- * behaviour the Spike A rows are meant to observe by hand.
+ * performs is real, so undo, redo, dirty state and save are the platform's own - the same
+ * behaviour the extension tests observe.
  */
 import * as assert from 'assert';
 import * as fs from 'fs';

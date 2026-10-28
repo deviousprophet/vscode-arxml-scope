@@ -14,14 +14,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "vscode-arxml-scope.helloWorld",
-        "title": "Hello World"
-      },
-      {
-        "command": "vscode-arxml-scope.spike.open",
-        "title": "Spike: Open lifecycle probe editor"
-      },
-      {
         "command": "vscode-arxml-scope.openEcucEditor",
         "title": "Open with ECUC Editor",
         "category": "ARXML Scope"
@@ -38,15 +30,6 @@
       }
     ],
     "customEditors": [
-      {
-        "viewType": "vscode-arxml-scope.spikeEditor",
-        "displayName": "Spike lifecycle probe (throwaway)",
-        "selector": [
-          {
-            "filenamePattern": "*.spike.arxml"
-          }
-        ]
-      },
       {
         "viewType": "vscode-arxml-scope.ecucEditor",
         "displayName": "ECUC Values Editor",

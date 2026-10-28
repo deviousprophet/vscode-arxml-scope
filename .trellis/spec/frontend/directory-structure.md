@@ -25,7 +25,6 @@ src/
     fixtures/           synthetic input fixtures (pinned `-text`)
     expected/           hand-authored expected models
     data/               gitignored: real files for local experimentation. Never commit.
-  spikes/               throwaway Step 0 scaffolding, awaiting a manual run and then deletion
 ```
 
 Build outputs, all gitignored: `dist/` (esbuild bundle of `src/extension.ts`) and `out/` (`tsc` output

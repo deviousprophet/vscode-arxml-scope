@@ -1,8 +1,7 @@
 /**
  * Reveal mechanics (parent design §10, child design §2.3–§2.4; UX child design §3).
  *
- * Spike B has not been run, so a live two-way split is unproven. Reveal is therefore
- * the two commands: editor → source opens the file in the text editor at the node's
+ * Reveal is two commands: editor → source opens the file in the text editor at the node's
  * range, source → editor maps the cursor offset to the innermost node and opens the
  * custom editor there. Do not add a second-pane mechanism on the strength of an
  * assumption.
