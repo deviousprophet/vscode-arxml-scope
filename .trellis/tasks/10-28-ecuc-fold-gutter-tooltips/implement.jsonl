@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/10-28-ecuc-fold-gutter-tooltips/prd.md", "reason": "Fold-gutter geometry, hover visibility, tooltip contract and ACs."}
+{"file": "docs/ECUC_EDITOR_DESIGN_SPEC.md", "reason": "Current Document layout, typography and interaction contract."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Row geometry, fold control, accessibility and CSS contracts."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "CSP, selection, colour and forbidden-pattern rules."}
+{"file": ".trellis/tasks/archive/2026-10/10-28-ecuc-document-ui-polish/design.md", "reason": "Previous Document-only geometry and fold-control decisions."}
+{"file": ".trellis/tasks/10-28-ecuc-fold-gutter-tooltips/research/vscode-fold-gutter.md", "reason": "VS Code source evidence for 26px gutter, icon path and hover visibility."}

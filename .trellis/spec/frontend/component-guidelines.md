@@ -56,11 +56,13 @@ details editor.
 - **`.value` is a direct child of `.row`.** The filter, `valueSpan` and tests depend on it. No input
   is inserted into `.value`; the details input is separate.
 - Document rows are a single flex line with `gap: 1ch`, no border and no fixed label column. Depth is
-  `data-level` + generated attribute CSS (`padding-left: calc(var(--doc-pad) + var(--indent) * n)`).
-  Never use a style attribute for depth.
-- The fold column is an inline 2ch twisty/spacer. Leaves keep the spacer so labels align. The twisty
-  stretches to the full row height so the hit area is the whole line, not only the 12px icon. Brace
-  rows add the fold width to their level padding so `{`/`}` align with the row text.
+  `data-level` + generated attribute CSS
+  (`padding-left: calc(var(--content-pad) + var(--indent) * n)`), where `--content-pad` is the 26px
+  fold gutter plus `--doc-pad`. Never use a style attribute for depth.
+- The fold gutter is a fixed 26px column at the far left of every row. The 16px Codicon outline
+  chevron is absolutely positioned 2px from the row's left edge and spans the full row height; leaves
+  reserve the gutter but have no twisty child. Expanded chevrons are hover/focus-only; collapsed
+  chevrons stay visible. Brace rows use the same indentation as labels (no extra fold offset).
 - Secondary fields live in `.row-meta`, inline after the value in Document. It is not `.meta` — that
   is the schema/package container. The filter highlights `.row-meta .short`, `.label` and
   `.value .value-text`.

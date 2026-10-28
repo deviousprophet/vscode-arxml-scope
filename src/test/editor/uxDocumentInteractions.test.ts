@@ -65,15 +65,20 @@ suite('editor Document interactions', () => {
 	test('a toggle is built only where the row has children, with no glyph or inline hint', () => {
 		const script = page();
 		const build = functionSource(script, 'buildNodeRow');
-		assert.ok(build.includes('row.hasChildren ? twistySpan() : spacerSpan()'), 'a leaf gets a spacer');
+		assert.ok(build.includes('if (row.hasChildren)'), 'a leaf has no fold control');
+		assert.ok(build.includes('rowElement.appendChild(twistySpan())'), 'the fold control sits in the fixed gutter');
+		assert.ok(!build.includes('spacerSpan'), 'leaves do not need a spacer in the gutter');
 		assert.ok(!build.includes('innerHTML'), 'model text is never inserted as markup');
 		assert.ok(!build.includes('.style'), 'depth is attribute CSS, not an inline style');
 		assert.ok(!build.includes('glyphSpan'), 'the Tree glyph is removed');
 		assert.ok(!build.includes('F2'), 'no inline F2 hint in the row builder');
 		assert.ok(!functionSource(script, 'valueSpan').includes('F2'), 'no F2 hover hint on the value');
 		assert.ok(functionSource(script, 'twistySpan').includes("className = 'twisty'"));
-		assert.ok(functionSource(script, 'spacerSpan').includes("className = 'spacer'"));
 		assert.ok(functionSource(script, 'twistyIcon').includes('createElementNS'), 'inline SVG, not an asset');
+		assert.ok(
+			functionSource(script, 'twistyIcon').includes('M6.14601 3.14579'),
+			'the exact Codicon chevron-right outline'
+		);
 
 		const rows = payload().rows;
 		assert.strictEqual(rows.find((row) => row.label === 'ContA')!.hasChildren, true);
@@ -82,6 +87,13 @@ suite('editor Document interactions', () => {
 		const style = styleOf(script);
 		assert.ok(/\.node\[aria-expanded="true"\] > \.row > \.twisty svg\s*\{[^}]*transform:\s*rotate\(90deg\)/.test(style));
 		assert.ok(!/content:\s*"  F2"/.test(style), 'no F2 pseudo hint');
+	});
+
+	test('reference tooltips show the target without display punctuation', () => {
+		const value = functionSource(page(), 'valueSpan');
+		assert.ok(value.includes("'Follow to the target: ' + (row.shownValue || '')"));
+		assert.ok(value.includes("'Target not found in this file: ' + (row.shownValue || '')"));
+		assert.ok(!value.includes(': = '), 'the display = is not part of the tooltip');
 	});
 
 	test('aria-expanded follows the displayed list, including a filter force-expand', () => {

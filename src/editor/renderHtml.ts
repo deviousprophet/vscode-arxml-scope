@@ -230,7 +230,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <div id="main">
 <div class="document">
 <div class="meta">${meta}</div>
-<div id="tree-measure" aria-hidden="true"><div class="node probe-doc"><span class="row k-parameter has-value"><span class="spacer"></span><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
+<div id="tree-measure" aria-hidden="true"><div class="node probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
 <div id="tree" class="tree" role="tree" aria-label="ECUC values"><div id="tree-top" class="v-spacer" role="presentation" aria-hidden="true"></div><div id="tree-window" role="presentation"></div><div id="tree-bottom" class="v-spacer" role="presentation" aria-hidden="true"></div></div>
 <div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div>
 </div>
@@ -329,14 +329,13 @@ export function moveTarget(key: string, from: number, count: number, page: numbe
 
 const DOCUMENT_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
 	const level = at + 1;
-	const indent = level === 1 ? 'var(--doc-pad)' : `calc(var(--doc-pad) + var(--indent) * ${level - 1})`;
-	return `body[data-view="document"] .row[data-level="${level}"] { padding-left: ${indent}; }
-body[data-view="document"] .brace .row[data-level="${level}"] { padding-left: calc(${indent} + 3ch); }`;
+	const indent = level === 1 ? 'var(--content-pad)' : `calc(var(--content-pad) + var(--indent) * ${level - 1})`;
+	return `body[data-view="document"] .row[data-level="${level}"] { padding-left: ${indent}; }`;
 }).join('\n');
 
 const GUIDE_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
 	const level = at + 1;
-	return `body[data-view="document"] .guide[data-level="${level}"] { left: calc(var(--doc-pad) + var(--indent) * ${level - 1} + 3.5ch); }`;
+	return `body[data-view="document"] .guide[data-level="${level}"] { left: calc(var(--content-pad) + var(--indent) * ${level - 1} + 0.5ch); }`;
 }).join('\n');
 
 const STYLE = `
@@ -373,6 +372,10 @@ body[data-view] {
 	--subtree-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
 	--sel-container-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
 	--container-accent: #4EC9B0;
+	--fold-gutter: 26px;
+	--doc-pad: 3ch;
+	--indent: 4ch;
+	--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
 	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
 }
 @supports (color: color-mix(in srgb, currentColor 50%, transparent)) {
@@ -536,7 +539,7 @@ body[data-view] {
 	flex: 1 1 auto;
 	min-width: 0;
 	overflow: auto;
-	scroll-padding-left: var(--doc-pad);
+	scroll-padding-left: var(--content-pad);
 	/* The window swaps spacer heights; browser scroll anchoring would fight the
 	 * virtual range and snap the viewport back to the top. */
 	overflow-anchor: none;
@@ -605,26 +608,24 @@ body[data-view] {
 	align-items: baseline;
 	box-sizing: border-box;
 	height: var(--ecuc-lh);
-	padding: 0 0 0 var(--doc-pad);
+	padding: 0 0 0 var(--content-pad);
 	position: relative;
 }
 .row:hover {
 	background-color: var(--hover-bg);
 }
 .twisty {
-	flex: 0 0 2ch;
-	width: 2ch;
-	align-self: stretch;
+	position: absolute;
+	left: 2px;
+	top: 0;
+	bottom: 0;
+	width: 16px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	justify-content: center;
 	color: var(--vscode-icon-foreground, var(--vscode-foreground));
-	opacity: 0.7;
-}
-.spacer {
-	flex: 0 0 2ch;
-	width: 2ch;
+	opacity: 0;
+	transition: opacity 0.5s;
 }
 .twisty svg {
 	transition: transform 120ms ease;
@@ -841,13 +842,9 @@ mark {
 	gap: 4px;
 	margin-top: 12px;
 }
-/* Document view: quiet source. One editor surface, a real source-line gutter,
- * and hover/focus affordances. Tree view keeps its grid; document selectors are
- * scoped. See docs/ECUC_EDITOR_DESIGN_SPEC.md. */
-body[data-view="document"] .document {
-	--doc-pad: 3ch;
-	--indent: 4ch;
-}
+/* Document view: quiet source. One editor surface, a fixed fold gutter and
+ * hover/focus affordances. Layout variables live on body[data-view] so #main's
+ * scroll padding sees them. See docs/ECUC_EDITOR_DESIGN_SPEC.md. */
 body[data-view="document"] #tree {
 	position: relative;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
@@ -860,7 +857,7 @@ body[data-view="document"] #tree {
 	padding: calc(var(--ecuc-lh) * 0.5) 2ch calc(var(--ecuc-lh) * 3) 0;
 }
 body[data-view="document"] .meta {
-	padding: calc(var(--ecuc-lh) * 0.5) 0 0 var(--doc-pad);
+	padding: calc(var(--ecuc-lh) * 0.5) 0 0 var(--content-pad);
 	margin-bottom: calc(var(--ecuc-lh) * 0.5);
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
@@ -907,11 +904,13 @@ body[data-view="document"] .node:hover > .row {
 	background-color: var(--hover-bg);
 }
 body[data-view="document"] .twisty svg {
-	width: 12px;
-	height: 12px;
+	width: 16px;
+	height: 16px;
 }
 body[data-view="document"] #tree:hover .node[aria-expanded="true"] > .row > .twisty,
-body[data-view="document"] #tree:focus-within .node[aria-expanded="true"] > .row > .twisty {
+body[data-view="document"] #tree:focus-within .node[aria-expanded="true"] > .row > .twisty,
+body[data-view="document"] .node:hover > .row > .twisty,
+body[data-view="document"] .node:focus-within > .row > .twisty {
 	opacity: 1;
 }
 body[data-view="document"] .node[aria-expanded="false"] > .row > .twisty {
@@ -1050,7 +1049,7 @@ body[data-view="document"] .node:focus-visible > .row {
 	box-shadow: inset 2px 0 0 var(--rail);
 }
 body[data-view="document"] .empty {
-	padding: 0 2ch 0 var(--doc-pad);
+	padding: 0 2ch 0 var(--content-pad);
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	line-height: var(--ecuc-lh);
@@ -1139,9 +1138,10 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
 }
 @media (max-width: 720px) {
-	body[data-view="document"] .document {
+	body[data-view="document"] {
 		--doc-pad: 2.5ch;
 		--indent: 3ch;
+		--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
 	}
 	.toolbar {
 		padding: 0 4px;
@@ -1172,6 +1172,7 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 	}
 }
 @media (prefers-reduced-motion: reduce) {
+	.twisty,
 	.twisty svg {
 		transition: none;
 	}
@@ -1395,13 +1396,14 @@ function setSpacers(top, bottom) {
 function twistyIcon() {
 	const svg = document.createElementNS(svgNamespace, 'svg');
 	svg.setAttribute('viewBox', '0 0 16 16');
-	svg.setAttribute('width', '12');
-	svg.setAttribute('height', '12');
+	svg.setAttribute('width', '16');
+	svg.setAttribute('height', '16');
 	svg.setAttribute('aria-hidden', 'true');
 	svg.setAttribute('class', 'g-twisty');
 	svg.setAttribute('fill', 'currentColor');
 	const path = document.createElementNS(svgNamespace, 'path');
-	path.setAttribute('d', 'M6 4l4 4-4 4z');
+	// Codicon chevron-right (MIT, microsoft/vscode-codicons).
+	path.setAttribute('d', 'M6.14601 3.14579C5.95101 3.34079 5.95101 3.65779 6.14601 3.85279L10.292 7.99879L6.14601 12.1448C5.95101 12.3398 5.95101 12.6568 6.14601 12.8518C6.34101 13.0468 6.65801 13.0468 6.85301 12.8518L11.353 8.35179C11.548 8.15679 11.548 7.83979 11.353 7.64478L6.85301 3.14479C6.65801 2.94979 6.34101 2.95079 6.14601 3.14579Z');
 	svg.appendChild(path);
 	return svg;
 }
@@ -1411,13 +1413,6 @@ function twistySpan() {
 	span.className = 'twisty';
 	span.setAttribute('aria-hidden', 'true');
 	span.appendChild(twistyIcon());
-	return span;
-}
-
-function spacerSpan() {
-	const span = document.createElement('span');
-	span.className = 'spacer';
-	span.setAttribute('aria-hidden', 'true');
 	return span;
 }
 
@@ -1452,9 +1447,9 @@ function valueSpan(row) {
 		value.title = 'Value: ' + (row.shownValue || '') + ' - edit in Details';
 	} else if (followable) {
 		value.dataset.follow = 'true';
-		value.title = 'Follow to the target: = ' + (row.shownValue || '');
+		value.title = 'Follow to the target: ' + (row.shownValue || '');
 	} else {
-		value.title = 'Target not found in this file: = ' + (row.shownValue || '');
+		value.title = 'Target not found in this file: ' + (row.shownValue || '');
 	}
 	const punct = document.createElement('span');
 	punct.className = 'punct';
@@ -1528,7 +1523,9 @@ function buildNodeRow(row, displayIndex) {
 	rowElement.className =
 		'row k-' + row.kind + (row.shownValue !== undefined ? ' has-value' : ' no-value');
 	rowElement.dataset.level = String(row.level);
-	rowElement.appendChild(row.hasChildren ? twistySpan() : spacerSpan());
+	if (row.hasChildren) {
+		rowElement.appendChild(twistySpan());
+	}
 	const label = document.createElement('span');
 	label.className = 'label';
 	appendHighlighted(label, row.label);

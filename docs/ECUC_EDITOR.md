@@ -6,7 +6,7 @@ parameter values in the details panel, without leaving VS Code.
 
 > Status: implemented, 0.1.0. `src/core/` (detection, scanner, model, ordering, resolution,
 > validation, offset index) and `src/editor/` (custom editor provider, row model, virtual renderer,
-> filter, navigation, details editing, details inspector) are in place with 208 passing tests. Two
+> filter, navigation, details editing, details inspector) are in place with 209 passing tests. Two
 > things are deliberately not implemented and are listed under *Limitations*: CDATA-backed values
 > are refused rather than edited, and reference resolution is single-file. The plan lives in
 > `.trellis/tasks/10-14-ecuc-artext-editor/` (`prd.md`, `design.md`, `implement.md`) with the
@@ -47,10 +47,13 @@ the file back to the text editor rather than showing an empty view.
 ## What it shows
 
 The editor opens in **Document** view, a quiet-source monospace surface: the editor font (13px
-fallback), 1.55 line height, a fold column, 4ch indentation, `{`/`}` on their own lines, one blank
-row between modules, and inline metadata. There is no line-number gutter: the header, rows and braces
-align on a stable left edge. Containers draw a vertical guide from their opening brace to their
-closing brace; it is faded at rest and becomes clearer while the pointer is over the container.
+fallback), 1.55 line height, a fixed 26px fold gutter at the far left, 4ch indentation, `{`/`}` on
+their own lines, one blank row between modules, and inline metadata. There is no line-number gutter:
+the fold gutter holds only the 16px Codicon chevron, inset 2px, and the header, rows and braces align
+after it. Expanded chevrons appear while the tree is hovered or focused, matching the editor's fold
+gutter; a collapsed container keeps its right chevron visible. Containers draw a vertical guide from
+their opening brace to their closing brace; it is faded at rest and becomes clearer while the pointer
+is over the container.
 Labels are neutral except the single key accent on parameter/reference names, the green container
 name, and the yellow italic reference target; keywords, strings, numbers/hex, conditions, annotations
 and booleans carry the semantic tokens. The `=` is muted punctuation. Parameter values are read-only
@@ -82,9 +85,9 @@ selected row that is outside the window still shows its details.
 | Conditions | `[SW-SYSCOND]` and post-build-variant conditions as `<Ref == value && …>` |
 | Annotations | `[Label] text`, shown in comment form (`/* … */`) in Document view, without a label when absent |
 
-The twisty column moves into the flat row, so labels align on exact 4ch steps and the braces align
-with the row's text. A container with children shows its twisty at rest (0.7 opacity); hover or focus
-raises it to full opacity, and a collapsed container keeps its chevron plus a `{ ... }` stub. There
+The 26px fold gutter is fixed at the far left, so labels align on exact 4ch steps and the braces align
+with the row's text. A container with children reveals its 16px Codicon chevron while the tree is
+hovered or focused; a collapsed container keeps its right chevron and a `{ ... }` stub visible. There
 are no list bullets, per-row borders, chips or fixed label columns. Long lines scroll horizontally
 instead of wrapping; nothing is hidden — short-name, variant, hexadecimal form, context, conditions
 and annotations move inline after the value. The empty filter state is a source comment

@@ -66,13 +66,15 @@ typeface and not by boxes.
 
 - One monospace surface, `line-height: 1.55em`, `white-space: pre`, horizontal scroll, no wrap.
 - No line-number gutter, `data-line` or `data-ln-digits`.
-- Geometry: `--doc-pad: 3ch` (`2.5ch` narrow), `--indent: 4ch` (`3ch` narrow). A level-3 row uses
-  `padding-left: calc(var(--doc-pad) + var(--indent) * 2)` (`level - 1`); braces add the 3ch fold
-  column so they align with the row text.
-- The fold column is an inline 2ch twisty/spacer before the label; leaves keep the spacer.
-- A container with children has a 12px twisty at 0.7 opacity at rest; the span covers the full row
-  height so the whole line toggles, and hover/focus raises it to 1.
-  A collapsed container always shows its chevron and a `{ ... }` stub.
+- Geometry: `--fold-gutter: 26px` at the far left, `--content-pad: calc(var(--fold-gutter) +
+  var(--doc-pad))`, `--doc-pad: 3ch` (`2.5ch` narrow) and `--indent: 4ch` (`3ch` narrow). A level-3
+  row uses `padding-left: calc(var(--content-pad) + var(--indent) * 2)` (`level - 1`); brace rows use
+  the same indentation, so `{`/`}` align with the row text.
+- The fold gutter is fixed at the far left and is part of every row. The 16px Codicon outline
+  chevron is inset 2px and spans the full row height; leaves reserve the gutter without a child.
+- A container with children shows the chevron while the tree is hovered or focused; its resting
+  opacity is 0, matching VS Code. A collapsed container always shows its right chevron and a
+  `{ ... }` stub.
 - One blank line between modules; braces on their own lines.
 - No list bullets, per-row borders, chips, fixed label columns or vertical rules across the whole
   surface.
@@ -80,7 +82,7 @@ typeface and not by boxes.
 ### 2.3 Bracket guides
 
 - Each container draws one 1px vertical guide per nesting level, from its opening brace to its
-  closing brace. The guide sits at the brace column (`--doc-pad + --indent * (level - 1) + 3.5ch`).
+  closing brace. The guide sits at the brace column (`--content-pad + --indent * (level - 1) + 0.5ch`).
 - Nested containers add their own guide: a row inside two containers carries both segments.
 - Guides are always present but faded (`opacity: .28`) at rest; hovering the container (or a row in
   its subtree) raises that container's guide to `opacity: .85` via `guide-active`.
@@ -112,8 +114,8 @@ typeface and not by boxes.
   `1.55em`.
 - UI font: toolbar, inspector keys/labels, count, notices.
 - Document rows are one line high; comments (`/* ... */`) and conditions are inline metadata.
-- `--doc-pad`/`--indent` are the only horizontal geometry inputs. The old `--ln-w`, `--ln-digits`,
-  `--gut` and `--ln-*` variables are removed.
+- `--fold-gutter`/`--content-pad`/`--doc-pad`/`--indent` are the horizontal geometry inputs. The old
+  `--ln-w`, `--ln-digits`, `--gut` and `--ln-*` variables are removed.
 - Selected row tint covers the full row; the focus rail is 2px at its left edge.
 
 ## 4. Colour and token system
@@ -158,7 +160,7 @@ chips, no line-number active colour.
 ### Components
 
 - **Toolbar**: filter, clear, count/status, labelled Collapse/Expand, Details.
-- **Document row**: twisty/spacer, label, optional `= value`, inline metadata.
+- **Document row**: fixed fold gutter, label, optional `= value`, inline metadata.
 - **Brace row**: `{` / `}` aligned with the owning row's text; no line number.
 - **Value**: `=`, `.value-text`; parameters read-only, references follow targets.
 - **Details**: kind/label, field rows, editable Value for parameters, Reveal action.
@@ -169,7 +171,7 @@ chips, no line-number active colour.
 | State | Document | Details |
 |---|---|---|
 | Idle | text, braces, metadata | hidden |
-| Hover | row background, twisty visible | n/a |
+| Hover | row background, expanded chevron appears | n/a |
 | Selected | tint + rail; selected subtree tint; bracket guides stay structural | filled from selected row |
 | Focus | 2px rail | details button focus ring |
 | Filtered | matches + ancestors, `<mark>` on rendered rows | selected row still shown |
@@ -182,7 +184,7 @@ chips, no line-number active colour.
 - Click a row: select; keep the document position.
 - Click a parameter value text: select, open details, focus the value input.
 - Click `=`/label: select only.
-- Twisty: toggle collapse without moving selection.
+- Click a container's chevron: collapses or expands it; the selection does not move.
 - Double-click / `Ctrl`/`Alt`+`Enter`: reveal in source.
 - Reference target: follows only when the target resolves in the same file; the target container is
   selected in the ECUC editor. An unresolved target is not a link.
@@ -201,8 +203,8 @@ chips, no line-number active colour.
 
 ## 7. Responsive and density
 
-- <=720px: `--doc-pad: 2.5ch`, `--indent: 3ch`; hide count/notice/Details label; details becomes a
-  bottom sheet.
+- <=720px: `--doc-pad: 2.5ch`, `--indent: 3ch`; the 26px fold gutter stays fixed; hide
+  count/notice/Details label; details becomes a bottom sheet.
 - Long labels/values scroll horizontally; no wrap.
 - No line-number gutter to reserve space.
 - Reduced motion: no twisty transition; flash steps.
@@ -227,8 +229,9 @@ chips, no line-number active colour.
   style hook.
 - Removed: Tree grid/height/block, kind glyphs/classes (the twisty keeps its `.g-twisty` class),
   `.view-switch`, line-number variables and `::before`, repeating-gradient guides, inline value editor.
-- Added: `--doc-pad`, `--indent`, `.guide`/`guide-active` rules, `data-subtree` tint,
-  `.details-value`, `.details-value-error`, green container and yellow-italic reference accents.
+- Added: `--fold-gutter` (26px), `--content-pad`, `--doc-pad`, `--indent`, `.guide`/`guide-active`
+  rules, a fixed 16px Codicon chevron, `data-subtree` tint, `.details-value`,
+  `.details-value-error`, green container and yellow-italic reference accents.
 - The toolbar's Collapse/Expand controls are labelled, >=28px wide and use 14px icons; labels hide
   only at narrow widths.
 
@@ -275,6 +278,9 @@ chips, no line-number active colour.
 8. Reference follow only for same-file targets; it selects the target container in the editor.
 9. Dark theme only for now; high contrast is the accessibility variant. No light-theme pass.
 10. Container names green; reference targets yellow italic; parameter selection stronger.
+11. Fixed 26px fold gutter with a 16px Codicon outline chevron; expanded chevrons are hover/focus
+    only, collapsed chevrons always visible.
+12. Reference tooltips show the target text without the document's `=` punctuation.
 
 ## 11. Acceptance checklist
 
@@ -286,5 +292,8 @@ chips, no line-number active colour.
 - [x] Value click/F2/Enter opens the details input; Enter/Escape/Tab/refusal work.
 - [x] No F2 hint, Source block or copy actions.
 - [x] Reference target is a link only when same-file, and follows to the target container.
+- [x] Fixed 26px fold gutter, 16px Codicon chevron, hover-only expanded icons and always-visible
+      collapsed icons.
+- [x] Reference tooltips do not include the display `=`.
 - [x] Dark/HC/narrow/deep/large/huge captures.
 - [x] Full gates and mutation checks pass.

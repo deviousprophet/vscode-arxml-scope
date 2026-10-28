@@ -79,13 +79,21 @@ suite('editor document view', () => {
 		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*white-space:\s*pre/.test(style));
 		assert.ok(/\.row\s*\{[^}]*display:\s*flex/.test(style));
 		assert.ok(/\.row\s*\{[^}]*gap:\s*1ch/.test(style));
-		assert.ok(/\.row\s*\{[^}]*padding:\s*0 0 0 var\(--doc-pad\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--doc-pad:\s*3ch/.test(style));
-		assert.ok(/body\[data-view="document"\] \.document\s*\{[^}]*--indent:\s*4ch/.test(style));
+		assert.ok(/\.row\s*\{[^}]*padding:\s*0 0 0 var\(--content-pad\)/.test(style));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--doc-pad:\s*3ch/.test(style));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--indent:\s*4ch/.test(style));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--fold-gutter:\s*26px/.test(style));
 		assert.ok(
-			/body\[data-view="document"\] \.row\[data-level="3"\]\s*\{[^}]*padding-left:\s*calc\(var\(--doc-pad\) \+ var\(--indent\) \* 2\)/.test(
+			/body\[data-view\]\s*\{[^}]*--content-pad:\s*calc\(var\(--fold-gutter\) \+ var\(--doc-pad\)\)/.test(style)
+		);
+		assert.ok(
+			/body\[data-view="document"\] \.row\[data-level="3"\]\s*\{[^}]*padding-left:\s*calc\(var\(--content-pad\) \+ var\(--indent\) \* 2\)/.test(
 				style
 			)
+		);
+		assert.ok(
+			!/body\[data-view="document"\] \.brace \.row\[data-level="3"\]/.test(style),
+			'brace rows use the same indentation as labels'
 		);
 		assert.ok(!/--ln-w|--ln-digits|--gut/.test(style), 'no line-number/gutter variables');
 		assert.ok(!/row::before\s*\{[^}]*attr\(data-line\)/.test(style), 'no line-number pseudo-element');
@@ -93,11 +101,19 @@ suite('editor document view', () => {
 		assert.ok(/\.guide\s*\{[^}]*opacity:\s*0\.28/.test(style), 'bracket guides start faded');
 		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(style), 'hover makes the guide clearer');
 		assert.ok(
-			/body\[data-view="document"\] \.guide\[data-level="3"\]\s*\{[^}]*left:\s*calc\(var\(--doc-pad\) \+ var\(--indent\) \* 2 \+ 3\.5ch\)/.test(
+			/body\[data-view="document"\] \.guide\[data-level="3"\]\s*\{[^}]*left:\s*calc\(var\(--content-pad\) \+ var\(--indent\) \* 2 \+ 0\.5ch\)/.test(
 				style
 			)
 		);
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(style));
+		assert.ok(
+			/body\[data-view="document"\] \.meta\s*\{[^}]*padding:[^;]*var\(--content-pad\)/.test(style),
+			'the header aligns with the post-gutter content edge'
+		);
+		assert.ok(
+			/body\[data-view="document"\] \.empty\s*\{[^}]*padding:[^;]*var\(--content-pad\)/.test(style),
+			'the empty state aligns with the post-gutter content edge'
+		);
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-gap="true"\]\s*\{[^}]*padding-top:\s*var\(--ecuc-lh\)/.test(style)
 		);
@@ -229,8 +245,20 @@ suite('editor document view', () => {
 		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"[^>]*>[\s\S]*?<span class="lbl">Collapse<\/span>/.test(html));
 		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"[^>]*>[\s\S]*?<span class="lbl">Expand<\/span>/.test(html));
 		assert.ok(/\.icon-tool\s*\{[^}]*min-width:\s*28px[^}]*padding:\s*0 8px/.test(styleOf(html)));
-		assert.ok(/\.twisty\s*\{[^}]*opacity:\s*0\.7/.test(styleOf(html)), 'the fold control is visible at rest');
-		assert.ok(/\.twisty\s*\{[^}]*align-self:\s*stretch/.test(styleOf(html)), 'the twisty keeps the full row-height hit area');
+		assert.ok(/\.twisty\s*\{[^}]*opacity:\s*0;/.test(styleOf(html)), 'expanded folds start hidden');
+		assert.ok(/\.twisty\s*\{[^}]*left:\s*2px/.test(styleOf(html)), 'the chevron is inset 2px into the gutter');
+		assert.ok(/\.twisty\s*\{[^}]*width:\s*16px/.test(styleOf(html)), 'the chevron is 16px wide');
+		assert.ok(/\.twisty\s*\{[^}]*top:\s*0[^}]*bottom:\s*0/.test(styleOf(html)), 'the hit area spans the full row height');
+		assert.ok(
+			/body\[data-view="document"\] #tree:hover \.node\[aria-expanded="true"\] > \.row > \.twisty/.test(styleOf(html)),
+			'expanded folds appear on tree hover'
+		);
+		assert.ok(
+			/body\[data-view="document"\] \.node\[aria-expanded="false"\] > \.row > \.twisty\s*\{[^}]*opacity:\s*1/.test(
+				styleOf(html)
+			),
+			'collapsed folds stay visible'
+		);
 		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(styleOf(html)));
 		assert.ok(/id="details-toggle"[^>]*aria-label="Show node details"[^>]*><svg/.test(html));
 		assert.ok(!html.includes('id="view-toggle"'));
@@ -274,7 +302,7 @@ suite('editor document view', () => {
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.grow[\s\S]*?display:\s*none/.test(style));
 		assert.ok(/\.inspector-code\s*\{[^}]*white-space:\s*normal/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?#inspector\s*\{[^}]*max-height:\s*45vh/.test(style));
-		assert.ok(/#main\s*\{[^}]*scroll-padding-left:\s*var\(--doc-pad\)/.test(style));
+		assert.ok(/#main\s*\{[^}]*scroll-padding-left:\s*var\(--content-pad\)/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(style));
 		assert.ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?steps\(1, end\)/.test(style));
 		assert.ok(/@media \(forced-colors: active\)[\s\S]*?body\[data-view\] mark/.test(style));
