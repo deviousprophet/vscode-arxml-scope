@@ -22,7 +22,7 @@
  */
 import { randomBytes } from 'crypto';
 import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
-import { FlatRow, buildFilterIndex, createFilterDebouncer, filterRows, flattenRows, matchRanges } from './filter';
+import { FlatRow, ancestorIds, buildFilterIndex, createFilterDebouncer, filterRows, flattenRows, matchRanges } from './filter';
 import { EcucRow, MetaPart, ParameterFormat, buildRows } from './renderRows';
 import { virtualScrollScript } from './virtualScroll';
 import { detailsEditorScript } from './ecucDetailsEditor';
@@ -1239,6 +1239,7 @@ ${matchRanges.toString()}
 ${buildFilterIndex.toString()}
 ${filterRows.toString()}
 ${flattenRows.toString()}
+${ancestorIds.toString()}
 ${createFilterDebouncer.toString()}
 ${inspectorFields.toString()}
 ${subtreeRowIds.toString()}
@@ -1340,16 +1341,9 @@ function rebuildDisplay() {
 			const row = rows[flat.rowIndex];
 			displayIndexById.set(row.id, at);
 			visibleNodeIds.push(row.id);
-			// Expansion follows the displayed list: a row is expanded only when the
-			// next displayed entry is its child/brace. This matches flattenRows,
-			// including the filter force-expand of an ancestor with a visible
-			// descendant, and never reports an expanded row with no children.
-			const next = displayRows[at + 1];
-			const descendantShown =
-				!!next &&
-				((next.type === 'brace-open' && next.rowIndex === flat.rowIndex) ||
-					(next.type === 'node' && next.level > flat.level));
-			if (row.hasChildren && descendantShown) {
+			// Expansion is the display list's decision, carried on the row; the page
+			// must not re-derive it from neighbouring rows (see filter.ts).
+			if (flat.expanded) {
 				expandedIds.add(row.id);
 			}
 		}
@@ -1666,12 +1660,10 @@ function renderWindow(force) {
 
 function expandAncestors(id) {
 	let changed = false;
-	let current = rowById.get(id);
-	while (current && current.parentId !== null) {
-		if (collapsed.delete(current.parentId)) {
+	for (const ancestorId of ancestorIds(rows, id)) {
+		if (collapsed.delete(ancestorId)) {
 			changed = true;
 		}
-		current = rowById.get(current.parentId);
 	}
 	return changed;
 }
