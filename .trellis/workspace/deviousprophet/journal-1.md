@@ -337,3 +337,37 @@ Restored the previous visible selection-highlight fill for selected containers/m
 ### Status
 
 [OK] **Completed**
+
+
+## Session 9: VS Code fold gutter and clean reference tooltips
+<!-- trellis-session: v=2 fp=9ac96ee21cd21bd2 -->
+
+**Date**: 2026-10-28
+**Task**: VS Code fold gutter and clean reference tooltips
+**Branch**: `feat/arxml-scope`
+
+### Summary
+
+Moved the Document fold control into a fixed 26px VS Code-style gutter with the Codicon outline chevron, hover-only expanded chevrons, and removed the display = from reference tooltips.
+
+### Main Changes
+
+- Fixed 26px fold gutter, 16px Codicon chevron at 2px, content/header/brace/guide alignment after the gutter, and no inline spacer.
+- Expanded chevrons appear on tree hover/focus; collapsed chevrons stay visible; the same chevron rotates to the expanded state.
+- Reference tooltips now show Follow to the target: <path> or Target not found in this file: <path> without the display =.
+- Updated docs/specs, tests and rest/hover/collapsed captures.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fb50c0f` | feat(editor): add a VS Code fold gutter and clean reference tooltips |
+| `5a92204` | chore(task): archive 10-28-ecuc-fold-gutter-tooltips |
+
+### Testing
+
+- [OK] npm run check-types, npm run lint, npm test (209 passing), npm run preview:check
+
+### Status
+
+[OK] **Completed**
