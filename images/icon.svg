@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="ARXML Scope">
+  <!-- Source artwork for images/icon.png. Regenerate the PNG from the repo root with:
+       npx sharp-cli@5 -i images/icon.svg -o images/icon.png resize 128 128 -->
+  <defs>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="128" height="128" rx="27" fill="#151D2C"/>
+  <rect x="1.25" y="1.25" width="125.5" height="125.5" rx="26" fill="none" stroke="#F0A63C" stroke-opacity="0.22" stroke-width="1.5"/>
+
+  <!-- scope brackets -->
+  <g fill="none" stroke="#F0A63C" stroke-opacity="0.55" stroke-width="2.5" stroke-linecap="round">
+    <path d="M15 32 V20 a5 5 0 0 1 5-5 h12"/>
+    <path d="M113 32 V20 a5 5 0 0 0-5-5 h-12"/>
+    <path d="M15 96 v12 a5 5 0 0 0 5 5 h12"/>
+    <path d="M113 96 v12 a5 5 0 0 1-5 5 h-12"/>
+  </g>
+
+  <!-- hexagon: AUTOSAR-flavoured scope ring -->
+  <polygon points="64,20 102,42 102,86 64,108 26,86 26,42"
+           fill="none" stroke="#F0A63C" stroke-opacity="0.9" stroke-width="3"
+           stroke-linejoin="round" filter="url(#glow)"/>
+
+  <!-- XML tag glyph -->
+  <g fill="none" stroke="#F2F5FA" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50 49 L36 64 L50 79"/>
+    <path d="M78 49 L92 64 L78 79"/>
+    <path d="M70 45 L58 83"/>
+  </g>
+</svg>
