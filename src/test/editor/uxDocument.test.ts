@@ -112,8 +112,8 @@ suite('editor document view', () => {
 	test('the review fixes keep the dark-only contrast tiers', () => {
 		const style = styleOf(page());
 		assert.ok(/@supports \(color: color-mix\(in srgb, currentColor 50%, transparent\)\)/.test(style));
-		assert.ok(/body\[data-view\]\s*\{[^}]*--sel-bg: color-mix\([^;]*10%/.test(style));
-		assert.ok(/body\[data-view\]\s*\{[^}]*--subtree-bg:/.test(style));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--sel-bg: color-mix\([^;]*14%/.test(style));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--subtree-bg: color-mix\([^;]*18%/.test(style));
 		assert.ok(!/body\.vscode-light/.test(style), 'light theme is not supported');
 	});
 
@@ -138,11 +138,12 @@ suite('editor document view', () => {
 		assert.ok(/body\[data-view="document"\] \.label\s*\{[^}]*color:\s*var\(--vscode-editor-foreground\)/.test(style));
 		assert.ok(!/body\[data-view="document"\] \.row\.k-module \.label\s*\{/.test(style), 'no module-path label colour');
 		assert.ok(
-			/body\[data-view="document"\] \.node\[data-kind="container"\] > \.row > \.label\s*\{[^}]*--vscode-symbolIcon-namespaceForeground/.test(
+			/body\[data-view="document"\] \.node\[data-kind="container"\] > \.row > \.label\s*\{[^}]*color:\s*var\(--container-accent\)/.test(
 				style
 			),
 			'a container is green like a type'
 		);
+		assert.ok(/--container-accent:\s*#4EC9B0/.test(style), 'the dark container accent is fixed green');
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-kind="reference"\] > \.row > \.value \.value-text\s*\{[^}]*--vscode-symbolIcon-functionForeground[^}]*font-style:\s*italic/.test(
 				style
@@ -171,7 +172,7 @@ suite('editor document view', () => {
 
 	test('quiet selection, focus rail and read-only values', () => {
 		const style = styleOf(page());
-		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg\)/.test(style));
+		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(style));
 		assert.ok(
 			/body\[data-view="document"\] #tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
@@ -268,6 +269,10 @@ suite('editor document view', () => {
 		assert.ok(
 			/body\.vscode-high-contrast\[data-view\] \.node\[data-subtree="true"\] > \.row[\s\S]*?background:\s*transparent/.test(style),
 			'high contrast uses an outline, not the subtree fill'
+		);
+		assert.ok(
+			/body\.vscode-high-contrast\[data-view\] \.node\[data-kind="container"\] > \.row > \.label[\s\S]*?color:\s*var\(--vscode-editor-foreground\)/.test(style),
+			'high contrast keeps the container name readable instead of forcing the dark green'
 		);
 		assert.ok(
 			/@media \(forced-colors: active\)[\s\S]*?data-subtree="true"[\s\S]*?outline:/.test(style),

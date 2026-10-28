@@ -107,9 +107,12 @@ details editor.
 
 ## Theme and accessibility
 
-- Every colour is a `--vscode-*` variable; a literal may appear only as a fallback inside `var(...)`.
-  The bracket-guide fallback `#80808040` and the green/yellow semantic fallbacks are the only literals in the stylesheet. No asset file; the
-  twisty is inline SVG under `default-src 'none'`.
+- Every colour is a `--vscode-*` variable; a literal may appear only as a fallback inside `var(...)`,
+  except the fixed dark container accent `--container-accent: #4EC9B0` (some themes resolve the
+  symbol-icon namespace to the regular foreground). High contrast/forced colors override the accent
+  to the editor foreground. The bracket-guide fallback `#80808040` and the yellow reference fallback
+  are the other literals in the stylesheet. No asset file; the twisty is inline SVG under
+  `default-src 'none'`.
 - **Value type is data.** A parameter's value span carries `data-value-kind="numeric|textual|boolean"`;
   the CSS maps it to `--tok-number`/`--tok-string`/`--tok-keyword`. Short names use `--tok-string`.
   The token names mirror the reference branch's `artext.tmLanguage.json` scopes; that branch is a

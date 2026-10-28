@@ -13,7 +13,7 @@ that is not obvious from the code.
 | Reintroducing the ARTEXT text form: a grammar, `Open as ARTEXT`, a text diff | ARTEXT survives only as the name of the information model. Anything that exists only because an external process produced a text file is dropped. |
 | Generating an expected fixture from the code under test | A snapshot agrees with the code by construction. See `testing.md`. |
 | Editing a committed fixture from a test | It passes once, then fails forever and silently rewrites the repository. |
-| Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. |
+| Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. The fixed `--container-accent` is the documented dark-pass exception. |
 | A second renderer or copied markup for a preview/harness | It diverges from the product; wrap the production `renderHtml` and assert containment. |
 | Reading a real customer file from a test | The repository is public. Fixtures are synthetic. |
 | Building the whole row list into the DOM | It restores the large-file lag; render the viewport window plus overscan only. |
@@ -54,9 +54,9 @@ that is not obvious from the code.
   values with `textContent`. Never use `innerHTML` for model text, and never reuse a full-tree HTML
   string as the re-scan payload.
 - **Selection never recolours syntax.** A selected parameter uses `--sel-bg-focus`, the 2px
-  `--rail` and a 1px `--sel-outline`; a selected container/module also tints its visible subtree
-  with `--subtree-bg`. Tokens keep their colours; high contrast uses outlines, not fills. Do not
-  reintroduce `--ecuc-selection-fg` or a monochrome selected line.
+  `--rail` and a 1px `--sel-outline`; a selected container/module uses the same strong row and its
+  visible subtree gets the softer `--subtree-bg` tint. Tokens keep their colours; high contrast uses
+  outlines, not fills. Do not reintroduce `--ecuc-selection-fg` or a monochrome selected line.
 - **`.value` stays a direct child of `.row`.** The filter and tests select `.row > .value`; a wrapper
   cell breaks them. The value contains a `--tok-punct` `=` and a `.value-text`; the document never
   inserts an input. The details input is a separate `.details-value` in the inspector.

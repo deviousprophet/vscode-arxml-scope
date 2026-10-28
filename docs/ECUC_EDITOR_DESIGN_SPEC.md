@@ -128,7 +128,7 @@ All colours come from `--vscode-*` variables (with fallbacks). No hard-coded pal
 | meta/variant/condition | `--vscode-debugTokenExpression-name` |
 | comment/annotation | `--vscode-charts-green` (italic) |
 | key accent (parameter labels) | `--vscode-symbolIcon-variableForeground` |
-| container name (green) | `--vscode-symbolIcon-namespaceForeground` (fallback `#4EC9B0`) |
+| container name (green) | `--container-accent` (fixed `#4EC9B0`; HC uses the editor foreground) |
 | reference target (yellow italic) | `--vscode-symbolIcon-functionForeground` (fallback `#DCDCAA`) |
 | punctuation | `--vscode-editor-foreground` mixed down |
 | selection | `--vscode-list-inactiveSelectionBackground` / `activeSelectionBackground` |
@@ -136,16 +136,18 @@ All colours come from `--vscode-*` variables (with fallbacks). No hard-coded pal
 | focus rail | `--vscode-focusBorder` |
 | bracket guide | `--vscode-tree-indentGuidesStroke` / `--vscode-panel-border` |
 
-Container names are green like a C typedef/type; reference targets are yellow italic. Other document
-labels are neutral; module paths, context paths and `=`/braces/punctuation stay neutral/muted.
-Reference targets underline on hover only. No per-kind glyph colours, no Tree chips, no line-number
-active colour.
+Container names are green like a C typedef/type; the dark pass uses a fixed `#4EC9B0` accent because
+some themes map `symbolIcon.namespaceForeground` to the ordinary foreground. Reference targets are
+yellow italic. Other document labels are neutral; module paths, context paths and `=`/braces/punctuation
+stay neutral/muted. Reference targets underline on hover only. No per-kind glyph colours, no Tree
+chips, no line-number active colour.
 
 ### State colours
 
 - Hover: `--vscode-list-hoverBackground`; the hovered container's bracket guide rises from 0.28 to 0.85.
 - Selected parameter: active selection fill + 2px rail + 1px outline, so the row is unmistakable.
-- Selected container/module: selected row tint + rail; visible descendants get the subtree tint.
+- Selected container/module: the same strong fill + rail + outline on the selected row; visible
+  descendants get the softer subtree tint.
 - Dark is the supported theme. High contrast/forced colors use outlines, no fills.
 - Flash after a successful edit: find-match highlight background fading out.
 - Invalid details field: input validation error border and an error comment below.

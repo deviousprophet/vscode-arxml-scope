@@ -216,13 +216,13 @@ suite('editor Document interactions', () => {
 		assert.ok(!/fetch\(|XMLHttpRequest|new Worker|serviceWorker/.test(html), 'no remote/worker path');
 	});
 
-	test('every colour literal is a fallback inside a --vscode-* variable', () => {
+	test('the stylesheet keeps only the documented colour literals', () => {
 		const style = styleOf(page());
 		const hexes = [...style.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
 		assert.deepStrictEqual(
 			hexes.sort(),
 			['#4EC9B0', '#80808040', '#DCDCAA'].sort(),
-			'the semantic guide/colour fallbacks are the only literals'
+			'the fixed container accent and guide/reference fallbacks are the only literals'
 		);
 		assert.ok(!/style="--/.test(page()), 'no CSP-blocked inline custom property');
 	});

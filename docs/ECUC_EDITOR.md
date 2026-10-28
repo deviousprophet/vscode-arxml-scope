@@ -99,14 +99,14 @@ with one line per nesting level; it is faded at rest and clearer while the conta
 Document colours are deliberately restrained. `schema`/`package`/`module` use the keyword token,
 short names and textual values the string token, numbers and hex the numeric token, conditions the
 meta token, and annotations the comment token (italic). Container names are green
-(`--vscode-symbolIcon-namespaceForeground`, the C typedef/type-like accent); reference targets are
-yellow and italic (`--vscode-symbolIcon-functionForeground`). Parameter and reference labels use the
-single key accent; module paths, context paths and `=`/braces/punctuation stay neutral/muted.
-Reference targets use the link underline only on hover and only when the target resolves in the same
-file. Selected parameters use the active selection fill, a 2px focus rail and a thin outline; a
-selected container/module also tints its visible parameters and sub-containers. High contrast
-switches the tint to outlines. Bracket guides are structural one-pixel lines, not a second selection
-colour.
+(`--container-accent`, the fixed dark accent `#4EC9B0`; high contrast falls back to the editor
+foreground); reference targets are yellow and italic (`--vscode-symbolIcon-functionForeground`).
+Parameter and reference labels use the single key accent; module paths, context paths and
+`=`/braces/punctuation stay neutral/muted. Reference targets use the link underline only on hover and
+only when the target resolves in the same file. Selected parameters and selected containers/modules
+use the strong active fill, a 2px focus rail and a thin outline; the selection stays unmistakable
+while its visible descendants get a softer subtree tint. High contrast switches the tint to
+outlines. Bracket guides are structural one-pixel lines, not a second selection colour.
 
 The presentational reference is the post-processed ARTEXT output of the remote
 `ref/ecucvalues-for-vscode` branch: `mmx` + `Arxml2Artext.mm`, then the extension's

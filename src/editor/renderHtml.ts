@@ -371,6 +371,7 @@ body[data-view] {
 	--sel-bg: var(--vscode-editor-background);
 	--sel-bg-focus: var(--vscode-editor-background);
 	--subtree-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
+	--container-accent: #4EC9B0;
 	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
 }
 @supports (color: color-mix(in srgb, currentColor 50%, transparent)) {
@@ -378,9 +379,9 @@ body[data-view] {
 		--tok-comment: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-editor-foreground)) 85%, var(--vscode-editor-background));
 		--tok-punct: color-mix(in srgb, var(--vscode-editor-foreground) 70%, var(--vscode-editor-background));
 		--tok-dim: color-mix(in srgb, var(--vscode-editor-foreground) 55%, var(--vscode-editor-background));
-		--sel-bg: color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background)) 10%, var(--vscode-editor-background));
-		--sel-bg-focus: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 10%, var(--vscode-editor-background));
-		--subtree-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 45%, transparent);
+		--sel-bg: color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background)) 14%, var(--vscode-editor-background));
+		--sel-bg-focus: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 24%, var(--vscode-editor-background));
+		--subtree-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 18%, transparent);
 		--sel-outline: color-mix(in srgb, var(--rail) 55%, transparent);
 	}
 }
@@ -684,7 +685,7 @@ body[data-view] {
 	background-color: var(--sel-bg-focus);
 	box-shadow: inset 2px 0 0 var(--rail);
 }
-/* Selection never recolours syntax; the tint, active line number and rail carry the state. */
+/* Selection never recolours syntax; the tint and rail carry the state. */
 .node.flash > .row {
 	animation: ecuc-flash 1s ease-out;
 }
@@ -931,7 +932,7 @@ body[data-view="document"] .node[data-kind="reference"] > .row > .label {
 	color: var(--tok-key);
 }
 body[data-view="document"] .node[data-kind="container"] > .row > .label {
-	color: var(--vscode-symbolIcon-namespaceForeground, #4EC9B0);
+	color: var(--container-accent);
 }
 body[data-view="document"] .node[data-kind="reference"] > .row > .value .value-text {
 	color: var(--vscode-symbolIcon-functionForeground, #DCDCAA);
@@ -1019,12 +1020,16 @@ body[data-view="document"] .node[data-kind="parameter"][data-selected="true"] > 
 		inset 0 0 0 1px var(--sel-outline, transparent);
 }
 body[data-view="document"] .node[data-selected="true"] > .row {
-	background-color: var(--sel-bg);
-	box-shadow: inset 2px 0 0 var(--rail);
+	background-color: var(--sel-bg-focus);
+	box-shadow:
+		inset 2px 0 0 var(--rail),
+		inset 0 0 0 1px var(--sel-outline, transparent);
 }
 body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
 	background-color: var(--sel-bg-focus);
-	box-shadow: inset 2px 0 0 var(--rail);
+	box-shadow:
+		inset 2px 0 0 var(--rail),
+		inset 0 0 0 1px var(--sel-outline, transparent);
 }
 body[data-view="document"] #tree:focus-within .node[data-kind="parameter"][data-selected="true"] > .row {
 	box-shadow:
@@ -1054,6 +1059,9 @@ body[data-view="document"] #tree[data-empty="true"] {
 	padding-bottom: 0;
 }
 @media (forced-colors: active) {
+	body[data-view] .node[data-kind="container"] > .row > .label {
+		color: var(--vscode-editor-foreground);
+	}
 	body[data-view] .node[data-subtree="true"] > .row,
 	body[data-view] .brace[data-subtree="true"] > .row {
 		background: transparent;
@@ -1085,6 +1093,9 @@ body[data-view="document"] #tree[data-empty="true"] {
 		animation: none;
 		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
 	}
+}
+body.vscode-high-contrast[data-view] .node[data-kind="container"] > .row > .label {
+	color: var(--vscode-editor-foreground);
 }
 body.vscode-high-contrast[data-view] .node[data-subtree="true"] > .row,
 body.vscode-high-contrast[data-view] .brace[data-subtree="true"] > .row {
