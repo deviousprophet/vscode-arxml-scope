@@ -22,8 +22,12 @@ import { buildRows } from './renderRows';
 import { buildNodeIndex } from './nodeId';
 import { applyEdit, buildEdit } from './ecucEdit';
 import { followReference, nodeIdForRange, revealRangeInTextEditor } from './navigation';
+import { watchBoot } from './bootWatchdog';
 
 export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
+
+/** How long a panel may take to report `ready` before the host warns (R3). */
+const BOOT_TIMEOUT_MS = 10_000;
 
 interface WebviewMessage {
 	type?: string;
@@ -105,15 +109,11 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		// A page whose script never runs cannot say so. If the boot message does not
 		// arrive, say it here — otherwise a dead page is just a header and an empty
 		// tree with no explanation (see the task's PRD).
-		let ready = false;
-		const readyTimer = setTimeout(() => {
-			if (ready) {
-				return;
-			}
+		const boot = watchBoot(() => {
 			void vscode.window.showWarningMessage(
 				`"${path.basename(document.uri.fsPath)}" opened, but the ECUC editor page did not start. Run "Developer: Open Webview Developer Tools" to see the error.`
 			);
-		}, 10000);
+		}, BOOT_TIMEOUT_MS);
 
 		// The single refresh path: any change to this document — an undo, an external
 		// edit, or the sibling child's write — re-scans and pushes row data, so no range
@@ -162,8 +162,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				}
 				if (message.type === 'ready') {
-					ready = true;
-					clearTimeout(readyTimer);
+					boot.settle();
 					return;
 				}
 				if (typeof message.nodeId !== 'string') {
@@ -185,7 +184,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		);
 
 		panel.onDidDispose(() => {
-			clearTimeout(readyTimer);
+			boot.dispose();
 			for (const disposable of disposables) {
 				disposable.dispose();
 			}

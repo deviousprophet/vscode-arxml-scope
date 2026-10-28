@@ -36,9 +36,38 @@ suite('editor rendering (AC1)', () => {
 				page.indexOf('window.ecucReportError = show') < page.indexOf('acquireVsCodeApi'),
 			'the error surface is armed before the API is acquired'
 		);
-		assert.ok(page.includes("addEventListener('error'"), 'uncaught errors are shown');
-		assert.ok(page.includes("addEventListener('unhandledrejection'"), 'rejected promises are shown');
 		assert.ok(page.includes("postMessage({ type: 'ready' })"), 'a live page tells the host it booted');
+	});
+
+	test('AC1: an uncaught error and a rejected promise both reach the notice, naming the DevTools', () => {
+		const page = html();
+		const listeners: Record<string, (event: unknown) => void> = {};
+		const notice = { textContent: '', dataset: {} as Record<string, string> };
+		const globals = globalThis as unknown as { document?: unknown; window?: unknown };
+		const savedDocument = globals.document;
+		const savedWindow = globals.window;
+		globals.document = { getElementById: () => notice };
+		globals.window = {
+			addEventListener: (type: string, listener: (event: unknown) => void) => {
+				listeners[type] = listener;
+			},
+		};
+		try {
+			evaluateFunction<() => void>(page, 'ecucInstallErrorSurface')();
+			assert.ok(listeners.error, 'uncaught errors are listened for');
+			assert.ok(listeners.unhandledrejection, 'rejected promises are listened for');
+			listeners.error({ message: 'boom', lineno: 12 });
+			assert.ok(notice.textContent.includes('boom'), notice.textContent);
+			assert.ok(notice.textContent.includes('(line 12)'), notice.textContent);
+			assert.ok(notice.textContent.includes('Webview Developer Tools'), 'R1: the error names the DevTools');
+			listeners.unhandledrejection({ reason: new Error('no boot') });
+			assert.ok(notice.textContent.includes('no boot'), notice.textContent);
+			assert.ok(notice.textContent.includes('Webview Developer Tools'), 'R1: a rejection names the DevTools too');
+			assert.strictEqual(notice.dataset.kind, 'warn');
+		} finally {
+			globals.document = savedDocument;
+			globals.window = savedWindow;
+		}
 	});
 
 	test('AC2: an unreadable row payload is reported instead of an empty tree', () => {

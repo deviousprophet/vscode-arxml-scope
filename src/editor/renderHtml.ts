@@ -1165,14 +1165,15 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 `;
 
 /**
- * Boot error surface. Emitted first, so it is armed before anything that can throw:
+ * Boot error surface. Emitted first and installed before anything that can throw:
  * without it a page that dies while booting shows the schema header and an empty
- * tree with no explanation (the failure mode that is worst to diagnose).
+ * tree with no explanation (the failure mode that is worst to diagnose). The
+ * installer is named so a test can drive the page's own copy rather than grep it.
  *
  * `$` is avoided in this block: the whole page is a template literal.
  */
 const PAGE_ERROR_SCRIPT = `
-(function () {
+function ecucInstallErrorSurface() {
 	function show(text) {
 		var notice = document.getElementById('notice');
 		if (!notice) {
@@ -1181,16 +1182,19 @@ const PAGE_ERROR_SCRIPT = `
 		notice.textContent = text;
 		notice.dataset.kind = 'warn';
 	}
+	function devToolsHint() {
+		return '. Open Developer: Open Webview Developer Tools for the stack.';
+	}
 	window.ecucReportError = show;
 	window.addEventListener('error', function (event) {
 		show('The ECUC editor page failed: ' + (event.message || 'unknown error') +
-			(event.lineno ? ' (line ' + event.lineno + ')' : '') +
-			'. Open Developer: Open Webview Developer Tools for the stack.');
+			(event.lineno ? ' (line ' + event.lineno + ')' : '') + devToolsHint());
 	});
 	window.addEventListener('unhandledrejection', function (event) {
-		show('The ECUC editor page failed: ' + String(event.reason));
+		show('The ECUC editor page failed: ' + String(event.reason) + devToolsHint());
 	});
-})();
+}
+ecucInstallErrorSurface();
 `;
 
 /**
