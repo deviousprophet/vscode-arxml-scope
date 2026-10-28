@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-10-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~308 | Active |
+| `journal-1.md` | ~339 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-10-28 | ECUC selected-container fill correction | `c1e4d28` | `feat/arxml-scope` |
 | 7 | 2026-10-28 | ECUC container selection and green accent fix | `ba668f3` | `feat/arxml-scope` |
 | 6 | 2026-10-28 | ECUC Document-only UI polish | `1e84dc0`, `09cbf7e` | `feat/arxml-scope` |
 | 1 | 2026-10-27 | ECUC visual preview, samples and semantic colours | `1dc1cd9`, `d8f25fa`, `f3fcc26`, `84f4aa7`, `66e0a41`, `2bce121` | `feat/arxml-scope` |

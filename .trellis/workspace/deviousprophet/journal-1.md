@@ -306,3 +306,34 @@ Fixed the selected-container hierarchy and the container-name colour reported af
 ### Next Steps
 
 - Manual Extension Development Host check remains for real webview theme/focus and details input
+
+
+## Session 8: ECUC selected-container fill correction
+<!-- trellis-session: v=2 fp=daca5b7f00936d59 -->
+
+**Date**: 2026-10-28
+**Task**: ECUC selected-container fill correction
+**Branch**: `feat/arxml-scope`
+
+### Summary
+
+Restored the previous visible selection-highlight fill for selected containers/modules after the active-selection blue proved too dark on the black editor background.
+
+### Main Changes
+
+- Selected containers/modules use the neutral selection-highlight fill at 45%, with the 2px rail and outline; the subtree tint stays at 18%.
+- Docs/specs/tests and the container-selected capture updated.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c1e4d28` | fix(editor): use the visible neutral fill for selected containers |
+
+### Testing
+
+- [OK] npm run check-types, npm run lint, npm test (208 passing), npm run preview:check
+
+### Status
+
+[OK] **Completed**
