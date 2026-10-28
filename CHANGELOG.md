@@ -5,15 +5,11 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-28
 
 ### Added
 
-- A marketplace icon for the extension
-
-### Changed
-
-- Releases publish to Open VSX with trusted publishing (GitHub OIDC) instead of a stored access token
+- A new extension icon, shown in the Marketplace listing and the Extensions view
 
 ## [0.1.0] - 2026-10-28
 
