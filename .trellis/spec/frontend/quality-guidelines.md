@@ -9,7 +9,7 @@ that is not obvious from the code.
 |---|---|
 | `import … from 'vscode'` under `src/core/**` | The core is a pure library over text; this is what keeps a future workspace index or language server possible. |
 | A new runtime dependency | The core is dependency-free by design and the extension bundles with esbuild. Reach for the standard library or the platform first. |
-| Writing a derived file, cache or index beside a user's file | The legacy tool did this and it is the main reason it is being replaced. Nothing but the `<VALUE>` text a user edited may be written. |
+| Writing a derived file, cache or index beside a user's file | The legacy tool did this and it is the main reason it is being replaced. Nothing but the text of the element the user edited (`<VALUE>`, `<SHORT-NAME>` or `<DEFINITION-REF>`) may be written. |
 | Reintroducing the ARTEXT text form: a grammar, `Open as ARTEXT`, a text diff | ARTEXT survives only as the name of the information model. Anything that exists only because an external process produced a text file is dropped. |
 | Generating an expected fixture from the code under test | A snapshot agrees with the code by construction. See `testing.md`. |
 | Editing a committed fixture from a test | It passes once, then fails forever and silently rewrites the repository. |
@@ -73,15 +73,23 @@ that is not obvious from the code.
   payload or source-position fields back to the row model. Bracket guides are the only vertical
   rules; they run from opening to closing brace, fade at rest and activate on hover. A repeating
   indent gradient is forbidden.
-- **Defaults are Document and hidden details.** `renderHtml` writes `data-view="document"`, the
-  inspector `hidden`, and `aria-pressed="false"`; only `inspectorHidden` is persisted. An old saved
-  `view` is ignored.
-- **Details editing is the only value edit path.** The details control follows the AUTOSAR type:
-  integer/float/text use an input with type-specific filtering; Boolean uses a true/false select. It
-  commits through the existing `{ type: 'edit', nodeId, value }` message; Enter commits, Escape
-  restores, Tab moves. A refusal keeps the typed text, marks the control invalid and shows the
-  reason. The panel exposes Jump to target for a followable reference plus Reveal in source; there is
-  no Source block or copy action.
+- **Defaults are Document and visible details.** `renderHtml` writes `data-view="document"`,
+  an open inspector and `aria-pressed="true"`. A saved `inspectorHidden: true` hides it, and every
+  explicit hide/show is persisted; only a missing or invalid saved state falls back to visible. An
+  old saved `view` is ignored.
+- **Details editing is the only edit path.** The panel edits a parameter's `<VALUE>` and a
+  container's `<SHORT-NAME>` / `<DEFINITION-REF>` inner text. The value control follows the AUTOSAR
+  type: integer/float/text use an input with type-specific filtering; Boolean uses a true/false
+  select. A parameter commits through `{ type: 'edit', nodeId, value }` (no `field`); a container
+  commits the same message with `field: 'shortName' | 'definitionRef'`. The host normalises a
+  missing `field` to `value` and ignores an unknown one. Enter commits, Escape restores, Tab moves
+  (adjacent parameter for a value, the other container field for a container). A refusal keeps the
+  typed text, marks the control invalid and shows the reason beside the field; the toolbar notice is
+  only the fallback when the details panel is hidden, so the same reason is never shown twice. Only
+  a container is editable this
+  way; a module rename is refused because its short name is part of every container id. The panel
+  exposes Jump to target for a followable reference plus Reveal in source; there is no Source block
+  or copy action.
 - **Types and formats live in details.** `ParameterNode.definitionDest` feeds the details Type row;
   integer values show Decimal/Hexadecimal/Binary (`0x0F`, `0b00001111`). Do not put `(= 0x…)` back
   into the Document meta; the Document shows the value once.

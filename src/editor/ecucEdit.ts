@@ -12,14 +12,23 @@
  * One record becomes exactly one `WorkspaceEdit`.
  */
 import * as vscode from 'vscode';
-import { EcucDocumentModel, ParameterNode, Range } from '../core/ecuc/model';
+import { EcucDocumentModel, ParameterNode, Range, lastShortName } from '../core/ecuc/model';
 import { scanEcucValues } from '../core/ecuc/scanner';
-import { validateValue } from '../core/ecuc/validate';
+import { validateDefinitionRef, validateShortName, validateValue } from '../core/ecuc/validate';
 import { LineIndex } from '../core/text/offsets';
-import { buildNodeIndex } from './nodeId';
+import { EcucNode, buildNodeIndex } from './nodeId';
+import { nodeIdForRange } from './navigation';
 
-/** `value` is the text content inside `<VALUE>…</VALUE>`; `element` is the whole element. */
-export type EditRegion = 'value' | 'element';
+/**
+ * `value` is the text content inside `<VALUE>…</VALUE>`; `element` is the whole element.
+ * `shortName` and `definitionRef` are the trimmed text content of a container's
+ * `<SHORT-NAME>` / `<DEFINITION-REF>` element, written as inner text so the element's own
+ * tags and attributes survive byte-for-byte.
+ */
+export type EditRegion = 'value' | 'element' | 'shortName' | 'definitionRef';
+
+/** The two fields the details panel edits on a container. */
+export type EditableField = 'shortName' | 'definitionRef';
 
 /** The exact strings that occupied and will occupy the region (design §2.1). */
 export interface EcucEditRecord {
@@ -30,7 +39,13 @@ export interface EcucEditRecord {
 }
 
 export type EditRefusal = { ok: false; reason: string };
-export type EditPlan = { ok: true; record: EcucEditRecord } | EditRefusal;
+export interface EditPlanOk {
+	ok: true;
+	record: EcucEditRecord;
+	/** The id of the edited node after the write; differs for a rename. */
+	nextNodeId?: string;
+}
+export type EditPlan = EditPlanOk | EditRefusal;
 export type ApplyResult = { ok: true } | EditRefusal;
 
 /** The value-bearing node for `nodeId`, or `undefined` when it is absent or not a parameter. */
@@ -39,32 +54,72 @@ export function parameterFor(model: EcucDocumentModel, nodeId: string): Paramete
 	return entry?.kind === 'parameter' ? (entry.node as ParameterNode) : undefined;
 }
 
+/** The node `nodeId` names, whatever its kind, or `undefined` when it is absent. */
+export function nodeFor(model: EcucDocumentModel, nodeId: string): EcucNode | undefined {
+	return buildNodeIndex(model).byId.get(nodeId)?.node;
+}
+
+/** The node's short name (or definition-ref tail), for a refusal message. */
+function nodeLabel(node: EcucNode): string {
+	if (node.kind === 'parameter' || node.kind === 'reference') {
+		return node.name;
+	}
+	return node.shortName || lastShortName(node.definitionRef);
+}
+
+/** What `region` replaces, so a refusal reads as one sentence for every region. */
+function regionLabel(region: EditRegion): string {
+	switch (region) {
+		case 'shortName':
+			return 'a <SHORT-NAME> text';
+		case 'definitionRef':
+			return 'a <DEFINITION-REF> text';
+		case 'element':
+			return 'a <VALUE> element';
+		default:
+			return 'a <VALUE> text';
+	}
+}
+
 /**
  * The span a write must touch, resolved from the node's ranges in `text`.
  *
  * `element` is the whole `<VALUE/>` slice, `value` the text content inside the tags. The
  * rule is the bytes rather than the decoded value: an element slice begins with `<`.
- * `undefined` means the node has nothing of that kind to replace, which is a refusal —
- * including a range inside a CDATA section, which has no region of either kind
+ * `shortName` and `definitionRef` are the scanner's trimmed text spans, written as plain
+ * inner text. `undefined` means the node has nothing of that kind to replace, which is a
+ * refusal — including a range inside a CDATA section, which has no region of either kind
  * (`touchesCdata`).
  */
 export function regionOf(
-	parameter: ParameterNode,
+	node: EcucNode,
 	text: string,
 	region: EditRegion
 ): { range: Range; oldText: string } | undefined {
-	const valueRange = parameter.valueRange;
-	if (!valueRange) {
-		return undefined;
-	}
-	let range: Range;
-	if (region === 'value') {
-		if (text[valueRange.start] === '<') {
-			return undefined; // the range covers the element, not its text content
+	let range: Range | undefined;
+	if (region === 'value' || region === 'element') {
+		if (node.kind !== 'parameter' || !node.valueRange) {
+			return undefined;
 		}
-		range = valueRange;
+		const valueRange = node.valueRange;
+		if (region === 'value') {
+			if (text[valueRange.start] === '<') {
+				return undefined; // the range covers the element, not its text content
+			}
+			range = valueRange;
+		} else {
+			range = elementSpan(text, valueRange);
+		}
+	} else if (region === 'shortName') {
+		if (node.kind !== 'module' && node.kind !== 'container') {
+			return undefined;
+		}
+		range = node.shortNameRange;
 	} else {
-		range = elementSpan(text, valueRange);
+		range = node.definitionRefRange;
+	}
+	if (!range) {
+		return undefined;
 	}
 	if (touchesCdata(text, range)) {
 		return undefined; // a CDATA section is neither text content nor an element
@@ -208,6 +263,74 @@ export function buildEdit(
 }
 
 /**
+ * Validates a container's short name or definition ref and describes the inner-text
+ * replacement, or refuses. Container-only on purpose: a module's short name is part of
+ * every container's path, so one write there would renumber the whole tree.
+ *
+ * The plan also names the id the container will carry after the write. A container id
+ * embeds its short name, so a rename invalidates the id the panel is selected by; the
+ * host uses this prediction to keep the renamed container selected across the re-scan.
+ * It is only a hint: `applyEdit` re-scans and refuses if the bytes moved.
+ */
+export function buildFieldEdit(
+	model: EcucDocumentModel,
+	text: string,
+	nodeId: string,
+	field: EditableField,
+	value: string
+): EditPlan {
+	const node = nodeFor(model, nodeId);
+	if (!node) {
+		return { ok: false, reason: 'the node is no longer in the file' };
+	}
+	if (node.kind !== 'container') {
+		return { ok: false, reason: 'the node is not a container' };
+	}
+	const validation = field === 'shortName' ? validateShortName(value) : validateDefinitionRef(value);
+	if (!validation.ok) {
+		return validation;
+	}
+	const described = regionOf(node, text, field);
+	if (!described) {
+		// No text span: the element is absent, empty or CDATA-backed. Creating or
+		// re-shaping the element is out of scope, so the write is refused.
+		return {
+			ok: false,
+			reason:
+				field === 'shortName'
+					? `"${nodeLabel(node)}" has no <SHORT-NAME> text to edit (absent, empty or CDATA-backed)`
+					: `"${nodeLabel(node)}" has no <DEFINITION-REF> text to edit (absent, empty or CDATA-backed)`,
+		};
+	}
+	const current = field === 'shortName' ? node.shortName : node.definitionRef;
+	if (value.trim() === current) {
+		return { ok: false, reason: field === 'shortName' ? 'the short name is unchanged' : 'the definition ref is unchanged' };
+	}
+	return {
+		ok: true,
+		record: {
+			nodeId,
+			region: field,
+			oldText: described.oldText,
+			newText: validation.text,
+		},
+		nextNodeId: predictNodeId(text, described.range, validation.text),
+	};
+}
+
+/**
+ * The id of the node that will contain `range` once `newText` replaces its bytes.
+ *
+ * Resolved with the same rule as a follow target (`nodeIdForRange`: exact match first,
+ * then the smallest containing node), so the id scheme is not duplicated here.
+ */
+function predictNodeId(text: string, range: Range, newText: string): string | undefined {
+	const predicted = text.slice(0, range.start) + newText + text.slice(range.end);
+	const index = buildNodeIndex(scanEcucValues(predicted));
+	return nodeIdForRange(index, { start: range.start, end: range.start + newText.length });
+}
+
+/**
  * Applies `record` as exactly one `WorkspaceEdit`, after recomputing the region from a
  * fresh scan (design §2.2, §2.7). Nothing else is written, so the document is never
  * reformatted and no derived file exists to write.
@@ -217,13 +340,13 @@ export async function applyEdit(
 	record: EcucEditRecord
 ): Promise<ApplyResult> {
 	const text = document.getText();
-	const parameter = parameterFor(scanEcucValues(text), record.nodeId);
-	if (!parameter) {
+	const node = nodeFor(scanEcucValues(text), record.nodeId);
+	if (!node) {
 		return { ok: false, reason: 'the node is no longer in the file' };
 	}
-	const described = regionOf(parameter, text, record.region);
+	const described = regionOf(node, text, record.region);
 	if (!described) {
-		return { ok: false, reason: `"${parameter.name}" no longer has a ${record.region} to replace` };
+		return { ok: false, reason: `"${nodeLabel(node)}" no longer has ${regionLabel(record.region)} to replace` };
 	}
 	if (described.oldText !== record.oldText) {
 		// The bytes under the region moved since the edit was prepared; writing now would

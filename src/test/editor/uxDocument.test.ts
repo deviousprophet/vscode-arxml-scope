@@ -10,7 +10,7 @@
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { RowPayload, renderHtml } from '../../editor/renderHtml';
+import { RowPayload, refusalShownInDetails, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
 import { functionSource } from './scriptTestUtils';
 
@@ -42,9 +42,9 @@ suite('editor document view', () => {
 		assert.ok(html.includes('<body data-view="document">'));
 		assert.ok(!html.includes('id="view-toggle"'), 'the Tree view toggle is gone');
 		assert.ok(!html.includes('view-document') && !html.includes('view-tree'), 'no view switch labels');
-		assert.ok(/id="details-toggle"[^>]*aria-pressed="false"/.test(html));
+		assert.ok(/id="details-toggle"[^>]*aria-pressed="true"/.test(html));
 		assert.ok(html.includes('aria-controls="inspector"'));
-		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>'));
+		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details">'));
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));
 		assert.ok(html.includes('<div id="notice" class="notice" role="status" aria-live="polite"></div>'));
@@ -257,7 +257,7 @@ suite('editor document view', () => {
 		);
 		assert.ok(functionSource(html, 'buildNodeRow').includes("node.dataset.empty = 'true'"), 'the marker is data-driven');
 		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(styleOf(html)));
-		assert.ok(/id="details-toggle"[^>]*aria-label="Show node details"[^>]*><svg/.test(html));
+		assert.ok(/id="details-toggle"[^>]*aria-label="Hide node details"[^>]*><svg/.test(html));
 		assert.ok(!html.includes('id="view-toggle"'));
 	});
 
@@ -330,10 +330,23 @@ suite('editor document view', () => {
 		assert.ok(html.includes('details-value-error'));
 		assert.ok(html.includes("error.textContent = '/* ' + reason + ' */'"));
 		assert.ok(html.includes("'aria-invalid', 'true'"));
-		assert.ok(html.includes('detailsEdit.input.focus()'));
+		assert.ok(html.includes('edit.input.focus()'));
 		const style = styleOf(html);
 		assert.ok(/\.details-value-error\s*\{[^}]*--vscode-errorForeground/.test(style));
 		assert.ok(/\.details-value\[aria-invalid="true"\]\s*\{[^}]*--vscode-inputValidation-errorBorder/.test(style));
+	});
+
+	test('a field refusal is left to the details panel instead of the toolbar notice', () => {
+		const html = page();
+		assert.ok(
+			html.includes('refusalShownInDetails(message, uiState.inspectorHidden)'),
+			'the notice handler asks whether the details panel already answered'
+		);
+		assert.ok(html.includes('delete notice.dataset.kind'), 'a stale warning is cleared');
+
+		assert.strictEqual(refusalShownInDetails({ inline: true }, false), true, 'visible details owns the refusal');
+		assert.strictEqual(refusalShownInDetails({ inline: true }, true), false, 'hidden details falls back to the notice');
+		assert.strictEqual(refusalShownInDetails({}, false), false, 'page-level problems still reach the notice');
 	});
 
 	test('the page details visibility drives the stubs', () => {
@@ -366,11 +379,60 @@ suite('editor document view', () => {
 
 	test('the defaults and persistence path are present', () => {
 		const script = page();
-		assert.ok(script.includes('let uiState = { inspectorHidden: true }'));
+		assert.ok(script.includes('let uiState = { inspectorHidden: false }'), 'details starts visible');
 		assert.ok(script.includes("uiState.inspectorHidden = !uiState.inspectorHidden"));
 		assert.ok(script.includes('vscode.getState()'));
 		assert.ok(script.includes('vscode.setState(uiState)'));
 		assert.ok(!script.includes('uiState.view'));
 		assert.ok(!script.includes('viewToggle'));
+	});
+
+	test('AC8: a saved hide is honoured and an invalid state falls back to visible', () => {
+		const html = page();
+		const start = html.indexOf('const savedState = vscode.getState();');
+		const assignment = html.indexOf('uiState.inspectorHidden = savedState.inspectorHidden;', start);
+		const close = html.indexOf('}', assignment);
+		assert.ok(start !== -1 && assignment !== -1 && close !== -1, 'the saved-state branch is inlined');
+		const snippet = html.slice(start, close + 1);
+		const read = new Function('vscode', `${snippet}\nreturn uiState;`) as (vscode: unknown) => {
+			inspectorHidden: boolean;
+		};
+		const state = (saved: unknown): boolean => read({ getState: () => saved }).inspectorHidden;
+
+		assert.strictEqual(state(undefined), false, 'no saved state shows the panel');
+		assert.strictEqual(state(null), false);
+		assert.strictEqual(state({}), false, 'a missing key shows the panel');
+		assert.strictEqual(state({ inspectorHidden: 'yes' }), false, 'an invalid type is ignored');
+		assert.strictEqual(state([]), false, 'an array is not a state object');
+		assert.strictEqual(state({ inspectorHidden: true }), true, 'an explicit hide is honoured');
+		assert.strictEqual(state({ inspectorHidden: false }), false, 'an explicit show is honoured');
+	});
+
+	test('R7: Collapse and Expand have different, semantically opposite glyphs', () => {
+		const html = page();
+		const details = /<button id="collapse-all"[\s\S]*?<\/button>/.exec(html);
+		const expand = /<button id="expand-all"[\s\S]*?<\/button>/.exec(html);
+		assert.ok(details && expand, 'both toolbar controls exist');
+
+		const collapsePath = /<path d="([^"]+)"/.exec(details[0])?.[1];
+		const expandPath = /<path d="([^"]+)"/.exec(expand[0])?.[1];
+		assert.ok(collapsePath && expandPath, 'both carry an inline SVG path');
+		assert.notStrictEqual(collapsePath, expandPath, 'the two controls do not look the same');
+
+		// Expand spreads outward: a chevron whose apex is above the top edge and one whose
+		// apex is below the bottom edge. Collapse squeezes inward: apexes point at the centre.
+		assert.ok(expandPath!.startsWith('M4 6.25 8 2.25l4 4'), 'the upper chevron points up and away');
+		assert.ok(expandPath!.includes('M4 9.75l4 4 4-4'), 'the lower chevron points down and away');
+		assert.ok(collapsePath!.startsWith('M4 2.25l4 4 4-4'), 'the upper chevron points down toward the centre');
+		assert.ok(collapsePath!.includes('M4 13.75l4-4 4 4'), 'the lower chevron points up toward the centre');
+
+		assert.ok(/id="collapse-all"[^>]*title="Collapse every container"/.test(html));
+		assert.ok(/id="expand-all"[^>]*title="Expand every container"/.test(html));
+		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"/.test(html));
+		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"/.test(html));
+		assert.ok(html.includes('<span class="lbl">Collapse</span>'));
+		assert.ok(html.includes('<span class="lbl">Expand</span>'));
+		assert.ok(/id="collapse-all"[^>]*><svg[^>]*stroke-linejoin="round"/.test(html));
+		assert.ok(/id="expand-all"[^>]*><svg[^>]*stroke-linejoin="round"/.test(html));
 	});
 });
