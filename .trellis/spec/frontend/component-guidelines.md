@@ -37,8 +37,8 @@ body (column)
 
 ## Event ownership
 
-The details editor (`ecucDetailsEditor.ts`) is emitted **before** the page script. Its value input
-lives in the details panel, outside `#tree`, and owns its own `Enter`/`Escape`/`Tab` keys:
+The details editor (`ecucDetailsEditor.ts`) is emitted **before** the page script. Its controls live
+in the details panel, outside `#tree`, and each owns its own `Enter`/`Escape`/`Tab` keys:
 
 ```text
 details control keys  →  details editor commit/cancel/move
@@ -84,9 +84,13 @@ selects and opens the details editor. Reference follow is the details **Jump to 
   inline twisty created with `createElementNS`. Brace rows are `aria-hidden`.
 - The details control is `<input class="details-value">` for numeric/text types and a
   `<select class="details-value">` for Boolean, with `aria-label`, `aria-invalid` on refusal and a
-  `.details-value-error` live status. The panel shows the AUTOSAR type and integer
-  Decimal/Hexadecimal/Binary formats. It commits through the existing
-  `{ type:'edit', nodeId, value }` message.
+  `.details-value-error` live status. A container row instead shows editable `Short name`
+  (`id="details-short-name"`, `data-field="shortName"`) and `Definition`
+  (`id="details-definition-ref"`, `data-field="definitionRef"`) text inputs; its read-only
+  `Definition`/`Short name` rows are not emitted, so a fact is never shown twice. Every control
+  commits through `{ type:'edit', nodeId, value }`, and the two container controls add
+  `field: 'shortName' | 'definitionRef'`. The panel shows the AUTOSAR type and integer
+  Decimal/Hexadecimal/Binary formats.
 
 ## State
 
@@ -100,9 +104,10 @@ selects and opens the details editor. Reference follow is the details **Jump to 
 - The initial row payload carries the host selection; `prepareFocus` expands its ancestors if
   needed, scrolls it into the rendered window and fills the inspector.
 - Only the details visibility is persisted through `acquireVsCodeApi().getState()/setState()`
-  (validated as a non-array object; missing/invalid hides the inspector `=== true`). The first paint
-  is Document with the inspector hidden; an old saved `view` is ignored. There is no browser harness
-  stub any more; the reload round trip is observed in the Extension Development Host.
+  (validated as a non-array object; `inspectorHidden === true` hides the inspector). The first paint
+  is Document with the inspector **visible**; a saved explicit hide still hides it and a
+  missing/invalid state falls back to visible. An old saved `view` is ignored. There is no browser
+  harness stub any more; the reload round trip is observed in the Extension Development Host.
 - The pure state helpers (`pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`,
   `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`) are real functions
   serialized into the page with `toString()`. The tests extract and drive the page's copy; do not

@@ -17,6 +17,12 @@ outlive its text. A re-scan posts `{ type: 'model', rows, selectedId }`; the mes
 because the details editor clears its edit state on it. The payload is row data, never a full-tree
 HTML string.
 
+A container short-name edit changes the path-based id of the node being edited, so `editField`
+stores the id the fresh scan predicts for the written text **before** `applyEdit`. The re-scan that
+follows the write therefore carries the surviving id and the renamed container stays selected; a
+refused write restores the previous selection entry. The prediction is only a hint — `applyEdit`
+re-scans and refuses if the bytes moved.
+
 ## Webview state
 
 | State | Owner | Survives a re-scan? |
@@ -29,7 +35,7 @@ HTML string.
 | `windowRange`, `main.scrollTop` | page script + browser | yes where possible; the scroll offset is restored and clamped by the new total |
 | `displayRows`, `expandedIds`, `subtreeIds`, `guideLevels` | page script | derived from the rows, collapsed set, filter and selected subtree |
 | type-ahead buffer | page script | yes; it is a transient 2 s window |
-| `detailsEdit` / `pendingMove` / `flashId` | details editor | no; the re-scan message clears stale state and rebuilds the details input |
+| `detailsEdits` / `pendingMove` / `pendingFieldFocus` / `flashId` | details editor | no; the re-scan message clears stale state and rebuilds the details inputs |
 | `uiState.inspectorHidden` | page + host state | yes, through `getState()/setState()` |
 
 The collapsed set is the only state that must not be re-derived from the rendered order. Node ids
@@ -59,13 +65,16 @@ second host-side implementation of a view rule.
   destroy it. The row store, flattening and window are rebuilt in place; there is no innerHTML swap.
 - **Across a webview reload:** the details panel uses
   `acquireVsCodeApi().getState()/setState()`. Validate the shape: a non-null, non-array object; hide
-  only when `inspectorHidden === true`. An old saved `view` is ignored; there is no second view. The
-  reload round trip is observed in the Extension Development Host, which is the only place the state
-  API exists.
+  only when `inspectorHidden === true` and show it for anything else, so the default (no saved state,
+  or an invalid one) is visible. A non-boolean `inspectorHidden` is ignored, not coerced. An explicit
+  hide/show is written on every toggle, so a user who hides the panel keeps that layout across
+  reloads. An old saved `view` is ignored; there is no second view. The reload round trip is observed
+  in the Extension Development Host, which is the only place the state API exists.
 
 ## No derived artefacts
 
-Nothing is written beside the user's file. The only write is the user's `<VALUE>` text through one
-`WorkspaceEdit`; the details panel exposes Jump to target for a followable reference and Reveal in source.
-No script reads a local sample directory: the preview, sample and benchmark scripts were dev-only and
-have been removed, so no CI step depends on a developer's disk.
+Nothing is written beside the user's file. The only write is the text of the element the user
+edited — a parameter's `<VALUE>` or a container's `<SHORT-NAME>` / `<DEFINITION-REF>` — through one
+`WorkspaceEdit`; the details panel exposes Jump to target for a followable reference and Reveal in
+source. No script reads a local sample directory: the preview, sample and benchmark scripts were
+dev-only and have been removed, so no CI step depends on a developer's disk.
