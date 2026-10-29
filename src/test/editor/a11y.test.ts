@@ -73,9 +73,16 @@ suite('editor accessibility (AC8)', () => {
 		const details = functionSource(page, 'detailsValueInput');
 		assert.ok(details.includes("input.setAttribute('aria-label'"), 'the input is named');
 		assert.ok(details.includes("input.id = 'details-value'"));
-		assert.ok(details.includes('aria-invalid'), 'refusal marks the input invalid');
-		assert.ok(details.includes("error.setAttribute('role', 'status')"), 'the error is announced');
-		assert.ok(details.includes("error.setAttribute('aria-live', 'polite')"));
+		assert.ok(
+			functionSource(page, 'setDetailsError').includes("setAttribute('aria-invalid', 'true')"),
+			'refusal marks the waiting control invalid'
+		);
+		const fields = functionSource(page, 'detailsFieldInput');
+		assert.ok(fields.includes("input.setAttribute('aria-label'"), 'the container controls are named too');
+		assert.ok(fields.includes("input.setAttribute('data-field', field)"), 'each control names its field');
+		const error = functionSource(page, 'detailsErrorSpan');
+		assert.ok(error.includes("error.setAttribute('role', 'status')"), 'the error is announced');
+		assert.ok(error.includes("error.setAttribute('aria-live', 'polite')"));
 		assert.ok(page.includes('.details-value-error'), 'the error has a style');
 	});
 });

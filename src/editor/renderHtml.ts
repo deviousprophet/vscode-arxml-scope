@@ -223,9 +223,9 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </div>
 <span id="count" class="count" role="status" aria-live="polite" data-state="none"></span>
 <span class="grow"></span>
-<button id="collapse-all" class="tool icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 6h4V2M3 6l4-4M13 10H9v4M13 10l-4 4"/></svg><span class="lbl">Collapse</span></button>
-<button id="expand-all" class="tool icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M7 2v4H3M7 2L3 6M9 14v-4h4M9 14l4-4"/></svg><span class="lbl">Expand</span></button>
-<button id="details-toggle" class="tool details-toggle" type="button" aria-pressed="false" aria-controls="inspector" title="Show node details" aria-label="Show node details"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg><span class="lbl">Details</span></button>
+<button id="collapse-all" class="tool icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
+<button id="expand-all" class="tool icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/></svg><span class="lbl">Expand</span></button>
+<button id="details-toggle" class="tool details-toggle" type="button" aria-pressed="true" aria-controls="inspector" title="Hide node details" aria-label="Hide node details"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg><span class="lbl">Details</span></button>
 </div>
 <div id="notice" class="notice" role="status" aria-live="polite"></div>
 <div id="content">
@@ -237,7 +237,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div>
 </div>
 </div>
-<aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>
+<aside id="inspector" class="inspector" role="region" aria-label="Node details">
 <div class="inspector-empty">
 <p>Select a line to see its details.</p>
 <p class="inspector-hint">Click a line or press Space.</p>
@@ -1220,7 +1220,7 @@ const svgNamespace = 'http://www.w3.org/2000/svg';
 const bufferRows = 10;
 const savedState = vscode.getState();
 // Only the details visibility is persisted; an older saved view is ignored and never written back.
-let uiState = { inspectorHidden: true };
+let uiState = { inspectorHidden: false };
 if (
 	savedState &&
 	typeof savedState === 'object' &&
@@ -2078,11 +2078,17 @@ function updateInspector() {
 	const data = inspectorFields(row);
 	inspector.appendChild(inspectorElement('div', 'inspector-kind', data.kind));
 	inspector.appendChild(inspectorElement('div', 'inspector-label', data.label));
-	if (data.definitionRef) {
-		inspector.appendChild(inspectorRow('Definition', data.definitionRef));
-	}
-	if (data.shortName) {
-		inspector.appendChild(inspectorRow('Short name', data.shortName));
+	if (row.kind === 'container') {
+		// A container's short name and definition ref are editable here, so the panel
+		// never shows the same fact twice.
+		inspector.appendChild(detailsContainerFields(row, data));
+	} else {
+		if (data.definitionRef) {
+			inspector.appendChild(inspectorRow('Definition', data.definitionRef));
+		}
+		if (data.shortName) {
+			inspector.appendChild(inspectorRow('Short name', data.shortName));
+		}
 	}
 	if (data.variant) {
 		inspector.appendChild(inspectorRow('Variant', data.variant));

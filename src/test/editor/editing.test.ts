@@ -21,7 +21,15 @@ import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { LineIndex } from '../../core/text/offsets';
 import { EcucEditorProvider } from '../../editor/ecucEditorProvider';
-import { applyEdit, buildEdit, parameterFor, regionOf, wrapElement } from '../../editor/ecucEdit';
+import {
+	applyEdit,
+	buildEdit,
+	buildFieldEdit,
+	nodeFor,
+	parameterFor,
+	regionOf,
+	wrapElement,
+} from '../../editor/ecucEdit';
 import { buildNodeIndex } from '../../editor/nodeId';
 import { EcucRow, buildRows } from '../../editor/renderRows';
 import { renderHtml } from '../../editor/renderHtml';
@@ -124,6 +132,29 @@ function parameterId(text: string, name: string): string {
 		}
 	}
 	throw new Error(`no parameter named ${name}`);
+}
+
+/** The path-based id of a container, as the provider's own index computes it. */
+function containerId(text: string, shortName: string): string {
+	const model = scanEcucValues(text);
+	const index = buildNodeIndex(model);
+	for (const container of model.modules[0].containers) {
+		if (container.shortName === shortName) {
+			const id = index.idOf(container);
+			assert.ok(id, shortName);
+			return id;
+		}
+	}
+	throw new Error(`no container named ${shortName}`);
+}
+
+/** The path-based id of a module, as the provider's own index computes it. */
+function moduleId(text: string): string {
+	const model = scanEcucValues(text);
+	const index = buildNodeIndex(model);
+	const id = index.idOf(model.modules[0]);
+	assert.ok(id);
+	return id;
 }
 
 /**
@@ -428,6 +459,10 @@ suite('editor value editing (AC1–AC9)', () => {
 			const result = await applyEdit(document, record);
 
 			assert.strictEqual(result.ok, false, 'an unresolvable region is not applied');
+			assert.ok(
+				result.ok === false && result.reason.includes('<VALUE>'),
+				'the refusal names the element it could not find'
+			);
 			assert.strictEqual(document.getText(), before, 'the document is untouched');
 			assert.strictEqual(document.isDirty, false);
 		});
@@ -664,5 +699,373 @@ suite('editor value editing (AC1–AC9)', () => {
 			assert.strictEqual(document.getText(), original.replace('<VALUE>7</VALUE>', '<VALUE>9</VALUE>'));
 			await waitFor('the pushed second edit', () => lastRows(stub).some((row) => row.value === '9'));
 		});
+	});
+});
+
+/**
+ * A module whose containers have no `SHORT-NAME` text to replace: absent, empty, or
+ * CDATA-backed, plus one with no `DEFINITION-REF` at all. Hand-written for the refusal
+ * cases; adding or creating an element is out of scope (`prd.md`, non-goals).
+ */
+const sparseContainers = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0">
+    <AR-PACKAGES>
+        <AR-PACKAGE>
+            <SHORT-NAME>PkgS</SHORT-NAME>
+            <ELEMENTS>
+                <ECUC-MODULE-CONFIGURATION-VALUES>
+                    <SHORT-NAME>SparseMod</SHORT-NAME>
+                    <DEFINITION-REF DEST="ECUC-MODULE-DEF">/PkgS/SparseMod</DEFINITION-REF>
+                    <CONTAINERS>
+                        <ECUC-CONTAINER-VALUE>
+                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgS/SparseMod/NoName</DEFINITION-REF>
+                        </ECUC-CONTAINER-VALUE>
+                        <ECUC-CONTAINER-VALUE>
+                            <SHORT-NAME></SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgS/SparseMod/EmptyName</DEFINITION-REF>
+                        </ECUC-CONTAINER-VALUE>
+                        <ECUC-CONTAINER-VALUE>
+                            <SHORT-NAME><![CDATA[CdataCont]]></SHORT-NAME>
+                        </ECUC-CONTAINER-VALUE>
+                    </CONTAINERS>
+                </ECUC-MODULE-CONFIGURATION-VALUES>
+            </ELEMENTS>
+        </AR-PACKAGE>
+    </AR-PACKAGES>
+</AUTOSAR>
+`;
+
+/**
+ * Container short name and definition ref editing (prd R1–R5).
+ *
+ * The byte expectations are hand-derived: the expected files differ from
+ * `editing/container.arxml` in exactly one contiguous span, so a writer that rewrites the
+ * element, its `DEST`, or the surrounding lines fails the whole-file comparison.
+ */
+suite('editor container field editing (R1–R5)', () => {
+	/** The committed fixtures as they were before this suite ran any edit. */
+	let committedBefore: Map<string, string>;
+	suiteSetup(() => {
+		committedBefore = new Map(
+			fs.readdirSync(fixturesDir).map((name) => [name, fs.readFileSync(committed(name), 'utf8')])
+		);
+	});
+
+	test('R1/R2: the plan replaces the inner text, never the tags or attributes', () => {
+		const text = fixtureText('editing/container.arxml');
+		const model = scanEcucValues(text);
+		const id = containerId(text, 'FirstCont');
+		const node = nodeFor(model, id)!;
+
+		const shortName = buildFieldEdit(model, text, id, 'shortName', 'FirstContA');
+		assert.ok(shortName.ok);
+		assert.strictEqual(shortName.record.region, 'shortName');
+		assert.strictEqual(shortName.record.oldText, 'FirstCont', 'no tag bytes are in the region');
+		assert.strictEqual(shortName.record.newText, 'FirstContA');
+		const shortRange = regionOf(node, text, 'shortName')!.range;
+		assert.strictEqual(text.slice(shortRange.start - 1, shortRange.end + 1), '>FirstCont<');
+
+		const definitionRef = '/PkgF/ContDefs/ContMod/FirstContRenamed';
+		const reference = buildFieldEdit(model, text, id, 'definitionRef', definitionRef);
+		assert.ok(reference.ok);
+		assert.strictEqual(reference.record.region, 'definitionRef');
+		assert.strictEqual(reference.record.oldText, '/PkgF/ContDefs/ContMod/FirstCont');
+		assert.strictEqual(reference.record.newText, definitionRef);
+		const refRange = regionOf(node, text, 'definitionRef')!.range;
+		assert.strictEqual(
+			text.slice(refRange.start - 1, refRange.end + 1),
+			'>/PkgF/ContDefs/ContMod/FirstCont<',
+			'the region is the inner text only'
+		);
+		// The element's own tag and `DEST` attribute sit before the region.
+		const openTagAt = text.lastIndexOf('<DEFINITION-REF', refRange.start);
+		assert.ok(
+			text.slice(openTagAt, refRange.start).includes('DEST="ECUC-PARAM-CONF-CONTAINER-DEF"'),
+			'the attribute is outside the span the write replaces'
+		);
+	});
+
+	test('R4/R5: only a container, and only a known node, can be edited', () => {
+		const text = fixtureText('editing/container.arxml');
+		const model = scanEcucValues(text);
+
+		const missing = buildFieldEdit(model, text, 'container:gone', 'shortName', 'Other');
+		assert.ok(missing.ok === false && missing.reason.includes('no longer in the file'), String(missing));
+
+		const module = buildFieldEdit(model, text, moduleId(text), 'shortName', 'OtherMod');
+		assert.ok(module.ok === false && module.reason === 'the node is not a container', String(module));
+
+		const parameter = buildFieldEdit(model, text, parameterId(text, 'Count'), 'definitionRef', '/Gone');
+		assert.ok(parameter.ok === false && parameter.reason === 'the node is not a container', String(parameter));
+	});
+
+	test('R4: an invalid or unchanged container field is refused with its reason', () => {
+		const text = fixtureText('editing/container.arxml');
+		const model = scanEcucValues(text);
+		const id = containerId(text, 'FirstCont');
+
+		for (const value of ['', 'First Cont', 'First/Cont', 'First&Cont', '1First']) {
+			const plan = buildFieldEdit(model, text, id, 'shortName', value);
+			assert.ok(plan.ok === false, JSON.stringify(value));
+			assert.ok(plan.ok === false && plan.reason.length > 0, JSON.stringify(value));
+		}
+		const relative = buildFieldEdit(model, text, id, 'definitionRef', 'PkgF/ContDefs/ContMod/FirstCont');
+		assert.ok(relative.ok === false && relative.reason.includes('absolute /-separated path'), String(relative));
+
+		const unchangedShortName = buildFieldEdit(model, text, id, 'shortName', 'FirstCont');
+		assert.ok(unchangedShortName.ok === false && unchangedShortName.reason === 'the short name is unchanged');
+		const unchangedRef = buildFieldEdit(model, text, id, 'definitionRef', '/PkgF/ContDefs/ContMod/FirstCont');
+		assert.ok(unchangedRef.ok === false && unchangedRef.reason === 'the definition ref is unchanged');
+	});
+
+	test('R5: a rename predicts the new id; a ref edit keeps the id', () => {
+		const text = fixtureText('editing/container.arxml');
+		const model = scanEcucValues(text);
+		const id = containerId(text, 'FirstCont');
+
+		const rename = buildFieldEdit(model, text, id, 'shortName', 'FirstContA');
+		assert.ok(rename.ok);
+		assert.ok(rename.nextNodeId, 'a rename has a predicted id');
+		assert.notStrictEqual(rename.nextNodeId, id, 'the old id is invalid after the rename');
+		const renamed = fixtureText('editing/container-short-name.expected.arxml');
+		assert.strictEqual(rename.nextNodeId, containerId(renamed, 'FirstContA'), 'the id the re-scan will assign');
+
+		const reference = buildFieldEdit(model, text, id, 'definitionRef', '/PkgF/ContDefs/ContMod/FirstContRenamed');
+		assert.ok(reference.ok);
+		assert.strictEqual(reference.nextNodeId, id, 'a definition-ref edit does not renumber the container');
+
+		// The value path is not touched by the prediction.
+		const value = buildEdit(scanEcucValues(fixtureText('editing/numeric.arxml')), fixtureText('editing/numeric.arxml'), parameterId(fixtureText('editing/numeric.arxml'), 'Count'), '42');
+		assert.ok(value.ok);
+		assert.strictEqual(value.nextNodeId, undefined);
+	});
+
+	test('AC2/AC6: a short-name commit changes one span, keeps the selection and its new id', async () => {
+		await withEditingFixture('container.arxml', async (uri, document, dir) => {
+			const original = document.getText();
+			const { stub } = open(document);
+			await vscode.window.showTextDocument(document);
+			const id = containerId(original, 'FirstCont');
+			await stub.send({ type: 'select', nodeId: id });
+
+			await stub.send({ type: 'edit', nodeId: id, field: 'shortName', value: 'FirstContA' });
+			await waitFor('the rename', () => document.getText().includes('<SHORT-NAME>FirstContA</SHORT-NAME>'));
+
+			const renamed = fixtureText('editing/container-short-name.expected.arxml');
+			assert.strictEqual(document.getText(), renamed, 'only the short name line changed');
+			assert.strictEqual(document.isDirty, true);
+
+			const newId = containerId(renamed, 'FirstContA');
+			await waitFor('the re-scan with the new id', () => lastModel(stub).selectedId === newId);
+			assert.strictEqual(lastModel(stub).selectedId, newId, 'the renamed container stays selected');
+			const row = lastRows(stub).find((candidate) => candidate.id === newId);
+			assert.ok(row, 'the re-scanned rows carry the new id');
+			assert.strictEqual(row!.shortName, 'FirstContA', 'and the new short name');
+
+			await document.save();
+			assert.strictEqual(fs.readFileSync(path.join(dir, 'container.arxml'), 'utf8'), renamed);
+
+			await vscode.commands.executeCommand('undo');
+			await waitFor('one undo', () => document.getText() === original);
+			assert.strictEqual(document.getText(), original, 'one press restores the previous bytes');
+			await vscode.commands.executeCommand('redo');
+			await waitFor('one redo', () => document.getText() === renamed);
+			assert.strictEqual(document.getText(), renamed);
+		});
+	});
+
+	test('AC3/AC7: a definition-ref commit keeps DEST and the container selected', async () => {
+		await withEditingFixture('container.arxml', async (uri, document, dir) => {
+			const original = document.getText();
+			const { stub } = open(document);
+			await vscode.window.showTextDocument(document);
+			const id = containerId(original, 'FirstCont');
+			await stub.send({ type: 'select', nodeId: id });
+
+			const next = '/PkgF/ContDefs/ContMod/FirstContRenamed';
+			await stub.send({ type: 'edit', nodeId: id, field: 'definitionRef', value: next });
+			await waitFor('the definition-ref edit', () => document.getText().includes(next + '</DEFINITION-REF>'));
+
+			const edited = fixtureText('editing/container-ref.expected.arxml');
+			assert.strictEqual(document.getText(), edited, 'only the DEFINITION-REF inner text changed');
+			assert.ok(
+				document.getText().includes('<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">' + next),
+				'the DEST attribute and tag spelling are intact'
+			);
+
+			await waitFor('the re-scan with the container selected', () => lastModel(stub).selectedId === id);
+			assert.strictEqual(lastModel(stub).selectedId, id, 'the container is still selected');
+			await waitFor('the row label to follow the new tail', () =>
+				lastRows(stub).some((candidate) => candidate.id === id && candidate.label === 'FirstContRenamed')
+			);
+			assert.strictEqual(lastRows(stub).find((candidate) => candidate.id === id)!.shortName, 'FirstCont');
+
+			await document.save();
+			assert.strictEqual(fs.readFileSync(path.join(dir, 'container.arxml'), 'utf8'), edited);
+
+			await vscode.commands.executeCommand('undo');
+			await waitFor('one undo', () => document.getText() === original);
+			assert.strictEqual(document.getText(), original);
+			await vscode.commands.executeCommand('redo');
+			await waitFor('one redo', () => document.getText() === edited);
+		});
+	});
+
+	test('AC5: a refused container edit leaves the bytes, the file and the selection alone', async () => {
+		await withEditingFixture('container.arxml', async (uri, document) => {
+			const before = document.getText();
+			const onDisk = fs.readFileSync(uri.fsPath, 'utf8');
+			const { stub } = open(document);
+			const id = containerId(before, 'FirstCont');
+			await stub.send({ type: 'select', nodeId: id });
+
+			await stub.send({ type: 'edit', nodeId: id, field: 'shortName', value: 'First Cont' });
+			await waitFor('the refusal', () => notices(stub).length > 0);
+			assert.ok(lastNotice(stub).message?.includes('not a valid short name'), lastNotice(stub).message);
+			assert.strictEqual(document.getText(), before, 'the document is untouched');
+			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
+			assert.strictEqual(document.isDirty, false, 'a refusal does not dirty the document');
+
+			// A later re-scan still carries the selection the user had: the refusal did not
+			// swap in a predicted id.
+			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Count'), value: '9' });
+			await waitFor('an unrelated re-scan', () => lastRows(stub).some((row) => row.value === '9'));
+			assert.strictEqual(lastModel(stub).selectedId, id, 'the selection survived the refusal');
+		});
+	});
+
+	test('AC5: an unchanged container field does not dirty the document', async () => {
+		await withEditingFixture('container.arxml', async (uri, document) => {
+			const before = document.getText();
+			const { stub } = open(document);
+			const id = containerId(before, 'FirstCont');
+
+			await stub.send({ type: 'edit', nodeId: id, field: 'shortName', value: 'FirstCont' });
+			await waitFor('the refusal', () => notices(stub).length > 0);
+			assert.ok(lastNotice(stub).message?.includes('unchanged'), lastNotice(stub).message);
+			assert.strictEqual(document.getText(), before);
+			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), before);
+			assert.strictEqual(document.isDirty, false);
+		});
+	});
+
+	test('R3: the parameter value message shape is unchanged', async () => {
+		await withEditingFixture('container.arxml', async (_uri, document) => {
+			const original = document.getText();
+			const { stub } = open(document);
+			await stub.send({ type: 'edit', nodeId: parameterId(original, 'Count'), value: '42' });
+			await waitFor('the value edit', () => document.getText().includes('<VALUE>42</VALUE>'));
+			assert.strictEqual(
+				document.getText(),
+				original.replace('<VALUE>7</VALUE>', '<VALUE>42</VALUE>'),
+				'the value path still writes only the VALUE text'
+			);
+		});
+	});
+
+	test('R4: an absent, empty or CDATA-backed element is refused, never created', () => {
+		// Hand-written: three containers whose SHORT-NAME is absent, empty and CDATA-backed,
+		// and one whose DEFINITION-REF is absent. Adding an element is out of scope, so the
+		// plan must refuse instead of writing text where there is no inner text span.
+		const text = sparseContainers;
+		const model = scanEcucValues(text);
+		const index = buildNodeIndex(model);
+		const [noName, emptyName, cdataName] = model.modules[0].containers;
+		assert.strictEqual(model.modules[0].containers.length, 3);
+
+		const missing = buildFieldEdit(model, text, index.idOf(noName)!, 'shortName', 'NowNamed');
+		assert.ok(missing.ok === false && missing.reason.includes('no <SHORT-NAME> text'), String(missing));
+
+		const empty = buildFieldEdit(model, text, index.idOf(emptyName)!, 'shortName', 'NowNamed');
+		assert.ok(empty.ok === false && empty.reason.includes('no <SHORT-NAME> text'), String(empty));
+
+		assert.strictEqual(cdataName.shortName, 'CdataCont', 'the CDATA text is read');
+		const cdata = buildFieldEdit(model, text, index.idOf(cdataName)!, 'shortName', 'CdataRenamed');
+		assert.ok(cdata.ok === false && cdata.reason.includes('no <SHORT-NAME> text'), String(cdata));
+
+		const noRef = buildFieldEdit(model, text, index.idOf(cdataName)!, 'definitionRef', '/PkgS/SparseMod/CdataCont');
+		assert.ok(noRef.ok === false && noRef.reason.includes('no <DEFINITION-REF> text'), String(noRef));
+	});
+
+	test('R5: a stale container region is refused instead of rewriting moved bytes', async () => {
+		await withEditingFixture('container.arxml', async (_uri, document) => {
+			const text = document.getText();
+			const model = scanEcucValues(text);
+			const id = containerId(text, 'FirstCont');
+
+			// Both plans are prepared against the same bytes; the id is unchanged by a
+			// definition-ref edit, so only the region's own text can tell them apart.
+			const first = buildFieldEdit(model, text, id, 'definitionRef', '/PkgF/ContDefs/ContMod/One');
+			const second = buildFieldEdit(model, text, id, 'definitionRef', '/PkgF/ContDefs/ContMod/Two');
+			assert.ok(first.ok && second.ok);
+
+			assert.deepStrictEqual(await applyEdit(document, first.record), { ok: true });
+			const written = document.getText();
+			assert.strictEqual(
+				written,
+				text.replace(
+					'<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgF/ContDefs/ContMod/FirstCont</DEFINITION-REF>',
+					'<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgF/ContDefs/ContMod/One</DEFINITION-REF>'
+				),
+				'one contiguous change, hand-derived'
+			);
+
+			const stale = await applyEdit(document, second.record);
+			assert.strictEqual(stale.ok, false, 'the stale record is refused');
+			assert.ok(stale.ok === false && stale.reason.includes('changed since'), String(stale));
+			assert.strictEqual(document.getText(), written, 'the refusal wrote nothing');
+		});
+	});
+
+	test('R5: a rename onto a sibling short name still predicts the renamed node', () => {
+		const text = fixtureText('editing/container.arxml');
+		const model = scanEcucValues(text);
+		const index = buildNodeIndex(model);
+		const sibling = model.modules[0].containers[1];
+		assert.strictEqual(sibling.shortName, 'SiblingCont');
+		const siblingStart = sibling.range.start;
+
+		const plan = buildFieldEdit(model, text, index.idOf(sibling)!, 'shortName', 'FirstCont');
+		assert.ok(plan.ok);
+		assert.ok(plan.nextNodeId, 'the rename still has a predicted id');
+
+		const predicted = scanEcucValues(
+			text.replace('<SHORT-NAME>SiblingCont</SHORT-NAME>', '<SHORT-NAME>FirstCont</SHORT-NAME>')
+		);
+		const renamed = nodeFor(predicted, plan.nextNodeId!);
+		assert.ok(renamed && renamed.kind === 'container', 'the predicted id resolves');
+		assert.strictEqual(
+			renamed!.range.start,
+			siblingStart,
+			'the id names the renamed sibling, not the sibling that already had that name'
+		);
+		assert.notStrictEqual(plan.nextNodeId, containerId(text, 'FirstCont'), 'the namesake keeps its own id');
+	});
+
+	test('R4: an unknown edit field is ignored, not guessed at', async () => {
+		await withEditingFixture('container.arxml', async (uri, document) => {
+			const before = document.getText();
+			const { stub } = open(document);
+			const id = containerId(before, 'FirstCont');
+
+			await stub.send({ type: 'edit', nodeId: id, field: 'sortKey', value: '/PkgF/Elsewhere' });
+			await sleep(50);
+
+			assert.strictEqual(notices(stub).length, 0, 'the message is dropped, not refused as a ref edit');
+			assert.strictEqual(document.getText(), before);
+			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), before, 'the file is untouched');
+			assert.strictEqual(document.isDirty, false);
+		});
+	});
+
+	test('AC9: the new fixtures are never written by the suite', () => {
+		const names = fs.readdirSync(fixturesDir).sort();
+		assert.deepStrictEqual(names, [...committedBefore.keys()].sort(), 'no fixture was added');
+		for (const [name, text] of committedBefore) {
+			assert.strictEqual(fs.readFileSync(committed(name), 'utf8'), text, `${name} is unmodified`);
+		}
+		assert.ok(names.includes('container.arxml'), 'the new fixture is present');
+		assert.ok(names.includes('container-short-name.expected.arxml'));
+		assert.ok(names.includes('container-ref.expected.arxml'));
 	});
 });

@@ -42,10 +42,10 @@ function styleOf(html: string): string {
 suite('editor visual polish', () => {
 	test('the details inspector is outside the virtual tree region and has no view toggle', () => {
 		const html = page();
-		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details" hidden>'));
+		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details">'));
 		assert.ok(html.includes('id="details-toggle"'));
 		assert.ok(html.includes('aria-controls="inspector"'));
-		assert.ok(/id="details-toggle"[^>]*aria-pressed="false"/.test(html));
+		assert.ok(/id="details-toggle"[^>]*aria-pressed="true"/.test(html));
 		assert.ok(!html.includes('id="view-toggle"'));
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));

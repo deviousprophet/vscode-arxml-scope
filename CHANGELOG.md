@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Container `Short name` and `Definition` are editable in the details panel, each written as one undoable edit that leaves the tag, `DEST` and surrounding bytes untouched
+- The details inspector is open on first paint, and an explicit hide or show is still remembered
+- Distinct Collapse and Expand toolbar icons that show the direction each control moves the tree
+
 ### Fixed
 
 - A page that fails to start now reports the error in the ECUC editor notice and names the `Developer: Open Webview Developer Tools` command

@@ -20,7 +20,7 @@ import { scanEcucValues } from '../core/ecuc/scanner';
 import { RenderOptions, renderHtml } from './renderHtml';
 import { buildRows } from './renderRows';
 import { buildNodeIndex } from './nodeId';
-import { applyEdit, buildEdit } from './ecucEdit';
+import { applyEdit, buildEdit, buildFieldEdit } from './ecucEdit';
 import { followReference, nodeIdForRange, revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
 
@@ -29,9 +29,16 @@ export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
 /** How long a panel may take to report `ready` before the host warns (R3). */
 const BOOT_TIMEOUT_MS = 10_000;
 
+/** The field a `type: 'edit'` message targets; absent means the parameter `<VALUE>`. */
+type EditField = 'value' | 'shortName' | 'definitionRef';
+
+const EDIT_FIELDS: readonly EditField[] = ['value', 'shortName', 'definitionRef'];
+
 interface WebviewMessage {
 	type?: string;
 	nodeId?: string;
+	/** The field the edit targets; old webview code omits it, which means `value`. */
+	field?: EditField;
 	/** The text the user typed, for `type: 'edit'` (parent design §8). */
 	value?: string;
 }
@@ -173,7 +180,11 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				} else if (message.type === 'follow') {
 					void this.followReference(document, model, message.nodeId, panel);
 				} else if (message.type === 'edit' && typeof message.value === 'string') {
-					void this.editValue(document, panel, message.nodeId, message.value);
+					const field: EditField = message.field ?? 'value';
+					// An unknown field is ignored rather than guessed at.
+					if (EDIT_FIELDS.includes(field)) {
+						void this.editField(document, panel, message.nodeId, field, message.value);
+					}
 				} else if (message.type === 'select') {
 					// A click in the tree is view state the host must know too: the re-scan
 					// payload carries the selection, so without this a document change would
@@ -268,25 +279,43 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	 * The write path (child design §2.3, §2.5): validate against a fresh scan, refuse
 	 * with a `notice` and no mutation, or apply exactly one `WorkspaceEdit`.
 	 *
+	 * A container rename changes the path-based id the panel is selected by, so the
+	 * predicted id is stored **before** the write: the `onDidChangeTextDocument` push that
+	 * follows then already carries the surviving id. A refusal restores the previous
+	 * selection entry, so a refused edit cannot move the selection on its own.
+	 *
 	 * The refresh after a successful write is the existing `onDidChangeTextDocument`
 	 * subscription — it re-scans and pushes the tree. Pushing here as well would be a
 	 * second update path for one change, which `rescan.test.ts` counts against the
 	 * platform's own events.
 	 */
-	private async editValue(
+	private async editField(
 		document: vscode.TextDocument,
 		panel: vscode.WebviewPanel,
 		nodeId: string,
+		field: EditField,
 		value: string
 	): Promise<void> {
+		const key = document.uri.toString();
 		const text = document.getText();
-		const plan = buildEdit(scanEcucValues(text), text, nodeId, value);
+		const model = scanEcucValues(text);
+		const plan =
+			field === 'value' ? buildEdit(model, text, nodeId, value) : buildFieldEdit(model, text, nodeId, field, value);
 		if (!plan.ok) {
 			await panel.webview.postMessage({ type: 'notice', message: plan.reason, kind: 'warn' });
 			return;
 		}
+		const previous = this.selections.get(key);
+		if (plan.nextNodeId !== undefined && plan.nextNodeId !== nodeId) {
+			this.selections.set(key, plan.nextNodeId);
+		}
 		const applied = await applyEdit(document, plan.record);
 		if (!applied.ok) {
+			if (previous === undefined) {
+				this.selections.delete(key);
+			} else {
+				this.selections.set(key, previous);
+			}
 			await panel.webview.postMessage({ type: 'notice', message: applied.reason, kind: 'warn' });
 		}
 	}

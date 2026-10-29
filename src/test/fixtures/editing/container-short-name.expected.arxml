@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic editing fixture: one container whose short name and definition ref are edited. -->
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+    <AR-PACKAGES>
+        <AR-PACKAGE>
+            <SHORT-NAME>PkgF</SHORT-NAME>
+            <ELEMENTS>
+                <ECUC-MODULE-CONFIGURATION-VALUES>
+                    <SHORT-NAME>ContMod</SHORT-NAME>
+                    <DEFINITION-REF DEST="ECUC-MODULE-DEF">/PkgF/ContDefs/ContMod</DEFINITION-REF>
+                    <CONTAINERS>
+                        <ECUC-CONTAINER-VALUE>
+                            <SHORT-NAME>FirstContA</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgF/ContDefs/ContMod/FirstCont</DEFINITION-REF>
+                            <PARAMETER-VALUES>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/PkgF/ContDefs/ContMod/FirstCont/Count</DEFINITION-REF>
+                                    <VALUE>7</VALUE>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                                <ECUC-TEXTUAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/PkgF/ContDefs/ContMod/FirstCont/Label</DEFINITION-REF>
+                                    <VALUE>bee</VALUE>
+                                </ECUC-TEXTUAL-PARAM-VALUE>
+                            </PARAMETER-VALUES>
+                        </ECUC-CONTAINER-VALUE>
+                        <ECUC-CONTAINER-VALUE>
+                            <SHORT-NAME>SiblingCont</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/PkgF/ContDefs/ContMod/SiblingCont</DEFINITION-REF>
+                            <PARAMETER-VALUES>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/PkgF/ContDefs/ContMod/SiblingCont/Count</DEFINITION-REF>
+                                    <VALUE>3</VALUE>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                            </PARAMETER-VALUES>
+                        </ECUC-CONTAINER-VALUE>
+                    </CONTAINERS>
+                </ECUC-MODULE-CONFIGURATION-VALUES>
+            </ELEMENTS>
+        </AR-PACKAGE>
+    </AR-PACKAGES>
+</AUTOSAR>

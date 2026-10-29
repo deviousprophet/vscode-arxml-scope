@@ -231,15 +231,74 @@ suite('editor Document interactions', () => {
 
 	test('the details editor owns Enter, Escape and Tab', () => {
 		const html = page();
-		const details = functionSource(html, 'detailsValueInput');
-		assert.ok(details.includes("event.key === 'Enter'") && details.includes('commitDetailsEdit()'));
-		assert.ok(details.includes("event.key === 'Escape'") && details.includes('cancelDetailsEdit()'));
+		const details = functionSource(html, 'detailsRegisterKeydown');
+		assert.ok(details.includes("event.key === 'Enter'") && details.includes('commitDetailsEdit(edit.field)'));
+		assert.ok(details.includes("event.key === 'Escape'") && details.includes('cancelDetailsEdit(edit.field)'));
 		assert.ok(details.includes("event.key === 'Tab'"), 'Tab moves to the adjacent parameter');
-		assert.ok(details.includes("dir: event.shiftKey ? 'prev' : 'next'"));
+		assert.ok(details.includes("event.shiftKey ? 'prev' : 'next'"), 'Shift reverses the move');
 		assert.ok(details.includes('stopPropagation()'), 'the tree does not also act on the key');
+		assert.ok(
+			details.includes('detailsFieldSibling(edit.field, dir)'),
+			'a container Tab targets the other field'
+		);
+		assert.ok(
+			details.includes('!document.getElementById(detailsFieldId(sibling))'),
+			'a Tab with no field to move to does not trap focus in the panel'
+		);
+		assert.ok(
+			functionSource(html, 'detailsValueInput').includes('detailsRegisterKeydown(input, edit)'),
+			'the value input uses the shared key handler'
+		);
+		assert.ok(
+			functionSource(html, 'detailsFieldInput').includes('detailsRegisterKeydown(input, edit)'),
+			'the container fields use the same key handler'
+		);
 		const commit = functionSource(html, 'commitDetailsEdit');
 		assert.ok(commit.includes("type: 'edit'"), 'the existing write message');
 		assert.ok(commit.includes('edit.input.value'));
+	});
+
+	test('R1/R2: a container exposes editable short name and definition controls', () => {
+		const html = page();
+		const fields = functionSource(html, 'detailsContainerFields');
+		assert.ok(fields.includes("'shortName', 'Short name'"), 'the short name control');
+		assert.ok(fields.includes("'definitionRef', 'Definition'"), 'the definition control');
+
+		const field = functionSource(html, 'detailsFieldInput');
+		assert.ok(field.includes('detailsFieldId(field)'), 'the id comes from the field');
+		assert.ok(field.includes("setAttribute('data-field', field)"), 'the field travels with the control');
+		assert.ok(field.includes("input.setAttribute('aria-label'"), 'the control has an accessible name');
+
+		const ids = functionSource(html, 'detailsFieldId');
+		assert.ok(ids.includes("return 'details-short-name'"));
+		assert.ok(ids.includes("return 'details-definition-ref'"));
+		assert.ok(ids.includes("return 'details-value'"), 'the parameter id is unchanged');
+
+		const commit = functionSource(html, 'commitDetailsEdit');
+		assert.ok(commit.includes('field: edit.field'), 'a container commit names its field');
+		assert.ok(
+			commit.includes("if (edit.field === 'value')"),
+			'a parameter commit keeps the old message without a field'
+		);
+
+		const focus = functionSource(html, 'focusDetailsField');
+		assert.ok(focus.includes('detailsFieldId(field)'));
+		const update = functionSource(html, 'updateInspector');
+		assert.ok(update.includes('detailsContainerFields(row, data)'), 'containers get the controls');
+		assert.ok(
+			update.includes("row.kind === 'container'"),
+			'and the read-only rows are kept for every other kind'
+		);
+		assert.ok(!update.includes("detailsFieldInput(row, 'shortName'"), 'the container facts are not shown twice');
+
+		const begin = functionSource(html, 'beginDetailsEdit');
+		assert.ok(begin.includes('field || detailsFirstField(row)'), 'the default field follows the row kind');
+		assert.ok(functionSource(html, 'detailsFirstField').includes("return 'shortName'"));
+		// Tab between the two container fields is a separate pending action from the
+		// parameter-to-parameter move.
+		assert.ok(html.includes('pendingFieldFocus = { rowId: edit.rowId, field: edit.field'));
+		assert.ok(html.includes('beginFieldDetailsEdit(focus)'));
+		assert.ok(html.includes('detailsEdits = {}'), 'a re-scan clears every field draft');
 	});
 
 	test('a refused write keeps the typed text and marks the details input invalid', () => {
@@ -248,14 +307,14 @@ suite('editor Document interactions', () => {
 		assert.ok(html.includes('details-value-error'));
 		assert.ok(error.includes("'aria-invalid', 'true'"));
 		assert.ok(error.includes("'/* ' + reason + ' */'"));
-		assert.ok(html.includes('detailsEdit.input.focus()'), 'the refused input keeps focus');
+		assert.ok(html.includes('edit.input.focus()'), 'the refused input keeps focus');
 		assert.ok(!html.includes('.value-edit'), 'no inline document editor');
 	});
 
 	test('a refused or pending edit keeps its draft across an inspector rebuild', () => {
 		const details = functionSource(page(), 'detailsValueInput');
 		assert.ok(
-			details.includes('detailsEdit && detailsEdit.rowId === row.id ? detailsEdit : null'),
+			details.includes("detailsStoredEdit(row, 'value')"),
 			'the same row keeps its draft even while a write is pending'
 		);
 		assert.ok(details.includes('pending: previous ? previous.pending : false'), 'pending survives the rebuild');

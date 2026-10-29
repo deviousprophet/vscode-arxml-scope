@@ -1,7 +1,14 @@
 import * as assert from 'assert';
 
 import { ParameterNode } from '../../core/ecuc/model';
-import { escapeXml, isNumericLiteral, validateValue } from '../../core/ecuc/validate';
+import {
+	ValidationResult,
+	escapeXml,
+	isNumericLiteral,
+	validateDefinitionRef,
+	validateShortName,
+	validateValue,
+} from '../../core/ecuc/validate';
 
 function parameter(numeric: boolean, displayValue: string, definitionDest?: string): ParameterNode {
 	return {
@@ -13,6 +20,11 @@ function parameter(numeric: boolean, displayValue: string, definitionDest?: stri
 		displayValue,
 		range: { start: 0, end: 0 },
 	};
+}
+
+/** The refusal text, so a reason assertion does not need a union cast. */
+function reasonOf(result: ValidationResult): string {
+	return result.ok ? '' : result.reason;
 }
 
 suite('validate (core)', () => {
@@ -107,5 +119,56 @@ suite('validate (core)', () => {
 		}
 		// Tab, newline and carriage return remain legal.
 		assert.strictEqual(validateValue(parameter(false, 'unrelated'), '\r\n\t').ok, true);
+	});
+
+	test('R4: a legal AUTOSAR short name is accepted', () => {
+		for (const name of ['ContA', '_private', 'a', 'A1_b2']) {
+			assert.deepStrictEqual(validateShortName(name), { ok: true, text: name }, name);
+		}
+	});
+
+	test('R4: an invalid short name is refused with a reason', () => {
+		for (const name of ['', ' ', 'Cont A', 'Cont/A', '1Cont', 'Cont-A', 'Cont.A', 'Cont&A', 'Cont\u0001']) {
+			const result = validateShortName(name);
+			assert.strictEqual(result.ok, false, JSON.stringify(name));
+			assert.ok(result.ok === false && result.reason.length > 0, JSON.stringify(name));
+		}
+		assert.strictEqual(validateShortName('Cont A').ok, false);
+		assert.strictEqual(validateShortName('Cont/A').ok, false);
+		assert.strictEqual(validateShortName('Cont&A').ok, false);
+		assert.ok(reasonOf(validateShortName('1Cont')).includes('not a valid short name'));
+		assert.ok(reasonOf(validateShortName('Cont\u0001')).includes('XML cannot represent'));
+	});
+
+	test('R4: a legal definition reference path is accepted', () => {
+		for (const ref of ['/A', '/Pkg/Defs/Mod/Cont', '/Pkg-x/Defs_1/Mod.2/Cont']) {
+			assert.deepStrictEqual(validateDefinitionRef(ref), { ok: true, text: ref }, ref);
+		}
+	});
+
+	test('R4: an invalid definition reference is refused with a reason', () => {
+		for (const ref of [
+			'',
+			'A/B',
+			'/',
+			'//A',
+			'/A//B',
+			'/A/B/',
+			'/A B',
+			'/A/B ',
+			' /A',
+			'/A/<B',
+			'/A/>B',
+			'/A/&B',
+			'/A/"B',
+			"/A/'B",
+			'/A/\u0001B',
+		]) {
+			const result = validateDefinitionRef(ref);
+			assert.strictEqual(result.ok, false, JSON.stringify(ref));
+			assert.ok(result.ok === false && result.reason.length > 0, JSON.stringify(ref));
+		}
+		assert.ok(reasonOf(validateDefinitionRef('A/B')).includes('absolute /-separated path'));
+		assert.ok(reasonOf(validateDefinitionRef('/A/\u0001B')).includes('XML cannot represent'));
 	});
 });
