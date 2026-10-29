@@ -277,7 +277,9 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 
 	/**
 	 * The write path (child design §2.3, §2.5): validate against a fresh scan, refuse
-	 * with a `notice` and no mutation, or apply exactly one `WorkspaceEdit`.
+	 * with a `notice` and no mutation, or apply exactly one `WorkspaceEdit`. A refusal
+	 * carries `inline: true`: the details panel shows it beside the field, and the page
+	 * keeps it out of the toolbar notice unless that panel is hidden.
 	 *
 	 * A container rename changes the path-based id the panel is selected by, so the
 	 * predicted id is stored **before** the write: the `onDidChangeTextDocument` push that
@@ -302,7 +304,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		const plan =
 			field === 'value' ? buildEdit(model, text, nodeId, value) : buildFieldEdit(model, text, nodeId, field, value);
 		if (!plan.ok) {
-			await panel.webview.postMessage({ type: 'notice', message: plan.reason, kind: 'warn' });
+			await panel.webview.postMessage({ type: 'notice', message: plan.reason, kind: 'warn', inline: true });
 			return;
 		}
 		const previous = this.selections.get(key);
@@ -316,7 +318,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			} else {
 				this.selections.set(key, previous);
 			}
-			await panel.webview.postMessage({ type: 'notice', message: applied.reason, kind: 'warn' });
+			await panel.webview.postMessage({ type: 'notice', message: applied.reason, kind: 'warn', inline: true });
 		}
 	}
 }

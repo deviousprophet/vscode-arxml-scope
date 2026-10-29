@@ -330,6 +330,18 @@ export function moveTarget(key: string, from: number, count: number, page: numbe
 	return undefined;
 }
 
+/**
+ * Whether a field refusal is already shown beside the field in the details panel.
+ *
+ * Field edits are answered inline by `ecucDetailsEditor`, so repeating the same reason
+ * in the toolbar notice leaves a second, stale copy under the filter bar. The notice
+ * stays as the fallback when the panel is hidden, and remains the only surface for
+ * page-level problems (a boot failure or a reference that cannot be followed).
+ */
+export function refusalShownInDetails(message: { inline?: boolean }, inspectorHidden: boolean): boolean {
+	return message.inline === true && inspectorHidden === false;
+}
+
 const DOCUMENT_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
 	const level = at + 1;
 	const indent = level === 1 ? 'var(--content-pad)' : `calc(var(--content-pad) + var(--indent) * ${level - 1})`;
@@ -1246,6 +1258,7 @@ ${subtreeRowIds.toString()}
 ${guidesFor.toString()}
 ${resolveFocusId.toString()}
 ${reconcileRowState.toString()}
+${refusalShownInDetails.toString()}
 
 let rows = [];
 let rowById = new Map();
@@ -2270,6 +2283,13 @@ window.addEventListener('message', function (event) {
 		focusRow(message.nodeId);
 		setSelection(message.nodeId);
 	} else if (message.type === 'notice') {
+		if (refusalShownInDetails(message, uiState.inspectorHidden)) {
+			// The details panel already answers this field; clear any older notice
+			// rather than leaving a stale warning above the tree.
+			notice.textContent = '';
+			delete notice.dataset.kind;
+			return;
+		}
 		notice.textContent = message.message;
 		if (message.kind) {
 			notice.dataset.kind = message.kind;

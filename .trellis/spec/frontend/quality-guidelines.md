@@ -84,7 +84,9 @@ that is not obvious from the code.
   commits the same message with `field: 'shortName' | 'definitionRef'`. The host normalises a
   missing `field` to `value` and ignores an unknown one. Enter commits, Escape restores, Tab moves
   (adjacent parameter for a value, the other container field for a container). A refusal keeps the
-  typed text, marks the control invalid and shows the reason. Only a container is editable this
+  typed text, marks the control invalid and shows the reason beside the field; the toolbar notice is
+  only the fallback when the details panel is hidden, so the same reason is never shown twice. Only
+  a container is editable this
   way; a module rename is refused because its short name is part of every container id. The panel
   exposes Jump to target for a followable reference plus Reveal in source; there is no Source block
   or copy action.

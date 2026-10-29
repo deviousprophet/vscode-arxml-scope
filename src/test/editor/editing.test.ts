@@ -42,6 +42,7 @@ interface StubMessage {
 	message?: string;
 	nodeId?: string;
 	selectedId?: string;
+	inline?: boolean;
 }
 
 interface StubPanel {
@@ -175,6 +176,13 @@ function notices(stub: StubPanel): StubMessage[] {
 
 function lastNotice(stub: StubPanel): StubMessage {
 	return notices(stub).at(-1) ?? {};
+}
+
+/** The last refusal; the details panel owns it, so it is marked `inline`. */
+function lastRefusal(stub: StubPanel): StubMessage {
+	const notice = lastNotice(stub);
+	assert.strictEqual(notice.inline, true, 'a field refusal is shown inline in the details panel');
+	return notice;
 }
 
 function lastModel(stub: StubPanel): StubMessage {
@@ -381,7 +389,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Count'), value: 'abc' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
 
-			assert.ok(lastNotice(stub).message?.includes('integer'), lastNotice(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('integer'), lastRefusal(stub).message);
 			assert.strictEqual(document.getText(), before, 'the document is untouched');
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false, 'a refusal does not dirty the document');
@@ -397,7 +405,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Label'), value: 'bad\u0001char' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
 
-			assert.ok(lastNotice(stub).message?.includes('XML cannot represent'), lastNotice(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('XML cannot represent'), lastRefusal(stub).message);
 			assert.strictEqual(document.getText(), before);
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false);
@@ -414,7 +422,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Pattern'), value: '42' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
 
-			assert.ok(lastNotice(stub).message?.includes('CDATA'), lastNotice(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('CDATA'), lastRefusal(stub).message);
 			assert.strictEqual(document.getText(), before, 'the document is untouched');
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false, 'a refusal does not dirty the document');
@@ -476,7 +484,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Count'), value: '7' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
 
-			assert.ok(lastNotice(stub).message?.includes('unchanged'), lastNotice(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('unchanged'), lastRefusal(stub).message);
 			assert.strictEqual(document.getText(), before);
 			assert.strictEqual(document.isDirty, false);
 		});
@@ -921,7 +929,7 @@ suite('editor container field editing (R1–R5)', () => {
 
 			await stub.send({ type: 'edit', nodeId: id, field: 'shortName', value: 'First Cont' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
-			assert.ok(lastNotice(stub).message?.includes('not a valid short name'), lastNotice(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('not a valid short name'), lastRefusal(stub).message);
 			assert.strictEqual(document.getText(), before, 'the document is untouched');
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false, 'a refusal does not dirty the document');
@@ -942,7 +950,7 @@ suite('editor container field editing (R1–R5)', () => {
 
 			await stub.send({ type: 'edit', nodeId: id, field: 'shortName', value: 'FirstCont' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
-			assert.ok(lastNotice(stub).message?.includes('unchanged'), lastNotice(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('unchanged'), lastRefusal(stub).message);
 			assert.strictEqual(document.getText(), before);
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), before);
 			assert.strictEqual(document.isDirty, false);

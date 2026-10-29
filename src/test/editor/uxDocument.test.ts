@@ -10,7 +10,7 @@
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { RowPayload, renderHtml } from '../../editor/renderHtml';
+import { RowPayload, refusalShownInDetails, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
 import { functionSource } from './scriptTestUtils';
 
@@ -334,6 +334,19 @@ suite('editor document view', () => {
 		const style = styleOf(html);
 		assert.ok(/\.details-value-error\s*\{[^}]*--vscode-errorForeground/.test(style));
 		assert.ok(/\.details-value\[aria-invalid="true"\]\s*\{[^}]*--vscode-inputValidation-errorBorder/.test(style));
+	});
+
+	test('a field refusal is left to the details panel instead of the toolbar notice', () => {
+		const html = page();
+		assert.ok(
+			html.includes('refusalShownInDetails(message, uiState.inspectorHidden)'),
+			'the notice handler asks whether the details panel already answered'
+		);
+		assert.ok(html.includes('delete notice.dataset.kind'), 'a stale warning is cleared');
+
+		assert.strictEqual(refusalShownInDetails({ inline: true }, false), true, 'visible details owns the refusal');
+		assert.strictEqual(refusalShownInDetails({ inline: true }, true), false, 'hidden details falls back to the notice');
+		assert.strictEqual(refusalShownInDetails({}, false), false, 'page-level problems still reach the notice');
 	});
 
 	test('the page details visibility drives the stubs', () => {

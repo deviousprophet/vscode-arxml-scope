@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The details inspector is open on first paint, and an explicit hide or show is still remembered
 - Distinct Collapse and Expand toolbar icons that show the direction each control moves the tree
 
+### Changed
+
+- A refused field edit is shown beside the field in the details panel instead of repeating under the filter bar; the toolbar notice remains the fallback when the panel is hidden
+
 ### Fixed
 
 - A page that fails to start now reports the error in the ECUC editor notice and names the `Developer: Open Webview Developer Tools` command
