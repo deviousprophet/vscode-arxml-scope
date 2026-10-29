@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Write-path rules: one WorkspaceEdit, validate-before-write, details editor ownership, mutation checks."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Inspector DOM/event contracts, details controls, shell vs virtual window, theme/a11y."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Byte-level editing tests, refusal tests, hand-authored expectations, webview test limits."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Host/webview state split, persisted inspector visibility, single re-scan path."}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Layering: core has no vscode import; where write path and webview code live."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Feature spans model range -> write path -> provider -> webview."}
