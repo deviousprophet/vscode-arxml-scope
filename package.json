@@ -2,7 +2,7 @@
   "name": "vscode-arxml-scope",
   "displayName": "ARXML Scope",
   "description": "Browse and edit AUTOSAR ECUC-Values ARXML files in VS Code.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "deviousprophet",
   "license": "MIT",
   "repository": {
@@ -124,7 +124,7 @@
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production && node scripts/check-webview-boot.cjs",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
