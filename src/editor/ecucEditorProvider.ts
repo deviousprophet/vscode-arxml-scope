@@ -213,6 +213,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 							type: 'notice',
 							message: `Ignored ${parsed.invalid.length} invalid condition name${parsed.invalid.length === 1 ? '' : 's'}: ${names}${more}.`,
 							kind: 'warn',
+							scope: 'conditions',
 						});
 					}
 					push();
@@ -303,7 +304,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 		const result = followReference(model, entry.node as ReferenceNode);
 		if (!result.ok) {
-			await panel.webview.postMessage({ type: 'notice', message: result.reason, kind: 'warn' });
+			await panel.webview.postMessage({ type: 'notice', message: result.reason, kind: 'warn', scope: 'details' });
 			return;
 		}
 		const index = buildNodeIndex(model);
@@ -313,6 +314,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				type: 'notice',
 				message: 'The same-file target is present but not an ECUC row.',
 				kind: 'warn',
+				scope: 'details',
 			});
 			return;
 		}
@@ -350,7 +352,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		const plan =
 			field === 'value' ? buildEdit(model, text, nodeId, value) : buildFieldEdit(model, text, nodeId, field, value);
 		if (!plan.ok) {
-			await panel.webview.postMessage({ type: 'notice', message: plan.reason, kind: 'warn', inline: true });
+			await panel.webview.postMessage({ type: 'notice', message: plan.reason, kind: 'warn', inline: true, scope: 'details' });
 			return;
 		}
 		const previous = this.selections.get(key);
@@ -364,7 +366,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			} else {
 				this.selections.set(key, previous);
 			}
-			await panel.webview.postMessage({ type: 'notice', message: applied.reason, kind: 'warn', inline: true });
+			await panel.webview.postMessage({ type: 'notice', message: applied.reason, kind: 'warn', inline: true, scope: 'details' });
 		}
 	}
 }

@@ -306,6 +306,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <div class="sb-body" id="sb-details-conditions-body" role="region" aria-labelledby="sb-details-conditions-title"><p class="sb-empty">No conditions or annotations.</p></div>
 </section>
 </div>
+<div id="details-status" class="details-status" role="status" aria-live="polite"></div>
 </div>
 <div id="sbp-conditions" class="sb-tab-panel" role="tabpanel" aria-labelledby="stab-conditions" hidden>
 <div class="sb-pane-view">
@@ -429,11 +430,10 @@ export function moveTarget(key: string, from: number, count: number, page: numbe
 /**
  * Whether a field refusal is already shown beside the field in the details panel.
  *
- * Field edits are answered inline by `ecucDetailsEditor`, so repeating the same reason
- * in the toolbar notice leaves a second, stale copy under the filter bar. The notice
- * stays as the fallback when the Details tab is not the active sidebar tab, and remains
- * the only surface for page-level problems (a boot failure or a reference that cannot
- * be followed).
+ * Field edits are answered inline by `ecucDetailsEditor`; the page must not also
+ * write a second, stale copy elsewhere. A refusal for another tab or a reference
+ * that cannot be followed goes to the Details status line; the toolbar notice is
+ * reserved for the fatal page-boot error surface.
  */
 export function refusalShownInDetails(message: { inline?: boolean }, detailsHidden: boolean): boolean {
 	return message.inline === true && detailsHidden === false;
@@ -941,6 +941,16 @@ input[type="search"]::-webkit-search-decoration {
 	color: var(--vscode-descriptionForeground);
 }
 .conditions-status:empty {
+	display: none;
+}
+.details-status {
+	flex: none;
+	padding: 4px 8px;
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	font-size: 11px;
+	color: var(--vscode-editorWarning-foreground, var(--vscode-descriptionForeground));
+}
+.details-status:empty {
 	display: none;
 }
 .sr-only {
@@ -1908,8 +1918,8 @@ const main = document.getElementById('main');
 const tree = document.getElementById('tree');
 const treeWindow = document.getElementById('tree-window');
 const virtualStyle = document.getElementById('virtual-style');
-const notice = document.getElementById('notice');
 const inspector = document.getElementById('inspector');
+const detailsStatus = document.getElementById('details-status');
 const detailsNodeBody = document.getElementById('sb-details-node-body');
 const detailsValueBody = document.getElementById('sb-details-value-body');
 const detailsReferenceBody = document.getElementById('sb-details-reference-body');
@@ -3434,6 +3444,26 @@ function paneActions(body) {
 	return actions;
 }
 
+function clearDetailsStatus() {
+	if (!detailsStatus) {
+		return;
+	}
+	detailsStatus.textContent = '';
+	delete detailsStatus.dataset.kind;
+}
+
+function setDetailsStatus(message) {
+	if (!detailsStatus) {
+		return;
+	}
+	detailsStatus.textContent = message.message || '';
+	if (message.kind) {
+		detailsStatus.dataset.kind = message.kind;
+	} else {
+		delete detailsStatus.dataset.kind;
+	}
+}
+
 /**
  * Rebuilds the four Details section bodies from the selected row's data. The
  * selected row can be outside the rendered window; nothing here queries the
@@ -3774,6 +3804,7 @@ window.addEventListener('message', function (event) {
 		return;
 	}
 	if (message.type === 'model') {
+		clearDetailsStatus();
 		const scrollTop = main.scrollTop;
 		const previousFocus = focusedNodeId() || focusId;
 		setRows(message.rows, message.selectedId);
@@ -3796,6 +3827,7 @@ window.addEventListener('message', function (event) {
 		if (typeof message.nodeId !== 'string' || !rowById.has(message.nodeId)) {
 			return;
 		}
+		clearDetailsStatus();
 		if (expandAncestors(message.nodeId)) {
 			rebuildDisplay();
 			renderWindow(true);
@@ -3803,19 +3835,20 @@ window.addEventListener('message', function (event) {
 		focusRow(message.nodeId);
 		setSelection(message.nodeId);
 	} else if (message.type === 'notice') {
-		if (refusalShownInDetails(message, uiState.tab !== 'details')) {
-			// The details panel already answers this field; clear any older notice
-			// rather than leaving a stale warning above the tree.
-			notice.textContent = '';
-			delete notice.dataset.kind;
+		if (message.scope === 'conditions') {
+			if (conditionsStatus) {
+				conditionsStatus.textContent = message.message || '';
+			}
 			return;
 		}
-		notice.textContent = message.message;
-		if (message.kind) {
-			notice.dataset.kind = message.kind;
-		} else {
-			delete notice.dataset.kind;
+		if (refusalShownInDetails(message, uiState.tab !== 'details')) {
+			// The details editor answers this field inline; there is no toolbar banner.
+			clearDetailsStatus();
+			return;
 		}
+		// Recoverable warnings belong in the Details tab. The toolbar notice is
+		// reserved for the fatal page-boot error surface.
+		setDetailsStatus(message);
 	}
 });
 

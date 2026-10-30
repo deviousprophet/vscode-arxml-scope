@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify the warning moves to the correct tab/status region."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify no toolbar banner for recoverable messages and no style drift."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify routing and clearing assertions fail when the feature is removed."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify transient status clears on select/model refresh."}

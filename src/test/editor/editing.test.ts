@@ -43,6 +43,7 @@ interface StubMessage {
 	nodeId?: string;
 	selectedId?: string;
 	inline?: boolean;
+	scope?: string;
 }
 
 interface StubPanel {

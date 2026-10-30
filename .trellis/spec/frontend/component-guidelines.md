@@ -61,6 +61,10 @@ body (column)
   `.sb-btn-danger`, `.nav-btn` and `.act-btn`. Toolbar, details actions, Conditions actions and the
   Filter/Search fields use those classes; do not add a one-off button style. Fields use `.filter` /
   `.search-input` (26px, input tokens, 3px radius) and the native search cancel is suppressed.
+- `#notice` under the toolbar is the fatal page-boot error surface only. Recoverable warnings use
+  `#conditions-status` or `#details-status`; they never write the toolbar banner. The Details status
+  clears on the next `select`/`model` message, and the Conditions status clears when its names are
+  valid.
 
 ## Event ownership
 

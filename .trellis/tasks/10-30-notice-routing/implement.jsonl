@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Notice/status regions, ARIA live regions and outside-#tree message ownership."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No file writes, no colour literals, textContent only."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Host/page message routing and clearing transient state on re-scan/select."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Page handler and host message assertions."}

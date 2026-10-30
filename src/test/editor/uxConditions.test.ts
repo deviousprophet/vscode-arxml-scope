@@ -839,6 +839,7 @@ suite('conditions provider wiring (design §5)', () => {
 		type?: string;
 		message?: string;
 		kind?: string;
+		scope?: string;
 		entries?: unknown;
 		rows?: Array<{ label: string; disabled?: boolean }>;
 	}
@@ -963,6 +964,7 @@ suite('conditions provider wiring (design §5)', () => {
 			const notice = stub.messages.find((message) => message.type === 'notice');
 			assert.ok(notice, 'an invalid name is reported');
 			assert.strictEqual(notice!.kind, 'warn');
+			assert.strictEqual(notice!.scope, 'conditions', 'it belongs in the Conditions status, not the toolbar');
 			assert.ok(notice!.message!.includes('BAD NAME'), notice!.message);
 
 			const pushed = stub.messages.filter((message) => message.type === 'model').at(-1);

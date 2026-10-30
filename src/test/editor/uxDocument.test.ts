@@ -356,11 +356,29 @@ suite('editor document view', () => {
 			html.includes("refusalShownInDetails(message, uiState.tab !== 'details')"),
 			'the notice handler asks whether the Details tab already answered'
 		);
-		assert.ok(html.includes('delete notice.dataset.kind'), 'a stale warning is cleared');
+		assert.ok(html.includes('clearDetailsStatus()'), 'the details status is cleared when the field already answers');
+		assert.ok(html.includes('setDetailsStatus(message)'), 'recoverable warnings go to the Details status');
+		assert.ok(!html.includes('notice.textContent = message.message'), 'the toolbar banner is never written by a notice');
+		assert.ok(html.includes('id="details-status"'), 'the Details tab has a status line');
 
 		assert.strictEqual(refusalShownInDetails({ inline: true }, false), true, 'visible details owns the refusal');
-		assert.strictEqual(refusalShownInDetails({ inline: true }, true), false, 'another tab falls back to the notice');
-		assert.strictEqual(refusalShownInDetails({}, false), false, 'page-level problems still reach the notice');
+		assert.strictEqual(refusalShownInDetails({ inline: true }, true), false, 'another tab uses the Details status');
+		assert.strictEqual(refusalShownInDetails({}, false), false, 'page-level problems use the Details status');
+	});
+
+	test('recoverable status lines replace the toolbar warning and clear on the next action', () => {
+		const html = page();
+		assert.ok(html.includes('id="details-status"'), 'the Details tab has a status line');
+		assert.ok(html.includes("if (message.scope === 'conditions')"), 'condition warnings are scoped to Conditions');
+		assert.ok(html.includes('conditionsStatus.textContent = message.message'), 'and go to its status line');
+		assert.ok(html.includes('setDetailsStatus(message)'), 'other recoverable warnings go to Details');
+		assert.ok(!html.includes('notice.textContent = message.message'), 'a host notice never writes the toolbar banner');
+		assert.ok(
+			/if \(message\.type === 'model'\) \{\s*clearDetailsStatus\(\)/.test(html),
+			'a model refresh clears the Details status'
+		);
+		assert.ok(html.includes('clearDetailsStatus();'), 'the status has one clear path');
+		assert.ok(/\.details-status:empty\s*\{[^}]*display:\s*none/.test(styleOf(html)));
 	});
 
 	test('the layout state defaults and persistence path are present', () => {
