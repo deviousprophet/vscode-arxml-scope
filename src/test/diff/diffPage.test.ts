@@ -54,24 +54,53 @@ function styleOf(source: string): string {
 }
 
 suite('semantic diff page (design §3)', () => {
-	test('the shell has one text filter, a changes-only toggle, summary, navigation and detail strip', () => {
+	test('the shell has Search, Show all/Show diff only, Prev/Next diff and Swap sides', () => {
 		const html = page();
-		assert.strictEqual((html.match(/id="diff-filter"/g) || []).length, 1);
-		assert.ok(/id="diff-filter"[^>]*type="text"/.test(html), 'the filter is type="text", so it has no native clear X');
-		assert.strictEqual((html.match(/type="search"/g) || []).length, 0);
-		assert.strictEqual((html.match(/id="diff-filter-clear"/g) || []).length, 1, 'exactly one clear control');
-		assert.ok(/id="diff-changes"[^>]*type="checkbox"/.test(html), 'the changes-only toggle exists');
-		assert.ok(/id="diff-summary"[^>]*role="status"/.test(html), 'the summary is a live status');
-		assert.strictEqual((html.match(/id="diff-prev"/g) || []).length, 1);
-		assert.strictEqual((html.match(/id="diff-next"/g) || []).length, 1);
-		assert.strictEqual((html.match(/id="diff-collapse"/g) || []).length, 1);
-		assert.strictEqual((html.match(/id="diff-expand"/g) || []).length, 1);
+		assert.strictEqual((html.match(/id="diff-filter"/g) || []).length, 0, 'the filter is gone');
+		assert.strictEqual((html.match(/id="diff-changes"/g) || []).length, 0, 'the changes-only checkbox is gone');
+		assert.strictEqual((html.match(/id="diff-summary"/g) || []).length, 0, 'the summary is gone');
+		assert.strictEqual((html.match(/id="diff-collapse"/g) || []).length, 0, 'Collapse is gone');
+		assert.strictEqual((html.match(/id="diff-expand"/g) || []).length, 0, 'Expand is gone');
+		assert.strictEqual((html.match(/id="diff-search-input"/g) || []).length, 1);
+		assert.ok(/id="diff-search-input"[^>]*type="search"/.test(html), 'Search is type="search"');
+		assert.strictEqual((html.match(/id="diff-search-clear"/g) || []).length, 1, 'one clear control');
+		assert.strictEqual((html.match(/id="diff-search-prev"/g) || []).length, 1);
+		assert.strictEqual((html.match(/id="diff-search-next"/g) || []).length, 1);
+		assert.ok(html.includes('id="diff-search-count"') && html.includes('id="diff-search-busy"'));
+		assert.ok(/id="diff-view-all"[^>]*aria-pressed="true"[^>]*>Show all</.test(html));
+		assert.ok(/id="diff-view-diff"[^>]*aria-pressed="false"[^>]*>Show diff only</.test(html));
+		assert.ok(/id="diff-prev"[\s\S]*?>Prev diff</.test(html));
+		assert.ok(/id="diff-next"[\s\S]*?>Next diff</.test(html));
+		assert.ok(/id="diff-swap"[^>]*aria-pressed="false"[\s\S]*?>Swap sides</.test(html));
 		assert.ok(/id="diff-detail"[^>]*role="region"/.test(html), 'the detail strip is a region');
 		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'), 'the empty state exists');
 		assert.ok(html.includes("'No differences'"), 'a pair with no changes has an explicit empty message');
-		assert.ok(html.includes("summary.changed + ' changed · '"), 'the summary counts changed/added/removed');
-		assert.ok(html.includes('class="pane-header" title="/work/left.arxml">left.arxml'), 'the left pane header');
-		assert.ok(html.includes('class="pane-header" title="/work/right.arxml">right.arxml'), 'the right pane header');
+		assert.ok(!html.includes(' changed · '), 'the changed/added/removed summary text is gone');
+		assert.ok(html.includes('id="diff-left-label">left.arxml'), 'the left pane header');
+		assert.ok(html.includes('id="diff-right-label">right.arxml'), 'the right pane header');
+		assert.strictEqual((html.match(/id="diff-scroll"/g) || []).length, 1, 'one synchronized scroll container');
+	});
+
+	test('the page serializes search and side-swap behavior', () => {
+		const html = page();
+		assert.ok(html.includes('class RowSearchEngine'), 'the chunked row search engine');
+		assert.ok(html.includes('searchCandidates = showChangesOnly'), 'search candidates follow the active view');
+		assert.ok(html.includes("row.status !== 'unchanged'"));
+		assert.ok(html.includes("searchInput.addEventListener('keydown'"), 'Search owns its keys');
+		assert.ok(html.includes('executeSearch(event.shiftKey ? -1 : 1)'), 'Enter and Shift+Enter navigate');
+		assert.ok(html.includes("event.key.toLowerCase() === 'f'"), 'Ctrl+F focuses Search');
+		const row = functionSource(html, 'buildDiffRow');
+		assert.ok(row.includes('displayLeft(row)') && row.includes('displayRight(row)'));
+		assert.ok(row.includes("element.dataset.status = status"), 'the displayed status is rendered');
+		assert.ok(row.includes("element.dataset.searchCurrent = 'true'"));
+		const detail = functionSource(html, 'updateDetail');
+		assert.ok(detail.includes('displayStatus(row)'));
+		assert.ok(detail.includes('swapped ? change.right : change.left'));
+		const reveal = functionSource(html, 'revealButton');
+		assert.ok(reveal.includes("side: hostSide(side)"), 'a displayed side maps back to the host side');
+		const swap = functionSource(html, 'setSwapped');
+		assert.ok(swap.includes('renderHeaders()') && swap.includes('renderWindow(true)'));
+		assert.ok(!swap.includes('scrollTop'), 'swapping never resets the single scroll container');
 	});
 
 	test('the shell is a tree with top/window/bottom spacers and a hidden probe', () => {
@@ -149,15 +178,18 @@ suite('semantic diff page (design §3)', () => {
 			'calcTotalHeight',
 			'calcRowOffset',
 			'appendHighlighted',
+			'conditionTokens',
+			'appendConditionTokens',
 			'valueSpan',
 			'metaSpan',
 		]) {
 			assert.ok(html.includes(`function ${name}(`), `${name} is inlined`);
 		}
+		assert.ok(html.includes('class RowSearchEngine'), 'the chunked search engine is inlined');
 		// The page's own copy is the tested copy.
 		const rows = documentOf().rows;
 		const visible = evaluateFunction<typeof import('../../diff/diffModel').diffVisibility>(html, 'diffVisibility');
-		assert.strictEqual(visible(rows, '', false).visibleCount, rows.length);
+		assert.ok(visible(rows, false).every(Boolean), 'Show all sees every row');
 		const flatten = evaluateFunction<typeof flattenDiffRows>(html, 'flattenDiffRows');
 		assert.strictEqual(flatten(rows).length, flattenDiffRows(rows).length);
 	});
@@ -322,7 +354,7 @@ suite('semantic diff page (design §3)', () => {
 		assert.ok(html.indexOf('diffInstallErrorSurface();') < html.indexOf("acquireVsCodeApi()"), 'errors are surfaced first');
 	});
 
-	test('refreshes keep the filter, changes-only, collapse, selection and scroll state', () => {
+	test('refreshes keep the view mode, swap, collapse, selection, search and scroll state', () => {
 		const html = page();
 		const message = /window\.addEventListener\('message'[\s\S]*?\n\}\);/.exec(html);
 		assert.ok(message, 'the message handler exists');
@@ -332,5 +364,11 @@ suite('semantic diff page (design §3)', () => {
 		assert.ok(html.includes('setDocument(message.document)'), 'the row store is replaced, not markup');
 		assert.ok(message![0].includes("message.type === 'error'"), 'a refresh error keeps the last document');
 		assert.ok(!html.includes('innerHTML'), 'a refresh never swaps HTML');
+		const set = functionSource(html, 'setDocument');
+		assert.ok(set.includes('refreshVisibility()'), 'the active view is recomputed');
+		assert.ok(set.includes('renderHeaders()'), 'the swap state is preserved');
+		assert.ok(set.includes('startSearch(searchQuery, currentMatchKey(), true)'), 'an active search restarts');
+		assert.ok(!set.includes('showChangesOnly ='), 'a refresh never resets the view mode');
+		assert.ok(!set.includes('swapped ='), 'a refresh never resets the swap');
 	});
 });

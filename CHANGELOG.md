@@ -20,7 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Condition expressions use distinct token colours for names, numbers, operators and punctuation; long expressions stay compact in the tree and wrap fully in **Details**
 - Condition constants discovered from the open document appear automatically; scanned constants are read-only and manual rows can be removed
 - Condition values use icon-only Edit, Save and Cancel actions
-- A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, a changes-only view, previous/next navigation, reveal-in-source and live refresh
+- A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, **Show all** / **Show diff only**, Enter-driven Search, **Prev diff** / **Next diff**, **Swap sides** and reveal-in-source
+- The diff toolbar has no Filter, changes summary or global collapse/expand buttons; row-level collapse and one synchronized scroll remain
 - A right-click **Duplicate** / **Delete** menu on container and parameter rows; both ask for confirmation, container duplicates ask for a unique short name, and each action is one undoable edit
 - An `ARXML Scope` context submenu for `Open with ECUC Editor` and `Reveal in ECUC Editor`
 

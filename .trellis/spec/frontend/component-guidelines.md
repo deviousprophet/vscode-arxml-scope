@@ -298,7 +298,15 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   embedded parent container ordinal, so reordered duplicate containers keep their parameters and
   references paired at every depth.
 - The diff is read-only: no `WorkspaceEdit`, `writeFile`, `applyEdit`, repair or derived file.
-  Refresh is a full re-scan after a 150 ms debounce; the page keeps filter, changes-only,
-  collapse, selection and scroll.
+  Refresh is a full re-scan after a 150 ms debounce; the page keeps the view mode, swap state,
+  collapse, selection, search and scroll.
+- The diff toolbar is Search + **Show all** / **Show diff only** + **Prev diff** / **Next diff** +
+  **Swap sides**. There is no Filter, no changes checkbox, no changed/added/removed summary and no
+  global Collapse/Expand. Search uses `RowSearchEngine` (Enter-only, chunked, cancellable); its
+  candidates are the changed rows in diff-only view, all rows otherwise. Search never hides rows.
+- **Swap sides is display-only.** `displayLeft`/`displayRight`/`displayStatus` re-project the row,
+  detail changes swap their columns, and reveal buttons map a displayed side back to the host's
+  original side. The comparison documents are not recomputed and the single `#diff-scroll` is
+  untouched; do not add pane-level scroll state.
 - The manifest adds the three commands to the existing `arxmlScope.actions` submenu with
   `explorerViewletFocus`/`listDoubleSelection` guards; there is no flat `editor/context` diff entry.

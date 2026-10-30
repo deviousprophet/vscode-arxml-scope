@@ -16,6 +16,7 @@ import { matchRangesScript } from '../editor/treeQuery';
 import { escapeHtml } from '../editor/html';
 import { encodeJsonForScript } from '../editor/jsonScript';
 import { pageErrorScript } from '../editor/pageError';
+import { rowSearchScript } from '../editor/rowSearch';
 import { rowViewScript } from '../editor/rowView';
 import { virtualScrollScript } from '../editor/virtualScroll';
 import { DiffDocument, diffVisibility, flattenDiffRows, nextChangeIndex } from './diffModel';
@@ -52,23 +53,31 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 </head>
 <body>
 <div class="toolbar">
-<div class="filter-wrap">
-<input id="diff-filter" class="filter" type="text" placeholder="Filter" aria-label="Filter the diff">
-<button id="diff-filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+<div class="search-box">
+<div class="search-field">
+<span class="search-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l3.5 3.5"/></svg></span>
+<input id="diff-search-input" class="search-input" type="search" placeholder="Search" aria-label="Search the diff" autocomplete="off" spellcheck="false">
+<button id="diff-search-clear" class="nav-btn search-clear" type="button" title="Clear search" aria-label="Clear search" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 </div>
-<label class="toggle"><input id="diff-changes" type="checkbox"> <span>Changes only</span></label>
-<span id="diff-summary" class="summary" role="status" aria-live="polite"></span>
+<button id="diff-search-prev" class="nav-btn search-nav" type="button" title="Previous match (Shift+F3)" aria-label="Previous match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.75l4-4 4 4"/></svg></button>
+<button id="diff-search-next" class="nav-btn search-nav" type="button" title="Next match (F3)" aria-label="Next match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25l4 4 4-4"/></svg></button>
+<span id="diff-search-count" class="search-count" role="status" aria-live="polite" hidden></span>
+<span id="diff-search-busy" class="search-progress" role="status" aria-label="Searching" hidden></span>
+</div>
+<div class="view-switch" role="group" aria-label="Diff view">
+<button id="diff-view-all" class="tool view-tool" type="button" aria-pressed="true">Show all</button>
+<button id="diff-view-diff" class="tool view-tool" type="button" aria-pressed="false">Show diff only</button>
+</div>
 <span class="grow"></span>
-<button id="diff-prev" class="tool icon-tool" type="button" title="Previous change (Shift+F7)" aria-label="Previous change"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg><span class="lbl">Previous</span></button>
-<button id="diff-next" class="tool icon-tool" type="button" title="Next change (F7)" aria-label="Next change"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg><span class="lbl">Next</span></button>
-<button id="diff-collapse" class="tool icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
-<button id="diff-expand" class="tool icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/></svg><span class="lbl">Expand</span></button>
+<button id="diff-prev" class="tool icon-tool" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg><span class="lbl">Prev diff</span></button>
+<button id="diff-next" class="tool icon-tool" type="button" title="Next difference (F7)" aria-label="Next difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg><span class="lbl">Next diff</span></button>
+<button id="diff-swap" class="tool icon-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h9m0 0-2.5-2.5M12 5 9.5 7.5M13 11H4m0 0 2.5-2.5M4 11l2.5 2.5"/></svg><span class="lbl">Swap sides</span></button>
 </div>
 <div id="diff-notice" class="notice" role="status" aria-live="polite"></div>
 <div id="diff-scroll">
 <div class="pane-headers" role="presentation">
-<div class="pane-header" title="${leftPath}">${left}</div>
-<div class="pane-header" title="${rightPath}">${right}</div>
+<div id="diff-left-header" class="pane-header" title="${leftPath}"><span id="diff-left-label">${left}</span></div>
+<div id="diff-right-header" class="pane-header" title="${rightPath}"><span id="diff-right-label">${right}</span></div>
 </div>
 <div id="diff-list" role="tree" aria-label="Semantic ECUC diff">
 <div id="diff-measure" aria-hidden="true"><div class="diff-row probe"><div class="diff-cell"><span class="row"><span class="label">x</span></span></div><div class="diff-cell"><span class="row"><span class="label">x</span></span></div></div></div>
@@ -96,6 +105,7 @@ const vscode = acquireVsCodeApi();
 ${rowViewScript()}
 ${virtualScrollScript()}
 ${matchRangesScript()}
+${rowSearchScript()}
 ${diffVisibility.toString()}
 ${flattenDiffRows.toString()}
 ${nextChangeIndex.toString()}
@@ -105,17 +115,33 @@ const list = document.getElementById('diff-list');
 const listWindow = document.getElementById('diff-window');
 const virtualStyle = document.getElementById('virtual-style');
 const notice = document.getElementById('diff-notice');
-const filterInput = document.getElementById('diff-filter');
-const clearButton = document.getElementById('diff-filter-clear');
-const countLabel = document.getElementById('diff-summary');
-const changesInput = document.getElementById('diff-changes');
+const searchInput = document.getElementById('diff-search-input');
+const searchClear = document.getElementById('diff-search-clear');
+const searchPrev = document.getElementById('diff-search-prev');
+const searchNext = document.getElementById('diff-search-next');
+const searchCount = document.getElementById('diff-search-count');
+const searchBusy = document.getElementById('diff-search-busy');
+const viewAll = document.getElementById('diff-view-all');
+const viewDiff = document.getElementById('diff-view-diff');
+const swapButton = document.getElementById('diff-swap');
+const leftLabel = document.getElementById('diff-left-label');
+const rightLabel = document.getElementById('diff-right-label');
+const leftHeader = document.getElementById('diff-left-header');
+const rightHeader = document.getElementById('diff-right-header');
 const empty = document.getElementById('diff-empty');
 const emptyText = document.getElementById('diff-empty-text');
 const detail = document.getElementById('diff-detail');
 const bufferRows = 10;
-let filterQuery = '';
+const searchEngine = new RowSearchEngine();
+let searchQuery = '';
 let highlightQuery = '';
-let changesOnly = false;
+let searchMatches = [];
+let searchIndex = -1;
+let searchRunning = false;
+let searchFirstJumpDone = false;
+let searchCandidates = [];
+let showChangesOnly = false;
+let swapped = false;
 let diffDocument = {
 	left: { name: '', path: '' },
 	right: { name: '', path: '' },
@@ -128,7 +154,7 @@ let rowIndexByKey = new Map();
 let collapsed = new Set();
 let selectedKey;
 let focusKey;
-let filterResult = { visible: [], matchCount: 0, visibleCount: 0 };
+let visibility = [];
 let displayRows = [];
 let displayIndexByKey = new Map();
 let navigationVisible = [];
@@ -189,12 +215,8 @@ function indexRows() {
 	}
 }
 
-function refreshFilter() {
-	filterResult = diffVisibility(rows, filterQuery, changesOnly);
-}
-
-function filterActive() {
-	return filterQuery.trim() !== '' || changesOnly;
+function refreshVisibility() {
+	visibility = diffVisibility(rows, showChangesOnly);
 }
 
 function buildHeightFn() {
@@ -211,8 +233,8 @@ function buildHeightFn() {
 function rebuildDisplay() {
 	displayRows = flattenDiffRows(rows, {
 		collapsed: collapsed,
-		visible: filterResult.visible,
-		filterActive: filterActive()
+		visible: visibility,
+		forceExpand: showChangesOnly
 	});
 	displayIndexByKey = new Map();
 	navigationVisible = new Array(rows.length).fill(false);
@@ -239,6 +261,8 @@ function setDocument(next) {
 	diffDocument = next;
 	rows = next.rows;
 	indexRows();
+	renderHeaders();
+	updateViewButtons();
 	const present = new Set(rows.map(function (row) { return row.key; }));
 	collapsed = new Set(Array.from(collapsed).filter(function (key) { return present.has(key); }));
 	if (selectedKey !== undefined && !rowByKey.has(selectedKey)) {
@@ -247,7 +271,7 @@ function setDocument(next) {
 	if (focusKey !== undefined && !rowByKey.has(focusKey)) {
 		focusKey = selectedKey;
 	}
-	refreshFilter();
+	refreshVisibility();
 	rebuildDisplay();
 	// The probe lives inside #diff-list; a still-hidden list measures 0. Update the
 	// empty/rows layout before measuring so a refresh that introduces the first rows
@@ -255,6 +279,9 @@ function setDocument(next) {
 	list.hidden = displayRows.length === 0;
 	measureHeights();
 	dataVersion++;
+	if (searchQuery.trim() !== '') {
+		startSearch(searchQuery, currentMatchKey(), true);
+	}
 }
 
 function measureHeights() {
@@ -309,13 +336,13 @@ function buildDiffCell(cell, side, row) {
 	line.appendChild(twisty);
 	const label = document.createElement('span');
 	label.className = 'label';
-	appendHighlighted(label, cell.label, filterQuery);
+	appendHighlighted(label, cell.label, highlightQuery);
 	line.appendChild(label);
 	if (cell.kind === 'parameter' || cell.kind === 'reference') {
-		line.appendChild(valueSpan(cell, true, filterQuery));
+		line.appendChild(valueSpan(cell, true, highlightQuery));
 	}
 	if (cell.meta && cell.meta.length > 0) {
-		line.appendChild(metaSpan(cell, filterQuery));
+		line.appendChild(metaSpan(cell, highlightQuery));
 	}
 	wrapper.appendChild(line);
 	return wrapper;
@@ -329,7 +356,29 @@ function emptyCell(side) {
 	return wrapper;
 }
 
+function displayLeft(row) {
+	return swapped ? row.right : row.left;
+}
+
+function displayRight(row) {
+	return swapped ? row.left : row.right;
+}
+
+function displayStatus(row) {
+	if (!swapped) {
+		return row.status;
+	}
+	return row.status === 'added' ? 'removed' : row.status === 'removed' ? 'added' : row.status;
+}
+
+function hostSide(side) {
+	return swapped ? (side === 'left' ? 'right' : 'left') : side;
+}
+
 function buildDiffRow(row, displayIndex) {
+	const left = displayLeft(row);
+	const right = displayRight(row);
+	const status = displayStatus(row);
 	const element = document.createElement('div');
 	element.className = 'node diff-row';
 	element.setAttribute('role', 'treeitem');
@@ -342,25 +391,28 @@ function buildDiffRow(row, displayIndex) {
 	}
 	element.tabIndex = -1;
 	element.dataset.key = row.key;
-	element.dataset.status = row.status;
+	element.dataset.status = status;
 	if (row.key === selectedKey) {
 		element.dataset.selected = 'true';
+	}
+	if (searchQuery.trim() !== '' && row.key === currentMatchKey()) {
+		element.dataset.searchCurrent = 'true';
 	}
 	if (row.kind === 'module' && displayIndex > 0) {
 		element.dataset.gap = 'true';
 	}
-	const owner = row.left || row.right;
+	const owner = left || right;
 	if (owner) {
 		element.title = owner.definitionRef;
 	}
-	if (row.status !== 'unchanged') {
-		const status = document.createElement('span');
-		status.className = 'sr-only';
-		status.textContent = row.status;
-		element.appendChild(status);
+	if (status !== 'unchanged') {
+		const badge = document.createElement('span');
+		badge.className = 'sr-only';
+		badge.textContent = status;
+		element.appendChild(badge);
 	}
-	element.appendChild(row.left ? buildDiffCell(row.left, 'left', row) : emptyCell('left'));
-	element.appendChild(row.right ? buildDiffCell(row.right, 'right', row) : emptyCell('right'));
+	element.appendChild(left ? buildDiffCell(left, 'left', row) : emptyCell('left'));
+	element.appendChild(right ? buildDiffCell(right, 'right', row) : emptyCell('right'));
 	return element;
 }
 
@@ -506,7 +558,7 @@ function revealButton(side, row) {
 	const button = detailElement('button', 'tool', side === 'left' ? 'Open left in source' : 'Open right in source');
 	button.type = 'button';
 	button.addEventListener('click', function () {
-		vscode.postMessage({ type: 'reveal', side: side, key: row.key });
+		vscode.postMessage({ type: 'reveal', side: hostSide(side), key: row.key });
 	});
 	return button;
 }
@@ -518,37 +570,40 @@ function updateDetail() {
 		detail.appendChild(detailElement('p', 'detail-hint', 'Select a row to see the changed fields.'));
 		return;
 	}
-	const owner = row.left || row.right;
+	const left = displayLeft(row);
+	const right = displayRight(row);
+	const status = displayStatus(row);
+	const owner = left || right;
 	const head = detailElement('div', 'detail-head');
 	head.appendChild(detailElement('span', 'detail-kind', row.kind));
 	head.appendChild(detailElement('span', 'detail-label', owner ? owner.label : row.key));
-	head.appendChild(detailElement('span', 'detail-status status-' + row.status, row.status));
+	head.appendChild(detailElement('span', 'detail-status status-' + status, status));
 	detail.appendChild(head);
 	if (owner) {
 		detail.appendChild(detailElement('div', 'detail-definition', owner.definitionRef));
 	}
-	if (row.status === 'changed') {
+	if (status === 'changed') {
 		const table = detailElement('div', 'detail-changes');
 		for (const change of row.changes) {
 			const line = detailElement('div', 'detail-change');
 			line.appendChild(detailElement('span', 'detail-field', change.field));
-			line.appendChild(detailElement('span', 'detail-side detail-left', change.left));
-			line.appendChild(detailElement('span', 'detail-side detail-right', change.right));
+			line.appendChild(detailElement('span', 'detail-side detail-left', swapped ? change.right : change.left));
+			line.appendChild(detailElement('span', 'detail-side detail-right', swapped ? change.left : change.right));
 			table.appendChild(line);
 		}
 		detail.appendChild(table);
-	} else if (row.status === 'added') {
+	} else if (status === 'added') {
 		detail.appendChild(detailElement('p', 'detail-note', 'Only in the right file.'));
-	} else if (row.status === 'removed') {
+	} else if (status === 'removed') {
 		detail.appendChild(detailElement('p', 'detail-note', 'Only in the left file.'));
 	} else {
 		detail.appendChild(detailElement('p', 'detail-note', 'No differences for this row.'));
 	}
 	const actions = detailElement('div', 'detail-actions');
-	if (row.left) {
+	if (left) {
 		actions.appendChild(revealButton('left', row));
 	}
-	if (row.right) {
+	if (right) {
 		actions.appendChild(revealButton('right', row));
 	}
 	if (actions.childNodes.length > 0) {
@@ -556,10 +611,33 @@ function updateDetail() {
 	}
 }
 
-function updateSummary() {
-	const summary = summaryOf(diffDocument);
-	countLabel.textContent =
-		summary.changed + ' changed · ' + summary.added + ' added · ' + summary.removed + ' removed';
+function renderHeaders() {
+	const left = swapped ? diffDocument.right : diffDocument.left;
+	const right = swapped ? diffDocument.left : diffDocument.right;
+	if (leftLabel) {
+		leftLabel.textContent = left.name;
+	}
+	if (rightLabel) {
+		rightLabel.textContent = right.name;
+	}
+	if (leftHeader) {
+		leftHeader.title = left.path;
+	}
+	if (rightHeader) {
+		rightHeader.title = right.path;
+	}
+}
+
+function updateViewButtons() {
+	if (viewAll) {
+		viewAll.setAttribute('aria-pressed', showChangesOnly ? 'false' : 'true');
+	}
+	if (viewDiff) {
+		viewDiff.setAttribute('aria-pressed', showChangesOnly ? 'true' : 'false');
+	}
+	if (swapButton) {
+		swapButton.setAttribute('aria-pressed', swapped ? 'true' : 'false');
+	}
 }
 
 function updateEmptyState() {
@@ -569,20 +647,13 @@ function updateEmptyState() {
 	if (!none) {
 		return;
 	}
-	if (!hasChanges()) {
-		emptyText.textContent = 'No differences';
-	} else if (filterActive()) {
-		const query = filterInput ? filterInput.value.trim() : filterQuery.trim();
-		emptyText.textContent = query === '' ? 'No rows match.' : 'No rows match "' + query + '".';
-	} else {
-		emptyText.textContent = 'No rows.';
-	}
+	emptyText.textContent = hasChanges() ? 'No rows.' : 'No differences';
 }
 
-function applyFilter() {
+function applyView() {
 	const anchor = captureAnchor();
 	const scrollTop = scroll.scrollTop;
-	refreshFilter();
+	refreshVisibility();
 	rebuildDisplay();
 	renderWindow(true);
 	if (anchor && displayIndexByKey.has(anchor.key)) {
@@ -592,23 +663,227 @@ function applyFilter() {
 	}
 	renderWindow(true);
 	updateSelection();
-	updateSummary();
 	updateEmptyState();
 	updateDetail();
+	if (searchQuery.trim() !== '') {
+		startSearch(searchQuery, currentMatchKey(), true);
+	}
 }
 
-function clearFilter(focusInput) {
-	if (filterInput) {
-		filterInput.value = '';
+function currentMatchKey() {
+	return searchIndex >= 0 && searchIndex < searchMatches.length ? searchMatches[searchIndex] : undefined;
+}
+
+function setSearchBusy(busy) {
+	searchRunning = busy === true;
+	renderSearchUi();
+}
+
+function searchIndexOfKey(key) {
+	return key === undefined ? -1 : searchMatches.indexOf(key);
+}
+
+function renderSearchUi() {
+	const hasText = searchInput ? searchInput.value.trim() !== '' : searchQuery.trim() !== '';
+	const active = searchQuery.trim() !== '';
+	const hasMatches = searchMatches.length > 0;
+	if (searchBusy) {
+		searchBusy.hidden = !searchRunning;
 	}
-	if (clearButton) {
-		clearButton.hidden = true;
+	if (searchClear) {
+		searchClear.hidden = !hasText;
 	}
-	filterQuery = '';
-	applyFilter();
-	if (focusInput && filterInput) {
-		filterInput.focus();
+	if (searchPrev) {
+		searchPrev.disabled = !hasMatches;
 	}
+	if (searchNext) {
+		searchNext.disabled = !hasMatches;
+	}
+	if (!searchCount) {
+		return;
+	}
+	searchCount.hidden = !active;
+	if (!active) {
+		searchCount.textContent = '';
+	} else if (!hasMatches) {
+		searchCount.textContent = '0 / 0';
+	} else {
+		searchCount.textContent = (searchIndex + 1) + ' / ' + searchMatches.length;
+	}
+}
+
+function jumpToSearchMatch(index) {
+	const key = searchMatches[index];
+	if (key === undefined) {
+		return;
+	}
+	if (expandAncestors(key)) {
+		rebuildDisplay();
+	}
+	const displayIndex = displayIndexByKey.get(key);
+	if (displayIndex === undefined) {
+		renderSearchUi();
+		return;
+	}
+	ensureVisible(displayIndex);
+	selectedKey = key;
+	focusKey = key;
+	renderWindow(true);
+	updateSelection();
+	updateDetail();
+	renderSearchUi();
+	if (searchInput) {
+		searchInput.focus({ preventScroll: true });
+	}
+}
+
+function cycleSearch(direction) {
+	if (searchMatches.length === 0) {
+		return;
+	}
+	searchIndex = (searchIndex + direction + searchMatches.length) % searchMatches.length;
+	jumpToSearchMatch(searchIndex);
+}
+
+function startSearch(query, previousKey, immediate) {
+	const text = query || '';
+	if (text.trim() === '') {
+		resetSearchResults();
+		return;
+	}
+	searchEngine.clear();
+	searchQuery = text;
+	highlightQuery = text;
+	searchMatches = [];
+	searchIndex = -1;
+	searchFirstJumpDone = previousKey !== undefined;
+	searchCandidates = showChangesOnly
+		? rows.filter(function (row) { return row.status !== 'unchanged'; })
+		: rows;
+	setSearchBusy(true);
+	renderWindow(true);
+	searchEngine.search(
+		searchCandidates,
+		text,
+		{
+			onProgressUpdate: function (indices) {
+				const currentKey = currentMatchKey();
+				searchMatches = indices.map(function (index) { return searchCandidates[index].key; });
+				if (!searchFirstJumpDone && searchMatches.length > 0) {
+					searchIndex = 0;
+					searchFirstJumpDone = true;
+					renderSearchUi();
+					jumpToSearchMatch(0);
+					return;
+				}
+				const wanted = currentKey !== undefined ? currentKey : previousKey;
+				const kept = searchIndexOfKey(wanted);
+				if (searchMatches.length === 0) {
+					searchIndex = -1;
+				} else if (kept >= 0) {
+					searchIndex = kept;
+				} else {
+					searchIndex = Math.min(Math.max(searchIndex, 0), searchMatches.length - 1);
+				}
+				renderSearchUi();
+				renderWindow(true);
+			},
+			onComplete: function (indices) {
+				const currentKey = currentMatchKey();
+				searchMatches = indices.map(function (index) { return searchCandidates[index].key; });
+				const wanted = currentKey !== undefined ? currentKey : previousKey;
+				const kept = searchIndexOfKey(wanted);
+				if (searchMatches.length === 0) {
+					searchIndex = -1;
+				} else if (kept >= 0) {
+					searchIndex = kept;
+				} else {
+					searchIndex = 0;
+				}
+				searchFirstJumpDone = true;
+				setSearchBusy(false);
+				renderSearchUi();
+				if (searchIndex >= 0) {
+					jumpToSearchMatch(searchIndex);
+				} else {
+					renderWindow(true);
+				}
+			}
+		},
+		immediate === true
+	);
+}
+
+function resetSearchResults() {
+	searchEngine.clear();
+	searchQuery = '';
+	searchMatches = [];
+	searchIndex = -1;
+	searchCandidates = [];
+	highlightQuery = '';
+	searchFirstJumpDone = false;
+	setSearchBusy(false);
+	renderWindow(true);
+}
+
+function executeSearch(direction) {
+	const query = searchInput ? searchInput.value : searchQuery;
+	if (query.trim() === '') {
+		resetSearchResults();
+		return;
+	}
+	if (query !== searchQuery) {
+		startSearch(query, undefined, false);
+		return;
+	}
+	cycleSearch(direction === -1 ? -1 : 1);
+}
+
+function clearSearch(focusInput) {
+	if (searchInput) {
+		searchInput.value = '';
+	}
+	resetSearchResults();
+	if (focusInput && searchInput) {
+		searchInput.focus({ preventScroll: true });
+	}
+}
+
+function focusListAfterSearch() {
+	const key =
+		selectedKey !== undefined && displayIndexByKey.has(selectedKey)
+			? selectedKey
+			: displayRows.length > 0
+				? rows[displayRows[0].rowIndex].key
+				: undefined;
+	if (key === undefined) {
+		return;
+	}
+	focusKey = key;
+	renderWindow(true);
+	applyRoving(key);
+	const element = renderedByKey.get(key);
+	if (element) {
+		element.focus({ preventScroll: true });
+	}
+}
+
+function setView(changesOnly) {
+	if (showChangesOnly === changesOnly) {
+		return;
+	}
+	showChangesOnly = changesOnly;
+	updateViewButtons();
+	applyView();
+}
+
+function setSwapped(next) {
+	swapped = next === true;
+	updateViewButtons();
+	renderHeaders();
+	renderWindow(true);
+	updateSelection();
+	updateDetail();
 }
 
 function selectKey(key, shouldFocus) {
@@ -703,24 +978,6 @@ function toggleCollapsed(key) {
 	refocus(focused);
 }
 
-function collapseAll() {
-	const focused = focusedKey();
-	collapsed = new Set(rows.filter(function (row) { return row.hasChildren; }).map(function (row) { return row.key; }));
-	rebuildDisplay();
-	renderWindow(true);
-	updateSelection();
-	refocus(focused);
-}
-
-function expandAll() {
-	const focused = focusedKey();
-	collapsed = new Set();
-	rebuildDisplay();
-	renderWindow(true);
-	updateSelection();
-	refocus(focused);
-}
-
 function moveSelection(offset) {
 	if (displayRows.length === 0) {
 		return;
@@ -752,6 +1009,14 @@ function selectedChild() {
 
 function onKeyDown(event) {
 	if (!(event.target instanceof Element)) {
+		return;
+	}
+	if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+		event.preventDefault();
+		if (searchInput) {
+			searchInput.focus();
+			searchInput.select();
+		}
 		return;
 	}
 	if (event.key === 'F7') {
@@ -805,7 +1070,8 @@ function onKeyDown(event) {
 		}
 	} else if (event.key === 'Enter') {
 		event.preventDefault();
-		vscode.postMessage({ type: 'reveal', side: row.left ? 'left' : 'right', key: key });
+		const side = displayLeft(row) ? hostSide('left') : hostSide('right');
+		vscode.postMessage({ type: 'reveal', side: side, key: key });
 	} else if (event.key === ' ') {
 		event.preventDefault();
 		selectKey(key, true);
@@ -844,34 +1110,42 @@ window.addEventListener('resize', function () {
 
 document.getElementById('diff-prev').addEventListener('click', function () { gotoChange(-1); });
 document.getElementById('diff-next').addEventListener('click', function () { gotoChange(1); });
-document.getElementById('diff-collapse').addEventListener('click', collapseAll);
-document.getElementById('diff-expand').addEventListener('click', expandAll);
+if (swapButton) {
+	swapButton.addEventListener('click', function () { setSwapped(!swapped); });
+}
+if (viewAll) {
+	viewAll.addEventListener('click', function () { setView(false); });
+}
+if (viewDiff) {
+	viewDiff.addEventListener('click', function () { setView(true); });
+}
 
-if (filterInput) {
-	filterInput.addEventListener('input', function () {
-		if (clearButton) {
-			clearButton.hidden = filterInput.value.trim() === '';
-		}
-		filterQuery = filterInput.value;
-		applyFilter();
+if (searchInput) {
+	searchInput.addEventListener('input', function () {
+		renderSearchUi();
 	});
-	filterInput.addEventListener('keydown', function (event) {
-		if (event.key === 'Escape') {
+	searchInput.addEventListener('keydown', function (event) {
+		if (event.key === 'Enter') {
 			event.preventDefault();
-			clearFilter(true);
+			executeSearch(event.shiftKey ? -1 : 1);
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			clearSearch(true);
+			focusListAfterSearch();
+		} else if (event.key === 'F3') {
+			event.preventDefault();
+			executeSearch(event.shiftKey ? -1 : 1);
 		}
 	});
 }
-if (clearButton) {
-	clearButton.addEventListener('click', function () {
-		clearFilter(true);
-	});
+if (searchClear) {
+	searchClear.addEventListener('click', function () { clearSearch(true); });
 }
-if (changesInput) {
-	changesInput.addEventListener('change', function () {
-		changesOnly = changesInput.checked === true;
-		applyFilter();
-	});
+if (searchPrev) {
+	searchPrev.addEventListener('click', function () { cycleSearch(-1); });
+}
+if (searchNext) {
+	searchNext.addEventListener('click', function () { cycleSearch(1); });
 }
 
 window.addEventListener('message', function (event) {
@@ -893,7 +1167,6 @@ window.addEventListener('message', function (event) {
 		}
 		renderWindow(true);
 		updateSelection();
-		updateSummary();
 		updateEmptyState();
 		updateDetail();
 	} else if (message.type === 'error') {
@@ -905,7 +1178,7 @@ window.addEventListener('message', function (event) {
 setDocument(readInitialDocument());
 renderWindow(true);
 updateSelection();
-updateSummary();
+updateViewButtons();
 updateEmptyState();
 updateDetail();
 vscode.postMessage({ type: 'ready' });
@@ -953,6 +1226,8 @@ body {
 	--hover-bg: var(--vscode-list-hoverBackground, transparent);
 	--sel-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
 	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
+	--match-bg: rgba(234, 179, 8, 0.32);
+	--match-hi: rgba(234, 179, 8, 0.7);
 	--indent: 2ch;
 }
 .toolbar {
@@ -970,28 +1245,59 @@ body {
 .grow {
 	flex: 1 1 auto;
 }
-.filter-wrap {
+.search-box {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	flex: 0 1 auto;
+	min-width: 0;
+}
+.search-field {
 	position: relative;
 	display: flex;
-	flex: 0 1 26ch;
+	align-items: center;
+	flex: 0 1 180px;
 	min-width: 0;
 }
-.filter {
-	width: 100%;
-	min-width: 0;
+.search-input {
+	box-sizing: border-box;
 	height: 22px;
-	padding: 0 22px 0 6px;
-	font: inherit;
-	color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+	min-width: 70px;
+	width: 180px;
+	padding: 0 7px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: 12px;
+	color: var(--vscode-input-foreground, var(--vscode-foreground));
 	background: var(--vscode-input-background, transparent);
-	border: 1px solid var(--vscode-input-border, transparent);
-	border-radius: 2px;
+	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, transparent));
+	border-radius: 3px;
 }
-.filter:focus-visible {
-	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
+.search-input:focus {
+	border-color: var(--vscode-focusBorder);
+	outline: 1px solid var(--vscode-focusBorder);
 	outline-offset: -1px;
 }
-.filter-clear {
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+	-webkit-appearance: none;
+	appearance: none;
+	display: none;
+}
+.search-field .search-input {
+	width: 100%;
+	min-width: 0;
+	padding: 0 22px 0 25px;
+}
+.search-icon {
+	position: absolute;
+	left: 7px;
+	top: 50%;
+	transform: translateY(-50%);
+	display: inline-flex;
+	color: var(--tok-dim);
+	pointer-events: none;
+}
+.search-clear {
 	position: absolute;
 	right: 3px;
 	top: 50%;
@@ -1002,6 +1308,7 @@ body {
 	width: 18px;
 	height: 18px;
 	padding: 0;
+	font: inherit;
 	line-height: 1;
 	cursor: pointer;
 	color: var(--tok-dim);
@@ -1009,27 +1316,91 @@ body {
 	border: 0;
 	border-radius: 2px;
 }
-.filter-clear[hidden] {
+.search-clear[hidden] {
 	display: none;
 }
-.filter-clear:hover {
+.search-clear:hover {
 	color: var(--vscode-foreground);
 	background: var(--vscode-toolbar-hoverBackground, transparent);
 }
-.toggle {
+.nav-btn {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
-	white-space: nowrap;
+	justify-content: center;
+	width: 28px;
+	height: 22px;
+	padding: 0;
 	color: var(--tok-dim);
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 3px;
 	cursor: pointer;
 }
-.toggle input {
-	margin: 0;
+.nav-btn:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground, transparent));
+	border-color: var(--vscode-panel-border, transparent);
 }
-.summary {
+.nav-btn:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+.nav-btn:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+.search-box .search-nav {
+	width: 28px;
+	height: 22px;
+	flex: none;
+}
+.search-count {
+	width: 14ch;
+	flex: none;
+	overflow: hidden;
+	text-align: right;
+	text-overflow: ellipsis;
 	white-space: nowrap;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
 	color: var(--tok-dim);
+}
+.search-count[hidden] {
+	display: none;
+}
+.search-progress {
+	width: 16px;
+	height: 16px;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.search-progress[hidden] {
+	display: none;
+}
+.search-progress::before {
+	content: '';
+	width: 11px;
+	height: 11px;
+	border: 2px solid var(--vscode-input-border, var(--vscode-panel-border));
+	border-top-color: var(--vscode-progressBar-background, var(--vscode-focusBorder));
+	border-radius: 50%;
+	animation: diff-search-spin 0.8s linear infinite;
+}
+@keyframes diff-search-spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+.view-switch {
+	display: flex;
+	flex: none;
+	gap: 2px;
+}
+.view-tool[aria-pressed="true"],
+.icon-tool[aria-pressed="true"] {
+	color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+	background: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
 }
 .tool {
 	display: inline-flex;
@@ -1290,7 +1661,10 @@ ${DIFF_LEVEL_RULES}
 }
 mark {
 	color: var(--vscode-editor-findMatchForeground, var(--vscode-foreground));
-	background: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground, transparent));
+	background: var(--match-bg);
+}
+.diff-row[data-search-current="true"] .diff-cell mark {
+	background: var(--match-hi);
 }
 .sr-only {
 	position: absolute;
@@ -1438,10 +1812,9 @@ body.vscode-high-contrast .diff-row:hover > .diff-cell {
 		padding: 0 4px;
 		gap: 3px;
 	}
-	.filter-wrap {
+	.search-field {
 		flex: 1 1 0;
 	}
-	.summary,
 	.notice,
 	.grow,
 	.icon-tool .lbl {

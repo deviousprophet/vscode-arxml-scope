@@ -399,7 +399,12 @@ function haystackOf(cell: DiffCell | undefined): string {
 	if (!cell) {
 		return '';
 	}
-	return [cell.label, cell.shortName ?? '', cell.shownValue ?? '']
+	return [
+		cell.label,
+		cell.shortName ?? '',
+		cell.shownValue ?? '',
+		...(cell.meta ? cell.meta.map((part) => part.text) : []),
+	]
 		.filter((part) => part !== '')
 		.join(' ');
 }
@@ -560,17 +565,17 @@ export function buildDiffDocument(
 /** The page helpers below are serialized into the diff webview. */
 
 /**
- * Text + changes-only visibility. A row matches when its haystack contains the
- * query and, with changes-only, its status is not `unchanged`. A backward pass
- * marks the ancestors of every match.
+ * Changes-only visibility. Every row is visible in Show all; Show diff only keeps
+ * changed/added/removed rows and marks their ancestors. Search is a jump control,
+ * so it never removes a row from this list.
  */
-export function diffVisibility(
-	rows: readonly DiffRow[],
-	query: string,
-	changesOnly: boolean
-): { visible: boolean[]; matchCount: number; visibleCount: number } {
+export function diffVisibility(rows: readonly DiffRow[], changesOnly: boolean): boolean[] {
 	const count = rows.length;
 	const visible = new Array<boolean>(count).fill(false);
+	if (!changesOnly) {
+		visible.fill(true);
+		return visible;
+	}
 	const parentIndex = new Int32Array(count).fill(-1);
 	const byKey = new Map<string, number>();
 	for (let i = 0; i < count; i++) {
@@ -583,27 +588,16 @@ export function diffVisibility(
 		}
 	}
 
-	const needle = query.trim().toLowerCase();
 	const below = new Array<boolean>(count).fill(false);
-	let matchCount = 0;
-	let visibleCount = 0;
 	for (let i = count - 1; i >= 0; i--) {
-		const text = needle === '' || rows[i].haystack.indexOf(needle) !== -1;
-		const status = !changesOnly || rows[i].status !== 'unchanged';
-		const self = text && status;
+		const self = rows[i].status !== 'unchanged';
 		const show = self || below[i];
 		visible[i] = show;
-		if (self) {
-			matchCount++;
-		}
-		if (show) {
-			visibleCount++;
-			if (parentIndex[i] >= 0) {
-				below[parentIndex[i]] = true;
-			}
+		if (show && parentIndex[i] >= 0) {
+			below[parentIndex[i]] = true;
 		}
 	}
-	return { visible, matchCount, visibleCount };
+	return visible;
 }
 
 /** One displayed diff row: `rowIndex` refers to the source row array. */
@@ -615,18 +609,18 @@ export interface FlatDiffRow {
 
 /**
  * The display list: source rows in order, subtrees skipped when collapsed or
- * filtered out. An active filter force-expands an ancestor with a visible
- * descendant without writing the collapsed set, so clearing the filter restores
+ * hidden by the current view. `forceExpand` opens an ancestor with a visible
+ * descendant without writing the collapsed set, so switching back restores
  * exactly the user's state.
  */
 export function flattenDiffRows(
 	rows: readonly DiffRow[],
-	options: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[]; filterActive?: boolean } = {}
+	options: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[]; forceExpand?: boolean } = {}
 ): FlatDiffRow[] {
 	const count = rows.length;
 	const collapsed = options.collapsed;
 	const visible = options.visible;
-	const filterActive = options.filterActive ?? visible !== undefined;
+	const forceExpand = options.forceExpand ?? visible !== undefined;
 
 	let visiblePrefix: Int32Array | undefined;
 	if (visible) {
@@ -659,7 +653,7 @@ export function flattenDiffRows(
 		const expanded =
 			row.hasChildren &&
 			hasVisibleDescendant(i) &&
-			(filterActive || !(collapsed ? collapsed.has(row.key) : false));
+			(forceExpand || !(collapsed ? collapsed.has(row.key) : false));
 		out.push({ rowIndex: i, level: row.level, expanded });
 		i = expanded ? i + 1 : subtreeEnd(i);
 	}

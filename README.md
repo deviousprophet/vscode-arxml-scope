@@ -34,6 +34,9 @@ A plain open still uses VS Code's text editor. The custom editor is opt-in.
 - Right-click a container or parameter to **Duplicate** or **Delete**. Duplicate inserts the copy
   after the original (a container copy asks for a unique short name); Delete removes the element.
   Both ask for confirmation and one `Ctrl+Z` restores the previous bytes.
+- In the diff, type a query and press `Enter` to search; `Enter` / `Shift+Enter` move between
+  matches. Use **Show all** / **Show diff only** to change the row set and **Swap sides** to mirror
+  the panes. Row twisties still collapse subtrees.
 - Condition values are stored per workspace, not written beside the ARXML.
 - Hover a condition chip to see each referenced system constant and its entered value, one per line.
   `(not set)` means the constant has no value yet; the row's dimmed state still shows the result.

@@ -119,6 +119,12 @@ non-blank query into the row primitives: every occurrence is marked, and the row
 find-bar panel. A jump posts the existing `select` message so the host keeps the row selected across
 a re-scan; Search itself never changes rows or collapse state.
 
+The diff page uses the same search contract with row **keys** instead of indices because its
+candidate list changes with the view mode. `showChangesOnly` chooses the candidate set
+(`status !== 'unchanged'` or all rows); a view switch restarts the committed query and keeps the
+current key where possible. `swapped` is page-local and display-only. Neither the view mode nor the
+swap state is persisted, and a refresh preserves both.
+
 ## Page errors
 
 There is no page-error UI state. A console-only installer is emitted before `acquireVsCodeApi`; it

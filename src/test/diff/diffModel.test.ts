@@ -159,6 +159,15 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.deepStrictEqual(changed[0].changes, [{ field: 'value', left: '10', right: '11' }]);
 	});
 
+	test('search haystack includes condition/meta text from both sides', () => {
+		const left = arxml(module('M1', container('C1', { condition: '(CANIPCORETYPE_SC==0)' })));
+		const right = arxml(module('M1', container('C1', { condition: '(CANIPCORETYPE_SC==1)' })));
+		const { document } = diffOf(left, right);
+		const row = rowByLabel(document.rows, 'C1');
+		assert.ok(row.haystack.includes('canipcoretype_sc'), row.haystack);
+		assert.ok(row.haystack.includes('==0') && row.haystack.includes('==1'), 'both sides contribute');
+	});
+
 	test('R6: every compared field is reported once, and annotation/meta derivatives are ignored', () => {
 		const base = cell();
 		const differing = cell({
@@ -589,7 +598,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		);
 	});
 
-	test('design §3.3: visibility keeps matches and their ancestors; changes-only hides unchanged rows', () => {
+	test('design §3.3: Show all shows every row and Show diff only keeps changes and ancestors', () => {
 		const left = arxml(
 			module(
 				'M1',
@@ -603,37 +612,28 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const { document } = diffOf(left, right);
 		const rows = document.rows;
 
-		const all = diffVisibility(rows, '', false);
-		assert.strictEqual(all.matchCount, rows.length);
-		assert.strictEqual(all.visibleCount, rows.length);
+		const all = diffVisibility(rows, false);
+		assert.strictEqual(all.length, rows.length);
+		assert.ok(all.every(Boolean), 'every row is visible in Show all');
 
-		const changesOnly = diffVisibility(rows, '', true);
+		const changesOnly = diffVisibility(rows, true);
 		for (let i = 0; i < rows.length; i++) {
 			if (rows[i].status !== 'unchanged') {
-				assert.ok(changesOnly.visible[i], `change ${rows[i].key} is visible`);
+				assert.ok(changesOnly[i], `change ${rows[i].key} is visible`);
 			}
 			if (rows[i].status === 'unchanged' && !rows[i].hasChildren) {
-				assert.strictEqual(changesOnly.visible[i], false, `unchanged leaf ${rows[i].key} is hidden`);
+				assert.strictEqual(changesOnly[i], false, `unchanged leaf ${rows[i].key} is hidden`);
 			}
 		}
-		assert.ok(changesOnly.visible[0], 'the module ancestor stays visible');
-		assert.ok(changesOnly.visible[1], 'the container ancestor stays visible');
-
-		const query = diffVisibility(rows, 'keep', false);
-		assert.ok(query.matchCount >= 1);
+		assert.ok(changesOnly[0], 'the module ancestor stays visible');
+		assert.ok(changesOnly[1], 'the container ancestor stays visible');
 		const keepIndex = rows.findIndex((row) => (row.left ?? row.right)?.label === 'Keep');
-		assert.ok(query.visible[keepIndex], 'the text match is visible');
-		assert.ok(query.visible[0] && query.visible[1], 'its ancestors are visible');
 		const goneIndex = rows.findIndex((row) => (row.left ?? row.right)?.label === 'Gone');
-		assert.strictEqual(query.visible[goneIndex], false, 'an unrelated row is hidden');
-
-		const both = diffVisibility(rows, 'keep', true);
-		const changedIndex = rows.findIndex((row) => (row.left ?? row.right)?.label === 'Changed');
-		assert.strictEqual(both.visible[changedIndex], false, 'a changed row that does not match is hidden');
-		assert.strictEqual(both.visible[keepIndex], false, 'an unchanged match is hidden by changes-only');
+		assert.strictEqual(changesOnly[keepIndex], false, 'an unchanged row is hidden');
+		assert.ok(changesOnly[goneIndex], 'a removed container is visible');
 	});
 
-	test('design §3.3: flatten skips collapsed subtrees and force-expands an active filter', () => {
+	test('design §3.3: flatten skips collapsed subtrees and force-expands a visible descendant', () => {
 		const left = arxml(
 			module(
 				'M1',
@@ -653,18 +653,18 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const moduleRow = rows.find((row) => row.level === 1)!;
 		const collapsed = new Set([moduleRow.key]);
 
-		const noFilter = flattenDiffRows(rows, { collapsed });
-		assert.deepStrictEqual(noFilter.map((flat) => flat.rowIndex), [0], 'a collapsed root hides its subtree');
+		const noView = flattenDiffRows(rows, { collapsed });
+		assert.deepStrictEqual(noView.map((flat) => flat.rowIndex), [0], 'a collapsed root hides its subtree');
 
-		const visibility = diffVisibility(rows, 'keep', false);
-		const filtered = flattenDiffRows(rows, {
+		const visibility = diffVisibility(rows, true);
+		const diffOnly = flattenDiffRows(rows, {
 			collapsed,
-			visible: visibility.visible,
-			filterActive: true,
+			visible: visibility,
+			forceExpand: true,
 		});
-		const shown = filtered.map((flat) => rows[flat.rowIndex]);
-		assert.ok(shown.some((row) => (row.left ?? row.right)?.label === 'Keep'), 'the match is reachable');
-		assert.ok(filtered[0].expanded, 'the ancestor reports expanded while the filter is active');
+		const shown = diffOnly.map((flat) => rows[flat.rowIndex]);
+		assert.ok(shown.some((row) => (row.left ?? row.right)?.label === 'Keep'), 'the changed row is reachable');
+		assert.ok(diffOnly[0].expanded, 'the ancestor reports expanded while its view has rows');
 		assert.strictEqual(rows[0].key, moduleRow.key);
 		assert.deepStrictEqual(Array.from(collapsed), [moduleRow.key], 'the collapsed set was not written');
 	});
