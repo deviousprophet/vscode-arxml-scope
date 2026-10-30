@@ -9,19 +9,6 @@ Browse and edit AUTOSAR ECUC-Values files in VS Code without reading raw XML. Th
 modules, containers, parameters and references as a keyboard-navigable document, with a tabbed
 sidebar for details and condition values, whole-tree search, and a read-only semantic diff.
 
-## What it does
-
-| Capability | What you get |
-|---|---|
-| Open | An opt-in ECUC editor for `.arxml` files. A plain open still uses the text editor. |
-| Browse | A Document view with indentation, braces, editor-style fold controls, collapse/expand, virtual scrolling and a resizable **Details** / **Conditions** sidebar. |
-| Search | Press `Enter` to search the whole tree. Every match is highlighted, the current match is stronger, and `Enter` / `Shift+Enter` move between matches. Search covers the visible label, value, short name, variant, context, condition and annotation text. |
-| Inspect | One scrolling **Details** section shows the AUTOSAR type, Decimal/Hexadecimal/Binary values, target, context, conditions and annotations. |
-| Edit | Parameter values and container `Short name` / `Definition` fields, with type-aware validation. Condition values are stored per workspace and edited with explicit Edit/Save/Cancel actions. |
-| Compare | A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, a changes-only view, previous/next navigation, reveal-in-source and live refresh. |
-| Navigate | Jump to a same-file reference target, reveal a node in the source, or open the source editor at the ECUC node under the cursor. The editor commands live under the `ARXML Scope` context submenu. |
-| Stay safe | Only the edited element text is written; invalid values are refused. No derived file, cache or index is created. |
-
 ## Quick start
 
 1. Install the extension and open a folder containing `.arxml` files.
