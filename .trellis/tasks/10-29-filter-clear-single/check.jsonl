@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify the duplicate-X regression test is meaningful."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify the fix introduced no inline style or colour literal."}

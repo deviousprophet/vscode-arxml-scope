@@ -1,0 +1,31 @@
+{
+  "id": "arxml-scope-feature-batch",
+  "name": "arxml-scope-feature-batch",
+  "title": "ARXML Scope: semantic diff, context menus, filter clear and syscond evaluation",
+  "description": "Umbrella request covering four features: semantic ARXML diff view, ARXML Scope editor context submenu, single filter clear button, and SW-SYSCOND evaluation with disabled-row display.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "deviousprophet",
+  "assignee": "deviousprophet",
+  "createdAt": "2026-10-29",
+  "completedAt": null,
+  "branch": "feat/arxml-scope-batch",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "10-29-semantic-diff-view",
+    "10-29-editor-context-submenu",
+    "10-29-filter-clear-single",
+    "10-29-syscond-evaluation"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

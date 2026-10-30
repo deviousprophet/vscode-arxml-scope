@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Final integration review checks the forbidden patterns and editor invariants."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Integration gate runs the repository's test conventions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify the four features still agree at layer boundaries."}

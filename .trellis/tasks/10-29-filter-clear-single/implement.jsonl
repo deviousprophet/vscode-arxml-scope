@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Filter control markup and event ownership live in the webview shell."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Regression assertions extend the existing filter/UX tests."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No hard-coded colours and no CSP-blocked inline styles."}

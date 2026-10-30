@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "The evaluator is pure core; the store and page wiring are editor layer."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Conditions panel markup, accessibility and event ownership."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Workspace state persistence and host/page message ownership."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Unit and page test conventions for the evaluator and panel."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No writes beside the file, no hard-coded colours, re-scan survival."}
