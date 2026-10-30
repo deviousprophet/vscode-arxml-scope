@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend guideline index for the sidebar/control redesign."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Webview shell, tabs, sections, outside-#tree focus and ARIA rules."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No second renderer, no colour literals, no writes, virtual-window rules."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Layout state persistence and the host/page boundary."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Page, pure-helper and mutation-testing conventions."}
-{"file": ".trellis/tasks/10-30-sidebar-control-parity/research/hex-scope-ui-reference.md", "reason": "Sidebar, section, search and button parity evidence."}

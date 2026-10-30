@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify tab/section/button DOM and accessibility parity."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify no second renderer, no hard-coded colours, no writes."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify tab/width/pane state persists and does not fight the re-scan."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify allocation, sash and details-migration assertions are meaningful."}
-{"file": ".trellis/tasks/10-30-sidebar-control-parity/research/hex-scope-ui-reference.md", "reason": "Confirm the implementation follows the approved Hex Scope parity."}
