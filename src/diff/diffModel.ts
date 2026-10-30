@@ -562,7 +562,7 @@ export function buildDiffDocument(
 /**
  * Text + changes-only visibility. A row matches when its haystack contains the
  * query and, with changes-only, its status is not `unchanged`. A backward pass
- * marks the ancestors of every match, like `filterRows`.
+ * marks the ancestors of every match.
  */
 export function diffVisibility(
 	rows: readonly DiffRow[],

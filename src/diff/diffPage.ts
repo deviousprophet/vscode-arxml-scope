@@ -12,7 +12,7 @@
  * (a literal may only appear as a fallback inside `var(...)`).
  */
 import { randomBytes } from 'crypto';
-import { matchRanges } from '../editor/filter';
+import { matchRanges } from '../editor/treeQuery';
 import { escapeHtml } from '../editor/html';
 import { encodeJsonForScript } from '../editor/jsonScript';
 import { pageErrorScript } from '../editor/pageError';
@@ -312,10 +312,10 @@ function buildDiffCell(cell, side, row) {
 	appendHighlighted(label, cell.label, filterQuery);
 	line.appendChild(label);
 	if (cell.kind === 'parameter' || cell.kind === 'reference') {
-		line.appendChild(valueSpan(cell, true));
+		line.appendChild(valueSpan(cell, true, filterQuery));
 	}
 	if (cell.meta && cell.meta.length > 0) {
-		line.appendChild(metaSpan(cell));
+		line.appendChild(metaSpan(cell, filterQuery));
 	}
 	wrapper.appendChild(line);
 	return wrapper;

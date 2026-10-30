@@ -197,32 +197,22 @@ function findButton(node: FakeNode, label: string): FakeNode | undefined {
 	return descendants(node).find((child) => child.tagName === 'button' && child.textContent === label);
 }
 
-function hasEmptyLine(node: FakeNode, text: string): boolean {
-	return descendants(node).some((child) => child.className === 'sb-empty' && child.textContent === text);
-}
-
 /**
- * Compiles the page's `updateInspector` (with its element helpers) against four
- * stub section bodies, so the test proves where each row lands rather than
- * grepping the source.
+ * Compiles the page's `updateInspector` (with its element helpers) against one
+ * stub Details body, so the test proves every row lands in the one section rather
+ * than grepping the source.
  */
 function compileInspector(
 	source: string,
 	rows: readonly { id: string }[],
 	selectedId: string | undefined
 ): {
-	node: FakeNode;
-	value: FakeNode;
-	reference: FakeNode;
-	conditions: FakeNode;
+	body: FakeNode;
 	run(): void;
 	followed(): string[];
 	revealed(): string[];
 } {
-	const node = fakeNode('div');
-	const value = fakeNode('div');
-	const reference = fakeNode('div');
-	const conditions = fakeNode('div');
+	const body = fakeNode('div');
 	const followed: string[] = [];
 	const revealed: string[] = [];
 	const rowById = new Map(rows.map((row) => [row.id, row]));
@@ -231,10 +221,7 @@ function compileInspector(
 	) => unknown;
 	const factory = new Function(
 		'inspector',
-		'detailsNodeBody',
-		'detailsValueBody',
-		'detailsReferenceBody',
-		'detailsConditionsBody',
+		'detailsBody',
 		'selectedId',
 		'rowById',
 		'detailsSelectionChanged',
@@ -246,17 +233,13 @@ function compileInspector(
 		'document',
 		`${functionSource(source, 'inspectorElement')}
 ${functionSource(source, 'inspectorRow')}
-${functionSource(source, 'paneEmpty')}
 ${functionSource(source, 'paneActions')}
 ${functionSource(source, 'updateInspector')}
 return updateInspector;`
 	);
 	const run = factory(
 		{},
-		node,
-		value,
-		reference,
-		conditions,
+		body,
 		selectedId,
 		rowById,
 		() => undefined,
@@ -277,7 +260,7 @@ return updateInspector;`
 		(id: string) => revealed.push(id),
 		{ createElement: (tag: string) => fakeNode(tag) }
 	) as () => void;
-	return { node, value, reference, conditions, run, followed: () => followed, revealed: () => revealed };
+	return { body, run, followed: () => followed, revealed: () => revealed };
 }
 
 /** One section as the allocator sees it. */
@@ -425,8 +408,8 @@ interface PaneFixture {
 }
 
 function paneFixture(height = 600): PaneFixture {
-	const first = fakeSection('sb-details-node');
-	const second = fakeSection('sb-details-value');
+	const first = fakeSection('pane-a');
+	const second = fakeSection('pane-b');
 	const sash = fakeSash(first, second);
 	return {
 		root: {
@@ -588,7 +571,7 @@ suite('sidebar shell', () => {
 		assert.ok(/id="stab-details"[^>]*class="stab active"/.test(html), 'Details is selected first');
 		assert.ok(!/id="stab-conditions"[^>]*class="stab active"/.test(html));
 
-		for (const id of ['sb-details-node', 'sb-details-value', 'sb-details-reference', 'sb-details-conditions', 'sb-conditions-values']) {
+		for (const id of ['sb-details', 'sb-conditions-values']) {
 			assert.ok(html.includes(`id="${id}" data-pane-id="${id}"`), `${id} is a pane`);
 			assert.ok(html.includes(`id="${id}-body" role="region"`), `${id} has a region body`);
 			assert.ok(
@@ -596,10 +579,9 @@ suite('sidebar shell', () => {
 				`${id} header controls its body`
 			);
 		}
-		assert.ok(html.includes('Conditions &amp; annotations'), 'the section label is escaped and uppercase via CSS');
-		assert.strictEqual((html.match(/class="sb-pane-sash"/g) ?? []).length, 3, 'three sashes between four Details panes');
-		assert.ok(/class="sb-pane-sash"[^>]*role="separator"[^>]*aria-orientation="horizontal"[^>]*tabindex="0"/.test(html));
-		assert.equal((html.match(/class="sb-section-head" role="button"/g) ?? []).length, 5, 'every section header is a button');
+		assert.ok(html.includes('id="sb-details"'), 'the Details tab has one section');
+		assert.ok(!/class="sb-pane-sash"/.test(html), 'there are no pane sashes');
+		assert.equal((html.match(/class="sb-section-head" role="button"/g) ?? []).length, 2, 'every section header is a button');
 		assert.ok(html.includes('<div id="inspector" class="inspector sb-pane-view"'), 'the inspector is the Details pane view');
 		assert.strictEqual((html.match(/id="inspector"/g) ?? []).length, 1, 'one details surface');
 		const detailsAt = html.indexOf('id="sbp-details"');
@@ -788,7 +770,7 @@ suite('sidebar shell', () => {
 		assert.strictEqual(resizer.persisted(), afterDrag, 'and writes nothing while the resizer is hidden');
 	});
 
-	test('updateInspector writes each row into its own section body', () => {
+	test('updateInspector writes every field into the one Details body', () => {
 		const html = page();
 		const rows = payload(html).rows;
 		const parameter = rows.find((row) => row.kind === 'parameter' && row.value === '63');
@@ -798,40 +780,48 @@ suite('sidebar shell', () => {
 
 		const param = compileInspector(html, rows, parameter.id);
 		param.run();
-		assert.ok(param.value.children.some((child) => child.className === 'details-value'), 'the value editor is in Value');
-		assert.ok(!param.reference.children.some((child) => child.className === 'details-value'), 'and not in Reference');
-		assert.ok(hasEmptyLine(param.reference, 'No reference.'), 'an empty Reference shows a quiet line');
-		const reveal = findButton(param.conditions, 'Reveal in source');
-		assert.ok(reveal, 'Reveal lives in Conditions & annotations');
-		assert.strictEqual(findButton(param.reference, 'Jump to target'), undefined, 'no jump on a parameter');
+		assert.ok(
+			descendants(param.body).some((child) => child.className === 'details-value'),
+			'the value editor is in the one Details body'
+		);
+		assert.ok(
+			descendants(param.body).some((child) => child.className === 'inspector-code' && child.textContent === '63'),
+			'the value is readable in the same body'
+		);
+		const reveal = findButton(param.body, 'Reveal in source');
+		assert.ok(reveal, 'Reveal lives in the Details body');
+		assert.strictEqual(findButton(param.body, 'Jump to target'), undefined, 'no jump on a parameter');
 		reveal.handlers.click({});
 		assert.deepStrictEqual(param.revealed(), [parameter.id], 'Reveal posts the selected row');
 
 		const ref = compileInspector(html, rows, reference.id);
 		ref.run();
-		const jump = findButton(ref.reference, 'Jump to target');
-		assert.ok(jump, 'Jump lives in Reference');
+		const jump = findButton(ref.body, 'Jump to target');
+		assert.ok(jump, 'Jump lives in the same Details body');
 		jump.handlers.click({});
 		assert.deepStrictEqual(ref.followed(), [reference.id], 'Jump follows the selected row');
-		assert.ok(hasEmptyLine(ref.value, 'No editable value.'), 'a reference has no value editor');
+		assert.ok(
+			!descendants(ref.body).some((child) => child.className === 'details-value'),
+			'a reference has no value editor'
+		);
 
 		const cont = compileInspector(html, rows, container.id);
 		cont.run();
 		assert.ok(
-			cont.node.children.some((child) => child.className === 'inspector-fields'),
-			'the container fields are in Node'
+			descendants(cont.body).some((child) => child.className === 'inspector-fields'),
+			'the container fields are in the same Details body'
 		);
-		assert.ok(hasEmptyLine(cont.value, 'No editable value.'), 'a container has no value editor');
+		assert.ok(
+			!descendants(cont.body).some((child) => child.className === 'details-value'),
+			'a container has no value editor'
+		);
 
 		const none = compileInspector(html, rows, undefined);
 		none.run();
 		assert.ok(
-			descendants(none.node).some((child) => child.className === 'inspector-empty'),
+			descendants(none.body).some((child) => child.className === 'inspector-empty'),
 			'no selection keeps the details hint'
 		);
-		assert.ok(hasEmptyLine(none.value, 'Select a line to see its value.'));
-		assert.ok(hasEmptyLine(none.reference, 'Select a line to see its reference.'));
-		assert.ok(hasEmptyLine(none.conditions, 'Select a line to see its conditions and annotations.'));
 	});
 
 	test('section keyboard and collapse update the pane heights and state', () => {
@@ -846,17 +836,17 @@ suite('sidebar shell', () => {
 		assert.strictEqual(second.style.values.get('--sb-pane-h'), '297px');
 
 		first.head.handlers.keydown({ key: 'ArrowLeft', target: first.head, preventDefault: () => undefined });
-		assert.strictEqual(view.isCollapsed('sb-details-node'), true);
+		assert.strictEqual(view.isCollapsed('pane-a'), true);
 		assert.strictEqual(first.head.attrs['aria-expanded'], 'false');
 		assert.strictEqual(first.style.values.get('--sb-pane-h'), '22px', 'a collapsed pane keeps its header');
 		assert.strictEqual(second.style.values.get('--sb-pane-h'), '572px', 'the single expanded pane fills');
-		assert.deepStrictEqual(state.collapsed, ['sb-details-node'], 'the collapsed section is persisted');
+		assert.deepStrictEqual(state.collapsed, ['pane-a'], 'the collapsed section is persisted');
 		assert.strictEqual(fixture.sash.tabIndex, -1, 'the adjacent sash leaves the tab order');
 		assert.strictEqual(fixture.sash.attrs['aria-disabled'], 'true');
 		assert.ok(fixture.sash.classList.contains('disabled'));
 
 		first.head.handlers.keydown({ key: 'ArrowRight', target: first.head, preventDefault: () => undefined });
-		assert.strictEqual(view.isCollapsed('sb-details-node'), false);
+		assert.strictEqual(view.isCollapsed('pane-a'), false);
 		assert.strictEqual(first.head.attrs['aria-expanded'], 'true');
 		assert.strictEqual(first.style.values.get('--sb-pane-h'), '297px');
 		assert.deepStrictEqual(state.collapsed, []);
@@ -864,17 +854,17 @@ suite('sidebar shell', () => {
 		assert.strictEqual(fixture.sash.attrs['aria-disabled'], undefined);
 
 		first.head.handlers.keydown({ key: 'Enter', target: first.head, preventDefault: () => undefined });
-		assert.strictEqual(view.isCollapsed('sb-details-node'), true);
+		assert.strictEqual(view.isCollapsed('pane-a'), true);
 		first.head.handlers.keydown({ key: ' ', target: first.head, preventDefault: () => undefined });
-		assert.strictEqual(view.isCollapsed('sb-details-node'), false);
+		assert.strictEqual(view.isCollapsed('pane-a'), false);
 
-		view.setCollapsed('sb-details-value', true, true);
-		assert.strictEqual(view.showSection('sb-details-value'), true, 'the view owns its section');
-		assert.strictEqual(view.isCollapsed('sb-details-value'), false, 'focusing a field expands its section');
+		view.setCollapsed('pane-b', true, true);
+		assert.strictEqual(view.showSection('pane-b'), true, 'the view owns its section');
+		assert.strictEqual(view.isCollapsed('pane-b'), false, 'focusing a field expands its section');
 		assert.strictEqual(view.showSection('sb-conditions-values'), false, 'another view owns that section');
 
 		const details = functionSource(page(), 'beginDetailsEdit');
-		assert.ok(details.includes("showSidebarSection(target === 'value' ? 'sb-details-value' : 'sb-details-node')"));
+		assert.ok(details.includes("showSidebarSection('sb-details')"));
 		assert.ok(details.includes('showSidebarTab'));
 	});
 
@@ -890,14 +880,14 @@ suite('sidebar shell', () => {
 		assert.strictEqual(fixture.sections[0].style.values.get('--sb-pane-h'), '287px', 'ArrowUp moves the sash up');
 		assert.strictEqual(fixture.sections[1].style.values.get('--sb-pane-h'), '307px');
 		assert.deepStrictEqual(state.panes, {
-			'sb-details-node': 287,
-			'sb-details-value': 307,
+			'pane-a': 287,
+			'pane-b': 307,
 		});
 
 		fixture.sash.handlers.keydown({ key: 'ArrowDown', preventDefault: () => undefined });
 		assert.strictEqual(fixture.sections[0].style.values.get('--sb-pane-h'), '297px');
 
-		view.shiftPane('sb-details-node', 'sb-details-value', -1000);
+		view.shiftPane('pane-a', 'pane-b', -1000);
 		assert.strictEqual(fixture.sections[0].style.values.get('--sb-pane-h'), `${MIN_PANE}px`, 'a pane never shrinks below MIN_PANE');
 		assert.strictEqual(fixture.sections[1].style.values.get('--sb-pane-h'), '512px');
 
@@ -905,23 +895,23 @@ suite('sidebar shell', () => {
 		assert.strictEqual(fixture.sections[0].style.values.get('--sb-pane-h'), '297px', 'double-click splits the pair');
 		assert.strictEqual(fixture.sections[1].style.values.get('--sb-pane-h'), '297px');
 		assert.deepStrictEqual(state.panes, {
-			'sb-details-node': 297,
-			'sb-details-value': 297,
+			'pane-a': 297,
+			'pane-b': 297,
 		});
 	});
 
-	test('a saved pane height and collapsed section are restored on mount', () => {
+	test('a saved pane height is restored on mount', () => {
 		const html = page();
 		const state: SidebarUiState = {
 			tab: 'details',
 			sidebarWidth: 420,
-			panes: { 'sb-details-node': 150 },
-			collapsed: ['sb-details-reference'],
+			panes: { 'pane-a': 150 },
+			collapsed: [],
 		};
 		const fixture = paneFixture(600);
 		const View = compilePaneView(html, state);
 		const view = new View(fixture.root);
-		assert.strictEqual(view.isCollapsed('sb-details-node'), false);
+		assert.strictEqual(view.isCollapsed('pane-a'), false);
 		assert.strictEqual(fixture.sections[1].head.attrs['aria-expanded'], 'true');
 		assert.strictEqual(fixture.sections[0].style.values.get('--sb-pane-h'), '150px', 'the saved size is claimed first');
 		assert.strictEqual(fixture.sections[1].style.values.get('--sb-pane-h'), '444px', 'the fresh pane takes the rest');
@@ -946,23 +936,22 @@ suite('sidebar shell', () => {
 		assert.ok(/\.act-btn\s*\{[^}]*width:\s*18px[^}]*height:\s*18px[^}]*opacity:\s*0/.test(style));
 		assert.ok(/\.parent:hover \.act-btn/.test(style), 'row actions appear on row hover');
 
-		assert.ok(/\.filter,\s*\.search-input\s*\{[^}]*height:\s*26px/.test(style), 'the shared field is 26px');
-		assert.ok(/\.filter,\s*\.search-input\s*\{[^}]*--vscode-input-background/.test(style));
-		assert.ok(/\.filter,\s*\.search-input\s*\{[^}]*--vscode-input-border/.test(style));
+		assert.ok(/\.search-input\s*\{[^}]*height:\s*26px/.test(style), 'the shared field is 26px');
+		assert.ok(/\.search-input\s*\{[^}]*--vscode-input-background/.test(style));
+		assert.ok(/\.search-input\s*\{[^}]*--vscode-input-border/.test(style));
 		assert.ok(/input\[type="search"\]::-webkit-search-cancel-button/.test(style), 'native search cancel stays suppressed');
 		assert.ok(
-			/\.filter-clear(?:,\s*\.search-clear)?\s*\{[^}]*position:\s*absolute/.test(style),
+			/\.search-clear\s*\{[^}]*position:\s*absolute/.test(style),
 			'the custom clear X remains'
 		);
-		assert.ok(/id="filter-clear"/.test(html));
+		assert.ok(/id="search-clear"/.test(html));
 	});
 
 	test('the editor actions use the shared classes and the old toggles are gone', () => {
 		const html = page();
-		assert.ok(/id="empty-clear" class="sb-btn sb-btn-secondary"/.test(html));
 		assert.ok(/id="collapse-all" class="sb-btn sb-btn-secondary/.test(html));
 		assert.ok(/id="expand-all" class="sb-btn sb-btn-secondary/.test(html));
-		assert.ok(html.includes('class="filter"'), 'the filter uses the shared field rule');
+		assert.ok(html.includes('class="search-input"'), 'Search uses the shared field rule');
 		const update = functionSource(html, 'updateInspector');
 		assert.ok(update.includes("'sb-btn sb-btn-secondary'"), 'Jump/Reveal use the shared secondary button');
 		assert.ok(update.includes("'Jump to target'"));

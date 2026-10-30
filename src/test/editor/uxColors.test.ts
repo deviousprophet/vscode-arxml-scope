@@ -77,7 +77,7 @@ suite('editor semantic colours (AC14)', () => {
 		assert.strictEqual(kindFor('IniValue'), 'numeric');
 		assert.strictEqual(kindFor('Title'), 'textual');
 		assert.strictEqual(kindFor('Flag'), 'boolean');
-		// The class contract is unchanged; the widget and filter still select `.value`.
+		// The class contract is unchanged; the widget and search still select `.value`.
 		assert.ok(page().includes("value.className = 'value'"));
 		const upper = buildRows(scanEcucValues(BOOLEAN_CASE_FIXTURE), {}).rows;
 		assert.strictEqual(

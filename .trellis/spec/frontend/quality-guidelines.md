@@ -45,8 +45,7 @@ that is not obvious from the code.
   `#tree`, and stops `Enter`/`Escape`/`Tab` propagation. The Document row handler only selects/opens
   the details editor; it never inserts an input into `.value`.
 - **Anything that must survive a re-scan lives outside the row window.** The shell, toolbar and
-  inspector are not rebuilt; the row store, display list and window are. The filter's empty state is
-  beside the tree because it describes the filtered list.
+  inspector are not rebuilt; the row store, display list and window are.
 - **Only the viewport window is in the DOM.** `calcVisibleRange` over `displayRows` plus the small
   overscan drives `renderWindow`; top/bottom spacers carry the rest of `calcTotalHeight`. Do not
   "hide" offscreen rows — they were never built.
@@ -58,7 +57,7 @@ that is not obvious from the code.
   `--sel-container-bg` with the same rail/outline, and its visible subtree gets the softer
   `--subtree-bg` tint. Tokens keep their colours; high contrast uses outlines, not fills. Do not
   reintroduce `--ecuc-selection-fg` or a monochrome selected line.
-- **`.value` stays a direct child of `.row`.** The filter and tests select `.row > .value`; a wrapper
+- **`.value` stays a direct child of `.row`.** `valueSpan` and tests select `.row > .value`; a wrapper
   cell breaks them. The value contains a `--tok-punct` `=` and a `.value-text`; the document never
   inserts an input. The details input is a separate `.details-value` in the inspector.
 - **One Document presentation.** There is no Tree toggle, view state, Tree grid/glyph/chip CSS or
@@ -80,8 +79,8 @@ that is not obvious from the code.
   surface.
 - **Details editing is the only edit path.** The panel edits a parameter's `<VALUE>` and a
   container's `<SHORT-NAME>` / `<DEFINITION-REF>` inner text. The value control follows the AUTOSAR
-  type: integer/float/text use an input with type-specific filtering; Boolean uses a true/false
-  select. A parameter commits through `{ type: 'edit', nodeId, value }` (no `field`); a container
+  type: integer/float/text use an input with type-specific character checks; Boolean uses a
+  true/false select. A parameter commits through `{ type: 'edit', nodeId, value }` (no `field`); a container
   commits the same message with `field: 'shortName' | 'definitionRef'`. The host normalises a
   missing `field` to `value` and ignores an unknown one. Enter commits, Escape restores, Tab moves
   (adjacent parameter for a value, the other container field for a container). A refusal keeps the
@@ -110,11 +109,14 @@ that is not obvious from the code.
   normal widths; labels may hide only at <=720px. The fixed gutter keeps the row control at the far
   left instead of indenting it with the label.
 - **A re-scan keeps state, not markup.** The host posts `{ type: 'model', rows, selectedId }`; the
-  page reconciles selection, collapse, query and scroll, rebuilds the display list and renders the
+  page reconciles selection, collapse, search and scroll, rebuilds the display list and renders the
   window. There is no `innerHTML` tree swap and no second refresh path.
-- **The filter scans the row index, never the DOM.** `filterRows`/`flattenRows` provide the matches,
-  their ancestors and the displayed list; only rendered rows get `<mark>` elements. The input
-  debounces and a stale generation is discarded.
+- **Search scans the row store, never the DOM.** `searchRows` returns every match and `flattenRows`
+  provides the display list; only rendered rows get `<mark>` elements. All matches share the subtle
+  find-match mark; the current match's row adds `data-search-current` for the stronger mark.
+- **The Details tab is one section.** `updateInspector` rewrites only `#sb-details-body`; Node, value,
+  reference, condition and annotation fields plus Jump/Reveal share that scrolling body. Do not split
+  them back into panes or add sashes to Details.
 - **Samples and benchmarks are dev-only.** The sample directory is outside the repository and
   synthetic; no committed script or CI step reads it. A benchmark is evidence, not a performance promise.
 

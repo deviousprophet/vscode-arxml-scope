@@ -311,8 +311,8 @@ function beginDetailsEdit(rowId, field) {
 		// silently swallow it.
 		showSidebarTab('details');
 	}
-	// The target field's section may be collapsed; reveal it before focus.
-	showSidebarSection(target === 'value' ? 'sb-details-value' : 'sb-details-node');
+	// The Details section may be collapsed; reveal it before focus.
+	showSidebarSection('sb-details');
 	if (selectedId !== rowId) {
 		const item = renderedItemFor(rowId);
 		if (item) {

@@ -1,5 +1,6 @@
 /**
- * Search within the rows the filter displays (find-bar task; PRD R6-R14).
+ * Search over the whole row store, its jump/selection policy and the two
+ * highlight tiers (all matches plus the current match).
  *
  * There is no webview DOM in the test host. The pure candidate/step helpers are
  * imported, their page copies are compiled from `renderHtml`, and the page's own
@@ -11,17 +12,8 @@ import * as assert from 'assert';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { DiffDocument } from '../../diff/diffModel';
 import { renderDiffHtml } from '../../diff/diffPage';
-import {
-	FilterRow,
-	buildFilterIndex,
-	filterRows,
-	flattenRows,
-	haystack,
-	matchRanges,
-	searchRows,
-	stepMatch,
-} from '../../editor/filter';
 import { RowPayload, renderHtml } from '../../editor/renderHtml';
+import { TreeRow, flattenRows, haystack, matchRanges, searchRows, stepMatch } from '../../editor/treeQuery';
 import { fixtureText } from '../core/modelTestUtils';
 import { evaluateFunction, functionSource } from './scriptTestUtils';
 
@@ -43,7 +35,7 @@ function styleOf(html: string): string {
 	return match[1];
 }
 
-const ROWS: FilterRow[] = [
+const ROWS: TreeRow[] = [
 	{ id: 'm', parentId: null, level: 1, subtreeSize: 5, hasChildren: true, haystack: 'pkga.pkgb.moddefs.modx modx' },
 	{ id: 'a', parentId: 'm', level: 2, subtreeSize: 2, hasChildren: true, haystack: 'conta conta' },
 	{ id: 'p1', parentId: 'a', level: 3, subtreeSize: 0, hasChildren: false, haystack: 'inivalue 63' },
@@ -64,19 +56,31 @@ suite('search helpers', () => {
 		assert.deepStrictEqual(searchRows(ROWS, 'nothing-matches-this'), []);
 	});
 
-	test('the visible flags are the only candidate restriction; collapse is not an input', () => {
-		const filtered = filterRows(ROWS, 'inivalue');
-		assert.deepStrictEqual(searchRows(ROWS, 'title', filtered.visible), [], 'a filter-hidden row is not a candidate');
-		assert.deepStrictEqual(searchRows(ROWS, 'title'), [3], 'without the filter the whole tree is searched');
-		assert.deepStrictEqual(searchRows(ROWS, 'nested', filtered.visible), [], 'a hidden subtree is not searched');
-		assert.deepStrictEqual(searchRows(ROWS, 'nested'), [5], 'and is found with no filter even when ancestors are collapsed');
-
+	test('the whole row store is searched, even below a collapsed ancestor', () => {
 		const collapsedDisplay = flattenRows(ROWS, { collapsed: new Set(['b']), braces: true });
 		assert.ok(
 			!collapsedDisplay.some((flat) => flat.type === 'node' && flat.rowIndex === 5),
 			'the collapsed display hides the nested row'
 		);
 		assert.deepStrictEqual(searchRows(ROWS, 'nested'), [5], 'a collapsed row stays a candidate');
+		assert.deepStrictEqual(searchRows(ROWS, 'title'), [3], 'siblings are candidates');
+	});
+
+	test('matchRanges finds every occurrence and haystack joins the searched fields', () => {
+		assert.strictEqual(haystack({ label: 'IniValue', shortName: 'ContA', value: '63' }), 'inivalue conta 63');
+		assert.strictEqual(haystack({ label: 'ContA' }), 'conta');
+		assert.deepStrictEqual(matchRanges('IniValue', 'inivalue'), [{ start: 0, end: 8 }]);
+		assert.deepStrictEqual(matchRanges('IniValue', 'i'), [
+			{ start: 0, end: 1 },
+			{ start: 2, end: 3 },
+		]);
+		assert.deepStrictEqual(matchRanges('aba', 'a'), [
+			{ start: 0, end: 1 },
+			{ start: 2, end: 3 },
+		]);
+		assert.deepStrictEqual(matchRanges('abc', 'zzz'), []);
+		assert.deepStrictEqual(matchRanges('abc', ''), []);
+		assert.deepStrictEqual(matchRanges('abc', '   '), []);
 	});
 
 	test('stepMatch wraps in both directions and handles current = -1', () => {
@@ -91,16 +95,20 @@ suite('search helpers', () => {
 		assert.strictEqual(stepMatch([10, 20, 30], 99, -1), 2);
 	});
 
-	test('the page serializes the same two helpers', () => {
+	test('the page serializes the same helpers', () => {
 		const html = page();
 		const inlinedSearch = evaluateFunction<typeof searchRows>(html, 'searchRows');
 		const inlinedStep = evaluateFunction<typeof stepMatch>(html, 'stepMatch');
+		const inlinedRanges = evaluateFunction<typeof matchRanges>(html, 'matchRanges');
 		for (const query of ['', '  ', 'inivalue', 'CONT', 'nope']) {
 			assert.deepStrictEqual(inlinedSearch(ROWS, query), searchRows(ROWS, query), query);
 		}
 		for (const current of [-1, 0, 1, 2, 5]) {
 			assert.strictEqual(inlinedStep([10, 20, 30], current, 1), stepMatch([10, 20, 30], current, 1));
 			assert.strictEqual(inlinedStep([10, 20, 30], current, -1), stepMatch([10, 20, 30], current, -1));
+		}
+		for (const [text, query] of [['IniValue', 'i'], ['aba', 'a'], ['abc', '']] as Array<[string, string]>) {
+			assert.deepStrictEqual(inlinedRanges(text, query), matchRanges(text, query));
 		}
 	});
 });
@@ -149,10 +157,9 @@ function compileSearchUi(
 }
 
 interface RefreshState {
-	rows: FilterRow[];
+	rows: TreeRow[];
 	rowIndexById: Map<string, number>;
 	searchQuery: string;
-	filterResult: { visible: boolean[] } | null;
 	searchMatches: number[];
 	searchIndex: number;
 	selectedId?: string;
@@ -161,7 +168,7 @@ interface RefreshState {
 
 interface RefreshHarness {
 	run(startAtSelection: boolean, previousId?: string): void;
-	reindex(nextRows: FilterRow[]): void;
+	reindex(nextRows: TreeRow[]): void;
 	state(): { matches: number[]; index: number; highlight: string };
 }
 
@@ -178,7 +185,6 @@ function compileRefresh(html: string, initial: RefreshState): RefreshHarness {
 		let rows = initial.rows;
 		let rowIndexById = initial.rowIndexById;
 		let searchQuery = initial.searchQuery;
-		let filterResult = initial.filterResult;
 		let searchMatches = initial.searchMatches;
 		let searchIndex = initial.searchIndex;
 		let selectedId = initial.selectedId;
@@ -199,7 +205,7 @@ function compileRefresh(html: string, initial: RefreshState): RefreshHarness {
 }
 
 function refreshState(overrides: Partial<RefreshState> = {}): RefreshState {
-	const rows: FilterRow[] = [
+	const rows: TreeRow[] = [
 		{ id: 'r0', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'alpha' },
 		{ id: 'r1', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'beta' },
 		{ id: 'r2', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'alpine' },
@@ -210,7 +216,6 @@ function refreshState(overrides: Partial<RefreshState> = {}): RefreshState {
 		rows,
 		rowIndexById: new Map(rows.map((row, at) => [row.id, at])),
 		searchQuery: 'alp',
-		filterResult: null,
 		searchMatches: [],
 		searchIndex: -1,
 		highlightQuery: '',
@@ -345,16 +350,14 @@ function marksOf(node: FakeNode): string[] {
 
 function compileHighlight(
 	html: string,
-	filterQuery: string,
 	highlightQuery: string
 ): (parent: FakeElement, text: string, query?: string) => void {
 	return new Function(
-		'filterQuery',
 		'highlightQuery',
 		'matchRanges',
 		'document',
 		`${functionSource(html, 'appendHighlighted')}\nreturn appendHighlighted;`
-	)(filterQuery, highlightQuery, matchRanges, fakeDocument()) as never;
+	)(highlightQuery, matchRanges, fakeDocument()) as never;
 }
 
 interface ClearSearchResult {
@@ -406,6 +409,7 @@ interface SyncSearchState {
 	matches: number[];
 	index: number;
 	renders: number;
+	windows: number;
 }
 
 function compileSyncSearch(html: string, state: SyncSearchState): (id: string) => number {
@@ -417,6 +421,7 @@ function compileSyncSearch(html: string, state: SyncSearchState): (id: string) =
 		let searchMatches = state.matches;
 		let searchIndex = state.index;
 		function renderSearchUi() { state.renders++; }
+		function renderWindow() { state.windows++; }
 		${functionSource(html, 'syncSearchToSelection')}
 		return function (id) {
 			syncSearchToSelection(id);
@@ -427,15 +432,14 @@ function compileSyncSearch(html: string, state: SyncSearchState): (id: string) =
 }
 
 suite('search page', () => {
-	test('the toolbar has separate filter and search fields, a count and one X per field', () => {
+	test('the toolbar has one query field, a count and one clear control', () => {
 		const html = page();
 		const start = html.indexOf('<div class="toolbar">');
 		const noticeAt = html.indexOf('<div id="notice"');
 		assert.ok(start >= 0 && noticeAt > start, 'the toolbar is a distinct strip');
 		const toolbar = html.slice(start, noticeAt);
-		assert.ok(toolbar.includes('class="filter-wrap"'), 'the filter keeps its wrapper');
-		assert.ok(/id="filter"[^>]*class="filter"[^>]*type="search"[^>]*aria-label="Filter the ECUC tree"/.test(toolbar));
-		assert.ok(toolbar.includes('class="search-box"'), 'the search field is a toolbar sibling');
+		assert.strictEqual((toolbar.match(/<input\b/g) || []).length, 1, 'Search is the only query control');
+		assert.ok(toolbar.includes('class="search-box"'), 'the search field owns the toolbar query area');
 		assert.ok(
 			/id="search-input"[^>]*class="search-input"[^>]*type="search"[^>]*aria-label="Search the ECUC tree"/.test(toolbar),
 			'the search field uses the shared input style and an accessible name'
@@ -448,20 +452,16 @@ suite('search page', () => {
 		assert.ok(/id="search-next"[^>]*class="[^"]*nav-btn[^"]*"[^>]*\sdisabled(?=[\s>])/.test(toolbar));
 		assert.ok(/id="search-next"[^>]*aria-label="Next match"/.test(toolbar), 'next has a name');
 		assert.ok(/id="search-count"[^>]*role="status"[^>]*aria-live="polite"[^>]*hidden/.test(toolbar));
-		assert.strictEqual((html.match(/id="filter-clear"/g) || []).length, 1);
 		assert.strictEqual((html.match(/id="search-clear"/g) || []).length, 1);
 		assert.ok(!html.includes('id="find"') && !html.includes('find-bar'), 'there is no separate find bar');
 		assert.ok(!/style="/.test(toolbar), 'no inline styles');
 
-		const filterWrap = /<div class="filter-wrap">([\s\S]*?)<\/div>/.exec(html);
-		assert.ok(filterWrap, 'the filter wrapper is emitted');
-		assert.strictEqual((filterWrap[1].match(/<button\b/g) || []).length, 1, 'exactly one filter X');
 		const searchField = /<div class="search-field">([\s\S]*?)<\/div>/.exec(html);
 		assert.ok(searchField, 'the search field wraps the input and its X');
 		assert.strictEqual((searchField[1].match(/<button\b/g) || []).length, 1, 'exactly one search X');
 	});
 
-	test('the shared field style, count and narrow-width rules are used', () => {
+	test('the shared field style and the narrow-width rule are used', () => {
 		const style = styleOf(page());
 		assert.ok(/input\[type="search"\]::-webkit-search-cancel-button/.test(style), 'native cancellation is suppressed');
 		assert.ok(/input\[type="search"\]::-webkit-search-decoration/.test(style));
@@ -470,21 +470,20 @@ suite('search page', () => {
 		assert.ok(/\.search-field \.search-input\s*\{[^}]*padding:\s*0 22px 0 25px/.test(style), 'room for the icon and X');
 		assert.ok(/\.search-icon\s*\{[^}]*--vscode-descriptionForeground/.test(style));
 		assert.ok(
-			/\.filter:focus,\s*\.search-input:focus\s*\{[^}]*--vscode-focusBorder/.test(style),
-			'the shared field focus border is visible'
+			/\.search-input:focus\s*\{[^}]*--vscode-focusBorder/.test(style),
+			'the field focus border is visible'
 		);
 		assert.ok(
 			/\.search-count\s*\{[^}]*width:\s*14ch[^}]*font-variant-numeric:\s*tabular-nums/.test(style),
 			'the search count is a fixed tabular column'
 		);
-		assert.ok(/\.count\s*\{[^}]*font-variant-numeric:\s*tabular-nums/.test(style), 'the filter count is tabular too');
 		assert.ok(/\.search-count\[hidden\]\s*\{[^}]*display:\s*none/.test(style));
 		assert.ok(
-			/@media \(max-width: 720px\)[\s\S]*?\.filter-wrap\s*\{[^}]*flex:\s*1 1 0[\s\S]*?\.search-box\s*\{[^}]*flex:\s*1 1 0/.test(style),
-			'both fields shrink instead of overlapping the actions'
+			/@media \(max-width: 720px\)[\s\S]*?\.search-box\s*\{[^}]*flex:\s*1 1 0/.test(style),
+			'the field shrinks instead of overlapping the actions'
 		);
 		assert.ok(/\.search-box \.search-nav\s*\{[^}]*width:\s*28px[^}]*height:\s*26px/.test(style));
-		assert.ok(/\.filter-clear,\s*\.search-clear\s*\{[^}]*width:\s*18px[^}]*height:\s*18px/.test(style));
+		assert.ok(/\.search-clear\s*\{[^}]*width:\s*18px[^}]*height:\s*18px/.test(style));
 	});
 
 	test('the count reads 1 / N, 0 / 0, or hides; nav disables with no matches', () => {
@@ -516,7 +515,7 @@ suite('search page', () => {
 		assert.strictEqual(middle.count.textContent, '3 / 3');
 	});
 
-	test('typing starts at the selection; a filter/re-scan keeps the current match by id', () => {
+	test('typing starts at the selection; a re-scan keeps the current match by id', () => {
 		const html = page();
 		const first = compileRefresh(html, refreshState());
 		first.run(true);
@@ -557,28 +556,13 @@ suite('search page', () => {
 			'a re-scan that shifts row indices keeps the current match by id, not by old index'
 		);
 
-		const filtered = compileRefresh(
-			html,
-			refreshState({
-				searchMatches: [0, 2],
-				searchIndex: 1,
-				filterResult: { visible: [false, false, true, false, false] },
-			})
-		);
-		filtered.run(false, 'r0');
-		assert.deepStrictEqual(
-			filtered.state(),
-			{ matches: [2], index: 0, highlight: 'alp' },
-			'the filter restricts candidates and the first remaining match is current'
-		);
-
 		const none = compileRefresh(html, refreshState({ searchQuery: 'zzz', searchMatches: [0, 2], searchIndex: 1 }));
 		none.run(true);
 		assert.deepStrictEqual(none.state(), { matches: [], index: -1, highlight: 'zzz' });
 
 		const cleared = compileRefresh(html, refreshState({ searchQuery: '', searchMatches: [0, 2], searchIndex: 1 }));
 		cleared.run(true);
-		assert.deepStrictEqual(cleared.state(), { matches: [], index: -1, highlight: '' }, 'a blank query clears the highlight override');
+		assert.deepStrictEqual(cleared.state(), { matches: [], index: -1, highlight: '' }, 'a blank query clears the highlight');
 	});
 
 	test('a search jump expands ancestors, scrolls, selects and keeps focus in the input', () => {
@@ -605,7 +589,7 @@ suite('search page', () => {
 		assert.deepStrictEqual([...positions].sort((a, b) => a - b), positions, 'the steps run in the designed order');
 	});
 
-	test('clearing the search resets query/current/highlight and restores the filter marks', () => {
+	test('clearing the search resets query/current/highlight', () => {
 		const html = page();
 		const clear = compileClearSearch(html);
 		const cleared = clear(false);
@@ -621,8 +605,8 @@ suite('search page', () => {
 		});
 
 		const label = fakeElement();
-		compileHighlight(html, 'IniValue', cleared.highlight)(label, 'IniValue');
-		assert.deepStrictEqual(marksOf(label), ['IniValue'], 'the filter query marks the row again');
+		compileHighlight(html, cleared.highlight)(label, 'IniValue');
+		assert.deepStrictEqual(marksOf(label), [], 'a cleared search leaves no marks');
 
 		const refocused = clear(true);
 		assert.strictEqual(refocused.focused, true, 'the clear X keeps focus in the field');
@@ -642,18 +626,21 @@ suite('search page', () => {
 			matches: [0, 2],
 			index: 1,
 			renders: 0,
+			windows: 0,
 		};
 		const sync = compileSyncSearch(html, state);
 		assert.strictEqual(sync('r0'), 0, 'a match becomes current');
 		assert.strictEqual(state.renders, 1, 'and the count is repainted');
+		assert.strictEqual(state.windows, 1, 'and the stronger current mark moves');
 		assert.strictEqual(sync('r1'), 0, 'a non-match leaves the current match alone');
 		assert.strictEqual(state.renders, 1, 'without repainting the count');
 		assert.strictEqual(sync('missing'), 0);
 
-		const blank: SyncSearchState = { ...state, query: '  ', index: 1, renders: 0 };
+		const blank: SyncSearchState = { ...state, query: '  ', index: 1, renders: 0, windows: 0 };
 		const ignore = compileSyncSearch(html, blank);
 		assert.strictEqual(ignore('r0'), 1, 'a blank query is not a search');
 		assert.strictEqual(blank.renders, 0);
+		assert.strictEqual(blank.windows, 0);
 	});
 
 	test('search input, clear, nav, Ctrl+F, Escape, Enter and F3 are wired', () => {
@@ -685,7 +672,7 @@ suite('search page', () => {
 		assert.ok(focusTree.includes('visibleNodeIds[0]'), 'otherwise to the first visible row');
 	});
 
-	test('search never changes filter visibility or count, and a filter change recomputes it', () => {
+	test('search never changes rows or collapse state and a re-scan recomputes it', () => {
 		const html = page();
 		for (const name of [
 			'refreshSearch',
@@ -696,9 +683,7 @@ suite('search page', () => {
 			'syncSearchToSelection',
 		]) {
 			const source = functionSource(html, name);
-			assert.ok(!/filterQuery\s*=/.test(source), `${name} never writes the filter query`);
-			assert.ok(!/filterResult\s*=/.test(source), `${name} never writes the filter result`);
-			assert.ok(!/updateFilterUi\s*\(/.test(source), `${name} never repaints the filter count`);
+			assert.ok(!source.includes('collapsed'), `${name} never writes the collapsed set`);
 			assert.ok(!source.includes('postMessage'), `${name} never messages the host`);
 		}
 		const jump = functionSource(html, 'jumpToSearchMatch');
@@ -707,78 +692,48 @@ suite('search page', () => {
 			'the jump persists its selection so a re-scan keeps it'
 		);
 		assert.strictEqual(jump.match(/postMessage/g)?.length, 1, 'the jump sends only the select message');
-		const apply = functionSource(html, 'applyFilterQuery');
-		assert.ok(apply.includes('refreshSearch(false, previousMatchId)'), 'the filter recomputes search candidates');
-		assert.ok(apply.indexOf('refreshFilter()') < apply.indexOf('refreshSearch('), 'after the filter result exists');
-		assert.ok(apply.indexOf('updateFilterUi()') < apply.indexOf('refreshSearch('), 'and after the filter count is painted');
-		assert.ok(!apply.includes('clearSearch'), 'the filter never clears search');
-		assert.ok(!apply.includes("filterQuery = ''"), 'and never clears itself');
+		assert.ok(functionSource(html, 'searchCandidates').includes('searchRows(rows, searchQuery)'), 'the whole store is searched');
 
 		const setRows = functionSource(html, 'setRows');
 		assert.ok(setRows.includes('const previousMatchId = currentMatchId();'));
 		assert.ok(setRows.indexOf('currentMatchId()') < setRows.indexOf('rows = incoming'), 'the current match id is captured first');
 		assert.ok(setRows.includes('refreshSearch(false, previousMatchId)'), 'the re-scan recomputes over the new rows');
 		assert.ok(!/searchQuery\s*=/.test(setRows), 'the query survives a re-scan');
+		const rebuild = functionSource(html, 'rebuildDisplay');
+		assert.ok(!rebuild.includes('visible:'), 'the display list has no query visibility input');
 
 		const click = functionSource(html, 'onRowClick');
 		assert.ok(click.indexOf('selectItem(item)') < click.indexOf('syncSearchToSelection(item.dataset.nodeId)'));
 		const sync = functionSource(html, 'syncSearchToSelection');
 		assert.ok(sync.includes('searchMatches.indexOf(rowIndex)') && sync.includes('searchIndex = at'));
+		assert.ok(sync.includes('renderWindow(true)'), 'the current-mark repaint follows the index');
 	});
 
-	test('an active filter restricts candidates, and the cleared filter restores filter highlighting', () => {
-		const html = page();
-		const rows = payload(html).rows;
-		const index = buildFilterIndex(rows);
-		const filter = filterRows(rows, 'IniValue', index);
-		const titleAt = rows.findIndex((row) => row.label === 'Title');
-		const contAt = rows.findIndex((row) => row.label === 'ContA');
-		const iniAt = rows.findIndex((row) => row.label === 'IniValue');
-		assert.ok(titleAt >= 0 && contAt >= 0 && iniAt >= 0);
-		assert.strictEqual(filter.visible[titleAt], false, 'the filter hides the sibling');
-		assert.deepStrictEqual(searchRows(rows, 'Title', filter.visible), [], 'so Title is not a search candidate');
-		assert.deepStrictEqual(searchRows(rows, 'Title'), [titleAt], 'without the filter it is found');
-		assert.deepStrictEqual(searchRows(rows, 'ContA', filter.visible), [contAt], 'context ancestors stay candidates');
-		assert.deepStrictEqual(searchRows(rows, 'IniValue', filter.visible), [iniAt]);
-		const snapshot = {
-			matches: filter.matches.slice(),
-			visible: filter.visible.slice(),
-			matchCount: filter.matchCount,
-			visibleCount: filter.visibleCount,
-		};
-		searchRows(rows, 'ContA', filter.visible);
-		searchRows(rows, 'IniValue');
-		assert.deepStrictEqual(filter, snapshot, 'searchRows does not mutate the filter result');
-
-		const filterAppend = compileHighlight(html, 'IniValue', '');
-		const filteredLabel = fakeElement();
-		filterAppend(filteredLabel, 'IniValue');
-		assert.deepStrictEqual(marksOf(filteredLabel), ['IniValue'], 'the filter query is the fallback highlight');
-	});
-
-	test('search highlighting takes precedence over the filter until the query is cleared', () => {
+	test('every match is marked and the current match gets the stronger mark', () => {
 		const html = page();
 		const text = 'IniValue ContA';
-		const filterOnly = fakeElement();
-		compileHighlight(html, 'cont', '')(filterOnly, text);
-		assert.deepStrictEqual(marksOf(filterOnly), ['Cont'], 'the filter marks its own query');
-
-		const searchWins = fakeElement();
-		compileHighlight(html, 'cont', 'inivalue')(searchWins, text);
-		assert.deepStrictEqual(marksOf(searchWins), ['IniValue'], 'the search query wins while non-blank');
-
-		const blankSearch = fakeElement();
-		compileHighlight(html, 'cont', '   ')(blankSearch, text);
-		assert.deepStrictEqual(marksOf(blankSearch), ['Cont'], 'a blank search restores the filter marks');
+		const all = fakeElement();
+		compileHighlight(html, 'inivalue')(all, text);
+		assert.deepStrictEqual(marksOf(all), ['IniValue'], 'all occurrences of the query are marked');
 
 		const explicit = fakeElement();
-		compileHighlight(html, 'cont', 'inivalue')(explicit, text, 'conta');
+		compileHighlight(html, 'inivalue')(explicit, text, 'conta');
 		assert.deepStrictEqual(marksOf(explicit), ['ContA'], 'an explicit query still bypasses the page fallback');
+		assert.strictEqual(textOf(all), text, 'highlighting preserves the full text');
 
-		const appendSource = functionSource(html, 'appendHighlighted');
-		assert.ok(appendSource.includes("typeof highlightQuery === 'string' && highlightQuery.trim() !== ''"));
-		assert.ok(appendSource.includes(': filterQuery'));
-		assert.ok(html.includes("let highlightQuery = '';"), 'the editor page declares the override');
+		const build = functionSource(html, 'buildNodeRow');
+		assert.ok(build.includes("node.dataset.searchCurrent = 'true'"), 'the current row carries a data flag');
+		assert.ok(build.includes('row.id === currentMatchId()'), 'and it is the row at the current index');
+		const style = styleOf(html);
+		assert.ok(
+			/\.node\[data-search-current="true"\] > \.row mark\s*\{[^}]*--vscode-editor-findMatchBackground/.test(style),
+			'the current mark uses the stronger find-match background'
+		);
+		assert.ok(
+			/mark\s*\{[^}]*--vscode-editor-findMatchHighlightBackground/.test(style),
+			'the other marks keep the subtle highlight'
+		);
+
 		const diffDocument: DiffDocument = {
 			left: { name: 'left.arxml', path: '/work/left.arxml' },
 			right: { name: 'right.arxml', path: '/work/right.arxml' },
@@ -787,22 +742,18 @@ suite('search page', () => {
 		};
 		assert.ok(
 			renderDiffHtml(diffDocument, { nonce: 'test-nonce' }).includes("let highlightQuery = '';"),
-			'the diff page declares it too'
+			'the diff page still declares the shared highlight global'
 		);
-		assert.strictEqual(textOf(filterOnly), text, 'highlighting preserves the full text');
 	});
 
-	test('the search label and count are independent from the filter count', () => {
+	test('the search label and count are owned by Search', () => {
 		const html = page();
-		const filterUi = functionSource(html, 'updateFilterUi');
-		assert.ok(filterUi.includes("filterResult.visibleCount + ' of ' + rows.length"), 'the filter count keeps its shown-of-total text');
 		const searchUi = functionSource(html, 'renderSearchUi');
 		assert.ok(searchUi.includes("(searchIndex + 1) + ' / ' + searchMatches.length"), 'search prints current of total');
 		assert.ok(searchUi.includes("'0 / 0'"), 'a query with no matches says 0 / 0');
 		assert.ok(searchUi.includes('searchPrev.disabled = !hasMatches'));
 		assert.ok(searchUi.includes('searchNext.disabled = !hasMatches'));
-		assert.ok(!searchUi.includes('visibleCount'), 'search never rewrites the filter count');
-		assert.ok(html.includes('id="count"') && html.includes('id="search-count"'), 'both counts exist');
-		assert.strictEqual(haystack({ label: 'IniValue', shortName: 'ContA', value: '63' }), 'inivalue conta 63');
+		assert.ok(html.includes('id="search-count"'));
+		assert.ok(!html.includes('id="count"'), 'there is no second toolbar count');
 	});
 });

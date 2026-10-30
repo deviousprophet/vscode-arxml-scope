@@ -3,7 +3,7 @@
  *
  * This is the host half of the virtual renderer: it walks the model in display
  * order and emits one plain object per entity — no HTML string, no DOM, no
- * `vscode` import. The page owns windowing, filtering and row markup; the host
+ * `vscode` import. The page owns windowing, querying and row markup; the host
  * stays the single owner of the ECUC ordering and display rules
  * (`orderModules` / `orderContainers` / `orderMembers`, `lastShortName`,
  * `dotted`, `camelize`, the suffix rules).
@@ -11,7 +11,7 @@
  * `EcucRow` carries the fields the Document surface needs - label, value/target/
  * context, the meta parts and the search haystack - but as values. Every row is in
  * DFS/display order with its children contiguous after it, which is what makes
- * `subtreeSize` a complete collapse index and `parentId` enough for filter ancestors.
+ * `subtreeSize` a complete collapse index and `parentId` enough for the ancestor walk.
  */
 import {
 	ContainerNode,
@@ -27,7 +27,7 @@ import {
 import { ConditionState, ConditionValue, evaluateSyscond } from '../core/ecuc/syscond';
 import { resolvePath } from '../core/ecuc/resolve';
 import { SORT_EXCEPTIONS, orderContainers, orderMembers, orderModules } from '../core/ecuc/order';
-import { haystack } from './filter';
+import { haystack } from './treeQuery';
 import { NodeIndex, buildNodeIndex } from './nodeId';
 
 /** One quiet-source meta fragment (short name, variant, context, condition, annotation). */
@@ -100,7 +100,7 @@ export interface EcucRow {
 	disabled?: boolean;
 	/** Why this row is disabled; absent when it is not. */
 	disabledBy?: 'self' | 'ancestor';
-	/** Lower-cased label + short name + value, the existing filter haystack. */
+	/** Lower-cased label + short name + value, the Search haystack. */
 	haystack: string;
 }
 

@@ -1,16 +1,16 @@
 /**
- * Task design §4, §5 and §8 — the page's own row/window/filter/focus code.
+ * Task design §4, §5 and §8 — the page's own row/window/flatten/focus code.
  *
  * The test host has no webview DOM, so the page script is the artifact: the
  * functions it serializes are extracted from the rendered page and driven with
- * real row data. That is enough to pin the window range, collapse/filter
- * flattening, the offscreen inspector and the focus/state rules; the DOM pass
- * is the browser harness's job.
+ * real row data. That is enough to pin the window range, collapse flattening, the
+ * offscreen inspector and the focus/state rules; the DOM pass is the browser
+ * harness's job.
  */
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { buildFilterIndex, filterRows, flattenRows, ancestorIds, FilterRow, FlatNodeRow } from '../../editor/filter';
+import { FlatNodeRow, TreeRow, ancestorIds, flattenRows } from '../../editor/treeQuery';
 import {
 	RowPayload,
 	encodeRowDocument,
@@ -65,7 +65,7 @@ function pageVirtualMath(html: string): {
 	)() as never;
 }
 
-function syntheticRows(count = 12): FilterRow[] {
+function syntheticRows(count = 12): TreeRow[] {
 	return Array.from({ length: count }, (_, at) => ({
 		id: 'row-' + at,
 		parentId: at === 0 ? null : 'row-' + (at - 1),
@@ -130,26 +130,6 @@ suite('virtual page (design §4, §5, §8)', () => {
 			'a collapsed node gets no brace pair'
 		);
 		assert.ok(tree.length > collapsed.length);
-	});
-
-	test('design §4/§7: filter keeps matches plus ancestors without changing the collapsed set', () => {
-		const html = page();
-		const indexRows = evaluateFunction<typeof buildFilterIndex>(html, 'buildFilterIndex');
-		const filter = evaluateFunction<typeof filterRows>(html, 'filterRows');
-		const flatten = evaluateFunction<typeof flattenRows>(html, 'flattenRows');
-		const rows = syntheticRows(12);
-		const collapsed = new Set([rows[0].id]);
-		const result = filter(rows, 'value4', indexRows(rows));
-		assert.ok(result.matchCount > 0);
-		assert.ok(result.visible[0], 'the root is an ancestor of the match');
-		const visibleIndexes = flatten(rows, { collapsed, visible: result.visible })
-			.filter((row) => row.type === 'node')
-			.map((row) => row.rowIndex);
-		assert.ok(visibleIndexes.includes(4), 'the match is reachable through the collapsed ancestor');
-		assert.deepStrictEqual(Array.from(collapsed), [rows[0].id], 'the saved collapsed set is untouched');
-		const none = filter(rows, 'nothing-matches-this', indexRows(rows));
-		assert.strictEqual(none.matchCount, 0);
-		assert.strictEqual(none.visibleCount, 0);
 	});
 
 	test('design §8: the inspector reads an offscreen row from the row map', () => {
@@ -261,18 +241,17 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.ok(!inspector.includes('Copy path') && !inspector.includes('Copy value'), 'copy actions are gone');
 	});
 
-	test('design §8: a re-scan preserves selection, collapse and query where possible', () => {
+	test('design §8: a re-scan preserves selection and collapse where possible', () => {
 		const html = page();
 		const inline = new Function(
 			`${functionSource(html, 'pruneCollapsed')}\n${functionSource(html, 'reconcileRowState')}\nreturn reconcileRowState;`
 		)() as typeof reconcileRowState;
-		const state = { selectedId: 'b', collapsed: ['a', 'gone'], query: 'ini' };
+		const state = { selectedId: 'b', collapsed: ['a', 'gone'] };
 		const next = [{ id: 'a' }, { id: 'b' }];
 		const preserved = reconcileRowState(state, next);
 		assert.deepStrictEqual(preserved, {
 			selectedId: 'b',
 			collapsed: ['a'],
-			query: 'ini',
 		});
 		assert.deepStrictEqual(inline(state, next), preserved);
 

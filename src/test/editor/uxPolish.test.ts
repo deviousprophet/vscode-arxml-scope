@@ -1,6 +1,6 @@
 /**
- * The details panel, the Document surface, the filter feedback and the state/toggle
- * wiring after the Document-only UI polish.
+ * The details panel, the Document surface and the state/toggle wiring after the
+ * Document-only UI polish.
  *
  * There is no webview DOM in the test host, so the assertions are on the row data, the
  * shell and the page's own inline script. The DOM pass — a click filling the panel, the
@@ -120,10 +120,7 @@ suite('editor visual polish', () => {
 		assert.ok(update.includes('rowById.get(selectedId)'), 'the panel selects from the row map');
 		assert.ok(!update.includes('querySelector'), 'and never from the rendered DOM');
 		assert.ok(update.includes('revealItem(row.id)'));
-		assert.ok(update.includes('detailsNodeBody'), 'the details are split into stable section bodies');
-		assert.ok(update.includes('detailsValueBody'));
-		assert.ok(update.includes('detailsReferenceBody'));
-		assert.ok(update.includes('detailsConditionsBody'));
+		assert.ok(update.includes('detailsBody'), 'the details are one stable section body');
 		assert.ok(!update.includes('innerHTML'), 'model text is never inserted as markup');
 
 		const details = functionSource(html, 'detailsValueInput');
@@ -184,35 +181,6 @@ suite('editor visual polish', () => {
 		assert.ok(!style.includes('grid-template-columns'), 'the Tree grid is removed');
 		assert.ok(/\.label\s*\{[^}]*text-overflow:\s*ellipsis/.test(style));
 		assert.ok(/\.value\s*\{[^}]*text-overflow:\s*ellipsis/.test(style));
-	});
-
-	test('the filter has a clear button, a count state and an empty state', () => {
-		const html = page();
-		assert.ok(html.includes('id="filter-clear"'));
-		assert.ok(html.includes('id="count"') && html.includes('data-state="none"'));
-		assert.ok(html.includes('id="empty"'));
-		assert.ok(html.includes('id="empty-text"'));
-		assert.ok(html.includes('id="empty-clear"'));
-		const apply = functionSource(html, 'updateFilterUi');
-		assert.ok(apply.includes("countLabel.dataset.state = 'none'"));
-		assert.ok(apply.includes("countLabel.dataset.state = 'empty'"));
-		assert.ok(apply.includes("countLabel.dataset.state = 'filtered'"));
-		assert.ok(apply.includes("clearButton.hidden = filterInput.value.trim() === ''"));
-		assert.ok(apply.includes("emptyText.textContent = '/* No entities match \"' + filterInput.value.trim() + '\". */'"));
-		assert.ok(html.includes("event.target.closest('#empty-clear')"), 'the empty clear is delegated');
-	});
-
-	test('the filter highlights label, short name and value through the shared matchRanges', () => {
-		const html = page();
-		const highlight = functionSource(html, 'appendHighlighted');
-		assert.ok(highlight.includes('matchRanges('), 'the one definition of a match is used');
-		assert.ok(highlight.includes("document.createElement('mark')"), 'a real highlight element');
-		assert.ok(!highlight.includes('dataset.highlighted'), 'rows are rebuilt for each window, so no restore dance');
-		const build = functionSource(html, 'buildNodeRow');
-		assert.ok(build.includes('appendHighlighted(label, row.label)'));
-		assert.ok(functionSource(html, 'valueSpan').includes("appendHighlighted(text, row.shownValue || '')"));
-		assert.ok(functionSource(html, 'metaSpan').includes("appendHighlighted(span, part.text)"), 'the short name');
-		assert.ok(!html.includes("document.querySelectorAll('#tree [role=\"treeitem\"]')"), 'no DOM-wide scan');
 	});
 
 	test('selection uses a quiet tint and keeps token colours', () => {

@@ -51,6 +51,8 @@ suite('editor document view', () => {
 		assert.ok(!html.includes('id="details-toggle"'), 'the details toggle is replaced by the tab strip');
 		assert.ok(!html.includes('id="conditions-toggle"'), 'the conditions toolbar toggle is gone');
 		assert.ok(html.includes('<div id="inspector" class="inspector sb-pane-view" role="region" aria-label="Node details">'));
+		assert.ok(html.includes('id="sb-details-body"'), 'the Details tab has one section body');
+		assert.ok(!/class="sb-pane-sash"/.test(html), 'there are no pane sashes in the sidebar');
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));
 		assert.ok(html.includes('<div id="notice" class="notice" role="status" aria-live="polite"></div>'));
@@ -115,10 +117,6 @@ suite('editor document view', () => {
 		assert.ok(
 			/body\[data-view="document"\] \.meta\s*\{[^}]*padding:[^;]*var\(--content-pad\)/.test(style),
 			'the header aligns with the post-gutter content edge'
-		);
-		assert.ok(
-			/body\[data-view="document"\] \.empty\s*\{[^}]*padding:[^;]*var\(--content-pad\)/.test(style),
-			'the empty state aligns with the post-gutter content edge'
 		);
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-gap="true"\]\s*\{[^}]*padding-top:\s*var\(--ecuc-lh\)/.test(style)
@@ -230,8 +228,7 @@ suite('editor document view', () => {
 		assert.ok(/\.toolbar\s*\{[^}]*height:\s*26px/.test(style));
 		assert.ok(/\.toolbar\s*\{[^}]*padding:\s*0 8px/.test(style));
 		assert.ok(/\.toolbar\s*\{[^}]*flex-wrap:\s*nowrap/.test(style));
-		assert.ok(/\.filter-wrap\s*\{[^}]*flex:\s*0 1 28ch/.test(style));
-		assert.ok(/\.filter,\s*\.search-input\s*\{[^}]*height:\s*26px[^}]*var\(--vscode-input-background\)/.test(style));
+		assert.ok(/\.search-input\s*\{[^}]*height:\s*26px[^}]*var\(--vscode-input-background\)/.test(style));
 		assert.ok(/\.tool\s*\{[^}]*background:\s*transparent[^}]*border:\s*0/.test(style));
 		assert.ok(!style.includes('.view-switch'), 'no view switch');
 	});
@@ -410,11 +407,11 @@ suite('editor document view', () => {
 			'the legacy hide flag is ignored rather than written back'
 		);
 		assert.strictEqual(loadUiState({ tab: 'conditions' }).tab, 'conditions', 'the saved tab is restored');
-		assert.deepStrictEqual(loadUiState({ panes: { 'sb-details-node': 120 }, collapsed: ['sb-details-value'] }), {
+		assert.deepStrictEqual(loadUiState({ panes: { 'sb-details': 120 }, collapsed: ['sb-conditions-values'] }), {
 			tab: 'details',
 			sidebarWidth: 360,
-			panes: { 'sb-details-node': 120 },
-			collapsed: ['sb-details-value'],
+			panes: { 'sb-details': 120 },
+			collapsed: ['sb-conditions-values'],
 		});
 	});
 

@@ -34,8 +34,8 @@ async function main() {
 		// `Function.prototype.toString()` (renderHtml.ts, virtualScroll.ts,
 		// ecucDetailsEditor.ts), and the page's own code calls those functions by
 		// their source names. Identifier minification renames the declarations but
-		// not the call sites in the template, so the installed VSIX died at boot
-		// with `ReferenceError: createFilterDebouncer is not defined`.
+		// not the call sites in the template, so the installed VSIX once died at
+		// boot with a `ReferenceError` for a serialized helper.
 		minifyWhitespace: production,
 		minifySyntax: production,
 		minifyIdentifiers: false,

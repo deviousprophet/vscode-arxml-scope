@@ -31,29 +31,27 @@ re-scans and refuses if the bytes moved.
 | `selectedId` | page script | yes, via the host payload; `reconcileRowState` drops it only if the row is gone |
 | `focusId` | page script | yes when its row is still rendered; `resolveFocusId` picks a roving fallback otherwise |
 | `collapsed: Set<nodeId>` | page script | yes; pruned by `pruneCollapsed` and read by `flattenRows` |
-| `filterQuery`, `filterResult` | page script | yes; the index is rebuilt and the query re-run against the new rows |
+| `searchQuery`, `searchMatches`, `searchIndex` | page script | recomputed over the full row store; the current match is kept by id where possible |
 | `windowRange`, `main.scrollTop` | page script + browser | yes where possible; the scroll offset is restored and clamped by the new total |
-| `displayRows`, `expandedIds`, `subtreeIds`, `guideLevels` | page script | derived from the rows, collapsed set, filter and selected subtree |
+| `displayRows`, `expandedIds`, `subtreeIds`, `guideLevels` | page script | derived from the rows, collapsed set and selected subtree |
 | type-ahead buffer | page script | yes; it is a transient 2 s window |
 | `detailsEdits` / `pendingMove` / `pendingFieldFocus` / `flashId` | details editor | no; the re-scan message clears stale state and rebuilds the details inputs |
 | `uiState.tab / sidebarWidth / panes / collapsed` | page + host state | yes, through `getState()/setState()` |
 
 The collapsed set is the only state that must not be re-derived from the rendered order. Node ids
 are path-based and include a declaration-order ordinal (see `nodeId.ts`); pruning only drops ids the
-new row set no longer contains. The filter never writes the collapsed set: `filterRows` marks
-matches/ancestors and `flattenRows` force-expands a collapsed ancestor for as long as a visible
-descendant exists. Clearing the filter therefore restores exactly what the user had. `expandedIds`
-is read from the display list's own `expanded` flag — the same expression that decides whether
-`flattenRows` descends — so it cannot disagree with what is on screen: a filter-forced ancestor
-reports `aria-expanded="true"` and does not show the collapsed stub. Do not re-derive expansion
-from the next displayed row; that is a second owner of the rule, and the reason the flag exists.
+new row set no longer contains. Search never writes the collapsed set: it scans the row store and a
+jump expands the target's ancestors explicitly. `flattenRows` reads the collapsed set only, so
+`expandedIds` comes from the display list's own `expanded` flag — the same expression that decides
+whether `flattenRows` descends. Do not re-derive expansion from the next displayed row; that is a
+second owner of the rule, and the reason the flag exists.
 
 ## Pure helpers, serialized once
 
 `pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`, `reconcileRowState`,
 `resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`, `ancestorIds`, the virtual-scroll
-functions and the filter/flatten functions live in `renderHtml.ts`, `virtualScroll.ts`,
-`renderRows.ts` and `filter.ts`.
+functions and the tree-query functions live in `renderHtml.ts`, `virtualScroll.ts`, `renderRows.ts`
+and `treeQuery.ts`.
 The page emits them with `Function.prototype.toString()` (the virtual math through
 `virtualScrollScript()`). Tests extract the page's own copy with `scriptTestUtils` and compile it, so
 "the page and the tests share one definition" is an assertion rather than a claim. Do not add a
@@ -69,9 +67,9 @@ second host-side implementation of a view rule.
   `panes` (section id → saved px), `collapsed` (section ids). A missing/invalid field falls
   back to Details, 360px and default heights; a non-array object is ignored. The legacy
   `inspectorHidden` field is ignored and never written back. Only user actions (tab click, resizer
-  release, sash release/reset, section toggle) write the preference; transient viewport clamping
-  does not overwrite the saved width. The reload round trip is observed in the Extension Development
-  Host, which is the only place the state API exists.
+  release, sash release/reset when a pane pair exists, section toggle) write the preference; transient
+  viewport clamping does not overwrite the saved width. The reload round trip is observed in the
+  Extension Development Host, which is the only place the state API exists.
 
 ## Condition values
 
@@ -99,12 +97,13 @@ Clear values send a `conditions` message. Opening Add alone sends nothing.
 ## Search state
 
 `searchQuery`, `searchMatches` (row indices) and `searchIndex` are page-local and are not persisted
-across reloads. They are recomputed from the full row store after a re-scan and after a filter
-change; the current match is preserved by row id where possible. Search must never write
-`filterQuery`, `filterResult` or the collapsed set. `highlightQuery` is a transient page variable:
-non-blank search text overrides the filter's row marks, and clearing it restores them. The toolbar
-holds Filter and Search as sibling fields; there is no separate find-bar panel and Search never
-posts a host message.
+across reloads. They are recomputed from the full row store after a re-scan; the current match is
+preserved by row id where possible. Search must never write the collapsed set. `highlightQuery` is a
+transient page variable carrying the non-blank query into the row primitives: every occurrence is
+marked, and the row that owns `searchIndex` carries `data-search-current="true"` for the stronger
+mark. The toolbar holds Search as its only query field; there is no separate find-bar panel. A jump
+posts the existing `select` message so the host keeps the row selected across a re-scan; Search itself
+never changes rows or collapse state.
 
 ## No derived artefacts
 

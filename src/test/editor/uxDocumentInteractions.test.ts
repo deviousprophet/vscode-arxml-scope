@@ -116,8 +116,7 @@ suite('editor Document interactions', () => {
 		assert.ok(details.includes("boolean ? 'select' : 'input'"), 'Boolean gets a select');
 		assert.ok(details.includes("for (const option of ['true', 'false'])"), 'true/false options');
 		assert.ok(details.includes('input.inputMode'), 'numeric inputs set an input mode');
-		assert.ok(details.includes('detailsInputAllowed(type, event.data)'), 'input filtering uses the type');
-		assert.ok(!details.includes('filterDetailsInput'), 'no silent rewrite of existing text');
+		assert.ok(details.includes('detailsInputAllowed(type, event.data)'), 'character checks use the type');
 		assert.ok(functionSource(html, 'focusDetailsInput').includes("typeof input.select === 'function'"));
 
 		assert.strictEqual(detailsInputAllowed('Integer', '1'), true);
@@ -138,7 +137,7 @@ suite('editor Document interactions', () => {
 		assert.ok(update.includes('inspectorRow(format.label, format.value)'));
 	});
 
-	test('aria-expanded follows the displayed list, including a filter force-expand', () => {
+	test('aria-expanded follows the displayed list', () => {
 		const script = page();
 		const build = functionSource(script, 'buildNodeRow');
 		assert.ok(build.includes("setAttribute('aria-expanded', expandedIds.has(row.id) ? 'true' : 'false')"));
@@ -148,12 +147,8 @@ suite('editor Document interactions', () => {
 		assert.ok(rebuild.includes('expandedIds = new Set()'), 'the displayed expansion set is rebuilt');
 		assert.ok(rebuild.includes('flat.expanded'), 'expansion comes from the display list');
 		assert.ok(!rebuild.includes('descendantShown'), 'the page does not re-derive expansion from neighbours');
-		assert.ok(
-			!rebuild.includes('!collapsed.has(row.id)'),
-			'a filtered container cannot claim expansion when it has no displayed child'
-		);
-		assert.ok(rebuild.includes('filterActive: active'), 'the active filter is passed to the flatten pass');
-		assert.ok(rebuild.includes('visible: active && filterResult'), 'and its visibility drives the display list');
+		assert.ok(rebuild.includes('flattenRows(rows, {'), 'the display list is built from rows and collapse state');
+		assert.ok(!rebuild.includes('visible:'), 'the display list has no query visibility input');
 		assert.ok(rebuild.includes("tree.dataset.empty"), 'and the empty state follows the display list');
 
 		const flip = functionSource(script, 'flipCollapsed');

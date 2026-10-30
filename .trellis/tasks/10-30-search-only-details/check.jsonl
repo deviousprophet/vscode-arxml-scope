@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check the one-section Details shell and Search-only DOM contracts."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Check filter state is gone and search state survives re-scan."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check colour literals, no write path and test conventions."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Check the removed/rewritten tests and page-copy assertions."}

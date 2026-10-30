@@ -636,7 +636,6 @@ suite('conditions panel (design §6)', () => {
 
 		assert.ok(!html.includes('scheduleConditions'), 'the debounced typing path is gone');
 		assert.ok(!html.includes('conditionDebouncer'), 'and its timer is gone');
-		assert.ok(!html.includes('createFilterDebouncer(300)'));
 		assert.strictEqual(
 			(html.match(/sendConditions\(\);/g) || []).length,
 			3,

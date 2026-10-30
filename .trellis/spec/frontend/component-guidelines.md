@@ -16,10 +16,9 @@ body (column)
       .document
         .meta                        schema/package header
         #tree[role=tree]             contains the top spacer, #tree-window, bottom spacer
-        #empty                       filtered-empty comment
     #sidebar-resizer (6px)            survives a re-scan
     #sidebar                          Details / Conditions tab panels
-      #sbp-details > #inspector > section.sb-section (Node, Value, Reference, Conditions)
+      #sbp-details > #inspector > section.sb-section#sb-details (one body)
       #sbp-conditions > section > #conditions-panel
     #side-tabs (28px)                 right-edge vertical tabs
 ```
@@ -35,8 +34,7 @@ body (column)
   parses it and never evaluates model text. A re-scan posts `{ type: 'model', rows, selectedId }`,
   not tree markup and no `digits`.
 - Anything that must survive a re-scan — the toolbar, the sidebar, the tabs, the inspector and the
-  Conditions panel — lives outside the rows. The filter's empty state lives beside `#tree` because it
-  describes the filtered list.
+  Conditions panel — lives outside the rows.
 - There is one Document presentation. There is no view toggle, no `view` state, no Tree CSS/probes/
   glyphs and no second refresh path.
 
@@ -45,13 +43,14 @@ body (column)
 - The right side is a Hex Scope-style sidebar: a 28px vertical tab strip (**Details**, **Conditions**)
   at the far right, a resizable panel area, and one visible tab panel at a time. Details is the
   default. There is no toolbar Details/Conditions toggle and no second panel surface.
-- `#inspector` remains the Details panel root. It is split into four stable section bodies (Node,
-  Value, Reference, Conditions & annotations); `updateInspector` clears and rewrites the bodies only,
-  never the section headers. The details editor owns its inputs in the Value/Node bodies.
-- Every section is a pane: 22px header (`role=button`, `aria-expanded`, `aria-controls`), chevron,
-  independent scrolling body (`role=region`), and a 6px `role=separator` sash to the next section.
-  Sashes support drag, ArrowUp/ArrowDown, double-click reset and are disabled next to a collapsed
-  pane. Collapse/expand animates 150ms; resize/layout is instant; reduced motion disables animation.
+- `#inspector` remains the Details panel root. It contains one stable `sb-details` section body;
+  `updateInspector` clears and rewrites that body only, never the section header. Node, value/formats,
+  reference, conditions, annotations and the Jump/Reveal actions share the one scrolling body. The
+  details editor owns its inputs there.
+- Every tab currently renders one section, so no sashes appear. The shell keeps the generic pane
+  plumbing (22px header with `role=button`, `aria-expanded`, `aria-controls`, chevron, independent
+  `role=region` body, collapse/expand) for a future multi-section panel; a rendered sash supports
+  drag, ArrowUp/ArrowDown and double-click reset.
 - Pane sizing: `HEADER_H=22`, `MIN_PANE=82`, `SASH_H=6`; saved user sizes first, fresh sections
   share the remainder, the last absorbs rounding, a single expanded section fills the panel.
 - The layout state (`tab`, `sidebarWidth`, `panes`, `collapsed`) is persisted through
@@ -59,8 +58,8 @@ body (column)
   state is ignored.
 - The shared control system is `.sb-btn-primary`, `.sb-btn-secondary`, `.sb-btn-add`,
   `.sb-btn-danger`, `.nav-btn` and `.act-btn`. Toolbar, details actions, Conditions actions and the
-  Filter/Search fields use those classes; do not add a one-off button style. Fields use `.filter` /
-  `.search-input` (26px, input tokens, 3px radius) and the native search cancel is suppressed.
+  Search field use those classes; do not add a one-off button style. The field uses `.search-input`
+  (26px, input tokens, 3px radius) and the native search cancel is suppressed.
 - `#notice` under the toolbar is the fatal page-boot error surface only. Recoverable warnings use
   `#conditions-status` or `#details-status`; they never write the toolbar banner. The Details status
   clears on the next `select`/`model` message, and the Conditions status clears when its names are
@@ -78,27 +77,26 @@ search input keys     →  Enter/Shift+Enter next/previous, Escape clears, Ctrl+
 page key handler      →  navigation / F2/Enter opens details / F3 while search is active / type-ahead
 ```
 
-The page's `onRowClick` handles the delegated `#empty-clear` action and the row interactions. One
-interaction, one effect: the twisty toggles without moving selection, a reference target is plain
-text in the Document, clicking `=`/label selects only, and clicking a parameter's `.value-text`
-selects and opens the details editor. Reference follow is the details **Jump to target** action.
-The inline chevron (`twistyIcon`) is one shared row primitive in `rowViewScript()`; the editor and
-diff pages must not fork it.
+The page's `onRowClick` handles the row interactions. One interaction, one effect: the twisty toggles
+without moving selection, a reference target is plain text in the Document, clicking `=`/label selects
+only, and clicking a parameter's `.value-text` selects and opens the details editor. Reference follow
+is the details **Jump to target** action. The inline chevron (`twistyIcon`) is one shared row primitive
+in `rowViewScript()`; the editor and diff pages must not fork it.
 
 ## DOM contracts
 
-- **The filter's only clear control is the custom `#filter-clear` button.** The input stays
-  `type="search"` for its searchbox role and native Escape behaviour, but Chromium also paints a
-  native `::-webkit-search-cancel-button`. The page suppresses
-  `::-webkit-search-cancel-button` and `::-webkit-search-decoration` in the nonce-carrying `STYLE`;
-  removing that rule reintroduces a second X beside the custom button. `#filter-clear` starts
-  `hidden` and is toggled by the page script.
-- **Filter hides; Search jumps.** The Filter field narrows the tree; the Search field never hides a
-  row. `searchRows(rows, query, filterResult?.visible)` is the single candidate rule: an active
-  filter restricts candidates to its displayed rows, no filter searches the whole tree, and collapse
-  does not remove a candidate. A jump expands ancestors, scrolls and selects the row but keeps focus
-  in the Search input. Search highlights override filter marks while the query is non-blank; clearing
-  restores filter marks. Do not add a second find bar or let Search write the filter query/result.
+- **Search is the only query control.** `#search-input` stays `type="search"` for its searchbox role;
+  Chromium's native `::-webkit-search-cancel-button` and `::-webkit-search-decoration` are suppressed
+  so the one custom `#search-clear` X is the only clear control. `#search-clear` starts `hidden` and is
+  toggled by the page script. Do not add a second query field or a separate find bar.
+- **Search jumps; it never hides.** `searchRows(rows, query)` scans the whole row store; collapse and
+  any view state never remove a candidate. A jump expands ancestors, scrolls and selects the row but
+  keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or hides for a blank query.
+- **All matches are marked; the current match is stronger.** `appendHighlighted` wraps every
+  case-insensitive occurrence in `<mark>`. `buildNodeRow` sets `data-search-current="true"` on the row
+  that owns the current match; CSS gives its `mark` the stronger `--vscode-editor-findMatchBackground`
+  while every other mark keeps `--vscode-editor-findMatchHighlightBackground`. Clearing the search
+  removes both. Do not add a second highlight implementation.
 - **Conditions actions follow the shared hierarchy.** Rows are data-backed (`data-name`,
   `data-value`, `data-auto`, `data-editing`); Edit/Remove are compact `.act-btn` actions, Save is
   `.sb-btn-primary`, Cancel/Clear are `.sb-btn-secondary`, Add is `.sb-btn-add`. Scanned constants
@@ -106,8 +104,8 @@ diff pages must not fork it.
   be removed. Clear values empties the committed `data-value` values and keeps the rows. The
   `unknown` badge is visible only for an empty committed value outside edit mode. Do not use the
   transparent `.tool` treatment for a primary action; hover-only affordances are not discoverable.
-- **`.value` is a direct child of `.row`.** The filter, `valueSpan` and tests depend on it. No input
-  is inserted into `.value`; the details input is separate.
+- **`.value` is a direct child of `.row`.** `valueSpan` and tests depend on it. No input is inserted
+  into `.value`; the details input is separate.
 - Document rows are a single flex line with `gap: 1ch`, no border and no fixed label column. Depth is
   `data-level` + generated attribute CSS
   (`padding-left: calc(var(--content-pad) + var(--indent) * n)`), where `--content-pad` is the 26px
@@ -117,7 +115,7 @@ diff pages must not fork it.
   reserve the gutter but have no twisty child. Expanded chevrons are hover/focus-only; collapsed
   chevrons stay visible. Brace rows use the same indentation as labels (no extra fold offset).
 - Secondary fields live in `.row-meta`, inline after the value in Document. It is not `.meta` — that
-  is the schema/package container. The filter highlights `.row-meta .short`, `.label` and
+  is the schema/package container. Search highlights `.row-meta .short`, `.label` and
   `.value .value-text`.
 - The row builder writes the inspector's primary identity as data: `data-node-id`, `data-kind`,
   `data-definition-ref`, `data-short-name`, `data-value` (parameters), `data-target` (references).
@@ -147,14 +145,14 @@ diff pages must not fork it.
 
 ## State
 
-- The webview owns: `selectedId`, `focusId`, the collapsed id set, the filter query/result, the
-  viewport range/scroll position, type-ahead, the details edit, the sidebar tab/width/pane state and
-  (after the Find child) the search state. The host owns: the panel map, the selection map and a
-  pending selection.
+- The webview owns: `selectedId`, `focusId`, the collapsed id set, the viewport range/scroll
+  position, type-ahead, the details edit, the sidebar tab/width/pane state and the search state. The
+  host owns: the panel map, the selection map and a pending selection.
 - A re-scan sends `{ type: 'model', rows, selectedId }`. `setRows` rebuilds the row maps, prunes the
-  collapsed set, preserves query/scroll where possible, recomputes the selected branch and re-renders
-  the window. `reconcileRowState` is the serialized policy; `resolveFocusId` restores focus by id
-  when the row remains rendered. The old `reRenderTree` DOM swap is gone.
+  collapsed set, preserves scroll where possible, captures the current search match by id, recomputes
+  the selected branch and re-renders the window. `reconcileRowState` is the serialized policy;
+  `resolveFocusId` restores focus by id when the row remains rendered. The old `reRenderTree` DOM swap
+  is gone.
 - The initial row payload carries the host selection; `prepareFocus` expands its ancestors if
   needed, scrolls it into the rendered window and fills the inspector.
 - Only layout state is persisted through `acquireVsCodeApi().getState()/setState()`: `tab`,
@@ -165,9 +163,9 @@ diff pages must not fork it.
   `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`) are real functions
   serialized into the page with `toString()`. The tests extract and drive the page's copy; do not
   create a second implementation.
-- The filter uses `filterRows`/`flattenRows` and `createFilterDebouncer`; a stale generation cannot
-  overwrite a newer query. The collapsed set is read, never written, by the filter; clearing the
-  query restores it.
+- `searchRows` scans the whole row store and `flattenRows` builds the display list from the collapsed
+  set only. Search never writes the collapsed set; a jump expands ancestors explicitly. There is no
+  second visibility input to the display list.
 
 ## Theme and accessibility
 
@@ -186,6 +184,10 @@ diff pages must not fork it.
   `--sel-container-bg`, its subtree gets the softer tint, and a selected parameter adds a 1px
   outline. High contrast uses outlines, not fills: the subtree tint becomes a dotted outline in
   HC/forced colors.
+- **Search has two highlight tiers.** All matches use
+  `--vscode-editor-findMatchHighlightBackground`; the current row's marks use the stronger
+  `--vscode-editor-findMatchBackground`. The current row is identified by
+  `data-search-current="true"`, never by a second mark type.
 - The flat tree uses `role="tree"` with direct `role="treeitem"` children (window/spacers are
   `role="presentation"`/`aria-hidden`), `aria-level`, `aria-posinset`, `aria-setsize`,
   `aria-expanded`, `aria-selected` and a roving `tabindex`. This is a valid flat tree without

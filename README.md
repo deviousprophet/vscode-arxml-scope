@@ -14,7 +14,7 @@ formats and source locations in one place.
 | Capability | What you get |
 |---|---|
 | Open | An opt-in ECUC editor for `.arxml` files. A plain open still uses the text editor. |
-| Browse | A Document view with indentation, braces, editor-style fold controls, collapse/expand, filtering and virtual scrolling. |
+| Browse | A Document view with indentation, braces, editor-style fold controls, collapse/expand, whole-tree search and virtual scrolling. |
 | Inspect | Parameter details show the AUTOSAR type, Decimal/Hexadecimal/Binary values, target, context, conditions and annotations. |
 | Edit | Parameter values in the details panel. Editing is type-aware: integer/hex/binary, float, Boolean selector or text. |
 | Navigate | Jump to a same-file reference target, reveal a node in the source, or open the source editor at the ECUC node under the cursor. |

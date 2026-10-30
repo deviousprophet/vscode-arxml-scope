@@ -4,11 +4,11 @@
  * The host no longer builds one DOM node per entity. `renderHtml` embeds a
  * compact row document (`buildRows`) as escaped JSON, plus a static shell: the
  * toolbar, the schema/package header, the `role="tree"` container with its
- * virtual spacers, the empty state and the details inspector. The inlined page
- * script flattens the rows (collapse/filter), asks the pure virtual-scroll math
- * for a viewport window and builds only those rows with DOM APIs. The same
- * script survives a re-scan: the host sends a new row array and the page keeps
- * its selection, collapsed set, query, sidebar layout and scroll where it can.
+ * virtual spacers and the details inspector. The inlined page script flattens the
+ * rows (collapse/braces), asks the pure virtual-scroll math for a viewport window
+ * and builds only those rows with DOM APIs. The same script survives a re-scan:
+ * the host sends a new row array and the page keeps its selection, collapsed set,
+ * search, sidebar layout and scroll where it can.
  *
  * Everything is inlined — no asset files, no remote loads — because the CSP
  * forbids them and `esbuild.js` has no asset-copy step. Every colour is a
@@ -26,7 +26,7 @@ import { randomBytes } from 'crypto';
 import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
 import type { ConditionValue } from '../core/ecuc/syscond';
 import type { ConditionEntry } from './conditionValues';
-import { FlatRow, ancestorIds, buildFilterIndex, createFilterDebouncer, filterRows, flattenRows, matchRanges, searchRows, stepMatch } from './filter';
+import { FlatRow, ancestorIds, flattenRows, matchRanges, searchRows, stepMatch } from './treeQuery';
 import { escapeHtml } from './html';
 import { encodeJsonForScript } from './jsonScript';
 import { pageErrorScript } from './pageError';
@@ -71,13 +71,12 @@ export function encodeRowDocument(payload: RowPayload): string {
 export interface RowState {
 	selectedId?: string;
 	collapsed: string[];
-	query: string;
 }
 
 /**
- * Keeps the selection when its row survived, prunes collapse ids that are gone,
- * and leaves the query alone. This is the whole re-scan policy, in one place
- * the page serialises and the tests drive.
+ * Keeps the selection when its row survived and prunes collapse ids that are gone.
+ * This is the whole re-scan policy, in one place the page serialises and the
+ * tests drive.
  */
 export function reconcileRowState(state: RowState, rows: readonly { id: string }[]): RowState {
 	const present = new Set(rows.map((row) => row.id));
@@ -86,7 +85,6 @@ export function reconcileRowState(state: RowState, rows: readonly { id: string }
 	return {
 		selectedId,
 		collapsed: pruneCollapsed(state.collapsed, rows.map((row) => row.id)),
-		query: state.query,
 	};
 }
 
@@ -239,11 +237,6 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </head>
 <body data-view="document">
 <div class="toolbar">
-<div class="filter-wrap">
-<input id="filter" class="filter" type="search" placeholder="Filter" aria-label="Filter the ECUC tree">
-<button id="filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
-</div>
-<span id="count" class="count" role="status" aria-live="polite" data-state="none"></span>
 <div class="search-box">
 <div class="search-field">
 <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l3.5 3.5"/></svg></span>
@@ -265,45 +258,20 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <div class="meta">${meta}</div>
 <div id="tree-measure" aria-hidden="true"><div class="node probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
 <div id="tree" class="tree" role="tree" aria-label="ECUC values"><div id="tree-top" class="v-spacer" role="presentation" aria-hidden="true"></div><div id="tree-window" role="presentation"></div><div id="tree-bottom" class="v-spacer" role="presentation" aria-hidden="true"></div></div>
-<div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="sb-btn sb-btn-secondary" type="button">Clear filter</button></div>
 </div>
 </div>
 <div id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" title="Drag to resize sidebar" tabindex="0"></div>
 <aside id="sidebar" aria-label="ECUC sidebar">
 <div id="sbp-details" class="sb-tab-panel active" role="tabpanel" aria-labelledby="stab-details">
 <div id="inspector" class="inspector sb-pane-view" role="region" aria-label="Node details">
-<section class="sb-section sb-pane" id="sb-details-node" data-pane-id="sb-details-node">
-<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-details-node-body" aria-label="Node">
+<section class="sb-section sb-pane" id="sb-details" data-pane-id="sb-details">
+<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-details-body" aria-label="Details">
 <span class="sb-section-chevron" aria-hidden="true"></span>
-<h3 class="sb-section-title" id="sb-details-node-title"><span class="sb-section-label">Node</span></h3>
+<h3 class="sb-section-title" id="sb-details-title"><span class="sb-section-label">Details</span></h3>
 </div>
-<div class="sb-body" id="sb-details-node-body" role="region" aria-labelledby="sb-details-node-title">
+<div class="sb-body" id="sb-details-body" role="region" aria-labelledby="sb-details-title">
 <div class="inspector-empty"><p>Select a line to see its details.</p><p class="inspector-hint">Click a line or press Space.</p></div>
 </div>
-</section>
-<div class="sb-pane-sash" role="separator" aria-orientation="horizontal" aria-label="Resize Node section" tabindex="0"></div>
-<section class="sb-section sb-pane" id="sb-details-value" data-pane-id="sb-details-value">
-<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-details-value-body" aria-label="Value">
-<span class="sb-section-chevron" aria-hidden="true"></span>
-<h3 class="sb-section-title" id="sb-details-value-title"><span class="sb-section-label">Value</span></h3>
-</div>
-<div class="sb-body" id="sb-details-value-body" role="region" aria-labelledby="sb-details-value-title"><p class="sb-empty">No value.</p></div>
-</section>
-<div class="sb-pane-sash" role="separator" aria-orientation="horizontal" aria-label="Resize Value section" tabindex="0"></div>
-<section class="sb-section sb-pane" id="sb-details-reference" data-pane-id="sb-details-reference">
-<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-details-reference-body" aria-label="Reference">
-<span class="sb-section-chevron" aria-hidden="true"></span>
-<h3 class="sb-section-title" id="sb-details-reference-title"><span class="sb-section-label">Reference</span></h3>
-</div>
-<div class="sb-body" id="sb-details-reference-body" role="region" aria-labelledby="sb-details-reference-title"><p class="sb-empty">No reference.</p></div>
-</section>
-<div class="sb-pane-sash" role="separator" aria-orientation="horizontal" aria-label="Resize Reference section" tabindex="0"></div>
-<section class="sb-section sb-pane" id="sb-details-conditions" data-pane-id="sb-details-conditions">
-<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-details-conditions-body" aria-label="Conditions and annotations">
-<span class="sb-section-chevron" aria-hidden="true"></span>
-<h3 class="sb-section-title" id="sb-details-conditions-title"><span class="sb-section-label">Conditions &amp; annotations</span></h3>
-</div>
-<div class="sb-body" id="sb-details-conditions-body" role="region" aria-labelledby="sb-details-conditions-title"><p class="sb-empty">No conditions or annotations.</p></div>
 </section>
 </div>
 <div id="details-status" class="details-status" role="status" aria-live="polite"></div>
@@ -604,7 +572,6 @@ body[data-view] {
 	color: var(--vscode-foreground);
 	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
 }
-.filter,
 .search-input {
 	box-sizing: border-box;
 	height: 26px;
@@ -618,15 +585,13 @@ body[data-view] {
 	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
 	border-radius: 3px;
 }
-.filter:focus,
 .search-input:focus {
 	border-color: var(--vscode-focusBorder);
 	outline: 1px solid var(--vscode-focusBorder);
 	outline-offset: -1px;
 }
-/* The Filter and Search fields each keep one custom clear X; Chromium's native
- * cancel button would paint a second one, so it is suppressed for every search
- * input. */
+/* The Search field keeps one custom clear X; Chromium's native cancel button
+ * would paint a second one, so it is suppressed. */
 input[type="search"]::-webkit-search-cancel-button,
 input[type="search"]::-webkit-search-decoration {
 	-webkit-appearance: none;
@@ -650,19 +615,6 @@ input[type="search"]::-webkit-search-decoration {
 .grow {
 	flex: 1 1 auto;
 }
-.filter-wrap {
-	position: relative;
-	display: flex;
-	flex: 0 1 28ch;
-	min-width: 0;
-	max-width: none;
-}
-.filter {
-	width: 100%;
-	min-width: 0;
-	padding: 0 22px 0 7px;
-}
-.filter-clear,
 .search-clear {
 	position: absolute;
 	right: 3px;
@@ -682,11 +634,9 @@ input[type="search"]::-webkit-search-decoration {
 	border: 0;
 	border-radius: 2px;
 }
-.filter-clear[hidden],
 .search-clear[hidden] {
 	display: none;
 }
-.filter-clear:hover,
 .search-clear:hover {
 	color: var(--vscode-foreground);
 	background: var(--vscode-toolbar-hoverBackground, transparent);
@@ -737,24 +687,6 @@ input[type="search"]::-webkit-search-decoration {
 }
 .search-count[hidden] {
 	display: none;
-}
-.count {
-	padding: 0;
-	border: 0;
-	white-space: nowrap;
-	color: var(--tok-dim);
-	background: transparent;
-	font-size: 12px;
-	font-variant-numeric: tabular-nums;
-}
-.count[data-state="none"] {
-	padding: 0;
-	background: transparent;
-}
-.count[data-state="empty"] {
-	color: var(--tok-dim);
-	background: transparent;
-	border-color: transparent;
 }
 .tool {
 	display: inline-flex;
@@ -1235,12 +1167,6 @@ body.sb-row-resizing {
 	outline: 1px solid var(--vscode-focusBorder);
 	outline-offset: -1px;
 }
-.sb-empty {
-	margin: 0;
-	color: var(--vscode-descriptionForeground);
-	font-size: 11px;
-	font-style: italic;
-}
 @media (prefers-reduced-motion: reduce) {
 	.sb-pane,
 	.sb-section-chevron {
@@ -1432,24 +1358,8 @@ mark {
 	color: var(--vscode-editor-findMatchForeground, var(--vscode-foreground));
 	background: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground));
 }
-.empty {
-	padding: 0;
-	text-align: left;
-	color: var(--tok-comment);
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--ecuc-fs);
-	line-height: var(--ecuc-lh);
-	font-style: italic;
-}
-.empty[hidden] {
-	display: none;
-}
-.empty p {
-	margin: 0;
-}
-.empty .sb-btn {
-	margin-left: 1ch;
-	font-style: normal;
+.node[data-search-current="true"] > .row mark {
+	background: var(--vscode-editor-findMatchBackground, var(--vscode-list-activeSelectionBackground));
 }
 .inspector-empty {
 	padding: 6px 0;
@@ -1731,21 +1641,6 @@ body[data-view="document"] #tree:focus-within .node[data-kind="parameter"][data-
 body[data-view="document"] .node:focus-visible > .row {
 	box-shadow: inset 2px 0 0 var(--rail);
 }
-body[data-view="document"] .empty {
-	padding: 0 2ch 0 var(--content-pad);
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--ecuc-fs);
-	line-height: var(--ecuc-lh);
-	color: var(--tok-comment);
-	font-style: italic;
-}
-body[data-view="document"] .empty p {
-	margin: 0;
-}
-body[data-view="document"] .empty .sb-btn {
-	margin-left: 1ch;
-	font-style: normal;
-}
 body[data-view="document"] #tree[data-empty="true"] {
 	padding-top: 0;
 	padding-bottom: 0;
@@ -1830,13 +1725,9 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 		padding: 0 4px;
 		gap: 3px;
 	}
-	.filter-wrap {
-		flex: 1 1 0;
-	}
 	.search-box {
 		flex: 1 1 0;
 	}
-	.count,
 	.search-count,
 	.notice,
 	.grow,
@@ -1908,7 +1799,7 @@ const PAGE_ERROR_SCRIPT = pageErrorScript({
 });
 
 /**
- * The page: the row store, flatten/collapse/filter, the virtual window, row
+ * The page: the row store, flatten/collapse, the virtual window, row
  * building, selection/focus, the inspector and the message bridge. The value
  * widget's script is emitted before this one and its document listeners claim
  * their events first; nothing here runs for an interaction it owns.
@@ -1920,20 +1811,12 @@ const treeWindow = document.getElementById('tree-window');
 const virtualStyle = document.getElementById('virtual-style');
 const inspector = document.getElementById('inspector');
 const detailsStatus = document.getElementById('details-status');
-const detailsNodeBody = document.getElementById('sb-details-node-body');
-const detailsValueBody = document.getElementById('sb-details-value-body');
-const detailsReferenceBody = document.getElementById('sb-details-reference-body');
-const detailsConditionsBody = document.getElementById('sb-details-conditions-body');
-const filterInput = document.getElementById('filter');
-const countLabel = document.getElementById('count');
-const clearButton = document.getElementById('filter-clear');
+const detailsBody = document.getElementById('sb-details-body');
 const searchInput = document.getElementById('search-input');
 const searchClear = document.getElementById('search-clear');
 const searchPrev = document.getElementById('search-prev');
 const searchNext = document.getElementById('search-next');
 const searchCount = document.getElementById('search-count');
-const empty = document.getElementById('empty');
-const emptyText = document.getElementById('empty-text');
 const conditionsPanel = document.getElementById('conditions-panel');
 const conditionsList = document.getElementById('conditions-list');
 const conditionsAdd = document.getElementById('conditions-add');
@@ -1960,13 +1843,10 @@ ${collapsedIdsFor.toString()}
 ${moveTarget.toString()}
 ${virtualScrollScript()}
 ${matchRanges.toString()}
-${buildFilterIndex.toString()}
-${filterRows.toString()}
 ${searchRows.toString()}
 ${stepMatch.toString()}
 ${flattenRows.toString()}
 ${ancestorIds.toString()}
-${createFilterDebouncer.toString()}
 ${inspectorFields.toString()}
 ${subtreeRowIds.toString()}
 ${guidesFor.toString()}
@@ -1987,14 +1867,9 @@ let subtreeIds = new Set();
 let guideLevels = [];
 let hoveredGuideId;
 let focusId;
-let filterQuery = '';
-let filterResult = null;
-let filterIndex = { haystacks: [] };
-let filterDebouncer = createFilterDebouncer(120);
-// Search is a jump control, not a visibility filter: candidates come from the
-// filter's visible rows (or the whole tree when the filter is blank), and the
-// collapsed set never removes a candidate. highlightQuery overrides the filter
-// only while it is non-blank, so clearing search restores filter marks.
+// Search is a jump control, not a visibility control: the whole row store is the
+// candidate set, and the collapsed set never removes a candidate. highlightQuery
+// carries the current query into the row primitives as the page's mark text.
 let searchQuery = '';
 let searchMatches = [];
 let searchIndex = -1;
@@ -2033,12 +1908,6 @@ function indexRows() {
 		rowById.set(rows[at].id, rows[at]);
 		rowIndexById.set(rows[at].id, at);
 	}
-	filterIndex = buildFilterIndex(rows);
-}
-
-function refreshFilter() {
-	const query = filterQuery.trim();
-	filterResult = query === '' ? null : filterRows(rows, query, filterIndex);
 }
 
 function buildHeightFn() {
@@ -2065,11 +1934,8 @@ function measureHeights() {
 }
 
 function rebuildDisplay() {
-	const active = filterQuery.trim() !== '';
 	displayRows = flattenRows(rows, {
 		collapsed: collapsed,
-		visible: active && filterResult ? filterResult.visible : undefined,
-		filterActive: active,
 		braces: true
 	});
 	guideLevels = guidesFor(displayRows, rows);
@@ -2083,7 +1949,7 @@ function rebuildDisplay() {
 			displayIndexById.set(row.id, at);
 			visibleNodeIds.push(row.id);
 			// Expansion is the display list's decision, carried on the row; the page
-			// must not re-derive it from neighbouring rows (see filter.ts).
+			// must not re-derive it from neighbouring rows (see treeQuery.ts).
 			if (flat.expanded) {
 				expandedIds.add(row.id);
 			}
@@ -2099,26 +1965,23 @@ function setRows(nextRows, nextSelectedId) {
 	const state = reconcileRowState(
 		{
 			selectedId: nextSelectedId !== undefined ? nextSelectedId : selectedId,
-			collapsed: Array.from(collapsed),
-			query: filterQuery
+			collapsed: Array.from(collapsed)
 		},
 		incoming
 	);
 	rows = incoming;
 	collapsed = new Set(state.collapsed);
 	selectedId = state.selectedId;
-	filterQuery = state.query;
 	indexRows();
 	ensureDiscoveredConditionRows();
 	if (focusId !== undefined && !rowById.has(focusId)) {
 		focusId = selectedId;
 	}
 	subtreeIds = new Set(subtreeRowIds(selectedId, rows));
-	refreshFilter();
 	rebuildDisplay();
 	measureHeights();
 	dataVersion++;
-	// A re-scan keeps the query and, when the row survived, the current match; the
+	// A re-scan keeps the search and, when the row survived, the current match; the
 	// matches themselves are recomputed against the new row indices.
 	refreshSearch(false, previousMatchId);
 }
@@ -2182,6 +2045,9 @@ function buildNodeRow(row, displayIndex) {
 	}
 	if (row.id === selectedId) {
 		node.dataset.selected = 'true';
+	}
+	if (searchQuery.trim() !== '' && row.id === currentMatchId()) {
+		node.dataset.searchCurrent = 'true';
 	}
 	if (subtreeIds.has(row.id) && row.id !== selectedId) {
 		node.dataset.subtree = 'true';
@@ -2356,36 +2222,6 @@ function ensureVisible(displayIndex) {
 	}
 }
 
-function captureWindowAnchor() {
-	if (displayRows.length === 0) {
-		return null;
-	}
-	const state = virtualState();
-	const scroll = Math.max(0, main.scrollTop - treeWindowTop());
-	for (let at = windowRange[0]; at < windowRange[1]; at++) {
-		const flat = displayRows[at];
-		if (flat && flat.type === 'node') {
-			return { id: rows[flat.rowIndex].id, delta: scroll - calcRowOffset(at, state) };
-		}
-	}
-	return null;
-}
-
-function restoreWindowAnchor(anchor) {
-	if (!anchor) {
-		renderWindow(true);
-		return;
-	}
-	const index = displayIndexById.get(anchor.id);
-	if (index === undefined) {
-		renderWindow(true);
-		return;
-	}
-	const state = virtualState();
-	main.scrollTop = treeWindowTop() + Math.max(0, calcRowOffset(index, state) + anchor.delta);
-	renderWindow(true);
-}
-
 function focusRow(id) {
 	const displayIndex = displayIndexById.get(id);
 	if (displayIndex === undefined) {
@@ -2520,10 +2356,6 @@ function onRowClick(event) {
 	if (!(event.target instanceof Element)) {
 		return;
 	}
-	if (event.target.closest('#empty-clear')) {
-		clearFilter(true);
-		return;
-	}
 	const item = event.target.closest('#tree [role="treeitem"]');
 	if (!item) {
 		return;
@@ -2652,71 +2484,6 @@ function renderedItemFor(id) {
 	return renderedById.get(id);
 }
 
-function updateFilterUi() {
-	if (clearButton) {
-		clearButton.hidden = filterInput.value.trim() === '';
-	}
-	if (!countLabel) {
-		return;
-	}
-	const active = filterQuery.trim() !== '';
-	if (!active) {
-		countLabel.textContent = '';
-		countLabel.dataset.state = 'none';
-		if (empty) {
-			empty.hidden = true;
-		}
-		return;
-	}
-	if (!filterResult || filterResult.matchCount === 0) {
-		countLabel.textContent = 'No matches';
-		countLabel.dataset.state = 'empty';
-		if (empty) {
-			empty.hidden = false;
-		}
-		if (emptyText) {
-			emptyText.textContent = '/* No entities match "' + filterInput.value.trim() + '". */';
-		}
-		return;
-	}
-	countLabel.textContent = filterResult.visibleCount + ' of ' + rows.length;
-	countLabel.dataset.state = 'filtered';
-	if (empty) {
-		empty.hidden = true;
-	}
-}
-
-function applyFilterQuery(query) {
-	const anchor = captureWindowAnchor();
-	const scrollTop = main.scrollTop;
-	const previousMatchId = currentMatchId();
-	filterQuery = query;
-	refreshFilter();
-	rebuildDisplay();
-	if (anchor && displayIndexById.has(anchor.id)) {
-		restoreWindowAnchor(anchor);
-	} else {
-		main.scrollTop = scrollTop;
-		renderWindow(true);
-	}
-	updateFilterUi();
-	// The filter defines search's candidate set. Recompute it without ever
-	// touching the filter query: a current match that survived stays current,
-	// otherwise the first remaining match (or none) is selected.
-	refreshSearch(false, previousMatchId);
-}
-
-function clearFilter(focusInput) {
-	filterDebouncer.cancel();
-	if (filterInput) {
-		filterInput.value = '';
-	}
-	applyFilterQuery('');
-	if (focusInput && filterInput) {
-		filterInput.focus();
-	}
-}
-
 /** The row id at the current search position, or undefined when nothing is current. */
 function currentMatchId() {
 	const rowIndex = searchMatches[searchIndex];
@@ -2724,9 +2491,9 @@ function currentMatchId() {
 	return row ? row.id : undefined;
 }
 
-/** The search candidates: only rows the active filter displays, else the whole tree. */
+/** Every row is a search candidate: collapse and any view state never remove one. */
 function searchCandidates() {
-	return searchRows(rows, searchQuery, filterResult ? filterResult.visible : undefined);
+	return searchRows(rows, searchQuery);
 }
 
 /** The position of the first match at or after the selected row, wrapping to the first. */
@@ -2748,11 +2515,10 @@ function firstMatchAtOrAfterSelection() {
 }
 
 /**
- * Recompute the matches after a query/filter/row change and clamp the current one.
+ * Recompute the matches after a query/row change and clamp the current one.
  * startAtSelection is the typing policy (first match at/after the selection);
- * previousId is the filter/re-scan policy (keep the current row by id when it is
- * still a candidate). A blank query clears the highlight override but never the
- * filter.
+ * previousId is the re-scan policy (keep the current row by id when it is still a
+ * candidate). A blank query clears the highlight.
  */
 function refreshSearch(startAtSelection, previousId, render = true) {
 	searchMatches = searchCandidates();
@@ -2812,8 +2578,8 @@ function jumpToSearchMatch(index) {
 	}
 	const displayIndex = displayIndexById.get(id);
 	if (displayIndex === undefined) {
-		// The row is no longer displayed after a filter/state change; do not select
-		// an invisible row or steal focus for a jump that cannot happen. The count
+		// The row is no longer displayed after a state change; do not select an
+		// invisible row or steal focus for a jump that cannot happen. The count
 		// still repaints so the current pointer cannot disagree with the control.
 		renderSearchUi();
 		return;
@@ -2837,7 +2603,7 @@ function cycleSearch(direction) {
 	jumpToSearchMatch(searchIndex);
 }
 
-/** Clear the search and restore filter highlighting; optionally return focus to it. */
+/** Clear the search and its highlight; optionally return focus to it. */
 function clearSearch(focusInput) {
 	searchQuery = '';
 	searchMatches = [];
@@ -2879,6 +2645,8 @@ function syncSearchToSelection(id) {
 	if (at >= 0) {
 		searchIndex = at;
 		renderSearchUi();
+		// The stronger current-match mark follows the row flag, so repaint the window.
+		renderWindow(true);
 	}
 }
 
@@ -3430,14 +3198,6 @@ function inspectorRow(key, value) {
 	return row;
 }
 
-/** One quiet line for a section body with nothing to show. */
-function paneEmpty(body, text) {
-	if (!body) {
-		return;
-	}
-	body.appendChild(inspectorElement('p', 'sb-empty', text));
-}
-
 function paneActions(body) {
 	const actions = inspectorElement('div', 'inspector-actions');
 	body.appendChild(actions);
@@ -3465,125 +3225,86 @@ function setDetailsStatus(message) {
 }
 
 /**
- * Rebuilds the four Details section bodies from the selected row's data. The
- * selected row can be outside the rendered window; nothing here queries the
- * tree DOM. The section shells (headers, bodies) are static, so a re-scan only
- * replaces body content and never resets the pane layout.
+ * Rebuilds the single Details body from the selected row's data. The selected row
+ * can be outside the rendered window; nothing here queries the tree DOM. The
+ * section shell (header, body) is static, so a re-scan only replaces body content
+ * and never resets the pane layout.
  */
 function updateInspector() {
-	if (!inspector) {
+	if (!inspector || !detailsBody) {
 		return;
 	}
-	const bodies = [detailsNodeBody, detailsValueBody, detailsReferenceBody, detailsConditionsBody];
-	for (let at = 0; at < bodies.length; at++) {
-		if (bodies[at]) {
-			bodies[at].textContent = '';
-		}
-	}
+	detailsBody.textContent = '';
 	const row = selectedId === undefined ? undefined : rowById.get(selectedId);
 	if (!row) {
 		detailsSelectionChanged(undefined);
 		const emptyPanel = inspectorElement('div', 'inspector-empty');
 		emptyPanel.appendChild(inspectorElement('p', '', 'Select a line to see its details.'));
 		emptyPanel.appendChild(inspectorElement('p', 'inspector-hint', 'Click a line or press Space.'));
-		if (detailsNodeBody) {
-			detailsNodeBody.appendChild(emptyPanel);
-		}
-		paneEmpty(detailsValueBody, 'Select a line to see its value.');
-		paneEmpty(detailsReferenceBody, 'Select a line to see its reference.');
-		paneEmpty(detailsConditionsBody, 'Select a line to see its conditions and annotations.');
+		detailsBody.appendChild(emptyPanel);
 		return;
 	}
 	detailsSelectionChanged(row.id);
 	const data = inspectorFields(row);
 
-	if (detailsNodeBody) {
-		detailsNodeBody.appendChild(inspectorElement('div', 'inspector-kind', data.kind));
-		detailsNodeBody.appendChild(inspectorElement('div', 'inspector-label', data.label));
-		if (row.kind === 'container') {
-			// A container's short name and definition ref are editable here, so the panel
-			// never shows the same fact twice.
-			detailsNodeBody.appendChild(detailsContainerFields(row, data));
-		} else {
-			if (data.definitionRef) {
-				detailsNodeBody.appendChild(inspectorRow('Definition', data.definitionRef));
-			}
-			if (data.shortName) {
-				detailsNodeBody.appendChild(inspectorRow('Short name', data.shortName));
-			}
+	detailsBody.appendChild(inspectorElement('div', 'inspector-kind', data.kind));
+	detailsBody.appendChild(inspectorElement('div', 'inspector-label', data.label));
+	if (row.kind === 'container') {
+		// A container's short name and definition ref are editable here, so the panel
+		// never shows the same fact twice.
+		detailsBody.appendChild(detailsContainerFields(row, data));
+	} else {
+		if (data.definitionRef) {
+			detailsBody.appendChild(inspectorRow('Definition', data.definitionRef));
 		}
-		if (data.variant) {
-			detailsNodeBody.appendChild(inspectorRow('Variant', data.variant));
-		}
-		if (data.type) {
-			detailsNodeBody.appendChild(inspectorRow('Type', data.type));
+		if (data.shortName) {
+			detailsBody.appendChild(inspectorRow('Short name', data.shortName));
 		}
 	}
-
-	if (detailsValueBody) {
-		if (data.kind === 'parameter') {
-			detailsValueBody.appendChild(detailsValueInput(row, data));
-		}
-		for (const format of data.formats) {
-			detailsValueBody.appendChild(inspectorRow(format.label, format.value));
-		}
-		if (data.kind !== 'parameter' && data.formats.length === 0) {
-			paneEmpty(detailsValueBody, 'No editable value.');
-		}
+	if (data.variant) {
+		detailsBody.appendChild(inspectorRow('Variant', data.variant));
 	}
-
-	let hasReference = false;
-	if (detailsReferenceBody) {
-		if (data.target) {
-			detailsReferenceBody.appendChild(inspectorRow('Target', data.target));
-			hasReference = true;
-		}
-		if (data.context) {
-			detailsReferenceBody.appendChild(inspectorRow('Context', data.context));
-			hasReference = true;
-		}
-		if (row.kind === 'reference' && row.followable === true) {
-			const actions = paneActions(detailsReferenceBody);
-			const jump = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Jump to target');
-			jump.type = 'button';
-			jump.addEventListener('click', function () { followItem(row.id); });
-			actions.appendChild(jump);
-		}
-		if (!hasReference) {
-			paneEmpty(detailsReferenceBody, 'No reference.');
-		}
+	if (data.type) {
+		detailsBody.appendChild(inspectorRow('Type', data.type));
 	}
-
-	if (detailsConditionsBody) {
-		let hasConditionText = false;
-		if (data.condition) {
-			detailsConditionsBody.appendChild(inspectorRow('Condition', data.condition.text));
-			detailsConditionsBody.appendChild(inspectorRow('Condition state', data.condition.state));
-			if (data.condition.reason) {
-				detailsConditionsBody.appendChild(inspectorRow('Condition note', data.condition.reason));
-			}
-			hasConditionText = true;
-		} else if (row.disabled && row.disabledBy === 'ancestor') {
-			detailsConditionsBody.appendChild(inspectorRow('Disabled', 'Disabled by an ancestor condition.'));
-			hasConditionText = true;
-		}
-		if (data.conditions) {
-			detailsConditionsBody.appendChild(inspectorRow('Conditions', data.conditions));
-			hasConditionText = true;
-		}
-		if (data.annotations) {
-			detailsConditionsBody.appendChild(inspectorRow('Annotations', data.annotations));
-			hasConditionText = true;
-		}
-		if (!hasConditionText) {
-			paneEmpty(detailsConditionsBody, 'No conditions or annotations.');
-		}
-		const actions = paneActions(detailsConditionsBody);
-		const reveal = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Reveal in source');
-		reveal.type = 'button';
-		reveal.addEventListener('click', function () { revealItem(row.id); });
-		actions.appendChild(reveal);
+	if (data.kind === 'parameter') {
+		detailsBody.appendChild(detailsValueInput(row, data));
 	}
+	for (const format of data.formats) {
+		detailsBody.appendChild(inspectorRow(format.label, format.value));
+	}
+	if (data.target) {
+		detailsBody.appendChild(inspectorRow('Target', data.target));
+	}
+	if (data.context) {
+		detailsBody.appendChild(inspectorRow('Context', data.context));
+	}
+	if (data.condition) {
+		detailsBody.appendChild(inspectorRow('Condition', data.condition.text));
+		detailsBody.appendChild(inspectorRow('Condition state', data.condition.state));
+		if (data.condition.reason) {
+			detailsBody.appendChild(inspectorRow('Condition note', data.condition.reason));
+		}
+	} else if (row.disabled && row.disabledBy === 'ancestor') {
+		detailsBody.appendChild(inspectorRow('Disabled', 'Disabled by an ancestor condition.'));
+	}
+	if (data.conditions) {
+		detailsBody.appendChild(inspectorRow('Conditions', data.conditions));
+	}
+	if (data.annotations) {
+		detailsBody.appendChild(inspectorRow('Annotations', data.annotations));
+	}
+	const actions = paneActions(detailsBody);
+	if (row.kind === 'reference' && row.followable === true) {
+		const jump = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Jump to target');
+		jump.type = 'button';
+		jump.addEventListener('click', function () { followItem(row.id); });
+		actions.appendChild(jump);
+	}
+	const reveal = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Reveal in source');
+	reveal.type = 'button';
+	reveal.addEventListener('click', function () { revealItem(row.id); });
+	actions.appendChild(reveal);
 }
 
 function onTreeHover(event) {
@@ -3632,31 +3353,6 @@ document.addEventListener('focusin', function (event) {
 });
 document.getElementById('collapse-all').addEventListener('click', collapseAll);
 document.getElementById('expand-all').addEventListener('click', expandAll);
-
-if (filterInput) {
-	filterInput.addEventListener('input', function () {
-		if (clearButton) {
-			clearButton.hidden = filterInput.value.trim() === '';
-		}
-		filterDebouncer.schedule(filterInput.value, function (query, generation) {
-			if (!filterDebouncer.isCurrent(generation)) {
-				return;
-			}
-			applyFilterQuery(query);
-		});
-	});
-	filterInput.addEventListener('keydown', function (event) {
-		if (event.key === 'Escape') {
-			event.preventDefault();
-			clearFilter(true);
-		}
-	});
-}
-if (clearButton) {
-	clearButton.addEventListener('click', function () {
-		clearFilter(true);
-	});
-}
 
 if (searchInput) {
 	searchInput.addEventListener('input', function () {
@@ -3821,7 +3517,6 @@ window.addEventListener('message', function (event) {
 		}
 		renderWindow(true);
 		updateInspector();
-		updateFilterUi();
 		applyDisabledCount();
 	} else if (message.type === 'select') {
 		if (typeof message.nodeId !== 'string' || !rowById.has(message.nodeId)) {
@@ -3862,7 +3557,6 @@ const initial = readInitialRows();
 setRows(initial.rows, initial.selectedId);
 renderWindow(true);
 prepareFocus();
-updateFilterUi();
 applyDisabledCount();
 updateInspector();
 // The host warns when this never arrives: a page whose script is blocked cannot

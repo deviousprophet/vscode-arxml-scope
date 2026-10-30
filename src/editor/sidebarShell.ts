@@ -5,7 +5,7 @@
  * Everything here is either a pure helper (serialized into the page with
  * `toString()`, so the tests drive the same copy the webview runs) or the page
  * script emitted by `sidebarShellScript()`. The shell knows nothing about ECUC
- * rows, the filter or Conditions semantics: `renderHtml` writes the static
+ * rows or Conditions semantics: `renderHtml` writes the static
  * section shells and `updateInspector` rebuilds only their bodies.
  */
 
@@ -165,7 +165,7 @@ export function loadUiState(saved: unknown): SidebarUiState {
  *
  * The script is emitted before `TREE_SCRIPT`; `mountSidebarShell()` is called
  * at boot, after `uiState` exists. It reads `uiState`/`persistUiState` from the
- * page and never touches rows, the filter or Conditions values.
+ * page and never touches rows or Conditions values.
  */
 export function sidebarShellScript(): string {
 	return `

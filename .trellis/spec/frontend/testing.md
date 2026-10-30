@@ -71,7 +71,7 @@ with `suite is not defined`.
 
 There is no webview DOM in the test host. Webview behaviour is therefore asserted at the level of the
 rendered page: the static shell, the escaped row JSON, the CSS, and the page's own inlined functions
-extracted with `scriptTestUtils` and compiled. Pure row/flatten/filter/window behaviour is tested
+extracted with `scriptTestUtils` and compiled. Pure row/flatten/search/window behaviour is tested
 directly; anything that depends on real DOM interaction has to be confirmed by hand in the Extension
 Development Host — say so in the task notes rather than implying it was tested.
 
@@ -79,7 +79,7 @@ Development Host — say so in the task notes rather than implying it was tested
 
 The in-repo preview harness (`preview:ecuc`, `preview:check`) and the `scripts/` directory were removed,
 so the page is no longer served with a stubbed `acquireVsCodeApi`. Open a fixture or a local `.arxml`
-in the ECUC editor and observe the real webview: layout, hover, focus, scroll, filter passes, the
+in the ECUC editor and observe the real webview: layout, hover, focus, scroll, search passes, the
 inspector and the reload path all need that host.
 
 A host observation is not a repeatable check. It cannot run in CI, so record it as host-observed with
@@ -124,22 +124,20 @@ row model carries no source-position fields.
 ## Virtual page tests drive the page's serialized row code
 
 The virtual row renderer is tested at two levels. Pure modules (`renderRows`, `virtualScroll`,
-`filterRows`/`flattenRows`) have ordinary unit tests over values. The page's own copy is extracted
-from `renderHtml` with `scriptTestUtils` and compiled: `filterRows`, `flattenRows`, `ancestorIds`,
-`inspectorFields`, `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` and the
-virtual math are driven with real row data, so the page does not get a second implementation.
-`virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse/filter
-display lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan
-payload. Structural
+`treeQuery`) have ordinary unit tests over values. The page's own copy is extracted from `renderHtml`
+with `scriptTestUtils` and compiled: `searchRows`, `flattenRows`, `ancestorIds`, `inspectorFields`,
+`reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` and the virtual math are driven
+with real row data, so the page does not get a second implementation.
+`virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse display
+lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan payload. Structural
 assertions (a window loop, spacers, no `innerHTML`/style attribute in the row builder, `data-level`
 CSS) are the regression guard; the real DOM pass is the Extension Development Host.
 
 Mutation checks for this layer: render the full row list instead of `[start,end)`, remove the
-top/bottom spacers, zero the overscan, drop subtree collapse/filter-ancestor logic, drop the filter
-generation guard, use `innerHTML` for row text, use an inline depth style, remove
-`aria-level`/posinset/setsize, remove focus restore, send full HTML on re-scan, use
-`#tree-window` as the offset, leak bracket guides outside their container, or leak the subtree tint
-to siblings; each must fail a test. For the Conditions panel, the mutation set is: drop the row
+top/bottom spacers, zero the overscan, drop subtree collapse logic, use `innerHTML` for row text, use
+an inline depth style, remove `aria-level`/posinset/setsize, remove focus restore, send full HTML on
+re-scan, use `#tree-window` as the offset, leak bracket guides outside their container, or leak the
+subtree tint to siblings; each must fail a test. For the Conditions panel, the mutation set is: drop the row
 `symbols`, treat an empty value as a known empty string, skip discovery after `setRows`, invert the
 `unknown` badge, make Clear values delete rows, or forget a removed discovered row; each must fail a
 test. Prefer the page's own functions over a grep-only assertion, and record which checks were

@@ -9,8 +9,7 @@
  *
  * The functions deliberately use only `document` and the field subset they read,
  * so both an `EcucRow` and a projected diff cell satisfy them. `appendHighlighted`
- * falls back to the page's `highlightQuery` while a search is active, and otherwise
- * to `filterQuery`; each page declares both variables.
+ * falls back to the page's `highlightQuery`; each page declares it.
  */
 
 /** The subset `valueSpan` / `metaSpan` read from a row or a projected diff cell. */
@@ -42,7 +41,6 @@ declare const document: {
 };
 
 /* Page globals declared by the host page around this script. */
-declare const filterQuery: string;
 declare const highlightQuery: string;
 declare function matchRanges(text: string, query: string): { start: number; end: number }[];
 
@@ -64,16 +62,11 @@ export function twistyIcon(): unknown {
 
 /**
  * Appends `text` to `parent`, wrapping every case-insensitive occurrence of the
- * query in `<mark>`. With no explicit query the page's live `filterQuery` is used,
- * unless a non-blank `highlightQuery` overrides it for the active search.
+ * query in `<mark>`. An explicit query wins; otherwise the page's live
+ * `highlightQuery` is used.
  */
 export function appendHighlighted(parent: PageElement, text: string, query?: string): void {
-	const needle =
-		query === undefined
-			? typeof highlightQuery === 'string' && highlightQuery.trim() !== ''
-				? highlightQuery
-				: filterQuery
-			: query;
+	const needle = query === undefined ? (typeof highlightQuery === 'string' ? highlightQuery : '') : query;
 	const ranges = needle.trim() === '' ? [] : matchRanges(text, needle);
 	if (ranges.length === 0) {
 		parent.appendChild(document.createTextNode(text));
@@ -95,7 +88,7 @@ export function appendHighlighted(parent: PageElement, text: string, query?: str
 }
 
 /** The `= shownValue` span; the `=` is punctuation, not part of the value token. */
-export function valueSpan(row: RowViewFields, readOnly = false): unknown {
+export function valueSpan(row: RowViewFields, readOnly = false, query?: string): unknown {
 	const value = document.createElement('span');
 	value.className = 'value';
 	if (row.kind === 'parameter') {
@@ -111,13 +104,13 @@ export function valueSpan(row: RowViewFields, readOnly = false): unknown {
 	value.appendChild(document.createTextNode(' '));
 	const text = document.createElement('span');
 	text.className = 'value-text';
-	appendHighlighted(text, row.shownValue || '');
+	appendHighlighted(text, row.shownValue || '', query);
 	value.appendChild(text);
 	return value;
 }
 
 /** The quiet-source meta chips (short name, variant, context, condition, annotation). */
-export function metaSpan(row: RowViewFields): unknown {
+export function metaSpan(row: RowViewFields, query?: string): unknown {
 	const meta = document.createElement('span');
 	meta.className = 'row-meta';
 	for (const part of row.meta) {
@@ -134,7 +127,7 @@ export function metaSpan(row: RowViewFields): unknown {
 			span.appendChild(keyword);
 			span.appendChild(document.createTextNode(' ' + part.text.slice('context '.length)));
 		} else if (part.cls === 'short') {
-			appendHighlighted(span, part.text);
+			appendHighlighted(span, part.text, query);
 		} else {
 			span.textContent = part.text;
 		}
