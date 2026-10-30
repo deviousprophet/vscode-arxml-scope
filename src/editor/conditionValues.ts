@@ -29,7 +29,15 @@ export const CONDITION_VALUES_KEY = 'arxmlScope.conditionValues.v1';
 const ENTRY_LIMIT = 200;
 const NAME_LIMIT = 200;
 const VALUE_LIMIT = 200;
-const NAME_PATTERN = /^\/?[A-Za-z_][A-Za-z0-9_.\-/]*$/;
+
+/**
+ * The constant-name rule. Self-contained so a page copy can be compared against
+ * it in a test; the page cannot call this module (it has no `vscode` import).
+ * A leading `/` is allowed so a full `SYSC-REF` path can be pasted (PRD R3).
+ */
+export function isConditionName(name: string): boolean {
+	return /^\/?[A-Za-z_][A-Za-z0-9_.\-/]*$/.test(name);
+}
 
 /**
  * Normalizes raw `{ name, value }` input. Names are trimmed and validated,
@@ -61,7 +69,7 @@ export function parseConditionEntries(input: unknown, limit = ENTRY_LIMIT): Pars
 		if (name === '') {
 			continue;
 		}
-		if (!NAME_PATTERN.test(name)) {
+		if (!isConditionName(name)) {
 			if (!invalid.includes(name)) {
 				invalid.push(name);
 			}

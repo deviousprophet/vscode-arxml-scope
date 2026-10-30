@@ -11,7 +11,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { ConditionEntry, ConditionValueStore } from '../../editor/conditionValues';
+import { ConditionEntry, ConditionValueStore, isConditionName } from '../../editor/conditionValues';
 import { EcucEditorProvider } from '../../editor/ecucEditorProvider';
 import { encodeJsonForScript, inspectorFields, renderHtml } from '../../editor/renderHtml';
 import { buildRows } from '../../editor/renderRows';
@@ -176,6 +176,9 @@ suite('conditions panel (design §6)', () => {
 		assert.strictEqual(valid('/Pkg/SwSystemconsts/A_SC'), true);
 		assert.strictEqual(valid('1ABC'), false);
 		assert.strictEqual(valid('A B'), false);
+		for (const name of ['A_SC', 'Pkg.Mod/Sub-1_A', '/Pkg/SwSystemconsts/A_SC', '1ABC', 'A B']) {
+			assert.strictEqual(valid(name), isConditionName(name), `the page and host agree on "${name}"`);
+		}
 	});
 
 	test('a host entries refresh replaces the panel rows and leaves other messages alone', () => {
@@ -281,7 +284,7 @@ suite('conditions panel (design §6)', () => {
 		const style = styleOf(html);
 		assert.ok(/\.node\[data-disabled="true"\] > \.row\s*\{[^}]*opacity:\s*0\.55[^}]*--vscode-disabledForeground/.test(style));
 		assert.ok(/\.condition\[data-state="false"\]\s*\{[^}]*--vscode-errorForeground/.test(style));
-		assert.ok(/\.condition\[data-state="unknown"\]\s*\{[^}]*border-style:\s*dashed[^}]*--vscode-descriptionForeground/.test(style));
+		assert.ok(!/\.condition\[data-state="unknown"\]/.test(style), 'unknown keeps the existing appearance (PRD R12)');
 		assert.ok(/\.sr-only\s*\{[^}]*clip:\s*rect\(0, 0, 0, 0\)/.test(style));
 		assert.ok(/\.condition-name\[aria-invalid="true"\]/.test(style));
 		for (const selector of ['.conditions-panel', '.condition-row', '.conditions-hint']) {

@@ -72,8 +72,16 @@ suite('SW-SYSCOND evaluator (design §2)', () => {
 		assert.strictEqual(stateOf('(CANIPCORETYPE_SC==0)', { CANIPCORETYPE_SC: 1 }), 'false');
 		assert.strictEqual(
 			stateOf('(CANIPCORETYPE_SC==0)', { '/Pkg/SwSystemconsts/CANIPCORETYPE_SC': 1 }),
+			'false',
+			'a full-path value matches the tail-shaped identifier the scanner produces'
+		);
+		assert.strictEqual(
+			stateOf('(CANIPCORETYPE_SC==0)', {
+				'/PkgA/SwSystemconsts/CANIPCORETYPE_SC': 0,
+				'/PkgB/SwSystemconsts/CANIPCORETYPE_SC': 1,
+			}),
 			'unknown',
-			'a bare identifier is not guessed against a full-path key'
+			'an ambiguous tail stays unknown rather than guessing'
 		);
 		assert.strictEqual(
 			stateOf('(/Pkg/SwSystemconsts/CANIPCORETYPE_SC==0)', { CANIPCORETYPE_SC: 1 }),

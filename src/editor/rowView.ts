@@ -67,12 +67,12 @@ export function appendHighlighted(parent: PageElement, text: string, query?: str
 }
 
 /** The `= shownValue` span; the `=` is punctuation, not part of the value token. */
-export function valueSpan(row: RowViewFields): unknown {
+export function valueSpan(row: RowViewFields, readOnly = false): unknown {
 	const value = document.createElement('span');
 	value.className = 'value';
 	if (row.kind === 'parameter') {
 		value.dataset.valueKind = row.valueKind || 'textual';
-		value.title = 'Value: ' + (row.shownValue || '') + ' - edit in Details';
+		value.title = 'Value: ' + (row.shownValue || '') + (readOnly ? '' : ' - edit in Details');
 	} else {
 		value.title = 'Target: ' + (row.shownValue || '');
 	}

@@ -451,15 +451,29 @@ function lookup(state: EvalState, name: string): ConditionValue | undefined {
 	if (exact !== undefined) {
 		return exact;
 	}
-	const slash = name.lastIndexOf('/');
-	if (slash >= 0) {
-		const tail = name.slice(slash + 1);
-		if (tail !== '') {
-			const byTail = state.values.get(tail);
-			if (byTail !== undefined) {
-				return byTail;
+	const tail = name.slice(name.lastIndexOf('/') + 1);
+	if (tail !== name) {
+		const byTail = state.values.get(tail);
+		if (byTail !== undefined) {
+			return byTail;
+		}
+	}
+	// A full path pasted into the value panel must match the tail-shaped
+	// identifier the scanner produces. Only an unambiguous tail match is used;
+	// two constants with the same tail stay unknown rather than guessing.
+	let found: ConditionValue | undefined;
+	let matches = 0;
+	for (const [key, value] of state.values) {
+		if (key.slice(key.lastIndexOf('/') + 1) === tail) {
+			found = value;
+			matches++;
+			if (matches > 1) {
+				break;
 			}
 		}
+	}
+	if (matches === 1) {
+		return found;
 	}
 	recordMissing(state, name);
 	return undefined;

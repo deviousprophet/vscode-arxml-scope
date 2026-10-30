@@ -48,6 +48,10 @@ export interface DiffRow {
 	key: string;
 	parentKey: string | null;
 	level: number;
+	/** 1-based position among siblings, for the tree's `aria-posinset`. */
+	posinset: number;
+	/** Number of siblings including this row, for `aria-setsize`. */
+	setsize: number;
 	kind: DiffCell['kind'];
 	hasChildren: boolean;
 	/** Recomputed over the merged tree. */
@@ -492,12 +496,15 @@ function mergeChildren(
 
 /** Pre-order flatten with level, parent, hasChildren and subtreeSize recomputed. */
 function flattenMerged(nodes: readonly MergedNode[], parentKey: string | null, level: number, out: DiffRow[]): void {
-	for (const node of nodes) {
+	for (let position = 0; position < nodes.length; position++) {
+		const node = nodes[position];
 		const at = out.length;
 		const row: DiffRow = {
 			key: node.key,
 			parentKey,
 			level,
+			posinset: position + 1,
+			setsize: nodes.length,
 			kind: node.kind,
 			hasChildren: node.children.length > 0,
 			subtreeSize: 0,
@@ -706,7 +713,7 @@ function suffixLabel(parts: readonly string[], depth: number, fallback: string):
  * then the shortest trailing path suffix that tells them apart.
  */
 export function disambiguatedLabels(a: FileLabel, b: FileLabel): [string, string] {
-	if (a.name !== b.name) {
+	if (a.name !== b.name || a.path === b.path) {
 		return [a.name, b.name];
 	}
 	const aParts = pathParts(a.path);

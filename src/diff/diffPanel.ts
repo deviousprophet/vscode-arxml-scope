@@ -73,7 +73,7 @@ export class DiffPanel {
 			return false;
 		}
 		const reason =
-			gateReason(left.document.getText(), leftUri.fsPath) ?? gateReason(right.document.getText(), rightUri.fsPath);
+			gateReason(left.getText(), leftUri.fsPath) ?? gateReason(right.getText(), rightUri.fsPath);
 		if (reason) {
 			void vscode.window.showWarningMessage(reason);
 			return false;
@@ -81,8 +81,8 @@ export class DiffPanel {
 
 		const leftLabel = label(leftUri);
 		const rightLabel = label(rightUri);
-		const leftRows = rowsFor(left.document);
-		const rightRows = rowsFor(right.document);
+		const leftRows = rowsFor(left);
+		const rightRows = rowsFor(right);
 		let current = buildDiffDocument(
 			leftLabel,
 			rightLabel,
@@ -244,9 +244,9 @@ export class DiffPanel {
 	}
 
 	/** Opens a side as a text document; an unreadable file is warned about, not thrown. */
-	private static async read(uri: vscode.Uri): Promise<{ document: vscode.TextDocument } | undefined> {
+	private static async read(uri: vscode.Uri): Promise<vscode.TextDocument | undefined> {
 		try {
-			return { document: await vscode.workspace.openTextDocument(uri) };
+			return await vscode.workspace.openTextDocument(uri);
 		} catch (error) {
 			void vscode.window.showWarningMessage(
 				`Cannot read "${fileName(uri)}" for comparison: ${error instanceof Error ? error.message : String(error)}`

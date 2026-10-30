@@ -550,12 +550,34 @@ suite('semantic diff model (design §2, §3.3)', () => {
 			}
 		}
 		assert.ok(document.rows.some((row) => row.hasChildren && row.subtreeSize > 0));
+		const roots = document.rows.filter((row) => row.parentKey === null);
+		const moduleKey = roots[0].key;
+		const children = document.rows.filter((row) => row.parentKey === moduleKey);
+		assert.deepStrictEqual(
+			children.map((row) => row.posinset),
+			[1, 2, 3],
+			'sibling positions are 1-based in merged order'
+		);
+		assert.ok(
+			children.every((row) => row.setsize === 3),
+			'every sibling reports the merged sibling count'
+		);
 	});
 
 	test('R10: titles disambiguate same-named files by the shortest path suffix', () => {
 		assert.strictEqual(
 			compareTitle({ name: 'left.arxml', path: '/w/left.arxml' }, { name: 'right.arxml', path: '/w/right.arxml' }),
 			'left.arxml ↔ right.arxml'
+		);
+		assert.strictEqual(
+			compareTitle({ name: 'same.arxml', path: '/w/a/same.arxml' }, { name: 'same.arxml', path: '/w/b/same.arxml' }),
+			'a/same.arxml ↔ b/same.arxml',
+			'same basename: the shortest distinguishing suffix is used'
+		);
+		assert.strictEqual(
+			compareTitle({ name: 'same.arxml', path: '/w/same.arxml' }, { name: 'same.arxml', path: '/w/same.arxml' }),
+			'same.arxml ↔ same.arxml',
+			'a file compared with itself keeps the basename, not the full path twice'
 		);
 		assert.deepStrictEqual(
 			disambiguatedLabels({ name: 'same.arxml', path: '/a/x/same.arxml' }, { name: 'same.arxml', path: '/b/y/same.arxml' }),

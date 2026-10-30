@@ -83,6 +83,8 @@ suite('semantic diff page (design §3)', () => {
 		assert.ok(html.includes('id="diff-measure"'));
 		assert.ok(html.includes("setAttribute('role', 'treeitem')"), 'rows are treeitems');
 		assert.ok(html.includes("setAttribute('aria-level'"), 'rows expose their level');
+		assert.ok(html.includes("setAttribute('aria-posinset'"), 'rows expose their sibling position');
+		assert.ok(html.includes("setAttribute('aria-setsize'"), 'rows expose their sibling count');
 		assert.ok(html.includes("setAttribute('aria-expanded'"), 'containers expose expansion');
 		assert.ok(html.includes("setAttribute('aria-selected'"), 'rows expose selection');
 		assert.ok(html.includes("'sr-only'"), 'a visually hidden status word is emitted');
@@ -107,7 +109,9 @@ suite('semantic diff page (design §3)', () => {
 		};
 		const payload = embedded(page(hostile));
 		assert.strictEqual(payload.rows[0].left?.label, '</script><img src=x>', 'the text survives the JSON round trip');
-		assert.ok(encodeDiffDocument(hostile).includes('\\u003c/script>'), '< is escaped so it cannot close the script');
+		const encoded = encodeDiffDocument(hostile);
+		assert.ok(encoded.includes('\\u003c/script\\u003e'), '< and > are escaped so model text cannot close the script');
+		assert.ok(!encoded.includes('</script>'), 'the raw end tag never appears in the payload');
 	});
 
 	test('the embedded document is the model the host built', () => {
@@ -168,6 +172,8 @@ suite('semantic diff page (design §3)', () => {
 			key: `row-${at}`,
 			parentKey: at === 0 ? null : 'row-0',
 			level: at === 0 ? 1 : 2,
+			posinset: at === 0 ? 1 : at,
+			setsize: at === 0 ? 1 : 1199,
 			kind: 'parameter' as const,
 			hasChildren: false,
 			subtreeSize: 0,

@@ -158,7 +158,11 @@ async function compareToStaged(
 		void vscode.window.showWarningMessage('Select the second .arxml file to compare.');
 		return;
 	}
-	await DiffPanel.open(context, stashed, target);
+	// The first-file stash is one-shot: a successful compare clears the context key
+	// so the Explorer item keeps telling the truth.
+	if (await DiffPanel.open(context, stashed, target)) {
+		compare.clear();
+	}
 }
 
 /**

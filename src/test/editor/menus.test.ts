@@ -6,6 +6,7 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 
 import { repoRoot } from './editorTestUtils';
 
@@ -108,5 +109,15 @@ suite('editor context menus (AC1–AC5)', () => {
 			[],
 			'no direct reveal entry'
 		);
+	});
+
+	test('AC2/AC3: the submenu targets registered commands', async () => {
+		const commands = await vscode.commands.getCommands(true);
+		for (const id of [OPEN_COMMAND, REVEAL_COMMAND]) {
+			assert.ok(commands.includes(id), `${id} is registered`);
+		}
+		// Menu visibility itself has no extension-host API. The `when` clauses are
+		// asserted against the manifest above, and both commands are executed in
+		// activation.test.ts; the rendered placement still needs a Development Host check.
 	});
 });

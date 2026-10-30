@@ -13,6 +13,9 @@
  */
 import { randomBytes } from 'crypto';
 import { matchRanges } from '../editor/filter';
+import { escapeHtml } from '../editor/html';
+import { encodeJsonForScript } from '../editor/jsonScript';
+import { pageErrorScript } from '../editor/pageError';
 import { rowViewScript } from '../editor/rowView';
 import { virtualScrollScript } from '../editor/virtualScroll';
 import { DiffDocument, diffVisibility, flattenDiffRows, nextChangeIndex } from './diffModel';
@@ -24,33 +27,21 @@ export interface DiffRenderOptions {
 
 /**
  * Serialises the diff document for a `<script type="application/json">` block.
- * `<` is escaped so model text can never close the script element; the page
- * calls `JSON.parse` and never evaluates it.
+ * The shared encoder escapes the characters that could close the element; the
+ * page calls `JSON.parse` and never evaluates it.
  */
 export function encodeDiffDocument(document: DiffDocument): string {
-	return JSON.stringify(document)
-		.replace(/</g, '\\u003c')
-		.replace(/\u2028/g, '\\u2028')
-		.replace(/\u2029/g, '\\u2029');
-}
-
-/** Text-content escaping; quotes are escaped because the same helper feeds attributes. */
-function escapeHtml(text: string): string {
-	return text
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;');
+	return encodeJsonForScript(document);
 }
 
 /** Builds the whole diff page. */
-export function renderDiffHtml(document: DiffDocument, options: DiffRenderOptions = {}): string {
+export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = {}): string {
 	const nonce = options.nonce ?? randomBytes(16).toString('base64');
-	const payload = encodeDiffDocument(document);
-	const left = escapeHtml(document.left.name);
-	const right = escapeHtml(document.right.name);
-	const leftPath = escapeHtml(document.left.path);
-	const rightPath = escapeHtml(document.right.path);
+	const payload = encodeDiffDocument(diff);
+	const left = escapeHtml(diff.left.name);
+	const right = escapeHtml(diff.right.name);
+	const leftPath = escapeHtml(diff.left.path);
+	const rightPath = escapeHtml(diff.right.path);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -335,7 +326,7 @@ function buildDiffCell(cell, side, row) {
 	appendHighlighted(label, cell.label, filterQuery);
 	line.appendChild(label);
 	if (cell.kind === 'parameter' || cell.kind === 'reference') {
-		line.appendChild(valueSpan(cell));
+		line.appendChild(valueSpan(cell, true));
 	}
 	if (cell.meta && cell.meta.length > 0) {
 		line.appendChild(metaSpan(cell));
@@ -357,6 +348,8 @@ function buildDiffRow(row, displayIndex) {
 	element.className = 'node diff-row';
 	element.setAttribute('role', 'treeitem');
 	element.setAttribute('aria-level', String(row.level));
+	element.setAttribute('aria-posinset', String(row.posinset));
+	element.setAttribute('aria-setsize', String(row.setsize));
 	element.setAttribute('aria-selected', row.key === selectedKey ? 'true' : 'false');
 	if (row.hasChildren) {
 		element.setAttribute('aria-expanded', displayRows[displayIndex] && displayRows[displayIndex].expanded ? 'true' : 'false');
@@ -1479,27 +1472,10 @@ body.vscode-high-contrast .diff-row:hover > .diff-cell {
 }
 `;
 
-/** Boot error surface; the diff page's copy of the editor's guarded installer. */
-const DIFF_PAGE_ERROR_SCRIPT = `
-function diffInstallErrorSurface() {
-	function show(text) {
-		var notice = document.getElementById('diff-notice');
-		if (!notice) {
-			return;
-		}
-		notice.textContent = text;
-		notice.dataset.kind = 'warn';
-	}
-	function devToolsHint() {
-		return '. Open Developer: Open Webview Developer Tools for the stack.';
-	}
-	window.diffReportError = show;
-	window.addEventListener('error', function (event) {
-		show('The diff page failed: ' + (event.message || 'unknown error') +
-			(event.lineno ? ' (line ' + event.lineno + ')' : '') + devToolsHint());
-	});
-	window.addEventListener('unhandledrejection', function (event) {
-		show('The diff page failed: ' + String(event.reason) + devToolsHint());
-	});
-}
-`;
+/** Boot error surface; shared with the editor page and pointed at the diff notice. */
+const DIFF_PAGE_ERROR_SCRIPT = pageErrorScript({
+	installerName: 'diffInstallErrorSurface',
+	reporterName: 'diffReportError',
+	noticeId: 'diff-notice',
+	label: 'The diff page failed',
+});

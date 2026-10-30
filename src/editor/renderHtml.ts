@@ -25,9 +25,15 @@ import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
 import type { ConditionValue } from '../core/ecuc/syscond';
 import type { ConditionEntry } from './conditionValues';
 import { FlatRow, ancestorIds, buildFilterIndex, createFilterDebouncer, filterRows, flattenRows, matchRanges } from './filter';
+import { escapeHtml } from './html';
+import { encodeJsonForScript } from './jsonScript';
+import { pageErrorScript } from './pageError';
 import { EcucRow, MetaPart, ParameterFormat, RowCondition, buildRows } from './renderRows';
 import { rowViewScript } from './rowView';
 import { virtualScrollScript } from './virtualScroll';
+
+export { encodeJsonForScript };
+
 import { detailsEditorScript } from './ecucDetailsEditor';
 
 export interface RenderOptions {
@@ -51,29 +57,11 @@ export interface RowPayload {
 
 /**
  * Serialises the row document for a `<script type="application/json">` block.
- * `<` is escaped so model text can never close the script element; the page
- * calls `JSON.parse` and never evaluates it.
+ * The shared encoder escapes the characters that could close the element; the
+ * page calls `JSON.parse` and never evaluates it.
  */
 export function encodeRowDocument(payload: RowPayload): string {
-	return JSON.stringify(payload)
-		.replace(/</g, '\\u003c')
-		.replace(/\u2028/g, '\\u2028')
-		.replace(/\u2029/g, '\\u2029');
-}
-
-/**
- * Serialises any value for an inline `<script type="application/json">` block.
- * `<`, `>` and `&` are escaped so a value can never close the element, and the
- * JavaScript line separators are escaped because JSON allows them raw.
- */
-export function encodeJsonForScript(value: unknown): string {
-	const json = JSON.stringify(value);
-	return (json === undefined ? 'null' : json)
-		.replace(/</g, '\\u003c')
-		.replace(/>/g, '\\u003e')
-		.replace(/&/g, '\\u0026')
-		.replace(/\u2028/g, '\\u2028')
-		.replace(/\u2029/g, '\\u2029');
+	return encodeJsonForScript(payload);
 }
 
 /** The state a re-scan keeps, pruned to the rows that still exist. */
@@ -315,11 +303,6 @@ function headerHtml(model: EcucDocumentModel): string {
 		meta.push(`<div class="package"><span class="keyword">package</span> ${escapeHtml(pkg.path.join('.'))}</div>`);
 	}
 	return meta.join('');
-}
-
-/** Text-content escaping; quotes are safe in text. */
-function escapeHtml(text: string): string {
-	return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /* ---------------------------------------------------------------------------------
@@ -883,13 +866,10 @@ body[data-view] {
 	border-radius: 3px;
 	color: var(--tok-meta);
 }
+/* Unknown keeps today's appearance (PRD R12); only a false condition recolours. */
 .condition[data-state="false"] {
 	color: var(--vscode-errorForeground);
 	border-color: currentColor;
-}
-.condition[data-state="unknown"] {
-	border-style: dashed;
-	color: var(--vscode-descriptionForeground);
 }
 .annotation {
 	padding: 0 4px;
@@ -1349,33 +1329,14 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
  * without it a page that dies while booting shows the schema header and an empty
  * tree with no explanation (the failure mode that is worst to diagnose). The
  * installer is named so a test can drive the page's own copy rather than grep it.
- *
- * `$` is avoided in this block: the whole page is a template literal.
  */
-const PAGE_ERROR_SCRIPT = `
-function ecucInstallErrorSurface() {
-	function show(text) {
-		var notice = document.getElementById('notice');
-		if (!notice) {
-			return;
-		}
-		notice.textContent = text;
-		notice.dataset.kind = 'warn';
-	}
-	function devToolsHint() {
-		return '. Open Developer: Open Webview Developer Tools for the stack.';
-	}
-	window.ecucReportError = show;
-	window.addEventListener('error', function (event) {
-		show('The ECUC editor page failed: ' + (event.message || 'unknown error') +
-			(event.lineno ? ' (line ' + event.lineno + ')' : '') + devToolsHint());
-	});
-	window.addEventListener('unhandledrejection', function (event) {
-		show('The ECUC editor page failed: ' + String(event.reason) + devToolsHint());
-	});
-}
-ecucInstallErrorSurface();
-`;
+const PAGE_ERROR_SCRIPT = pageErrorScript({
+	installerName: 'ecucInstallErrorSurface',
+	reporterName: 'ecucReportError',
+	noticeId: 'notice',
+	label: 'The ECUC editor page failed',
+	install: true,
+});
 
 /**
  * The page: the row store, flatten/collapse/filter, the virtual window, row
@@ -2151,7 +2112,6 @@ function applyFilterQuery(query) {
 	filterQuery = query;
 	refreshFilter();
 	rebuildDisplay();
-	renderWindow(true);
 	if (anchor && displayIndexById.has(anchor.id)) {
 		restoreWindowAnchor(anchor);
 	} else {
