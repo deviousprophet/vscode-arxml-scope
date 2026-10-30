@@ -6,7 +6,7 @@
  * file, or repairs anything. Every listener and timer is disposed with the panel.
  *
  * Refresh is a full re-scan after a short debounce, not an incremental update; the
- * page keeps its filter, changes-only toggle, collapse set, selection and scroll.
+ * page keeps its view mode, swap state, collapse set, selection, search and scroll.
  * If a side stops being ECUC while the panel is open, the last good document stays
  * visible with an error banner instead of silently showing stale ranges.
  */

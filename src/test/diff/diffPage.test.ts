@@ -1,6 +1,5 @@
 /**
  * The diff page shell and its serialized helpers (task design §3; ac14).
- *
  * The test host has no webview DOM, so the page is asserted at the level of the
  * rendered shell plus the page's own functions, extracted with `scriptTestUtils`.
  * The real webview pass is the Extension Development Host.
@@ -239,6 +238,10 @@ suite('semantic diff page (design §3)', () => {
 		assert.ok(html.includes("searchInput.addEventListener('keydown'"), 'Search owns its keys');
 		assert.ok(html.includes('executeSearch(event.shiftKey ? -1 : 1)'), 'Enter and Shift+Enter navigate');
 		assert.ok(html.includes("event.key.toLowerCase() === 'f'"), 'Ctrl+F focuses Search');
+		assert.ok(
+			functionSource(html, 'onKeyDown').includes("closest('#diff-detail')"),
+			'arrows still navigate after selecting strip text'
+		);
 		const row = functionSource(html, 'buildDiffRow');
 		assert.ok(row.includes('displayLeft(row)') && row.includes('displayRight(row)'));
 		assert.ok(row.includes("element.dataset.status = status"), 'the displayed status is rendered');
@@ -566,6 +569,17 @@ suite('semantic diff page (design §3)', () => {
 			}),
 		});
 		assert.strictEqual(diffRowChars(container), 4 + 1 + 10 + 10, 'indent and one gap per fragment');
+		const moduleRow = detailRow({
+			level: 1,
+			kind: 'module',
+			left: detailCell({ kind: 'module', label: 'M', meta: [] }),
+		});
+		assert.strictEqual(diffRowChars(moduleRow), 2 + 1 + 7, 'the rendered "module " prefix is counted');
+		assert.strictEqual(
+			diffRowChars(detailRow({ left: detailCell({ label: 'P', shownValue: undefined, meta: [] }) })),
+			2 + 1 + 3,
+			'the "= " separator renders even without a value'
+		);
 		assert.strictEqual(diffRowChars(detailRow({ left: undefined, right: undefined })), 0);
 	});
 
@@ -597,6 +611,7 @@ suite('semantic diff page (design §3)', () => {
 		assert.strictEqual((style.match(/overflow-x:/g) || []).length, 0, 'no second horizontal scroll surface');
 		assert.ok(html.includes('id="diff-ch-probe"'), 'one font probe feeds the width model');
 		assert.strictEqual((html.match(/id="diff-ch-probe"/g) || []).length, 1);
+		assert.ok(/\.toolbar\s*\{[^}]*height:\s*26px/.test(style), 'the diff toolbar stays one 26px row');
 
 		const measure = functionSource(html, 'measureColumnWidth');
 		assert.ok(measure.includes('diffRowChars(row)') && measure.includes('scroll.clientWidth / 2'));

@@ -91,7 +91,7 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 </div>
 <div id="diff-empty" class="empty" hidden><p id="diff-empty-text"></p></div>
 </div>
-<div id="diff-detail" class="detail" role="region" aria-label="Selected row details"></div>
+<div id="diff-detail" class="detail" role="region" aria-label="Selected row changes"></div>
 <script type="application/json" id="diff-document" nonce="${nonce}">${payload}</script>
 <script nonce="${nonce}">
 ${DIFF_PAGE_ERROR_SCRIPT}
@@ -228,8 +228,13 @@ export function diffRowChars(row: DiffRow): number {
 			continue;
 		}
 		let chars = 2 * row.level + cell.label.length;
-		if (cell.shownValue !== undefined) {
-			chars += cell.shownValue.length + 3;
+		if (cell.kind === 'module') {
+			// `.k-module .label::before` renders "module ".
+			chars += 7;
+		}
+		if (cell.kind === 'parameter' || cell.kind === 'reference') {
+			// `valueSpan` always renders "= " before the value, plus one row gap.
+			chars += 3 + (cell.shownValue === undefined ? 0 : cell.shownValue.length);
 		}
 		for (const part of cell.meta) {
 			chars += part.text.length + 1;
@@ -1295,10 +1300,14 @@ function onKeyDown(event) {
 		return;
 	}
 	const item = event.target.closest('#diff-list [role="treeitem"]');
-	if (!item) {
+	const fallback =
+		!item &&
+		selectedKey !== undefined &&
+		(event.target === document.body || event.target.closest('#diff-detail') !== null);
+	if (!item && !fallback) {
 		return;
 	}
-	const key = item.dataset.key;
+	const key = item ? item.dataset.key : selectedKey;
 	const row = rowByKey.get(key);
 	if (!row) {
 		return;
@@ -1517,7 +1526,7 @@ body {
 	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 	align-items: center;
 	gap: 6px;
-	height: 30px;
+	height: 26px;
 	padding: 0 8px;
 	flex: none;
 	font-size: 12px;

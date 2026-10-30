@@ -374,6 +374,18 @@ suite('editor document view', () => {
 		assert.ok(build.includes("'comment-text'") && build.includes('appendHighlighted(text, flat.text)'), 'the annotation text is highlighted like the row');
 		const display = functionSource(html, 'buildDisplayRow');
 		assert.ok(display.includes("flat.type === 'comment'"), 'comment rows are part of the display list');
+		assert.ok(
+			functionSource(html, 'buildHeightFn').includes('carriesGroupGap(rows, displayRows, index)'),
+			'the reserved height uses the shared gap predicate'
+		);
+		assert.ok(
+			functionSource(html, 'buildCommentRow').includes('carriesGroupGap(rows, displayRows, displayIndex)'),
+			'an annotated module carries the gap on its first comment'
+		);
+		assert.ok(
+			functionSource(html, 'buildNodeRow').includes('carriesGroupGap(rows, displayRows, displayIndex)'),
+			'a module without annotations keeps the gap on its node row'
+		);
 		const update = functionSource(html, 'updateInspector');
 		assert.ok(update.includes("conditionCodeRow('Condition'"));
 		assert.ok(update.includes("conditionCodeRow('Conditions'"));
