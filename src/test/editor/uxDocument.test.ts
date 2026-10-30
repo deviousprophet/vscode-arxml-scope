@@ -365,7 +365,7 @@ suite('editor document view', () => {
 		const html = page();
 		const build = functionSource(html, 'buildCommentRow');
 		assert.ok(build.includes("'row comment-row'"), 'a comment row uses the shared row layout');
-		assert.ok(build.includes("'comment-text'") && build.includes('flat.text'), 'the annotation text is the row text');
+		assert.ok(build.includes("'comment-text'") && build.includes('appendHighlighted(text, flat.text)'), 'the annotation text is highlighted like the row');
 		const display = functionSource(html, 'buildDisplayRow');
 		assert.ok(display.includes("flat.type === 'comment'"), 'comment rows are part of the display list');
 		const update = functionSource(html, 'updateInspector');

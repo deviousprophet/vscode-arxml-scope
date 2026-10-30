@@ -25,6 +25,7 @@ src/
     jsonScript.ts           shared inline-JSON encoder for webview payloads
     pageError.ts            shared webview boot-error installer
     ecucEdit.ts             the edit record, region resolution, applyEdit
+    ecucStructureEdit.ts    delete/duplicate plans and one-edit structure writes
     ecucDetailsEditor.ts    the details-panel value editor (webview half)
   diff/               the read-only semantic diff. `diffPanel.ts` and
                       `compareSelection.ts` import `vscode`; `diffModel.ts` and

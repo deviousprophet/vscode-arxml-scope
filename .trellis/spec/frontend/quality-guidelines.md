@@ -13,7 +13,7 @@ that is not obvious from the code.
 | Reintroducing the ARTEXT text form: a grammar, `Open as ARTEXT`, a text diff | ARTEXT survives only as the name of the information model. Anything that exists only because an external process produced a text file is dropped. |
 | Generating an expected fixture from the code under test | A snapshot agrees with the code by construction. See `testing.md`. |
 | Editing a committed fixture from a test | It passes once, then fails forever and silently rewrites the repository. |
-| Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. The fixed `--container-accent` is the documented dark-pass exception. |
+| Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. The fixed `--container-accent` and the fixed search match tiers (`--match-bg`/`--match-hi`) are the documented dark-pass exceptions. |
 | A second renderer or copied markup for a preview | It diverges from the product; wrap the production `renderHtml` and assert containment. |
 | Reading a real customer file from a test | The repository is public. Fixtures are synthetic. |
 | Building the whole row list into the DOM | It restores the large-file lag; render the viewport window plus overscan only. |

@@ -423,7 +423,6 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			type: 'notice',
 			message,
 			kind: 'warn',
-			inline: true,
 			scope: 'details',
 		});
 	}

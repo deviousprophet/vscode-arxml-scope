@@ -1703,12 +1703,6 @@ body[data-view="document"] .comment > .row {
 	color: var(--tok-comment);
 	font-style: italic;
 }
-body[data-view="document"] .comment > .row:hover {
-	background-color: var(--hover-bg);
-}
-body[data-view="document"] .comment[data-subtree="true"] > .row {
-	background-color: var(--subtree-bg);
-}
 body[data-view="document"] .row.k-module .label::before {
 	content: "module ";
 	color: var(--tok-keyword);
@@ -2251,15 +2245,15 @@ function buildCommentRow(flat, displayIndex) {
 	const node = document.createElement('div');
 	node.className = 'comment';
 	node.setAttribute('aria-hidden', 'true');
-	if (subtreeIds.has(owner.id)) {
-		node.dataset.subtree = 'true';
-	}
 	node.dataset.rowId = owner.id;
 	const rowElement = document.createElement('span');
 	rowElement.className = 'row comment-row';
 	rowElement.dataset.level = String(flat.level);
 	rowElement.appendChild(inspectorElement('span', 'punct comment-mark', '/* '));
-	rowElement.appendChild(inspectorElement('span', 'comment-text', flat.text));
+	const text = document.createElement('span');
+	text.className = 'comment-text';
+	appendHighlighted(text, flat.text);
+	rowElement.appendChild(text);
 	rowElement.appendChild(inspectorElement('span', 'punct comment-mark', ' */'));
 	appendGuides(rowElement, displayIndex);
 	node.appendChild(rowElement);
@@ -2582,15 +2576,9 @@ function onRowClick(event) {
 		const comment = event.target.closest('#tree .comment[data-row-id]');
 		if (comment) {
 			const id = comment.dataset.rowId;
-			if (id) {
-				focusId = id;
-				setSelection(id);
-				const node = renderedById.get(id);
-				if (node) {
-					applyRoving(id);
-					node.focus({ preventScroll: true });
-				}
-				vscode.postMessage({ type: 'select', nodeId: id });
+			const node = id === undefined ? undefined : renderedById.get(id);
+			if (id && node) {
+				selectItem(node);
 				syncSearchToSelection(id);
 			}
 		}

@@ -136,7 +136,7 @@ export function toDiffCell(row: EcucRow, range?: Range): DiffCell {
 		value: row.value,
 		target: row.target,
 		contextPaths: row.contextPaths ? row.contextPaths.slice() : undefined,
-		meta: row.meta.map((part) => ({ cls: part.cls, text: part.text, title: part.title })),
+		meta: row.meta.map((part) => ({ cls: part.cls, text: part.text, title: part.title, ...(part.state ? { state: part.state } : {}) })),
 		range: range ? { start: range.start, end: range.end } : { start: 0, end: 0 },
 	};
 }
@@ -609,18 +609,16 @@ export interface FlatDiffRow {
 
 /**
  * The display list: source rows in order, subtrees skipped when collapsed or
- * hidden by the current view. `forceExpand` opens an ancestor with a visible
- * descendant without writing the collapsed set, so switching back restores
- * exactly the user's state.
+ * hidden by the current view. The collapsed set is only read, never modified, so
+ * switching views restores exactly the user's state.
  */
 export function flattenDiffRows(
 	rows: readonly DiffRow[],
-	options: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[]; forceExpand?: boolean } = {}
+	options: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[] } = {}
 ): FlatDiffRow[] {
 	const count = rows.length;
 	const collapsed = options.collapsed;
 	const visible = options.visible;
-	const forceExpand = options.forceExpand ?? visible !== undefined;
 
 	let visiblePrefix: Int32Array | undefined;
 	if (visible) {
@@ -653,7 +651,7 @@ export function flattenDiffRows(
 		const expanded =
 			row.hasChildren &&
 			hasVisibleDescendant(i) &&
-			(forceExpand || !(collapsed ? collapsed.has(row.key) : false));
+			!(collapsed ? collapsed.has(row.key) : false);
 		out.push({ rowIndex: i, level: row.level, expanded });
 		i = expanded ? i + 1 : subtreeEnd(i);
 	}

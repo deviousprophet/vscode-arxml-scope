@@ -286,6 +286,11 @@ suite('semantic diff page (design §3)', () => {
 			'a removed row marks the left side'
 		);
 		assert.ok(style.includes('@media (forced-colors: active)'), 'high contrast uses outlines');
+		assert.ok(style.includes('.syscond-name'), 'condition names keep their token colour in the diff');
+		assert.ok(
+			/\.condition\[data-state="false"\]\s*\{[^}]*border-color/.test(style),
+			'a false diff condition is marked by its edge'
+		);
 	});
 
 	test('the editor page and the diff page serialize byte-identical row primitives', () => {

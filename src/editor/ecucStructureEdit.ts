@@ -110,15 +110,6 @@ export function defaultDuplicateName(name: string, siblings: readonly string[]):
 	return `${base}${ordinal}`;
 }
 
-/** The default container name, or `undefined` for a parameter (no name is asked for). */
-export function duplicateNameSuggestion(model: EcucDocumentModel, nodeId: string): string | undefined {
-	const node = structureNode(model, nodeId);
-	if (node?.kind !== 'container') {
-		return undefined;
-	}
-	return defaultDuplicateName(node.shortName, siblingNames(model, node));
-}
-
 /** Why `name` cannot be a container duplicate's short name, or `undefined` when it can. */
 export function duplicateNameRefusal(model: EcucDocumentModel, nodeId: string, name: string): string | undefined {
 	const node = structureNode(model, nodeId);
@@ -147,6 +138,20 @@ function validRange(text: string, range: Range): boolean {
 		range.end <= text.length &&
 		range.start < range.end
 	);
+}
+
+/** True when the element bytes include or sit inside a CDATA section. */
+function touchesCdata(text: string, range: Range): boolean {
+	const bytes = text.slice(range.start, range.end);
+	if (bytes.includes('<![CDATA[') || bytes.includes(']]>')) {
+		return true;
+	}
+	const open = text.lastIndexOf('<![CDATA[', range.start);
+	if (open < 0) {
+		return false;
+	}
+	const close = text.indexOf(']]>', open + 9);
+	return close < 0 || close > range.start;
 }
 
 function countDescendants(node: ContainerNode): number {
@@ -230,6 +235,9 @@ export function planDelete(model: EcucDocumentModel, text: string, nodeId: strin
 	if (!validRange(text, node.range)) {
 		return { ok: false, reason: 'the node has no removable source range' };
 	}
+	if (touchesCdata(text, node.range)) {
+		return { ok: false, reason: 'the node is stored in a CDATA section, which this editor does not edit' };
+	}
 	const span = lineSpan(text, node.range);
 	return {
 		ok: true,
@@ -256,6 +264,9 @@ export function planDuplicate(
 	}
 	if (!validRange(text, node.range)) {
 		return { ok: false, reason: 'the node has no copyable source range' };
+	}
+	if (touchesCdata(text, node.range)) {
+		return { ok: false, reason: 'the node is stored in a CDATA section, which this editor does not edit' };
 	}
 	let duplicateName: string | undefined;
 	if (node.kind === 'container') {
@@ -300,6 +311,9 @@ export async function applyStructureEdit(
 		if (!validRange(text, node.range)) {
 			return { ok: false, reason: 'the node no longer has a removable source range' };
 		}
+		if (touchesCdata(text, node.range)) {
+			return { ok: false, reason: 'the node is stored in a CDATA section, which this editor does not edit' };
+		}
 		const span = lineSpan(text, node.range);
 		if (text.slice(span.start, span.end) !== record.oldText) {
 			return { ok: false, reason: 'the file changed since the row was read; try again' };
@@ -309,6 +323,9 @@ export async function applyStructureEdit(
 	if (record.action === 'duplicate') {
 		if (!validRange(text, node.range)) {
 			return { ok: false, reason: 'the node no longer has a copyable source range' };
+		}
+		if (touchesCdata(text, node.range)) {
+			return { ok: false, reason: 'the node is stored in a CDATA section, which this editor does not edit' };
 		}
 		if (text.slice(node.range.start, node.range.end) !== record.oldText) {
 			return { ok: false, reason: 'the file changed since the row was read; try again' };

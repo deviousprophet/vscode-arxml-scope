@@ -633,7 +633,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.ok(changesOnly[goneIndex], 'a removed container is visible');
 	});
 
-	test('design §3.3: flatten skips collapsed subtrees and force-expands a visible descendant', () => {
+	test('design §3.3: flatten skips collapsed subtrees in every view', () => {
 		const left = arxml(
 			module(
 				'M1',
@@ -660,13 +660,13 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const diffOnly = flattenDiffRows(rows, {
 			collapsed,
 			visible: visibility,
-			forceExpand: true,
 		});
-		const shown = diffOnly.map((flat) => rows[flat.rowIndex]);
-		assert.ok(shown.some((row) => (row.left ?? row.right)?.label === 'Keep'), 'the changed row is reachable');
-		assert.ok(diffOnly[0].expanded, 'the ancestor reports expanded while its view has rows');
-		assert.strictEqual(rows[0].key, moduleRow.key);
+		assert.deepStrictEqual(diffOnly.map((flat) => flat.rowIndex), [0], 'Show diff only respects the collapse');
 		assert.deepStrictEqual(Array.from(collapsed), [moduleRow.key], 'the collapsed set was not written');
+
+		const reopened = flattenDiffRows(rows, { visible: visibility });
+		const shown = reopened.map((flat) => rows[flat.rowIndex]);
+		assert.ok(shown.some((row) => (row.left ?? row.right)?.label === 'Keep'), 'expanding reaches the changed row');
 	});
 
 	test('design §3.3: next/previous change wraps and respects visibility', () => {

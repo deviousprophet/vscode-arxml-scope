@@ -233,8 +233,7 @@ function buildHeightFn() {
 function rebuildDisplay() {
 	displayRows = flattenDiffRows(rows, {
 		collapsed: collapsed,
-		visible: visibility,
-		forceExpand: showChangesOnly
+		visible: visibility
 	});
 	displayIndexByKey = new Map();
 	navigationVisible = new Array(rows.length).fill(false);
@@ -1122,7 +1121,16 @@ if (viewDiff) {
 
 if (searchInput) {
 	searchInput.addEventListener('input', function () {
-		renderSearchUi();
+		if (searchInput.value === searchQuery) {
+			renderSearchUi();
+			return;
+		}
+		if (searchQuery === '' && searchMatches.length === 0) {
+			renderSearchUi();
+			return;
+		}
+		// Typing after a run invalidates the old marks until Enter runs the new query.
+		resetSearchResults();
 	});
 	searchInput.addEventListener('keydown', function (event) {
 		if (event.key === 'Enter') {
@@ -1650,7 +1658,29 @@ ${DIFF_LEVEL_RULES}
 	color: var(--tok-meta);
 }
 .condition {
+	padding: 0 2px;
+	border: 1px solid transparent;
+	border-radius: 3px;
 	color: var(--tok-meta);
+}
+.condition[data-state="false"] {
+	border-color: var(--vscode-errorForeground, var(--diff-removed-edge));
+}
+.syscond-name {
+	color: var(--tok-key);
+}
+.syscond-number {
+	color: var(--tok-number);
+}
+.syscond-string {
+	color: var(--tok-string);
+}
+.syscond-operator,
+.syscond-literal {
+	color: var(--tok-keyword);
+}
+.syscond-punct {
+	color: var(--tok-punct);
 }
 .annotation {
 	color: var(--tok-comment);

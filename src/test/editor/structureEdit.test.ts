@@ -107,6 +107,20 @@ suite('structural row actions', () => {
 		assert.ok(duplicateNameRefusal(model, containerId, 'not a name'));
 	});
 
+	test('a CDATA-backed node is refused, just like a CDATA value edit', () => {
+		const text = fixtureText('editing/cdata.arxml');
+		const model = scanEcucValues(text);
+		const entry = Array.from(buildNodeIndex(model).byId.values()).find(
+			(candidate) => candidate.node.kind === 'parameter' && candidate.node.name === 'Pattern'
+		);
+		assert.ok(entry);
+		const deleted = planDelete(model, text, entry.id);
+		assert.strictEqual(deleted.ok, false);
+		assert.ok(!deleted.ok && deleted.reason.includes('CDATA'), !deleted.ok ? deleted.reason : '');
+		const duplicated = planDuplicate(model, text, entry.id);
+		assert.strictEqual(duplicated.ok, false, 'a CDATA-backed element cannot be copied structurally');
+	});
+
 	test('apply deletes one element and one undo restores it', async () => {
 		const original = fixtureText(FIXTURE);
 		const model = scanEcucValues(original);
