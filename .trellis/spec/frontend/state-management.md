@@ -89,10 +89,12 @@ reload cannot show (and then save) a stale list.
 
 The panel discovers constants from `RowCondition.symbols` on every model push: unique names in the
 row order the host sends, appended only when no row already shows them. Discovery never rewrites an
-input and never posts a message, so a typed draft survives a re-scan. An empty entry stays visible
-in the table but is absent from the evaluation map, so a condition that uses it is `unknown` and
-never disables a row. A discovered row the user removes stays removed across value-only re-pushes;
-a condition change clears that local dismissal (it is not persisted).
+input and never posts a message, so a typed draft survives a re-scan. An empty committed value stays
+visible in the table but is absent from the evaluation map, so a condition that uses it is `unknown`
+and never disables a row. Scanned rows are read-only and cannot be removed; a manual row (a stored
+name not referenced by the document) can be removed and that removal is persisted through the store.
+Drafts live only in Edit mode; only Save, Remove, Clear values and a valid Add send a `conditions`
+message.
 
 ## No derived artefacts
 
