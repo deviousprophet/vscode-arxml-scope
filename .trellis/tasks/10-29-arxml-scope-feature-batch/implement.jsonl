@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend guideline index for this webview-based extension."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Forbidden patterns and invariants every child must keep."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Host/webview split and re-scan survival rules shared by the batch."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Four features cross manifest, host, page and model layers."}
