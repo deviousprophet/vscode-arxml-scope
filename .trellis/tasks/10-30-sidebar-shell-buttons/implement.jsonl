@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Tabs, sections, sashes, details bodies and ARIA rules."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No second renderer, no colour literals, no writes."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Tab/width/pane persistence via vscode.setState and re-scan survival."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Pure allocation tests and page-shell assertions."}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "The shell script belongs in the editor layer; allocation helpers stay testable."}
-{"file": ".trellis/tasks/10-30-sidebar-control-parity/research/hex-scope-ui-reference.md", "reason": "Sidebar/section/search/button reference anchors."}
