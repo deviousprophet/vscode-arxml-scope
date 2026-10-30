@@ -9,18 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- A right-side sidebar with **Details** and **Conditions** tabs, resizable and collapsible sections, and persisted layout
-- A **Search** field that scans the whole tree when you press Enter with a chunked, cancellable engine, streams the count and first match, marks every match in yellow, gives the current match a stronger highlight, and supports instant wrapped previous/next navigation; label, value, short name, variant, context, condition and annotation text are all searchable
-- A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, changes-only filtering, previous/next navigation, reveal-in-source and live refresh as either file is edited
-- A `Conditions` panel that lists every `SW-SYSCOND` constant in the open document with an `unknown` state until a value is entered; values are stored per workspace, false conditions dim their rows, and unresolved conditions stay active
+- A resizable right sidebar with **Details** and **Conditions** tabs, collapsible sections and saved layout
+- A single scrolling **Details** section that shows the node, value and formats, reference, conditions and annotations, with Jump to target and Reveal in source actions
+- A **Search** field that runs on Enter, streams matches and the first match, highlights every match with a stronger current match, and moves instantly between matches with wrapped previous/next navigation
+- Search covers the text the Document shows, including the label, value, short name, variant, context, condition and annotation
+- Search remains responsive on large files
+- A **Conditions** panel that lists every `SW-SYSCOND` constant with an `unknown` state until a value is entered, stores values per workspace and dims rows disabled by a false condition
+- Condition constants discovered from the open document appear automatically; scanned constants are read-only and manual rows can be removed
+- Condition values use icon-only Edit, Save and Cancel actions
+- A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, a changes-only view, previous/next navigation, reveal-in-source and live refresh
+- An `ARXML Scope` context submenu for `Open with ECUC Editor` and `Reveal in ECUC Editor`
 
 ### Changed
 
-- The Conditions table moved from the toolbar into the sidebar and now uses icon-only Edit/Save/Cancel actions; scanned constants are read-only and cannot be removed, and entering edit mode keeps the name, equals and value columns stable
-- The Details tab is one scrolling section for the node, value, reference, conditions and annotations; Search is the toolbar's only query control
-- The toolbar Search field, primary/secondary/add/danger buttons and row actions share one control style
-- ECUC page errors are written to the webview debug console only; the editor no longer shows a warning banner under the Search bar
-- `Open with ECUC Editor` and `Reveal in ECUC Editor` now live under the `ARXML Scope` submenu; `Reveal in ECUC Editor` is only offered in a text editor
+- Recoverable ECUC warnings now appear beside the Conditions or Details panel they belong to, and page errors go to the webview debug console instead of the toolbar banner
+
+### Removed
+
+- The separate ECUC tree Filter field and its clear, count and empty-state UI; Search is now the only query control
 
 ## [0.3.1] - 2026-10-29
 
