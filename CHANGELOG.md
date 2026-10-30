@@ -5,6 +5,18 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A Conditions panel in the ECUC editor for entering SW system-constant values (numbers, hexadecimal, booleans or strings) per workspace, with a live disabled-row count; rows whose `SW-SYSCOND` evaluates false are dimmed, containers dim their whole subtree, and unresolved conditions never disable anything
+- A read-only semantic ARXML diff: compare two ECUC-Values files by node identity from the Explorer context menu, with aligned panes, changes-only filtering, previous/next change navigation, reveal-in-source and live refresh on unsaved edits
+- An **ARXML Scope** submenu in the text-editor and Explorer context menus; **Reveal in ECUC Editor** is now text-editor-only
+
+### Fixed
+
+- The ECUC editor filter shows one clear X instead of two (the native search cancel button is suppressed)
+
 ## [0.3.1] - 2026-10-29
 
 ### Fixed

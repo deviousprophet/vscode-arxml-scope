@@ -24,6 +24,7 @@ import {
 	Suffixes,
 	lastShortName,
 } from '../core/ecuc/model';
+import { ConditionState, ConditionValue, evaluateSyscond } from '../core/ecuc/syscond';
 import { resolvePath } from '../core/ecuc/resolve';
 import { SORT_EXCEPTIONS, orderContainers, orderMembers, orderModules } from '../core/ecuc/order';
 import { haystack } from './filter';
@@ -34,6 +35,18 @@ export interface MetaPart {
 	cls: 'short' | 'variant' | 'context' | 'condition' | 'annotation';
 	text: string;
 	title: string;
+	/** Condition chip state, so the page can style it without parsing text. */
+	state?: ConditionState;
+}
+
+/** An evaluated `SW-SYSCOND` that belongs to one row. */
+export interface RowCondition {
+	/** The scanner's condition text, without brackets. */
+	text: string;
+	state: ConditionState;
+	/** Missing symbols or the parse/type reason, when the result is unknown. */
+	reason?: string;
+	missing?: string[];
 }
 
 /** One entity in DFS/display order. UI fields are values; no markup is carried. */
@@ -79,6 +92,12 @@ export interface EcucRow {
 	/** Hover text: the full `DEFINITION-REF` (design §2.7). */
 	title: string;
 	meta: MetaPart[];
+	/** Present only when the node has its own SW-SYSCOND. */
+	condition?: RowCondition;
+	/** True when this row or any ancestor condition is false. */
+	disabled?: boolean;
+	/** Why this row is disabled; absent when it is not. */
+	disabledBy?: 'self' | 'ancestor';
 	/** Lower-cased label + short name + value, the existing filter haystack. */
 	haystack: string;
 }
@@ -94,6 +113,8 @@ export interface RowBuildOptions {
 	sort?: SortMode;
 	/** The `sort all` exception list; defaults to the legacy 15 entries. */
 	sortExcept?: readonly string[];
+	/** SW system-constant values used to evaluate each node's own condition. */
+	conditions?: ReadonlyMap<string, ConditionValue>;
 }
 
 interface BuildContext {
@@ -101,6 +122,7 @@ interface BuildContext {
 	sort: SortMode;
 	except: readonly string[];
 	pathIndex: Map<string, Range>;
+	conditions: ReadonlyMap<string, ConditionValue>;
 }
 
 /**
@@ -114,11 +136,12 @@ export function buildRows(model: EcucDocumentModel, options: RowBuildOptions = {
 		sort: options.sort ?? 'all',
 		except: options.sortExcept ?? SORT_EXCEPTIONS,
 		pathIndex: model.pathIndex,
+		conditions: options.conditions ?? new Map<string, ConditionValue>(),
 	};
 	const rows: EcucRow[] = [];
 	const modules = orderModules(model.modules, ctx.sort, ctx.except);
 	for (let at = 0; at < modules.length; at++) {
-		moduleRow(ctx, rows, modules[at], 1, at + 1, modules.length, null);
+		moduleRow(ctx, rows, modules[at], 1, at + 1, modules.length, null, false);
 	}
 	return { rows };
 }
@@ -220,9 +243,11 @@ function moduleRow(
 	level: number,
 	posinset: number,
 	setsize: number,
-	parentId: string | null
+	parentId: string | null,
+	disabledByAncestor: boolean
 ): void {
 	const index = rows.length;
+	const condition = ownCondition(module, ctx);
 	const row: EcucRow = {
 		id: ctx.index.idOf(module) ?? '',
 		kind: 'module',
@@ -239,15 +264,16 @@ function moduleRow(
 		meta: [
 			shortPart(module.shortName),
 			...(module.variant ? [variantPart(module.variant)] : []),
-			...suffixParts(module),
+			...suffixParts(module, condition),
 		],
 		haystack: haystack({ label: dotted(module.definitionRef), shortName: module.shortName }),
 	};
+	const disabled = applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
 
 	const containers = orderContainers(module.containers, ctx.sort, ctx.except);
 	for (let at = 0; at < containers.length; at++) {
-		containerRow(ctx, rows, containers[at], level + 1, at + 1, containers.length, row.id);
+		containerRow(ctx, rows, containers[at], level + 1, at + 1, containers.length, row.id, disabled);
 	}
 	row.hasChildren = containers.length > 0;
 	row.subtreeSize = rows.length - index - 1;
@@ -260,9 +286,11 @@ function containerRow(
 	level: number,
 	posinset: number,
 	setsize: number,
-	parentId: string | null
+	parentId: string | null,
+	disabledByAncestor: boolean
 ): void {
 	const at = rows.length;
+	const condition = ownCondition(container, ctx);
 	const row: EcucRow = {
 		id: ctx.index.idOf(container) ?? '',
 		kind: 'container',
@@ -276,9 +304,10 @@ function containerRow(
 		shortName: container.shortName,
 		definitionRef: container.definitionRef,
 		title: container.definitionRef,
-		meta: [shortPart(container.shortName), ...suffixParts(container)],
+		meta: [shortPart(container.shortName), ...suffixParts(container, condition)],
 		haystack: haystack({ label: lastShortName(container.definitionRef), shortName: container.shortName }),
 	};
+	const disabled = applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
 
 	// Parameters, then references, then nested containers: one contiguous
@@ -288,15 +317,15 @@ function containerRow(
 	const total = members.parameters.length + members.references.length + nested.length;
 	let child = 1;
 	for (const parameter of members.parameters) {
-		parameterRow(ctx, rows, parameter, level + 1, child, total, row.id);
+		parameterRow(ctx, rows, parameter, level + 1, child, total, row.id, disabled);
 		child++;
 	}
 	for (const reference of members.references) {
-		referenceRow(ctx, rows, reference, level + 1, child, total, row.id);
+		referenceRow(ctx, rows, reference, level + 1, child, total, row.id, disabled);
 		child++;
 	}
 	for (const container of nested) {
-		containerRow(ctx, rows, container, level + 1, child, total, row.id);
+		containerRow(ctx, rows, container, level + 1, child, total, row.id, disabled);
 		child++;
 	}
 	row.hasChildren = total > 0;
@@ -311,14 +340,16 @@ function parameterRow(
 	level: number,
 	posinset: number,
 	setsize: number,
-	parentId: string | null
+	parentId: string | null,
+	disabledByAncestor: boolean
 ): void {
 	const value = parameter.displayValue ?? '';
 	// The legacy form quotes a textual value and leaves a numerical one bare.
 	const shown = parameter.numeric ? value : `"${value}"`;
 	const valueKind = parameter.numeric ? (/^(true|false)$/i.test(value) ? 'boolean' : 'numeric') : 'textual';
 	const type = parameterType(parameter.definitionDest, valueKind);
-	rows.push({
+	const condition = ownCondition(parameter, ctx);
+	const row: EcucRow = {
 		id: ctx.index.idOf(parameter) ?? '',
 		kind: 'parameter',
 		level,
@@ -336,9 +367,11 @@ function parameterRow(
 		valueKind,
 		shownValue: shown,
 		title: parameter.definitionRef,
-		meta: suffixParts(parameter),
+		meta: suffixParts(parameter, condition),
 		haystack: haystack({ label: parameter.name, value }),
-	});
+	};
+	applyCondition(row, condition, disabledByAncestor);
+	rows.push(row);
 }
 
 function referenceRow(
@@ -348,12 +381,14 @@ function referenceRow(
 	level: number,
 	posinset: number,
 	setsize: number,
-	parentId: string | null
+	parentId: string | null,
+	disabledByAncestor: boolean
 ): void {
 	const target = reference.targetPath ?? reference.targetRawPath ?? '';
 	const rawTarget = reference.targetRawPath ?? target;
 	const followable = rawTarget !== '' && resolvePath(ctx.pathIndex, rawTarget) !== undefined;
-	rows.push({
+	const condition = ownCondition(reference, ctx);
+	const row: EcucRow = {
 		id: ctx.index.idOf(reference) ?? '',
 		kind: 'reference',
 		level,
@@ -376,10 +411,47 @@ function referenceRow(
 			...(reference.instance && reference.contextPaths.length > 0
 				? [contextPart(reference.contextPaths)]
 				: []),
-			...suffixParts(reference),
+			...suffixParts(reference, condition),
 		],
 		haystack: haystack({ label: reference.name, value: target }),
-	});
+	};
+	applyCondition(row, condition, disabledByAncestor);
+	rows.push(row);
+}
+
+/** Evaluates a node's own condition, or `undefined` when it has none. */
+function ownCondition(node: Suffixes, ctx: BuildContext): RowCondition | undefined {
+	if (!node.syscond) {
+		return undefined;
+	}
+	const result = evaluateSyscond(node.syscond, ctx.conditions);
+	const missingText = result.missing.length > 0 ? `missing: ${result.missing.join(', ')}` : undefined;
+	return {
+		text: node.syscond,
+		state: result.state,
+		reason: result.error ?? missingText,
+		missing: result.missing,
+	};
+}
+
+/**
+ * Marks the row disabled when its own condition is false or an ancestor is
+ * disabled. A true/unknown own condition never re-enables a row below a false
+ * container. The return value is what the children inherit.
+ */
+function applyCondition(row: EcucRow, condition: RowCondition | undefined, disabledByAncestor: boolean): boolean {
+	const ownFalse = condition !== undefined && condition.state === 'false';
+	if (condition) {
+		row.condition = condition;
+	}
+	const disabled = disabledByAncestor || ownFalse;
+	if (disabled) {
+		row.disabled = true;
+		row.disabledBy = ownFalse ? 'self' : 'ancestor';
+	} else if (condition) {
+		row.disabled = false;
+	}
+	return disabled;
 }
 
 function shortPart(shortName: string): MetaPart {
@@ -397,11 +469,14 @@ function contextPart(contextPaths: readonly string[]): MetaPart {
 }
 
 /** Conditions and annotations in the legacy order: syscond, post-build conditions, annotations. */
-function suffixParts(node: Suffixes): MetaPart[] {
+function suffixParts(node: Suffixes, condition?: RowCondition): MetaPart[] {
 	const parts: MetaPart[] = [];
 	if (node.syscond) {
 		const text = `[${node.syscond}]`;
-		parts.push({ cls: 'condition', text, title: text });
+		const title = condition
+			? `${text} — ${condition.state}${condition.reason ? ` (${condition.reason})` : ''}`
+			: text;
+		parts.push({ cls: 'condition', text, title, ...(condition ? { state: condition.state } : {}) });
 	}
 	if (node.postBuildVariants && node.postBuildVariants.length > 0) {
 		const text = node.postBuildVariants.map((v) => `${v.criterion} ${v.operator} ${v.value}`).join(' && ');

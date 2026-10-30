@@ -71,6 +71,20 @@ second host-side implementation of a view rule.
   reloads. An old saved `view` is ignored; there is no second view. The reload round trip is observed
   in the Extension Development Host, which is the only place the state API exists.
 
+## Condition values
+
+The ECUC editor's Conditions panel stores SW system-constant values as raw `{ name, value }` text in
+`context.workspaceState` under `arxmlScope.conditionValues.v1`. They are never written beside the
+ARXML. `ConditionValueStore` normalizes on load and save (trim, 200-entry/200-character caps, name
+pattern `/?[A-Za-z_][A-Za-z0-9_.\-/]*`, last duplicate wins); the page sends raw entries and never
+evaluates a condition. `buildRows` evaluates each node's own `SW-SYSCOND` with
+`src/core/ecuc/syscond.ts` and carries `condition`/`disabled`/`disabledBy` on the row; a false
+container or module disables its subtree, a false parameter/reference only itself, and `unknown`
+never disables. Every rebuild (document change, settings, conditions message) uses the same map, and
+a conditions message re-pushes rows instead of reloading the page. The embedded entries are the
+first-paint copy only: the host answers the page's `ready` with the current entries, so a webview
+reload cannot show (and then save) a stale list.
+
 ## No derived artefacts
 
 Nothing is written beside the user's file. The only write is the text of the element the user

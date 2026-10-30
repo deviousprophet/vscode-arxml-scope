@@ -22,8 +22,11 @@
  */
 import { randomBytes } from 'crypto';
 import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
+import type { ConditionValue } from '../core/ecuc/syscond';
+import type { ConditionEntry } from './conditionValues';
 import { FlatRow, ancestorIds, buildFilterIndex, createFilterDebouncer, filterRows, flattenRows, matchRanges } from './filter';
-import { EcucRow, MetaPart, ParameterFormat, buildRows } from './renderRows';
+import { EcucRow, MetaPart, ParameterFormat, RowCondition, buildRows } from './renderRows';
+import { rowViewScript } from './rowView';
 import { virtualScrollScript } from './virtualScroll';
 import { detailsEditorScript } from './ecucDetailsEditor';
 
@@ -34,6 +37,10 @@ export interface RenderOptions {
 	sortExcept?: readonly string[];
 	/** Node to select on load (child design §2.4, source → editor). */
 	selectedId?: string;
+	/** SW system-constant values, evaluated once per row build. */
+	conditions?: ReadonlyMap<string, ConditionValue>;
+	/** The host's normalized entries, embedded for the Conditions panel. */
+	conditionEntries?: readonly ConditionEntry[];
 }
 
 /** The initial row payload the page parses before its first render. */
@@ -50,6 +57,21 @@ export interface RowPayload {
 export function encodeRowDocument(payload: RowPayload): string {
 	return JSON.stringify(payload)
 		.replace(/</g, '\\u003c')
+		.replace(/\u2028/g, '\\u2028')
+		.replace(/\u2029/g, '\\u2029');
+}
+
+/**
+ * Serialises any value for an inline `<script type="application/json">` block.
+ * `<`, `>` and `&` are escaped so a value can never close the element, and the
+ * JavaScript line separators are escaped because JSON allows them raw.
+ */
+export function encodeJsonForScript(value: unknown): string {
+	const json = JSON.stringify(value);
+	return (json === undefined ? 'null' : json)
+		.replace(/</g, '\\u003c')
+		.replace(/>/g, '\\u003e')
+		.replace(/&/g, '\\u0026')
 		.replace(/\u2028/g, '\\u2028')
 		.replace(/\u2029/g, '\\u2029');
 }
@@ -161,6 +183,7 @@ export interface InspectorFields {
 	context: string;
 	conditions: string;
 	annotations: string;
+	condition?: RowCondition;
 }
 
 /**
@@ -179,6 +202,7 @@ export function inspectorFields(row: EcucRow): InspectorFields {
 			: contextText.startsWith('context ')
 				? contextText.slice('context '.length)
 				: contextText;
+	const ownCondition = row.condition === undefined ? undefined : `[${row.condition.text}]`;
 	return {
 		kind: row.kind,
 		label: row.label,
@@ -190,8 +214,13 @@ export function inspectorFields(row: EcucRow): InspectorFields {
 		formats: row.formats ?? [],
 		target: row.target ?? '',
 		context,
-		conditions: parts('condition').join('\n'),
+		// The own syscond has its own Condition rows; this one keeps the post-build
+		// conditions so the same text is never shown twice.
+		conditions: parts('condition')
+			.filter((text) => text !== ownCondition)
+			.join('\n'),
 		annotations: parts('annotation').join('\n'),
+		...(row.condition === undefined ? {} : { condition: row.condition }),
 	};
 }
 
@@ -201,11 +230,13 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 	const document = buildRows(model, {
 		sort: options.sort,
 		sortExcept: options.sortExcept,
+		conditions: options.conditions,
 	});
 	const payload = encodeRowDocument({
 		rows: document.rows,
 		selectedId: options.selectedId,
 	});
+	const conditionPayload = encodeJsonForScript(options.conditionEntries ?? []);
 	const meta = headerHtml(model);
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -221,6 +252,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <input id="filter" class="filter" type="search" placeholder="Filter" aria-label="Filter the ECUC tree">
 <button id="filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 </div>
+<button id="conditions-toggle" class="tool icon-tool" type="button" aria-pressed="false" aria-expanded="false" aria-controls="conditions-panel" title="Enter SW system-constant values" aria-label="Enter SW system-constant values"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 4.5h12M2 8h12M2 11.5h12"/><circle cx="5.5" cy="4.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="10.5" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="11.5" r="1.5" fill="currentColor" stroke="none"/></svg><span class="lbl">Conditions</span></button>
 <span id="count" class="count" role="status" aria-live="polite" data-state="none"></span>
 <span class="grow"></span>
 <button id="collapse-all" class="tool icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
@@ -228,6 +260,18 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <button id="details-toggle" class="tool details-toggle" type="button" aria-pressed="true" aria-controls="inspector" title="Hide node details" aria-label="Hide node details"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg><span class="lbl">Details</span></button>
 </div>
 <div id="notice" class="notice" role="status" aria-live="polite"></div>
+<div id="conditions-panel" class="conditions-panel" hidden>
+<div class="conditions-head">
+<span class="conditions-title">Condition values</span>
+<span id="conditions-count" class="conditions-count" hidden></span>
+<span class="grow"></span>
+<button id="conditions-add" class="tool" type="button">Add value</button>
+<button id="conditions-clear" class="tool" type="button">Clear all</button>
+</div>
+<div id="conditions-list" class="conditions-list"></div>
+<p class="conditions-hint">Values for the SW system constants used by SW-SYSCOND, for example <code>CANIPCORETYPE_SC = 1</code>.</p>
+<div id="conditions-status" class="conditions-status" role="status" aria-live="polite"></div>
+</div>
 <div id="content">
 <div id="main">
 <div class="document">
@@ -245,10 +289,12 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </aside>
 </div>
 <script type="application/json" id="ecuc-rows" nonce="${nonce}">${payload}</script>
+<script type="application/json" id="ecuc-conditions" nonce="${nonce}">${conditionPayload}</script>
 <script nonce="${nonce}">
 ${PAGE_ERROR_SCRIPT}
 const vscode = acquireVsCodeApi();
 ${detailsEditorScript()}
+${rowViewScript()}
 ${TREE_SCRIPT}
 </script>
 </body>
@@ -448,6 +494,14 @@ body[data-view] {
 	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
 	outline-offset: -1px;
 }
+/* Keep type="search" for its searchbox role and native Escape, but Chromium's own cancel
+ * button and decoration would give the box a second X beside the custom #filter-clear. */
+.filter::-webkit-search-cancel-button,
+.filter::-webkit-search-decoration {
+	-webkit-appearance: none;
+	appearance: none;
+	display: none;
+}
 .filter-clear {
 	position: absolute;
 	right: 3px;
@@ -527,6 +581,105 @@ body[data-view] {
 }
 .details-toggle .lbl {
 	white-space: nowrap;
+}
+
+.conditions-panel {
+	flex: none;
+	padding: 6px 8px 8px;
+	overflow: auto;
+	max-height: 42vh;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 12px;
+	color: var(--vscode-editor-foreground);
+	background: var(--vscode-editor-background);
+	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.conditions-panel[hidden] {
+	display: none;
+}
+.conditions-head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+	margin-bottom: 6px;
+}
+.conditions-title {
+	font-weight: 600;
+}
+.conditions-count {
+	white-space: nowrap;
+	color: var(--vscode-descriptionForeground);
+}
+.conditions-count[hidden] {
+	display: none;
+}
+.conditions-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.condition-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.condition-name,
+.condition-value {
+	box-sizing: border-box;
+	min-width: 0;
+	height: 20px;
+	padding: 0 4px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: 12px;
+	color: var(--vscode-input-foreground);
+	background: var(--vscode-input-background);
+	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+	border-radius: 2px;
+}
+.condition-name {
+	flex: 0 1 30ch;
+}
+.condition-value {
+	flex: 0 1 22ch;
+}
+.condition-name:focus,
+.condition-value:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+.condition-name[aria-invalid="true"] {
+	border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+}
+.condition-remove {
+	flex: none;
+}
+.conditions-hint {
+	margin: 6px 0 0;
+	color: var(--vscode-descriptionForeground);
+}
+.conditions-hint code {
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+}
+.conditions-status {
+	min-height: 0;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+.conditions-status:empty {
+	display: none;
+}
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
 
 .notice {
@@ -695,6 +848,10 @@ body[data-view] {
 .node:focus-visible > .row {
 	box-shadow: inset 2px 0 0 var(--rail);
 }
+.node[data-disabled="true"] > .row {
+	opacity: 0.55;
+	color: var(--vscode-disabledForeground);
+}
 .node[data-selected="true"] > .row {
 	background-color: var(--sel-bg);
 	box-shadow: inset 2px 0 0 var(--rail);
@@ -725,6 +882,14 @@ body[data-view] {
 	border: 1px solid var(--vscode-panel-border, transparent);
 	border-radius: 3px;
 	color: var(--tok-meta);
+}
+.condition[data-state="false"] {
+	color: var(--vscode-errorForeground);
+	border-color: currentColor;
+}
+.condition[data-state="unknown"] {
+	border-style: dashed;
+	color: var(--vscode-descriptionForeground);
 }
 .annotation {
 	padding: 0 4px;
@@ -994,6 +1159,9 @@ body[data-view="document"] .annotation {
 	border: 0;
 	border-radius: 0;
 }
+body[data-view="document"] .condition[data-state="false"] {
+	color: var(--vscode-errorForeground);
+}
 body[data-view="document"] .annotation::before {
 	content: "/* ";
 }
@@ -1228,6 +1396,14 @@ const countLabel = document.getElementById('count');
 const clearButton = document.getElementById('filter-clear');
 const empty = document.getElementById('empty');
 const emptyText = document.getElementById('empty-text');
+const conditionsToggle = document.getElementById('conditions-toggle');
+const conditionsPanel = document.getElementById('conditions-panel');
+const conditionsList = document.getElementById('conditions-list');
+const conditionsAdd = document.getElementById('conditions-add');
+const conditionsClear = document.getElementById('conditions-clear');
+const conditionsCount = document.getElementById('conditions-count');
+const conditionsStatus = document.getElementById('conditions-status');
+const conditionsScript = document.getElementById('ecuc-conditions');
 const svgNamespace = 'http://www.w3.org/2000/svg';
 const bufferRows = 10;
 const savedState = vscode.getState();
@@ -1276,6 +1452,8 @@ let filterQuery = '';
 let filterResult = null;
 let filterIndex = { haystacks: [] };
 let filterDebouncer = createFilterDebouncer(120);
+let conditionDebouncer = createFilterDebouncer(300);
+let conditionsOpen = false;
 let windowRange = [0, 0];
 let renderedDataVersion = -1;
 let dataVersion = 0;
@@ -1440,72 +1618,6 @@ function twistySpan() {
 	return span;
 }
 
-function appendHighlighted(parent, text, query) {
-	const needle = query === undefined ? filterQuery : query;
-	const ranges = needle.trim() === '' ? [] : matchRanges(text, needle);
-	if (ranges.length === 0) {
-		parent.appendChild(document.createTextNode(text));
-		return;
-	}
-	let at = 0;
-	for (const range of ranges) {
-		if (range.start > at) {
-			parent.appendChild(document.createTextNode(text.slice(at, range.start)));
-		}
-		const mark = document.createElement('mark');
-		mark.textContent = text.slice(range.start, range.end);
-		parent.appendChild(mark);
-		at = range.end;
-	}
-	if (at < text.length) {
-		parent.appendChild(document.createTextNode(text.slice(at)));
-	}
-}
-
-function valueSpan(row) {
-	const value = document.createElement('span');
-	value.className = 'value';
-	if (row.kind === 'parameter') {
-		value.dataset.valueKind = row.valueKind || 'textual';
-		value.title = 'Value: ' + (row.shownValue || '') + ' - edit in Details';
-	} else {
-		value.title = 'Target: ' + (row.shownValue || '');
-	}
-	const punct = document.createElement('span');
-	punct.className = 'punct';
-	punct.textContent = '=';
-	value.appendChild(punct);
-	value.appendChild(document.createTextNode(' '));
-	const text = document.createElement('span');
-	text.className = 'value-text';
-	appendHighlighted(text, row.shownValue || '');
-	value.appendChild(text);
-	return value;
-}
-
-function metaSpan(row) {
-	const meta = document.createElement('span');
-	meta.className = 'row-meta';
-	for (const part of row.meta) {
-		const span = document.createElement('span');
-		span.className = part.cls;
-		span.title = part.title;
-		if (part.cls === 'context' && part.text.indexOf('context ') === 0) {
-			const keyword = document.createElement('span');
-			keyword.className = 'keyword';
-			keyword.textContent = 'context';
-			span.appendChild(keyword);
-			span.appendChild(document.createTextNode(' ' + part.text.slice('context '.length)));
-		} else if (part.cls === 'short') {
-			appendHighlighted(span, part.text);
-		} else {
-			span.textContent = part.text;
-		}
-		meta.appendChild(span);
-	}
-	return meta;
-}
-
 function buildNodeRow(row, displayIndex) {
 	const node = document.createElement('div');
 	node.className = row.meta.length > 0 ? 'node has-meta' : 'node';
@@ -1540,6 +1652,9 @@ function buildNodeRow(row, displayIndex) {
 	if (row.empty) {
 		node.dataset.empty = 'true';
 	}
+	if (row.disabled) {
+		node.dataset.disabled = 'true';
+	}
 	node.title = row.title;
 
 	const rowElement = document.createElement('span');
@@ -1558,6 +1673,12 @@ function buildNodeRow(row, displayIndex) {
 	}
 	if (row.meta.length > 0) {
 		rowElement.appendChild(metaSpan(row));
+	}
+	if (row.disabled) {
+		const suffix = document.createElement('span');
+		suffix.className = 'sr-only';
+		suffix.textContent = '(disabled by condition)';
+		rowElement.appendChild(suffix);
 	}
 	appendGuides(rowElement, displayIndex);
 	node.appendChild(rowElement);
@@ -2051,6 +2172,155 @@ function clearFilter(focusInput) {
 	}
 }
 
+function conditionNameValid(name) {
+	return /^\\/?[A-Za-z_][A-Za-z0-9_./-]*$/.test(name);
+}
+
+function conditionRowElement(entry) {
+	const row = document.createElement('div');
+	row.className = 'condition-row';
+	const name = document.createElement('input');
+	name.className = 'condition-name';
+	name.type = 'text';
+	name.placeholder = 'CONSTANT_NAME';
+	name.setAttribute('aria-label', 'Constant name');
+	name.value = entry && typeof entry.name === 'string' ? entry.name : '';
+	name.setAttribute('aria-invalid', name.value.trim() === '' || conditionNameValid(name.value.trim()) ? 'false' : 'true');
+	const equals = document.createElement('span');
+	equals.className = 'punct';
+	equals.textContent = '=';
+	const value = document.createElement('input');
+	value.className = 'condition-value';
+	value.type = 'text';
+	value.placeholder = 'value';
+	value.setAttribute('aria-label', 'Constant value');
+	value.value = entry && typeof entry.value === 'string' ? entry.value : '';
+	const remove = document.createElement('button');
+	remove.type = 'button';
+	remove.className = 'tool condition-remove';
+	remove.textContent = 'Remove';
+	remove.title = 'Remove this condition value';
+	remove.setAttribute('aria-label', 'Remove ' + (name.value.trim() || 'condition value'));
+	row.appendChild(name);
+	row.appendChild(equals);
+	row.appendChild(value);
+	row.appendChild(remove);
+	return row;
+}
+
+function readConditionEntries() {
+	const entries = [];
+	if (!conditionsList) {
+		return entries;
+	}
+	const rows = conditionsList.querySelectorAll('.condition-row');
+	for (let at = 0; at < rows.length; at++) {
+		const nameInput = rows[at].querySelector('.condition-name');
+		const valueInput = rows[at].querySelector('.condition-value');
+		const name = nameInput ? nameInput.value.trim() : '';
+		if (!conditionNameValid(name)) {
+			continue;
+		}
+		entries.push({ name: name, value: valueInput ? valueInput.value : '' });
+	}
+	return entries;
+}
+
+function initialConditionEntries() {
+	if (!conditionsScript) {
+		return [];
+	}
+	try {
+		const parsed = JSON.parse(conditionsScript.textContent || '[]');
+		return Array.isArray(parsed) ? parsed : [];
+	} catch (error) {
+		window.ecucReportError('The condition values could not be read: ' + error.message);
+		return [];
+	}
+}
+
+function renderConditionEntries(entries) {
+	if (!conditionsList) {
+		return;
+	}
+	conditionsList.textContent = '';
+	const list = Array.isArray(entries) ? entries : [];
+	for (let at = 0; at < list.length; at++) {
+		conditionsList.appendChild(conditionRowElement(list[at]));
+	}
+}
+
+function sendConditions() {
+	conditionDebouncer.cancel();
+	vscode.postMessage({ type: 'conditions', entries: readConditionEntries() });
+}
+
+function scheduleConditions() {
+	const payload = JSON.stringify(readConditionEntries());
+	conditionDebouncer.schedule(payload, function (text) {
+		vscode.postMessage({ type: 'conditions', entries: JSON.parse(text) });
+	});
+}
+
+function addConditionEntry() {
+	if (!conditionsList) {
+		return;
+	}
+	const row = conditionRowElement({ name: '', value: '' });
+	conditionsList.appendChild(row);
+	const nameInput = row.querySelector('.condition-name');
+	if (nameInput) {
+		nameInput.focus();
+	}
+	sendConditions();
+}
+
+function removeConditionRow(row) {
+	if (row && row.parentNode) {
+		row.parentNode.removeChild(row);
+	}
+	sendConditions();
+}
+
+function clearConditionEntries() {
+	if (conditionsList) {
+		conditionsList.textContent = '';
+	}
+	sendConditions();
+}
+
+function applyDisabledCount() {
+	if (!conditionsCount) {
+		return;
+	}
+	let disabled = 0;
+	for (let at = 0; at < rows.length; at++) {
+		if (rows[at].disabled) {
+			disabled++;
+		}
+	}
+	conditionsCount.textContent = disabled > 0 ? disabled + ' disabled' : '';
+	conditionsCount.hidden = disabled === 0;
+}
+
+/** Applies a host entries refresh (a reloaded page) and reports whether it handled the message. */
+function applyConditionsMessage(message) {
+	if (!message || message.type !== 'conditions') {
+		return false;
+	}
+	renderConditionEntries(message.entries);
+	return true;
+}
+
+function applyConditionsVisibility() {
+	if (!conditionsToggle || !conditionsPanel) {
+		return;
+	}
+	conditionsPanel.hidden = !conditionsOpen;
+	conditionsToggle.setAttribute('aria-pressed', conditionsOpen ? 'true' : 'false');
+	conditionsToggle.setAttribute('aria-expanded', conditionsOpen ? 'true' : 'false');
+}
+
 function inspectorElement(tag, className, text) {
 	const element = document.createElement(tag);
 	if (className) {
@@ -2120,6 +2390,15 @@ function updateInspector() {
 	}
 	if (data.context) {
 		inspector.appendChild(inspectorRow('Context', data.context));
+	}
+	if (data.condition) {
+		inspector.appendChild(inspectorRow('Condition', data.condition.text));
+		inspector.appendChild(inspectorRow('Condition state', data.condition.state));
+		if (data.condition.reason) {
+			inspector.appendChild(inspectorRow('Condition note', data.condition.reason));
+		}
+	} else if (row.disabled && row.disabledBy === 'ancestor') {
+		inspector.appendChild(inspectorRow('Disabled', 'Disabled by an ancestor condition.'));
 	}
 	if (data.conditions) {
 		inspector.appendChild(inspectorRow('Conditions', data.conditions));
@@ -2235,6 +2514,57 @@ if (clearButton) {
 	});
 }
 
+if (conditionsToggle && conditionsPanel) {
+	conditionsToggle.addEventListener('click', function () {
+		conditionsOpen = !conditionsOpen;
+		applyConditionsVisibility();
+		// The panel changes #main's height, which changes how many rows fit in the
+		// viewport. Recompute the window so closing it cannot leave a blank band.
+		renderWindow(true);
+		if (!conditionsOpen) {
+			return;
+		}
+		const first = conditionsList ? conditionsList.querySelector('.condition-name') : undefined;
+		if (first) {
+			first.focus();
+		} else if (conditionsAdd) {
+			conditionsAdd.focus();
+		}
+	});
+}
+if (conditionsAdd) {
+	conditionsAdd.addEventListener('click', addConditionEntry);
+}
+if (conditionsClear) {
+	conditionsClear.addEventListener('click', clearConditionEntries);
+}
+if (conditionsPanel) {
+	conditionsPanel.addEventListener('click', function (event) {
+		if (!(event.target instanceof Element)) {
+			return;
+		}
+		const remove = event.target.closest('.condition-remove');
+		if (!remove) {
+			return;
+		}
+		removeConditionRow(remove.closest('.condition-row'));
+	});
+	conditionsPanel.addEventListener('input', function (event) {
+		const target = event.target;
+		if (target && target.classList && target.classList.contains('condition-name')) {
+			const name = target.value.trim();
+			const valid = name === '' || conditionNameValid(name);
+			target.setAttribute('aria-invalid', valid ? 'false' : 'true');
+			if (conditionsStatus) {
+				conditionsStatus.textContent = valid
+					? ''
+					: 'Invalid name: use a constant name or path (letters, digits, _ . - /).';
+			}
+		}
+		scheduleConditions();
+	});
+}
+
 main.addEventListener('scroll', function () {
 	if (scrollFrame !== 0) {
 		return;
@@ -2252,6 +2582,9 @@ window.addEventListener('resize', function () {
 window.addEventListener('message', function (event) {
 	const message = event.data;
 	if (!message) {
+		return;
+	}
+	if (applyConditionsMessage(message)) {
 		return;
 	}
 	if (message.type === 'model') {
@@ -2272,6 +2605,7 @@ window.addEventListener('message', function (event) {
 		renderWindow(true);
 		updateInspector();
 		updateFilterUi();
+		applyDisabledCount();
 	} else if (message.type === 'select') {
 		if (typeof message.nodeId !== 'string' || !rowById.has(message.nodeId)) {
 			return;
@@ -2303,11 +2637,14 @@ window.addEventListener('message', function (event) {
 // full webview reload (the host state); the harness persists the same state in
 // localStorage so the browser loop can exercise it.
 applyInspectorVisibility();
+renderConditionEntries(initialConditionEntries());
+applyConditionsVisibility();
 const initial = readInitialRows();
 setRows(initial.rows, initial.selectedId);
 renderWindow(true);
 prepareFocus();
 updateFilterUi();
+applyDisabledCount();
 updateInspector();
 // The host warns when this never arrives: a page whose script is blocked cannot
 // report its own failure, so the absence of this message is the only signal.

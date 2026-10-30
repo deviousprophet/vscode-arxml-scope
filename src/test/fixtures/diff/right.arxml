@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic semantic-diff fixture (right). Covers unchanged, changed, added,
+     moved, reordered and duplicate-name rows. -->
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0">
+    <AR-PACKAGES>
+        <AR-PACKAGE>
+            <SHORT-NAME>Pkg</SHORT-NAME>
+            <AR-PACKAGES>
+                <AR-PACKAGE>
+                    <SHORT-NAME>Diff</SHORT-NAME>
+                    <ELEMENTS>
+                        <ECUC-MODULE-CONFIGURATION-VALUES>
+                            <SHORT-NAME>ModAlpha</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/Diff/ModAlpha</DEFINITION-REF>
+                            <CONTAINERS>
+                                <ECUC-CONTAINER-VALUE>
+                                    <SHORT-NAME>ContKeep</SHORT-NAME>
+                                    <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Diff/ModAlpha/ContKeep</DEFINITION-REF>
+                                    <PARAMETER-VALUES>
+                                        <ECUC-NUMERICAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/Diff/ModAlpha/ContKeep/Keep</DEFINITION-REF>
+                                            <VALUE>1</VALUE>
+                                        </ECUC-NUMERICAL-PARAM-VALUE>
+                                        <ECUC-NUMERICAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/Diff/ModAlpha/ContKeep/Changed</DEFINITION-REF>
+                                            <VALUE>11</VALUE>
+                                        </ECUC-NUMERICAL-PARAM-VALUE>
+                                        <ECUC-TEXTUAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/Pkg/Diff/ModAlpha/ContKeep/Dup</DEFINITION-REF>
+                                            <VALUE>beta</VALUE>
+                                        </ECUC-TEXTUAL-PARAM-VALUE>
+                                        <ECUC-TEXTUAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/Pkg/Diff/ModAlpha/ContKeep/Dup</DEFINITION-REF>
+                                            <VALUE>alpha</VALUE>
+                                        </ECUC-TEXTUAL-PARAM-VALUE>
+                                    </PARAMETER-VALUES>
+                                    <REFERENCE-VALUES>
+                                        <ECUC-REFERENCE-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/Pkg/Diff/ModAlpha/ContKeep/TargetRef</DEFINITION-REF>
+                                            <VALUE-REF DEST="ECUC-CONTAINER-VALUE">/Pkg/Diff/ModAlpha/ContAdded</VALUE-REF>
+                                        </ECUC-REFERENCE-VALUE>
+                                    </REFERENCE-VALUES>
+                                </ECUC-CONTAINER-VALUE>
+                                <ECUC-CONTAINER-VALUE>
+                                    <SHORT-NAME>ContAdded</SHORT-NAME>
+                                    <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Diff/ModAlpha/ContAdded</DEFINITION-REF>
+                                    <PARAMETER-VALUES>
+                                        <ECUC-NUMERICAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/Diff/ModAlpha/ContAdded/AddedParam</DEFINITION-REF>
+                                            <VALUE>3</VALUE>
+                                        </ECUC-NUMERICAL-PARAM-VALUE>
+                                    </PARAMETER-VALUES>
+                                    <SUB-CONTAINERS>
+                                        <ECUC-CONTAINER-VALUE>
+                                            <SHORT-NAME>ContAddedNested</SHORT-NAME>
+                                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Diff/ModAlpha/ContAddedNested</DEFINITION-REF>
+                                            <PARAMETER-VALUES>
+                                                <ECUC-TEXTUAL-PARAM-VALUE>
+                                                    <DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/Pkg/Diff/ModAlpha/ContAddedNested/NestedText</DEFINITION-REF>
+                                                    <VALUE>new</VALUE>
+                                                </ECUC-TEXTUAL-PARAM-VALUE>
+                                            </PARAMETER-VALUES>
+                                        </ECUC-CONTAINER-VALUE>
+                                    </SUB-CONTAINERS>
+                                </ECUC-CONTAINER-VALUE>
+                                <ECUC-CONTAINER-VALUE>
+                                    <SHORT-NAME>ContParentA</SHORT-NAME>
+                                    <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Diff/ModAlpha/ContParentA</DEFINITION-REF>
+                                </ECUC-CONTAINER-VALUE>
+                                <ECUC-CONTAINER-VALUE>
+                                    <SHORT-NAME>ContParentB</SHORT-NAME>
+                                    <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Diff/ModAlpha/ContParentB</DEFINITION-REF>
+                                    <SUB-CONTAINERS>
+                                        <ECUC-CONTAINER-VALUE>
+                                            <SHORT-NAME>ContMoved</SHORT-NAME>
+                                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Diff/ModAlpha/ContMoved</DEFINITION-REF>
+                                            <PARAMETER-VALUES>
+                                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/Diff/ModAlpha/ContMoved/MovedValue</DEFINITION-REF>
+                                                    <VALUE>7</VALUE>
+                                                </ECUC-NUMERICAL-PARAM-VALUE>
+                                            </PARAMETER-VALUES>
+                                        </ECUC-CONTAINER-VALUE>
+                                    </SUB-CONTAINERS>
+                                </ECUC-CONTAINER-VALUE>
+                            </CONTAINERS>
+                        </ECUC-MODULE-CONFIGURATION-VALUES>
+                        <ECUC-MODULE-CONFIGURATION-VALUES>
+                            <SHORT-NAME>ModBeta</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/Diff/ModBeta</DEFINITION-REF>
+                            <CONTAINERS>
+                                <ECUC-CONTAINER-VALUE>
+                                    <SHORT-NAME>ContBeta</SHORT-NAME>
+                                    <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Diff/ModBeta/ContBeta</DEFINITION-REF>
+                                    <PARAMETER-VALUES>
+                                        <ECUC-NUMERICAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-BOOLEAN-PARAM-DEF">/Pkg/Diff/ModBeta/ContBeta/BetaFlag</DEFINITION-REF>
+                                            <VALUE>false</VALUE>
+                                        </ECUC-NUMERICAL-PARAM-VALUE>
+                                    </PARAMETER-VALUES>
+                                </ECUC-CONTAINER-VALUE>
+                            </CONTAINERS>
+                        </ECUC-MODULE-CONFIGURATION-VALUES>
+                    </ELEMENTS>
+                </AR-PACKAGE>
+            </AR-PACKAGES>
+        </AR-PACKAGE>
+    </AR-PACKAGES>
+</AUTOSAR>

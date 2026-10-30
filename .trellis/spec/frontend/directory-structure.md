@@ -7,7 +7,7 @@ src/
   extension.ts        activation, registrations
   commands.ts         command handlers and the activation gate
   core/               pure logic. NO `vscode` imports. See the layering rule below.
-    ecuc/             detect.ts  scanner.ts  model.ts  order.ts  resolve.ts  validate.ts
+    ecuc/             detect.ts  scanner.ts  model.ts  order.ts  resolve.ts  validate.ts  syscond.ts
     text/             offsets.ts (line/offset index)
   editor/             the custom editor. May import `vscode`.
     ecucEditorProvider.ts   provider: gate, scan, build rows, wire, re-scan
@@ -17,11 +17,19 @@ src/
     navigation.ts           node <-> source range, reference following
     nodeId.ts               path-based node ids, stable across a re-scan
     filter.ts               row index/filter/flatten and shared match ranges
+    conditionValues.ts      SW-SYSCOND value entries and the workspaceState store
+    rowView.ts              page row primitives shared by the editor and diff pages
     ecucEdit.ts             the edit record, region resolution, applyEdit
     ecucDetailsEditor.ts    the details-panel value editor (webview half)
+  diff/               the read-only semantic diff. Only the panel imports `vscode`.
+    diffModel.ts            pure matching/status/merged order, page helpers, title
+    diffPage.ts             the diff shell and its serialized page script
+    diffPanel.ts            the WebviewPanel lifecycle, refresh and reveal
+    compareSelection.ts     the session-only first-file stash
   test/
     core/               core suites
     editor/             editor suites
+    diff/               diff suites
     fixtures/           synthetic input fixtures (pinned `-text`)
     expected/           hand-authored expected models
     data/               gitignored: real files for local experimentation. Never commit.
@@ -56,5 +64,6 @@ Practical consequences:
 |---|---|
 | Parsing, ordering, validation, anything over text | `src/core/` |
 | Anything that touches a document, a panel, a command or a setting | `src/editor/` or `src/commands.ts` |
+| A diff matching/status/order rule or a diff page helper | `src/diff/diffModel.ts` (pure); the page shell in `src/diff/diffPage.ts` |
 | A synthetic fixture for a core suite | `src/test/fixtures/` |
 | A real file you want to try locally | `src/test/data/` (gitignored) |

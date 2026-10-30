@@ -34,6 +34,21 @@
         "command": "vscode-arxml-scope.revealInEcucEditor",
         "title": "Reveal in ECUC Editor",
         "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.selectAsFirst",
+        "title": "Select as First File to Compare",
+        "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.compareToStaged",
+        "title": "Compare with First File",
+        "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.compareSelected",
+        "title": "Compare Two ARXML Files…",
+        "category": "ARXML Scope"
       }
     ],
     "customEditors": [
@@ -48,15 +63,28 @@
         "priority": "option"
       }
     ],
+    "submenus": [
+      {
+        "id": "arxmlScope.actions",
+        "label": "ARXML Scope"
+      }
+    ],
     "menus": {
       "explorer/context": [
         {
-          "command": "vscode-arxml-scope.openEcucEditor",
+          "submenu": "arxmlScope.actions",
           "when": "resourceExtname == .arxml",
           "group": "navigation"
         }
       ],
       "editor/context": [
+        {
+          "submenu": "arxmlScope.actions",
+          "when": "resourceExtname == .arxml && activeCustomEditorId != 'vscode-arxml-scope.ecucEditor'",
+          "group": "navigation"
+        }
+      ],
+      "arxmlScope.actions": [
         {
           "command": "vscode-arxml-scope.openEcucEditor",
           "when": "resourceExtname == .arxml",
@@ -64,7 +92,22 @@
         },
         {
           "command": "vscode-arxml-scope.revealInEcucEditor",
-          "when": "resourceExtname == .arxml",
+          "when": "resourceExtname == .arxml && activeCustomEditorId != 'vscode-arxml-scope.ecucEditor' && editorTextFocus",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-arxml-scope.selectAsFirst",
+          "when": "resourceExtname == .arxml && !listMultiSelection && explorerViewletFocus",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-arxml-scope.compareToStaged",
+          "when": "resourceExtname == .arxml && !listMultiSelection && explorerViewletFocus && arxmlScope.hasCompareSelection",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-arxml-scope.compareSelected",
+          "when": "resourceExtname == .arxml && listDoubleSelection && explorerViewletFocus",
           "group": "navigation"
         }
       ]

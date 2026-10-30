@@ -133,4 +133,31 @@ suite('editor filter feedback (AC9)', () => {
 		assert.ok(html.includes('filterDebouncer.isCurrent(generation)'), 'and stale generations are discarded');
 		assert.ok(html.includes("event.target.closest('#empty-clear')"), 'the empty action clears the filter');
 	});
+
+	test('the search box renders exactly one visible clear control', () => {
+		const html = page();
+		const style = /<style[^>]*nonce[^>]*>([\s\S]*?)<\/style>/.exec(html);
+		assert.ok(style, 'the nonce-carrying sheet carries the rules');
+		assert.ok(
+			/\.filter::-webkit-search-cancel-button\s*,\s*\.filter::-webkit-search-decoration\s*\{[^}]*-webkit-appearance:\s*none[^}]*display:\s*none/.test(
+				style[1]
+			),
+			"Chromium's native search cancel button and decoration are suppressed"
+		);
+		assert.ok(html.includes('type="search"'), 'the input keeps its searchbox semantics');
+
+		const wrap = /<div class="filter-wrap">([\s\S]*?)<\/div>/.exec(html);
+		assert.ok(wrap, 'the filter has its wrapper');
+		assert.strictEqual((wrap[1].match(/<button\b/g) || []).length, 1, 'one button in the filter wrapper');
+		assert.strictEqual(
+			(wrap[1].match(/id="filter-clear"/g) || []).length,
+			1,
+			'and it is the custom clear control'
+		);
+		assert.strictEqual((html.match(/id="filter-clear"/g) || []).length, 1, 'no second clear control is emitted');
+		assert.ok(
+			/id="filter-clear"[^>]*\shidden(?=[\s>])/.test(wrap[1]),
+			'the custom control starts hidden, so an empty query shows no X'
+		);
+	});
 });

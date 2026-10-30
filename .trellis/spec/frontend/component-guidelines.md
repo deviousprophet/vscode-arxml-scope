@@ -10,6 +10,7 @@ full-tree HTML string and no second renderer.
 ```
 body (column)
   .toolbar                        survives a re-scan
+  #conditions-panel               hidden until toggled; outside #tree so typing survives a re-scan
   #content (row)
     #main (flex: 1; overflow: auto)   ← the scroll container
       .document
@@ -53,6 +54,12 @@ selects and opens the details editor. Reference follow is the details **Jump to 
 
 ## DOM contracts
 
+- **The filter's only clear control is the custom `#filter-clear` button.** The input stays
+  `type="search"` for its searchbox role and native Escape behaviour, but Chromium also paints a
+  native `::-webkit-search-cancel-button`. The page suppresses
+  `::-webkit-search-cancel-button` and `::-webkit-search-decoration` in the nonce-carrying `STYLE`;
+  removing that rule reintroduces a second X beside the custom button. `#filter-clear` starts
+  `hidden` and is toggled by the page script.
 - **`.value` is a direct child of `.row`.** The filter, `valueSpan` and tests depend on it. No input
   is inserted into `.value`; the details input is separate.
 - Document rows are a single flex line with `gap: 1ch`, no border and no fixed label column. Depth is
@@ -178,3 +185,33 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 | `innerHTML` with a model value | The value is text, not markup; use `textContent` |
 | Reading the inspector from the rendered row | An offscreen selection has no rendered row; use `rowById` |
 | Calling a string assertion or a test-host render a webview pass | Neither is a VS Code webview; the Extension Development Host still needs a check |
+
+## Semantic diff surface
+
+`src/diff/**` is a second webview, not a second renderer. Its invariants:
+
+- `diffModel.ts` is pure (no `vscode`); it owns projection, matching, status, merged order,
+  summary and the page helpers. The panel only reads documents, scans and posts.
+- Both pages inject `rowViewScript()`; `valueSpan`/`metaSpan`/`appendHighlighted` bodies are
+  byte-identical (tested). Do not fork a row primitive into the diff page.
+- `diffPage.ts` reuses `virtualScrollScript()`; only the viewport window is in the DOM and the
+  spacer heights come from `calcRowOffset`/`calcTotalHeight`. The list offset comes from
+  `#diff-list`'s content edge, not `#diff-window`.
+- `DiffCell.range` is injected from the host's `buildNodeIndex`; `EcucRow` still carries no
+  source positions. Reveal forces `mode: 'beside'` so the diff tab survives `revealMode: replace`.
+- A paired row uses the left id as its page key; an added row uses `right:` + its right id, so a
+  duplicate pairing that shifts an ordinal cannot hand an added row the key a paired row already
+  uses (its subtree embeds that id too). `parentKey` is the merged parent's key, never copied from
+  either side.
+- Same-named sibling groups pair by exact compared content first, then by the looser sort identity,
+  before ordinal ids, because a declaration swap puts different values at the same ordinal. Equal-size
+  groups therefore compare equal, even when the duplicates differ only in a condition or DEST, and a
+  changed duplicate still lands on one row instead of add + remove. The base-id one-to-one fallback
+  remains for the single-leftover case. The base key removes the row's own ordinal **and** an
+  embedded parent container ordinal, so reordered duplicate containers keep their parameters and
+  references paired at every depth.
+- The diff is read-only: no `WorkspaceEdit`, `writeFile`, `applyEdit`, repair or derived file.
+  Refresh is a full re-scan after a 150 ms debounce; the page keeps filter, changes-only,
+  collapse, selection and scroll.
+- The manifest adds the three commands to the existing `arxmlScope.actions` submenu with
+  `explorerViewletFocus`/`listDoubleSelection` guards; there is no flat `editor/context` diff entry.

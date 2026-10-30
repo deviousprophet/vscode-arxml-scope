@@ -17,6 +17,8 @@ import { isArxmlPath, isEcucValues } from '../core/ecuc/detect';
 import { ReferenceNode, SortMode } from '../core/ecuc/model';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
+import { ConditionValue } from '../core/ecuc/syscond';
+import { ConditionEntry, ConditionValueStore, parseConditionEntries } from './conditionValues';
 import { RenderOptions, renderHtml } from './renderHtml';
 import { buildRows } from './renderRows';
 import { buildNodeIndex } from './nodeId';
@@ -41,6 +43,8 @@ interface WebviewMessage {
 	field?: EditField;
 	/** The text the user typed, for `type: 'edit'` (parent design §8). */
 	value?: string;
+	/** Raw condition entries for `type: 'conditions'`; validated before use. */
+	entries?: unknown;
 }
 
 /**
@@ -78,6 +82,21 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	 * node the editor happened to be opened at (design §2.2, §2.4).
 	 */
 	private readonly selections = new Map<string, string>();
+	/**
+	 * The normalized condition entries. Without a store (unit tests) they live
+	 * for the provider's lifetime only; a real workspace passes a
+	 * `ConditionValueStore` over `context.workspaceState`.
+	 */
+	private conditionEntries: ConditionEntry[];
+
+	constructor(private readonly conditionStore?: ConditionValueStore) {
+		this.conditionEntries = conditionStore?.load() ?? [];
+	}
+
+	/** The evaluation map, rebuilt from the same normalization `load` applies. */
+	private conditionValues(): Map<string, ConditionValue> {
+		return parseConditionEntries(this.conditionEntries).values;
+	}
 
 	public resolveCustomTextEditor(
 		document: vscode.TextDocument,
@@ -109,6 +128,8 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		panel.webview.options = { enableScripts: true };
 		panel.webview.html = renderHtml(model, {
 			...editorSettings(),
+			conditions: this.conditionValues(),
+			conditionEntries: this.conditionEntries.slice(),
 			nonce,
 			selectedId,
 		});
@@ -130,6 +151,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			const current = this.selections.get(key);
 			const options: RenderOptions = {
 				...editorSettings(),
+				conditions: this.conditionValues(),
 				selectedId: current,
 			};
 			const rowDocument = buildRows(model, options);
@@ -170,6 +192,30 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				}
 				if (message.type === 'ready') {
 					boot.settle();
+					// The page can be reloaded without reopening the panel. The embedded
+					// entries are only the first-paint copy; re-post the host's current
+					// entries so a reload cannot show (and then save) stale values.
+					void panel.webview.postMessage({ type: 'conditions', entries: this.conditionEntries });
+					return;
+				}
+				if (message.type === 'conditions') {
+					// A non-array payload is ignored rather than treated as "clear all membership".
+					if (!Array.isArray(message.entries)) {
+						return;
+					}
+					const parsed = parseConditionEntries(message.entries);
+					this.conditionEntries = parsed.entries;
+					void this.conditionStore?.save(parsed.entries);
+					if (parsed.invalid.length > 0) {
+						const names = parsed.invalid.slice(0, 5).join(', ');
+						const more = parsed.invalid.length > 5 ? ` and ${parsed.invalid.length - 5} more` : '';
+						void panel.webview.postMessage({
+							type: 'notice',
+							message: `Ignored ${parsed.invalid.length} invalid condition name${parsed.invalid.length === 1 ? '' : 's'}: ${names}${more}.`,
+							kind: 'warn',
+						});
+					}
+					push();
 					return;
 				}
 				if (typeof message.nodeId !== 'string') {
