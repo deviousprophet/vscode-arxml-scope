@@ -29,7 +29,7 @@ import type { ConditionEntry } from './conditionValues';
 import { FlatRow, ancestorIds, flattenRows, matchRanges, searchRows, stepMatch } from './treeQuery';
 import { escapeHtml } from './html';
 import { encodeJsonForScript } from './jsonScript';
-import { pageErrorScript } from './pageError';
+import { consoleErrorScript } from './pageError';
 import { EcucRow, MetaPart, ParameterFormat, RowCondition, buildRows } from './renderRows';
 import { rowViewScript } from './rowView';
 import { sidebarShellScript } from './sidebarShell';
@@ -251,7 +251,6 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <button id="collapse-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
 <button id="expand-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/></svg><span class="lbl">Expand</span></button>
 </div>
-<div id="notice" class="notice" role="status" aria-live="polite"></div>
 <div id="content">
 <div id="main">
 <div class="document">
@@ -314,7 +313,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <script type="application/json" id="ecuc-rows" nonce="${nonce}">${payload}</script>
 <script type="application/json" id="ecuc-conditions" nonce="${nonce}">${conditionPayload}</script>
 <script nonce="${nonce}">
-${PAGE_ERROR_SCRIPT}
+${CONSOLE_ERROR_SCRIPT}
 const vscode = acquireVsCodeApi();
 ${detailsEditorScript()}
 ${rowViewScript()}
@@ -400,8 +399,7 @@ export function moveTarget(key: string, from: number, count: number, page: numbe
  *
  * Field edits are answered inline by `ecucDetailsEditor`; the page must not also
  * write a second, stale copy elsewhere. A refusal for another tab or a reference
- * that cannot be followed goes to the Details status line; the toolbar notice is
- * reserved for the fatal page-boot error surface.
+ * that cannot be followed goes to the Details status line.
  */
 export function refusalShownInDetails(message: { inline?: boolean }, detailsHidden: boolean): boolean {
 	return message.inline === true && detailsHidden === false;
@@ -452,6 +450,9 @@ body[data-view] {
 	--subtree-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
 	--sel-container-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
 	--container-accent: #4EC9B0;
+	/* Search match tiers: fixed dark-theme yellow, matching the reference UI. */
+	--match-bg: rgba(234, 179, 8, 0.32);
+	--match-hi: rgba(234, 179, 8, 0.7);
 	--fold-gutter: 26px;
 	--doc-pad: 3ch;
 	--indent: 4ch;
@@ -858,7 +859,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 .condition-save,
 .condition-cancel {
-	padding: 1px 7px;
+	opacity: 1;
 }
 .conditions-hint {
 	margin: 6px 0 0;
@@ -897,22 +898,6 @@ input[type="search"]::-webkit-search-decoration {
 	border: 0;
 }
 
-.notice {
-	padding: 0 8px;
-	min-height: 18px;
-	font-size: 12px;
-	line-height: 18px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	color: var(--tok-dim);
-}
-.notice:empty {
-	display: none;
-}
-.notice[data-kind="warn"] {
-	color: var(--vscode-editorWarning-foreground, var(--tok-dim));
-}
 #content {
 	display: flex;
 	flex: 1 1 auto;
@@ -1355,11 +1340,11 @@ body.sb-row-resizing {
 	color: var(--tok-keyword);
 }
 mark {
-	color: var(--vscode-editor-findMatchForeground, var(--vscode-foreground));
-	background: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground));
+	color: inherit;
+	background: var(--match-bg);
 }
 .node[data-search-current="true"] > .row mark {
-	background: var(--vscode-editor-findMatchBackground, var(--vscode-list-activeSelectionBackground));
+	background: var(--match-hi);
 }
 .inspector-empty {
 	padding: 6px 0;
@@ -1729,7 +1714,6 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 		flex: 1 1 0;
 	}
 	.search-count,
-	.notice,
 	.grow,
 	.icon-tool .lbl {
 		display: none;
@@ -1785,16 +1769,13 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 `;
 
 /**
- * Boot error surface. Emitted first and installed before anything that can throw:
- * without it a page that dies while booting shows the schema header and an empty
- * tree with no explanation (the failure mode that is worst to diagnose). The
- * installer is named so a test can drive the page's own copy rather than grep it.
+ * Install the console-only reporter before anything that can throw. Errors are
+ * visible in the webview devtools console; the page never paints a banner.
  */
-const PAGE_ERROR_SCRIPT = pageErrorScript({
-	installerName: 'ecucInstallErrorSurface',
+const CONSOLE_ERROR_SCRIPT = consoleErrorScript({
+	installerName: 'ecucInstallConsoleErrors',
 	reporterName: 'ecucReportError',
-	noticeId: 'notice',
-	label: 'The ECUC editor page failed',
+	label: 'ECUC editor',
 	install: true,
 });
 
@@ -2515,10 +2496,10 @@ function firstMatchAtOrAfterSelection() {
 }
 
 /**
- * Recompute the matches after a query/row change and clamp the current one.
- * startAtSelection is the typing policy (first match at/after the selection);
- * previousId is the re-scan policy (keep the current row by id when it is still a
- * candidate). A blank query clears the highlight.
+ * Recompute the matches after an explicit Enter or a re-scan and clamp the
+ * current one. startAtSelection is the first-run policy (first match at/after the
+ * selection); previousId is the re-scan policy (keep the current row by id when it
+ * is still a candidate). A blank query clears the highlight.
  */
 function refreshSearch(startAtSelection, previousId, render = true) {
 	searchMatches = searchCandidates();
@@ -2542,10 +2523,11 @@ function refreshSearch(startAtSelection, previousId, render = true) {
 
 /** The count and control state: '1 / N', '0 / 0', or hidden for a blank query. */
 function renderSearchUi() {
+	const hasText = searchInput ? searchInput.value.trim() !== '' : searchQuery.trim() !== '';
 	const active = searchQuery.trim() !== '';
 	const hasMatches = searchMatches.length > 0;
 	if (searchClear) {
-		searchClear.hidden = !active;
+		searchClear.hidden = !hasText;
 	}
 	if (searchPrev) {
 		searchPrev.disabled = !hasMatches;
@@ -2603,17 +2585,38 @@ function cycleSearch(direction) {
 	jumpToSearchMatch(searchIndex);
 }
 
-/** Clear the search and its highlight; optionally return focus to it. */
-function clearSearch(focusInput) {
+/** Drop the active result set without touching the search field text. */
+function resetSearchResults() {
 	searchQuery = '';
 	searchMatches = [];
 	searchIndex = -1;
 	highlightQuery = '';
+	renderSearchUi();
+	renderWindow(true);
+}
+
+/** Enter: search the typed query and jump to its first match at/after the selection. */
+function executeSearch() {
+	const query = searchInput ? searchInput.value : searchQuery;
+	if (query.trim() === '') {
+		resetSearchResults();
+		return;
+	}
+	searchQuery = query;
+	refreshSearch(true, undefined, false);
+	if (searchIndex >= 0) {
+		jumpToSearchMatch(searchIndex);
+	} else {
+		renderWindow(true);
+	}
+}
+
+/** Clear the search and its highlight; optionally return focus to it. */
+function clearSearch(focusInput) {
 	if (searchInput) {
 		searchInput.value = '';
 	}
-	renderSearchUi();
-	renderWindow(true);
+	resetSearchResults();
 	if (focusInput && searchInput) {
 		searchInput.focus({ preventScroll: true });
 	}
@@ -2721,19 +2724,19 @@ function renderConditionRow(row) {
 		valueInput.setAttribute('aria-label', 'Constant value');
 		valueInput.value = value;
 		row.appendChild(valueInput);
-		const save = document.createElement('button');
-		save.type = 'button';
-		save.className = 'sb-btn sb-btn-primary condition-save';
-		save.textContent = 'Save';
-		save.title = 'Save this condition value';
-		save.setAttribute('aria-label', 'Save ' + (name || 'condition value'));
+		const save = conditionIconButton(
+			'condition-save',
+			'Save ' + (name || 'condition value'),
+			'Save this condition value',
+			'M3 8.5l3 3 7-7'
+		);
 		row.appendChild(save);
-		const cancel = document.createElement('button');
-		cancel.type = 'button';
-		cancel.className = 'sb-btn sb-btn-secondary condition-cancel';
-		cancel.textContent = 'Cancel';
-		cancel.title = 'Discard this change';
-		cancel.setAttribute('aria-label', 'Cancel ' + (name || 'new condition value'));
+		const cancel = conditionIconButton(
+			'condition-cancel',
+			'Cancel ' + (name || 'new condition value'),
+			'Discard this change',
+			'M4 4l8 8M12 4l-8 8'
+		);
 		row.appendChild(cancel);
 		return;
 	}
@@ -3356,18 +3359,28 @@ document.getElementById('expand-all').addEventListener('click', expandAll);
 
 if (searchInput) {
 	searchInput.addEventListener('input', function () {
-		searchQuery = searchInput.value;
-		refreshSearch(true, undefined, false);
-		if (searchIndex >= 0) {
-			jumpToSearchMatch(searchIndex);
-		} else {
-			renderWindow(true);
+		if (searchInput.value === searchQuery) {
+			renderSearchUi();
+			return;
 		}
+		if (searchQuery === '' && searchMatches.length === 0) {
+			// Nothing has run yet; keep the clear X in step with the typed text.
+			if (searchClear) {
+				searchClear.hidden = searchInput.value.trim() === '';
+			}
+			return;
+		}
+		// Typing after a run invalidates the old marks until Enter runs the new query.
+		resetSearchResults();
 	});
 	searchInput.addEventListener('keydown', function (event) {
 		if (event.key === 'Enter') {
 			event.preventDefault();
-			cycleSearch(event.shiftKey ? -1 : 1);
+			if (searchInput.value !== searchQuery) {
+				executeSearch();
+			} else {
+				cycleSearch(event.shiftKey ? -1 : 1);
+			}
 		} else if (event.key === 'Escape') {
 			event.preventDefault();
 			clearSearch(false);
@@ -3537,12 +3550,11 @@ window.addEventListener('message', function (event) {
 			return;
 		}
 		if (refusalShownInDetails(message, uiState.tab !== 'details')) {
-			// The details editor answers this field inline; there is no toolbar banner.
+			// The details editor answers this field inline; there is no separate banner.
 			clearDetailsStatus();
 			return;
 		}
-		// Recoverable warnings belong in the Details tab. The toolbar notice is
-		// reserved for the fatal page-boot error surface.
+		// Recoverable warnings belong in the Details tab.
 		setDetailsStatus(message);
 	}
 });

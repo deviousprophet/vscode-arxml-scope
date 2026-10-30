@@ -10,7 +10,6 @@ full-tree HTML string and no second renderer.
 ```
 body (column)
   .toolbar                          survives a re-scan
-  #notice
   #content (row)
     #main (flex: 1; overflow: auto)   ← the scroll container
       .document
@@ -60,10 +59,9 @@ body (column)
   `.sb-btn-danger`, `.nav-btn` and `.act-btn`. Toolbar, details actions, Conditions actions and the
   Search field use those classes; do not add a one-off button style. The field uses `.search-input`
   (26px, input tokens, 3px radius) and the native search cancel is suppressed.
-- `#notice` under the toolbar is the fatal page-boot error surface only. Recoverable warnings use
-  `#conditions-status` or `#details-status`; they never write the toolbar banner. The Details status
-  clears on the next `select`/`model` message, and the Conditions status clears when its names are
-  valid.
+- Page errors are console-only. An early installer defines `window.ecucReportError`, forwards
+  uncaught errors and unhandled rejections to `console.error`, and paints no banner. Recoverable
+  warnings use the Conditions or Details status line. Do not reintroduce a toolbar notice.
 
 ## Event ownership
 
@@ -73,7 +71,7 @@ in the details panel, outside `#tree`, and each owns its own `Enter`/`Escape`/`T
 ```text
 details control keys  →  details editor commit/cancel/move
 page row click        →  select / twisty / value-click opens details
-search input keys     →  Enter/Shift+Enter next/previous, Escape clears, Ctrl+F focuses
+search input keys     →  Enter runs/cycles, Shift+Enter previous, Escape clears, Ctrl+F focuses
 page key handler      →  navigation / F2/Enter opens details / F3 while search is active / type-ahead
 ```
 
@@ -85,25 +83,31 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
 
 ## DOM contracts
 
-- **Search is the only query control.** `#search-input` stays `type="search"` for its searchbox role;
-  Chromium's native `::-webkit-search-cancel-button` and `::-webkit-search-decoration` are suppressed
-  so the one custom `#search-clear` X is the only clear control. `#search-clear` starts `hidden` and is
-  toggled by the page script. Do not add a second query field or a separate find bar.
+- **Search is the only query control and runs on Enter.** `#search-input` stays `type="search"` for
+  its searchbox role; Chromium's native cancel/decoration pseudo-elements are suppressed so the one
+  custom `#search-clear` X is the only clear control. Typing only updates the field and the clear X;
+  it never runs, marks, scrolls or jumps. Enter executes a changed query from the selection, and a
+  second Enter cycles; Shift+Enter goes backwards. Escape clears and returns focus to the tree.
+  Do not add a second query field or a separate find bar.
 - **Search jumps; it never hides.** `searchRows(rows, query)` scans the whole row store; collapse and
   any view state never remove a candidate. A jump expands ancestors, scrolls and selects the row but
-  keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or hides for a blank query.
+  keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or hides while the typed
+  text has not been executed.
 - **All matches are marked; the current match is stronger.** `appendHighlighted` wraps every
-  case-insensitive occurrence in `<mark>`. `buildNodeRow` sets `data-search-current="true"` on the row
-  that owns the current match; CSS gives its `mark` the stronger `--vscode-editor-findMatchBackground`
-  while every other mark keeps `--vscode-editor-findMatchHighlightBackground`. Clearing the search
-  removes both. Do not add a second highlight implementation.
+  case-insensitive occurrence in `<mark>`. `buildNodeRow` sets `data-search-current="true"` on the
+  row that owns the current match. The page defines fixed dark-theme tiers
+  `--match-bg: rgba(234, 179, 8, 0.32)` and `--match-hi: rgba(234, 179, 8, 0.7)`; all marks use the
+  subtle tier and the current row uses the strong tier. Do not depend on
+  `--vscode-editor-findMatch*`, which a theme may resolve to transparent. Clearing the search removes
+  both marks. Do not add a second highlight implementation.
 - **Conditions actions follow the shared hierarchy.** Rows are data-backed (`data-name`,
-  `data-value`, `data-auto`, `data-editing`); Edit/Remove are compact `.act-btn` actions, Save is
-  `.sb-btn-primary`, Cancel/Clear are `.sb-btn-secondary`, Add is `.sb-btn-add`. Scanned constants
-  (names referenced by the current document) are read-only and have no Remove; only manual rows can
-  be removed. Clear values empties the committed `data-value` values and keeps the rows. The
-  `unknown` badge is visible only for an empty committed value outside edit mode. Do not use the
-  transparent `.tool` treatment for a primary action; hover-only affordances are not discoverable.
+  `data-value`, `data-auto`, `data-editing`). Edit, Save and Cancel are icon-only `.act-btn` actions:
+  pencil, check and X with `title` + `aria-label`; Remove is the trash icon. Save/Cancel exist only in
+  edit mode and stay visible for the session; Edit/Remove keep the hover/focus affordance. Clear is
+  `.sb-btn-secondary`, Add is `.sb-btn-add`. Scanned constants (names referenced by the current
+  document) are read-only and have no Remove; only manual rows can be removed. Clear values empties
+  the committed `data-value` values and keeps the rows. The `unknown` badge is visible only for an
+  empty committed value outside edit mode. Do not put text labels back on Save/Cancel.
 - **`.value` is a direct child of `.row`.** `valueSpan` and tests depend on it. No input is inserted
   into `.value`; the details input is separate.
 - Document rows are a single flex line with `gap: 1ch`, no border and no fixed label column. Depth is
@@ -184,10 +188,11 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
   `--sel-container-bg`, its subtree gets the softer tint, and a selected parameter adds a 1px
   outline. High contrast uses outlines, not fills: the subtree tint becomes a dotted outline in
   HC/forced colors.
-- **Search has two highlight tiers.** All matches use
-  `--vscode-editor-findMatchHighlightBackground`; the current row's marks use the stronger
-  `--vscode-editor-findMatchBackground`. The current row is identified by
-  `data-search-current="true"`, never by a second mark type.
+- **Search has two fixed highlight tiers.** All matches use the subtle `--match-bg`
+  (`rgba(234, 179, 8, 0.32)`); the current row's marks use the stronger `--match-hi`
+  (`rgba(234, 179, 8, 0.7)`). These are documented dark-theme literals, deliberately independent of
+  theme find-match variables. The current row is identified by `data-search-current="true"`, never
+  by a second mark type. High contrast/forced colors uses an outline instead of the fill.
 - The flat tree uses `role="tree"` with direct `role="treeitem"` children (window/spacers are
   `role="presentation"`/`aria-hidden`), `aria-level`, `aria-posinset`, `aria-setsize`,
   `aria-expanded`, `aria-selected` and a roving `tabindex`. This is a valid flat tree without

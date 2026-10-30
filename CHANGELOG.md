@@ -10,15 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - A right-side sidebar with **Details** and **Conditions** tabs, resizable and collapsible sections, and persisted layout
-- A **Search** field that scans the whole tree, marks every match, gives the current match a stronger highlight, and supports wrapped previous/next navigation
+- A **Search** field that scans the whole tree when you press Enter, marks every match in yellow, gives the current match a stronger highlight, and supports wrapped previous/next navigation
 - A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, changes-only filtering, previous/next navigation, reveal-in-source and live refresh as either file is edited
 - A `Conditions` panel that lists every `SW-SYSCOND` constant in the open document with an `unknown` state until a value is entered; values are stored per workspace, false conditions dim their rows, and unresolved conditions stay active
 
 ### Changed
 
-- The Conditions table moved from the toolbar into the sidebar and now uses explicit Edit/Save/Cancel; scanned constants are read-only and cannot be removed
+- The Conditions table moved from the toolbar into the sidebar and now uses icon-only Edit/Save/Cancel actions; scanned constants are read-only and cannot be removed
 - The Details tab is one scrolling section for the node, value, reference, conditions and annotations; Search is the toolbar's only query control
 - The toolbar Search field, primary/secondary/add/danger buttons and row actions share one control style
+- ECUC page errors are written to the webview debug console only; the editor no longer shows a warning banner under the Search bar
 - `Open with ECUC Editor` and `Reveal in ECUC Editor` now live under the `ARXML Scope` submenu; `Reveal in ECUC Editor` is only offered in a text editor
 
 ## [0.3.1] - 2026-10-29

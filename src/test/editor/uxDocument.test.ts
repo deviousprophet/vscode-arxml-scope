@@ -55,8 +55,8 @@ suite('editor document view', () => {
 		assert.ok(!/class="sb-pane-sash"/.test(html), 'there are no pane sashes in the sidebar');
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));
-		assert.ok(html.includes('<div id="notice" class="notice" role="status" aria-live="polite"></div>'));
-		assert.equal(html.match(/id="notice"/g)?.length, 1, 'the notice id is unique');
+		assert.ok(!html.includes('id="notice"'), 'there is no notice banner under Search');
+		assert.ok(!html.includes('data-kind="warn"'), 'the toolbar warning surface is gone');
 		assert.ok(!html.includes('data-ln-digits'), 'no line-number gutter width');
 		assert.ok(!html.includes('data-line='), 'no source-line display data');
 		assert.ok(!html.includes('class="glyph"'), 'no Tree glyph column');
@@ -347,15 +347,15 @@ suite('editor document view', () => {
 		assert.ok(/\.details-value\[aria-invalid="true"\]\s*\{[^}]*--vscode-inputValidation-errorBorder/.test(style));
 	});
 
-	test('a field refusal is left to the details panel instead of the toolbar notice', () => {
+	test('a field refusal is left to the details panel', () => {
 		const html = page();
 		assert.ok(
 			html.includes("refusalShownInDetails(message, uiState.tab !== 'details')"),
-			'the notice handler asks whether the Details tab already answered'
+			'the message handler asks whether the Details tab already answered'
 		);
 		assert.ok(html.includes('clearDetailsStatus()'), 'the details status is cleared when the field already answers');
 		assert.ok(html.includes('setDetailsStatus(message)'), 'recoverable warnings go to the Details status');
-		assert.ok(!html.includes('notice.textContent = message.message'), 'the toolbar banner is never written by a notice');
+		assert.ok(!html.includes('id="notice"'), 'there is no toolbar banner');
 		assert.ok(html.includes('id="details-status"'), 'the Details tab has a status line');
 
 		assert.strictEqual(refusalShownInDetails({ inline: true }, false), true, 'visible details owns the refusal');
@@ -363,13 +363,13 @@ suite('editor document view', () => {
 		assert.strictEqual(refusalShownInDetails({}, false), false, 'page-level problems use the Details status');
 	});
 
-	test('recoverable status lines replace the toolbar warning and clear on the next action', () => {
+	test('recoverable status lines route away from the toolbar and clear on the next action', () => {
 		const html = page();
 		assert.ok(html.includes('id="details-status"'), 'the Details tab has a status line');
 		assert.ok(html.includes("if (message.scope === 'conditions')"), 'condition warnings are scoped to Conditions');
 		assert.ok(html.includes('conditionsStatus.textContent = message.message'), 'and go to its status line');
 		assert.ok(html.includes('setDetailsStatus(message)'), 'other recoverable warnings go to Details');
-		assert.ok(!html.includes('notice.textContent = message.message'), 'a host notice never writes the toolbar banner');
+		assert.ok(!html.includes('id="notice"'), 'there is no toolbar banner');
 		assert.ok(
 			/if \(message\.type === 'model'\) \{\s*clearDetailsStatus\(\)/.test(html),
 			'a model refresh clears the Details status'

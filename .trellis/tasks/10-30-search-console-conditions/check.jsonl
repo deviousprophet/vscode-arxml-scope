@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check Search-only toolbar, highlight tiers and icon-only row actions."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Check typed/committed Search state and re-scan behaviour."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check colour literals, error routing and no file write."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Check the rewritten tests still fail when the behaviour is removed."}

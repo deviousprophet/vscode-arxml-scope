@@ -96,14 +96,24 @@ Clear values send a `conditions` message. Opening Add alone sends nothing.
 
 ## Search state
 
-`searchQuery`, `searchMatches` (row indices) and `searchIndex` are page-local and are not persisted
-across reloads. They are recomputed from the full row store after a re-scan; the current match is
-preserved by row id where possible. Search must never write the collapsed set. `highlightQuery` is a
-transient page variable carrying the non-blank query into the row primitives: every occurrence is
-marked, and the row that owns `searchIndex` carries `data-search-current="true"` for the stronger
-mark. The toolbar holds Search as its only query field; there is no separate find-bar panel. A jump
-posts the existing `select` message so the host keeps the row selected across a re-scan; Search itself
-never changes rows or collapse state.
+`searchInput.value` is the raw typed text. `searchQuery`, `searchMatches` (row indices) and
+`searchIndex` are the committed search and are page-local; they are not persisted across reloads.
+Typing alone never searches: it only keeps the clear X in step, and a changed value invalidates the
+old result set. Enter runs the changed query (first match at/after the selection) or cycles an
+already-executed one; Shift+Enter goes backwards. A re-scan recomputes the committed query over the
+full row store and keeps the current match by row id where possible. Search must never write the
+collapsed set. `highlightQuery` is a transient page variable carrying the committed non-blank query
+into the row primitives: every occurrence is marked, and the row that owns `searchIndex` carries
+`data-search-current="true"` for the stronger mark. The toolbar holds Search as its only query field;
+there is no separate find-bar panel. A jump posts the existing `select` message so the host keeps the
+row selected across a re-scan; Search itself never changes rows or collapse state.
+
+## Page errors
+
+There is no page-error UI state. A console-only installer is emitted before `acquireVsCodeApi`; it
+defines `window.ecucReportError` and forwards `error` / `unhandledrejection` to `console.error`.
+Recoverable field/condition warnings still use the Details or Conditions status; they never create a
+banner.
 
 ## No derived artefacts
 

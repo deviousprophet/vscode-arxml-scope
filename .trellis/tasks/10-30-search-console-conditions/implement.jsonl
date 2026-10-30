@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Toolbar Search, mark tiers, Conditions row actions and error-surface contracts."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Committed versus typed Search state, re-scan and failure handling."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No inline styles, documented colour literals and no write path."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Pure-helper and compiled page-function test conventions."}

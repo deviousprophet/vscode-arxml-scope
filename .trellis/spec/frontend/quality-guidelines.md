@@ -85,9 +85,9 @@ that is not obvious from the code.
   missing `field` to `value` and ignores an unknown one. Enter commits, Escape restores, Tab moves
   (adjacent parameter for a value, the other container field for a container). A refusal keeps the
   typed text, marks the control invalid and shows the reason beside the field. Recoverable warnings
-  never use the toolbar notice: condition-name warnings go to the Conditions status, and
-  follow/reveal/edit failures go to the Details status. `#notice` is reserved for fatal page-boot
-  errors. Only
+  never use a banner: condition-name warnings go to the Conditions status, and follow/reveal/edit
+  failures go to the Details status. The editor has no notice element; page errors are console-only.
+  Only
   a container is editable this
   way; a module rename is refused because its short name is part of every container id. The panel
   exposes Jump to target for a followable reference plus Reveal in source; there is no Source block
@@ -111,9 +111,14 @@ that is not obvious from the code.
 - **A re-scan keeps state, not markup.** The host posts `{ type: 'model', rows, selectedId }`; the
   page reconciles selection, collapse, search and scroll, rebuilds the display list and renders the
   window. There is no `innerHTML` tree swap and no second refresh path.
-- **Search scans the row store, never the DOM.** `searchRows` returns every match and `flattenRows`
-  provides the display list; only rendered rows get `<mark>` elements. All matches share the subtle
-  find-match mark; the current match's row adds `data-search-current` for the stronger mark.
+- **Search runs on Enter and scans the row store, never the DOM.** Typing only updates the field and
+  the clear X; a changed query invalidates the old marks until Enter. `searchRows` returns every
+  match and `flattenRows` provides the display list; only rendered rows get `<mark>` elements. All
+  matches use the fixed `--match-bg` tier; the current match's row adds `data-search-current` for
+  `--match-hi`. Do not depend on theme find-match variables that can be transparent.
+- **Conditions row actions are icon-only.** Edit, Save and Cancel use the shared `.act-btn` primitive
+  with pencil/check/X SVGs, `title` and `aria-label`; Remove is the trash icon. Save/Cancel are
+  visible only while editing. Do not restore text Save/Cancel buttons.
 - **The Details tab is one section.** `updateInspector` rewrites only `#sb-details-body`; Node, value,
   reference, condition and annotation fields plus Jump/Reveal share that scrolling body. Do not split
   them back into panes or add sashes to Details.

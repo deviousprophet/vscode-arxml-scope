@@ -8,7 +8,7 @@ import * as assert from 'assert';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { RowPayload, encodeRowDocument, renderHtml } from '../../editor/renderHtml';
 import { fixtureText } from '../core/modelTestUtils';
-import { evaluateFunction } from './scriptTestUtils';
+import { evaluateFunction, functionSource } from './scriptTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
@@ -29,45 +29,48 @@ suite('editor rendering (AC1)', () => {
 		assert.ok(page.includes('>package</span> PkgA.PkgB'));
 	});
 
-	test('AC1: a boot failure is shown in the notice region instead of an empty tree', () => {
+	test('AC1: the console reporter is armed before the API and no banner is emitted', () => {
 		const page = html();
 		assert.ok(
-			page.indexOf('window.ecucReportError = show') !== -1 &&
-				page.indexOf('window.ecucReportError = show') < page.indexOf('acquireVsCodeApi'),
-			'the error surface is armed before the API is acquired'
+			page.indexOf('window.ecucReportError = report') !== -1 &&
+				page.indexOf('window.ecucReportError = report') < page.indexOf('acquireVsCodeApi'),
+			'the console reporter is armed before the API is acquired'
 		);
+		assert.ok(!page.includes('id="notice"'), 'there is no notice element');
+		assert.ok(!page.includes('ecucInstallErrorSurface'), 'the UI error installer is gone');
+		assert.ok(!page.includes('The ECUC editor page failed'), 'the old banner text is gone');
 		assert.ok(page.includes("postMessage({ type: 'ready' })"), 'a live page tells the host it booted');
 	});
 
-	test('AC1: an uncaught error and a rejected promise both reach the notice, naming the DevTools', () => {
+	test('AC1: an uncaught error and a rejected promise both go to the debug console', () => {
 		const page = html();
 		const listeners: Record<string, (event: unknown) => void> = {};
-		const notice = { textContent: '', dataset: {} as Record<string, string> };
-		const globals = globalThis as unknown as { document?: unknown; window?: unknown };
-		const savedDocument = globals.document;
-		const savedWindow = globals.window;
-		globals.document = { getElementById: () => notice };
-		globals.window = {
+		const logged: string[] = [];
+		const fakeWindow = {
 			addEventListener: (type: string, listener: (event: unknown) => void) => {
 				listeners[type] = listener;
 			},
 		};
-		try {
-			evaluateFunction<() => void>(page, 'ecucInstallErrorSurface')();
-			assert.ok(listeners.error, 'uncaught errors are listened for');
-			assert.ok(listeners.unhandledrejection, 'rejected promises are listened for');
-			listeners.error({ message: 'boom', lineno: 12 });
-			assert.ok(notice.textContent.includes('boom'), notice.textContent);
-			assert.ok(notice.textContent.includes('(line 12)'), notice.textContent);
-			assert.ok(notice.textContent.includes('Webview Developer Tools'), 'R1: the error names the DevTools');
-			listeners.unhandledrejection({ reason: new Error('no boot') });
-			assert.ok(notice.textContent.includes('no boot'), notice.textContent);
-			assert.ok(notice.textContent.includes('Webview Developer Tools'), 'R1: a rejection names the DevTools too');
-			assert.strictEqual(notice.dataset.kind, 'warn');
-		} finally {
-			globals.document = savedDocument;
-			globals.window = savedWindow;
-		}
+		const fakeConsole = {
+			error: (...args: unknown[]) => {
+				logged.push(args.map(String).join(' '));
+			},
+		};
+		const installer = new Function(
+			'window',
+			'console',
+			`${functionSource(page, 'ecucInstallConsoleErrors')}\nreturn ecucInstallConsoleErrors;`
+		)(fakeWindow, fakeConsole) as () => void;
+		installer();
+		assert.ok(listeners.error, 'uncaught errors are listened for');
+		assert.ok(listeners.unhandledrejection, 'rejected promises are listened for');
+		listeners.error({ message: 'boom', lineno: 12 });
+		listeners.unhandledrejection({ reason: new Error('no boot') });
+		assert.strictEqual(logged.length, 2, 'both failures are logged once');
+		assert.ok(logged[0].includes('ECUC editor:'), logged[0]);
+		assert.ok(logged[0].includes('boom'), logged[0]);
+		assert.ok(logged[0].includes('(line 12)'), logged[0]);
+		assert.ok(logged[1].includes('no boot'), logged[1]);
 	});
 
 	test('AC2: an unreadable row payload is reported instead of an empty tree', () => {

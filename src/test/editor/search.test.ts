@@ -142,6 +142,7 @@ function compileSearchUi(
 		'searchPrev',
 		'searchNext',
 		'searchCount',
+		'searchInput',
 		`${functionSource(html, 'renderSearchUi')}
 		return function (query, matches, current, clear, prev, next, count) {
 			searchQuery = query;
@@ -151,9 +152,10 @@ function compileSearchUi(
 			searchPrev = prev;
 			searchNext = next;
 			searchCount = count;
+			searchInput.value = query;
 			renderSearchUi();
 		};`
-	)() as never;
+	)({}, [], -1, null, null, null, null, { value: '' }) as never;
 }
 
 interface RefreshState {
@@ -371,6 +373,52 @@ interface ClearSearchResult {
 	windows: number;
 }
 
+interface ExecuteSearchState {
+	query: string;
+	refresh: number;
+	jump: number;
+	reset: number;
+	render: number;
+}
+
+function compileExecuteSearch(html: string, input: string): {
+	run(): ExecuteSearchState;
+} {
+	const state = { refresh: 0, jump: 0, reset: 0, render: 0 };
+	const factory = new Function(
+		'state',
+		'input',
+		`
+		let searchQuery = '';
+		let searchMatches = [];
+		let searchIndex = -1;
+		let highlightQuery = '';
+		const searchInput = { value: input };
+		function refreshSearch() {
+			state.refresh++;
+			searchMatches = input.indexOf('nomatch') >= 0 ? [] : [0, 2];
+			searchIndex = searchMatches.length > 0 ? 1 : -1;
+			highlightQuery = searchQuery;
+		}
+		function jumpToSearchMatch(index) { state.jump++; state.jumpIndex = index; }
+		function renderWindow() { state.render++; }
+		function resetSearchResults() {
+			state.reset++;
+			searchQuery = '';
+			searchMatches = [];
+			searchIndex = -1;
+			highlightQuery = '';
+		}
+		${functionSource(html, 'executeSearch')}
+		return function () {
+			executeSearch();
+			return { query: searchQuery, refresh: state.refresh, jump: state.jump, reset: state.reset, render: state.render };
+		};
+	`
+	);
+	return { run: factory(state, input) as () => ExecuteSearchState };
+}
+
 function compileClearSearch(html: string): (focusInput: boolean) => ClearSearchResult {
 	const state: { focused?: boolean } = {};
 	return new Function(
@@ -385,6 +433,7 @@ function compileClearSearch(html: string): (focusInput: boolean) => ClearSearchR
 		let windows = 0;
 		function renderSearchUi() { searchUi++; }
 		function renderWindow() { windows++; }
+		${functionSource(html, 'resetSearchResults')}
 		${functionSource(html, 'clearSearch')}
 		return function (focusInput) {
 			clearSearch(focusInput);
@@ -435,9 +484,9 @@ suite('search page', () => {
 	test('the toolbar has one query field, a count and one clear control', () => {
 		const html = page();
 		const start = html.indexOf('<div class="toolbar">');
-		const noticeAt = html.indexOf('<div id="notice"');
-		assert.ok(start >= 0 && noticeAt > start, 'the toolbar is a distinct strip');
-		const toolbar = html.slice(start, noticeAt);
+		const contentAt = html.indexOf('<div id="content"');
+		assert.ok(start >= 0 && contentAt > start, 'the toolbar is a distinct strip');
+		const toolbar = html.slice(start, contentAt);
 		assert.strictEqual((toolbar.match(/<input\b/g) || []).length, 1, 'Search is the only query control');
 		assert.ok(toolbar.includes('class="search-box"'), 'the search field owns the toolbar query area');
 		assert.ok(
@@ -515,7 +564,7 @@ suite('search page', () => {
 		assert.strictEqual(middle.count.textContent, '3 / 3');
 	});
 
-	test('typing starts at the selection; a re-scan keeps the current match by id', () => {
+	test('Enter starts at the selection; a re-scan keeps the current match by id', () => {
 		const html = page();
 		const first = compileRefresh(html, refreshState());
 		first.run(true);
@@ -589,6 +638,22 @@ suite('search page', () => {
 		assert.deepStrictEqual([...positions].sort((a, b) => a - b), positions, 'the steps run in the designed order');
 	});
 
+	test('executeSearch runs only the committed query and jumps to its first match', () => {
+		const html = page();
+		const first = compileExecuteSearch(html, 'alp');
+		assert.deepStrictEqual(first.run(), {
+			query: 'alp',
+			refresh: 1,
+			jump: 1,
+			reset: 0,
+			render: 0,
+		});
+		const blank = compileExecuteSearch(html, '   ');
+		assert.deepStrictEqual(blank.run(), { query: '', refresh: 0, jump: 0, reset: 1, render: 0 });
+		const none = compileExecuteSearch(html, 'nomatch');
+		assert.deepStrictEqual(none.run(), { query: 'nomatch', refresh: 1, jump: 0, reset: 0, render: 1 });
+	});
+
 	test('clearing the search resets query/current/highlight', () => {
 		const html = page();
 		const clear = compileClearSearch(html);
@@ -649,11 +714,17 @@ suite('search page', () => {
 		const end = html.indexOf('if (conditionsAdd) {');
 		assert.ok(start >= 0 && end > start, 'the search wiring is a distinct block');
 		const block = html.slice(start, end);
-		assert.ok(block.includes("searchInput.addEventListener('input'"), 'typing is live');
-		assert.ok(block.includes('searchQuery = searchInput.value'));
-		assert.ok(block.includes('refreshSearch(true, undefined, false)'));
-		assert.ok(block.includes('jumpToSearchMatch(searchIndex)'));
-		assert.ok(block.includes("event.key === 'Enter'") && block.includes('cycleSearch(event.shiftKey ? -1 : 1)'));
+		assert.ok(block.includes("searchInput.addEventListener('input'"), 'typing updates the field');
+		assert.ok(block.includes("searchInput.addEventListener('keydown'"), 'Enter is handled in the field');
+		const inputAt = block.indexOf("searchInput.addEventListener('input'");
+		const keydownAt = block.indexOf("searchInput.addEventListener('keydown'");
+		const inputBlock = block.slice(inputAt, keydownAt);
+		assert.ok(!inputBlock.includes('refreshSearch'), 'typing never runs a search');
+		assert.ok(!inputBlock.includes('jumpToSearchMatch'), 'typing never jumps');
+		assert.ok(inputBlock.includes('resetSearchResults()'), 'typing drops stale marks');
+		assert.ok(block.includes('executeSearch()'), 'Enter runs the typed query');
+		assert.ok(block.includes('searchInput.value !== searchQuery'), 'a new query is executed, the same one cycles');
+		assert.ok(block.includes('cycleSearch(event.shiftKey ? -1 : 1)'));
 		assert.ok(block.includes("event.key === 'Escape'"));
 		assert.ok(block.includes('clearSearch(false)') && block.includes('focusTreeAfterSearch()'));
 		assert.ok(block.includes('clearSearch(true)'), 'the X keeps focus in the field');
@@ -667,6 +738,9 @@ suite('search page', () => {
 			block.slice(f3At).includes('cycleSearch(event.shiftKey ? -1 : 1)'),
 			'F3 goes forward and Shift+F3 backward'
 		);
+		const execute = functionSource(html, 'executeSearch');
+		assert.ok(execute.includes('refreshSearch(true, undefined, false)'), 'Enter executes the search');
+		assert.ok(execute.includes('jumpToSearchMatch(searchIndex)'), 'and jumps to its first match');
 		const focusTree = functionSource(html, 'focusTreeAfterSearch');
 		assert.ok(focusTree.includes('displayIndexById.has(selectedId)'), 'Escape returns to the selected row when visible');
 		assert.ok(focusTree.includes('visibleNodeIds[0]'), 'otherwise to the first visible row');
@@ -726,11 +800,16 @@ suite('search page', () => {
 		assert.ok(build.includes('row.id === currentMatchId()'), 'and it is the row at the current index');
 		const style = styleOf(html);
 		assert.ok(
-			/\.node\[data-search-current="true"\] > \.row mark\s*\{[^}]*--vscode-editor-findMatchBackground/.test(style),
-			'the current mark uses the stronger find-match background'
+			/--match-bg:\s*rgba\(234, 179, 8, 0\.32\)/.test(style),
+			'all matches use the fixed subtle yellow tier'
+		);
+		assert.ok(/--match-hi:\s*rgba\(234, 179, 8, 0\.7\)/.test(style), 'the current match uses the stronger tier');
+		assert.ok(
+			/\.node\[data-search-current="true"\] > \.row mark\s*\{[^}]*background:\s*var\(--match-hi\)/.test(style),
+			'the current mark uses the stronger match background'
 		);
 		assert.ok(
-			/mark\s*\{[^}]*--vscode-editor-findMatchHighlightBackground/.test(style),
+			/mark\s*\{[^}]*background:\s*var\(--match-bg\)/.test(style),
 			'the other marks keep the subtle highlight'
 		);
 

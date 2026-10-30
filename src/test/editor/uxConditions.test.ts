@@ -245,8 +245,13 @@ suite('conditions panel (design §6)', () => {
 		assert.ok(render.includes("state.className = 'condition-state'"));
 		assert.ok(render.includes("state.textContent = 'unknown'"));
 		assert.ok(render.includes('updateConditionRowState(row)'), 'the badge follows the committed value');
-		assert.ok(render.includes("save.className = 'sb-btn sb-btn-primary condition-save'"));
-		assert.ok(render.includes("cancel.className = 'sb-btn sb-btn-secondary condition-cancel'"));
+		assert.ok(render.includes("conditionIconButton("), 'the row actions use the shared icon primitive');
+		assert.ok(render.includes("'condition-save'"), 'Save is an icon action');
+		assert.ok(render.includes("'condition-cancel'"), 'Cancel is an icon action');
+		assert.ok(render.includes("'M3 8.5l3 3 7-7'"), 'Save uses a check glyph');
+		assert.ok(render.includes("'M4 4l8 8M12 4l-8 8'"), 'Cancel uses an X glyph');
+		assert.ok(!render.includes('save.textContent'), 'Save has no text label');
+		assert.ok(!render.includes('cancel.textContent'), 'Cancel has no text label');
 		assert.ok(render.includes("'condition-edit'"), 'the pencil is a compact act-btn');
 		assert.ok(render.includes("'condition-remove'"), 'the trash is a compact act-btn');
 		assert.ok(render.includes('if (!auto)'), 'scanned rows get no Remove');
@@ -806,6 +811,10 @@ suite('conditions panel (design §6)', () => {
 		for (const selector of ['.conditions-panel', '.condition-row', '.conditions-hint', '.condition-name-text', '.condition-value-text', '.condition-save', '.condition-cancel']) {
 			assert.ok(style.includes(selector), selector);
 		}
+		assert.ok(
+			/\.condition-save,\s*\.condition-cancel\s*\{[^}]*opacity:\s*1/.test(style),
+			'Save/Cancel stay visible while editing'
+		);
 		assert.ok(
 			/\.condition-name,\s*\.condition-value\s*\{[^}]*--vscode-input-background[^}]*--vscode-input-border/.test(style),
 			'inputs use the theme input colours'
