@@ -222,13 +222,14 @@ interface JumpRecord {
 	calls: string[];
 	rebuilds: number;
 	focusOptions: unknown[];
+	messages: unknown[];
 }
 
 function runJump(
 	html: string,
 	options: { expanded?: boolean; displayIndex?: number; matches?: number[] } = {}
 ): JumpRecord {
-	const record: JumpRecord = { calls: [], rebuilds: 0, focusOptions: [] };
+	const record: JumpRecord = { calls: [], rebuilds: 0, focusOptions: [], messages: [] };
 	const rows = [{ id: 'r0' }, { id: 'r1' }, { id: 'r2' }];
 	const displayIndexById = new Map<string, number>();
 	if (options.displayIndex !== undefined) {
@@ -245,6 +246,7 @@ function runJump(
 		'renderWindow',
 		'renderSearchUi',
 		'searchInput',
+		'vscode',
 		`${functionSource(html, 'jumpToSearchMatch')}\nreturn jumpToSearchMatch;`
 	)(
 		rows,
@@ -267,7 +269,8 @@ function runJump(
 				record.calls.push('focus');
 				record.focusOptions.push(opts);
 			},
-		}
+		},
+		{ postMessage: (message: unknown) => record.messages.push(message) }
 	) as (index: number) => void;
 	jump(0);
 	return record;
@@ -480,7 +483,7 @@ suite('search page', () => {
 			/@media \(max-width: 720px\)[\s\S]*?\.filter-wrap\s*\{[^}]*flex:\s*1 1 0[\s\S]*?\.search-box\s*\{[^}]*flex:\s*1 1 0/.test(style),
 			'both fields shrink instead of overlapping the actions'
 		);
-		assert.ok(/\.search-box \.search-nav\s*\{[^}]*width:\s*26px[^}]*height:\s*26px/.test(style));
+		assert.ok(/\.search-box \.search-nav\s*\{[^}]*width:\s*28px[^}]*height:\s*26px/.test(style));
 		assert.ok(/\.filter-clear,\s*\.search-clear\s*\{[^}]*width:\s*18px[^}]*height:\s*18px/.test(style));
 	});
 
@@ -587,9 +590,12 @@ suite('search page', () => {
 		const alreadyVisible = runJump(html, { expanded: false, displayIndex: 2 });
 		assert.deepStrictEqual(alreadyVisible.calls, ['expand', 'ensure:2', 'select:r1', 'render', 'searchUi', 'focus']);
 		assert.strictEqual(alreadyVisible.rebuilds, 0, 'no rebuild when nothing was collapsed');
+		assert.deepStrictEqual(expanded.messages, [{ type: 'select', nodeId: 'r1' }], 'the host keeps the search selection across a re-scan');
+		assert.deepStrictEqual(alreadyVisible.messages, [{ type: 'select', nodeId: 'r1' }]);
 
 		const undisplayed = runJump(html, { expanded: false });
 		assert.deepStrictEqual(undisplayed.calls, ['expand', 'searchUi'], 'an undisplayed target is not selected or focused');
+		assert.deepStrictEqual(undisplayed.messages, [], 'an impossible jump does not move the host selection');
 
 		const source = functionSource(html, 'jumpToSearchMatch');
 		assert.ok(!source.includes('focusRow('), 'the tree is selected without taking focus');
@@ -658,7 +664,7 @@ suite('search page', () => {
 		const block = html.slice(start, end);
 		assert.ok(block.includes("searchInput.addEventListener('input'"), 'typing is live');
 		assert.ok(block.includes('searchQuery = searchInput.value'));
-		assert.ok(block.includes('refreshSearch(true)'));
+		assert.ok(block.includes('refreshSearch(true, undefined, false)'));
 		assert.ok(block.includes('jumpToSearchMatch(searchIndex)'));
 		assert.ok(block.includes("event.key === 'Enter'") && block.includes('cycleSearch(event.shiftKey ? -1 : 1)'));
 		assert.ok(block.includes("event.key === 'Escape'"));
@@ -687,7 +693,6 @@ suite('search page', () => {
 			'renderSearchUi',
 			'clearSearch',
 			'cycleSearch',
-			'jumpToSearchMatch',
 			'syncSearchToSelection',
 		]) {
 			const source = functionSource(html, name);
@@ -696,6 +701,12 @@ suite('search page', () => {
 			assert.ok(!/updateFilterUi\s*\(/.test(source), `${name} never repaints the filter count`);
 			assert.ok(!source.includes('postMessage'), `${name} never messages the host`);
 		}
+		const jump = functionSource(html, 'jumpToSearchMatch');
+		assert.ok(
+			jump.includes("vscode.postMessage({ type: 'select', nodeId: id })"),
+			'the jump persists its selection so a re-scan keeps it'
+		);
+		assert.strictEqual(jump.match(/postMessage/g)?.length, 1, 'the jump sends only the select message');
 		const apply = functionSource(html, 'applyFilterQuery');
 		assert.ok(apply.includes('refreshSearch(false, previousMatchId)'), 'the filter recomputes search candidates');
 		assert.ok(apply.indexOf('refreshFilter()') < apply.indexOf('refreshSearch('), 'after the filter result exists');

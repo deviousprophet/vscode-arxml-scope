@@ -720,7 +720,7 @@ input[type="search"]::-webkit-search-decoration {
 	pointer-events: none;
 }
 .search-box .search-nav {
-	width: 26px;
+	width: 28px;
 	height: 26px;
 	flex: none;
 }
@@ -2140,21 +2140,6 @@ function setSpacers(top, bottom) {
 		'#tree-bottom{height:' + Math.max(0, bottom) + 'px}';
 }
 
-function twistyIcon() {
-	const svg = document.createElementNS(svgNamespace, 'svg');
-	svg.setAttribute('viewBox', '0 0 16 16');
-	svg.setAttribute('width', '16');
-	svg.setAttribute('height', '16');
-	svg.setAttribute('aria-hidden', 'true');
-	svg.setAttribute('class', 'g-twisty');
-	svg.setAttribute('fill', 'currentColor');
-	const path = document.createElementNS(svgNamespace, 'path');
-	// Codicon chevron-right (MIT, microsoft/vscode-codicons).
-	path.setAttribute('d', 'M6.14601 3.14579C5.95101 3.34079 5.95101 3.65779 6.14601 3.85279L10.292 7.99879L6.14601 12.1448C5.95101 12.3398 5.95101 12.6568 6.14601 12.8518C6.34101 13.0468 6.65801 13.0468 6.85301 12.8518L11.353 8.35179C11.548 8.15679 11.548 7.83979 11.353 7.64478L6.85301 3.14479C6.65801 2.94979 6.34101 2.95079 6.14601 3.14579Z');
-	svg.appendChild(path);
-	return svg;
-}
-
 function twistySpan() {
 	const span = document.createElement('span');
 	span.className = 'twisty';
@@ -2759,7 +2744,7 @@ function firstMatchAtOrAfterSelection() {
  * still a candidate). A blank query clears the highlight override but never the
  * filter.
  */
-function refreshSearch(startAtSelection, previousId) {
+function refreshSearch(startAtSelection, previousId, render = true) {
 	searchMatches = searchCandidates();
 	const previousRow = previousId === undefined ? undefined : rowIndexById.get(previousId);
 	const previousAt = previousRow === undefined ? -1 : searchMatches.indexOf(previousRow);
@@ -2774,7 +2759,9 @@ function refreshSearch(startAtSelection, previousId) {
 	}
 	highlightQuery = searchQuery.trim() === '' ? '' : searchQuery;
 	renderSearchUi();
-	renderWindow(true);
+	if (render) {
+		renderWindow(true);
+	}
 }
 
 /** The count and control state: '1 / N', '0 / 0', or hidden for a blank query. */
@@ -2823,6 +2810,7 @@ function jumpToSearchMatch(index) {
 	}
 	ensureVisible(displayIndex);
 	setSelection(id);
+	vscode.postMessage({ type: 'select', nodeId: id });
 	renderWindow(true);
 	renderSearchUi();
 	if (searchInput) {
@@ -3107,7 +3095,8 @@ function syncConditionRowAutoFlags() {
 			continue;
 		}
 		const hasRemove = row.querySelector('.condition-remove') !== null;
-		if (auto === hasRemove) {
+		const needsRemove = auto !== true;
+		if (hasRemove !== needsRemove) {
 			// Scanned rows must have no Remove, manual rows must have it.
 			renderConditionRow(row);
 		}
@@ -3147,7 +3136,13 @@ function readConditionEntries() {
 		if (!conditionNameValid(name)) {
 			continue;
 		}
-		entries.push({ name: name, value: row.dataset.value || '' });
+		const value = row.dataset.value || '';
+		// A discovered constant with no saved value is regenerated from the document;
+		// persisting it would turn it into a manual row in other files.
+		if (row.dataset.auto === 'true' && value === '') {
+			continue;
+		}
+		entries.push({ name: name, value: value });
 	}
 	return entries;
 }
@@ -3636,9 +3631,11 @@ if (clearButton) {
 if (searchInput) {
 	searchInput.addEventListener('input', function () {
 		searchQuery = searchInput.value;
-		refreshSearch(true);
+		refreshSearch(true, undefined, false);
 		if (searchIndex >= 0) {
 			jumpToSearchMatch(searchIndex);
+		} else {
+			renderWindow(true);
 		}
 	});
 	searchInput.addEventListener('keydown', function (event) {
@@ -3717,7 +3714,7 @@ if (conditionsPanel) {
 		}
 	});
 	conditionsPanel.addEventListener('keydown', function (event) {
-		if (!(event.target instanceof Element)) {
+		if (!(event.target instanceof Element) || event.target.tagName !== 'INPUT') {
 			return;
 		}
 		const row = event.target.closest('.condition-row');

@@ -30,6 +30,15 @@
 
 export type ConditionValue = string | number | boolean;
 
+/**
+ * The SW system-constant name rule shared by the host and the page:
+ * `[A-Za-z_][A-Za-z0-9_.-/]*` with an optional leading `/` for a pasted
+ * `SYSC-REF` path. It is core validation, not editor policy.
+ */
+export function isConditionName(name: string): boolean {
+	return /^\/?[A-Za-z_][A-Za-z0-9_.\-/]*$/.test(name);
+}
+
 export type ConditionState = 'true' | 'false' | 'unknown';
 
 export interface ConditionResult {

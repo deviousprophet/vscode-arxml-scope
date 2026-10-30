@@ -114,6 +114,18 @@ suite('semantic diff page (design §3)', () => {
 		assert.ok(!encoded.includes('</script>'), 'the raw end tag never appears in the payload');
 	});
 
+	test('F7 is scoped to the diff list, so filter/input focus keeps its own keys', () => {
+		const source = functionSource(page(), 'onKeyDown');
+		assert.ok(source.includes("closest('#diff-list')"), 'F7 checks that the event target is in the tree');
+		const f7 = source.indexOf("event.key === 'F7'");
+		assert.ok(f7 >= 0, 'the F7 branch exists');
+		assert.ok(source.indexOf("closest('#diff-list')") > f7, 'the scope check is inside the F7 branch');
+		assert.ok(
+			source.indexOf("closest('#diff-list')") < source.indexOf('gotoChange'),
+			'the scope check runs before the F7 action'
+		);
+	});
+
 	test('the embedded document is the model the host built', () => {
 		const expected = documentOf();
 		// The payload is JSON: absent optional fields are dropped, which is exactly

@@ -277,11 +277,13 @@ suite('conditions panel (design §6)', () => {
 		const html = page();
 		const list = {
 			querySelectorAll: () => [
-				fakeRow({ name: '  A_SC  ', value: ' 1 ', new: 'false' }),
-				fakeRow({ name: 'BAD NAME', value: '2', new: 'false' }),
-				fakeRow({ name: '   ', value: '3', new: 'false' }),
-				fakeRow({ name: 'B_SC', value: '', new: 'false' }),
-				fakeRow({ name: 'DRAFT_SC', value: '9', new: 'true' }),
+				fakeRow({ name: '  A_SC  ', value: ' 1 ', new: 'false', auto: 'false' }),
+				fakeRow({ name: 'BAD NAME', value: '2', new: 'false', auto: 'false' }),
+				fakeRow({ name: '   ', value: '3', new: 'false', auto: 'false' }),
+				fakeRow({ name: 'B_SC', value: '', new: 'false', auto: 'false' }),
+				fakeRow({ name: 'C_SC', value: '', new: 'false', auto: 'true' }),
+				fakeRow({ name: 'E_SC', value: '3', new: 'false', auto: 'true' }),
+				fakeRow({ name: 'DRAFT_SC', value: '9', new: 'true', auto: 'false' }),
 			],
 		};
 		const compiled = compileWith<{ readConditionEntries(): ConditionEntry[] }>(
@@ -293,10 +295,19 @@ suite('conditions panel (design §6)', () => {
 		assert.deepStrictEqual(compiled.readConditionEntries(), [
 			{ name: 'A_SC', value: ' 1 ' },
 			{ name: 'B_SC', value: '' },
+			{ name: 'E_SC', value: '3' },
 		]);
 		const source = functionSource(html, 'readConditionEntries');
 		assert.ok(source.includes('row.dataset.value'), 'the committed value is the only value read');
+		assert.ok(
+			source.includes("row.dataset.auto === 'true' && value === ''"),
+			'an empty discovered constant is not persisted as a manual row'
+		);
 		assert.ok(!source.includes('querySelector('), 'no input is queried');
+		assert.ok(
+			html.includes("event.target.tagName !== 'INPUT'"),
+			'Enter on Save/Cancel is left to the button, not treated as a value commit'
+		);
 		const valid = evaluateFunction<(name: string) => boolean>(html, 'conditionNameValid');
 		assert.strictEqual(valid('A_SC'), true);
 		assert.strictEqual(valid('Pkg.Mod/Sub-1_A'), true);

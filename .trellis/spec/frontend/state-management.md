@@ -36,7 +36,7 @@ re-scans and refuses if the bytes moved.
 | `displayRows`, `expandedIds`, `subtreeIds`, `guideLevels` | page script | derived from the rows, collapsed set, filter and selected subtree |
 | type-ahead buffer | page script | yes; it is a transient 2 s window |
 | `detailsEdits` / `pendingMove` / `pendingFieldFocus` / `flashId` | details editor | no; the re-scan message clears stale state and rebuilds the details inputs |
-| `uiState.tab / sidebarWidth / panes / collapsedSections` | page + host state | yes, through `getState()/setState()` |
+| `uiState.tab / sidebarWidth / panes / collapsed` | page + host state | yes, through `getState()/setState()` |
 
 The collapsed set is the only state that must not be re-derived from the rendered order. Node ids
 are path-based and include a declaration-order ordinal (see `nodeId.ts`); pruning only drops ids the
@@ -66,7 +66,7 @@ second host-side implementation of a view rule.
   is no innerHTML swap.
 - **Across a webview reload:** the sidebar uses `acquireVsCodeApi().getState()/setState()` with one
   validated object: `tab` (`details`/`conditions`), `sidebarWidth` (clamped 260–900),
-  `panes` (section id → saved px), `collapsedSections` (section ids). A missing/invalid field falls
+  `panes` (section id → saved px), `collapsed` (section ids). A missing/invalid field falls
   back to Details, 360px and default heights; a non-array object is ignored. The legacy
   `inspectorHidden` field is ignored and never written back. Only user actions (tab click, resizer
   release, sash release/reset, section toggle) write the preference; transient viewport clamping
@@ -93,8 +93,8 @@ input and never posts a message, so a typed draft survives a re-scan. An empty c
 visible in the table but is absent from the evaluation map, so a condition that uses it is `unknown`
 and never disables a row. Scanned rows are read-only and cannot be removed; a manual row (a stored
 name not referenced by the document) can be removed and that removal is persisted through the store.
-Drafts live only in Edit mode; only Save, Remove, Clear values and a valid Add send a `conditions`
-message.
+Drafts live only in Edit mode; only Save (including committing a new Add draft), Remove and
+Clear values send a `conditions` message. Opening Add alone sends nothing.
 
 ## Search state
 

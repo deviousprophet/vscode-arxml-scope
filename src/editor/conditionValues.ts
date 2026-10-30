@@ -9,7 +9,9 @@
  */
 import * as vscode from 'vscode';
 
-import { ConditionValue, parseConditionValue } from '../core/ecuc/syscond';
+import { ConditionValue, isConditionName, parseConditionValue } from '../core/ecuc/syscond';
+
+export { isConditionName };
 
 export interface ConditionEntry {
 	name: string;
@@ -29,15 +31,6 @@ export const CONDITION_VALUES_KEY = 'arxmlScope.conditionValues.v1';
 const ENTRY_LIMIT = 200;
 const NAME_LIMIT = 200;
 const VALUE_LIMIT = 200;
-
-/**
- * The constant-name rule. Self-contained so a page copy can be compared against
- * it in a test; the page cannot call this module (it has no `vscode` import).
- * A leading `/` is allowed so a full `SYSC-REF` path can be pasted (PRD R3).
- */
-export function isConditionName(name: string): boolean {
-	return /^\/?[A-Za-z_][A-Za-z0-9_.\-/]*$/.test(name);
-}
 
 /**
  * Normalizes raw `{ name, value }` input. Names are trimmed and validated,

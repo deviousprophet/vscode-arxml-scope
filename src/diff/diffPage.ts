@@ -112,7 +112,6 @@ const changesInput = document.getElementById('diff-changes');
 const empty = document.getElementById('diff-empty');
 const emptyText = document.getElementById('diff-empty-text');
 const detail = document.getElementById('diff-detail');
-const svgNamespace = 'http://www.w3.org/2000/svg';
 const bufferRows = 10;
 let filterQuery = '';
 let highlightQuery = '';
@@ -292,20 +291,6 @@ function setSpacers(top, bottom) {
 	virtualStyle.textContent =
 		'#diff-top{height:' + Math.max(0, top) + 'px}' +
 		'#diff-bottom{height:' + Math.max(0, bottom) + 'px}';
-}
-
-function twistyIcon() {
-	const svg = document.createElementNS(svgNamespace, 'svg');
-	svg.setAttribute('viewBox', '0 0 16 16');
-	svg.setAttribute('width', '16');
-	svg.setAttribute('height', '16');
-	svg.setAttribute('aria-hidden', 'true');
-	svg.setAttribute('fill', 'currentColor');
-	const path = document.createElementNS(svgNamespace, 'path');
-	// Codicon chevron-right (MIT, microsoft/vscode-codicons).
-	path.setAttribute('d', 'M6.14601 3.14579C5.95101 3.34079 5.95101 3.65779 6.14601 3.85279L10.292 7.99879L6.14601 12.1448C5.95101 12.3398 5.95101 12.6568 6.14601 12.8518C6.34101 13.0468 6.65801 13.0468 6.85301 12.8518L11.353 8.35179C11.548 8.15679 11.548 7.83979 11.353 7.64478L6.85301 3.14479C6.65801 2.94979 6.34101 2.95079 6.14601 3.14579Z');
-	svg.appendChild(path);
-	return svg;
 }
 
 function buildDiffCell(cell, side, row) {
@@ -770,6 +755,9 @@ function onKeyDown(event) {
 		return;
 	}
 	if (event.key === 'F7') {
+		if (!event.target.closest('#diff-list')) {
+			return;
+		}
 		event.preventDefault();
 		gotoChange(event.shiftKey ? -1 : 1);
 		return;

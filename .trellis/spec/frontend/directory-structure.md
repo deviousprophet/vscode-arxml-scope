@@ -19,9 +19,15 @@ src/
     filter.ts               row index/filter/flatten and shared match ranges
     conditionValues.ts      SW-SYSCOND value entries and the workspaceState store
     rowView.ts              page row primitives shared by the editor and diff pages
+    sidebarShell.ts         sidebar tabs, width, section panes/sashes and layout state
+    html.ts                 shared HTML text/attribute escaper
+    jsonScript.ts           shared inline-JSON encoder for webview payloads
+    pageError.ts            shared webview boot-error installer
     ecucEdit.ts             the edit record, region resolution, applyEdit
     ecucDetailsEditor.ts    the details-panel value editor (webview half)
-  diff/               the read-only semantic diff. Only the panel imports `vscode`.
+  diff/               the read-only semantic diff. `diffPanel.ts` and
+                      `compareSelection.ts` import `vscode`; `diffModel.ts` and
+                      `diffPage.ts` stay pure/page-only.
     diffModel.ts            pure matching/status/merged order, page helpers, title
     diffPage.ts             the diff shell and its serialized page script
     diffPanel.ts            the WebviewPanel lifecycle, refresh and reveal

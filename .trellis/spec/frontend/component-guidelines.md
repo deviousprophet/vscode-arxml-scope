@@ -70,13 +70,16 @@ in the details panel, outside `#tree`, and each owns its own `Enter`/`Escape`/`T
 ```text
 details control keys  →  details editor commit/cancel/move
 page row click        →  select / twisty / value-click opens details
-page key handler      →  navigation / F2/Enter opens details / type-ahead
+search input keys     →  Enter/Shift+Enter next/previous, Escape clears, Ctrl+F focuses
+page key handler      →  navigation / F2/Enter opens details / F3 while search is active / type-ahead
 ```
 
 The page's `onRowClick` handles the delegated `#empty-clear` action and the row interactions. One
 interaction, one effect: the twisty toggles without moving selection, a reference target is plain
 text in the Document, clicking `=`/label selects only, and clicking a parameter's `.value-text`
 selects and opens the details editor. Reference follow is the details **Jump to target** action.
+The inline chevron (`twistyIcon`) is one shared row primitive in `rowViewScript()`; the editor and
+diff pages must not fork it.
 
 ## DOM contracts
 
