@@ -12,7 +12,7 @@
  * (a literal may only appear as a fallback inside `var(...)`).
  */
 import { randomBytes } from 'crypto';
-import { matchRanges } from '../editor/treeQuery';
+import { matchRangesScript } from '../editor/treeQuery';
 import { escapeHtml } from '../editor/html';
 import { encodeJsonForScript } from '../editor/jsonScript';
 import { pageErrorScript } from '../editor/pageError';
@@ -95,7 +95,7 @@ diffInstallErrorSurface();
 const vscode = acquireVsCodeApi();
 ${rowViewScript()}
 ${virtualScrollScript()}
-${matchRanges.toString()}
+${matchRangesScript()}
 ${diffVisibility.toString()}
 ${flattenDiffRows.toString()}
 ${nextChangeIndex.toString()}

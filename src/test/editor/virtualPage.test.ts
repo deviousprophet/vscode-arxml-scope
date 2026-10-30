@@ -10,7 +10,7 @@
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { FlatNodeRow, TreeRow, ancestorIds, flattenRows } from '../../editor/treeQuery';
+import { FlatNodeRow, TreeRow, ancestorIds, flattenRows, matchRanges } from '../../editor/treeQuery';
 import {
 	RowPayload,
 	encodeRowDocument,
@@ -285,8 +285,12 @@ suite('virtual page (design §4, §5, §8)', () => {
 		};
 		const metaSpan = new Function(
 			'document',
-			`${functionSource(html, 'metaSpan')}\nreturn metaSpan;`
-		)(fakeDocument) as (row: unknown) => { children: unknown[] };
+			'highlightQuery',
+			'matchRanges',
+			`${functionSource(html, 'appendHighlighted')}
+${functionSource(html, 'metaSpan')}
+return metaSpan;`
+		)(fakeDocument, '', matchRanges) as (row: unknown) => { children: unknown[] };
 		const meta = metaSpan({ meta: [{ cls: 'context', text: 'context PkgA.PkgB', title: '' }] });
 		const collect = (node: unknown): string => {
 			const typed = node as { textContent?: string; children?: unknown[] };

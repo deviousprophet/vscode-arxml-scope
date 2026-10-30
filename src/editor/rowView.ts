@@ -123,13 +123,12 @@ export function metaSpan(row: RowViewFields, query?: string): unknown {
 		if (part.cls === 'context' && part.text.indexOf('context ') === 0) {
 			const keyword = document.createElement('span');
 			keyword.className = 'keyword';
-			keyword.textContent = 'context';
+			appendHighlighted(keyword, 'context', query);
 			span.appendChild(keyword);
-			span.appendChild(document.createTextNode(' ' + part.text.slice('context '.length)));
-		} else if (part.cls === 'short') {
-			appendHighlighted(span, part.text, query);
+			span.appendChild(document.createTextNode(' '));
+			appendHighlighted(span, part.text.slice('context '.length), query);
 		} else {
-			span.textContent = part.text;
+			appendHighlighted(span, part.text, query);
 		}
 		meta.appendChild(span);
 	}

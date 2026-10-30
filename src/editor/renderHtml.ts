@@ -26,7 +26,7 @@ import { randomBytes } from 'crypto';
 import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
 import type { ConditionValue } from '../core/ecuc/syscond';
 import type { ConditionEntry } from './conditionValues';
-import { FlatRow, ancestorIds, flattenRows, matchRanges, stepMatch } from './treeQuery';
+import { FlatRow, ancestorIds, flattenRows, matchRangesScript, stepMatch } from './treeQuery';
 import { escapeHtml } from './html';
 import { encodeJsonForScript } from './jsonScript';
 import { consoleErrorScript } from './pageError';
@@ -826,6 +826,16 @@ input[type="search"]::-webkit-search-decoration {
 	gap: 6px;
 	min-width: 0;
 }
+/* Reserve one stable action column so the name, equals and value columns do not
+ * move when a row enters edit mode and swaps the state/Edit/Remove group for
+ * Save/Cancel. */
+.condition-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 0 0 100px;
+	min-width: 0;
+}
 .condition-name,
 .condition-value {
 	box-sizing: border-box;
@@ -849,6 +859,10 @@ input[type="search"]::-webkit-search-decoration {
 .condition-value-text {
 	flex: 0 1 auto;
 	min-width: 0;
+	box-sizing: border-box;
+	height: 20px;
+	padding: 0 4px;
+	border: 1px solid transparent;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -1855,7 +1869,7 @@ ${toggleCollapsed.toString()}
 ${collapsedIdsFor.toString()}
 ${moveTarget.toString()}
 ${virtualScrollScript()}
-${matchRanges.toString()}
+${matchRangesScript()}
 ${rowSearchScript()}
 ${stepMatch.toString()}
 ${flattenRows.toString()}
@@ -2809,20 +2823,23 @@ function renderConditionRow(row) {
 		valueInput.setAttribute('aria-label', 'Constant value');
 		valueInput.value = value;
 		row.appendChild(valueInput);
+		const actions = document.createElement('div');
+		actions.className = 'condition-actions';
 		const save = conditionIconButton(
 			'condition-save',
 			'Save ' + (name || 'condition value'),
 			'Save this condition value',
 			'M3 8.5l3 3 7-7'
 		);
-		row.appendChild(save);
+		actions.appendChild(save);
 		const cancel = conditionIconButton(
 			'condition-cancel',
 			'Cancel ' + (name || 'new condition value'),
 			'Discard this change',
 			'M4 4l8 8M12 4l-8 8'
 		);
-		row.appendChild(cancel);
+		actions.appendChild(cancel);
+		row.appendChild(actions);
 		return;
 	}
 	if (value.trim() !== '') {
@@ -2832,13 +2849,14 @@ function renderConditionRow(row) {
 		valueText.title = 'Value: ' + value;
 		row.appendChild(valueText);
 	}
+	const actions = document.createElement('div');
+	actions.className = 'condition-actions';
 	const state = document.createElement('span');
 	state.className = 'condition-state';
 	state.textContent = 'unknown';
 	state.title = 'No value yet: conditions using this constant stay unknown';
-	row.appendChild(state);
-	updateConditionRowState(row);
-	row.appendChild(
+	actions.appendChild(state);
+	actions.appendChild(
 		conditionIconButton(
 			'condition-edit',
 			'Edit ' + (name || 'condition value'),
@@ -2847,7 +2865,7 @@ function renderConditionRow(row) {
 		)
 	);
 	if (!auto) {
-		row.appendChild(
+		actions.appendChild(
 			conditionIconButton(
 				'condition-remove',
 				'Remove ' + (name || 'condition value'),
@@ -2856,6 +2874,8 @@ function renderConditionRow(row) {
 			)
 		);
 	}
+	row.appendChild(actions);
+	updateConditionRowState(row);
 }
 
 /** Creates a row from an entry and its committed flags, then renders it. */

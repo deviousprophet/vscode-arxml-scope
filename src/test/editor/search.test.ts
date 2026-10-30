@@ -69,6 +69,11 @@ suite('search helpers', () => {
 	test('matchRanges finds every occurrence and haystack joins the searched fields', () => {
 		assert.strictEqual(haystack({ label: 'IniValue', shortName: 'ContA', value: '63' }), 'inivalue conta 63');
 		assert.strictEqual(haystack({ label: 'ContA' }), 'conta');
+		assert.strictEqual(
+			haystack({ label: 'Title', value: 'hello', meta: [{ text: '[Note] keep' }, { text: 'context A.B' }] }),
+			'title hello [note] keep context a.b',
+			'visible meta fragments are searchable'
+		);
 		assert.deepStrictEqual(matchRanges('IniValue', 'inivalue'), [{ start: 0, end: 8 }]);
 		assert.deepStrictEqual(matchRanges('IniValue', 'i'), [
 			{ start: 0, end: 1 },
@@ -443,6 +448,20 @@ function compileExecuteSearch(
 	`
 	);
 	return { run: factory(state, input, initialQuery) as (direction?: number) => ExecuteSearchState };
+}
+
+function compileMetaSpan(
+	html: string,
+	highlightQuery: string
+): (row: { meta: { cls: string; text: string; title: string }[] }) => FakeElement {
+	return new Function(
+		'highlightQuery',
+		'matchRanges',
+		'document',
+		`${functionSource(html, 'appendHighlighted')}
+${functionSource(html, 'metaSpan')}
+return metaSpan;`
+	)(highlightQuery, matchRanges, fakeDocument()) as never;
 }
 
 function compileClearSearch(html: string): (focusInput: boolean) => ClearSearchResult {
@@ -860,6 +879,24 @@ suite('search page', () => {
 			renderDiffHtml(diffDocument, { nonce: 'test-nonce' }).includes("let highlightQuery = '';"),
 			'the diff page still declares the shared highlight global'
 		);
+	});
+
+	test('every visible meta fragment is highlighted, including context paths', () => {
+		const html = page();
+		const meta = compileMetaSpan(html, 'note');
+		const row = {
+			meta: [
+				{ cls: 'short', text: '"ContA"', title: 'ContA' },
+				{ cls: 'variant', text: '(VariantPreCompile)', title: 'VariantPreCompile' },
+				{ cls: 'annotation', text: '[Note] keep', title: '[Note] keep' },
+				{ cls: 'context', text: 'context A.Note', title: 'context A.Note' },
+			],
+		};
+		assert.deepStrictEqual(marksOf(meta(row)), ['Note', 'Note'], 'annotation and context path matches');
+		const context = compileMetaSpan(html, 'context');
+		assert.deepStrictEqual(marksOf(context({ meta: [{ cls: 'context', text: 'context A.B', title: '' }] })), [
+			'context',
+		]);
 	});
 
 	test('the search label and count are owned by Search', () => {

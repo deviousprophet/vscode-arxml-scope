@@ -114,11 +114,12 @@ that is not obvious from the code.
 - **Search runs on Enter through the chunked engine, never a synchronous full scan.** Typing only
   updates the field and the clear X; a changed query cancels the old run until Enter. `RowSearchEngine`
   scans 512 rows between clock checks with a 24 ms budget, a 120 ms debounce, a 150 ms progress
-  throttle and a generation token. The first streamed match is jumped to; completion preserves the
-  current row by id; later navigation only moves an index. Only rendered rows get `<mark>` elements.
-  All matches use the fixed `--match-bg` tier; the current match's row adds `data-search-current` for
-  `--match-hi`. Do not restore a synchronous `searchRows` page scan or theme find-match variables
-  that can be transparent.
+  throttle and a generation token. The haystack is the label, value and every visible meta fragment,
+  so annotation, variant, condition and context text is searchable. The first streamed match is
+  jumped to; completion preserves the current row by id; later navigation only moves an index. Only
+  rendered rows get `<mark>` elements. All matches use the fixed `--match-bg` tier; the current
+  match's row adds `data-search-current` for `--match-hi`. Do not restore a synchronous `searchRows`
+  page scan or theme find-match variables that can be transparent.
 - **Conditions row actions are icon-only.** Edit, Save and Cancel use the shared `.act-btn` primitive
   with pencil/check/X SVGs, `title` and `aria-label`; Remove is the trash icon. Save/Cancel are
   visible only while editing. Do not restore text Save/Cancel buttons.

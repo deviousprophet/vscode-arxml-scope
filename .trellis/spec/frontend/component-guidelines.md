@@ -92,26 +92,31 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
   and 150 ms progress throttling. `#search-busy` is the spinner while a run is active. Do not add a
   second query field, a separate find bar or a synchronous full-store scan.
 - **Search jumps; it never hides.** The engine scans the whole row store; collapse and any view state
-  never remove a candidate. The first streamed match is selected and scrolled into view; completion
+  never remove a candidate. The haystack is the label, value and every visible meta fragment (short
+  name, variant, context, condition and annotation), so a word the Document shows can be found.
+  The first streamed match is selected and scrolled into view; completion
   preserves the current row by id. Later Enter/Shift+Enter and the previous/next buttons only move
   the match index and jump — they never rescan. A jump expands ancestors, scrolls and selects the
   row but keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or hides while
   the typed text has not been executed.
 - **All matches are marked; the current match is stronger.** `appendHighlighted` wraps every
-  case-insensitive occurrence in `<mark>`. `buildNodeRow` sets `data-search-current="true"` on the
-  row that owns the current match. The page defines fixed dark-theme tiers
-  `--match-bg: rgba(234, 179, 8, 0.32)` and `--match-hi: rgba(234, 179, 8, 0.7)`; all marks use the
-  subtle tier and the current row uses the strong tier. Do not depend on
+  case-insensitive occurrence in `<mark>` in the label, value and every visible meta fragment
+  (short name, variant, context, condition and annotation). `buildNodeRow` sets
+  `data-search-current="true"` on the row that owns the current match. The page defines fixed
+  dark-theme tiers `--match-bg: rgba(234, 179, 8, 0.32)` and `--match-hi: rgba(234, 179, 8, 0.7)`;
+  all marks use the subtle tier and the current row uses the strong tier. Do not depend on
   `--vscode-editor-findMatch*`, which a theme may resolve to transparent. Clearing the search removes
   both marks. Do not add a second highlight implementation.
 - **Conditions actions follow the shared hierarchy.** Rows are data-backed (`data-name`,
   `data-value`, `data-auto`, `data-editing`). Edit, Save and Cancel are icon-only `.act-btn` actions:
   pencil, check and X with `title` + `aria-label`; Remove is the trash icon. Save/Cancel exist only in
-  edit mode and stay visible for the session; Edit/Remove keep the hover/focus affordance. Clear is
-  `.sb-btn-secondary`, Add is `.sb-btn-add`. Scanned constants (names referenced by the current
-  document) are read-only and have no Remove; only manual rows can be removed. Clear values empties
-  the committed `data-value` values and keeps the rows. The `unknown` badge is visible only for an
-  empty committed value outside edit mode. Do not put text labels back on Save/Cancel.
+  edit mode and stay visible for the session; Edit/Remove keep the hover/focus affordance. The
+  actions live in a fixed 100px `.condition-actions` column and the name/value text spans match the
+  input border/padding geometry, so the name, `=` and value columns do not jump when a row enters
+  edit mode. Clear is `.sb-btn-secondary`, Add is `.sb-btn-add`. Scanned constants (names referenced
+  by the current document) are read-only and have no Remove; only manual rows can be removed. Clear
+  values empties the committed `data-value` values and keeps the rows. The `unknown` badge is visible
+  only for an empty committed value outside edit mode. Do not put text labels back on Save/Cancel.
 - **`.value` is a direct child of `.row`.** `valueSpan` and tests depend on it. No input is inserted
   into `.value`; the details input is separate.
 - Document rows are a single flex line with `gap: 1ch`, no border and no fixed label column. Depth is

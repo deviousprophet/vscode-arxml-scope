@@ -12,6 +12,7 @@ import * as assert from 'assert';
 import { ContainerNode, EcucDocumentModel, ModuleNode, ParameterNode, ReferenceNode } from '../../core/ecuc/model';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { buildRows, parameterFormats, parameterType } from '../../editor/renderRows';
+import { searchRows } from '../../editor/treeQuery';
 import { fixtureText } from '../core/modelTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
@@ -224,14 +225,19 @@ suite('editor row model (design §2)', () => {
 		]);
 	});
 
-	test('design §2: haystacks are lower-cased label + short name + value', () => {
+	test('design §2: haystacks include the label, value and every visible meta fragment', () => {
 		const doc = fixtureRows();
-		const byLabel = (label: string) => doc.rows.find((row) => row.label === label)?.haystack;
-		assert.strictEqual(byLabel('PkgA.PkgB.ModDefs.ModX'), 'pkga.pkgb.moddefs.modx modx');
-		assert.strictEqual(byLabel('ContA'), 'conta conta');
+		const byLabel = (label: string) => doc.rows.find((row) => row.label === label)?.haystack ?? '';
+		assert.strictEqual(byLabel('PkgA.PkgB.ModDefs.ModX').startsWith('pkga.pkgb.moddefs.modx modx '), true);
+		assert.ok(byLabel('PkgA.PkgB.ModDefs.ModX').includes('module note'), 'annotations are searchable');
+		assert.ok(byLabel('PkgA.PkgB.ModDefs.ModX').includes('variantprecompile'), 'the variant is searchable');
+		assert.ok(byLabel('ContA').includes('container note'), 'container annotations are searchable');
 		assert.strictEqual(byLabel('IniValue'), 'inivalue 63');
 		assert.strictEqual(byLabel('Title'), 'title hello');
-		assert.strictEqual(byLabel('PeerRef'), 'peerref pkga.pkgb.modx.conta.contb');
+		assert.ok(byLabel('PeerIref').includes('pkga.pkgb.modx.conta.contb'));
+		assert.ok(byLabel('PeerIref').includes('context pkga.pkgb.modx.conta'), 'the reference context is searchable');
+		const hits = searchRows(doc.rows, 'module note').map((at) => doc.rows[at].label);
+		assert.deepStrictEqual(hits, ['PkgA.PkgB.ModDefs.ModX'], 'searching an annotation finds its row');
 	});
 
 	test('design §2: rows carry no display-only source position or digit width', () => {

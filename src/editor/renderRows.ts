@@ -250,6 +250,11 @@ function moduleRow(
 ): void {
 	const index = rows.length;
 	const condition = ownCondition(module, ctx);
+	const meta: MetaPart[] = [
+		shortPart(module.shortName),
+		...(module.variant ? [variantPart(module.variant)] : []),
+		...suffixParts(module, condition),
+	];
 	const row: EcucRow = {
 		id: ctx.index.idOf(module) ?? '',
 		kind: 'module',
@@ -263,12 +268,8 @@ function moduleRow(
 		shortName: module.shortName,
 		definitionRef: module.definitionRef,
 		title: module.definitionRef,
-		meta: [
-			shortPart(module.shortName),
-			...(module.variant ? [variantPart(module.variant)] : []),
-			...suffixParts(module, condition),
-		],
-		haystack: haystack({ label: dotted(module.definitionRef), shortName: module.shortName }),
+		meta,
+		haystack: haystack({ label: dotted(module.definitionRef), shortName: module.shortName, meta }),
 	};
 	const disabled = applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
@@ -293,6 +294,7 @@ function containerRow(
 ): void {
 	const at = rows.length;
 	const condition = ownCondition(container, ctx);
+	const meta: MetaPart[] = [shortPart(container.shortName), ...suffixParts(container, condition)];
 	const row: EcucRow = {
 		id: ctx.index.idOf(container) ?? '',
 		kind: 'container',
@@ -306,8 +308,12 @@ function containerRow(
 		shortName: container.shortName,
 		definitionRef: container.definitionRef,
 		title: container.definitionRef,
-		meta: [shortPart(container.shortName), ...suffixParts(container, condition)],
-		haystack: haystack({ label: lastShortName(container.definitionRef), shortName: container.shortName }),
+		meta,
+		haystack: haystack({
+			label: lastShortName(container.definitionRef),
+			shortName: container.shortName,
+			meta,
+		}),
 	};
 	const disabled = applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
@@ -351,6 +357,7 @@ function parameterRow(
 	const valueKind = parameter.numeric ? (/^(true|false)$/i.test(value) ? 'boolean' : 'numeric') : 'textual';
 	const type = parameterType(parameter.definitionDest, valueKind);
 	const condition = ownCondition(parameter, ctx);
+	const meta: MetaPart[] = suffixParts(parameter, condition);
 	const row: EcucRow = {
 		id: ctx.index.idOf(parameter) ?? '',
 		kind: 'parameter',
@@ -369,8 +376,8 @@ function parameterRow(
 		valueKind,
 		shownValue: shown,
 		title: parameter.definitionRef,
-		meta: suffixParts(parameter, condition),
-		haystack: haystack({ label: parameter.name, value }),
+		meta,
+		haystack: haystack({ label: parameter.name, value, meta }),
 	};
 	applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
@@ -390,6 +397,12 @@ function referenceRow(
 	const rawTarget = reference.targetRawPath ?? target;
 	const followable = rawTarget !== '' && resolvePath(ctx.pathIndex, rawTarget) !== undefined;
 	const condition = ownCondition(reference, ctx);
+	const meta: MetaPart[] = [
+		...(reference.instance && reference.contextPaths.length > 0
+			? [contextPart(reference.contextPaths)]
+			: []),
+		...suffixParts(reference, condition),
+	];
 	const row: EcucRow = {
 		id: ctx.index.idOf(reference) ?? '',
 		kind: 'reference',
@@ -409,13 +422,8 @@ function referenceRow(
 			? { contextPaths: reference.contextPaths.slice() }
 			: {}),
 		title: reference.definitionRef,
-		meta: [
-			...(reference.instance && reference.contextPaths.length > 0
-				? [contextPart(reference.contextPaths)]
-				: []),
-			...suffixParts(reference, condition),
-		],
-		haystack: haystack({ label: reference.name, value: target }),
+		meta,
+		haystack: haystack({ label: reference.name, value: target, meta }),
 	};
 	applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);

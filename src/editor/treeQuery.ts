@@ -20,11 +20,18 @@ export interface QueryFields {
 	label: string;
 	shortName?: string;
 	value?: string;
+	/** Visible meta fragments (short name, variant, context, condition, annotation). */
+	meta?: readonly { text: string }[];
 }
 
-/** Lower-cased search text: label, short-name and value, space separated. */
+/** Lower-cased search text: label, short-name, value and every visible meta fragment. */
 export function haystack(node: QueryFields): string {
-	return [node.label, node.shortName ?? '', node.value ?? '']
+	return [
+		node.label,
+		node.shortName ?? '',
+		node.value ?? '',
+		...(node.meta ? node.meta.map((part) => part.text) : []),
+	]
 		.filter((part) => part !== '')
 		.join(' ')
 		.toLowerCase();
@@ -156,6 +163,26 @@ export function flattenRows(rows: readonly TreeRow[], options: FlattenOptions = 
 		out.push({ type: 'brace-close', rowIndex: closed.rowIndex, level: closed.level });
 	}
 	return out;
+}
+
+/**
+ * The serialized matcher, with a stable page name.
+ *
+ * Bundling the editor and diff pages can rename one copy of `matchRanges` (for
+ * example to `matchRanges2`). `appendHighlighted` is serialized separately and
+ * always calls `matchRanges`, so the page gets a stable wrapper when the
+ * compiler renamed the implementation.
+ */
+export function matchRangesScript(): string {
+	const source = matchRanges.toString();
+	const name = matchRanges.name;
+	if (name === 'matchRanges') {
+		return source;
+	}
+	return `${source}
+function matchRanges(text, query) {
+	return ${name}(text, query);
+}`;
 }
 
 /**
