@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify the action hierarchy and ARIA inside the Conditions section."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify no writes, colour literals or duplicate action path."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify badge, auto/manual and save/cancel assertions fail when removed."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify drafts never persist and the committed dataset drives counts."}
+{"file": ".trellis/tasks/10-30-conditions-edit-flow/research/hex-scope-action-buttons.md", "reason": "Confirm the implementation follows the approved action hierarchy."}
+{"file": ".trellis/tasks/10-30-sidebar-control-parity/research/hex-scope-ui-reference.md", "reason": "Confirm the Conditions content uses the shared sidebar/section/button primitives."}

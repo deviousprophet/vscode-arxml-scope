@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify tabs/sections/sashes and details-field DOM remain accessible."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify no duplicate details renderer and no colour literals."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify layout state persistence and re-scan survival."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify allocation/keyboard/reset tests fail when the behavior is removed."}
+{"file": ".trellis/tasks/10-30-sidebar-control-parity/research/hex-scope-ui-reference.md", "reason": "Confirm full sidebar/section parity."}
