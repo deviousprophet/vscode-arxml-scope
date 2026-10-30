@@ -47,6 +47,8 @@ export interface RowCondition {
 	/** Missing symbols or the parse/type reason, when the result is unknown. */
 	reason?: string;
 	missing?: string[];
+	/** Identifiers referenced by this condition, in source order. */
+	symbols: string[];
 }
 
 /** One entity in DFS/display order. UI fields are values; no markup is carried. */
@@ -431,6 +433,7 @@ function ownCondition(node: Suffixes, ctx: BuildContext): RowCondition | undefin
 		state: result.state,
 		reason: result.error ?? missingText,
 		missing: result.missing,
+		symbols: result.symbols,
 	};
 }
 

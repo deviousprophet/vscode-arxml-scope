@@ -139,9 +139,11 @@ top/bottom spacers, zero the overscan, drop subtree collapse/filter-ancestor log
 generation guard, use `innerHTML` for row text, use an inline depth style, remove
 `aria-level`/posinset/setsize, remove focus restore, send full HTML on re-scan, use
 `#tree-window` as the offset, leak bracket guides outside their container, or leak the subtree tint
-to siblings; each must fail a test. Prefer the
-page's own functions over a grep-only assertion, and record which checks were observed in the real
-webview rather than unit-tested.
+to siblings; each must fail a test. For the Conditions panel, the mutation set is: drop the row
+`symbols`, treat an empty value as a known empty string, skip discovery after `setRows`, invert the
+`unknown` badge, make Clear values delete rows, or forget a removed discovered row; each must fail a
+test. Prefer the page's own functions over a grep-only assertion, and record which checks were
+observed in the real webview rather than unit-tested.
 
 ## A CSS rule is not a contrast measurement
 

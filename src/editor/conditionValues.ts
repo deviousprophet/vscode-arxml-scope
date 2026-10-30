@@ -47,6 +47,9 @@ export function isConditionName(name: string): boolean {
  * match.
  *
  * A name may start with `/` so a full `SYSC-REF` path can be pasted (PRD R3).
+ * An empty value keeps the entry in `entries` so the panel can show the discovered
+ * constant, but it is absent from `values`: the evaluator treats it as missing
+ * (unknown) rather than as the known empty string.
  */
 export function parseConditionEntries(input: unknown, limit = ENTRY_LIMIT): ParsedConditions {
 	const entries: ConditionEntry[] = [];
@@ -81,7 +84,11 @@ export function parseConditionEntries(input: unknown, limit = ENTRY_LIMIT): Pars
 			// Later duplicates replace the value but keep the first position, and the
 			// Map keeps its first insertion position for the same key.
 			entries[at] = { name, value };
-			values.set(name, parseConditionValue(value));
+			if (value === '') {
+				values.delete(name);
+			} else {
+				values.set(name, parseConditionValue(value));
+			}
 			continue;
 		}
 		if (entries.length >= cap) {
@@ -89,7 +96,9 @@ export function parseConditionEntries(input: unknown, limit = ENTRY_LIMIT): Pars
 		}
 		positions.set(name, entries.length);
 		entries.push({ name, value });
-		values.set(name, parseConditionValue(value));
+		if (value !== '') {
+			values.set(name, parseConditionValue(value));
+		}
 	}
 	return { entries, values, invalid };
 }

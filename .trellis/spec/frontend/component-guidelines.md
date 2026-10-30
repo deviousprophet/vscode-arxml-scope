@@ -61,8 +61,9 @@ selects and opens the details editor. Reference follow is the details **Jump to 
   removing that rule reintroduces a second X beside the custom button. `#filter-clear` starts
   `hidden` and is toggled by the page script.
 - **Conditions panel actions are buttons, not labels.** `Add value` uses the primary button tokens
-  (`--vscode-button-background` / `--vscode-button-foreground`) and `Clear all` the secondary tokens
-  with a real disabled state. The panel shows an empty-state action when it has no rows. Do not
+  (`--vscode-button-background` / `--vscode-button-foreground`) and `Clear values` the secondary tokens
+  with a real disabled state. `Clear values` empties every input and keeps the rows; only the per-row
+  Remove button deletes a row. The panel shows an empty-state action when it has no rows. Do not
   reuse the transparent `.tool` treatment for a primary action; hover-only affordances are not
   discoverable.
 - **`.value` is a direct child of `.row`.** The filter, `valueSpan` and tests depend on it. No input

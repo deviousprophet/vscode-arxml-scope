@@ -263,7 +263,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <div class="conditions-actions">
 <button id="conditions-add" class="tool primary" type="button" title="Add a condition value" aria-label="Add condition value"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg><span>Add value</span></button>
 <span class="grow"></span>
-<button id="conditions-clear" class="tool secondary danger" type="button" title="Remove every condition value" aria-label="Clear all condition values" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.5 8h5l.5-8M7 7v3.5M9 7v3.5"/></svg><span>Clear all</span></button>
+<button id="conditions-clear" class="tool secondary danger" type="button" title="Remove every entered condition value" aria-label="Clear all condition values" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.5 8h5l.5-8M7 7v3.5M9 7v3.5"/></svg><span>Clear values</span></button>
 </div>
 <div id="conditions-status" class="conditions-status" role="status" aria-live="polite"></div>
 </div>
@@ -690,6 +690,18 @@ body[data-view] {
 }
 .condition-value {
 	flex: 0 1 22ch;
+}
+.condition-state {
+	flex: none;
+	padding: 0 5px;
+	border: 1px dashed var(--vscode-descriptionForeground);
+	border-radius: 3px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+	line-height: 18px;
+}
+.condition-state[hidden] {
+	display: none;
 }
 .condition-name:focus,
 .condition-value:focus {
@@ -1481,6 +1493,10 @@ let filterIndex = { haystacks: [] };
 let filterDebouncer = createFilterDebouncer(120);
 let conditionDebouncer = createFilterDebouncer(300);
 let conditionsOpen = false;
+// Discovery remembers the identifiers it last saw and the rows the user removed.
+// A value-only re-push changes no condition, so it must not re-add a removed row;
+// a document change that changes the condition list clears the dismissal (PRD R6).
+let conditionDiscovery = { signature: undefined, dismissed: new Set() };
 let windowRange = [0, 0];
 let renderedDataVersion = -1;
 let dataVersion = 0;
@@ -1585,6 +1601,7 @@ function setRows(nextRows, nextSelectedId) {
 	selectedId = state.selectedId;
 	filterQuery = state.query;
 	indexRows();
+	ensureDiscoveredConditionRows();
 	if (focusId !== undefined && !rowById.has(focusId)) {
 		focusId = selectedId;
 	}
@@ -2221,6 +2238,11 @@ function conditionRowElement(entry) {
 	value.placeholder = 'value';
 	value.setAttribute('aria-label', 'Constant value');
 	value.value = entry && typeof entry.value === 'string' ? entry.value : '';
+	const state = document.createElement('span');
+	state.className = 'condition-state';
+	state.textContent = 'unknown';
+	state.title = 'No value yet: conditions using this constant stay unknown';
+	state.hidden = value.value.trim() === '';
 	const remove = document.createElement('button');
 	remove.type = 'button';
 	remove.className = 'tool condition-remove';
@@ -2230,8 +2252,84 @@ function conditionRowElement(entry) {
 	row.appendChild(name);
 	row.appendChild(equals);
 	row.appendChild(value);
+	row.appendChild(state);
 	row.appendChild(remove);
 	return row;
+}
+
+function updateConditionRowState(row) {
+	if (!row) {
+		return;
+	}
+	const value = row.querySelector('.condition-value');
+	const state = row.querySelector('.condition-state');
+	if (value && state) {
+		state.hidden = value.value.trim() === '';
+	}
+}
+
+function updateConditionRowStates() {
+	if (!conditionsList) {
+		return;
+	}
+	const list = conditionsList.querySelectorAll('.condition-row');
+	for (let at = 0; at < list.length; at++) {
+		updateConditionRowState(list[at]);
+	}
+}
+
+function discoveredConditionSymbols() {
+	const seen = new Set();
+	const out = [];
+	for (let at = 0; at < rows.length; at++) {
+		const condition = rows[at] ? rows[at].condition : undefined;
+		const symbols = condition && Array.isArray(condition.symbols) ? condition.symbols : [];
+		for (let symbol = 0; symbol < symbols.length; symbol++) {
+			const name = symbols[symbol];
+			if (typeof name === 'string' && name !== '' && !seen.has(name)) {
+				seen.add(name);
+				out.push(name);
+			}
+		}
+	}
+	return out;
+}
+
+function existingConditionNames() {
+	const names = new Set();
+	if (!conditionsList) {
+		return names;
+	}
+	const list = conditionsList.querySelectorAll('.condition-row');
+	for (let at = 0; at < list.length; at++) {
+		const name = list[at].querySelector('.condition-name');
+		if (name) {
+			names.add(name.value.trim());
+		}
+	}
+	return names;
+}
+
+function ensureDiscoveredConditionRows() {
+	if (!conditionsList) {
+		return;
+	}
+	const symbols = discoveredConditionSymbols();
+	const signature = JSON.stringify(symbols);
+	if (signature !== conditionDiscovery.signature) {
+		conditionDiscovery.signature = signature;
+		conditionDiscovery.dismissed = new Set();
+	}
+	const existing = existingConditionNames();
+	for (let at = 0; at < symbols.length; at++) {
+		if (existing.has(symbols[at]) || conditionDiscovery.dismissed.has(symbols[at])) {
+			continue;
+		}
+		existing.add(symbols[at]);
+		conditionsList.appendChild(conditionRowElement({ name: symbols[at], value: '' }));
+	}
+	updateConditionsChrome();
+	updateConditionRowStates();
 }
 
 function readConditionEntries() {
@@ -2266,7 +2364,18 @@ function initialConditionEntries() {
 }
 
 function updateConditionsChrome() {
-	const count = conditionsList ? conditionsList.querySelectorAll('.condition-row').length : 0;
+	let count = 0;
+	let missing = 0;
+	if (conditionsList) {
+		const list = conditionsList.querySelectorAll('.condition-row');
+		count = list.length;
+		for (let at = 0; at < list.length; at++) {
+			const value = list[at].querySelector('.condition-value');
+			if (!value || value.value.trim() === '') {
+				missing++;
+			}
+		}
+	}
 	if (conditionsEmpty) {
 		conditionsEmpty.hidden = count !== 0;
 	}
@@ -2274,7 +2383,8 @@ function updateConditionsChrome() {
 		conditionsClear.disabled = count === 0;
 	}
 	if (conditionsValuesCount) {
-		conditionsValuesCount.textContent = count + (count === 1 ? ' value' : ' values');
+		conditionsValuesCount.textContent =
+			count + (count === 1 ? ' constant' : ' constants') + (missing > 0 ? ' · ' + missing + ' missing' : '');
 		conditionsValuesCount.hidden = count === 0;
 	}
 }
@@ -2289,6 +2399,7 @@ function renderConditionEntries(entries) {
 		conditionsList.appendChild(conditionRowElement(list[at]));
 	}
 	updateConditionsChrome();
+	ensureDiscoveredConditionRows();
 }
 
 function sendConditions() {
@@ -2318,8 +2429,17 @@ function addConditionEntry() {
 }
 
 function removeConditionRow(row) {
-	if (row && row.parentNode) {
-		row.parentNode.removeChild(row);
+	if (row) {
+		const nameInput = row.querySelector('.condition-name');
+		const name = nameInput ? nameInput.value.trim() : '';
+		if (name !== '') {
+			// A removed constant stays removed across a value-only re-push; a document
+			// change that changes the condition list clears the dismissal (PRD R6).
+			conditionDiscovery.dismissed.add(name);
+		}
+		if (row.parentNode) {
+			row.parentNode.removeChild(row);
+		}
 	}
 	updateConditionsChrome();
 	sendConditions();
@@ -2327,7 +2447,14 @@ function removeConditionRow(row) {
 
 function clearConditionEntries() {
 	if (conditionsList) {
-		conditionsList.textContent = '';
+		const list = conditionsList.querySelectorAll('.condition-row');
+		for (let at = 0; at < list.length; at++) {
+			const value = list[at].querySelector('.condition-value');
+			if (value) {
+				value.value = '';
+			}
+			updateConditionRowState(list[at]);
+		}
 	}
 	updateConditionsChrome();
 	sendConditions();
@@ -2604,6 +2731,9 @@ if (conditionsPanel) {
 					? ''
 					: 'Invalid name: use a constant name or path (letters, digits, _ . - /).';
 			}
+		}
+		if (target && target.classList && target.classList.contains('condition-value')) {
+			updateConditionRowState(target.closest('.condition-row'));
 		}
 		scheduleConditions();
 	});

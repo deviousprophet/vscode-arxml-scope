@@ -9,6 +9,7 @@ import * as assert from 'assert';
 
 import { ConditionValue, evaluateSyscond } from '../../core/ecuc/syscond';
 import { scanEcucValues } from '../../core/ecuc/scanner';
+import { parseConditionEntries } from '../../editor/conditionValues';
 import { EcucRow, buildRows } from '../../editor/renderRows';
 import { fixtureText } from '../core/modelTestUtils';
 
@@ -42,6 +43,12 @@ suite('condition rows (design §4)', () => {
 		const sibling = rowNamed(all, 'Sibling');
 		assert.strictEqual(sibling.disabled, undefined, 'an unconditioned sibling stays normal');
 		assert.strictEqual(rowNamed(all, 'ContA').disabled, undefined, 'the parent container stays normal');
+		assert.deepStrictEqual(selfOff.condition?.symbols, ['CANIPCORETYPE_SC'], 'the evaluator symbols travel on the row');
+		assert.deepStrictEqual(
+			rowNamed(rows({}), 'LiteralOff').condition?.symbols,
+			[],
+			'a literal-only condition has no symbols'
+		);
 	});
 
 	test('AC1: the same condition is true (and not disabled) with 0', () => {
@@ -139,6 +146,28 @@ suite('condition rows (design §4)', () => {
 		for (const label of ['SelfOff', 'ContB', 'RefOff', 'Pkg.ModDefs.ModCond']) {
 			assert.notStrictEqual(rowNamed(all, label).disabled, true, `${label} is not dimmed by an unknown`);
 		}
+	});
+
+	test('AC2: an empty discovered value is unknown and never disables a row', () => {
+		const parsed = parseConditionEntries([
+			{ name: 'CANIPCORETYPE_SC', value: '' },
+			{ name: 'MISSING_SC', value: '' },
+		]);
+		assert.deepStrictEqual(
+			parsed.entries,
+			[
+				{ name: 'CANIPCORETYPE_SC', value: '' },
+				{ name: 'MISSING_SC', value: '' },
+			],
+			'the discovered entries stay visible'
+		);
+		const all = buildRows(scanEcucValues(fixtureText(FIXTURE)), { conditions: parsed.values }).rows;
+		for (const label of ['SelfOff', 'ContB', 'RefOff', 'Pkg.ModDefs.ModCond', 'Missing']) {
+			const row = rowNamed(all, label);
+			assert.strictEqual(row.condition?.state, 'unknown', `${label} is unknown without a value`);
+			assert.notStrictEqual(row.disabled, true, `${label} is not dimmed`);
+		}
+		assert.strictEqual(rowNamed(all, 'LiteralOff').disabled, true, 'a literal condition still evaluates');
 	});
 
 	test('AC11: with no values the symbolic conditions are unknown and nothing else changes', () => {

@@ -108,6 +108,32 @@ suite('condition values (design §3)', () => {
 		assert.strictEqual(parsed.values.get('A_SC'), 3);
 	});
 
+	test('an empty value is unknown and stays visible as an entry', () => {
+		const parsed = parseConditionEntries([
+			{ name: 'A_SC', value: '' },
+			{ name: 'B_SC', value: '2' },
+		]);
+		assert.deepStrictEqual(parsed.entries, [
+			{ name: 'A_SC', value: '' },
+			{ name: 'B_SC', value: '2' },
+		]);
+		assert.strictEqual(parsed.values.has('A_SC'), false, 'the empty value is not a known string');
+		assert.strictEqual(parsed.values.get('B_SC'), 2);
+
+		const cleared = parseConditionEntries([
+			{ name: 'A_SC', value: '1' },
+			{ name: 'A_SC', value: '' },
+		]);
+		assert.deepStrictEqual(cleared.entries, [{ name: 'A_SC', value: '' }], 'the entry stays for the table');
+		assert.strictEqual(cleared.values.has('A_SC'), false, 'a later empty duplicate clears the value');
+
+		const restored = parseConditionEntries([
+			{ name: 'A_SC', value: '' },
+			{ name: 'A_SC', value: '3' },
+		]);
+		assert.strictEqual(restored.values.get('A_SC'), 3, 'a later value restores it');
+	});
+
 	test('entries and values are capped at 200, values at 200 characters', () => {
 		const many = Array.from({ length: 205 }, (_, at) => ({ name: `SC_${at}`, value: String(at) }));
 		const parsed = parseConditionEntries(many);

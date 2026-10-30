@@ -14,7 +14,7 @@ import { scanEcucValues } from '../../core/ecuc/scanner';
 import { ConditionEntry, ConditionValueStore, isConditionName } from '../../editor/conditionValues';
 import { EcucEditorProvider } from '../../editor/ecucEditorProvider';
 import { encodeJsonForScript, inspectorFields, renderHtml } from '../../editor/renderHtml';
-import { buildRows } from '../../editor/renderRows';
+import { EcucRow, buildRows } from '../../editor/renderRows';
 import { fixtureText } from '../core/modelTestUtils';
 import { fixtureUri } from './editorTestUtils';
 import { evaluateFunction, functionSource } from './scriptTestUtils';
@@ -106,10 +106,8 @@ suite('conditions panel (design §6)', () => {
 		assert.ok(html.includes('id="conditions-empty"'));
 		assert.ok(html.includes('class="conditions-actions"'));
 		assert.ok(/id="conditions-add" class="tool primary"/.test(html), 'Add is a primary action');
-		assert.ok(
-			/id="conditions-clear" class="tool secondary danger"[^>]*disabled/.test(html),
-			'Clear starts disabled and is visibly a secondary action'
-		);
+		assert.ok(/id="conditions-clear" class="tool secondary danger"[^>]*disabled/.test(html), 'Clear starts disabled and is visibly a secondary action');
+		assert.ok(html.includes('<span>Clear values</span>'), 'Clear is labelled by what it does');
 		assert.ok(html.includes('role="status" aria-live="polite"'), 'the panel status is announced');
 
 		const noticeAt = html.indexOf('id="notice"');
@@ -121,18 +119,27 @@ suite('conditions panel (design §6)', () => {
 		assert.ok(html.indexOf('id="ecuc-conditions"') > treeAt, 'the entries are data, not shell markup');
 	});
 
-	test('the actions are visibly styled and the empty state tracks the row count', () => {
+	test('the actions are visibly styled and the header tracks rows and missing values', () => {
 		const html = page();
 		const style = styleOf(html);
 		assert.ok(/\.tool\.primary\s*\{(?=[^}]*--vscode-button-background)(?=[^}]*--vscode-button-foreground)/.test(style));
 		assert.ok(/\.tool\.secondary\s*\{(?=[^}]*--vscode-button-secondaryBackground)(?=[^}]*--vscode-button-border)/.test(style));
 		assert.ok(/\.tool\[disabled\]\s*\{[^}]*opacity/.test(style));
 		assert.ok(/\.conditions-actions\s*\{[^}]*border-top/.test(style));
+		assert.ok(/\.condition-state\s*\{[^}]*--vscode-descriptionForeground/.test(style));
+		const stateCss = /\.condition-state \{[^}]*\}/.exec(style);
+		assert.ok(stateCss && !/#[0-9a-fA-F]{3,8}\b/.test(stateCss[0]), 'the badge uses theme colours only');
 
 		const empty = { hidden: true };
 		const clear = { disabled: false };
 		const values = { textContent: '', hidden: true };
-		const list = { querySelectorAll: () => [1, 2] };
+		const row = (value: string) => ({
+			querySelector(selector: string) {
+				return selector === '.condition-value' ? { value } : null;
+			},
+		});
+		let rows = [row(''), row('')];
+		const list = { querySelectorAll: () => rows };
 		const chrome = compileWith<{ updateConditionsChrome(): void }>(
 			html,
 			['updateConditionsChrome'],
@@ -141,15 +148,39 @@ suite('conditions panel (design §6)', () => {
 		);
 		chrome.updateConditionsChrome();
 		assert.strictEqual(empty.hidden, true, 'rows hide the empty state');
-		assert.strictEqual(clear.disabled, false, 'rows enable Clear all');
-		assert.strictEqual(values.textContent, '2 values');
+		assert.strictEqual(clear.disabled, false, 'rows enable Clear values');
+		assert.strictEqual(values.textContent, '2 constants · 2 missing');
 		assert.strictEqual(values.hidden, false);
+
+		rows = [row('1'), row('')];
+		chrome.updateConditionsChrome();
+		assert.strictEqual(values.textContent, '2 constants · 1 missing', 'a typed value is no longer missing');
 
 		list.querySelectorAll = () => [];
 		chrome.updateConditionsChrome();
 		assert.strictEqual(empty.hidden, false, 'no rows show the empty state');
-		assert.strictEqual(clear.disabled, true, 'no rows disable Clear all');
-		assert.strictEqual(values.hidden, true, 'no rows hide the value count');
+		assert.strictEqual(clear.disabled, true, 'no rows disable Clear values');
+		assert.strictEqual(values.hidden, true, 'no rows hide the constant count');
+	});
+
+	test('the unknown badge tracks whether a row has a value', () => {
+		const html = page();
+		const state = { hidden: true };
+		const value = { value: '' };
+		const row = {
+			querySelector(selector: string) {
+				return selector === '.condition-value' ? value : selector === '.condition-state' ? state : null;
+			},
+		};
+		const update = evaluateFunction<(row: unknown) => void>(html, 'updateConditionRowState');
+		update(row);
+		assert.strictEqual(state.hidden, true, 'an empty value shows unknown');
+		value.value = '1';
+		update(row);
+		assert.strictEqual(state.hidden, false, 'a typed value hides unknown');
+		value.value = '  ';
+		update(row);
+		assert.strictEqual(state.hidden, true, 'a blank value is still unknown');
 	});
 
 	test('the embedded entries are escaped and parsed back exactly', () => {
@@ -181,15 +212,25 @@ suite('conditions panel (design §6)', () => {
 		assert.ok(create.includes("name.className = 'condition-name'"));
 		assert.ok(create.includes("value.className = 'condition-value'"));
 		assert.ok(create.includes("remove.className = 'tool condition-remove'"));
+		assert.ok(create.includes("state.className = 'condition-state'"));
+		assert.ok(create.includes("state.textContent = 'unknown'"));
+		assert.ok(create.includes("state.hidden = value.value.trim() === ''"), 'a stored empty value starts unknown');
 		assert.ok(!create.includes('innerHTML'), 'entries are never markup');
 		assert.ok(!functionSource(html, 'renderConditionEntries').includes('innerHTML'));
 		assert.ok(functionSource(html, 'renderConditionEntries').includes('appendChild(conditionRowElement'));
 		assert.ok(functionSource(html, 'renderConditionEntries').includes('updateConditionsChrome()'), 'the shell tracks the rows');
+		assert.ok(
+			functionSource(html, 'renderConditionEntries').includes('ensureDiscoveredConditionRows()'),
+			'a host entries refresh re-discovers the document constants'
+		);
 		assert.ok(functionSource(html, 'addConditionEntry').includes('nameInput.focus()'), 'Add focuses the name');
 		assert.ok(functionSource(html, 'addConditionEntry').includes('updateConditionsChrome()'));
 		assert.ok(functionSource(html, 'removeConditionRow').includes('updateConditionsChrome()'));
-		assert.ok(functionSource(html, 'clearConditionEntries').includes("conditionsList.textContent = ''"));
-		assert.ok(functionSource(html, 'clearConditionEntries').includes('updateConditionsChrome()'));
+		const clear = functionSource(html, 'clearConditionEntries');
+		assert.ok(clear.includes(".condition-value"), 'Clear values targets the value inputs');
+		assert.ok(clear.includes("value.value = ''"), 'and empties them');
+		assert.ok(!clear.includes("conditionsList.textContent = ''"), 'without removing the rows');
+		assert.ok(clear.includes('updateConditionsChrome()'));
 		assert.ok(!html.includes('innerHTML'), 'the page has no innerHTML path at all');
 	});
 
@@ -232,20 +273,194 @@ suite('conditions panel (design §6)', () => {
 			appendChild: (item: unknown) => appended.push(item),
 			querySelectorAll: () => appended,
 		};
-		const empty = { hidden: false };
-		const clear = { disabled: false };
-		const values = { textContent: '', hidden: true };
 		const row = { name: 'A_SC' };
 		const compiled = compileWith<{ applyConditionsMessage(message: unknown): boolean }>(
 			html,
-			['renderConditionEntries', 'applyConditionsMessage', 'updateConditionsChrome'],
-			['conditionsList', 'conditionRowElement', 'conditionsEmpty', 'conditionsClear', 'conditionsValuesCount'],
-			[list, () => row, empty, clear, values]
+			['renderConditionEntries', 'applyConditionsMessage'],
+			['conditionsList', 'conditionRowElement', 'updateConditionsChrome', 'ensureDiscoveredConditionRows'],
+			[list, () => row, () => {}, () => {}]
 		);
 		assert.strictEqual(compiled.applyConditionsMessage({ type: 'model' }), false, 'other messages are not handled');
 		assert.strictEqual(compiled.applyConditionsMessage({ type: 'conditions', entries: [{}] }), true);
 		assert.strictEqual(list.textContent, '', 'the old rows are cleared');
 		assert.deepStrictEqual(appended, [row], 'the host entries are rendered with the page builder');
+	});
+
+	test('discovery adds only missing symbols and sends no message', () => {
+		const html = page();
+		interface FakeRow {
+			querySelector(selector: string): { value: string } | null;
+		}
+		const appended: FakeRow[] = [];
+		const existing: FakeRow[] = [
+			{ querySelector: (selector: string) => (selector === '.condition-name' ? { value: 'A_SC' } : null) },
+		];
+		const list = {
+			querySelectorAll: (): FakeRow[] => existing.concat(appended),
+			appendChild: (row: FakeRow) => appended.push(row),
+		};
+		const rows = [
+			{ condition: { symbols: ['A_SC', 'B_SC'] } },
+			{ condition: { symbols: ['B_SC', 'C_SC'] } },
+			{ condition: {} },
+			{},
+		];
+		const created: Array<{ name: string; value: string }> = [];
+		const discovery = { signature: undefined, dismissed: new Set<string>() };
+		const compiled = compileWith<{ ensureDiscoveredConditionRows(): void }>(
+			html,
+			['discoveredConditionSymbols', 'existingConditionNames', 'ensureDiscoveredConditionRows'],
+			[
+				'rows',
+				'conditionsList',
+				'conditionRowElement',
+				'updateConditionsChrome',
+				'updateConditionRowStates',
+				'conditionDiscovery',
+			],
+			[
+				rows,
+				list,
+				(entry: { name: string; value: string }): FakeRow => {
+					created.push(entry);
+					return { querySelector: () => null };
+				},
+				() => {},
+				() => {},
+				discovery,
+			]
+		);
+		compiled.ensureDiscoveredConditionRows();
+		assert.deepStrictEqual(created, [
+			{ name: 'B_SC', value: '' },
+			{ name: 'C_SC', value: '' },
+		]);
+		assert.ok(
+			!functionSource(html, 'ensureDiscoveredConditionRows').includes('postMessage'),
+			'discovery changes no value and sends nothing'
+		);
+	});
+
+	test('a real document yields each discovered constant once, in document order', () => {
+		const html = page();
+		const discovered = (scanned: EcucRow[]): string[] =>
+			compileWith<{ discoveredConditionSymbols(): string[] }>(
+				html,
+				['discoveredConditionSymbols'],
+				['rows'],
+				[scanned]
+			).discoveredConditionSymbols();
+		assert.deepStrictEqual(
+			discovered(buildRows(model(), { sort: 'declaration' }).rows),
+			['CANIPCORETYPE_SC', 'MISSING_SC', 'A'],
+			'module, container, parameter and reference conditions all contribute; duplicates collapse and literals add nothing'
+		);
+		assert.deepStrictEqual(
+			discovered(buildRows(model()).rows),
+			['CANIPCORETYPE_SC', 'A', 'MISSING_SC'],
+			'the page follows the row order the host sends'
+		);
+	});
+
+	test('a removed discovered row survives a value re-push and returns only on a condition change', () => {
+		const html = page();
+		interface FakeRow {
+			querySelector(selector: string): { value: string } | null;
+		}
+		const appended: FakeRow[] = [];
+		const list = {
+			querySelectorAll: (): FakeRow[] => appended,
+			appendChild: (row: FakeRow) => appended.push(row),
+		};
+		const rows = [{ condition: { symbols: ['A_SC', 'B_SC'] } }];
+		const created: string[] = [];
+		const discovery = {
+			signature: JSON.stringify(['A_SC', 'B_SC']),
+			dismissed: new Set<string>(['A_SC']),
+		};
+		const compiled = compileWith<{ ensureDiscoveredConditionRows(): void }>(
+			html,
+			['discoveredConditionSymbols', 'existingConditionNames', 'ensureDiscoveredConditionRows'],
+			[
+				'rows',
+				'conditionsList',
+				'conditionRowElement',
+				'updateConditionsChrome',
+				'updateConditionRowStates',
+				'conditionDiscovery',
+			],
+			[
+				rows,
+				list,
+				(entry: { name: string }): FakeRow => {
+					created.push(entry.name);
+					return {
+						querySelector: (selector: string) => (selector === '.condition-name' ? { value: entry.name } : null),
+					};
+				},
+				() => {},
+				() => {},
+				discovery,
+			]
+		);
+		compiled.ensureDiscoveredConditionRows();
+		assert.deepStrictEqual(created, ['B_SC'], 'the dismissed constant is not re-added by a model re-push');
+
+		created.length = 0;
+		rows[0] = { condition: { symbols: ['A_SC', 'B_SC', 'C_SC'] } };
+		compiled.ensureDiscoveredConditionRows();
+		assert.deepStrictEqual(created, ['A_SC', 'C_SC'], 'a changed condition list clears the dismissal');
+	});
+
+	test('removing a row dismisses its constant and still removes it immediately', () => {
+		const html = page();
+		const discovery = { signature: '[]', dismissed: new Set<string>() };
+		let removed = 0;
+		const row = {
+			parentNode: { removeChild: () => { removed++; } },
+			querySelector: (selector: string) => (selector === '.condition-name' ? { value: ' A_SC ' } : null),
+		};
+		const compiled = compileWith<{ removeConditionRow(row: unknown): void }>(
+			html,
+			['removeConditionRow'],
+			['conditionDiscovery', 'updateConditionsChrome', 'sendConditions'],
+			[discovery, () => {}, () => {}]
+		);
+		compiled.removeConditionRow(row);
+		assert.ok(discovery.dismissed.has('A_SC'), 'the removed constant is remembered');
+		assert.strictEqual(removed, 1, 'the row is removed from the panel');
+	});
+
+	test('a model re-push runs discovery after the new row store is indexed', () => {
+		const html = page();
+		const setRows = functionSource(html, 'setRows');
+		const indexAt = setRows.indexOf('indexRows()');
+		const discoverAt = setRows.indexOf('ensureDiscoveredConditionRows()');
+		assert.ok(indexAt >= 0, 'setRows rebuilds the row index');
+		assert.ok(discoverAt > indexAt, 'a document change discovers from the new rows');
+	});
+
+	test('Clear values empties the rows without removing them', () => {
+		const html = page();
+		const value = { value: '1' };
+		const state = { hidden: false };
+		const row = {
+			querySelector: (selector: string) =>
+				selector === '.condition-value' ? value : selector === '.condition-state' ? state : null,
+		};
+		const list = { textContent: 'rows', querySelectorAll: () => [row] };
+		let sent = 0;
+		const compiled = compileWith<{ clearConditionEntries(): void }>(
+			html,
+			['updateConditionRowState', 'clearConditionEntries'],
+			['conditionsList', 'updateConditionsChrome', 'sendConditions'],
+			[list, () => {}, () => { sent++; }]
+		);
+		compiled.clearConditionEntries();
+		assert.strictEqual(value.value, '', 'the value is emptied');
+		assert.strictEqual(state.hidden, true, 'the unknown badge returns');
+		assert.strictEqual(list.textContent, 'rows', 'the rows stay in place');
+		assert.strictEqual(sent, 1, 'the empty values are sent to the host');
 	});
 
 	test('typing is debounced and the message carries only the raw entries', () => {

@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, changes-only filtering, previous/next navigation, reveal-in-source and live refresh as either file is edited
-- A `Conditions` panel in the ECUC editor for entering SW system-constant values per workspace, with rows whose `SW-SYSCOND` evaluates false dimmed and unresolved conditions left active
+- A `Conditions` panel in the ECUC editor that lists every `SW-SYSCOND` constant in the open document with an `unknown` state until a value is entered; values are stored per workspace, false conditions dim their rows, and unresolved conditions stay active
 
 ### Changed
 

@@ -85,6 +85,13 @@ a conditions message re-pushes rows instead of reloading the page. The embedded 
 first-paint copy only: the host answers the page's `ready` with the current entries, so a webview
 reload cannot show (and then save) a stale list.
 
+The panel discovers constants from `RowCondition.symbols` on every model push: unique names in the
+row order the host sends, appended only when no row already shows them. Discovery never rewrites an
+input and never posts a message, so a typed draft survives a re-scan. An empty entry stays visible
+in the table but is absent from the evaluation map, so a condition that uses it is `unknown` and
+never disables a row. A discovered row the user removes stays removed across value-only re-pushes;
+a condition change clears that local dismissal (it is not persisted).
+
 ## No derived artefacts
 
 Nothing is written beside the user's file. The only write is the text of the element the user
