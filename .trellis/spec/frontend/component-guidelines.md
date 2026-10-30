@@ -86,13 +86,17 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
 - **Search is the only query control and runs on Enter.** `#search-input` stays `type="search"` for
   its searchbox role; Chromium's native cancel/decoration pseudo-elements are suppressed so the one
   custom `#search-clear` X is the only clear control. Typing only updates the field and the clear X;
-  it never runs, marks, scrolls or jumps. Enter executes a changed query from the selection, and a
-  second Enter cycles; Shift+Enter goes backwards. Escape clears and returns focus to the tree.
-  Do not add a second query field or a separate find bar.
-- **Search jumps; it never hides.** `searchRows(rows, query)` scans the whole row store; collapse and
-  any view state never remove a candidate. A jump expands ancestors, scrolls and selects the row but
-  keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or hides while the typed
-  text has not been executed.
+  it never runs, marks, scrolls or jumps. Enter executes a changed query, and a second Enter cycles;
+  Shift+Enter goes backwards. Escape clears and returns focus to the tree. The page uses a chunked
+  `RowSearchEngine` with a 120 ms debounce, 24 ms time slices, a 512-row batch, a generation token
+  and 150 ms progress throttling. `#search-busy` is the spinner while a run is active. Do not add a
+  second query field, a separate find bar or a synchronous full-store scan.
+- **Search jumps; it never hides.** The engine scans the whole row store; collapse and any view state
+  never remove a candidate. The first streamed match is selected and scrolled into view; completion
+  preserves the current row by id. Later Enter/Shift+Enter and the previous/next buttons only move
+  the match index and jump — they never rescan. A jump expands ancestors, scrolls and selects the
+  row but keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or hides while
+  the typed text has not been executed.
 - **All matches are marked; the current match is stronger.** `appendHighlighted` wraps every
   case-insensitive occurrence in `<mark>`. `buildNodeRow` sets `data-search-current="true"` on the
   row that owns the current match. The page defines fixed dark-theme tiers

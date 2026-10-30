@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - A right-side sidebar with **Details** and **Conditions** tabs, resizable and collapsible sections, and persisted layout
-- A **Search** field that scans the whole tree when you press Enter, marks every match in yellow, gives the current match a stronger highlight, and supports wrapped previous/next navigation
+- A **Search** field that scans the whole tree when you press Enter with a chunked, cancellable engine, streams the count and first match, marks every match in yellow, gives the current match a stronger highlight, and supports instant wrapped previous/next navigation
 - A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, changes-only filtering, previous/next navigation, reveal-in-source and live refresh as either file is edited
 - A `Conditions` panel that lists every `SW-SYSCOND` constant in the open document with an `unknown` state until a value is entered; values are stored per workspace, false conditions dim their rows, and unresolved conditions stay active
 

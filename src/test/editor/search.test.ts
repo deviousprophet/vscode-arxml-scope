@@ -95,14 +95,13 @@ suite('search helpers', () => {
 		assert.strictEqual(stepMatch([10, 20, 30], 99, -1), 2);
 	});
 
-	test('the page serializes the same helpers', () => {
+	test('the page serializes the chunked engine and the step helper', () => {
 		const html = page();
-		const inlinedSearch = evaluateFunction<typeof searchRows>(html, 'searchRows');
+		assert.ok(html.includes('class RowSearchEngine'), 'the chunked engine is in the page');
+		assert.ok(html.includes('SEARCH_DEBOUNCE_MS = 120'));
+		assert.ok(html.includes('SEARCH_CHUNK_BUDGET_MS = 24'));
 		const inlinedStep = evaluateFunction<typeof stepMatch>(html, 'stepMatch');
 		const inlinedRanges = evaluateFunction<typeof matchRanges>(html, 'matchRanges');
-		for (const query of ['', '  ', 'inivalue', 'CONT', 'nope']) {
-			assert.deepStrictEqual(inlinedSearch(ROWS, query), searchRows(ROWS, query), query);
-		}
 		for (const current of [-1, 0, 1, 2, 5]) {
 			assert.strictEqual(inlinedStep([10, 20, 30], current, 1), stepMatch([10, 20, 30], current, 1));
 			assert.strictEqual(inlinedStep([10, 20, 30], current, -1), stepMatch([10, 20, 30], current, -1));
@@ -143,7 +142,9 @@ function compileSearchUi(
 		'searchNext',
 		'searchCount',
 		'searchInput',
-		`${functionSource(html, 'renderSearchUi')}
+		'searchBusy',
+		`let searchRunning = false;
+		${functionSource(html, 'renderSearchUi')}
 		return function (query, matches, current, clear, prev, next, count) {
 			searchQuery = query;
 			searchMatches = matches;
@@ -153,76 +154,112 @@ function compileSearchUi(
 			searchNext = next;
 			searchCount = count;
 			searchInput.value = query;
+			searchBusy.hidden = true;
 			renderSearchUi();
 		};`
-	)({}, [], -1, null, null, null, null, { value: '' }) as never;
+	)({}, [], -1, null, null, null, null, { value: '' }, { hidden: true }) as never;
 }
 
-interface RefreshState {
-	rows: TreeRow[];
-	rowIndexById: Map<string, number>;
-	searchQuery: string;
-	searchMatches: number[];
-	searchIndex: number;
-	selectedId?: string;
-	highlightQuery: string;
+interface StartSearchResult {
+	run(query: string, previousId?: string, immediate?: boolean): void;
+	progress(matches: number[]): void;
+	complete(matches: number[]): void;
+	state(): {
+		query: string;
+		matches: number[];
+		index: number;
+		running: boolean;
+		jumps: number[];
+		searched: string;
+		immediate: boolean;
+		cleared: number;
+		ui: number;
+		windows: number;
+	};
 }
 
-interface RefreshHarness {
-	run(startAtSelection: boolean, previousId?: string): void;
-	reindex(nextRows: TreeRow[]): void;
-	state(): { matches: number[]; index: number; highlight: string };
-}
-
-function compileRefresh(html: string, initial: RefreshState): RefreshHarness {
-	const source = ['searchCandidates', 'firstMatchAtOrAfterSelection', 'refreshSearch']
-		.map((name) => functionSource(html, name))
-		.join('\n');
-	return new Function(
-		'searchRows',
-		'renderSearchUi',
-		'renderWindow',
-		'initial',
+function compileStartSearch(html: string, rows: TreeRow[]): StartSearchResult {
+	const state = {
+		jumps: [] as number[],
+		running: false,
+		searched: '',
+		immediate: false,
+		cleared: 0,
+		ui: 0,
+		windows: 0,
+		handlers: null as {
+			onProgressUpdate?(matches: number[]): void;
+			onComplete(matches: number[]): void;
+		} | null,
+	};
+	const rowIndexById = new Map(rows.map((row, at) => [row.id, at]));
+	const searchEngine = {
+		clear: () => {
+			state.cleared++;
+		},
+		search: (
+			_nextRows: readonly TreeRow[],
+			query: string,
+			nextHandlers: { onProgressUpdate?(matches: number[]): void; onComplete(matches: number[]): void },
+			immediate: boolean
+		) => {
+			state.searched = query;
+			state.immediate = immediate === true;
+			state.handlers = nextHandlers;
+		},
+	};
+	const result = new Function(
+		'state',
+		'rows',
+		'rowIndexById',
+		'searchEngine',
 		`
-		let rows = initial.rows;
-		let rowIndexById = initial.rowIndexById;
-		let searchQuery = initial.searchQuery;
-		let searchMatches = initial.searchMatches;
-		let searchIndex = initial.searchIndex;
-		let selectedId = initial.selectedId;
-		let highlightQuery = initial.highlightQuery;
-		${source}
+		let searchQuery = '';
+		let searchMatches = [];
+		let searchIndex = -1;
+		let highlightQuery = '';
+		let searchFirstJumpDone = false;
+		function resetSearchResults() {
+			searchQuery = '';
+			searchMatches = [];
+			searchIndex = -1;
+			highlightQuery = '';
+			searchFirstJumpDone = false;
+			state.running = false;
+		}
+		function setSearchBusy(busy) { state.running = busy === true; }
+		function renderSearchUi() { state.ui++; }
+		function renderWindow() { state.windows++; }
+		function currentMatchId() {
+			const rowIndex = searchMatches[searchIndex];
+			const row = rowIndex === undefined ? undefined : rows[rowIndex];
+			return row ? row.id : undefined;
+		}
+		${functionSource(html, 'searchIndexOfId')}
+		function jumpToSearchMatch(index) { state.jumps.push(index); }
+		${functionSource(html, 'startSearch')}
 		return {
-			run: refreshSearch,
-			reindex: function (nextRows) {
-				rows = nextRows;
-				rowIndexById = new Map(nextRows.map(function (row, at) { return [row.id, at]; }));
-			},
+			run: startSearch,
+			progress: function (matches) { state.handlers.onProgressUpdate(matches); },
+			complete: function (matches) { state.handlers.onComplete(matches); },
 			state: function () {
-				return { matches: searchMatches, index: searchIndex, highlight: highlightQuery };
+				return {
+					query: searchQuery,
+					matches: searchMatches,
+					index: searchIndex,
+					running: state.running,
+					jumps: state.jumps.slice(),
+					searched: state.searched,
+					immediate: state.immediate,
+					cleared: state.cleared,
+					ui: state.ui,
+					windows: state.windows
+				};
 			}
 		};
 	`
-	)(searchRows, function () {}, function () {}, initial) as never;
-}
-
-function refreshState(overrides: Partial<RefreshState> = {}): RefreshState {
-	const rows: TreeRow[] = [
-		{ id: 'r0', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'alpha' },
-		{ id: 'r1', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'beta' },
-		{ id: 'r2', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'alpine' },
-		{ id: 'r3', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'gamma' },
-		{ id: 'r4', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'delta' },
-	];
-	return {
-		rows,
-		rowIndexById: new Map(rows.map((row, at) => [row.id, at])),
-		searchQuery: 'alp',
-		searchMatches: [],
-		searchIndex: -1,
-		highlightQuery: '',
-		...overrides,
-	};
+	)(state, rows, rowIndexById, searchEngine) as StartSearchResult;
+	return result;
 }
 
 interface JumpRecord {
@@ -375,48 +412,37 @@ interface ClearSearchResult {
 
 interface ExecuteSearchState {
 	query: string;
-	refresh: number;
-	jump: number;
+	start: number;
+	cycle: number;
 	reset: number;
-	render: number;
 }
 
-function compileExecuteSearch(html: string, input: string): {
-	run(): ExecuteSearchState;
+function compileExecuteSearch(
+	html: string,
+	input: string,
+	initialQuery = ''
+): {
+	run(direction?: number): ExecuteSearchState;
 } {
-	const state = { refresh: 0, jump: 0, reset: 0, render: 0 };
+	const state = { start: 0, cycle: 0, reset: 0 };
 	const factory = new Function(
 		'state',
 		'input',
+		'initialQuery',
 		`
-		let searchQuery = '';
-		let searchMatches = [];
-		let searchIndex = -1;
-		let highlightQuery = '';
+		let searchQuery = initialQuery;
 		const searchInput = { value: input };
-		function refreshSearch() {
-			state.refresh++;
-			searchMatches = input.indexOf('nomatch') >= 0 ? [] : [0, 2];
-			searchIndex = searchMatches.length > 0 ? 1 : -1;
-			highlightQuery = searchQuery;
-		}
-		function jumpToSearchMatch(index) { state.jump++; state.jumpIndex = index; }
-		function renderWindow() { state.render++; }
-		function resetSearchResults() {
-			state.reset++;
-			searchQuery = '';
-			searchMatches = [];
-			searchIndex = -1;
-			highlightQuery = '';
-		}
+		function startSearch(query) { state.start++; searchQuery = query; }
+		function cycleSearch(direction) { state.cycle++; state.direction = direction; }
+		function resetSearchResults() { state.reset++; searchQuery = ''; }
 		${functionSource(html, 'executeSearch')}
-		return function () {
-			executeSearch();
-			return { query: searchQuery, refresh: state.refresh, jump: state.jump, reset: state.reset, render: state.render };
+		return function (direction) {
+			executeSearch(direction);
+			return { query: searchQuery, start: state.start, cycle: state.cycle, reset: state.reset };
 		};
 	`
 	);
-	return { run: factory(state, input) as () => ExecuteSearchState };
+	return { run: factory(state, input, initialQuery) as (direction?: number) => ExecuteSearchState };
 }
 
 function compileClearSearch(html: string): (focusInput: boolean) => ClearSearchResult {
@@ -428,11 +454,14 @@ function compileClearSearch(html: string): (focusInput: boolean) => ClearSearchR
 		let searchMatches = [0, 2];
 		let searchIndex = 1;
 		let highlightQuery = 'alp';
+		let searchFirstJumpDone = false;
 		const searchInput = { value: 'alp', focus: function () { state.focused = true; } };
+		const searchEngine = { clear: function () { state.cleared = (state.cleared || 0) + 1; } };
 		let searchUi = 0;
 		let windows = 0;
 		function renderSearchUi() { searchUi++; }
 		function renderWindow() { windows++; }
+		function setSearchBusy() {}
 		${functionSource(html, 'resetSearchResults')}
 		${functionSource(html, 'clearSearch')}
 		return function (focusInput) {
@@ -501,6 +530,7 @@ suite('search page', () => {
 		assert.ok(/id="search-next"[^>]*class="[^"]*nav-btn[^"]*"[^>]*\sdisabled(?=[\s>])/.test(toolbar));
 		assert.ok(/id="search-next"[^>]*aria-label="Next match"/.test(toolbar), 'next has a name');
 		assert.ok(/id="search-count"[^>]*role="status"[^>]*aria-live="polite"[^>]*hidden/.test(toolbar));
+		assert.ok(/id="search-busy"[^>]*class="search-progress"[^>]*role="status"[^>]*aria-label="Searching"[^>]*hidden/.test(toolbar));
 		assert.strictEqual((html.match(/id="search-clear"/g) || []).length, 1);
 		assert.ok(!html.includes('id="find"') && !html.includes('find-bar'), 'there is no separate find bar');
 		assert.ok(!/style="/.test(toolbar), 'no inline styles');
@@ -527,6 +557,7 @@ suite('search page', () => {
 			'the search count is a fixed tabular column'
 		);
 		assert.ok(/\.search-count\[hidden\]\s*\{[^}]*display:\s*none/.test(style));
+		assert.ok(/\.search-progress::before\s*\{[^}]*animation:\s*ecuc-search-spin/.test(style), 'the busy spinner lives in the toolbar');
 		assert.ok(
 			/@media \(max-width: 720px\)[\s\S]*?\.search-box\s*\{[^}]*flex:\s*1 1 0/.test(style),
 			'the field shrinks instead of overlapping the actions'
@@ -564,54 +595,61 @@ suite('search page', () => {
 		assert.strictEqual(middle.count.textContent, '3 / 3');
 	});
 
-	test('Enter starts at the selection; a re-scan keeps the current match by id', () => {
+	test('startSearch streams the first match, then preserves the current row on completion', () => {
 		const html = page();
-		const first = compileRefresh(html, refreshState());
-		first.run(true);
-		assert.deepStrictEqual(first.state(), { matches: [0, 2], index: 0, highlight: 'alp' }, 'no selection starts at the first');
+		const rows: TreeRow[] = [
+			{ id: 'r0', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'alpha' },
+			{ id: 'r1', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'beta' },
+			{ id: 'r2', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'alpine' },
+			{ id: 'r3', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'gamma' },
+			{ id: 'r4', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'delta' },
+		];
+		const run = compileStartSearch(html, rows);
+		run.run('alp', undefined, false);
+		assert.strictEqual(run.state().searched, 'alp');
+		assert.strictEqual(run.state().running, true, 'the busy state starts with the search');
+		assert.deepStrictEqual(run.state().matches, [], 'no stale matches are kept');
 
-		const later = compileRefresh(html, refreshState({ selectedId: 'r1' }));
-		later.run(true);
-		assert.deepStrictEqual(
-			later.state(),
-			{ matches: [0, 2], index: 1, highlight: 'alp' },
-			'the first match at/after the selection'
-		);
+		run.progress([0, 2]);
+		assert.deepStrictEqual(run.state().matches, [0, 2]);
+		assert.strictEqual(run.state().index, 0, 'the first streamed match is current');
+		assert.deepStrictEqual(run.state().jumps, [0], 'and is jumped to once');
+		assert.strictEqual(run.state().running, true, 'still scanning');
 
-		const wrap = compileRefresh(html, refreshState({ selectedId: 'r4', searchMatches: [0, 2], searchIndex: 1 }));
-		wrap.run(true);
-		assert.deepStrictEqual(
-			wrap.state(),
-			{ matches: [0, 2], index: 0, highlight: 'alp' },
-			'all matches before the selection wrap to the first'
-		);
+		run.complete([0, 2]);
+		assert.strictEqual(run.state().running, false, 'completion clears the busy state');
+		assert.strictEqual(run.state().index, 0, 'the current row is preserved by id');
+		assert.deepStrictEqual(run.state().jumps, [0, 0], 'completion reselects the same match');
+	});
 
-		const preserve = compileRefresh(html, refreshState({ searchMatches: [0, 2], searchIndex: 1, selectedId: 'r3' }));
-		preserve.run(false, 'r2');
-		assert.deepStrictEqual(
-			preserve.state(),
-			{ matches: [0, 2], index: 1, highlight: 'alp' },
-			'the current row stays current when it remains a candidate'
-		);
+	test('a re-scan restarts immediately and preserves the current row by id', () => {
+		const html = page();
+		const rows: TreeRow[] = [
+			{ id: 'r0', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'alpha' },
+			{ id: 'r1', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'beta' },
+			{ id: 'r2', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'alpine' },
+		];
+		const run = compileStartSearch(html, rows);
+		run.run('alp', 'r2', true);
+		assert.strictEqual(run.state().immediate, true, 'a re-scan skips the debounce');
+		run.progress([0, 2]);
+		assert.strictEqual(run.state().index, 1, 'the previous row is kept while streaming');
+		assert.deepStrictEqual(run.state().jumps, [], 'streaming does not steal the selection on a re-scan');
+		run.complete([0, 2]);
+		assert.strictEqual(run.state().index, 1);
+		assert.deepStrictEqual(run.state().jumps, [1], 'completion jumps to the preserved row');
+	});
 
-		const baseRows = refreshState().rows;
-		const reordered = [baseRows[2], baseRows[4], baseRows[3], baseRows[1], baseRows[0]];
-		const rescanned = compileRefresh(html, refreshState({ searchMatches: [0, 2], searchIndex: 1 }));
-		rescanned.reindex(reordered);
-		rescanned.run(false, 'r2');
-		assert.deepStrictEqual(
-			rescanned.state(),
-			{ matches: [0, 4], index: 0, highlight: 'alp' },
-			'a re-scan that shifts row indices keeps the current match by id, not by old index'
-		);
-
-		const none = compileRefresh(html, refreshState({ searchQuery: 'zzz', searchMatches: [0, 2], searchIndex: 1 }));
-		none.run(true);
-		assert.deepStrictEqual(none.state(), { matches: [], index: -1, highlight: 'zzz' });
-
-		const cleared = compileRefresh(html, refreshState({ searchQuery: '', searchMatches: [0, 2], searchIndex: 1 }));
-		cleared.run(true);
-		assert.deepStrictEqual(cleared.state(), { matches: [], index: -1, highlight: '' }, 'a blank query clears the highlight');
+	test('a blank start clears the previous result set', () => {
+		const html = page();
+		const rows: TreeRow[] = [
+			{ id: 'r0', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, haystack: 'alpha' },
+		];
+		const run = compileStartSearch(html, rows);
+		run.run('   ', undefined, false);
+		assert.strictEqual(run.state().running, false);
+		assert.deepStrictEqual(run.state().matches, []);
+		assert.strictEqual(run.state().index, -1);
 	});
 
 	test('a search jump expands ancestors, scrolls, selects and keeps focus in the input', () => {
@@ -638,20 +676,17 @@ suite('search page', () => {
 		assert.deepStrictEqual([...positions].sort((a, b) => a - b), positions, 'the steps run in the designed order');
 	});
 
-	test('executeSearch runs only the committed query and jumps to its first match', () => {
+	test('executeSearch starts a changed query and cycles an executed one', () => {
 		const html = page();
 		const first = compileExecuteSearch(html, 'alp');
-		assert.deepStrictEqual(first.run(), {
-			query: 'alp',
-			refresh: 1,
-			jump: 1,
-			reset: 0,
-			render: 0,
-		});
+		assert.deepStrictEqual(first.run(1), { query: 'alp', start: 1, cycle: 0, reset: 0 }, 'first Enter starts');
+		assert.deepStrictEqual(first.run(1), { query: 'alp', start: 1, cycle: 1, reset: 0 }, 'second Enter cycles');
 		const blank = compileExecuteSearch(html, '   ');
-		assert.deepStrictEqual(blank.run(), { query: '', refresh: 0, jump: 0, reset: 1, render: 0 });
-		const none = compileExecuteSearch(html, 'nomatch');
-		assert.deepStrictEqual(none.run(), { query: 'nomatch', refresh: 1, jump: 0, reset: 0, render: 1 });
+		assert.deepStrictEqual(blank.run(1), { query: '', start: 0, cycle: 0, reset: 1 });
+		const changed = compileExecuteSearch(html, 'bravo', 'alp');
+		assert.deepStrictEqual(changed.run(1), { query: 'bravo', start: 1, cycle: 0, reset: 0 });
+		const previous = compileExecuteSearch(html, 'alp', 'alp');
+		assert.deepStrictEqual(previous.run(-1), { query: 'alp', start: 0, cycle: 1, reset: 0 });
 	});
 
 	test('clearing the search resets query/current/highlight', () => {
@@ -719,12 +754,10 @@ suite('search page', () => {
 		const inputAt = block.indexOf("searchInput.addEventListener('input'");
 		const keydownAt = block.indexOf("searchInput.addEventListener('keydown'");
 		const inputBlock = block.slice(inputAt, keydownAt);
-		assert.ok(!inputBlock.includes('refreshSearch'), 'typing never runs a search');
+		assert.ok(!inputBlock.includes('searchEngine.search'), 'typing never starts a scan');
 		assert.ok(!inputBlock.includes('jumpToSearchMatch'), 'typing never jumps');
 		assert.ok(inputBlock.includes('resetSearchResults()'), 'typing drops stale marks');
-		assert.ok(block.includes('executeSearch()'), 'Enter runs the typed query');
-		assert.ok(block.includes('searchInput.value !== searchQuery'), 'a new query is executed, the same one cycles');
-		assert.ok(block.includes('cycleSearch(event.shiftKey ? -1 : 1)'));
+		assert.ok(block.includes('executeSearch(event.shiftKey ? -1 : 1)'), 'Enter runs or cycles');
 		assert.ok(block.includes("event.key === 'Escape'"));
 		assert.ok(block.includes('clearSearch(false)') && block.includes('focusTreeAfterSearch()'));
 		assert.ok(block.includes('clearSearch(true)'), 'the X keeps focus in the field');
@@ -739,18 +772,19 @@ suite('search page', () => {
 			'F3 goes forward and Shift+F3 backward'
 		);
 		const execute = functionSource(html, 'executeSearch');
-		assert.ok(execute.includes('refreshSearch(true, undefined, false)'), 'Enter executes the search');
-		assert.ok(execute.includes('jumpToSearchMatch(searchIndex)'), 'and jumps to its first match');
+		assert.ok(execute.includes('startSearch(query, undefined, false)'), 'Enter starts a changed query');
+		assert.ok(execute.includes('cycleSearch(direction === -1 ? -1 : 1)'), 'the same query cycles');
 		const focusTree = functionSource(html, 'focusTreeAfterSearch');
 		assert.ok(focusTree.includes('displayIndexById.has(selectedId)'), 'Escape returns to the selected row when visible');
 		assert.ok(focusTree.includes('visibleNodeIds[0]'), 'otherwise to the first visible row');
 	});
 
-	test('search never changes rows or collapse state and a re-scan recomputes it', () => {
+	test('search never changes rows or collapse state and a re-scan restarts it', () => {
 		const html = page();
 		for (const name of [
-			'refreshSearch',
-			'searchCandidates',
+			'startSearch',
+			'resetSearchResults',
+			'executeSearch',
 			'renderSearchUi',
 			'clearSearch',
 			'cycleSearch',
@@ -766,12 +800,15 @@ suite('search page', () => {
 			'the jump persists its selection so a re-scan keeps it'
 		);
 		assert.strictEqual(jump.match(/postMessage/g)?.length, 1, 'the jump sends only the select message');
-		assert.ok(functionSource(html, 'searchCandidates').includes('searchRows(rows, searchQuery)'), 'the whole store is searched');
+		assert.ok(
+			functionSource(html, 'startSearch').includes('searchEngine.search('),
+			'the chunked engine scans the whole store'
+		);
 
 		const setRows = functionSource(html, 'setRows');
 		assert.ok(setRows.includes('const previousMatchId = currentMatchId();'));
 		assert.ok(setRows.indexOf('currentMatchId()') < setRows.indexOf('rows = incoming'), 'the current match id is captured first');
-		assert.ok(setRows.includes('refreshSearch(false, previousMatchId)'), 'the re-scan recomputes over the new rows');
+		assert.ok(setRows.includes('startSearch(searchQuery, previousMatchId, true)'), 'the re-scan restarts immediately');
 		assert.ok(!/searchQuery\s*=/.test(setRows), 'the query survives a re-scan');
 		const rebuild = functionSource(html, 'rebuildDisplay');
 		assert.ok(!rebuild.includes('visible:'), 'the display list has no query visibility input');

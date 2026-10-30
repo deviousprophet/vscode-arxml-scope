@@ -51,7 +51,8 @@ second owner of the rule, and the reason the flag exists.
 `pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`, `reconcileRowState`,
 `resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`, `ancestorIds`, the virtual-scroll
 functions and the tree-query functions live in `renderHtml.ts`, `virtualScroll.ts`, `renderRows.ts`
-and `treeQuery.ts`.
+and `treeQuery.ts`. The chunked `RowSearchEngine` lives in `rowSearch.ts` and is serialized with
+`rowSearchScript()`.
 The page emits them with `Function.prototype.toString()` (the virtual math through
 `virtualScrollScript()`). Tests extract the page's own copy with `scriptTestUtils` and compile it, so
 "the page and the tests share one definition" is an assertion rather than a claim. Do not add a
@@ -98,15 +99,18 @@ Clear values send a `conditions` message. Opening Add alone sends nothing.
 
 `searchInput.value` is the raw typed text. `searchQuery`, `searchMatches` (row indices) and
 `searchIndex` are the committed search and are page-local; they are not persisted across reloads.
-Typing alone never searches: it only keeps the clear X in step, and a changed value invalidates the
-old result set. Enter runs the changed query (first match at/after the selection) or cycles an
-already-executed one; Shift+Enter goes backwards. A re-scan recomputes the committed query over the
-full row store and keeps the current match by row id where possible. Search must never write the
-collapsed set. `highlightQuery` is a transient page variable carrying the committed non-blank query
-into the row primitives: every occurrence is marked, and the row that owns `searchIndex` carries
-`data-search-current="true"` for the stronger mark. The toolbar holds Search as its only query field;
-there is no separate find-bar panel. A jump posts the existing `select` message so the host keeps the
-row selected across a re-scan; Search itself never changes rows or collapse state.
+Typing alone never searches: it only keeps the clear X in step, and a changed value cancels the
+engine and invalidates the old result set. Enter runs the changed query through `RowSearchEngine`
+(120 ms debounce, 24 ms slices, 512-row batches, 150 ms progress throttle, generation token) or
+cycles an already-executed one; Shift+Enter goes backwards. The first streamed match is jumped to,
+and completion preserves the current match by row id. A re-scan restarts the committed query
+immediately over the full row store and preserves the current row id where possible. Search must
+never write the collapsed set. `highlightQuery` is a transient page variable carrying the committed
+non-blank query into the row primitives: every occurrence is marked, and the row that owns
+`searchIndex` carries `data-search-current="true"` for the stronger mark. `searchRunning` drives the
+`#search-busy` spinner. The toolbar holds Search as its only query field; there is no separate
+find-bar panel. A jump posts the existing `select` message so the host keeps the row selected across
+a re-scan; Search itself never changes rows or collapse state.
 
 ## Page errors
 

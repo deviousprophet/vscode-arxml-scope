@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Toolbar Search UX, busy state, highlight tiers and jump/navigation contracts."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Committed/typed Search state, streaming progress and re-scan restart."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No inline styles, documented colour literals and virtual-window constraints."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Pure-helper, compiled page-function and performance-test conventions."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Where the pure row-search engine belongs."}

@@ -111,11 +111,14 @@ that is not obvious from the code.
 - **A re-scan keeps state, not markup.** The host posts `{ type: 'model', rows, selectedId }`; the
   page reconciles selection, collapse, search and scroll, rebuilds the display list and renders the
   window. There is no `innerHTML` tree swap and no second refresh path.
-- **Search runs on Enter and scans the row store, never the DOM.** Typing only updates the field and
-  the clear X; a changed query invalidates the old marks until Enter. `searchRows` returns every
-  match and `flattenRows` provides the display list; only rendered rows get `<mark>` elements. All
-  matches use the fixed `--match-bg` tier; the current match's row adds `data-search-current` for
-  `--match-hi`. Do not depend on theme find-match variables that can be transparent.
+- **Search runs on Enter through the chunked engine, never a synchronous full scan.** Typing only
+  updates the field and the clear X; a changed query cancels the old run until Enter. `RowSearchEngine`
+  scans 512 rows between clock checks with a 24 ms budget, a 120 ms debounce, a 150 ms progress
+  throttle and a generation token. The first streamed match is jumped to; completion preserves the
+  current row by id; later navigation only moves an index. Only rendered rows get `<mark>` elements.
+  All matches use the fixed `--match-bg` tier; the current match's row adds `data-search-current` for
+  `--match-hi`. Do not restore a synchronous `searchRows` page scan or theme find-match variables
+  that can be transparent.
 - **Conditions row actions are icon-only.** Edit, Save and Cancel use the shared `.act-btn` primitive
   with pencil/check/X SVGs, `title` and `aria-label`; Remove is the trash icon. Save/Cancel are
   visible only while editing. Do not restore text Save/Cancel buttons.

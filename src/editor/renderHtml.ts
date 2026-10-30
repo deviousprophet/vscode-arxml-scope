@@ -26,11 +26,12 @@ import { randomBytes } from 'crypto';
 import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
 import type { ConditionValue } from '../core/ecuc/syscond';
 import type { ConditionEntry } from './conditionValues';
-import { FlatRow, ancestorIds, flattenRows, matchRanges, searchRows, stepMatch } from './treeQuery';
+import { FlatRow, ancestorIds, flattenRows, matchRanges, stepMatch } from './treeQuery';
 import { escapeHtml } from './html';
 import { encodeJsonForScript } from './jsonScript';
 import { consoleErrorScript } from './pageError';
 import { EcucRow, MetaPart, ParameterFormat, RowCondition, buildRows } from './renderRows';
+import { rowSearchScript } from './rowSearch';
 import { rowViewScript } from './rowView';
 import { sidebarShellScript } from './sidebarShell';
 import { virtualScrollScript } from './virtualScroll';
@@ -246,6 +247,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <button id="search-prev" class="nav-btn search-nav" type="button" title="Previous match (Shift+F3)" aria-label="Previous match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.75l4-4 4 4"/></svg></button>
 <button id="search-next" class="nav-btn search-nav" type="button" title="Next match (F3)" aria-label="Next match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25l4 4 4-4"/></svg></button>
 <span id="search-count" class="search-count" role="status" aria-live="polite" hidden></span>
+<span id="search-busy" class="search-progress" role="status" aria-label="Searching" hidden></span>
 </div>
 <span class="grow"></span>
 <button id="collapse-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
@@ -688,6 +690,35 @@ input[type="search"]::-webkit-search-decoration {
 }
 .search-count[hidden] {
 	display: none;
+}
+.search-progress {
+	width: 16px;
+	height: 16px;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.search-progress[hidden] {
+	display: none;
+}
+.search-progress::before {
+	content: '';
+	width: 11px;
+	height: 11px;
+	border: 2px solid var(--vscode-input-border, var(--vscode-panel-border));
+	border-top-color: var(--vscode-progressBar-background, var(--vscode-focusBorder));
+	border-radius: 50%;
+	animation: ecuc-search-spin 0.8s linear infinite;
+}
+@keyframes ecuc-search-spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.search-progress::before {
+		animation: none;
+	}
 }
 .tool {
 	display: inline-flex;
@@ -1798,6 +1829,7 @@ const searchClear = document.getElementById('search-clear');
 const searchPrev = document.getElementById('search-prev');
 const searchNext = document.getElementById('search-next');
 const searchCount = document.getElementById('search-count');
+const searchBusy = document.getElementById('search-busy');
 const conditionsPanel = document.getElementById('conditions-panel');
 const conditionsList = document.getElementById('conditions-list');
 const conditionsAdd = document.getElementById('conditions-add');
@@ -1824,7 +1856,7 @@ ${collapsedIdsFor.toString()}
 ${moveTarget.toString()}
 ${virtualScrollScript()}
 ${matchRanges.toString()}
-${searchRows.toString()}
+${rowSearchScript()}
 ${stepMatch.toString()}
 ${flattenRows.toString()}
 ${ancestorIds.toString()}
@@ -1855,6 +1887,9 @@ let searchQuery = '';
 let searchMatches = [];
 let searchIndex = -1;
 let highlightQuery = '';
+const searchEngine = new RowSearchEngine();
+let searchRunning = false;
+let searchFirstJumpDone = false;
 // Discovery derives row names from the current document; manual rows are the
 // only removable ones, so there is no dismissal set any more.
 let editingRow = null;
@@ -1964,7 +1999,15 @@ function setRows(nextRows, nextSelectedId) {
 	dataVersion++;
 	// A re-scan keeps the search and, when the row survived, the current match; the
 	// matches themselves are recomputed against the new row indices.
-	refreshSearch(false, previousMatchId);
+	if (searchQuery.trim() !== '') {
+		startSearch(searchQuery, previousMatchId, true);
+	} else {
+		searchMatches = [];
+		searchIndex = -1;
+		highlightQuery = '';
+		setSearchBusy(false);
+		renderSearchUi();
+	}
 }
 
 function treeWindowTop() {
@@ -2472,53 +2515,91 @@ function currentMatchId() {
 	return row ? row.id : undefined;
 }
 
-/** Every row is a search candidate: collapse and any view state never remove one. */
-function searchCandidates() {
-	return searchRows(rows, searchQuery);
-}
-
-/** The position of the first match at or after the selected row, wrapping to the first. */
-function firstMatchAtOrAfterSelection() {
-	const count = searchMatches.length;
-	if (count === 0) {
+/** The index of a row id in the current match list, or -1. */
+function searchIndexOfId(id) {
+	if (id === undefined) {
 		return -1;
 	}
-	const selectedRowIndex = selectedId === undefined ? undefined : rowIndexById.get(selectedId);
-	if (selectedRowIndex === undefined) {
-		return 0;
+	const rowIndex = rowIndexById.get(id);
+	return rowIndex === undefined ? -1 : searchMatches.indexOf(rowIndex);
+}
+
+function setSearchBusy(busy) {
+	searchRunning = busy === true;
+	if (searchBusy) {
+		searchBusy.hidden = !searchRunning;
 	}
-	for (let at = 0; at < count; at++) {
-		if (searchMatches[at] >= selectedRowIndex) {
-			return at;
-		}
-	}
-	return 0;
 }
 
 /**
- * Recompute the matches after an explicit Enter or a re-scan and clamp the
- * current one. startAtSelection is the first-run policy (first match at/after the
- * selection); previousId is the re-scan policy (keep the current row by id when it
- * is still a candidate). A blank query clears the highlight.
+ * Start a chunked search. previousId is preserved across progress/completion
+ * and a re-scan; immediate skips the 120 ms debounce for a re-scan.
  */
-function refreshSearch(startAtSelection, previousId, render = true) {
-	searchMatches = searchCandidates();
-	const previousRow = previousId === undefined ? undefined : rowIndexById.get(previousId);
-	const previousAt = previousRow === undefined ? -1 : searchMatches.indexOf(previousRow);
-	if (searchMatches.length === 0) {
-		searchIndex = -1;
-	} else if (previousAt >= 0) {
-		searchIndex = previousAt;
-	} else if (startAtSelection) {
-		searchIndex = firstMatchAtOrAfterSelection();
-	} else {
-		searchIndex = 0;
+function startSearch(query, previousId, immediate) {
+	const text = query || '';
+	if (text.trim() === '') {
+		resetSearchResults();
+		return;
 	}
-	highlightQuery = searchQuery.trim() === '' ? '' : searchQuery;
+	searchEngine.clear();
+	searchQuery = text;
+	highlightQuery = text;
+	searchMatches = [];
+	searchIndex = -1;
+	searchFirstJumpDone = previousId !== undefined;
+	setSearchBusy(true);
 	renderSearchUi();
-	if (render) {
-		renderWindow(true);
-	}
+	renderWindow(true);
+	searchEngine.search(
+		rows,
+		text,
+		{
+			onProgressUpdate: function (matches) {
+				const currentId = currentMatchId();
+				searchMatches = matches;
+				if (!searchFirstJumpDone && searchMatches.length > 0) {
+					searchIndex = 0;
+					searchFirstJumpDone = true;
+					renderSearchUi();
+					jumpToSearchMatch(0);
+					return;
+				}
+				const wanted = currentId !== undefined ? currentId : previousId;
+				const kept = searchIndexOfId(wanted);
+				if (searchMatches.length === 0) {
+					searchIndex = -1;
+				} else if (kept >= 0) {
+					searchIndex = kept;
+				} else {
+					searchIndex = Math.min(Math.max(searchIndex, 0), searchMatches.length - 1);
+				}
+				renderSearchUi();
+				renderWindow(true);
+			},
+			onComplete: function (matches) {
+				const currentId = currentMatchId();
+				searchMatches = matches;
+				const wanted = currentId !== undefined ? currentId : previousId;
+				const kept = searchIndexOfId(wanted);
+				if (searchMatches.length === 0) {
+					searchIndex = -1;
+				} else if (kept >= 0) {
+					searchIndex = kept;
+				} else {
+					searchIndex = 0;
+				}
+				searchFirstJumpDone = true;
+				setSearchBusy(false);
+				renderSearchUi();
+				if (searchIndex >= 0) {
+					jumpToSearchMatch(searchIndex);
+				} else {
+					renderWindow(true);
+				}
+			}
+		},
+		immediate === true
+	);
 }
 
 /** The count and control state: '1 / N', '0 / 0', or hidden for a blank query. */
@@ -2526,6 +2607,9 @@ function renderSearchUi() {
 	const hasText = searchInput ? searchInput.value.trim() !== '' : searchQuery.trim() !== '';
 	const active = searchQuery.trim() !== '';
 	const hasMatches = searchMatches.length > 0;
+	if (searchBusy) {
+		searchBusy.hidden = !searchRunning;
+	}
 	if (searchClear) {
 		searchClear.hidden = !hasText;
 	}
@@ -2587,28 +2671,29 @@ function cycleSearch(direction) {
 
 /** Drop the active result set without touching the search field text. */
 function resetSearchResults() {
+	searchEngine.clear();
 	searchQuery = '';
 	searchMatches = [];
 	searchIndex = -1;
 	highlightQuery = '';
+	searchFirstJumpDone = false;
+	setSearchBusy(false);
 	renderSearchUi();
 	renderWindow(true);
 }
 
-/** Enter: search the typed query and jump to its first match at/after the selection. */
-function executeSearch() {
+/** Enter: start a changed query, or move through the current result set. */
+function executeSearch(direction) {
 	const query = searchInput ? searchInput.value : searchQuery;
 	if (query.trim() === '') {
 		resetSearchResults();
 		return;
 	}
-	searchQuery = query;
-	refreshSearch(true, undefined, false);
-	if (searchIndex >= 0) {
-		jumpToSearchMatch(searchIndex);
-	} else {
-		renderWindow(true);
+	if (query !== searchQuery) {
+		startSearch(query, undefined, false);
+		return;
 	}
+	cycleSearch(direction === -1 ? -1 : 1);
 }
 
 /** Clear the search and its highlight; optionally return focus to it. */
@@ -3376,11 +3461,7 @@ if (searchInput) {
 	searchInput.addEventListener('keydown', function (event) {
 		if (event.key === 'Enter') {
 			event.preventDefault();
-			if (searchInput.value !== searchQuery) {
-				executeSearch();
-			} else {
-				cycleSearch(event.shiftKey ? -1 : 1);
-			}
+			executeSearch(event.shiftKey ? -1 : 1);
 		} else if (event.key === 'Escape') {
 			event.preventDefault();
 			clearSearch(false);

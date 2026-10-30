@@ -16,7 +16,8 @@ src/
     renderHtml.ts           the page shell, row window, row builder, page script
     navigation.ts           node <-> source range, reference following
     nodeId.ts               path-based node ids, stable across a re-scan
-    treeQuery.ts            tree rows: haystack, match ranges, search and flatten helpers
+    treeQuery.ts            tree rows: haystack, match ranges and flatten helpers
+    rowSearch.ts            chunked cancellable row search engine, serialized into the page
     conditionValues.ts      SW-SYSCOND value entries and the workspaceState store
     rowView.ts              page row primitives shared by the editor and diff pages
     sidebarShell.ts         sidebar tabs, width, section panes/sashes and layout state
