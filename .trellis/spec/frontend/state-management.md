@@ -96,6 +96,16 @@ name not referenced by the document) can be removed and that removal is persiste
 Drafts live only in Edit mode; only Save, Remove, Clear values and a valid Add send a `conditions`
 message.
 
+## Search state
+
+`searchQuery`, `searchMatches` (row indices) and `searchIndex` are page-local and are not persisted
+across reloads. They are recomputed from the full row store after a re-scan and after a filter
+change; the current match is preserved by row id where possible. Search must never write
+`filterQuery`, `filterResult` or the collapsed set. `highlightQuery` is a transient page variable:
+non-blank search text overrides the filter's row marks, and clearing it restores them. The toolbar
+holds Filter and Search as sibling fields; there is no separate find-bar panel and Search never
+posts a host message.
+
 ## No derived artefacts
 
 Nothing is written beside the user's file. The only write is the text of the element the user

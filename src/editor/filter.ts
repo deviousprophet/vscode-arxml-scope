@@ -326,6 +326,57 @@ export function flattenRows(rows: readonly FilterRow[], options: FlattenOptions 
 }
 
 /**
+ * The rows whose haystack contains `query`, in row order, as indices into `rows`.
+ *
+ * The candidate set is the filter's displayed set, not the collapsed set: pass
+ * `filterResult.visible` to search only what the filter shows (matches plus their
+ * ancestors), or omit it to search the whole tree. A collapsed container is still a
+ * candidate, because search may expand its ancestors when it jumps; hiding is the
+ * display list's job. A blank query matches nothing, and matching is case-insensitive
+ * like `filterRows`.
+ */
+export function searchRows(
+	rows: readonly FilterRow[],
+	query: string,
+	visible?: readonly boolean[]
+): number[] {
+	const needle = query.trim().toLowerCase();
+	if (needle === '') {
+		return [];
+	}
+	const matches: number[] = [];
+	for (let i = 0; i < rows.length; i++) {
+		if (visible && visible[i] === false) {
+			continue;
+		}
+		if (rows[i].haystack.toLowerCase().includes(needle)) {
+			matches.push(i);
+		}
+	}
+	return matches;
+}
+
+/**
+ * The next position in a match list, wrapping at both ends. `current = -1` means
+ * "nothing selected yet": forward starts at the first match, backward at the last.
+ * An empty list always yields -1 so the caller can keep its count/disabled state.
+ */
+export function stepMatch(
+	matches: readonly number[],
+	current: number,
+	direction: 1 | -1
+): number {
+	const count = matches.length;
+	if (count === 0) {
+		return -1;
+	}
+	if (current < 0 || current >= count) {
+		return direction === 1 ? 0 : count - 1;
+	}
+	return (current + direction + count) % count;
+}
+
+/**
  * The ancestors of `id` used to expand a revealed row, nearest parent first. A root
  * row or an id that is not in the list yields `[]`; a malformed parent cycle stops
  * instead of looping. This is the one owner of the walk expansion performs — the

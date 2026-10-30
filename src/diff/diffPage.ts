@@ -115,6 +115,7 @@ const detail = document.getElementById('diff-detail');
 const svgNamespace = 'http://www.w3.org/2000/svg';
 const bufferRows = 10;
 let filterQuery = '';
+let highlightQuery = '';
 let changesOnly = false;
 let diffDocument = {
 	left: { name: '', path: '' },

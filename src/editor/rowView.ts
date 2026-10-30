@@ -9,7 +9,8 @@
  *
  * The functions deliberately use only `document` and the field subset they read,
  * so both an `EcucRow` and a projected diff cell satisfy them. `appendHighlighted`
- * falls back to the page's `filterQuery` variable, which each page declares.
+ * falls back to the page's `highlightQuery` while a search is active, and otherwise
+ * to `filterQuery`; each page declares both variables.
  */
 
 /** The subset `valueSpan` / `metaSpan` read from a row or a projected diff cell. */
@@ -38,14 +39,21 @@ declare const document: {
 
 /* Page globals declared by the host page around this script. */
 declare const filterQuery: string;
+declare const highlightQuery: string;
 declare function matchRanges(text: string, query: string): { start: number; end: number }[];
 
 /**
  * Appends `text` to `parent`, wrapping every case-insensitive occurrence of the
- * query in `<mark>`. With no explicit query the page's live `filterQuery` is used.
+ * query in `<mark>`. With no explicit query the page's live `filterQuery` is used,
+ * unless a non-blank `highlightQuery` overrides it for the active search.
  */
 export function appendHighlighted(parent: PageElement, text: string, query?: string): void {
-	const needle = query === undefined ? filterQuery : query;
+	const needle =
+		query === undefined
+			? typeof highlightQuery === 'string' && highlightQuery.trim() !== ''
+				? highlightQuery
+				: filterQuery
+			: query;
 	const ranges = needle.trim() === '' ? [] : matchRanges(text, needle);
 	if (ranges.length === 0) {
 		parent.appendChild(document.createTextNode(text));

@@ -950,7 +950,10 @@ suite('sidebar shell', () => {
 		assert.ok(/\.filter,\s*\.search-input\s*\{[^}]*--vscode-input-background/.test(style));
 		assert.ok(/\.filter,\s*\.search-input\s*\{[^}]*--vscode-input-border/.test(style));
 		assert.ok(/input\[type="search"\]::-webkit-search-cancel-button/.test(style), 'native search cancel stays suppressed');
-		assert.ok(/\.filter-clear\s*\{[^}]*position:\s*absolute/.test(style), 'the custom clear X remains');
+		assert.ok(
+			/\.filter-clear(?:,\s*\.search-clear)?\s*\{[^}]*position:\s*absolute/.test(style),
+			'the custom clear X remains'
+		);
 		assert.ok(/id="filter-clear"/.test(html));
 	});
 

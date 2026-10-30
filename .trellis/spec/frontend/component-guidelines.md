@@ -86,6 +86,12 @@ selects and opens the details editor. Reference follow is the details **Jump to 
   `::-webkit-search-cancel-button` and `::-webkit-search-decoration` in the nonce-carrying `STYLE`;
   removing that rule reintroduces a second X beside the custom button. `#filter-clear` starts
   `hidden` and is toggled by the page script.
+- **Filter hides; Search jumps.** The Filter field narrows the tree; the Search field never hides a
+  row. `searchRows(rows, query, filterResult?.visible)` is the single candidate rule: an active
+  filter restricts candidates to its displayed rows, no filter searches the whole tree, and collapse
+  does not remove a candidate. A jump expands ancestors, scrolls and selects the row but keeps focus
+  in the Search input. Search highlights override filter marks while the query is non-blank; clearing
+  restores filter marks. Do not add a second find bar or let Search write the filter query/result.
 - **Conditions actions follow the shared hierarchy.** Rows are data-backed (`data-name`,
   `data-value`, `data-auto`, `data-editing`); Edit/Remove are compact `.act-btn` actions, Save is
   `.sb-btn-primary`, Cancel/Clear are `.sb-btn-secondary`, Add is `.sb-btn-add`. Scanned constants

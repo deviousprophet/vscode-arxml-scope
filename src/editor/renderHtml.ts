@@ -26,7 +26,7 @@ import { randomBytes } from 'crypto';
 import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
 import type { ConditionValue } from '../core/ecuc/syscond';
 import type { ConditionEntry } from './conditionValues';
-import { FlatRow, ancestorIds, buildFilterIndex, createFilterDebouncer, filterRows, flattenRows, matchRanges } from './filter';
+import { FlatRow, ancestorIds, buildFilterIndex, createFilterDebouncer, filterRows, flattenRows, matchRanges, searchRows, stepMatch } from './filter';
 import { escapeHtml } from './html';
 import { encodeJsonForScript } from './jsonScript';
 import { pageErrorScript } from './pageError';
@@ -244,6 +244,16 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <button id="filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 </div>
 <span id="count" class="count" role="status" aria-live="polite" data-state="none"></span>
+<div class="search-box">
+<div class="search-field">
+<span class="search-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l3.5 3.5"/></svg></span>
+<input id="search-input" class="search-input" type="search" placeholder="Search" aria-label="Search the ECUC tree" autocomplete="off" spellcheck="false">
+<button id="search-clear" class="nav-btn search-clear" type="button" title="Clear search" aria-label="Clear search" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+</div>
+<button id="search-prev" class="nav-btn search-nav" type="button" title="Previous match (Shift+F3)" aria-label="Previous match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.75l4-4 4 4"/></svg></button>
+<button id="search-next" class="nav-btn search-nav" type="button" title="Next match (F3)" aria-label="Next match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25l4 4 4-4"/></svg></button>
+<span id="search-count" class="search-count" role="status" aria-live="polite" hidden></span>
+</div>
 <span class="grow"></span>
 <button id="collapse-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
 <button id="expand-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/></svg><span class="lbl">Expand</span></button>
@@ -614,8 +624,9 @@ body[data-view] {
 	outline: 1px solid var(--vscode-focusBorder);
 	outline-offset: -1px;
 }
-/* The filter keeps its custom clear X; Chromium's native cancel button would
- * paint a second one, so it is suppressed for every search input. */
+/* The Filter and Search fields each keep one custom clear X; Chromium's native
+ * cancel button would paint a second one, so it is suppressed for every search
+ * input. */
 input[type="search"]::-webkit-search-cancel-button,
 input[type="search"]::-webkit-search-decoration {
 	-webkit-appearance: none;
@@ -651,7 +662,8 @@ input[type="search"]::-webkit-search-decoration {
 	min-width: 0;
 	padding: 0 22px 0 7px;
 }
-.filter-clear {
+.filter-clear,
+.search-clear {
 	position: absolute;
 	right: 3px;
 	top: 50%;
@@ -670,12 +682,61 @@ input[type="search"]::-webkit-search-decoration {
 	border: 0;
 	border-radius: 2px;
 }
-.filter-clear[hidden] {
+.filter-clear[hidden],
+.search-clear[hidden] {
 	display: none;
 }
-.filter-clear:hover {
+.filter-clear:hover,
+.search-clear:hover {
 	color: var(--vscode-foreground);
 	background: var(--vscode-toolbar-hoverBackground, transparent);
+}
+.search-box {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	flex: 0 1 auto;
+	min-width: 0;
+}
+.search-field {
+	position: relative;
+	display: flex;
+	align-items: center;
+	flex: 0 1 180px;
+	min-width: 0;
+}
+.search-field .search-input {
+	width: 100%;
+	min-width: 0;
+	padding: 0 22px 0 25px;
+}
+.search-icon {
+	position: absolute;
+	left: 7px;
+	top: 50%;
+	transform: translateY(-50%);
+	display: inline-flex;
+	color: var(--vscode-descriptionForeground, var(--tok-dim));
+	pointer-events: none;
+}
+.search-box .search-nav {
+	width: 26px;
+	height: 26px;
+	flex: none;
+}
+.search-count {
+	width: 14ch;
+	flex: none;
+	overflow: hidden;
+	text-align: right;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	color: var(--vscode-descriptionForeground, var(--tok-dim));
+}
+.search-count[hidden] {
+	display: none;
 }
 .count {
 	padding: 0;
@@ -684,6 +745,7 @@ input[type="search"]::-webkit-search-decoration {
 	color: var(--tok-dim);
 	background: transparent;
 	font-size: 12px;
+	font-variant-numeric: tabular-nums;
 }
 .count[data-state="none"] {
 	padding: 0;
@@ -1761,7 +1823,11 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 	.filter-wrap {
 		flex: 1 1 0;
 	}
+	.search-box {
+		flex: 1 1 0;
+	}
 	.count,
+	.search-count,
 	.notice,
 	.grow,
 	.icon-tool .lbl {
@@ -1851,6 +1917,11 @@ const detailsConditionsBody = document.getElementById('sb-details-conditions-bod
 const filterInput = document.getElementById('filter');
 const countLabel = document.getElementById('count');
 const clearButton = document.getElementById('filter-clear');
+const searchInput = document.getElementById('search-input');
+const searchClear = document.getElementById('search-clear');
+const searchPrev = document.getElementById('search-prev');
+const searchNext = document.getElementById('search-next');
+const searchCount = document.getElementById('search-count');
 const empty = document.getElementById('empty');
 const emptyText = document.getElementById('empty-text');
 const conditionsPanel = document.getElementById('conditions-panel');
@@ -1881,6 +1952,8 @@ ${virtualScrollScript()}
 ${matchRanges.toString()}
 ${buildFilterIndex.toString()}
 ${filterRows.toString()}
+${searchRows.toString()}
+${stepMatch.toString()}
 ${flattenRows.toString()}
 ${ancestorIds.toString()}
 ${createFilterDebouncer.toString()}
@@ -1893,6 +1966,7 @@ ${refusalShownInDetails.toString()}
 
 let rows = [];
 let rowById = new Map();
+let rowIndexById = new Map();
 let displayRows = [];
 let displayIndexById = new Map();
 let visibleNodeIds = [];
@@ -1907,6 +1981,14 @@ let filterQuery = '';
 let filterResult = null;
 let filterIndex = { haystacks: [] };
 let filterDebouncer = createFilterDebouncer(120);
+// Search is a jump control, not a visibility filter: candidates come from the
+// filter's visible rows (or the whole tree when the filter is blank), and the
+// collapsed set never removes a candidate. highlightQuery overrides the filter
+// only while it is non-blank, so clearing search restores filter marks.
+let searchQuery = '';
+let searchMatches = [];
+let searchIndex = -1;
+let highlightQuery = '';
 // Discovery derives row names from the current document; manual rows are the
 // only removable ones, so there is no dismissal set any more.
 let editingRow = null;
@@ -1936,8 +2018,10 @@ function readInitialRows() {
 
 function indexRows() {
 	rowById = new Map();
+	rowIndexById = new Map();
 	for (let at = 0; at < rows.length; at++) {
 		rowById.set(rows[at].id, rows[at]);
+		rowIndexById.set(rows[at].id, at);
 	}
 	filterIndex = buildFilterIndex(rows);
 }
@@ -2001,6 +2085,7 @@ function rebuildDisplay() {
 
 function setRows(nextRows, nextSelectedId) {
 	const incoming = Array.isArray(nextRows) ? nextRows : [];
+	const previousMatchId = currentMatchId();
 	const state = reconcileRowState(
 		{
 			selectedId: nextSelectedId !== undefined ? nextSelectedId : selectedId,
@@ -2023,6 +2108,9 @@ function setRows(nextRows, nextSelectedId) {
 	rebuildDisplay();
 	measureHeights();
 	dataVersion++;
+	// A re-scan keeps the query and, when the row survived, the current match; the
+	// matches themselves are recomputed against the new row indices.
+	refreshSearch(false, previousMatchId);
 }
 
 function treeWindowTop() {
@@ -2452,6 +2540,7 @@ function onRowClick(event) {
 		return;
 	}
 	selectItem(item);
+	syncSearchToSelection(item.dataset.nodeId);
 	if (event.target.closest('.value-text') && item.dataset.kind === 'parameter') {
 		beginDetailsEdit(item.dataset.nodeId);
 	}
@@ -2605,6 +2694,7 @@ function updateFilterUi() {
 function applyFilterQuery(query) {
 	const anchor = captureWindowAnchor();
 	const scrollTop = main.scrollTop;
+	const previousMatchId = currentMatchId();
 	filterQuery = query;
 	refreshFilter();
 	rebuildDisplay();
@@ -2615,6 +2705,10 @@ function applyFilterQuery(query) {
 		renderWindow(true);
 	}
 	updateFilterUi();
+	// The filter defines search's candidate set. Recompute it without ever
+	// touching the filter query: a current match that survived stays current,
+	// otherwise the first remaining match (or none) is selected.
+	refreshSearch(false, previousMatchId);
 }
 
 function clearFilter(focusInput) {
@@ -2625,6 +2719,168 @@ function clearFilter(focusInput) {
 	applyFilterQuery('');
 	if (focusInput && filterInput) {
 		filterInput.focus();
+	}
+}
+
+/** The row id at the current search position, or undefined when nothing is current. */
+function currentMatchId() {
+	const rowIndex = searchMatches[searchIndex];
+	const row = rowIndex === undefined ? undefined : rows[rowIndex];
+	return row ? row.id : undefined;
+}
+
+/** The search candidates: only rows the active filter displays, else the whole tree. */
+function searchCandidates() {
+	return searchRows(rows, searchQuery, filterResult ? filterResult.visible : undefined);
+}
+
+/** The position of the first match at or after the selected row, wrapping to the first. */
+function firstMatchAtOrAfterSelection() {
+	const count = searchMatches.length;
+	if (count === 0) {
+		return -1;
+	}
+	const selectedRowIndex = selectedId === undefined ? undefined : rowIndexById.get(selectedId);
+	if (selectedRowIndex === undefined) {
+		return 0;
+	}
+	for (let at = 0; at < count; at++) {
+		if (searchMatches[at] >= selectedRowIndex) {
+			return at;
+		}
+	}
+	return 0;
+}
+
+/**
+ * Recompute the matches after a query/filter/row change and clamp the current one.
+ * startAtSelection is the typing policy (first match at/after the selection);
+ * previousId is the filter/re-scan policy (keep the current row by id when it is
+ * still a candidate). A blank query clears the highlight override but never the
+ * filter.
+ */
+function refreshSearch(startAtSelection, previousId) {
+	searchMatches = searchCandidates();
+	const previousRow = previousId === undefined ? undefined : rowIndexById.get(previousId);
+	const previousAt = previousRow === undefined ? -1 : searchMatches.indexOf(previousRow);
+	if (searchMatches.length === 0) {
+		searchIndex = -1;
+	} else if (previousAt >= 0) {
+		searchIndex = previousAt;
+	} else if (startAtSelection) {
+		searchIndex = firstMatchAtOrAfterSelection();
+	} else {
+		searchIndex = 0;
+	}
+	highlightQuery = searchQuery.trim() === '' ? '' : searchQuery;
+	renderSearchUi();
+	renderWindow(true);
+}
+
+/** The count and control state: '1 / N', '0 / 0', or hidden for a blank query. */
+function renderSearchUi() {
+	const active = searchQuery.trim() !== '';
+	const hasMatches = searchMatches.length > 0;
+	if (searchClear) {
+		searchClear.hidden = !active;
+	}
+	if (searchPrev) {
+		searchPrev.disabled = !hasMatches;
+	}
+	if (searchNext) {
+		searchNext.disabled = !hasMatches;
+	}
+	if (!searchCount) {
+		return;
+	}
+	searchCount.hidden = !active;
+	if (!active) {
+		searchCount.textContent = '';
+	} else if (!hasMatches) {
+		searchCount.textContent = '0 / 0';
+	} else {
+		searchCount.textContent = (searchIndex + 1) + ' / ' + searchMatches.length;
+	}
+}
+
+/** Move to one match: expand ancestors, rebuild, scroll, select, keep focus in Search. */
+function jumpToSearchMatch(index) {
+	const rowIndex = searchMatches[index];
+	if (rowIndex === undefined) {
+		return;
+	}
+	const id = rows[rowIndex].id;
+	if (expandAncestors(id)) {
+		rebuildDisplay();
+	}
+	const displayIndex = displayIndexById.get(id);
+	if (displayIndex === undefined) {
+		// The row is no longer displayed after a filter/state change; do not select
+		// an invisible row or steal focus for a jump that cannot happen. The count
+		// still repaints so the current pointer cannot disagree with the control.
+		renderSearchUi();
+		return;
+	}
+	ensureVisible(displayIndex);
+	setSelection(id);
+	renderWindow(true);
+	renderSearchUi();
+	if (searchInput) {
+		searchInput.focus({ preventScroll: true });
+	}
+}
+
+/** Cycle matches with wrapping; no-op when the query has no candidates. */
+function cycleSearch(direction) {
+	if (searchMatches.length === 0) {
+		return;
+	}
+	searchIndex = stepMatch(searchMatches, searchIndex, direction);
+	jumpToSearchMatch(searchIndex);
+}
+
+/** Clear the search and restore filter highlighting; optionally return focus to it. */
+function clearSearch(focusInput) {
+	searchQuery = '';
+	searchMatches = [];
+	searchIndex = -1;
+	highlightQuery = '';
+	if (searchInput) {
+		searchInput.value = '';
+	}
+	renderSearchUi();
+	renderWindow(true);
+	if (focusInput && searchInput) {
+		searchInput.focus({ preventScroll: true });
+	}
+}
+
+/** Escape returns focus to the tree: the selected row when visible, else the first. */
+function focusTreeAfterSearch() {
+	const id =
+		selectedId !== undefined && displayIndexById.has(selectedId)
+			? selectedId
+			: visibleNodeIds.length > 0
+				? visibleNodeIds[0]
+				: undefined;
+	if (id !== undefined) {
+		focusRow(id);
+	}
+}
+
+/** A row click while search is active makes that row the current match. */
+function syncSearchToSelection(id) {
+	if (searchQuery.trim() === '') {
+		return;
+	}
+	const rowIndex = rowIndexById.get(id);
+	if (rowIndex === undefined) {
+		return;
+	}
+	const at = searchMatches.indexOf(rowIndex);
+	if (at >= 0) {
+		searchIndex = at;
+		renderSearchUi();
 	}
 }
 
@@ -3376,6 +3632,55 @@ if (clearButton) {
 		clearFilter(true);
 	});
 }
+
+if (searchInput) {
+	searchInput.addEventListener('input', function () {
+		searchQuery = searchInput.value;
+		refreshSearch(true);
+		if (searchIndex >= 0) {
+			jumpToSearchMatch(searchIndex);
+		}
+	});
+	searchInput.addEventListener('keydown', function (event) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			cycleSearch(event.shiftKey ? -1 : 1);
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			clearSearch(false);
+			focusTreeAfterSearch();
+		}
+	});
+}
+if (searchClear) {
+	searchClear.addEventListener('click', function () {
+		clearSearch(true);
+	});
+}
+if (searchPrev) {
+	searchPrev.addEventListener('click', function () {
+		cycleSearch(-1);
+	});
+}
+if (searchNext) {
+	searchNext.addEventListener('click', function () {
+		cycleSearch(1);
+	});
+}
+// Ctrl/Cmd+F is the find shortcut; F3/Shift+F3 cycle while a search query is
+// active. Both are document-level so they work from the tree and the input.
+document.addEventListener('keydown', function (event) {
+	if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
+		event.preventDefault();
+		if (searchInput) {
+			searchInput.focus();
+			searchInput.select();
+		}
+	} else if (event.key === 'F3' && searchQuery.trim() !== '') {
+		event.preventDefault();
+		cycleSearch(event.shiftKey ? -1 : 1);
+	}
+});
 
 if (conditionsAdd) {
 	conditionsAdd.addEventListener('click', addConditionEntry);
