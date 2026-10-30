@@ -1359,14 +1359,13 @@ body.sb-row-resizing {
 }
 .condition {
 	padding: 0 4px;
-	border: 1px solid var(--vscode-panel-border, transparent);
+	border: 1px solid transparent;
 	border-radius: 3px;
 	color: var(--tok-meta);
 }
-/* Unknown keeps today's appearance (PRD R12); only a false condition recolours. */
+/* A false condition is marked by its edge; the tokens keep their own colours. */
 .condition[data-state="false"] {
-	color: var(--vscode-errorForeground);
-	border-color: currentColor;
+	border-color: var(--vscode-errorForeground);
 }
 .annotation {
 	padding: 0 4px;
@@ -1377,6 +1376,30 @@ body.sb-row-resizing {
 }
 .punct {
 	color: var(--tok-punct);
+}
+.syscond-name {
+	color: var(--tok-key);
+}
+.syscond-number {
+	color: var(--tok-number);
+}
+.syscond-string {
+	color: var(--tok-string);
+}
+.syscond-operator {
+	color: var(--tok-keyword);
+}
+.syscond-literal {
+	color: var(--tok-keyword);
+}
+.syscond-punct {
+	color: var(--tok-punct);
+}
+.comment-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: pre;
 }
 .context {
 	color: var(--vscode-editor-foreground);
@@ -1434,6 +1457,9 @@ mark {
 	line-height: 1.4;
 	white-space: normal;
 	overflow-wrap: anywhere;
+}
+.condition-code {
+	white-space: pre-wrap;
 }
 .details-value {
 	box-sizing: border-box;
@@ -1614,20 +1640,34 @@ body[data-view="document"] .annotation {
 body[data-view="document"] .context {
 	color: var(--vscode-editor-foreground);
 }
-body[data-view="document"] .condition,
-body[data-view="document"] .annotation {
-	padding: 0;
-	border: 0;
-	border-radius: 0;
+body[data-view="document"] .condition {
+	padding: 0 4px;
+	border: 1px solid transparent;
+	border-radius: 3px;
 }
 body[data-view="document"] .condition[data-state="false"] {
-	color: var(--vscode-errorForeground);
+	border-color: var(--vscode-errorForeground);
 }
-body[data-view="document"] .annotation::before {
-	content: "/* ";
+body[data-view="document"] .row-meta > span.condition {
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 56ch;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
-body[data-view="document"] .annotation::after {
-	content: " */";
+body[data-view="document"] .comment {
+	height: var(--ecuc-lh);
+}
+body[data-view="document"] .comment > .row {
+	color: var(--tok-comment);
+	font-style: italic;
+}
+body[data-view="document"] .comment > .row:hover {
+	background-color: var(--hover-bg);
+}
+body[data-view="document"] .comment[data-subtree="true"] > .row {
+	background-color: var(--subtree-bg);
 }
 body[data-view="document"] .row.k-module .label::before {
 	content: "module ";
@@ -2060,8 +2100,9 @@ function twistySpan() {
 }
 
 function buildNodeRow(row, displayIndex) {
+	const inlineMeta = row.meta.filter((part) => part.cls !== 'annotation');
 	const node = document.createElement('div');
-	node.className = row.meta.length > 0 ? 'node has-meta' : 'node';
+	node.className = inlineMeta.length > 0 ? 'node has-meta' : 'node';
 	node.setAttribute('role', 'treeitem');
 	node.setAttribute('aria-level', String(row.level));
 	node.setAttribute('aria-posinset', String(row.posinset));
@@ -2115,8 +2156,8 @@ function buildNodeRow(row, displayIndex) {
 	if (row.kind === 'parameter' || row.kind === 'reference') {
 		rowElement.appendChild(valueSpan(row));
 	}
-	if (row.meta.length > 0) {
-		rowElement.appendChild(metaSpan(row));
+	if (inlineMeta.length > 0) {
+		rowElement.appendChild(metaSpan({ ...row, meta: inlineMeta }));
 	}
 	if (row.disabled) {
 		const suffix = document.createElement('span');
@@ -2161,7 +2202,30 @@ function buildBraceRow(flat, displayIndex) {
 	return node;
 }
 
+function buildCommentRow(flat, displayIndex) {
+	const owner = rows[flat.rowIndex];
+	const node = document.createElement('div');
+	node.className = 'comment';
+	node.setAttribute('aria-hidden', 'true');
+	if (subtreeIds.has(owner.id)) {
+		node.dataset.subtree = 'true';
+	}
+	node.dataset.rowId = owner.id;
+	const rowElement = document.createElement('span');
+	rowElement.className = 'row comment-row';
+	rowElement.dataset.level = String(flat.level);
+	rowElement.appendChild(inspectorElement('span', 'punct comment-mark', '/* '));
+	rowElement.appendChild(inspectorElement('span', 'comment-text', flat.text));
+	rowElement.appendChild(inspectorElement('span', 'punct comment-mark', ' */'));
+	appendGuides(rowElement, displayIndex);
+	node.appendChild(rowElement);
+	return node;
+}
+
 function buildDisplayRow(flat, displayIndex) {
+	if (flat.type === 'comment') {
+		return buildCommentRow(flat, displayIndex);
+	}
 	return flat.type === 'node'
 		? buildNodeRow(rows[flat.rowIndex], displayIndex)
 		: buildBraceRow(flat, displayIndex);
@@ -2396,6 +2460,21 @@ function onRowClick(event) {
 	}
 	const item = event.target.closest('#tree [role="treeitem"]');
 	if (!item) {
+		const comment = event.target.closest('#tree .comment[data-row-id]');
+		if (comment) {
+			const id = comment.dataset.rowId;
+			if (id) {
+				focusId = id;
+				setSelection(id);
+				const node = renderedById.get(id);
+				if (node) {
+					applyRoving(id);
+					node.focus({ preventScroll: true });
+				}
+				vscode.postMessage({ type: 'select', nodeId: id });
+				syncSearchToSelection(id);
+			}
+		}
 		return;
 	}
 	// One interaction, one effect: the twisty toggles without moving the selection,
@@ -3306,6 +3385,16 @@ function inspectorRow(key, value) {
 	return row;
 }
 
+/** A Details row whose value is a token-coloured, wrapped condition expression. */
+function conditionCodeRow(key, text) {
+	const row = inspectorElement('div', 'inspector-row');
+	row.appendChild(inspectorElement('span', 'inspector-key', key));
+	const code = inspectorElement('div', 'inspector-code condition-code');
+	appendConditionTokens(code, text, '');
+	row.appendChild(code);
+	return row;
+}
+
 function paneActions(body) {
 	const actions = inspectorElement('div', 'inspector-actions');
 	body.appendChild(actions);
@@ -3388,7 +3477,7 @@ function updateInspector() {
 		detailsBody.appendChild(inspectorRow('Context', data.context));
 	}
 	if (data.condition) {
-		detailsBody.appendChild(inspectorRow('Condition', data.condition.text));
+		detailsBody.appendChild(conditionCodeRow('Condition', data.condition.text));
 		detailsBody.appendChild(inspectorRow('Condition state', data.condition.state));
 		if (data.condition.reason) {
 			detailsBody.appendChild(inspectorRow('Condition note', data.condition.reason));
@@ -3397,7 +3486,7 @@ function updateInspector() {
 		detailsBody.appendChild(inspectorRow('Disabled', 'Disabled by an ancestor condition.'));
 	}
 	if (data.conditions) {
-		detailsBody.appendChild(inspectorRow('Conditions', data.conditions));
+		detailsBody.appendChild(conditionCodeRow('Conditions', data.conditions));
 	}
 	if (data.annotations) {
 		detailsBody.appendChild(inspectorRow('Annotations', data.annotations));
@@ -3421,14 +3510,16 @@ function onTreeHover(event) {
 	}
 	const item = event.target.closest('#tree [role="treeitem"]');
 	const brace = item ? null : event.target.closest('#tree .brace[data-row-id]');
-	if (!item && !brace) {
+	const comment = item || brace ? null : event.target.closest('#tree .comment[data-row-id]');
+	if (!item && !brace && !comment) {
 		if (hoveredGuideId !== undefined) {
 			hoveredGuideId = undefined;
 			applyGuideHover();
 		}
 		return;
 	}
-	let row = item ? rowById.get(item.dataset.nodeId) : rowById.get(brace.dataset.rowId);
+	const owner = item ? item.dataset.nodeId : brace ? brace.dataset.rowId : comment.dataset.rowId;
+	let row = owner === undefined ? undefined : rowById.get(owner);
 	while (row && !row.hasChildren) {
 		row = row.parentId === null ? undefined : rowById.get(row.parentId);
 	}

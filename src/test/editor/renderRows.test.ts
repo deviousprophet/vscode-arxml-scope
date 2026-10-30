@@ -11,7 +11,7 @@ import * as assert from 'assert';
 
 import { ContainerNode, EcucDocumentModel, ModuleNode, ParameterNode, ReferenceNode } from '../../core/ecuc/model';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { buildRows, parameterFormats, parameterType } from '../../editor/renderRows';
+import { RowCondition, buildRows, conditionTooltip, parameterFormats, parameterType } from '../../editor/renderRows';
 import { searchRows } from '../../editor/treeQuery';
 import { fixtureText } from '../core/modelTestUtils';
 
@@ -156,6 +156,70 @@ suite('editor row model (design §2)', () => {
 		assert.deepStrictEqual(peer.meta.map((part) => `${part.cls}:${part.text}`), [
 			'context:context PkgA.PkgB.ModX.ContA',
 		]);
+	});
+
+	test('annotations are comment lines and condition titles explain their inputs', () => {
+		const plain = fixtureRows();
+		const moduleRow = plain.rows.find((row) => row.kind === 'module')!;
+		assert.deepStrictEqual(moduleRow.comments, ['[Note] module note'], 'each annotation is one comment line');
+		assert.strictEqual(
+			plain.rows.find((row) => row.label === 'ContA')?.comments?.[0],
+			'container note',
+			'an unlabelled annotation keeps its text'
+		);
+		const conditionPart = moduleRow.meta.find(
+			(part) => part.cls === 'condition' && part.text === '[(A == B)]'
+		);
+		assert.strictEqual(
+			conditionPart?.title,
+			'A = (not set)\nB = (not set)',
+			'missing values are listed one per line'
+		);
+
+		const evaluated = buildRows(scanEcucValues(fixtureText(FIXTURE)), {
+			conditions: new Map([
+				['A', 1],
+				['B', 2],
+			]),
+		}).rows.find((row) => row.kind === 'module')!;
+		assert.deepStrictEqual(evaluated.condition?.values, { A: 1, B: 2 });
+		assert.strictEqual(
+			evaluated.meta.find((part) => part.cls === 'condition' && part.text === '[(A == B)]')?.title,
+			'A = 1\nB = 2',
+			'the tooltip lists values in source order, separated by newlines'
+		);
+	});
+
+	test('condition tooltip quotes strings, marks missing values and keeps a literal fallback', () => {
+		const condition = (over: Partial<RowCondition>): RowCondition => ({
+			text: '(X==1)',
+			state: 'true',
+			symbols: [],
+			values: {},
+			...over,
+		});
+		assert.strictEqual(
+			conditionTooltip(condition({ symbols: ['X', 'Y'], values: { X: 'a' } })),
+			'X = "a"\nY = (not set)'
+		);
+		assert.strictEqual(conditionTooltip(condition({ text: 'true' })), 'true');
+		assert.strictEqual(
+			conditionTooltip(
+				condition({
+					text: '(A==',
+					state: 'unknown',
+					reason: 'unexpected end of expression',
+					symbols: ['A'],
+					values: { A: 1 },
+				})
+			),
+			'A = 1\nunexpected end of expression'
+		);
+		assert.strictEqual(
+			conditionTooltip(condition({ text: '(A==1)', state: 'unknown', reason: 'missing: A', symbols: ['A'] })),
+			'A = (not set)',
+			'a missing reason is not repeated after the not-set lines'
+		);
 	});
 
 	test('design §2: reference followability is same-file only', () => {

@@ -68,6 +68,13 @@ that is not obvious from the code.
   dotted underline or hover pencil. Empty containers show a muted `{ }` marker so they are distinct
   from parameters. Use `--fold-gutter`/`--content-pad`/`--doc-pad`/`--indent`; there is no line-number
   gutter. The `=` is punctuation, not part of the value token.
+- **A condition tooltip explains inputs, not the result.** The row's dimmed state already says the
+  condition is false, so the chip `title` lists `NAME = value`, one per line in source order;
+  strings are quoted and missing values read `(not set)`. Do not put `true`/`false` or a
+  `unknown (missing: …)` summary back in the title. A parse/type reason may follow the value lines;
+  a bare `missing:` reason is suppressed because the lines already show it.
+- **Annotations describe the node below them.** They are muted italic `/* … */` comment rows above
+  the node, not pills at the end of the line. Multiple annotations stack in source order.
 - **No line-number gutter.** Do not add `data-line`, `data-ln-digits`, `--ln-*`, `--gut`, a digits
   payload or source-position fields back to the row model. Bracket guides are the only vertical
   rules; they run from opening to closing brace, fade at rest and activate on hover. A repeating

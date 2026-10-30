@@ -81,6 +81,8 @@ export interface TreeRow {
 	hasChildren: boolean;
 	/** Lower-cased label + short name + value. */
 	haystack: string;
+	/** Annotation lines shown above this row, in source order. */
+	comments?: readonly string[];
 }
 
 /** A displayed node row: `rowIndex` refers to the source row array. */
@@ -106,7 +108,16 @@ export interface FlatBraceRow {
 	level: number;
 }
 
-export type FlatRow = FlatNodeRow | FlatBraceRow;
+/** A comment line above the node it annotates; not focusable and not a tree row. */
+export interface FlatCommentRow {
+	type: 'comment';
+	rowIndex: number;
+	/** The annotated node's 1-based level, so indentation and guides line up. */
+	level: number;
+	text: string;
+}
+
+export type FlatRow = FlatNodeRow | FlatBraceRow | FlatCommentRow;
 
 export interface FlattenOptions {
 	/** The saved collapsed ids; never mutated by this function. */
@@ -141,6 +152,9 @@ export function flattenRows(rows: readonly TreeRow[], options: FlattenOptions = 
 		}
 		const row = rows[i];
 		const expanded = row.hasChildren && !(collapsed ? collapsed.has(row.id) : false);
+		for (const text of row.comments ?? []) {
+			out.push({ type: 'comment', rowIndex: i, level: row.level, text });
+		}
 		out.push({
 			type: 'node',
 			rowIndex: i,

@@ -109,6 +109,174 @@ export function valueSpan(row: RowViewFields, readOnly = false, query?: string):
 	return value;
 }
 
+/** One syntax-coloured slice of a condition expression. */
+export interface ConditionToken {
+	/** CSS class, or `''` for whitespace. */
+	cls: string;
+	start: number;
+	end: number;
+}
+
+/**
+ * Splits a condition into syntax tokens without changing any character.
+ * Identifiers, numbers, strings, operators and punctuation get the shared
+ * `--tok-*` classes; whitespace stays unstyled so the expression reads normally.
+ *
+ * The whole tokenizer lives inside this function: the page serializes it with
+ * `toString()`, so a module-level helper or constant would not reach the webview.
+ */
+export function conditionTokens(text: string): ConditionToken[] {
+	const twoChar = ['&&', '||', '==', '!=', '<=', '>='];
+	const nameStart = (character: string): boolean =>
+		(character >= 'A' && character <= 'Z') ||
+		(character >= 'a' && character <= 'z') ||
+		character === '_';
+	const namePart = (character: string): boolean =>
+		nameStart(character) ||
+		(character >= '0' && character <= '9') ||
+		character === '.' ||
+		character === '-' ||
+		character === '/';
+	const digit = (character: string): boolean => character >= '0' && character <= '9';
+	const whitespace = (character: string): boolean =>
+		character === ' ' || character === '\t' || character === '\r' || character === '\n';
+
+	const tokens: ConditionToken[] = [];
+	let at = 0;
+	while (at < text.length) {
+		const character = text[at];
+		const start = at;
+		if (whitespace(character)) {
+			while (at < text.length && whitespace(text[at])) {
+				at++;
+			}
+			tokens.push({ cls: '', start, end: at });
+			continue;
+		}
+		if (character === '"' || character === "'") {
+			at++;
+			while (at < text.length) {
+				if (text[at] === '\\') {
+					at += 2;
+					continue;
+				}
+				if (text[at] === character) {
+					at++;
+					break;
+				}
+				at++;
+			}
+			tokens.push({ cls: 'syscond-string', start, end: Math.min(at, text.length) });
+			continue;
+		}
+		const signed =
+			(character === '+' || character === '-') && digit(text[at + 1] ?? '');
+		const decimal = character === '.' && digit(text[at + 1] ?? '');
+		if (digit(character) || signed || decimal) {
+			if (character === '+' || character === '-') {
+				at++;
+			}
+			if (text[at] === '0' && (text[at + 1] === 'x' || text[at + 1] === 'X')) {
+				at += 2;
+				while (at < text.length && /[0-9a-fA-F]/.test(text[at])) {
+					at++;
+				}
+			} else {
+				while (at < text.length && digit(text[at])) {
+					at++;
+				}
+				if (text[at] === '.') {
+					at++;
+					while (at < text.length && digit(text[at])) {
+						at++;
+					}
+				}
+			}
+			tokens.push({ cls: 'syscond-number', start, end: at });
+			continue;
+		}
+		if (nameStart(character)) {
+			while (at < text.length && namePart(text[at])) {
+				at++;
+			}
+			const name = text.slice(start, at);
+			const literal = name === 'true' || name === 'false' || name === 'TRUE' || name === 'FALSE';
+			tokens.push({ cls: literal ? 'syscond-literal' : 'syscond-name', start, end: at });
+			continue;
+		}
+		const pair = text.slice(at, at + 2);
+		if (twoChar.indexOf(pair) !== -1) {
+			tokens.push({ cls: 'syscond-operator', start, end: at + 2 });
+			at += 2;
+			continue;
+		}
+		if ('<>!'.indexOf(character) !== -1) {
+			tokens.push({ cls: 'syscond-operator', start, end: at + 1 });
+			at++;
+			continue;
+		}
+		tokens.push({ cls: 'syscond-punct', start, end: at + 1 });
+		at++;
+	}
+	return tokens;
+}
+
+/** Appends one token slice, optionally wrapped in the search `<mark>`. */
+function appendConditionSlice(
+	parent: PageElement,
+	cls: string,
+	text: string,
+	marked: boolean
+): void {
+	let target = parent;
+	if (cls !== '') {
+		const span = document.createElement('span');
+		span.className = cls;
+		parent.appendChild(span);
+		target = span;
+	}
+	if (marked) {
+		const mark = document.createElement('mark');
+		mark.textContent = text;
+		target.appendChild(mark);
+	} else {
+		target.appendChild(document.createTextNode(text));
+	}
+}
+
+/**
+ * Appends a condition with token colours while keeping Search highlighting.
+ * Highlight ranges are computed over the whole expression, so a match that
+ * crosses a token boundary stays one visible mark inside each token.
+ */
+export function appendConditionTokens(parent: PageElement, text: string, query?: string): void {
+	const needle = query === undefined ? (typeof highlightQuery === 'string' ? highlightQuery : '') : query;
+	const ranges = needle.trim() === '' ? [] : matchRanges(text, needle);
+	let rangeIndex = 0;
+	for (const token of conditionTokens(text)) {
+		let at = token.start;
+		while (at < token.end) {
+			while (rangeIndex < ranges.length && ranges[rangeIndex].end <= at) {
+				rangeIndex++;
+			}
+			const range = ranges[rangeIndex];
+			if (!range || range.start >= token.end) {
+				appendConditionSlice(parent, token.cls, text.slice(at, token.end), false);
+				at = token.end;
+				continue;
+			}
+			if (range.start > at) {
+				appendConditionSlice(parent, token.cls, text.slice(at, range.start), false);
+				at = range.start;
+				continue;
+			}
+			const end = Math.min(range.end, token.end);
+			appendConditionSlice(parent, token.cls, text.slice(at, end), true);
+			at = end;
+		}
+	}
+}
+
 /** The quiet-source meta chips (short name, variant, context, condition, annotation). */
 export function metaSpan(row: RowViewFields, query?: string): unknown {
 	const meta = document.createElement('span');
@@ -120,7 +288,9 @@ export function metaSpan(row: RowViewFields, query?: string): unknown {
 		if (part.state) {
 			span.dataset.state = part.state;
 		}
-		if (part.cls === 'context' && part.text.indexOf('context ') === 0) {
+		if (part.cls === 'condition') {
+			appendConditionTokens(span, part.text, query);
+		} else if (part.cls === 'context' && part.text.indexOf('context ') === 0) {
 			const keyword = document.createElement('span');
 			keyword.className = 'keyword';
 			appendHighlighted(keyword, 'context', query);
@@ -137,5 +307,5 @@ export function metaSpan(row: RowViewFields, query?: string): unknown {
 
 /** The page functions, serialized for a webview's classic script. */
 export function rowViewScript(): string {
-	return `${twistyIcon.toString()}${appendHighlighted.toString()}${valueSpan.toString()}${metaSpan.toString()}`;
+	return `${twistyIcon.toString()}${appendHighlighted.toString()}${conditionTokens.toString()}${appendConditionSlice.toString()}${appendConditionTokens.toString()}${valueSpan.toString()}${metaSpan.toString()}`;
 }

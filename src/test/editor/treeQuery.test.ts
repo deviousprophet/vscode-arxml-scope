@@ -25,6 +25,42 @@ suite('tree query helpers', () => {
 		assert.deepStrictEqual(nodeIndexes(), [0, 1, 2, 3, 4, 5]);
 	});
 
+	test('annotation comments are fixed display rows above their node', () => {
+		const rows = ROWS.map((row) =>
+			row.id === 'a' ? { ...row, comments: ['[Note] first', 'second'] } : row
+		);
+		const list = flattenRows(rows, { braces: true });
+		assert.deepStrictEqual(
+			list.map((row) => `${row.type}:${row.rowIndex}`),
+			[
+				'node:0',
+				'brace-open:0',
+				'comment:1',
+				'comment:1',
+				'node:1',
+				'brace-open:1',
+				'node:2',
+				'node:3',
+				'brace-close:1',
+				'node:4',
+				'brace-open:4',
+				'node:5',
+				'brace-close:4',
+				'brace-close:0',
+			]
+		);
+		const comments = list.filter((row) => row.type === 'comment');
+		assert.deepStrictEqual(
+			comments.map((row) => (row.type === 'comment' ? `${row.level}:${row.text}` : '')),
+			['2:[Note] first', '2:second'],
+			'comments carry the owner level and source order'
+		);
+		assert.ok(
+			flattenRows(ROWS).every((row) => row.type !== 'comment'),
+			'a row without annotations adds no display row'
+		);
+	});
+
 	test('a collapsed node hides its subtree', () => {
 		assert.deepStrictEqual(nodeIndexes(new Set(['a'])), [0, 1, 4, 5]);
 		assert.deepStrictEqual(nodeIndexes(new Set(['m'])), [0], 'a collapsed module hides everything below it');

@@ -11,6 +11,7 @@ import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { RowPayload, refusalShownInDetails, renderHtml } from '../../editor/renderHtml';
+import { conditionTokens } from '../../editor/rowView';
 import { loadUiState } from '../../editor/sidebarShell';
 import { fixtureText } from '../core/modelTestUtils';
 import { functionSource } from './scriptTestUtils';
@@ -122,8 +123,18 @@ suite('editor document view', () => {
 			/body\[data-view="document"\] \.node\[data-gap="true"\]\s*\{[^}]*padding-top:\s*var\(--ecuc-lh\)/.test(style)
 		);
 		assert.ok(/body\[data-view="document"\] \.meta\s*\{[^}]*margin-bottom:\s*calc\(var\(--ecuc-lh\) \* 0\.5\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.condition,[\s\S]*?border:\s*0/.test(style));
-		assert.ok(/body\[data-view="document"\] \.annotation::before\s*\{[^}]*content:\s*"\/\*/.test(style));
+		assert.ok(
+			/body\[data-view="document"\] \.condition\s*\{[^}]*border:\s*1px solid transparent/.test(style),
+			'the condition chip keeps a compact edge'
+		);
+		assert.ok(
+			/body\[data-view="document"\] \.condition\[data-state="false"\]\s*\{[^}]*border-color:\s*var\(--vscode-errorForeground\)/.test(
+				style
+			),
+			'a false condition is marked by its edge'
+		);
+		assert.ok(/body\[data-view="document"\] \.comment > \.row\s*\{[^}]*--tok-comment/.test(style));
+		assert.ok(/body\[data-view="document"\] \.comment\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*content:\s*"module /.test(style));
 		assert.ok(!/body\[data-view="document"\] \.row-meta\s*\{[^}]*display:\s*none/.test(style), 'metadata is not hidden');
 		assert.ok(!/body\[data-view="tree"\]/.test(style), 'no Tree scoped CSS');
@@ -287,7 +298,7 @@ suite('editor document view', () => {
 		const script = functionSource(page(), 'buildNodeRow');
 		assert.ok(script.includes('appendHighlighted(label, row.label)'), 'the label');
 		assert.ok(script.includes('valueSpan(row)'), 'the value');
-		assert.ok(script.includes('metaSpan(row)'), 'the metadata line');
+		assert.ok(script.includes('metaSpan({ ...row, meta: inlineMeta })'), 'the metadata line');
 		assert.ok(script.includes('rowElement.appendChild(valueSpan(row))'), 'the value stays a direct row child');
 	});
 
@@ -300,6 +311,74 @@ suite('editor document view', () => {
 		const style = styleOf(script);
 		assert.ok(/\.punct\s*\{[^}]*--tok-punct/.test(style));
 		assert.ok(/body\[data-view="document"\] \.value\s*\{[^}]*flex:\s*0 0 auto/.test(style));
+	});
+
+	test('condition expressions are split into distinct syntax tokens without losing text', () => {
+		const expression = '(CANIPCORETYPE_SC == 1 && OTHER_SC != 0)';
+		const tokens = conditionTokens(expression);
+		assert.deepStrictEqual(
+			tokens.map((token) => `${token.cls}:${expression.slice(token.start, token.end)}`),
+			[
+				'syscond-punct:(',
+				'syscond-name:CANIPCORETYPE_SC',
+				': ',
+				'syscond-operator:==',
+				': ',
+				'syscond-number:1',
+				': ',
+				'syscond-operator:&&',
+				': ',
+				'syscond-name:OTHER_SC',
+				': ',
+				'syscond-operator:!=',
+				': ',
+				'syscond-number:0',
+				'syscond-punct:)',
+			]
+		);
+		assert.strictEqual(tokens.map((token) => expression.slice(token.start, token.end)).join(''), expression);
+
+		const typed = conditionTokens('(0x10 == -2 && "a b" == A.B)');
+		assert.deepStrictEqual(
+			typed.map((token) => `${token.cls}:${'(0x10 == -2 && "a b" == A.B)'.slice(token.start, token.end)}`),
+			[
+				'syscond-punct:(',
+				'syscond-number:0x10',
+				': ',
+				'syscond-operator:==',
+				': ',
+				'syscond-number:-2',
+				': ',
+				'syscond-operator:&&',
+				': ',
+				'syscond-string:"a b"',
+				': ',
+				'syscond-operator:==',
+				': ',
+				'syscond-name:A.B',
+				'syscond-punct:)',
+			]
+		);
+	});
+
+	test('annotations render above their node and long conditions wrap in Details', () => {
+		const html = page();
+		const build = functionSource(html, 'buildCommentRow');
+		assert.ok(build.includes("'row comment-row'"), 'a comment row uses the shared row layout');
+		assert.ok(build.includes("'comment-text'") && build.includes('flat.text'), 'the annotation text is the row text');
+		const display = functionSource(html, 'buildDisplayRow');
+		assert.ok(display.includes("flat.type === 'comment'"), 'comment rows are part of the display list');
+		const update = functionSource(html, 'updateInspector');
+		assert.ok(update.includes("conditionCodeRow('Condition'"));
+		assert.ok(update.includes("conditionCodeRow('Conditions'"));
+		const style = styleOf(html);
+		assert.ok(/\.condition-code\s*\{[^}]*white-space:\s*pre-wrap/.test(style));
+		assert.ok(
+			/body\[data-view="document"\] \.row-meta > span\.condition\s*\{[^}]*max-width:\s*56ch[^}]*text-overflow:\s*ellipsis/.test(
+				style
+			),
+			'the tree chip stays one bounded line'
+		);
 	});
 
 	test('the sidebar width and narrow layout are specified', () => {

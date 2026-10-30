@@ -172,7 +172,8 @@ suite('editor visual polish', () => {
 		assert.ok(!build.includes('glyphSpan'), 'no Tree glyph');
 		assert.ok(value.includes("value.className = 'value'"));
 		assert.ok(value.includes("text.className = 'value-text'"));
-		assert.ok(build.includes('metaSpan(row)'));
+		assert.ok(build.includes("row.meta.filter((part) => part.cls !== 'annotation')"), 'annotation meta leaves the row');
+		assert.ok(build.includes('metaSpan({ ...row, meta: inlineMeta })'), 'the remaining metadata line');
 		assert.ok(functionSource(script, 'metaSpan').includes("span.className = part.cls"));
 		assert.ok(functionSource(script, 'metaSpan').includes('span.title = part.title'));
 

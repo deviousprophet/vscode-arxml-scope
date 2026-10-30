@@ -68,6 +68,23 @@ suite('SW-SYSCOND evaluator (design §2)', () => {
 		assert.deepStrictEqual(partial.missing, ['B'], 'and the unresolved symbol is still reported');
 	});
 
+	test('the result carries the supplied value for every referenced identifier', () => {
+		const partial = evaluateSyscond('(A==1 && B!=2)', values({ A: 1 }));
+		assert.deepStrictEqual(partial.values, { A: 1 }, 'known values travel with the result');
+
+		const fullPath = evaluateSyscond('(/Pkg/SwSystemconsts/A==1)', values({ A: 1 }));
+		assert.deepStrictEqual(fullPath.values, { '/Pkg/SwSystemconsts/A': 1 }, 'the same tail lookup fills the map');
+
+		const typed = evaluateSyscond('(TEXT=="a" && ON==true && COUNT==2)', values({ TEXT: 'a', ON: true, COUNT: 2 }));
+		assert.deepStrictEqual(typed.values, { TEXT: 'a', ON: true, COUNT: 2 }, 'strings, booleans and numbers survive');
+
+		const malformed = evaluateSyscond('(A==', values({ A: 'x' }));
+		assert.deepStrictEqual(malformed.values, { A: 'x' }, 'a parse failure still shows the referenced values');
+
+		const unterminated = evaluateSyscond('"unterminated', values({ A: 1 }));
+		assert.deepStrictEqual(unterminated.values, {}, 'a tokenize failure references no identifiers');
+	});
+
 	test('design §2.3: lookup is exact first, then the last / segment', () => {
 		assert.strictEqual(stateOf('(CANIPCORETYPE_SC==0)', { CANIPCORETYPE_SC: 1 }), 'false');
 		assert.strictEqual(

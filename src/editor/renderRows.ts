@@ -49,6 +49,8 @@ export interface RowCondition {
 	missing?: string[];
 	/** Identifiers referenced by this condition, in source order. */
 	symbols: string[];
+	/** The entered value for each referenced identifier that has one. */
+	values: Record<string, ConditionValue>;
 }
 
 /** One entity in DFS/display order. UI fields are values; no markup is carried. */
@@ -94,6 +96,8 @@ export interface EcucRow {
 	/** Hover text: the full `DEFINITION-REF` (design §2.7). */
 	title: string;
 	meta: MetaPart[];
+	/** Annotation comment lines shown above this row, in source order. */
+	comments?: string[];
 	/** Present only when the node has its own SW-SYSCOND. */
 	condition?: RowCondition;
 	/** True when this row or any ancestor condition is false. */
@@ -269,6 +273,7 @@ function moduleRow(
 		definitionRef: module.definitionRef,
 		title: module.definitionRef,
 		meta,
+		comments: commentLines(meta),
 		haystack: haystack({ label: dotted(module.definitionRef), shortName: module.shortName, meta }),
 	};
 	const disabled = applyCondition(row, condition, disabledByAncestor);
@@ -309,6 +314,7 @@ function containerRow(
 		definitionRef: container.definitionRef,
 		title: container.definitionRef,
 		meta,
+		comments: commentLines(meta),
 		haystack: haystack({
 			label: lastShortName(container.definitionRef),
 			shortName: container.shortName,
@@ -377,6 +383,7 @@ function parameterRow(
 		shownValue: shown,
 		title: parameter.definitionRef,
 		meta,
+		comments: commentLines(meta),
 		haystack: haystack({ label: parameter.name, value, meta }),
 	};
 	applyCondition(row, condition, disabledByAncestor);
@@ -423,6 +430,7 @@ function referenceRow(
 			: {}),
 		title: reference.definitionRef,
 		meta,
+		comments: commentLines(meta),
 		haystack: haystack({ label: reference.name, value: target, meta }),
 	};
 	applyCondition(row, condition, disabledByAncestor);
@@ -442,7 +450,40 @@ function ownCondition(node: Suffixes, ctx: BuildContext): RowCondition | undefin
 		reason: result.error ?? missingText,
 		missing: result.missing,
 		symbols: result.symbols,
+		values: result.values,
 	};
+}
+
+/** How one entered condition value reads in the tooltip. */
+function conditionValueText(value: ConditionValue): string {
+	return typeof value === 'string' ? JSON.stringify(value) : String(value);
+}
+
+/**
+ * The condition chip's hover text: one `NAME = value` line per referenced
+ * symbol, in source order. The enabled/disabled row already carries the result,
+ * so the tooltip explains the inputs instead of repeating `true`/`false`.
+ */
+export function conditionTooltip(condition: RowCondition): string {
+	const lines = condition.symbols.map((name) => {
+		const value = condition.values[name];
+		return `${name} = ${value === undefined ? '(not set)' : conditionValueText(value)}`;
+	});
+	// A parse/type reason is still useful next to its values; a bare `missing:`
+	// reason repeats the `(not set)` lines and is left out.
+	const reason =
+		condition.state === 'unknown' &&
+		condition.reason !== undefined &&
+		!condition.reason.startsWith('missing:')
+			? condition.reason
+			: undefined;
+	if (lines.length === 0) {
+		return reason ?? condition.text;
+	}
+	if (reason !== undefined) {
+		lines.push(reason);
+	}
+	return lines.join('\n');
 }
 
 /**
@@ -484,9 +525,7 @@ function suffixParts(node: Suffixes, condition?: RowCondition): MetaPart[] {
 	const parts: MetaPart[] = [];
 	if (node.syscond) {
 		const text = `[${node.syscond}]`;
-		const title = condition
-			? `${text} — ${condition.state}${condition.reason ? ` (${condition.reason})` : ''}`
-			: text;
+		const title = condition ? conditionTooltip(condition) : text;
 		parts.push({ cls: 'condition', text, title, ...(condition ? { state: condition.state } : {}) });
 	}
 	if (node.postBuildVariants && node.postBuildVariants.length > 0) {
@@ -502,6 +541,12 @@ function suffixParts(node: Suffixes, condition?: RowCondition): MetaPart[] {
 		parts.push({ cls: 'annotation', text: label + text, title: label + text });
 	}
 	return parts;
+}
+
+/** The annotation parts, in source order, for the comment lines above a row. */
+function commentLines(meta: readonly MetaPart[]): string[] | undefined {
+	const lines = meta.filter((part) => part.cls === 'annotation').map((part) => part.text);
+	return lines.length > 0 ? lines : undefined;
 }
 
 /** `/A/B/C` -> `A.B.C`, the legacy `\structify` (shared with the HTML renderer). */

@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Search covers the text the Document shows, including the label, value, short name, variant, context, condition and annotation
 - Search remains responsive on large files
 - A **Conditions** panel that lists every `SW-SYSCOND` constant with an `unknown` state until a value is entered, stores values per workspace and dims rows disabled by a false condition
+- A condition chip whose hover text lists each referenced system constant and its entered value on its own line, with `(not set)` for missing values
+- Annotations render as italic comment lines above the node they describe
+- Condition expressions use distinct token colours for names, numbers, operators and punctuation; long expressions stay compact in the tree and wrap fully in **Details**
 - Condition constants discovered from the open document appear automatically; scanned constants are read-only and manual rows can be removed
 - Condition values use icon-only Edit, Save and Cancel actions
 - A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, a changes-only view, previous/next navigation, reveal-in-source and live refresh

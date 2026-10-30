@@ -144,6 +144,18 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
   text.
 - Long labels/values/metadata use `white-space: pre` and horizontal scroll. The node's `title` remains
   the full `DEFINITION-REF`.
+- **Annotations are comment rows, not inline meta.** `flattenRows` emits one `comment` display row per
+  annotation directly above its node (`buildCommentRow`), using the node's level for indentation and
+  guides. Comment rows are `aria-hidden`, fixed-height, never enter `visibleNodeIds`/`renderedById`,
+  and `buildNodeRow` filters `cls === 'annotation'` out of `metaSpan`. The annotation still lives in
+  the row's `meta`/haystack and in Details.
+- **Conditions are token-coloured.** `conditionTokens` preserves every character and assigns
+  `syscond-name`, `syscond-number`, `syscond-string`, `syscond-operator`, `syscond-literal` and
+  `syscond-punct`, all backed by the existing `--tok-*` variables. A false condition marks its chip
+  with a border edge only; the tokens keep their colours. The tree chip is bounded with ellipsis and
+  its `title` is `conditionTooltip`: one `NAME = value` line per symbol, `(not set)` for a missing
+  value, no `true`/`false`. Details renders `Condition`/`Conditions` through `conditionCodeRow` in a
+  wrapped `.condition-code` block.
 - Rows are built with `document.createElement` / `textContent`; the only `innerHTML`-like SVG is the
   inline twisty created with `createElementNS`. Brace rows are `aria-hidden`.
 - The details control is `<input class="details-value">` for numeric/text types and a

@@ -47,6 +47,8 @@ export interface ConditionResult {
 	symbols: string[];
 	/** Identifiers with no supplied value. */
 	missing: string[];
+	/** The supplied value for each referenced identifier that has one. */
+	values: Record<string, ConditionValue>;
 	/** Parse or comparison reason when the result is unknown. */
 	error?: string;
 }
@@ -452,27 +454,28 @@ function recordMissing(state: EvalState, name: string): void {
 /**
  * Exact key first, then the last `/` segment (design §2.3). A value entered as
  * `CANIPCORETYPE_SC` therefore matches a condition that uses a pasted full
- * `SYSC-REF` path, and a pasted full path matches a tail-shaped key.
+ * `SYSC-REF` path, and a pasted full path matches a tail-shaped key. Only an
+ * unambiguous tail match is used; two constants with the same tail stay
+ * unresolved rather than guessing.
  */
-function lookup(state: EvalState, name: string): ConditionValue | undefined {
-	recordSymbol(state, name);
-	const exact = state.values.get(name);
+function resolveValue(
+	values: ReadonlyMap<string, ConditionValue>,
+	name: string
+): ConditionValue | undefined {
+	const exact = values.get(name);
 	if (exact !== undefined) {
 		return exact;
 	}
 	const tail = name.slice(name.lastIndexOf('/') + 1);
 	if (tail !== name) {
-		const byTail = state.values.get(tail);
+		const byTail = values.get(tail);
 		if (byTail !== undefined) {
 			return byTail;
 		}
 	}
-	// A full path pasted into the value panel must match the tail-shaped
-	// identifier the scanner produces. Only an unambiguous tail match is used;
-	// two constants with the same tail stay unknown rather than guessing.
 	let found: ConditionValue | undefined;
 	let matches = 0;
-	for (const [key, value] of state.values) {
+	for (const [key, value] of values) {
 		if (key.slice(key.lastIndexOf('/') + 1) === tail) {
 			found = value;
 			matches++;
@@ -481,11 +484,16 @@ function lookup(state: EvalState, name: string): ConditionValue | undefined {
 			}
 		}
 	}
-	if (matches === 1) {
-		return found;
+	return matches === 1 ? found : undefined;
+}
+
+function lookup(state: EvalState, name: string): ConditionValue | undefined {
+	recordSymbol(state, name);
+	const value = resolveValue(state.values, name);
+	if (value === undefined) {
+		recordMissing(state, name);
 	}
-	recordMissing(state, name);
-	return undefined;
+	return value;
 }
 
 function describe(value: ConditionValue): string {
@@ -565,19 +573,36 @@ function evaluate(expression: Expression, state: EvalState): ConditionValue | un
 	}
 }
 
+/** The supplied value for every referenced name that has one, keyed by name. */
+function valuesOf(
+	symbols: readonly string[],
+	values: ReadonlyMap<string, ConditionValue>
+): Record<string, ConditionValue> {
+	const out: Record<string, ConditionValue> = {};
+	for (const name of symbols) {
+		const value = resolveValue(values, name);
+		if (value !== undefined) {
+			out[name] = value;
+		}
+	}
+	return out;
+}
+
 /** Evaluates one condition against the supplied constant values. */
 export function evaluateSyscond(text: string, values: ReadonlyMap<string, ConditionValue>): ConditionResult {
 	const tokenized = tokenize(text);
 	if ('error' in tokenized) {
-		return { state: 'unknown', symbols: [], missing: [], error: tokenized.error };
+		return { state: 'unknown', symbols: [], missing: [], values: {}, error: tokenized.error };
 	}
 	const parser = new Parser(tokenized.tokens);
 	const expression = parser.parse();
 	if (expression === undefined) {
+		const symbols = identifiersOf(tokenized.tokens);
 		return {
 			state: 'unknown',
-			symbols: identifiersOf(tokenized.tokens),
+			symbols,
 			missing: [],
+			values: valuesOf(symbols, values),
 			error: parser.failureMessage() ?? 'invalid expression',
 		};
 	}
@@ -598,6 +623,7 @@ export function evaluateSyscond(text: string, values: ReadonlyMap<string, Condit
 		state: conditionState,
 		symbols: state.symbols,
 		missing: state.missing,
+		values: valuesOf(state.symbols, values),
 	};
 	if (conditionState === 'unknown' && state.reasons.length > 0) {
 		result.error = state.reasons[0];

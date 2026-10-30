@@ -104,6 +104,13 @@ Document markup/CSS tests are string assertions (the Document-only shell, layout
 selectors, fallbacks, no Tree/line-number/copy code), but the view/details behaviour must drive the
 page's own `applyInspectorVisibility`, `subtreeRowIds`, `guidesFor`, `reconcileRowState` and
 `detailsValueInput` extracted with `scriptTestUtils` against stub elements — not a host-side twin.
+Condition/annotation presentation tests are value-first: `syscond.test.ts` asserts the `values` map for
+known, missing, tail-resolved and malformed expressions; `renderRows.test.ts` asserts `conditionTooltip`
+(multi-line, quoted strings, `(not set)`, no `true`/`false`) and that annotations become `comments`;
+`treeQuery.test.ts`/`virtualPage.test.ts` assert comment display rows sit above their node and never
+enter the selectable id list; `uxDocument.test.ts` asserts the token split, token CSS, bounded chip and
+wrapped `.condition-code`. Do not test these by re-implementing the evaluator or tokenizer in the test.
+
 The mutation table for this pass is: re-add a Tree toggle/view state, Tree CSS/glyph/probes; re-add
 the line-number gutter/`data-line`/digits; re-add the repeating indent gradient; drop the
 bracket-guide computation or leak it to every row; drop brace hover; re-add inline `.value` editing;

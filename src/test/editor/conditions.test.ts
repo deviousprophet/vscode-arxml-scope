@@ -181,21 +181,21 @@ suite('condition rows (design §4)', () => {
 		assert.deepStrictEqual(labels.slice(0, 1), ['Pkg.ModDefs.ModCond'], 'display order is untouched');
 	});
 
-	test('the condition chip carries the evaluated state and a reason title', () => {
+	test('the condition chip carries the evaluated state and its input values as the title', () => {
 		const trueRow = rowNamed(rows({ CANIPCORETYPE_SC: 0 }), 'SelfOff');
 		assert.strictEqual(conditionPart(trueRow)?.state, 'true');
 		assert.strictEqual(conditionPart(trueRow)?.text, '[(CANIPCORETYPE_SC==0)]');
-		assert.strictEqual(conditionPart(trueRow)?.title, '[(CANIPCORETYPE_SC==0)] — true');
+		assert.strictEqual(conditionPart(trueRow)?.title, 'CANIPCORETYPE_SC = 0');
 
 		const falseRow = rowNamed(rows({ CANIPCORETYPE_SC: 1 }), 'SelfOff');
 		assert.strictEqual(conditionPart(falseRow)?.state, 'false');
-		assert.strictEqual(conditionPart(falseRow)?.title, '[(CANIPCORETYPE_SC==0)] — false');
+		assert.strictEqual(conditionPart(falseRow)?.title, 'CANIPCORETYPE_SC = 1');
 
 		const unknownRow = rowNamed(rows({}), 'Missing');
-		assert.ok(conditionPart(unknownRow)?.title.includes('unknown (missing: MISSING_SC)'), conditionPart(unknownRow)?.title);
+		assert.strictEqual(conditionPart(unknownRow)?.title, 'MISSING_SC = (not set)');
 
 		const malformed = rowNamed(rows({}), 'Malformed');
-		assert.ok(conditionPart(malformed)?.title.includes('unknown ('), conditionPart(malformed)?.title);
+		assert.ok(conditionPart(malformed)?.title.includes('A = (not set)'), conditionPart(malformed)?.title);
 	});
 
 	test('AC1: the fixture reports the manual CANIPCORETYPE_SC case the design names', () => {

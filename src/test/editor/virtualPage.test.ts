@@ -132,6 +132,24 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.ok(tree.length > collapsed.length);
 	});
 
+	test('design §4: annotation comment rows join the window but never the selectable ids', () => {
+		const html = page();
+		const flatten = evaluateFunction<typeof flattenRows>(html, 'flattenRows');
+		const rows = syntheticRows(3).map((row) =>
+			row.id === 'row-1' ? { ...row, comments: ['[Note] above'] } : row
+		);
+		const list = flatten(rows);
+		assert.deepStrictEqual(
+			list.map((row) => row.type),
+			['node', 'comment', 'node', 'node'],
+			'the comment sits directly above its node'
+		);
+		const rebuild = functionSource(html, 'rebuildDisplay');
+		assert.ok(rebuild.includes("if (flat.type === 'node')"), 'only node rows enter focus and selection state');
+		assert.ok(rebuild.includes('visibleNodeIds.push(row.id)'));
+		assert.ok(!rebuild.includes("flat.type === 'comment'"), 'comments are no tree items');
+	});
+
 	test('design §8: the inspector reads an offscreen row from the row map', () => {
 		const html = page();
 		const rows = payload(html).rows;

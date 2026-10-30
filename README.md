@@ -32,6 +32,10 @@ A plain open still uses VS Code's text editor. The custom editor is opt-in.
   References are not editable.
 - A value backed by CDATA is shown but not editable.
 - Condition values are stored per workspace, not written beside the ARXML.
+- Hover a condition chip to see each referenced system constant and its entered value, one per line.
+  `(not set)` means the constant has no value yet; the row's dimmed state still shows the result.
+- Annotations appear as comment lines above their node; long conditions stay compact in the tree and
+  wrap fully in **Details**.
 - The ECUC editor currently supports ECUC-Values files; files without ECUC values are handed back to
   the text editor.
 
