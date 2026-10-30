@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify empty values never disable and no file is written."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify discovery, badge and Clear-values assertions are meaningful."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify the row remains accessible and theme-only."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify discovered names are regenerated, values persist, drafts survive."}

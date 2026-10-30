@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "The symbols field belongs to the row model; discovery logic belongs to the page script."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "The Conditions panel shell, row markup, ARIA and theme rules."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Empty entries, workspace persistence and host/page ownership."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No writes, no new dependency, no hard-coded colours, re-scan survival."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Page-function and mutation-testing conventions."}
