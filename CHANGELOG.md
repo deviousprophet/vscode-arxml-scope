@@ -11,17 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A resizable right sidebar with **Details** and **Conditions** tabs, collapsible sections and saved layout
 - A single scrolling **Details** section that shows the node, value and formats, reference, conditions and annotations, with Jump to target and Reveal in source actions
-- A **Search** field that runs on Enter, streams matches and the first match, highlights every match with a stronger current match, and moves instantly between matches with wrapped previous/next navigation
+- A **Search** field that runs on Enter, streams matches and the first match, highlights every match with a stronger current match, and moves instantly between matches with wrapped previous/next navigation; Search is the last control in the toolbar and its count keeps a fixed slot, so the field never shifts
 - Search covers the text the Document shows, including the label, value, short name, variant, context, condition and annotation
 - Search remains responsive on large files
 - A **Conditions** panel that lists every `SW-SYSCOND` constant with an `unknown` state until a value is entered, stores values per workspace and dims rows disabled by a false condition
 - A condition chip whose hover text lists each referenced system constant and its entered value on its own line, with `(not set)` for missing values
-- Annotations render as italic comment lines above the node they describe
+- Annotations render as italic comment lines directly above the node they describe, with module spacing above the comment
 - Condition expressions use distinct token colours for names, numbers, operators and punctuation; long expressions stay compact in the tree and wrap fully in **Details**
 - Condition constants discovered from the open document appear automatically; scanned constants are read-only and manual rows can be removed
 - Condition values use icon-only Edit, Save and Cancel actions
 - A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, **Show all** / **Show diff only**, Enter-driven Search, **Prev diff** / **Next diff**, **Swap sides** and reveal-in-source
-- The diff toolbar has no Filter, changes summary or global collapse/expand buttons; row-level collapse and one synchronized scroll remain
+- The diff scrolls both panes with one horizontal scrollbar when a line is longer than its pane
+- The strip below the diff shows only the selected row's changed fields, with both file names above the values and a clear marker for values missing from one file
+- Two files with the same name are disambiguated by their shortest differing path in the diff title, pane headers and comparison strip
+- The diff toolbar has no Filter, changes summary or global collapse/expand buttons; **Swap sides** sits centred while the view, difference and Search controls share the right edge; row-level collapse and one synchronized scroll remain
 - A right-click **Duplicate** / **Delete** menu on container and parameter rows; both ask for confirmation, container duplicates ask for a unique short name, and each action is one undoable edit
 - An `ARXML Scope` context submenu for `Open with ECUC Editor` and `Reveal in ECUC Editor`
 

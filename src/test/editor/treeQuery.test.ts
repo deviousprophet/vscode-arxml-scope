@@ -5,7 +5,7 @@
  */
 import * as assert from 'assert';
 
-import { TreeRow, ancestorIds, flattenRows } from '../../editor/treeQuery';
+import { TreeRow, ancestorIds, carriesGroupGap, flattenRows } from '../../editor/treeQuery';
 
 const ROWS: TreeRow[] = [
 	{ id: 'm', parentId: null, level: 1, subtreeSize: 5, hasChildren: true, haystack: 'pkga.pkgb.moddefs.modx modx' },
@@ -58,6 +58,46 @@ suite('tree query helpers', () => {
 		assert.ok(
 			flattenRows(ROWS).every((row) => row.type !== 'comment'),
 			'a row without annotations adds no display row'
+		);
+	});
+
+	test('the module group gap sits on the first annotation, not the node', () => {
+		const rows = [
+			{ kind: 'module', comments: ['first'] },
+			{ kind: 'module', comments: ['one', 'two'] },
+			{ kind: 'module', comments: ['only'] },
+		];
+		const asTree = rows.map((row, index) => ({
+			...row,
+			id: `m${index}`,
+			parentId: null,
+			level: 1,
+			subtreeSize: 0,
+			hasChildren: false,
+			haystack: '',
+		}));
+		const display = flattenRows(asTree);
+		assert.deepStrictEqual(
+			display.map((flat, index) => carriesGroupGap(rows, display, index)),
+			[false, false, true, false, false, true, false],
+			'the first comment of a later module carries the gap; its node and later comments do not'
+		);
+		const plain = [{ kind: 'module' }, { kind: 'module' }];
+		const plainDisplay = flattenRows(
+			plain.map((row, index) => ({
+				...row,
+				id: `p${index}`,
+				parentId: null,
+				level: 1,
+				subtreeSize: 0,
+				hasChildren: false,
+				haystack: '',
+			}))
+		);
+		assert.deepStrictEqual(
+			plainDisplay.map((flat, index) => carriesGroupGap(plain, plainDisplay, index)),
+			[false, true],
+			'a module without annotations keeps the gap on its node row'
 		);
 	});
 

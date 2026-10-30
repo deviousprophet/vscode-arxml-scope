@@ -36,7 +36,9 @@ A plain open still uses VS Code's text editor. The custom editor is opt-in.
   Both ask for confirmation and one `Ctrl+Z` restores the previous bytes.
 - In the diff, type a query and press `Enter` to search; `Enter` / `Shift+Enter` move between
   matches. Use **Show all** / **Show diff only** to change the row set and **Swap sides** to mirror
-  the panes. Row twisties still collapse subtrees.
+  the panes. Row twisties still collapse subtrees. When a file has a long line, one horizontal
+  scrollbar moves both panes together; the strip below the diff shows only the fields that changed
+  on the selected row, with both file names above the values.
 - Condition values are stored per workspace, not written beside the ARXML.
 - Hover a condition chip to see each referenced system constant and its entered value, one per line.
   `(not set)` means the constant has no value yet; the row's dimmed state still shows the result.

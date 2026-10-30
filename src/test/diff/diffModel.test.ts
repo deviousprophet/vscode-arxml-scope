@@ -573,6 +573,18 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		);
 	});
 
+	test('the document carries the same pane labels the compare title uses', () => {
+		const left = side(fixtureText('diff/left.arxml'));
+		const right = side(fixtureText('diff/right.arxml'));
+		const document = buildDiffDocument(
+			{ name: 'same.arxml', path: '/w/a/same.arxml' },
+			{ name: 'same.arxml', path: '/w/b/same.arxml' },
+			left.rows,
+			right.rows
+		);
+		assert.deepStrictEqual(document.labels, ['a/same.arxml', 'b/same.arxml']);
+	});
+
 	test('R10: titles disambiguate same-named files by the shortest path suffix', () => {
 		assert.strictEqual(
 			compareTitle({ name: 'left.arxml', path: '/w/left.arxml' }, { name: 'right.arxml', path: '/w/right.arxml' }),

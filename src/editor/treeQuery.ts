@@ -180,6 +180,35 @@ export function flattenRows(rows: readonly TreeRow[], options: FlattenOptions = 
 }
 
 /**
+ * True when display item `index` carries the blank line that separates module
+ * groups. The gap belongs to the first display item of the group, so an
+ * annotated module carries it on its first comment row; without comments the
+ * node row carries it, exactly as before. The CSS and `heightFn` both call this,
+ * so the reserved height and the painted padding can never disagree.
+ *
+ * Serialized into the page with `toString()`: keep the body self-contained.
+ */
+export function carriesGroupGap(
+	rows: readonly { kind: string }[],
+	display: readonly { type: string; rowIndex: number }[],
+	index: number
+): boolean {
+	const flat = display[index];
+	if (!flat || index <= 0) {
+		return false;
+	}
+	if (flat.type !== 'node' && flat.type !== 'comment') {
+		return false;
+	}
+	const row = rows[flat.rowIndex];
+	if (!row || row.kind !== 'module') {
+		return false;
+	}
+	const previous = display[index - 1];
+	return !previous || previous.rowIndex !== flat.rowIndex;
+}
+
+/**
  * The serialized matcher, with a stable page name.
  *
  * Bundling the editor and diff pages can rename one copy of `matchRanges` (for

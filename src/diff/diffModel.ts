@@ -80,6 +80,12 @@ export interface FileLabel {
 export interface DiffDocument {
 	left: FileLabel;
 	right: FileLabel;
+	/**
+	 * Pane headings in `[left, right]` order: the basename, or the shortest
+	 * trailing path suffix when both files share one. The page and the Details
+	 * strip both use it, so a side never means two different files on one screen.
+	 */
+	labels: [string, string];
 	/** Pre-order, children contiguous. */
 	rows: DiffRow[];
 	summary: DiffSummary;
@@ -559,7 +565,7 @@ export function buildDiffDocument(
 	rightRanges?: RangeLookup
 ): DiffDocument {
 	const rows = diffRows(leftRows, rightRows, leftRanges, rightRanges);
-	return { left, right, rows, summary: summarizeDiff(rows) };
+	return { left, right, labels: disambiguatedLabels(left, right), rows, summary: summarizeDiff(rows) };
 }
 
 /** The page helpers below are serialized into the diff webview. */

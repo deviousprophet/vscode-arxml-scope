@@ -135,6 +135,12 @@ suite('editor document view', () => {
 		);
 		assert.ok(/body\[data-view="document"\] \.comment > \.row\s*\{[^}]*--tok-comment/.test(style));
 		assert.ok(/body\[data-view="document"\] \.comment\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(style));
+		assert.ok(
+			/body\[data-view="document"\] \.comment\[data-gap="true"\]\s*\{[^}]*height:\s*calc\(var\(--ecuc-lh\) \* 2\)[^}]*padding-top:\s*var\(--ecuc-lh\)[^}]*box-sizing:\s*border-box/.test(
+				style
+			),
+			'an annotated module carries the group gap above its comment'
+		);
 		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*content:\s*"module /.test(style));
 		assert.ok(!/body\[data-view="document"\] \.row-meta\s*\{[^}]*display:\s*none/.test(style), 'metadata is not hidden');
 		assert.ok(!/body\[data-view="tree"\]/.test(style), 'no Tree scoped CSS');

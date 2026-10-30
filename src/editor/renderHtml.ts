@@ -26,7 +26,7 @@ import { randomBytes } from 'crypto';
 import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
 import type { ConditionValue } from '../core/ecuc/syscond';
 import type { ConditionEntry } from './conditionValues';
-import { FlatRow, ancestorIds, flattenRows, matchRangesScript, stepMatch } from './treeQuery';
+import { FlatRow, ancestorIds, carriesGroupGap, flattenRows, matchRangesScript, stepMatch } from './treeQuery';
 import { escapeHtml } from './html';
 import { encodeJsonForScript } from './jsonScript';
 import { consoleErrorScript } from './pageError';
@@ -239,6 +239,9 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </head>
 <body data-view="document">
 <div class="toolbar">
+<span class="grow"></span>
+<button id="collapse-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
+<button id="expand-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/></svg><span class="lbl">Expand</span></button>
 <div class="search-box">
 <div class="search-field">
 <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l3.5 3.5"/></svg></span>
@@ -247,12 +250,9 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </div>
 <button id="search-prev" class="nav-btn search-nav" type="button" title="Previous match (Shift+F3)" aria-label="Previous match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.75l4-4 4 4"/></svg></button>
 <button id="search-next" class="nav-btn search-nav" type="button" title="Next match (F3)" aria-label="Next match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25l4 4 4-4"/></svg></button>
-<span id="search-count" class="search-count" role="status" aria-live="polite" hidden></span>
-<span id="search-busy" class="search-progress" role="status" aria-label="Searching" hidden></span>
+<span id="search-count" class="search-count" role="status" aria-live="polite"></span>
+<span id="search-busy" class="search-progress" role="status" aria-label="Searching" data-busy="false"></span>
 </div>
-<span class="grow"></span>
-<button id="collapse-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
-<button id="expand-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/></svg><span class="lbl">Expand</span></button>
 </div>
 <div id="content">
 <div id="main">
@@ -693,9 +693,8 @@ input[type="search"]::-webkit-search-decoration {
 	font-variant-numeric: tabular-nums;
 	color: var(--vscode-descriptionForeground, var(--tok-dim));
 }
-.search-count[hidden] {
-	display: none;
-}
+/* The count and the busy spinner keep their boxes at all times: reserving the
+ * space is what stops the Search field from moving when a run starts or ends. */
 .search-progress {
 	width: 16px;
 	height: 16px;
@@ -704,8 +703,8 @@ input[type="search"]::-webkit-search-decoration {
 	align-items: center;
 	justify-content: center;
 }
-.search-progress[hidden] {
-	display: none;
+.search-progress[data-busy="false"] {
+	visibility: hidden;
 }
 .search-progress::before {
 	content: '';
@@ -1699,6 +1698,11 @@ body[data-view="document"] .row-meta > span.condition {
 body[data-view="document"] .comment {
 	height: var(--ecuc-lh);
 }
+body[data-view="document"] .comment[data-gap="true"] {
+	height: calc(var(--ecuc-lh) * 2);
+	padding-top: var(--ecuc-lh);
+	box-sizing: border-box;
+}
 body[data-view="document"] .comment > .row {
 	color: var(--tok-comment);
 	font-style: italic;
@@ -1832,7 +1836,6 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 	.search-box {
 		flex: 1 1 0;
 	}
-	.search-count,
 	.grow,
 	.icon-tool .lbl {
 		display: none;
@@ -1949,6 +1952,7 @@ ${matchRangesScript()}
 ${rowSearchScript()}
 ${stepMatch.toString()}
 ${flattenRows.toString()}
+${carriesGroupGap.toString()}
 ${ancestorIds.toString()}
 ${inspectorFields.toString()}
 ${subtreeRowIds.toString()}
@@ -2020,10 +2024,7 @@ function indexRows() {
 function buildHeightFn() {
 	const base = heights.document;
 	heightFn = function (index) {
-		const flat = displayRows[index];
-		const row = flat && flat.type === 'node' ? rows[flat.rowIndex] : undefined;
-		const gap = row && row.kind === 'module' && index > 0;
-		return base + (gap ? base : 0);
+		return base + (carriesGroupGap(rows, displayRows, index) ? base : 0);
 	};
 	heightVersion++;
 }
@@ -2169,7 +2170,7 @@ function buildNodeRow(row, displayIndex) {
 	if (subtreeIds.has(row.id) && row.id !== selectedId) {
 		node.dataset.subtree = 'true';
 	}
-	if (row.kind === 'module' && displayIndex > 0) {
+	if (row.kind === 'module' && carriesGroupGap(rows, displayRows, displayIndex)) {
 		node.dataset.gap = 'true';
 	}
 	if (row.empty) {
@@ -2246,6 +2247,9 @@ function buildCommentRow(flat, displayIndex) {
 	node.className = 'comment';
 	node.setAttribute('aria-hidden', 'true');
 	node.dataset.rowId = owner.id;
+	if (carriesGroupGap(rows, displayRows, displayIndex)) {
+		node.dataset.gap = 'true';
+	}
 	const rowElement = document.createElement('span');
 	rowElement.className = 'row comment-row';
 	rowElement.dataset.level = String(flat.level);
@@ -2726,9 +2730,7 @@ function searchIndexOfId(id) {
 
 function setSearchBusy(busy) {
 	searchRunning = busy === true;
-	if (searchBusy) {
-		searchBusy.hidden = !searchRunning;
-	}
+	renderSearchUi();
 }
 
 /**
@@ -2802,13 +2804,13 @@ function startSearch(query, previousId, immediate) {
 	);
 }
 
-/** The count and control state: '1 / N', '0 / 0', or hidden for a blank query. */
+/** The count and control state: '1 / N', '0 / 0', or empty for a blank query. */
 function renderSearchUi() {
 	const hasText = searchInput ? searchInput.value.trim() !== '' : searchQuery.trim() !== '';
 	const active = searchQuery.trim() !== '';
 	const hasMatches = searchMatches.length > 0;
 	if (searchBusy) {
-		searchBusy.hidden = !searchRunning;
+		searchBusy.dataset.busy = searchRunning ? 'true' : 'false';
 	}
 	if (searchClear) {
 		searchClear.hidden = !hasText;
@@ -2822,7 +2824,6 @@ function renderSearchUi() {
 	if (!searchCount) {
 		return;
 	}
-	searchCount.hidden = !active;
 	if (!active) {
 		searchCount.textContent = '';
 	} else if (!hasMatches) {

@@ -9,8 +9,8 @@ import * as assert from 'assert';
 
 import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { DiffDocument, buildDiffDocument, flattenDiffRows } from '../../diff/diffModel';
-import { encodeDiffDocument, renderDiffHtml } from '../../diff/diffPage';
+import { DiffCell, DiffDocument, DiffRow, buildDiffDocument, flattenDiffRows } from '../../diff/diffModel';
+import { diffCellFields, diffColumnWidth, diffFieldLabel, diffFieldRank, diffRowChars, encodeDiffDocument, renderDiffHtml } from '../../diff/diffPage';
 import { buildNodeIndex } from '../../editor/nodeId';
 import { buildRows } from '../../editor/renderRows';
 import { renderHtml } from '../../editor/renderHtml';
@@ -53,6 +53,138 @@ function styleOf(source: string): string {
 	return match[1];
 }
 
+/** The smallest DOM the strip renderer needs, so `updateDetail` can be driven. */
+class FakeElement {
+	readonly tagName: string;
+	className = '';
+	title = '';
+	children: FakeElement[] = [];
+	readonly attributes: Record<string, string> = {};
+	private text = '';
+
+	constructor(tagName: string) {
+		this.tagName = tagName;
+	}
+
+	get textContent(): string {
+		return this.text;
+	}
+
+	set textContent(value: string) {
+		this.text = value;
+		if (value === '') {
+			this.children = [];
+		}
+	}
+
+	appendChild(child: FakeElement): void {
+		this.children.push(child);
+	}
+
+	get childNodes(): FakeElement[] {
+		return this.children;
+	}
+
+	setAttribute(name: string, value: string): void {
+		this.attributes[name] = value;
+	}
+
+	addEventListener(): void {
+		// The test never clicks a reveal button.
+	}
+}
+
+function fakeDocument(): { createElement: (tag: string) => FakeElement } {
+	return { createElement: (tag) => new FakeElement(tag) };
+}
+
+type DetailRenderer = (document: DiffDocument, row: DiffRow | undefined, swapped: boolean) => FakeElement;
+
+/** Compiles the page's own strip renderer with its real helpers and a fake DOM. */
+function compileDetail(html: string): DetailRenderer {
+	const factory = new Function(
+		'document',
+		'vscode',
+		`
+		${functionSource(html, 'detailElement')}
+		${functionSource(html, 'revealButton')}
+		${functionSource(html, 'detailSideCell')}
+		${functionSource(html, 'diffFieldLabel')}
+		${functionSource(html, 'diffFieldRank')}
+		${functionSource(html, 'diffCellFields')}
+		${functionSource(html, 'displayLeft')}
+		${functionSource(html, 'displayRight')}
+		${functionSource(html, 'displayStatus')}
+		let detail;
+		let selectedKey;
+		let rowByKey = new Map();
+		let diffDocument = { left: { path: '' }, right: { path: '' }, labels: ['', ''] };
+		let swapped = false;
+		function appendConditionTokens(parent, text) { parent.textContent = text; }
+		${functionSource(html, 'updateDetail')}
+		return function (documentModel, row, isSwapped) {
+			detail = document.createElement('div');
+			diffDocument = documentModel;
+			selectedKey = row === undefined ? undefined : row.key;
+			rowByKey = row === undefined ? new Map() : new Map([[row.key, row]]);
+			swapped = isSwapped === true;
+			updateDetail();
+			return detail;
+		};
+	`
+	);
+	return factory(fakeDocument(), { postMessage: () => undefined }) as DetailRenderer;
+}
+
+function descendants(element: FakeElement, className: string): FakeElement[] {
+	const out: FakeElement[] = [];
+	for (const child of element.children) {
+		if (child.className.split(' ').includes(className)) {
+			out.push(child);
+		}
+		out.push(...descendants(child, className));
+	}
+	return out;
+}
+
+function detailRow(overrides: Partial<DiffRow> = {}): DiffRow {
+	return {
+		key: 'p1',
+		parentKey: null,
+		level: 1,
+		posinset: 1,
+		setsize: 1,
+		kind: 'parameter',
+		hasChildren: false,
+		subtreeSize: 0,
+		status: 'changed',
+		changes: [],
+		haystack: 'foo',
+		...overrides,
+	};
+}
+
+function detailCell(overrides: Partial<DiffCell> = {}): DiffCell {
+	return {
+		kind: 'parameter',
+		label: 'Foo',
+		definitionRef: '/P/Foo',
+		meta: [],
+		range: { start: 0, end: 1 },
+		...overrides,
+	};
+}
+
+function labels(): DiffDocument {
+	return {
+		left: { name: 'left.arxml', path: '/work/left.arxml' },
+		right: { name: 'right.arxml', path: '/work/right.arxml' },
+		labels: ['left.arxml', 'right.arxml'],
+		rows: [],
+		summary: { changed: 0, added: 0, removed: 0, unchanged: 0 },
+	};
+}
+
 suite('semantic diff page (design §3)', () => {
 	test('the shell has Search, Show all/Show diff only, Prev/Next diff and Swap sides', () => {
 		const html = page();
@@ -67,11 +199,29 @@ suite('semantic diff page (design §3)', () => {
 		assert.strictEqual((html.match(/id="diff-search-prev"/g) || []).length, 1);
 		assert.strictEqual((html.match(/id="diff-search-next"/g) || []).length, 1);
 		assert.ok(html.includes('id="diff-search-count"') && html.includes('id="diff-search-busy"'));
+		assert.ok(
+			/<span id="diff-search-count"[^>]*aria-live="polite"><\/span>/.test(html),
+			'the count reserves its slot instead of hiding'
+		);
+		assert.ok(/id="diff-search-busy"[^>]*data-busy="false"/.test(html));
 		assert.ok(/id="diff-view-all"[^>]*aria-pressed="true"[^>]*>Show all</.test(html));
 		assert.ok(/id="diff-view-diff"[^>]*aria-pressed="false"[^>]*>Show diff only</.test(html));
 		assert.ok(/id="diff-prev"[\s\S]*?>Prev diff</.test(html));
 		assert.ok(/id="diff-next"[\s\S]*?>Next diff</.test(html));
 		assert.ok(/id="diff-swap"[^>]*aria-pressed="false"[\s\S]*?>Swap sides</.test(html));
+		const toolbar = /<div class="toolbar">([\s\S]*?)<div id="diff-notice"/.exec(html);
+		assert.ok(toolbar, 'the toolbar is a distinct strip');
+		const controls = toolbar[1];
+		assert.ok(
+			controls.indexOf('class="toolbar-center"') < controls.indexOf('class="toolbar-right"'),
+			'Swap sits between the two flexible slots'
+		);
+		assert.ok(
+			controls.indexOf('id="diff-view-all"') < controls.indexOf('id="diff-prev"') &&
+				controls.indexOf('id="diff-prev"') < controls.indexOf('id="diff-next"') &&
+				controls.indexOf('id="diff-next"') < controls.indexOf('class="search-box"'),
+			'Show all, Show diff only, Prev diff, Next diff, then Search'
+		);
 		assert.ok(/id="diff-detail"[^>]*role="region"/.test(html), 'the detail strip is a region');
 		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'), 'the empty state exists');
 		assert.ok(html.includes("'No differences'"), 'a pair with no changes has an explicit empty message');
@@ -95,7 +245,8 @@ suite('semantic diff page (design §3)', () => {
 		assert.ok(row.includes("element.dataset.searchCurrent = 'true'"));
 		const detail = functionSource(html, 'updateDetail');
 		assert.ok(detail.includes('displayStatus(row)'));
-		assert.ok(detail.includes('swapped ? change.right : change.left'));
+		assert.ok(detail.includes('diffDocument.labels'), 'the strip headings follow the panes');
+		assert.ok(detail.includes('displayLeft(row)') && detail.includes('displayRight(row)'), 'the strip shows the displayed sides');
 		const reveal = functionSource(html, 'revealButton');
 		assert.ok(reveal.includes("side: hostSide(side)"), 'a displayed side maps back to the host side');
 		const swap = functionSource(html, 'setSwapped');
@@ -155,6 +306,307 @@ suite('semantic diff page (design §3)', () => {
 		);
 	});
 
+	test('same-named files are disambiguated in the pane headers, and a swap follows', () => {
+		const left = side('diff/left.arxml');
+		const right = side('diff/right.arxml');
+		const document = buildDiffDocument(
+			{ name: 'same.arxml', path: '/w/a/same.arxml' },
+			{ name: 'same.arxml', path: '/w/b/same.arxml' },
+			left.rows,
+			right.rows,
+			left.rangeOf,
+			right.rangeOf
+		);
+		const html = page(document);
+		assert.ok(html.includes('id="diff-left-label">a/same.arxml'), 'the left header is disambiguated at first paint');
+		assert.ok(html.includes('id="diff-right-label">b/same.arxml'), 'the right header is disambiguated at first paint');
+
+		const run = new Function(
+			'diffDocument',
+			'swapped',
+			'leftLabel',
+			'rightLabel',
+			'leftHeader',
+			'rightHeader',
+			`${functionSource(html, 'renderHeaders')}\nrenderHeaders();`
+		) as (document: DiffDocument, swapped: boolean, left: unknown, right: unknown, leftHeader: unknown, rightHeader: unknown) => void;
+		const leftEl = { textContent: '' };
+		const rightEl = { textContent: '' };
+		const leftHead = { title: '' };
+		const rightHead = { title: '' };
+		run(document, false, leftEl, rightEl, leftHead, rightHead);
+		assert.strictEqual(leftEl.textContent, 'a/same.arxml');
+		assert.strictEqual(rightEl.textContent, 'b/same.arxml');
+		run(document, true, leftEl, rightEl, leftHead, rightHead);
+		assert.strictEqual(leftEl.textContent, 'b/same.arxml', 'the label follows the displayed side');
+		assert.strictEqual(rightEl.textContent, 'a/same.arxml');
+		assert.strictEqual(leftHead.title, '/w/b/same.arxml', 'the tooltip follows the displayed side');
+	});
+
+	test('the strip vocabulary maps every compared field and keeps canonical order', () => {
+		assert.strictEqual(diffFieldLabel('definition ref'), 'Definition');
+		assert.strictEqual(diffFieldLabel('definition dest'), 'Definition DEST');
+		assert.strictEqual(diffFieldLabel('short name'), 'Short name');
+		assert.strictEqual(diffFieldLabel('variant'), 'Variant');
+		assert.strictEqual(diffFieldLabel('value'), 'Value');
+		assert.strictEqual(diffFieldLabel('shown value'), 'Value');
+		assert.strictEqual(diffFieldLabel('target'), 'Target');
+		assert.strictEqual(diffFieldLabel('context'), 'Context');
+		assert.strictEqual(diffFieldLabel('condition'), 'Condition');
+		assert.strictEqual(diffFieldLabel('annotation'), 'Annotations');
+		assert.strictEqual(diffFieldLabel('mystery'), 'mystery', 'unknown fields survive as-is');
+
+		const fields = [
+			'annotation',
+			'condition',
+			'context',
+			'target',
+			'value',
+			'variant',
+			'short name',
+			'definition dest',
+			'definition ref',
+			'mystery',
+		];
+		assert.deepStrictEqual(
+			fields.slice().sort((a, b) => diffFieldRank(a) - diffFieldRank(b)),
+			[
+				'definition ref',
+				'definition dest',
+				'short name',
+				'variant',
+				'value',
+				'target',
+				'context',
+				'condition',
+				'annotation',
+				'mystery',
+			]
+		);
+	});
+
+	test('an added or removed cell lists only its non-empty fields in canonical order', () => {
+		assert.deepStrictEqual(
+			diffCellFields(
+				detailCell({
+					definitionRef: '/P/Foo',
+					shortName: '',
+					shownValue: '7',
+					value: '7',
+					meta: [
+						{ cls: 'variant', text: 'variant pre', title: '' },
+						{ cls: 'condition', text: 'A == 1', title: '' },
+						{ cls: 'condition', text: 'B == 2', title: '' },
+						{ cls: 'annotation', text: 'one', title: '' },
+						{ cls: 'annotation', text: 'two', title: '' },
+					],
+				})
+			),
+			[
+				{ field: 'definition ref', text: '/P/Foo' },
+				{ field: 'variant', text: 'variant pre' },
+				{ field: 'value', text: '7' },
+				{ field: 'condition', text: 'A == 1\nB == 2' },
+				{ field: 'annotation', text: 'one\ntwo' },
+			],
+			'empty fields are dropped and meta groups are joined'
+		);
+		assert.deepStrictEqual(
+			diffCellFields(detailCell({ definitionRef: '/P/C', contextPaths: ['A.B', 'C.D'], meta: [] })),
+			[
+				{ field: 'definition ref', text: '/P/C' },
+				{ field: 'context', text: 'A.B, C.D' },
+			],
+			'a container reports its context path list'
+		);
+	});
+
+	test('the strip styles reserve 22vh, stick its headings and hide the old definition line', () => {
+		const html = page();
+		const style = styleOf(html);
+		assert.ok(/#diff-detail\s*\{[^}]*max-height:\s*22vh[^}]*overflow:\s*auto/.test(style), 'the strip scrolls internally');
+		assert.ok(/#diff-detail\s*\{[^}]*user-select:\s*text/.test(style), 'the values are selectable');
+		assert.ok(/\.detail-columns\s*\{[^}]*position:\s*sticky[^}]*top:\s*0/.test(style), 'headings stick');
+		assert.ok(/\.detail-columns,\s*\.detail-change\s*\{[^}]*14ch minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style));
+		assert.ok(/\.detail-missing\s*\{[^}]*--tok-dim[^}]*font-style:\s*italic/.test(style));
+		assert.ok(!/\.detail-definition/.test(style), 'the separate definition line is gone');
+		const update = functionSource(html, 'updateDetail');
+		assert.ok(update.includes("'detail-table'") && update.includes("'detail-columns'"), 'one table renderer');
+		assert.ok(update.includes('diffDocument.labels'), 'the headings come from the model labels');
+		assert.ok(
+			functionSource(html, 'detailSideCell').includes("'— not in this file —'"),
+			'the missing column explains itself'
+		);
+		assert.ok(update.includes("'No differences for this row.'"));
+		assert.ok(update.includes("'Select a row to see its changes.'"));
+		assert.ok(!update.includes('detail-definition'), 'the definition line is not rebuilt');
+	});
+
+	test('a changed row lists only its differing fields, sorted canonically', () => {
+		const render = compileDetail(page());
+		const row = detailRow({
+			changes: [
+				{ field: 'condition', left: 'A == 1', right: 'A == 2' },
+				{ field: 'value', left: '1', right: '2' },
+				{ field: 'definition ref', left: '/P/Foo', right: '/P/Bar' },
+			],
+			left: detailCell({ shortName: 'Same' }),
+			right: detailCell({ shortName: 'Same', definitionRef: '/P/Bar' }),
+		});
+		const detail = render(labels(), row, false);
+		const table = descendants(detail, 'detail-table')[0];
+		assert.ok(table, 'a changed row has a table');
+		assert.strictEqual(table.attributes.role, 'table');
+		assert.strictEqual(table.attributes['aria-label'], 'left.arxml versus right.arxml');
+		const headings = descendants(table, 'detail-columns')[0];
+		assert.deepStrictEqual(
+			headings.children.map((cell) => cell.textContent),
+			['', 'left.arxml', 'right.arxml']
+		);
+		const lines = descendants(table, 'detail-change');
+		assert.deepStrictEqual(
+			lines.map((line) => line.children[0].textContent),
+			['Definition', 'Value', 'Condition'],
+			'canonical order, no unchanged Short name row'
+		);
+		assert.deepStrictEqual(
+			lines.map((line) => [line.children[1].textContent, line.children[2].textContent]),
+			[
+				['/P/Foo', '/P/Bar'],
+				['1', '2'],
+				['A == 1', 'A == 2'],
+			]
+		);
+		assert.strictEqual(descendants(detail, 'detail-actions')[0].children.length, 2, 'both sides reveal');
+	});
+
+	test('an added row lists the surviving side and marks the missing column', () => {
+		const render = compileDetail(page());
+		const row = detailRow({
+			status: 'added',
+			right: detailCell({
+				definitionRef: '/P/New',
+				shownValue: '7',
+				meta: [{ cls: 'annotation', text: 'note', title: '' }],
+			}),
+		});
+		const detail = render(labels(), row, false);
+		const lines = descendants(detail, 'detail-change');
+		assert.deepStrictEqual(
+			lines.map((line) => [line.children[1].textContent, line.children[2].textContent]),
+			[
+				['— not in this file —', '/P/New'],
+				['— not in this file —', '7'],
+				['— not in this file —', 'note'],
+			]
+		);
+		assert.ok(lines.every((line) => line.children[1].className.includes('detail-missing')));
+		assert.ok(lines.every((line) => !line.children[2].className.includes('detail-missing')));
+
+		const swapped = render(labels(), row, true);
+		const flipped = descendants(swapped, 'detail-change');
+		assert.deepStrictEqual(
+			flipped.map((line) => [line.children[1].textContent, line.children[2].textContent]),
+			[
+				['/P/New', '— not in this file —'],
+				['7', '— not in this file —'],
+				['note', '— not in this file —'],
+			],
+			'after Swap sides the surviving file is the left column'
+		);
+	});
+
+	test('swap flips the strip values and headings together', () => {
+		const render = compileDetail(page());
+		const row = detailRow({
+			changes: [{ field: 'value', left: '1', right: '2' }],
+			left: detailCell(),
+			right: detailCell(),
+		});
+		const detail = render(labels(), row, true);
+		assert.deepStrictEqual(
+			descendants(detail, 'detail-columns')[0].children.map((cell) => cell.textContent),
+			['', 'right.arxml', 'left.arxml']
+		);
+		const line = descendants(detail, 'detail-change')[0];
+		assert.deepStrictEqual([line.children[1].textContent, line.children[2].textContent], ['2', '1']);
+	});
+
+	test('unchanged and unselected rows show a note, never a table', () => {
+		const render = compileDetail(page());
+		const unchanged = render(labels(), detailRow({ status: 'unchanged' }), false);
+		assert.strictEqual(descendants(unchanged, 'detail-table').length, 0);
+		assert.deepStrictEqual(
+			descendants(unchanged, 'detail-note').map((note) => note.textContent),
+			['No differences for this row.']
+		);
+		const none = render(labels(), undefined, false);
+		assert.deepStrictEqual(
+			descendants(none, 'detail-hint').map((hint) => hint.textContent),
+			['Select a row to see its changes.']
+		);
+	});
+
+	test('the width model counts indent, label, value and meta on the wider side', () => {
+		const parameter = detailRow({
+			level: 1,
+			left: detailCell({ label: 'Foo', shownValue: '123', meta: [] }),
+			right: detailCell({ label: 'LongerName', shownValue: '12345', meta: [] }),
+		});
+		assert.strictEqual(diffRowChars(parameter), 2 + 10 + 5 + 3, 'the longer side wins');
+		const container = detailRow({
+			level: 2,
+			left: detailCell({
+				kind: 'container',
+				label: 'C',
+				meta: [
+					{ cls: 'short', text: 'short abc', title: '' },
+					{ cls: 'variant', text: 'variant v', title: '' },
+				],
+			}),
+		});
+		assert.strictEqual(diffRowChars(container), 4 + 1 + 10 + 10, 'indent and one gap per fragment');
+		assert.strictEqual(diffRowChars(detailRow({ left: undefined, right: undefined })), 0);
+	});
+
+	test('a column is at least half the viewport, fits the longest row and is capped', () => {
+		assert.strictEqual(diffColumnWidth(10, 8, 500, 1600), 500, 'short content keeps the half-viewport column');
+		assert.strictEqual(diffColumnWidth(100, 8, 500, 1600), 828, 'the longest row widens both tracks');
+		assert.strictEqual(diffColumnWidth(5000, 8, 500, 1600), 1600, 'a pathological line is clamped');
+	});
+
+	test('the tracks share one width and one scrollbar moves both panes', () => {
+		const html = page();
+		const style = styleOf(html);
+		assert.ok(/#diff-scroll\s*\{[^}]*--diff-col:\s*50vw/.test(style), 'the first paint has a half-viewport column');
+		assert.ok(
+			/\.pane-headers\s*\{[^}]*grid-template-columns:\s*var\(--diff-col\) var\(--diff-col\)[^}]*width:\s*calc\(var\(--diff-col\) \* 2\)/.test(
+				style
+			),
+			'the header row is as wide as its tracks'
+		);
+		assert.ok(
+			/#diff-window\s*\{[^}]*width:\s*calc\(var\(--diff-col\) \* 2\)/.test(style),
+			'the row window is as wide as its tracks'
+		);
+		assert.ok(
+			/#diff-measure \.diff-row,\s*#diff-measure \.probe\s*\{[^}]*minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style),
+			'the hidden probe is never widened'
+		);
+		assert.ok(/#diff-scroll\s*\{[^}]*overflow:\s*auto/.test(style), 'the diff scroller is the scroll surface');
+		assert.strictEqual((style.match(/overflow-x:/g) || []).length, 0, 'no second horizontal scroll surface');
+		assert.ok(html.includes('id="diff-ch-probe"'), 'one font probe feeds the width model');
+		assert.strictEqual((html.match(/id="diff-ch-probe"/g) || []).length, 1);
+
+		const measure = functionSource(html, 'measureColumnWidth');
+		assert.ok(measure.includes('diffRowChars(row)') && measure.includes('scroll.clientWidth / 2'));
+		assert.ok(measure.includes('diffColumnWidth(maxChars, chWidth, scroll.clientWidth / 2, 1600)'));
+		assert.ok(measure.includes('writeVirtualStyle()'));
+		assert.ok(html.includes('new ResizeObserver'), 'a pane resize recomputes the width');
+		assert.ok(functionSource(html, 'setSpacers').includes('writeVirtualStyle()'), 'spacers and width share one sheet write');
+		assert.ok(!functionSource(html, 'setSwapped').includes('scrollLeft'), 'swapping keeps the horizontal offset');
+	});
+
 	test('the embedded document is the model the host built', () => {
 		const expected = documentOf();
 		// The payload is JSON: absent optional fields are dropped, which is exactly
@@ -163,6 +615,7 @@ suite('semantic diff page (design §3)', () => {
 		const actual = embedded();
 		assert.deepStrictEqual(actual.left, roundTrip.left);
 		assert.deepStrictEqual(actual.right, roundTrip.right);
+		assert.deepStrictEqual(actual.labels, roundTrip.labels);
 		assert.deepStrictEqual(actual.summary, roundTrip.summary);
 		assert.strictEqual(actual.rows.length, roundTrip.rows.length);
 		assert.deepStrictEqual(actual.rows[0], roundTrip.rows[0]);
@@ -174,6 +627,11 @@ suite('semantic diff page (design §3)', () => {
 			'diffVisibility',
 			'flattenDiffRows',
 			'nextChangeIndex',
+			'diffFieldLabel',
+			'diffFieldRank',
+			'diffCellFields',
+			'diffRowChars',
+			'diffColumnWidth',
 			'calcVisibleRange',
 			'calcTotalHeight',
 			'calcRowOffset',
@@ -235,6 +693,7 @@ suite('semantic diff page (design §3)', () => {
 		const html = page({
 			left: { name: 'left.arxml', path: '/work/left.arxml' },
 			right: { name: 'right.arxml', path: '/work/right.arxml' },
+			labels: ['left.arxml', 'right.arxml'],
 			rows,
 			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0 },
 		});

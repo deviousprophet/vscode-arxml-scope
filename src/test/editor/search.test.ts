@@ -159,10 +159,9 @@ function compileSearchUi(
 			searchNext = next;
 			searchCount = count;
 			searchInput.value = query;
-			searchBusy.hidden = true;
 			renderSearchUi();
 		};`
-	)({}, [], -1, null, null, null, null, { value: '' }, { hidden: true }) as never;
+	)({}, [], -1, null, null, null, null, { value: '' }, { dataset: {} }) as never;
 }
 
 interface StartSearchResult {
@@ -548,8 +547,18 @@ suite('search page', () => {
 		assert.ok(/id="search-prev"[^>]*aria-label="Previous match"/.test(toolbar), 'previous has a name');
 		assert.ok(/id="search-next"[^>]*class="[^"]*nav-btn[^"]*"[^>]*\sdisabled(?=[\s>])/.test(toolbar));
 		assert.ok(/id="search-next"[^>]*aria-label="Next match"/.test(toolbar), 'next has a name');
-		assert.ok(/id="search-count"[^>]*role="status"[^>]*aria-live="polite"[^>]*hidden/.test(toolbar));
-		assert.ok(/id="search-busy"[^>]*class="search-progress"[^>]*role="status"[^>]*aria-label="Searching"[^>]*hidden/.test(toolbar));
+		assert.ok(/id="search-count"[^>]*class="search-count"[^>]*role="status"[^>]*aria-live="polite"/.test(toolbar));
+		assert.ok(
+			/id="search-busy"[^>]*class="search-progress"[^>]*role="status"[^>]*aria-label="Searching"[^>]*data-busy="false"/.test(
+				toolbar
+			)
+		);
+		assert.ok(
+			toolbar.indexOf('id="collapse-all"') < toolbar.indexOf('class="search-box"') &&
+				toolbar.indexOf('id="expand-all"') < toolbar.indexOf('class="search-box"') &&
+				toolbar.lastIndexOf('class="search-box"') > toolbar.indexOf('id="expand-all"'),
+			'Search closes the toolbar, after Collapse and Expand'
+		);
 		assert.strictEqual((html.match(/id="search-clear"/g) || []).length, 1);
 		assert.ok(!html.includes('id="find"') && !html.includes('find-bar'), 'there is no separate find bar');
 		assert.ok(!/style="/.test(toolbar), 'no inline styles');
@@ -575,8 +584,12 @@ suite('search page', () => {
 			/\.search-count\s*\{[^}]*width:\s*14ch[^}]*font-variant-numeric:\s*tabular-nums/.test(style),
 			'the search count is a fixed tabular column'
 		);
-		assert.ok(/\.search-count\[hidden\]\s*\{[^}]*display:\s*none/.test(style));
 		assert.ok(/\.search-progress::before\s*\{[^}]*animation:\s*ecuc-search-spin/.test(style), 'the busy spinner lives in the toolbar');
+		assert.ok(
+			/\.search-progress\[data-busy="false"\]\s*\{[^}]*visibility:\s*hidden/.test(style),
+			'the busy spinner keeps its slot instead of collapsing'
+		);
+		assert.ok(!/\.search-count\[hidden\]/.test(style), 'the count is never removed from the flow');
 		assert.ok(
 			/@media \(max-width: 720px\)[\s\S]*?\.search-box\s*\{[^}]*flex:\s*1 1 0/.test(style),
 			'the field shrinks instead of overlapping the actions'
@@ -585,12 +598,11 @@ suite('search page', () => {
 		assert.ok(/\.search-clear\s*\{[^}]*width:\s*18px[^}]*height:\s*18px/.test(style));
 	});
 
-	test('the count reads 1 / N, 0 / 0, or hides; nav disables with no matches', () => {
+	test('the count reads 1 / N, 0 / 0, or nothing; nav disables with no matches', () => {
 		const render = compileSearchUi(page());
 		const blank = { clear: controls(), prev: controls(), next: controls(), count: controls() };
 		render('', [], -1, blank.clear, blank.prev, blank.next, blank.count);
 		assert.strictEqual(blank.count.textContent, '');
-		assert.strictEqual(blank.count.hidden, true, 'a blank query hides the count');
 		assert.strictEqual(blank.clear.hidden, true);
 		assert.strictEqual(blank.prev.disabled, true);
 		assert.strictEqual(blank.next.disabled, true);
@@ -598,7 +610,6 @@ suite('search page', () => {
 		const empty = { clear: controls(), prev: controls(), next: controls(), count: controls() };
 		render('zzz', [], -1, empty.clear, empty.prev, empty.next, empty.count);
 		assert.strictEqual(empty.count.textContent, '0 / 0');
-		assert.strictEqual(empty.count.hidden, false);
 		assert.strictEqual(empty.prev.disabled, true);
 		assert.strictEqual(empty.next.disabled, true);
 		assert.strictEqual(empty.clear.hidden, false, 'a query still has a clear action');
@@ -872,6 +883,7 @@ suite('search page', () => {
 		const diffDocument: DiffDocument = {
 			left: { name: 'left.arxml', path: '/work/left.arxml' },
 			right: { name: 'right.arxml', path: '/work/right.arxml' },
+			labels: ['left.arxml', 'right.arxml'],
 			rows: [],
 			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 },
 		};

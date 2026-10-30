@@ -110,8 +110,9 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
   The first streamed match is selected and scrolled into view; completion
   preserves the current row by id. Later Enter/Shift+Enter and the previous/next buttons only move
   the match index and jump — they never rescan. A jump expands ancestors, scrolls and selects the
-  row but keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or hides while
-  the typed text has not been executed.
+  row but keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or is empty for an
+  unexecuted query, but it never leaves the flow: its fixed `14ch` slot and the always-present busy
+  slot stop the field from shifting. The Search control closes the toolbar, after Collapse/Expand.
 - **All matches are marked; the current match is stronger.** `appendHighlighted` wraps every
   case-insensitive occurrence in `<mark>` in the label, value and every visible meta fragment
   (short name, variant, context, condition and annotation). `buildNodeRow` sets
@@ -161,7 +162,9 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
   annotation directly above its node (`buildCommentRow`), using the node's level for indentation and
   guides. Comment rows are `aria-hidden`, fixed-height, never enter `visibleNodeIds`/`renderedById`,
   and `buildNodeRow` filters `cls === 'annotation'` out of `metaSpan`. The annotation still lives in
-  the row's `meta`/haystack and in Details.
+  the row's `meta`/haystack and in Details. The module group's blank line belongs to the first display
+  item of the group, so an annotated module carries it on its first comment row, not on the node row;
+  `carriesGroupGap` is the one predicate the height function and both row builders share.
 - **Conditions are token-coloured.** `conditionTokens` preserves every character and assigns
   `syscond-name`, `syscond-number`, `syscond-string`, `syscond-operator`, `syscond-literal` and
   `syscond-punct`, all backed by the existing `--tok-*` variables. A false condition marks its chip
@@ -300,10 +303,27 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 - The diff is read-only: no `WorkspaceEdit`, `writeFile`, `applyEdit`, repair or derived file.
   Refresh is a full re-scan after a 150 ms debounce; the page keeps the view mode, swap state,
   collapse, selection, search and scroll.
-- The diff toolbar is Search + **Show all** / **Show diff only** + **Prev diff** / **Next diff** +
-  **Swap sides**. There is no Filter, no changes checkbox, no changed/added/removed summary and no
-  global Collapse/Expand. Search uses `RowSearchEngine` (Enter-only, chunked, cancellable); its
-  candidates are the changed rows in diff-only view, all rows otherwise. Search never hides rows.
+- The diff toolbar puts **Swap sides** in a centred track and the right track ends with
+  **Show all** / **Show diff only**, **Prev diff**, **Next diff**, then Search; Search is always the
+  last control and its count/busy slots stay in the flow. There is no Filter, no changes checkbox, no
+  changed/added/removed summary and no global Collapse/Expand. Search uses `RowSearchEngine`
+  (Enter-only, chunked, cancellable); its candidates are the changed rows in diff-only view, all rows
+  otherwise. Search never hides rows.
+- **The diff strip mirrors Details for one row.** `updateDetail` shows a head (kind, label, status,
+  reveal actions) and a `role="table"` whose sticky heading row carries `DiffDocument.labels`.
+  `changed` rows list only `row.changes`, sorted by `diffFieldRank`; `added`/`removed` list the
+  surviving cell through `diffCellFields` and put `— not in this file —` in the missing column;
+  `unchanged` shows only `No differences for this row.` There is no definition line, no `Type`, no
+  format and no condition-state/Disabled row. The strip is outside `#diff-scroll`, caps at `22vh`
+  and scrolls internally.
+- **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`, so two
+  same-named files read as the same shortest path suffix in the window title, the pane headers and
+  the strip. Swap reverses the pair; do not recompute it in the page.
+- **Horizontal scrolling is one scrollbar.** `#diff-scroll` is the only horizontal surface; both
+  tracks use `var(--diff-col)` and `#diff-window`/`.pane-headers` are `calc(var(--diff-col) * 2)`
+  wide. The width comes from `diffRowChars` + one monospace font probe, clamped to 1600px and never
+  below half the viewport, written to the nonce `#virtual-style` sheet. Never add a `style`
+  attribute, a per-pane offset or a scroll listener.
 - **Swap sides is display-only.** `displayLeft`/`displayRight`/`displayStatus` re-project the row,
   detail changes swap their columns, and reveal buttons map a displayed side back to the host's
   original side. The comparison documents are not recomputed and the single `#diff-scroll` is

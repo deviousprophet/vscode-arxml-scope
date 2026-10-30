@@ -19,7 +19,7 @@ import { pageErrorScript } from '../editor/pageError';
 import { rowSearchScript } from '../editor/rowSearch';
 import { rowViewScript } from '../editor/rowView';
 import { virtualScrollScript } from '../editor/virtualScroll';
-import { DiffDocument, diffVisibility, flattenDiffRows, nextChangeIndex } from './diffModel';
+import { DiffCell, DiffDocument, DiffRow, diffVisibility, flattenDiffRows, nextChangeIndex } from './diffModel';
 
 export interface DiffRenderOptions {
 	/** Inline-script nonce; generated when absent. */
@@ -39,8 +39,8 @@ export function encodeDiffDocument(document: DiffDocument): string {
 export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = {}): string {
 	const nonce = options.nonce ?? randomBytes(16).toString('base64');
 	const payload = encodeDiffDocument(diff);
-	const left = escapeHtml(diff.left.name);
-	const right = escapeHtml(diff.right.name);
+	const left = escapeHtml(diff.labels[0]);
+	const right = escapeHtml(diff.labels[1]);
 	const leftPath = escapeHtml(diff.left.path);
 	const rightPath = escapeHtml(diff.right.path);
 	return `<!DOCTYPE html>
@@ -53,6 +53,17 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 </head>
 <body>
 <div class="toolbar">
+<span class="toolbar-slot" aria-hidden="true"></span>
+<div class="toolbar-center">
+<button id="diff-swap" class="tool icon-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h9m0 0-2.5-2.5M12 5 9.5 7.5M13 11H4m0 0 2.5-2.5M4 11l2.5 2.5"/></svg><span class="lbl">Swap sides</span></button>
+</div>
+<div class="toolbar-right">
+<div class="view-switch" role="group" aria-label="Diff view">
+<button id="diff-view-all" class="tool view-tool" type="button" aria-pressed="true">Show all</button>
+<button id="diff-view-diff" class="tool view-tool" type="button" aria-pressed="false">Show diff only</button>
+</div>
+<button id="diff-prev" class="tool icon-tool" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg><span class="lbl">Prev diff</span></button>
+<button id="diff-next" class="tool icon-tool" type="button" title="Next difference (F7)" aria-label="Next difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg><span class="lbl">Next diff</span></button>
 <div class="search-box">
 <div class="search-field">
 <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l3.5 3.5"/></svg></span>
@@ -61,17 +72,10 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 </div>
 <button id="diff-search-prev" class="nav-btn search-nav" type="button" title="Previous match (Shift+F3)" aria-label="Previous match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.75l4-4 4 4"/></svg></button>
 <button id="diff-search-next" class="nav-btn search-nav" type="button" title="Next match (F3)" aria-label="Next match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25l4 4 4-4"/></svg></button>
-<span id="diff-search-count" class="search-count" role="status" aria-live="polite" hidden></span>
-<span id="diff-search-busy" class="search-progress" role="status" aria-label="Searching" hidden></span>
+<span id="diff-search-count" class="search-count" role="status" aria-live="polite"></span>
+<span id="diff-search-busy" class="search-progress" role="status" aria-label="Searching" data-busy="false"></span>
 </div>
-<div class="view-switch" role="group" aria-label="Diff view">
-<button id="diff-view-all" class="tool view-tool" type="button" aria-pressed="true">Show all</button>
-<button id="diff-view-diff" class="tool view-tool" type="button" aria-pressed="false">Show diff only</button>
 </div>
-<span class="grow"></span>
-<button id="diff-prev" class="tool icon-tool" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg><span class="lbl">Prev diff</span></button>
-<button id="diff-next" class="tool icon-tool" type="button" title="Next difference (F7)" aria-label="Next difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg><span class="lbl">Next diff</span></button>
-<button id="diff-swap" class="tool icon-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h9m0 0-2.5-2.5M12 5 9.5 7.5M13 11H4m0 0 2.5-2.5M4 11l2.5 2.5"/></svg><span class="lbl">Swap sides</span></button>
 </div>
 <div id="diff-notice" class="notice" role="status" aria-live="polite"></div>
 <div id="diff-scroll">
@@ -80,7 +84,7 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 <div id="diff-right-header" class="pane-header" title="${rightPath}"><span id="diff-right-label">${right}</span></div>
 </div>
 <div id="diff-list" role="tree" aria-label="Semantic ECUC diff">
-<div id="diff-measure" aria-hidden="true"><div class="diff-row probe"><div class="diff-cell"><span class="row"><span class="label">x</span></span></div><div class="diff-cell"><span class="row"><span class="label">x</span></span></div></div></div>
+<div id="diff-measure" aria-hidden="true"><span id="diff-ch-probe" class="ch-probe">${'0'.repeat(100)}</span><div class="diff-row probe"><div class="diff-cell"><span class="row"><span class="label">x</span></span></div><div class="diff-cell"><span class="row"><span class="label">x</span></span></div></div></div>
 <div id="diff-top" class="v-spacer" role="presentation" aria-hidden="true"></div>
 <div id="diff-window" role="presentation"></div>
 <div id="diff-bottom" class="v-spacer" role="presentation" aria-hidden="true"></div>
@@ -97,6 +101,161 @@ ${diffPageScript()}
 </html>`;
 }
 
+/**
+ * The rail label for a compared field, in the Details vocabulary.
+ *
+ * Serialized into the page with `toString()`: keep the body self-contained.
+ */
+export function diffFieldLabel(field: string): string {
+	switch (field) {
+		case 'definition ref':
+			return 'Definition';
+		case 'definition dest':
+			return 'Definition DEST';
+		case 'short name':
+			return 'Short name';
+		case 'variant':
+			return 'Variant';
+		case 'value':
+		case 'shown value':
+			return 'Value';
+		case 'target':
+			return 'Target';
+		case 'context':
+			return 'Context';
+		case 'condition':
+			return 'Condition';
+		case 'annotation':
+			return 'Annotations';
+		default:
+			return field;
+	}
+}
+
+/**
+ * The canonical position of a field in the strip, so the same field always sits
+ * in the same place. Unknown fields sort last instead of disappearing.
+ *
+ * Serialized into the page with `toString()`: keep the body self-contained.
+ */
+export function diffFieldRank(field: string): number {
+	switch (field) {
+		case 'definition ref':
+			return 0;
+		case 'definition dest':
+			return 1;
+		case 'short name':
+			return 2;
+		case 'variant':
+			return 3;
+		case 'value':
+		case 'shown value':
+			return 4;
+		case 'target':
+			return 5;
+		case 'context':
+			return 6;
+		case 'condition':
+			return 7;
+		case 'annotation':
+			return 8;
+		default:
+			return 99;
+	}
+}
+
+/**
+ * The fields an added or removed row shows: everything present on the one side
+ * that survives, in canonical order. Empty fields are dropped, so a bare
+ * container lists only what it actually carries.
+ *
+ * Serialized into the page with `toString()`: keep the body self-contained.
+ */
+export function diffCellFields(cell: DiffCell): { field: string; text: string }[] {
+	const out: { field: string; text: string }[] = [];
+	if (!cell) {
+		return out;
+	}
+	const push = function (field: string, text: string): void {
+		if (text !== '') {
+			out.push({ field: field, text: text });
+		}
+	};
+	const metaOf = function (cls: string): string {
+		const parts: string[] = [];
+		for (const part of cell.meta) {
+			if (part.cls === cls) {
+				parts.push(part.text);
+			}
+		}
+		return parts.join('\n');
+	};
+	let context = '';
+	if (cell.contextPaths && cell.contextPaths.length > 0) {
+		context = cell.contextPaths.join(', ');
+	} else {
+		for (const part of cell.meta) {
+			if (part.cls === 'context') {
+				context = part.text.indexOf('context ') === 0 ? part.text.slice('context '.length) : part.text;
+				break;
+			}
+		}
+	}
+	push('definition ref', cell.definitionRef);
+	push('definition dest', cell.definitionDest === undefined ? '' : cell.definitionDest);
+	push('short name', cell.shortName === undefined ? '' : cell.shortName);
+	push('variant', metaOf('variant'));
+	push('value', cell.shownValue === undefined ? (cell.value === undefined ? '' : cell.value) : cell.shownValue);
+	push('target', cell.target === undefined ? '' : cell.target);
+	push('context', context);
+	push('condition', metaOf('condition'));
+	push('annotation', metaOf('annotation'));
+	return out;
+}
+
+/**
+ * The rendered character width of one diff row: indent, label, value and meta.
+ * The row font is monospace and meta fragments render at the same size, so a
+ * character count is a faithful width model; the wider side wins.
+ *
+ * Serialized into the page with `toString()`: keep the body self-contained.
+ */
+export function diffRowChars(row: DiffRow): number {
+	let widest = 0;
+	const sides = [row.left, row.right];
+	for (const cell of sides) {
+		if (!cell) {
+			continue;
+		}
+		let chars = 2 * row.level + cell.label.length;
+		if (cell.shownValue !== undefined) {
+			chars += cell.shownValue.length + 3;
+		}
+		for (const part of cell.meta) {
+			chars += part.text.length + 1;
+		}
+		if (chars > widest) {
+			widest = chars;
+		}
+	}
+	return widest;
+}
+
+/**
+ * One column width: never narrower than half the viewport, wide enough for the
+ * longest row, and capped so a pathological line cannot create an unusable
+ * scroll range. 20px covers the cell padding, 8px the twisty and gaps.
+ *
+ * Serialized into the page with `toString()`: keep the body self-contained.
+ */
+export function diffColumnWidth(maxChars: number, chWidth: number, half: number, cap: number): number {
+	const safeChars = maxChars > 0 ? maxChars : 0;
+	const safeChar = chWidth > 0 ? chWidth : 0;
+	const safeHalf = half > 0 ? half : 0;
+	const need = Math.ceil(safeChars * safeChar) + 20 + 8;
+	return Math.min(Math.max(safeHalf, need), cap);
+}
+
 /** The page script: the shared primitives plus the diff DOM glue. */
 export function diffPageScript(): string {
 	return `
@@ -109,6 +268,11 @@ ${rowSearchScript()}
 ${diffVisibility.toString()}
 ${flattenDiffRows.toString()}
 ${nextChangeIndex.toString()}
+${diffFieldLabel.toString()}
+${diffFieldRank.toString()}
+${diffCellFields.toString()}
+${diffRowChars.toString()}
+${diffColumnWidth.toString()}
 
 const scroll = document.getElementById('diff-scroll');
 const list = document.getElementById('diff-list');
@@ -165,6 +329,10 @@ let dataVersion = 0;
 let heights = { row: 20 };
 let heightFn = function () { return heights.row; };
 let heightVersion = 0;
+let spacerTop = 0;
+let spacerBottom = 0;
+let diffColumn = 0;
+let virtualStyleText = '';
 let scrollFrame = 0;
 
 function readInitialDocument() {
@@ -174,6 +342,7 @@ function readInitialDocument() {
 		return {
 			left: { name: '', path: '' },
 			right: { name: '', path: '' },
+			labels: ['', ''],
 			rows: [],
 			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
 		};
@@ -183,6 +352,7 @@ function readInitialDocument() {
 		return parsed && Array.isArray(parsed.rows) ? parsed : {
 			left: { name: '', path: '' },
 			right: { name: '', path: '' },
+			labels: ['', ''],
 			rows: [],
 			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
 		};
@@ -191,6 +361,7 @@ function readInitialDocument() {
 		return {
 			left: { name: '', path: '' },
 			right: { name: '', path: '' },
+			labels: ['', ''],
 			rows: [],
 			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
 		};
@@ -257,6 +428,9 @@ function setDocument(next) {
 	if (!next || !Array.isArray(next.rows)) {
 		return;
 	}
+	if (!Array.isArray(next.labels) || next.labels.length !== 2) {
+		next.labels = [next.left ? next.left.name : '', next.right ? next.right.name : ''];
+	}
 	diffDocument = next;
 	rows = next.rows;
 	indexRows();
@@ -277,6 +451,7 @@ function setDocument(next) {
 	// gets the real row height instead of the fallback.
 	list.hidden = displayRows.length === 0;
 	measureHeights();
+	measureColumnWidth();
 	dataVersion++;
 	if (searchQuery.trim() !== '') {
 		startSearch(searchQuery, currentMatchKey(), true);
@@ -291,6 +466,31 @@ function measureHeights() {
 	// the window math to the fallback.
 	heights = { row: measured > 0 ? measured : heights.row > 0 ? heights.row : 20 };
 	buildHeightFn();
+}
+
+/**
+ * One column width per rebuild. The row font is monospace, so one font probe plus
+ * character counts give every row's width without reading layout per row.
+ */
+function measureColumnWidth() {
+	const probe = document.getElementById('diff-ch-probe');
+	let chWidth = 0;
+	if (probe) {
+		const rect = probe.getBoundingClientRect();
+		chWidth = rect.width > 0 ? rect.width / 100 : 0;
+	}
+	let maxChars = 0;
+	for (const row of rows) {
+		const chars = diffRowChars(row);
+		if (chars > maxChars) {
+			maxChars = chars;
+		}
+	}
+	const next = diffColumnWidth(maxChars, chWidth, scroll.clientWidth / 2, 1600);
+	if (next !== diffColumn) {
+		diffColumn = next;
+		writeVirtualStyle();
+	}
 }
 
 function listWindowTop() {
@@ -313,10 +513,22 @@ function virtualState() {
 	};
 }
 
+function writeVirtualStyle() {
+	const text =
+		'#diff-top{height:' + Math.max(0, spacerTop) + 'px}' +
+		'#diff-bottom{height:' + Math.max(0, spacerBottom) + 'px}' +
+		(diffColumn > 0 ? '#diff-scroll{--diff-col:' + diffColumn + 'px}' : '');
+	if (text === virtualStyleText) {
+		return;
+	}
+	virtualStyleText = text;
+	virtualStyle.textContent = text;
+}
+
 function setSpacers(top, bottom) {
-	virtualStyle.textContent =
-		'#diff-top{height:' + Math.max(0, top) + 'px}' +
-		'#diff-bottom{height:' + Math.max(0, bottom) + 'px}';
+	spacerTop = top;
+	spacerBottom = bottom;
+	writeVirtualStyle();
 }
 
 function buildDiffCell(cell, side, row) {
@@ -566,7 +778,7 @@ function updateDetail() {
 	detail.textContent = '';
 	const row = selectedKey === undefined ? undefined : rowByKey.get(selectedKey);
 	if (!row) {
-		detail.appendChild(detailElement('p', 'detail-hint', 'Select a row to see the changed fields.'));
+		detail.appendChild(detailElement('p', 'detail-hint', 'Select a row to see its changes.'));
 		return;
 	}
 	const left = displayLeft(row);
@@ -577,27 +789,7 @@ function updateDetail() {
 	head.appendChild(detailElement('span', 'detail-kind', row.kind));
 	head.appendChild(detailElement('span', 'detail-label', owner ? owner.label : row.key));
 	head.appendChild(detailElement('span', 'detail-status status-' + status, status));
-	detail.appendChild(head);
-	if (owner) {
-		detail.appendChild(detailElement('div', 'detail-definition', owner.definitionRef));
-	}
-	if (status === 'changed') {
-		const table = detailElement('div', 'detail-changes');
-		for (const change of row.changes) {
-			const line = detailElement('div', 'detail-change');
-			line.appendChild(detailElement('span', 'detail-field', change.field));
-			line.appendChild(detailElement('span', 'detail-side detail-left', swapped ? change.right : change.left));
-			line.appendChild(detailElement('span', 'detail-side detail-right', swapped ? change.left : change.right));
-			table.appendChild(line);
-		}
-		detail.appendChild(table);
-	} else if (status === 'added') {
-		detail.appendChild(detailElement('p', 'detail-note', 'Only in the right file.'));
-	} else if (status === 'removed') {
-		detail.appendChild(detailElement('p', 'detail-note', 'Only in the left file.'));
-	} else {
-		detail.appendChild(detailElement('p', 'detail-note', 'No differences for this row.'));
-	}
+	head.appendChild(detailElement('span', 'detail-spacer'));
 	const actions = detailElement('div', 'detail-actions');
 	if (left) {
 		actions.appendChild(revealButton('left', row));
@@ -606,18 +798,95 @@ function updateDetail() {
 		actions.appendChild(revealButton('right', row));
 	}
 	if (actions.childNodes.length > 0) {
-		detail.appendChild(actions);
+		head.appendChild(actions);
 	}
+	detail.appendChild(head);
+
+	const fields = [];
+	if (status === 'changed') {
+		for (const change of row.changes.slice().sort(function (a, b) {
+			return diffFieldRank(a.field) - diffFieldRank(b.field);
+		})) {
+			fields.push(
+				swapped
+					? { field: change.field, left: change.right, right: change.left }
+					: { field: change.field, left: change.left, right: change.right }
+			);
+		}
+	} else if (status === 'added' && right) {
+		for (const entry of diffCellFields(right)) {
+			fields.push({ field: entry.field, left: '', right: entry.text, missing: 'left' });
+		}
+	} else if (status === 'removed' && left) {
+		for (const entry of diffCellFields(left)) {
+			fields.push({ field: entry.field, left: entry.text, right: '', missing: 'right' });
+		}
+	}
+	if (fields.length === 0) {
+		const note = status === 'unchanged' ? 'No differences for this row.' : 'No fields to compare for this row.';
+		detail.appendChild(detailElement('p', 'detail-note', note));
+		return;
+	}
+	const labels = swapped
+		? [diffDocument.labels[1], diffDocument.labels[0]]
+		: diffDocument.labels;
+	const paths = swapped
+		? [diffDocument.right.path, diffDocument.left.path]
+		: [diffDocument.left.path, diffDocument.right.path];
+	const table = detailElement('div', 'detail-table');
+	table.setAttribute('role', 'table');
+	table.setAttribute('aria-label', labels[0] + ' versus ' + labels[1]);
+	const headings = detailElement('div', 'detail-columns');
+	headings.setAttribute('role', 'row');
+	const rail = detailElement('span', 'detail-field');
+	rail.setAttribute('role', 'columnheader');
+	headings.appendChild(rail);
+	const leftHead = detailElement('span', 'detail-side-head detail-left', labels[0]);
+	leftHead.setAttribute('role', 'columnheader');
+	leftHead.title = paths[0];
+	headings.appendChild(leftHead);
+	const rightHead = detailElement('span', 'detail-side-head detail-right', labels[1]);
+	rightHead.setAttribute('role', 'columnheader');
+	rightHead.title = paths[1];
+	headings.appendChild(rightHead);
+	table.appendChild(headings);
+	for (const entry of fields) {
+		const line = detailElement('div', 'detail-change');
+		line.setAttribute('role', 'row');
+		const field = detailElement('span', 'detail-field', diffFieldLabel(entry.field));
+		field.setAttribute('role', 'rowheader');
+		line.appendChild(field);
+		line.appendChild(detailSideCell('detail-left', entry.left, entry.field, entry.missing === 'left'));
+		line.appendChild(detailSideCell('detail-right', entry.right, entry.field, entry.missing === 'right'));
+		table.appendChild(line);
+	}
+	detail.appendChild(table);
+}
+
+function detailSideCell(sideClass, text, field, missing) {
+	const cell = detailElement('span', 'detail-side ' + sideClass + (missing ? ' detail-missing' : ''));
+	cell.setAttribute('role', 'cell');
+	if (missing) {
+		cell.textContent = '— not in this file —';
+	} else if (field === 'condition') {
+		appendConditionTokens(cell, text);
+	} else {
+		cell.textContent = text;
+	}
+	return cell;
 }
 
 function renderHeaders() {
 	const left = swapped ? diffDocument.right : diffDocument.left;
 	const right = swapped ? diffDocument.left : diffDocument.right;
+	const labels = swapped
+		? [diffDocument.labels[1], diffDocument.labels[0]]
+		: diffDocument.labels;
 	if (leftLabel) {
-		leftLabel.textContent = left.name;
+		leftLabel.textContent = labels[0];
 	}
 	if (rightLabel) {
-		rightLabel.textContent = right.name;
+		rightLabel.textContent = labels[1];
 	}
 	if (leftHeader) {
 		leftHeader.title = left.path;
@@ -687,7 +956,7 @@ function renderSearchUi() {
 	const active = searchQuery.trim() !== '';
 	const hasMatches = searchMatches.length > 0;
 	if (searchBusy) {
-		searchBusy.hidden = !searchRunning;
+		searchBusy.dataset.busy = searchRunning ? 'true' : 'false';
 	}
 	if (searchClear) {
 		searchClear.hidden = !hasText;
@@ -701,7 +970,6 @@ function renderSearchUi() {
 	if (!searchCount) {
 		return;
 	}
-	searchCount.hidden = !active;
 	if (!active) {
 		searchCount.textContent = '';
 	} else if (!hasMatches) {
@@ -1104,8 +1372,14 @@ scroll.addEventListener('scroll', function () {
 });
 window.addEventListener('resize', function () {
 	measureHeights();
+	measureColumnWidth();
 	renderWindow(true);
 });
+if (typeof ResizeObserver === 'function') {
+	new ResizeObserver(function () {
+		measureColumnWidth();
+	}).observe(scroll);
+}
 
 document.getElementById('diff-prev').addEventListener('click', function () { gotoChange(-1); });
 document.getElementById('diff-next').addEventListener('click', function () { gotoChange(1); });
@@ -1239,10 +1513,10 @@ body {
 	--indent: 2ch;
 }
 .toolbar {
-	display: flex;
-	flex-wrap: nowrap;
-	gap: 6px;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 	align-items: center;
+	gap: 6px;
 	height: 30px;
 	padding: 0 8px;
 	flex: none;
@@ -1250,8 +1524,21 @@ body {
 	color: var(--tok-dim);
 	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
-.grow {
-	flex: 1 1 auto;
+.toolbar-slot {
+	min-width: 0;
+}
+.toolbar-center {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 0;
+}
+.toolbar-right {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	min-width: 0;
 }
 .search-box {
 	display: flex;
@@ -1373,9 +1660,8 @@ input[type="search"]::-webkit-search-decoration {
 	font-variant-numeric: tabular-nums;
 	color: var(--tok-dim);
 }
-.search-count[hidden] {
-	display: none;
-}
+/* The count and the busy spinner keep their boxes at all times: reserving the
+ * space is what stops the Search field from moving when a run starts or ends. */
 .search-progress {
 	width: 16px;
 	height: 16px;
@@ -1384,8 +1670,8 @@ input[type="search"]::-webkit-search-decoration {
 	align-items: center;
 	justify-content: center;
 }
-.search-progress[hidden] {
-	display: none;
+.search-progress[data-busy="false"] {
+	visibility: hidden;
 }
 .search-progress::before {
 	content: '';
@@ -1459,13 +1745,16 @@ input[type="search"]::-webkit-search-decoration {
 	min-height: 0;
 	overflow: auto;
 	overflow-anchor: none;
+	/* First paint, before the page measures the longest row. */
+	--diff-col: 50vw;
 }
 .pane-headers {
 	position: sticky;
 	top: 0;
 	z-index: 2;
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	grid-template-columns: var(--diff-col) var(--diff-col);
+	width: calc(var(--diff-col) * 2);
 	background: var(--vscode-editor-background);
 	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
@@ -1496,6 +1785,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 #diff-window {
 	display: flow-root;
+	width: calc(var(--diff-col) * 2);
 }
 .v-spacer {
 	pointer-events: none;
@@ -1508,9 +1798,22 @@ input[type="search"]::-webkit-search-decoration {
 	visibility: hidden;
 	pointer-events: none;
 }
+.ch-probe {
+	position: absolute;
+	left: 0;
+	top: 0;
+	white-space: pre;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	font-weight: var(--vscode-editor-font-weight, normal);
+}
+#diff-measure .diff-row,
+#diff-measure .probe {
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
 .diff-row, .probe {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	grid-template-columns: var(--diff-col) var(--diff-col);
 	align-items: stretch;
 	outline: none;
 }
@@ -1723,11 +2026,12 @@ mark {
 }
 #diff-detail {
 	flex: none;
-	max-height: 32vh;
+	max-height: 22vh;
 	overflow: auto;
 	padding: 6px 10px;
 	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 	background: var(--vscode-editor-background);
+	user-select: text;
 }
 .detail-hint,
 .detail-note {
@@ -1740,6 +2044,9 @@ mark {
 	flex-wrap: wrap;
 	gap: 8px;
 	align-items: baseline;
+}
+.detail-spacer {
+	flex: 1 1 auto;
 }
 .detail-kind {
 	font-size: 11px;
@@ -1763,23 +2070,32 @@ mark {
 .detail-status.status-removed {
 	color: var(--diff-removed-edge);
 }
-.detail-definition {
-	margin: 2px 0 6px;
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: 0.9em;
-	color: var(--tok-dim);
-	overflow-wrap: anywhere;
-}
-.detail-changes {
+.detail-table {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
+	margin-top: 6px;
 }
+.detail-columns,
 .detail-change {
 	display: grid;
 	grid-template-columns: 14ch minmax(0, 1fr) minmax(0, 1fr);
 	gap: 8px;
 	align-items: baseline;
+}
+.detail-columns {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--vscode-editor-background);
+	padding-bottom: 2px;
+}
+.detail-side-head {
+	font-weight: 600;
+	color: var(--tok-dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .detail-field {
 	color: var(--tok-dim);
@@ -1788,6 +2104,10 @@ mark {
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
+}
+.detail-missing {
+	color: var(--tok-dim);
+	font-style: italic;
 }
 .detail-left {
 	color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-editorError-foreground, var(--vscode-foreground)));
@@ -1799,7 +2119,6 @@ mark {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
-	margin-top: 8px;
 }
 @media (forced-colors: active) {
 	.diff-row[data-status="changed"] > .diff-cell,
@@ -1846,13 +2165,13 @@ body.vscode-high-contrast .diff-row:hover > .diff-cell {
 		flex: 1 1 0;
 	}
 	.notice,
-	.grow,
 	.icon-tool .lbl {
 		display: none;
 	}
 	.tool {
 		padding: 0 4px;
 	}
+	.detail-columns,
 	.detail-change {
 		grid-template-columns: minmax(0, 1fr);
 	}
