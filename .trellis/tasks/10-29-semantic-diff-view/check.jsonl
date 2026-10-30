@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Review the diff against the no-copy, virtualisation and no-write rules."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify the diff tests follow the repository's assertion conventions."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check tree semantics, keyboard behaviour and theme usage."}
-{"file": ".trellis/tasks/10-29-semantic-diff-view/research/hex-scope-diff-reference.md", "reason": "Confirm the diff follows the approved reference flow."}

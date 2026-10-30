@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Menu contributions must keep the webview/text-editor context rules consistent."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Never claim a file by default and dispose contributed behaviour correctly."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Manifest assertions use the repository's existing package.json test pattern."}
