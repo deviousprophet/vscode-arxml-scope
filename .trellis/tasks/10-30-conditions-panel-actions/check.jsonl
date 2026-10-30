@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify theme-only colours and no second action path."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify the new assertions fail when the affordance or disabled state is removed."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify the panel stays outside #tree and keeps its keyboard/ARIA contract."}

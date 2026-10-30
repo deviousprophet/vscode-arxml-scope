@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "The Conditions panel is a webview shell surface; markup, event ownership and theme rules apply."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No hard-coded colours, no inline styles, one action per interaction, dispose/state rules."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Page shell and extracted-function assertions follow the existing test conventions."}
