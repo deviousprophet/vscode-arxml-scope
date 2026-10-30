@@ -91,13 +91,13 @@ function fakeConditionRow(name: string | null, value: string | null): FakeCondit
 }
 
 suite('conditions panel (design §6)', () => {
-	test('the toolbar toggle and the panel shell exist once, outside #tree', () => {
+	test('the Conditions tab hosts the panel shell once, outside #tree', () => {
 		const html = page();
-		assert.ok(/id="conditions-toggle"[^>]*aria-pressed="false"[^>]*aria-expanded="false"[^>]*aria-controls="conditions-panel"/.test(html));
-		assert.ok(html.includes('title="Enter SW system-constant values"'));
-		assert.ok(html.includes('<span class="lbl">Conditions</span>'));
-
-		assert.ok(html.includes('<div id="conditions-panel" class="conditions-panel" hidden>'));
+		assert.ok(!html.includes('id="conditions-toggle"'), 'the toolbar toggle is removed');
+		assert.ok(/id="stab-conditions"[^>]*role="tab"[^>]*aria-controls="sbp-conditions"/.test(html));
+		assert.ok(html.includes('id="sbp-conditions"'), 'the tab panel exists');
+		assert.ok(!/<div id="conditions-panel" class="conditions-panel" hidden>/.test(html), 'the tab controls visibility, not the panel');
+		assert.ok(html.includes('<div id="conditions-panel" class="conditions-panel">'));
 		assert.ok(html.includes('id="conditions-list"'));
 		assert.ok(html.includes('id="conditions-add"'));
 		assert.ok(html.includes('id="conditions-clear"'));
@@ -110,10 +110,10 @@ suite('conditions panel (design §6)', () => {
 		assert.ok(html.includes('<span>Clear values</span>'), 'Clear is labelled by what it does');
 		assert.ok(html.includes('role="status" aria-live="polite"'), 'the panel status is announced');
 
-		const noticeAt = html.indexOf('id="notice"');
+		const bodyAt = html.indexOf('id="sb-conditions-values-body"');
 		const panelAt = html.indexOf('id="conditions-panel"');
 		const contentAt = html.indexOf('id="content"');
-		assert.ok(noticeAt >= 0 && panelAt > noticeAt && contentAt > panelAt, 'the panel survives a re-scan');
+		assert.ok(bodyAt >= 0 && panelAt > bodyAt && panelAt > contentAt, 'the panel lives in the sidebar section body');
 		const treeAt = html.indexOf('id="tree"');
 		assert.ok(treeAt > contentAt, 'the panel is not inside #tree');
 		assert.ok(html.indexOf('id="ecuc-conditions"') > treeAt, 'the entries are data, not shell markup');

@@ -73,10 +73,11 @@ that is not obvious from the code.
   payload or source-position fields back to the row model. Bracket guides are the only vertical
   rules; they run from opening to closing brace, fade at rest and activate on hover. A repeating
   indent gradient is forbidden.
-- **Defaults are Document and visible details.** `renderHtml` writes `data-view="document"`,
-  an open inspector and `aria-pressed="true"`. A saved `inspectorHidden: true` hides it, and every
-  explicit hide/show is persisted; only a missing or invalid saved state falls back to visible. An
-  old saved `view` is ignored.
+- **Defaults are Document and the Details tab.** `renderHtml` writes `data-view="document"` and
+  selects the Details sidebar tab by default; Conditions starts hidden. The tab, sidebar width,
+  section panes and collapsed sections persist through `getState()/setState()`. A legacy
+  `inspectorHidden` is ignored; there is no toolbar Details/Conditions toggle and no second panel
+  surface.
 - **Details editing is the only edit path.** The panel edits a parameter's `<VALUE>` and a
   container's `<SHORT-NAME>` / `<DEFINITION-REF>` inner text. The value control follows the AUTOSAR
   type: integer/float/text use an input with type-specific filtering; Boolean uses a true/false
@@ -85,7 +86,7 @@ that is not obvious from the code.
   missing `field` to `value` and ignores an unknown one. Enter commits, Escape restores, Tab moves
   (adjacent parameter for a value, the other container field for a container). A refusal keeps the
   typed text, marks the control invalid and shows the reason beside the field; the toolbar notice is
-  only the fallback when the details panel is hidden, so the same reason is never shown twice. Only
+  only the fallback when the Details tab is not active, so the same reason is never shown twice. Only
   a container is editable this
   way; a module rename is refused because its short name is part of every container id. The panel
   exposes Jump to target for a followable reference plus Reveal in source; there is no Source block

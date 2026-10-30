@@ -1,16 +1,17 @@
 /**
  * The Document-only quiet-source surface: no Tree toggle or Tree CSS, no source-line gutter,
  * bracket guides and selected-subtree highlighting, the editor surface/tokens, selection/focus,
- * details width, the details value editor and the state defaults.
+ * details width, the details value editor and the layout state defaults.
  *
- * There is no webview DOM in the test host. The page's own `applyInspectorVisibility` is
- * driven with stub DOM objects; the rest is asserted on the row data, the shell, its styles
- * and the inlined script. The browser pass is the rendered evidence.
+ * There is no webview DOM in the test host. The page's own `loadUiState` helper is driven
+ * directly; the rest is asserted on the row data, the shell, its styles and the inlined
+ * script. The browser pass is the rendered evidence.
  */
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { RowPayload, refusalShownInDetails, renderHtml } from '../../editor/renderHtml';
+import { loadUiState } from '../../editor/sidebarShell';
 import { fixtureText } from '../core/modelTestUtils';
 import { functionSource } from './scriptTestUtils';
 
@@ -37,14 +38,19 @@ function styleOf(html: string): string {
 }
 
 suite('editor document view', () => {
-	test('Document is the only view; the strip and details exist', () => {
+	test('Document is the only view; the sidebar shell and details exist', () => {
 		const html = page();
 		assert.ok(html.includes('<body data-view="document">'));
 		assert.ok(!html.includes('id="view-toggle"'), 'the Tree view toggle is gone');
 		assert.ok(!html.includes('view-document') && !html.includes('view-tree'), 'no view switch labels');
-		assert.ok(/id="details-toggle"[^>]*aria-pressed="true"/.test(html));
-		assert.ok(html.includes('aria-controls="inspector"'));
-		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details">'));
+		assert.ok(html.includes('<div id="sidebar-resizer" role="separator"'), 'the sidebar is resizable');
+		assert.ok(html.includes('<aside id="sidebar" aria-label="ECUC sidebar">'));
+		assert.ok(html.includes('id="side-tabs"'));
+		assert.ok(html.includes('id="stab-details"'));
+		assert.ok(html.includes('id="stab-conditions"'));
+		assert.ok(!html.includes('id="details-toggle"'), 'the details toggle is replaced by the tab strip');
+		assert.ok(!html.includes('id="conditions-toggle"'), 'the conditions toolbar toggle is gone');
+		assert.ok(html.includes('<div id="inspector" class="inspector sb-pane-view" role="region" aria-label="Node details">'));
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));
 		assert.ok(html.includes('<div id="notice" class="notice" role="status" aria-live="polite"></div>'));
@@ -225,7 +231,7 @@ suite('editor document view', () => {
 		assert.ok(/\.toolbar\s*\{[^}]*padding:\s*0 8px/.test(style));
 		assert.ok(/\.toolbar\s*\{[^}]*flex-wrap:\s*nowrap/.test(style));
 		assert.ok(/\.filter-wrap\s*\{[^}]*flex:\s*0 1 28ch/.test(style));
-		assert.ok(/\.filter:not\(:placeholder-shown\)\s*\{[^}]*var\(--vscode-input-background\)/.test(style));
+		assert.ok(/\.filter,\s*\.search-input\s*\{[^}]*height:\s*26px[^}]*var\(--vscode-input-background\)/.test(style));
 		assert.ok(/\.tool\s*\{[^}]*background:\s*transparent[^}]*border:\s*0/.test(style));
 		assert.ok(!style.includes('.view-switch'), 'no view switch');
 	});
@@ -234,7 +240,9 @@ suite('editor document view', () => {
 		const html = page();
 		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"[^>]*>[\s\S]*?<span class="lbl">Collapse<\/span>/.test(html));
 		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"[^>]*>[\s\S]*?<span class="lbl">Expand<\/span>/.test(html));
-		assert.ok(/\.icon-tool\s*\{[^}]*min-width:\s*28px[^}]*padding:\s*0 8px/.test(styleOf(html)));
+		assert.ok(/id="collapse-all"[^>]*class="[^"]*sb-btn sb-btn-secondary/.test(html), 'toolbar controls use the shared secondary button');
+		assert.ok(/id="expand-all"[^>]*class="[^"]*sb-btn sb-btn-secondary/.test(html));
+		assert.ok(/\.icon-tool\s*\{[^}]*min-width:\s*28px/.test(styleOf(html)));
 		assert.ok(/\.twisty\s*\{[^}]*opacity:\s*0;/.test(styleOf(html)), 'expanded folds start hidden');
 		assert.ok(/\.twisty\s*\{[^}]*left:\s*2px/.test(styleOf(html)), 'the chevron is inset 2px into the gutter');
 		assert.ok(/\.twisty\s*\{[^}]*width:\s*16px/.test(styleOf(html)), 'the chevron is 16px wide');
@@ -257,7 +265,6 @@ suite('editor document view', () => {
 		);
 		assert.ok(functionSource(html, 'buildNodeRow').includes("node.dataset.empty = 'true'"), 'the marker is data-driven');
 		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(styleOf(html)));
-		assert.ok(/id="details-toggle"[^>]*aria-label="Hide node details"[^>]*><svg/.test(html));
 		assert.ok(!html.includes('id="view-toggle"'));
 	});
 
@@ -298,13 +305,20 @@ suite('editor document view', () => {
 		assert.ok(/body\[data-view="document"\] \.value\s*\{[^}]*flex:\s*0 0 auto/.test(style));
 	});
 
-	test('the details width and narrow layout are specified', () => {
+	test('the sidebar width and narrow layout are specified', () => {
 		const style = styleOf(page());
-		assert.ok(/#inspector\s*\{[^}]*flex:\s*0 0 clamp\(260px, 30%, 340px\)/.test(style));
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.details-toggle \.lbl[\s\S]*?display:\s*none/.test(style));
+		assert.ok(/#sidebar\s*\{[^}]*width:\s*var\(--sidebar-w, 360px\)/.test(style));
+		assert.ok(/#sidebar\s*\{[^}]*min-width:\s*var\(--sidebar-w, 360px\)/.test(style));
+		assert.ok(/#sidebar\s*\{[^}]*border-left:\s*1px solid/.test(style));
+		assert.ok(/#sidebar-resizer\s*\{[^}]*cursor:\s*col-resize/.test(style));
+		assert.ok(/#sidebar-resizer\s*\{[^}]*width:\s*6px/.test(style));
+		assert.ok(/#side-tabs\s*\{[^}]*width:\s*28px/.test(style));
+		assert.ok(/\.stab\s*\{[^}]*writing-mode:\s*vertical-rl/.test(style));
+		assert.ok(/\.stab\.active\s*\{[^}]*border-right-color:\s*var\(--vscode-textLink-foreground\)/.test(style));
+		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.icon-tool \.lbl[\s\S]*?display:\s*none/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.grow[\s\S]*?display:\s*none/.test(style));
 		assert.ok(/\.inspector-code\s*\{[^}]*white-space:\s*normal/.test(style));
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?#inspector\s*\{[^}]*max-height:\s*45vh/.test(style));
+		assert.ok(/@media \(max-width: 720px\)[\s\S]*?#sidebar\s*\{[^}]*max-height:\s*45vh/.test(style));
 		assert.ok(/#main\s*\{[^}]*scroll-padding-left:\s*var\(--content-pad\)/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(style));
 		assert.ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?steps\(1, end\)/.test(style));
@@ -339,73 +353,51 @@ suite('editor document view', () => {
 	test('a field refusal is left to the details panel instead of the toolbar notice', () => {
 		const html = page();
 		assert.ok(
-			html.includes('refusalShownInDetails(message, uiState.inspectorHidden)'),
-			'the notice handler asks whether the details panel already answered'
+			html.includes("refusalShownInDetails(message, uiState.tab !== 'details')"),
+			'the notice handler asks whether the Details tab already answered'
 		);
 		assert.ok(html.includes('delete notice.dataset.kind'), 'a stale warning is cleared');
 
 		assert.strictEqual(refusalShownInDetails({ inline: true }, false), true, 'visible details owns the refusal');
-		assert.strictEqual(refusalShownInDetails({ inline: true }, true), false, 'hidden details falls back to the notice');
+		assert.strictEqual(refusalShownInDetails({ inline: true }, true), false, 'another tab falls back to the notice');
 		assert.strictEqual(refusalShownInDetails({}, false), false, 'page-level problems still reach the notice');
 	});
 
-	test('the page details visibility drives the stubs', () => {
-		const html = page();
-		const inspector = { hidden: false };
-		const details = {
-			attrs: {} as Record<string, string>,
-			title: '',
-			setAttribute(name: string, value: string) {
-				this.attrs[name] = value;
-			},
-		};
-		const applyInspector = new Function(
-			'uiState',
-			'inspector',
-			'detailsToggle',
-			`${functionSource(html, 'applyInspectorVisibility')}\napplyInspectorVisibility();`
-		) as (state: unknown, panel: unknown, toggle: unknown) => void;
-		applyInspector({ inspectorHidden: true }, inspector, details);
-		assert.strictEqual(inspector.hidden, true);
-		assert.strictEqual(details.attrs['aria-pressed'], 'false');
-		assert.strictEqual(details.attrs['aria-label'], 'Show node details');
-		assert.strictEqual(details.title, 'Show node details');
-		applyInspector({ inspectorHidden: false }, inspector, details);
-		assert.strictEqual(inspector.hidden, false);
-		assert.strictEqual(details.attrs['aria-pressed'], 'true');
-		assert.strictEqual(details.attrs['aria-label'], 'Hide node details');
-		assert.strictEqual(details.title, 'Hide node details');
-	});
-
-	test('the defaults and persistence path are present', () => {
+	test('the layout state defaults and persistence path are present', () => {
 		const script = page();
-		assert.ok(script.includes('let uiState = { inspectorHidden: false }'), 'details starts visible');
-		assert.ok(script.includes("uiState.inspectorHidden = !uiState.inspectorHidden"));
-		assert.ok(script.includes('vscode.getState()'));
+		assert.ok(script.includes('let uiState = loadUiState(savedState)'), 'the shell state is validated on boot');
+		assert.ok(script.includes('function persistUiState()'));
 		assert.ok(script.includes('vscode.setState(uiState)'));
 		assert.ok(!script.includes('uiState.view'));
+		assert.ok(!script.includes('uiState.inspectorHidden'), 'the legacy inspector flag is dropped');
 		assert.ok(!script.includes('viewToggle'));
 	});
 
-	test('AC8: a saved hide is honoured and an invalid state falls back to visible', () => {
-		const html = page();
-		const start = html.indexOf('const savedState = vscode.getState();');
-		const assignment = html.indexOf('uiState.inspectorHidden = savedState.inspectorHidden;', start);
-		const close = html.indexOf('}', assignment);
-		assert.ok(start !== -1 && assignment !== -1 && close !== -1, 'the saved-state branch is inlined');
-		const snippet = html.slice(start, close + 1);
-		const read = new Function('vscode', `${snippet}\nreturn uiState;`) as (vscode: unknown) => {
-			inspectorHidden: boolean;
-		};
-		const state = (saved: unknown): boolean => read({ getState: () => saved }).inspectorHidden;
-
-		assert.strictEqual(state(undefined), false, 'no saved state shows the panel');
-		assert.strictEqual(state(null), false);
-		assert.strictEqual(state({}), false, 'a missing key shows the panel');
-		assert.strictEqual(state({ inspectorHidden: 'yes' }), false, 'an invalid type is ignored');
-		assert.strictEqual(state([]), false, 'an array is not a state object');
-		assert.strictEqual(state({ inspectorHidden: true }), true, 'an explicit hide is honoured');
-		assert.strictEqual(state({ inspectorHidden: false }), false, 'an explicit show is honoured');
+	test('AC8: an invalid saved layout falls back to Details, 360px and no panes', () => {
+		const defaults = loadUiState(undefined);
+		assert.deepStrictEqual(defaults, { tab: 'details', sidebarWidth: 360, panes: {}, collapsed: [] });
+		assert.deepStrictEqual(loadUiState(null), defaults);
+		assert.deepStrictEqual(loadUiState({}), defaults);
+		assert.deepStrictEqual(loadUiState([]), defaults);
+		assert.strictEqual(loadUiState({ tab: 'nope' }).tab, 'details', 'an unknown tab falls back to Details');
+		assert.strictEqual(loadUiState({ sidebarWidth: 'wide' }).sidebarWidth, 360, 'an invalid width is ignored');
+		assert.strictEqual(loadUiState({ sidebarWidth: 1200 }).sidebarWidth, 900, 'a saved width is clamped');
+		assert.strictEqual(loadUiState({ sidebarWidth: 100 }).sidebarWidth, 260, 'a too-small width is clamped');
+		assert.deepStrictEqual(loadUiState({ panes: [] }).panes, {}, 'an array is not a pane map');
+		assert.deepStrictEqual(loadUiState({ panes: { a: 'x', b: -1 } }).panes, {});
+		assert.deepStrictEqual(loadUiState({ collapsed: ['a', 3, 'b'] }).collapsed, ['a', 'b']);
+		assert.deepStrictEqual(
+			loadUiState({ inspectorHidden: true }),
+			defaults,
+			'the legacy hide flag is ignored rather than written back'
+		);
+		assert.strictEqual(loadUiState({ tab: 'conditions' }).tab, 'conditions', 'the saved tab is restored');
+		assert.deepStrictEqual(loadUiState({ panes: { 'sb-details-node': 120 }, collapsed: ['sb-details-value'] }), {
+			tab: 'details',
+			sidebarWidth: 360,
+			panes: { 'sb-details-node': 120 },
+			collapsed: ['sb-details-value'],
+		});
 	});
 
 	test('R7: Collapse and Expand have different, semantically opposite glyphs', () => {

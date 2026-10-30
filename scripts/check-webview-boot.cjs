@@ -130,8 +130,17 @@ function embeddedJson(html, id) {
 
 	// Guard against a vacuous success: each rendered page must contain the panel
 	// this gate claims to boot.
-	if (!editorHtml.includes('id="tree"')) {
-		throw new Error('rendered editor page is missing id="tree"');
+	for (const marker of ['id="tree"', 'id="sidebar"', 'id="sidebar-resizer"', 'id="side-tabs"']) {
+		if (!editorHtml.includes(marker)) {
+			throw new Error(`rendered editor page is missing ${marker}`);
+		}
+	}
+	// The sidebar shell is injected via toString(); keep the page's own entry
+	// points so a bundler rename is caught before the VSIX ships a dead sidebar.
+	for (const marker of ['function mountSidebarShell', 'function activateSidebarTab', 'class SidebarPaneView']) {
+		if (!editorHtml.includes(marker)) {
+			throw new Error(`rendered editor page is missing ${marker}`);
+		}
 	}
 	if (!diffHtml.includes('id="diff-list"')) {
 		throw new Error('rendered diff page is missing id="diff-list"');

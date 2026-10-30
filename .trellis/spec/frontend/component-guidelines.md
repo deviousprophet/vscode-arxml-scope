@@ -9,15 +9,19 @@ full-tree HTML string and no second renderer.
 
 ```
 body (column)
-  .toolbar                        survives a re-scan
-  #conditions-panel               hidden until toggled; outside #tree so typing survives a re-scan
+  .toolbar                          survives a re-scan
+  #notice
   #content (row)
     #main (flex: 1; overflow: auto)   ← the scroll container
       .document
         .meta                        schema/package header
         #tree[role=tree]             contains the top spacer, #tree-window, bottom spacer
         #empty                       filtered-empty comment
-    #inspector (aside)                survives a re-scan
+    #sidebar-resizer (6px)            survives a re-scan
+    #sidebar                          Details / Conditions tab panels
+      #sbp-details > #inspector > section.sb-section (Node, Value, Reference, Conditions)
+      #sbp-conditions > section > #conditions-panel
+    #side-tabs (28px)                 right-edge vertical tabs
 ```
 
 - `#main` is the **scroll container**. The page computes the rows-region offset from `#tree`'s
@@ -30,11 +34,33 @@ body (column)
 - The initial rows are escaped JSON in `<script type="application/json" id="ecuc-rows">`; the page
   parses it and never evaluates model text. A re-scan posts `{ type: 'model', rows, selectedId }`,
   not tree markup and no `digits`.
-- Anything that must survive a re-scan — the toolbar, the details inspector, the details toggle —
-  lives outside the rows. The filter's empty state lives beside `#tree` because it describes the
-  filtered list.
+- Anything that must survive a re-scan — the toolbar, the sidebar, the tabs, the inspector and the
+  Conditions panel — lives outside the rows. The filter's empty state lives beside `#tree` because it
+  describes the filtered list.
 - There is one Document presentation. There is no view toggle, no `view` state, no Tree CSS/probes/
   glyphs and no second refresh path.
+
+## Sidebar shell
+
+- The right side is a Hex Scope-style sidebar: a 28px vertical tab strip (**Details**, **Conditions**)
+  at the far right, a resizable panel area, and one visible tab panel at a time. Details is the
+  default. There is no toolbar Details/Conditions toggle and no second panel surface.
+- `#inspector` remains the Details panel root. It is split into four stable section bodies (Node,
+  Value, Reference, Conditions & annotations); `updateInspector` clears and rewrites the bodies only,
+  never the section headers. The details editor owns its inputs in the Value/Node bodies.
+- Every section is a pane: 22px header (`role=button`, `aria-expanded`, `aria-controls`), chevron,
+  independent scrolling body (`role=region`), and a 6px `role=separator` sash to the next section.
+  Sashes support drag, ArrowUp/ArrowDown, double-click reset and are disabled next to a collapsed
+  pane. Collapse/expand animates 150ms; resize/layout is instant; reduced motion disables animation.
+- Pane sizing: `HEADER_H=22`, `MIN_PANE=82`, `SASH_H=6`; saved user sizes first, fresh sections
+  share the remainder, the last absorbs rounding, a single expanded section fills the panel.
+- The layout state (`tab`, `sidebarWidth`, `panes`, `collapsed`) is persisted through
+  `acquireVsCodeApi().getState()/setState()`. A re-scan never resets it. The old `inspectorHidden`
+  state is ignored.
+- The shared control system is `.sb-btn-primary`, `.sb-btn-secondary`, `.sb-btn-add`,
+  `.sb-btn-danger`, `.nav-btn` and `.act-btn`. Toolbar, details actions, Conditions actions and the
+  Filter/Search fields use those classes; do not add a one-off button style. Fields use `.filter` /
+  `.search-input` (26px, input tokens, 3px radius) and the native search cancel is suppressed.
 
 ## Event ownership
 
@@ -108,19 +134,19 @@ selects and opens the details editor. Reference follow is the details **Jump to 
 ## State
 
 - The webview owns: `selectedId`, `focusId`, the collapsed id set, the filter query/result, the
-  viewport range/scroll position, type-ahead, the details edit and the details visibility. The host
-  owns: the panel map, the selection map and a pending selection.
+  viewport range/scroll position, type-ahead, the details edit, the sidebar tab/width/pane state and
+  (after the Find child) the search state. The host owns: the panel map, the selection map and a
+  pending selection.
 - A re-scan sends `{ type: 'model', rows, selectedId }`. `setRows` rebuilds the row maps, prunes the
   collapsed set, preserves query/scroll where possible, recomputes the selected branch and re-renders
   the window. `reconcileRowState` is the serialized policy; `resolveFocusId` restores focus by id
   when the row remains rendered. The old `reRenderTree` DOM swap is gone.
 - The initial row payload carries the host selection; `prepareFocus` expands its ancestors if
   needed, scrolls it into the rendered window and fills the inspector.
-- Only the details visibility is persisted through `acquireVsCodeApi().getState()/setState()`
-  (validated as a non-array object; `inspectorHidden === true` hides the inspector). The first paint
-  is Document with the inspector **visible**; a saved explicit hide still hides it and a
-  missing/invalid state falls back to visible. An old saved `view` is ignored. There is no browser
-  harness stub any more; the reload round trip is observed in the Extension Development Host.
+- Only layout state is persisted through `acquireVsCodeApi().getState()/setState()`: `tab`,
+  `sidebarWidth`, `panes` and `collapsed`. A missing or invalid state falls back to Details, 360px
+  and default section heights; a legacy `inspectorHidden` is ignored and never written back. The
+  reload round trip is observed in the Extension Development Host.
 - The pure state helpers (`pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`,
   `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`) are real functions
   serialized into the page with `toString()`. The tests extract and drive the page's copy; do not

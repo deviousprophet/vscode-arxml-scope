@@ -139,7 +139,7 @@ suite('editor filter feedback (AC9)', () => {
 		const style = /<style[^>]*nonce[^>]*>([\s\S]*?)<\/style>/.exec(html);
 		assert.ok(style, 'the nonce-carrying sheet carries the rules');
 		assert.ok(
-			/\.filter::-webkit-search-cancel-button\s*,\s*\.filter::-webkit-search-decoration\s*\{[^}]*-webkit-appearance:\s*none[^}]*display:\s*none/.test(
+			/input\[type="search"\]::-webkit-search-cancel-button\s*,\s*input\[type="search"\]::-webkit-search-decoration\s*\{[^}]*-webkit-appearance:\s*none[^}]*display:\s*none/.test(
 				style[1]
 			),
 			"Chromium's native search cancel button and decoration are suppressed"

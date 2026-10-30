@@ -36,7 +36,7 @@ re-scans and refuses if the bytes moved.
 | `displayRows`, `expandedIds`, `subtreeIds`, `guideLevels` | page script | derived from the rows, collapsed set, filter and selected subtree |
 | type-ahead buffer | page script | yes; it is a transient 2 s window |
 | `detailsEdits` / `pendingMove` / `pendingFieldFocus` / `flashId` | details editor | no; the re-scan message clears stale state and rebuilds the details inputs |
-| `uiState.inspectorHidden` | page + host state | yes, through `getState()/setState()` |
+| `uiState.tab / sidebarWidth / panes / collapsedSections` | page + host state | yes, through `getState()/setState()` |
 
 The collapsed set is the only state that must not be re-derived from the rendered order. Node ids
 are path-based and include a declaration-order ordinal (see `nodeId.ts`); pruning only drops ids the
@@ -61,15 +61,17 @@ second host-side implementation of a view rule.
 
 ## Persistence
 
-- **Within the page:** the shell (toolbar, inspector) lives outside the rows, so a re-scan cannot
-  destroy it. The row store, flattening and window are rebuilt in place; there is no innerHTML swap.
-- **Across a webview reload:** the details panel uses
-  `acquireVsCodeApi().getState()/setState()`. Validate the shape: a non-null, non-array object; hide
-  only when `inspectorHidden === true` and show it for anything else, so the default (no saved state,
-  or an invalid one) is visible. A non-boolean `inspectorHidden` is ignored, not coerced. An explicit
-  hide/show is written on every toggle, so a user who hides the panel keeps that layout across
-  reloads. An old saved `view` is ignored; there is no second view. The reload round trip is observed
-  in the Extension Development Host, which is the only place the state API exists.
+- **Within the page:** the toolbar, sidebar, tabs, sections and details panel live outside the rows,
+  so a re-scan cannot destroy them. The row store, flattening and window are rebuilt in place; there
+  is no innerHTML swap.
+- **Across a webview reload:** the sidebar uses `acquireVsCodeApi().getState()/setState()` with one
+  validated object: `tab` (`details`/`conditions`), `sidebarWidth` (clamped 260–900),
+  `panes` (section id → saved px), `collapsedSections` (section ids). A missing/invalid field falls
+  back to Details, 360px and default heights; a non-array object is ignored. The legacy
+  `inspectorHidden` field is ignored and never written back. Only user actions (tab click, resizer
+  release, sash release/reset, section toggle) write the preference; transient viewport clamping
+  does not overwrite the saved width. The reload round trip is observed in the Extension Development
+  Host, which is the only place the state API exists.
 
 ## Condition values
 

@@ -8,13 +8,15 @@
  * script flattens the rows (collapse/filter), asks the pure virtual-scroll math
  * for a viewport window and builds only those rows with DOM APIs. The same
  * script survives a re-scan: the host sends a new row array and the page keeps
- * its selection, collapsed set, query, inspector visibility and scroll where it can.
+ * its selection, collapsed set, query, sidebar layout and scroll where it can.
  *
  * Everything is inlined — no asset files, no remote loads — because the CSP
  * forbids them and `esbuild.js` has no asset-copy step. Every colour is a
- * `--vscode-*` custom property (or a fallback inside one). The page never uses
- * a style attribute: row depth is `data-level` CSS and the virtual spacer
- * heights come from a nonce-carrying stylesheet whose text is updated.
+ * `--vscode-*` custom property (or a fallback inside one). The page never writes
+ * a model-derived style attribute: row depth is `data-level` CSS and the virtual
+ * spacer heights come from a nonce-carrying stylesheet whose text is updated.
+ * The sidebar writes only its own two geometry custom properties
+ * (`--sidebar-w`, `--sb-pane-h`) through CSSOM, which the nonce CSP allows.
  *
  * The pure helpers that decide re-scan state, the inspector and focus are
  * defined here as real functions and serialized into the page with
@@ -30,6 +32,7 @@ import { encodeJsonForScript } from './jsonScript';
 import { pageErrorScript } from './pageError';
 import { EcucRow, MetaPart, ParameterFormat, RowCondition, buildRows } from './renderRows';
 import { rowViewScript } from './rowView';
+import { sidebarShellScript } from './sidebarShell';
 import { virtualScrollScript } from './virtualScroll';
 
 export { encodeJsonForScript };
@@ -240,17 +243,70 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <input id="filter" class="filter" type="search" placeholder="Filter" aria-label="Filter the ECUC tree">
 <button id="filter-clear" class="filter-clear" type="button" title="Clear the filter" aria-label="Clear the filter" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 </div>
-<button id="conditions-toggle" class="tool icon-tool" type="button" aria-pressed="false" aria-expanded="false" aria-controls="conditions-panel" title="Enter SW system-constant values" aria-label="Enter SW system-constant values"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 4.5h12M2 8h12M2 11.5h12"/><circle cx="5.5" cy="4.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="10.5" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="11.5" r="1.5" fill="currentColor" stroke="none"/></svg><span class="lbl">Conditions</span></button>
 <span id="count" class="count" role="status" aria-live="polite" data-state="none"></span>
 <span class="grow"></span>
-<button id="collapse-all" class="tool icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
-<button id="expand-all" class="tool icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/></svg><span class="lbl">Expand</span></button>
-<button id="details-toggle" class="tool details-toggle" type="button" aria-pressed="true" aria-controls="inspector" title="Hide node details" aria-label="Hide node details"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg><span class="lbl">Details</span></button>
+<button id="collapse-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
+<button id="expand-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/></svg><span class="lbl">Expand</span></button>
 </div>
 <div id="notice" class="notice" role="status" aria-live="polite"></div>
-<div id="conditions-panel" class="conditions-panel" hidden>
+<div id="content">
+<div id="main">
+<div class="document">
+<div class="meta">${meta}</div>
+<div id="tree-measure" aria-hidden="true"><div class="node probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
+<div id="tree" class="tree" role="tree" aria-label="ECUC values"><div id="tree-top" class="v-spacer" role="presentation" aria-hidden="true"></div><div id="tree-window" role="presentation"></div><div id="tree-bottom" class="v-spacer" role="presentation" aria-hidden="true"></div></div>
+<div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="sb-btn sb-btn-secondary" type="button">Clear filter</button></div>
+</div>
+</div>
+<div id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" title="Drag to resize sidebar" tabindex="0"></div>
+<aside id="sidebar" aria-label="ECUC sidebar">
+<div id="sbp-details" class="sb-tab-panel active" role="tabpanel" aria-labelledby="stab-details">
+<div id="inspector" class="inspector sb-pane-view" role="region" aria-label="Node details">
+<section class="sb-section sb-pane" id="sb-details-node" data-pane-id="sb-details-node">
+<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-details-node-body" aria-label="Node">
+<span class="sb-section-chevron" aria-hidden="true"></span>
+<h3 class="sb-section-title" id="sb-details-node-title"><span class="sb-section-label">Node</span></h3>
+</div>
+<div class="sb-body" id="sb-details-node-body" role="region" aria-labelledby="sb-details-node-title">
+<div class="inspector-empty"><p>Select a line to see its details.</p><p class="inspector-hint">Click a line or press Space.</p></div>
+</div>
+</section>
+<div class="sb-pane-sash" role="separator" aria-orientation="horizontal" aria-label="Resize Node section" tabindex="0"></div>
+<section class="sb-section sb-pane" id="sb-details-value" data-pane-id="sb-details-value">
+<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-details-value-body" aria-label="Value">
+<span class="sb-section-chevron" aria-hidden="true"></span>
+<h3 class="sb-section-title" id="sb-details-value-title"><span class="sb-section-label">Value</span></h3>
+</div>
+<div class="sb-body" id="sb-details-value-body" role="region" aria-labelledby="sb-details-value-title"><p class="sb-empty">No value.</p></div>
+</section>
+<div class="sb-pane-sash" role="separator" aria-orientation="horizontal" aria-label="Resize Value section" tabindex="0"></div>
+<section class="sb-section sb-pane" id="sb-details-reference" data-pane-id="sb-details-reference">
+<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-details-reference-body" aria-label="Reference">
+<span class="sb-section-chevron" aria-hidden="true"></span>
+<h3 class="sb-section-title" id="sb-details-reference-title"><span class="sb-section-label">Reference</span></h3>
+</div>
+<div class="sb-body" id="sb-details-reference-body" role="region" aria-labelledby="sb-details-reference-title"><p class="sb-empty">No reference.</p></div>
+</section>
+<div class="sb-pane-sash" role="separator" aria-orientation="horizontal" aria-label="Resize Reference section" tabindex="0"></div>
+<section class="sb-section sb-pane" id="sb-details-conditions" data-pane-id="sb-details-conditions">
+<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-details-conditions-body" aria-label="Conditions and annotations">
+<span class="sb-section-chevron" aria-hidden="true"></span>
+<h3 class="sb-section-title" id="sb-details-conditions-title"><span class="sb-section-label">Conditions &amp; annotations</span></h3>
+</div>
+<div class="sb-body" id="sb-details-conditions-body" role="region" aria-labelledby="sb-details-conditions-title"><p class="sb-empty">No conditions or annotations.</p></div>
+</section>
+</div>
+</div>
+<div id="sbp-conditions" class="sb-tab-panel" role="tabpanel" aria-labelledby="stab-conditions" hidden>
+<div class="sb-pane-view">
+<section class="sb-section sb-pane" id="sb-conditions-values" data-pane-id="sb-conditions-values">
+<div class="sb-section-head" role="button" tabindex="0" aria-expanded="true" aria-controls="sb-conditions-values-body" aria-label="Condition values">
+<span class="sb-section-chevron" aria-hidden="true"></span>
+<h3 class="sb-section-title" id="sb-conditions-values-title"><span class="sb-section-label">Condition values</span></h3>
+</div>
+<div class="sb-body" id="sb-conditions-values-body" role="region" aria-labelledby="sb-conditions-values-title">
+<div id="conditions-panel" class="conditions-panel">
 <div class="conditions-head">
-<span class="conditions-title">Condition values</span>
 <span id="conditions-count" class="conditions-count" hidden></span>
 <span id="conditions-values-count" class="conditions-count" hidden></span>
 <span class="grow"></span>
@@ -267,21 +323,15 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </div>
 <div id="conditions-status" class="conditions-status" role="status" aria-live="polite"></div>
 </div>
-<div id="content">
-<div id="main">
-<div class="document">
-<div class="meta">${meta}</div>
-<div id="tree-measure" aria-hidden="true"><div class="node probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
-<div id="tree" class="tree" role="tree" aria-label="ECUC values"><div id="tree-top" class="v-spacer" role="presentation" aria-hidden="true"></div><div id="tree-window" role="presentation"></div><div id="tree-bottom" class="v-spacer" role="presentation" aria-hidden="true"></div></div>
-<div id="empty" class="empty" hidden><p id="empty-text"></p><button id="empty-clear" class="tool" type="button">Clear filter</button></div>
 </div>
+</section>
 </div>
-<aside id="inspector" class="inspector" role="region" aria-label="Node details">
-<div class="inspector-empty">
-<p>Select a line to see its details.</p>
-<p class="inspector-hint">Click a line or press Space.</p>
 </div>
 </aside>
+<div id="side-tabs" role="tablist" aria-label="Editor sidebar" aria-orientation="vertical">
+<button id="stab-details" class="stab active" type="button" role="tab" aria-selected="true" aria-controls="sbp-details">Details</button>
+<button id="stab-conditions" class="stab" type="button" role="tab" aria-selected="false" aria-controls="sbp-conditions" tabindex="-1">Conditions</button>
+</div>
 </div>
 <script type="application/json" id="ecuc-rows" nonce="${nonce}">${payload}</script>
 <script type="application/json" id="ecuc-conditions" nonce="${nonce}">${conditionPayload}</script>
@@ -290,6 +340,7 @@ ${PAGE_ERROR_SCRIPT}
 const vscode = acquireVsCodeApi();
 ${detailsEditorScript()}
 ${rowViewScript()}
+${sidebarShellScript()}
 ${TREE_SCRIPT}
 </script>
 </body>
@@ -371,11 +422,12 @@ export function moveTarget(key: string, from: number, count: number, page: numbe
  *
  * Field edits are answered inline by `ecucDetailsEditor`, so repeating the same reason
  * in the toolbar notice leaves a second, stale copy under the filter bar. The notice
- * stays as the fallback when the panel is hidden, and remains the only surface for
- * page-level problems (a boot failure or a reference that cannot be followed).
+ * stays as the fallback when the Details tab is not the active sidebar tab, and remains
+ * the only surface for page-level problems (a boot failure or a reference that cannot
+ * be followed).
  */
-export function refusalShownInDetails(message: { inline?: boolean }, inspectorHidden: boolean): boolean {
-	return message.inline === true && inspectorHidden === false;
+export function refusalShownInDetails(message: { inline?: boolean }, detailsHidden: boolean): boolean {
+	return message.inline === true && detailsHidden === false;
 }
 
 const DOCUMENT_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
@@ -441,6 +493,136 @@ body[data-view] {
 		--sel-outline: color-mix(in srgb, var(--rail) 55%, transparent);
 	}
 }
+/* Shared button/field primitives. The editor, the details panel and the later
+ * Conditions/Search children all use these classes; every colour is a theme
+ * token. A control that is missing its semantic token falls back to the panel
+ * border rather than a literal colour. */
+.sb-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	border-radius: 3px;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 10px;
+	font-weight: 600;
+	padding: 2px 8px;
+	cursor: pointer;
+	white-space: nowrap;
+	user-select: none;
+}
+.sb-btn-primary {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid transparent;
+}
+.sb-btn-primary:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+.sb-btn-secondary {
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	border: 1px solid var(--vscode-panel-border, var(--vscode-editorGroup-border));
+}
+.sb-btn-secondary:hover {
+	color: var(--vscode-foreground);
+	border-color: currentColor;
+}
+.sb-btn-add {
+	background: transparent;
+	color: var(--vscode-textLink-foreground);
+	border: 1px dashed var(--vscode-panel-border, var(--vscode-editorGroup-border));
+}
+.sb-btn-add:hover {
+	background: var(--vscode-list-hoverBackground);
+	border-style: solid;
+}
+.sb-btn-danger {
+	background: transparent;
+	color: var(--vscode-errorForeground);
+	border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+}
+.sb-btn-danger:hover {
+	background: var(--vscode-inputValidation-errorBackground, var(--vscode-list-hoverBackground));
+	border-color: var(--vscode-errorForeground);
+}
+.sb-btn:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+.sb-btn:focus-visible,
+.nav-btn:focus-visible,
+.act-btn:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+.nav-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	background: transparent;
+	color: var(--vscode-foreground);
+	border: 1px solid transparent;
+	border-radius: 4px;
+	cursor: pointer;
+}
+.nav-btn:hover {
+	background: var(--vscode-list-hoverBackground);
+	border-color: var(--vscode-panel-border, transparent);
+}
+.act-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	opacity: 0;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	border: 0;
+	border-radius: 2px;
+	cursor: pointer;
+}
+.parent:hover .act-btn,
+.parent:focus-within .act-btn,
+.act-btn:focus-visible {
+	opacity: 1;
+}
+.act-btn:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+.filter,
+.search-input {
+	box-sizing: border-box;
+	height: 26px;
+	min-width: 70px;
+	width: 180px;
+	padding: 0 7px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: 12px;
+	color: var(--vscode-input-foreground);
+	background: var(--vscode-input-background);
+	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+	border-radius: 3px;
+}
+.filter:focus,
+.search-input:focus {
+	border-color: var(--vscode-focusBorder);
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+/* The filter keeps its custom clear X; Chromium's native cancel button would
+ * paint a second one, so it is suppressed for every search input. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+	-webkit-appearance: none;
+	appearance: none;
+	display: none;
+}
 .toolbar {
 	display: flex;
 	flex-wrap: nowrap;
@@ -468,29 +650,7 @@ body[data-view] {
 .filter {
 	width: 100%;
 	min-width: 0;
-	height: 20px;
-	padding: 0 22px 0 6px;
-	font: inherit;
-	color: var(--vscode-editor-foreground);
-	background: transparent;
-	border: 1px solid transparent;
-	border-radius: 2px;
-}
-.filter:not(:placeholder-shown) {
-	color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
-	background: var(--vscode-input-background);
-}
-.filter:focus-visible {
-	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
-	outline-offset: -1px;
-}
-/* Keep type="search" for its searchbox role and native Escape, but Chromium's own cancel
- * button and decoration would give the box a second X beside the custom #filter-clear. */
-.filter::-webkit-search-cancel-button,
-.filter::-webkit-search-decoration {
-	-webkit-appearance: none;
-	appearance: none;
-	display: none;
+	padding: 0 22px 0 7px;
 }
 .filter-clear {
 	position: absolute;
@@ -561,28 +721,20 @@ body[data-view] {
 	flex: none;
 }
 .icon-tool {
-	width: auto;
 	min-width: 28px;
-	padding: 0 8px;
 	gap: 4px;
 }
 .icon-tool .lbl {
 	white-space: nowrap;
 }
-.details-toggle .lbl {
-	white-space: nowrap;
-}
 
 .conditions-panel {
 	flex: none;
-	padding: 6px 8px 8px;
-	overflow: auto;
-	max-height: 42vh;
+	padding: 0;
 	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
 	font-size: 12px;
 	color: var(--vscode-editor-foreground);
-	background: var(--vscode-editor-background);
-	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	background: transparent;
 }
 .conditions-panel[hidden] {
 	display: none;
@@ -593,9 +745,6 @@ body[data-view] {
 	gap: 6px;
 	align-items: center;
 	margin-bottom: 6px;
-}
-.conditions-title {
-	font-weight: 600;
 }
 .conditions-count {
 	white-space: nowrap;
@@ -772,15 +921,256 @@ body[data-view] {
 	overflow-anchor: none;
 }
 #inspector {
-	flex: 0 0 clamp(260px, 30%, 340px);
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
 	min-width: 0;
-	overflow: auto;
-	padding: 8px 10px 16px;
-	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
-	background: var(--vscode-editor-background);
+	min-height: 0;
+	overflow: hidden;
+	padding: 0;
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
 }
-#inspector[hidden] {
+/* ── Sidebar shell: resizer, tab strip, tab panels ─────────────────────── */
+#sidebar {
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 auto;
+	width: var(--sidebar-w, 360px);
+	min-width: var(--sidebar-w, 360px);
+	max-width: var(--sidebar-w, 360px);
+	overflow: hidden;
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+#sidebar-resizer {
+	width: 6px;
+	flex: 0 0 6px;
+	box-sizing: border-box;
+	cursor: col-resize;
+	background: transparent;
+	border-left: 1px solid transparent;
+	border-right: 1px solid transparent;
+	transition: background 0.12s ease, border-color 0.12s ease;
+}
+#sidebar-resizer:hover,
+#sidebar-resizer.dragging {
+	background: var(--vscode-list-hoverBackground);
+	border-left-color: var(--vscode-focusBorder);
+	border-right-color: var(--vscode-focusBorder);
+}
+#sidebar-resizer:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+body.sb-col-resizing {
+	cursor: col-resize;
+	user-select: none;
+}
+body.sb-row-resizing {
+	cursor: row-resize;
+	user-select: none;
+}
+#side-tabs {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 28px;
+	flex: 0 0 28px;
+	gap: 2px;
+	padding: 6px 0;
+	overflow: hidden;
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.stab {
+	writing-mode: vertical-rl;
+	transform: none;
+	padding: 10px 5px;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	white-space: nowrap;
+	color: var(--vscode-descriptionForeground);
+	background: transparent;
+	border: 0;
+	border-right: 3px solid transparent;
+	cursor: pointer;
+	transition: color 0.12s, background-color 0.12s, border-color 0.12s;
+}
+.stab:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-list-hoverBackground);
+}
+.stab.active {
+	color: var(--vscode-textLink-foreground);
+	border-right-color: var(--vscode-textLink-foreground);
+	background: var(--vscode-list-inactiveSelectionBackground, transparent);
+}
+.stab:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+.sb-tab-panel {
 	display: none;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+}
+.sb-tab-panel.active {
+	display: flex;
+}
+.sb-tab-panel > div {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	box-sizing: border-box;
+}
+/* ── Section panes: 22px header, independently scrolling body, drag sash ── */
+.sb-pane-view {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+.sb-pane {
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 auto;
+	flex-basis: var(--sb-pane-h, auto);
+	min-height: 0;
+	overflow: hidden;
+	box-sizing: border-box;
+	transition: flex-basis 0.15s ease-out;
+}
+/* A sash drag must track the pointer exactly; collapse/expand is the only
+ * layout change that animates (150ms). */
+.sb-pane-view.dragging .sb-pane,
+.sb-pane-view.no-transition .sb-pane {
+	transition: none;
+}
+.sb-section-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 22px;
+	line-height: 22px;
+	overflow: hidden;
+	flex: 0 0 22px;
+	box-sizing: border-box;
+	padding-left: 8px;
+}
+.sb-section-head[role="button"] {
+	cursor: pointer;
+	user-select: none;
+}
+.sb-section-head[role="button"]:hover {
+	background: var(--vscode-list-hoverBackground, transparent);
+}
+.sb-section-head:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+.sb-section-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1 1 auto;
+	min-width: 0;
+	margin: 0;
+	font: inherit;
+	color: inherit;
+}
+.sb-section-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 3ch;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	color: var(--vscode-descriptionForeground);
+}
+/* Decorative chevron: points right at rest, rotates down when expanded. */
+.sb-section-chevron {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	height: 14px;
+	flex: 0 0 14px;
+	font-size: 14px;
+	line-height: 1;
+	color: var(--vscode-descriptionForeground);
+	transition: transform 0.15s ease-out;
+}
+.sb-section-chevron::before {
+	content: '\\203A';
+}
+.sb-section-head[aria-expanded="true"] .sb-section-chevron {
+	transform: rotate(90deg);
+}
+.sb-section-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 0 0 auto;
+	margin-left: auto;
+	margin-right: 8px;
+}
+.sb-section-actions .sb-section-action {
+	max-height: 22px;
+	padding: 2px 8px;
+	font-size: 10px;
+	line-height: 1.2;
+	white-space: nowrap;
+}
+.sb-pane .sb-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 8px 10px 12px;
+	box-sizing: border-box;
+}
+.sb-pane-sash {
+	height: 6px;
+	flex: 0 0 6px;
+	box-sizing: border-box;
+	cursor: row-resize;
+	user-select: none;
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	transition: background 0.12s ease, border-color 0.12s ease;
+}
+.sb-pane-sash:hover,
+.sb-pane-sash.dragging {
+	background: var(--vscode-list-hoverBackground);
+	border-top-color: var(--vscode-focusBorder);
+}
+.sb-pane-sash.disabled {
+	cursor: default;
+	opacity: 0.4;
+}
+.sb-pane-sash:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+.sb-empty {
+	margin: 0;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+	font-style: italic;
+}
+@media (prefers-reduced-motion: reduce) {
+	.sb-pane,
+	.sb-section-chevron {
+		transition-duration: 0s;
+	}
 }
 .document {
 	position: relative;
@@ -982,7 +1372,7 @@ mark {
 .empty p {
 	margin: 0;
 }
-.empty .tool {
+.empty .sb-btn {
 	margin-left: 1ch;
 	font-style: normal;
 }
@@ -1277,7 +1667,7 @@ body[data-view="document"] .empty {
 body[data-view="document"] .empty p {
 	margin: 0;
 }
-body[data-view="document"] .empty .tool {
+body[data-view="document"] .empty .sb-btn {
 	margin-left: 1ch;
 	font-style: normal;
 }
@@ -1371,8 +1761,7 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 	.count,
 	.notice,
 	.grow,
-	.icon-tool .lbl,
-	.details-toggle .lbl {
+	.icon-tool .lbl {
 		display: none;
 	}
 	.tool {
@@ -1381,12 +1770,37 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 	#content {
 		flex-direction: column;
 	}
-	#inspector {
-		flex: 0 0 auto;
+	#sidebar {
+		width: auto;
 		min-width: 0;
+		max-width: none;
 		max-height: 45vh;
+		flex: 0 0 auto;
 		border-left: 0;
 		border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	}
+	#sidebar-resizer {
+		display: none;
+	}
+	#side-tabs {
+		flex-direction: row;
+		width: auto;
+		flex: 0 0 28px;
+		height: 28px;
+		padding: 0 6px;
+		border-left: 0;
+		border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	}
+	.stab {
+		writing-mode: horizontal-tb;
+		height: 28px;
+		padding: 0 8px;
+		border-right: 0;
+		border-bottom: 3px solid transparent;
+	}
+	.stab.active {
+		border-right-color: transparent;
+		border-bottom-color: var(--vscode-textLink-foreground);
 	}
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1427,13 +1841,15 @@ const treeWindow = document.getElementById('tree-window');
 const virtualStyle = document.getElementById('virtual-style');
 const notice = document.getElementById('notice');
 const inspector = document.getElementById('inspector');
-const detailsToggle = document.getElementById('details-toggle');
+const detailsNodeBody = document.getElementById('sb-details-node-body');
+const detailsValueBody = document.getElementById('sb-details-value-body');
+const detailsReferenceBody = document.getElementById('sb-details-reference-body');
+const detailsConditionsBody = document.getElementById('sb-details-conditions-body');
 const filterInput = document.getElementById('filter');
 const countLabel = document.getElementById('count');
 const clearButton = document.getElementById('filter-clear');
 const empty = document.getElementById('empty');
 const emptyText = document.getElementById('empty-text');
-const conditionsToggle = document.getElementById('conditions-toggle');
 const conditionsPanel = document.getElementById('conditions-panel');
 const conditionsList = document.getElementById('conditions-list');
 const conditionsAdd = document.getElementById('conditions-add');
@@ -1446,15 +1862,12 @@ const conditionsScript = document.getElementById('ecuc-conditions');
 const svgNamespace = 'http://www.w3.org/2000/svg';
 const bufferRows = 10;
 const savedState = vscode.getState();
-// Only the details visibility is persisted; an older saved view is ignored and never written back.
-let uiState = { inspectorHidden: false };
-if (
-	savedState &&
-	typeof savedState === 'object' &&
-	!Array.isArray(savedState) &&
-	typeof savedState.inspectorHidden === 'boolean'
-) {
-	uiState.inspectorHidden = savedState.inspectorHidden;
+// Tab, sidebar width, pane heights and collapsed sections are the whole
+// persisted layout. A legacy inspectorHidden flag is ignored (and not written back).
+let uiState = loadUiState(savedState);
+
+function persistUiState() {
+	vscode.setState(uiState);
 }
 
 ${pruneCollapsed.toString()}
@@ -1492,7 +1905,6 @@ let filterResult = null;
 let filterIndex = { haystacks: [] };
 let filterDebouncer = createFilterDebouncer(120);
 let conditionDebouncer = createFilterDebouncer(300);
-let conditionsOpen = false;
 // Discovery remembers the identifiers it last saw and the rows the user removed.
 // A value-only re-push changes no condition, so it must not re-add a removed row;
 // a document change that changes the condition list clears the dismissal (PRD R6).
@@ -2483,15 +2895,6 @@ function applyConditionsMessage(message) {
 	return true;
 }
 
-function applyConditionsVisibility() {
-	if (!conditionsToggle || !conditionsPanel) {
-		return;
-	}
-	conditionsPanel.hidden = !conditionsOpen;
-	conditionsToggle.setAttribute('aria-pressed', conditionsOpen ? 'true' : 'false');
-	conditionsToggle.setAttribute('aria-expanded', conditionsOpen ? 'true' : 'false');
-}
-
 function inspectorElement(tag, className, text) {
 	const element = document.createElement(tag);
 	if (className) {
@@ -2510,96 +2913,140 @@ function inspectorRow(key, value) {
 	return row;
 }
 
-/**
- * Rebuilds the details panel from the selected row's data. The selected row can
- * be outside the rendered window; nothing here queries the tree DOM.
- */
-function updateInspector() {
-	if (!inspector || inspector.hidden) {
+/** One quiet line for a section body with nothing to show. */
+function paneEmpty(body, text) {
+	if (!body) {
 		return;
 	}
-	inspector.textContent = '';
+	body.appendChild(inspectorElement('p', 'sb-empty', text));
+}
+
+function paneActions(body) {
+	const actions = inspectorElement('div', 'inspector-actions');
+	body.appendChild(actions);
+	return actions;
+}
+
+/**
+ * Rebuilds the four Details section bodies from the selected row's data. The
+ * selected row can be outside the rendered window; nothing here queries the
+ * tree DOM. The section shells (headers, bodies) are static, so a re-scan only
+ * replaces body content and never resets the pane layout.
+ */
+function updateInspector() {
+	if (!inspector) {
+		return;
+	}
+	const bodies = [detailsNodeBody, detailsValueBody, detailsReferenceBody, detailsConditionsBody];
+	for (let at = 0; at < bodies.length; at++) {
+		if (bodies[at]) {
+			bodies[at].textContent = '';
+		}
+	}
 	const row = selectedId === undefined ? undefined : rowById.get(selectedId);
 	if (!row) {
 		detailsSelectionChanged(undefined);
 		const emptyPanel = inspectorElement('div', 'inspector-empty');
 		emptyPanel.appendChild(inspectorElement('p', '', 'Select a line to see its details.'));
 		emptyPanel.appendChild(inspectorElement('p', 'inspector-hint', 'Click a line or press Space.'));
-		inspector.appendChild(emptyPanel);
+		if (detailsNodeBody) {
+			detailsNodeBody.appendChild(emptyPanel);
+		}
+		paneEmpty(detailsValueBody, 'Select a line to see its value.');
+		paneEmpty(detailsReferenceBody, 'Select a line to see its reference.');
+		paneEmpty(detailsConditionsBody, 'Select a line to see its conditions and annotations.');
 		return;
 	}
 	detailsSelectionChanged(row.id);
 	const data = inspectorFields(row);
-	inspector.appendChild(inspectorElement('div', 'inspector-kind', data.kind));
-	inspector.appendChild(inspectorElement('div', 'inspector-label', data.label));
-	if (row.kind === 'container') {
-		// A container's short name and definition ref are editable here, so the panel
-		// never shows the same fact twice.
-		inspector.appendChild(detailsContainerFields(row, data));
-	} else {
-		if (data.definitionRef) {
-			inspector.appendChild(inspectorRow('Definition', data.definitionRef));
+
+	if (detailsNodeBody) {
+		detailsNodeBody.appendChild(inspectorElement('div', 'inspector-kind', data.kind));
+		detailsNodeBody.appendChild(inspectorElement('div', 'inspector-label', data.label));
+		if (row.kind === 'container') {
+			// A container's short name and definition ref are editable here, so the panel
+			// never shows the same fact twice.
+			detailsNodeBody.appendChild(detailsContainerFields(row, data));
+		} else {
+			if (data.definitionRef) {
+				detailsNodeBody.appendChild(inspectorRow('Definition', data.definitionRef));
+			}
+			if (data.shortName) {
+				detailsNodeBody.appendChild(inspectorRow('Short name', data.shortName));
+			}
 		}
-		if (data.shortName) {
-			inspector.appendChild(inspectorRow('Short name', data.shortName));
+		if (data.variant) {
+			detailsNodeBody.appendChild(inspectorRow('Variant', data.variant));
 		}
-	}
-	if (data.variant) {
-		inspector.appendChild(inspectorRow('Variant', data.variant));
-	}
-	if (data.type) {
-		inspector.appendChild(inspectorRow('Type', data.type));
-	}
-	if (data.kind === 'parameter') {
-		inspector.appendChild(detailsValueInput(row, data));
-	}
-	for (const format of data.formats) {
-		inspector.appendChild(inspectorRow(format.label, format.value));
-	}
-	if (data.target) {
-		inspector.appendChild(inspectorRow('Target', data.target));
-	}
-	if (data.context) {
-		inspector.appendChild(inspectorRow('Context', data.context));
-	}
-	if (data.condition) {
-		inspector.appendChild(inspectorRow('Condition', data.condition.text));
-		inspector.appendChild(inspectorRow('Condition state', data.condition.state));
-		if (data.condition.reason) {
-			inspector.appendChild(inspectorRow('Condition note', data.condition.reason));
+		if (data.type) {
+			detailsNodeBody.appendChild(inspectorRow('Type', data.type));
 		}
-	} else if (row.disabled && row.disabledBy === 'ancestor') {
-		inspector.appendChild(inspectorRow('Disabled', 'Disabled by an ancestor condition.'));
-	}
-	if (data.conditions) {
-		inspector.appendChild(inspectorRow('Conditions', data.conditions));
-	}
-	if (data.annotations) {
-		inspector.appendChild(inspectorRow('Annotations', data.annotations));
 	}
 
-	const actions = inspectorElement('div', 'inspector-actions');
-	if (row.kind === 'reference' && row.followable === true) {
-		const jump = inspectorElement('button', 'tool', 'Jump to target');
-		jump.type = 'button';
-		jump.addEventListener('click', function () { followItem(row.id); });
-		actions.appendChild(jump);
+	if (detailsValueBody) {
+		if (data.kind === 'parameter') {
+			detailsValueBody.appendChild(detailsValueInput(row, data));
+		}
+		for (const format of data.formats) {
+			detailsValueBody.appendChild(inspectorRow(format.label, format.value));
+		}
+		if (data.kind !== 'parameter' && data.formats.length === 0) {
+			paneEmpty(detailsValueBody, 'No editable value.');
+		}
 	}
-	const reveal = inspectorElement('button', 'tool', 'Reveal in source');
-	reveal.type = 'button';
-	reveal.addEventListener('click', function () { revealItem(row.id); });
-	actions.appendChild(reveal);
-	inspector.appendChild(actions);
-}
 
-function applyInspectorVisibility() {
-	if (!inspector || !detailsToggle) {
-		return;
+	let hasReference = false;
+	if (detailsReferenceBody) {
+		if (data.target) {
+			detailsReferenceBody.appendChild(inspectorRow('Target', data.target));
+			hasReference = true;
+		}
+		if (data.context) {
+			detailsReferenceBody.appendChild(inspectorRow('Context', data.context));
+			hasReference = true;
+		}
+		if (row.kind === 'reference' && row.followable === true) {
+			const actions = paneActions(detailsReferenceBody);
+			const jump = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Jump to target');
+			jump.type = 'button';
+			jump.addEventListener('click', function () { followItem(row.id); });
+			actions.appendChild(jump);
+		}
+		if (!hasReference) {
+			paneEmpty(detailsReferenceBody, 'No reference.');
+		}
 	}
-	inspector.hidden = uiState.inspectorHidden === true;
-	detailsToggle.setAttribute('aria-pressed', inspector.hidden ? 'false' : 'true');
-	detailsToggle.title = inspector.hidden ? 'Show node details' : 'Hide node details';
-	detailsToggle.setAttribute('aria-label', inspector.hidden ? 'Show node details' : 'Hide node details');
+
+	if (detailsConditionsBody) {
+		let hasConditionText = false;
+		if (data.condition) {
+			detailsConditionsBody.appendChild(inspectorRow('Condition', data.condition.text));
+			detailsConditionsBody.appendChild(inspectorRow('Condition state', data.condition.state));
+			if (data.condition.reason) {
+				detailsConditionsBody.appendChild(inspectorRow('Condition note', data.condition.reason));
+			}
+			hasConditionText = true;
+		} else if (row.disabled && row.disabledBy === 'ancestor') {
+			detailsConditionsBody.appendChild(inspectorRow('Disabled', 'Disabled by an ancestor condition.'));
+			hasConditionText = true;
+		}
+		if (data.conditions) {
+			detailsConditionsBody.appendChild(inspectorRow('Conditions', data.conditions));
+			hasConditionText = true;
+		}
+		if (data.annotations) {
+			detailsConditionsBody.appendChild(inspectorRow('Annotations', data.annotations));
+			hasConditionText = true;
+		}
+		if (!hasConditionText) {
+			paneEmpty(detailsConditionsBody, 'No conditions or annotations.');
+		}
+		const actions = paneActions(detailsConditionsBody);
+		const reveal = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Reveal in source');
+		reveal.type = 'button';
+		reveal.addEventListener('click', function () { revealItem(row.id); });
+		actions.appendChild(reveal);
+	}
 }
 
 function onTreeHover(event) {
@@ -2649,17 +3096,6 @@ document.addEventListener('focusin', function (event) {
 document.getElementById('collapse-all').addEventListener('click', collapseAll);
 document.getElementById('expand-all').addEventListener('click', expandAll);
 
-if (detailsToggle && inspector) {
-	detailsToggle.addEventListener('click', function () {
-		uiState.inspectorHidden = !uiState.inspectorHidden;
-		applyInspectorVisibility();
-		vscode.setState(uiState);
-		if (!uiState.inspectorHidden) {
-			updateInspector();
-		}
-	});
-}
-
 if (filterInput) {
 	filterInput.addEventListener('input', function () {
 		if (clearButton) {
@@ -2685,24 +3121,6 @@ if (clearButton) {
 	});
 }
 
-if (conditionsToggle && conditionsPanel) {
-	conditionsToggle.addEventListener('click', function () {
-		conditionsOpen = !conditionsOpen;
-		applyConditionsVisibility();
-		// The panel changes #main's height, which changes how many rows fit in the
-		// viewport. Recompute the window so closing it cannot leave a blank band.
-		renderWindow(true);
-		if (!conditionsOpen) {
-			return;
-		}
-		const first = conditionsList ? conditionsList.querySelector('.condition-name') : undefined;
-		if (first) {
-			first.focus();
-		} else if (conditionsAdd) {
-			conditionsAdd.focus();
-		}
-	});
-}
 if (conditionsAdd) {
 	conditionsAdd.addEventListener('click', addConditionEntry);
 }
@@ -2752,6 +3170,24 @@ window.addEventListener('resize', function () {
 	measureHeights();
 	renderWindow(true);
 });
+// At <=720px the sidebar stacks below #main, so switching tabs or collapsing a
+// section changes how many rows fit. Re-run the window only when the sidebar's
+// height actually changed; a width-only change (sidebar drag) leaves the row
+// count alone. Observing the sidebar rather than #main avoids a feedback loop
+// with #main's own scrollbars.
+const sidebarPanel = document.getElementById('sidebar');
+let sidebarViewportHeight = sidebarPanel ? sidebarPanel.clientHeight : 0;
+if (sidebarPanel && typeof ResizeObserver !== 'undefined') {
+	const sidebarViewportObserver = new ResizeObserver(function () {
+		const height = sidebarPanel.clientHeight;
+		if (height === sidebarViewportHeight) {
+			return;
+		}
+		sidebarViewportHeight = height;
+		renderWindow(true);
+	});
+	sidebarViewportObserver.observe(sidebarPanel);
+}
 
 window.addEventListener('message', function (event) {
 	const message = event.data;
@@ -2791,7 +3227,7 @@ window.addEventListener('message', function (event) {
 		focusRow(message.nodeId);
 		setSelection(message.nodeId);
 	} else if (message.type === 'notice') {
-		if (refusalShownInDetails(message, uiState.inspectorHidden)) {
+		if (refusalShownInDetails(message, uiState.tab !== 'details')) {
 			// The details panel already answers this field; clear any older notice
 			// rather than leaving a stale warning above the tree.
 			notice.textContent = '';
@@ -2807,12 +3243,12 @@ window.addEventListener('message', function (event) {
 	}
 });
 
-// The details preference survives a re-scan (the shell is not swapped) and a
-// full webview reload (the host state); the harness persists the same state in
-// localStorage so the browser loop can exercise it.
-applyInspectorVisibility();
+// The shell (tab, width, pane heights, collapsed sections) survives a re-scan
+// because it lives outside the rows; a webview reload restores it from the host
+// state. mountSidebarShell binds the static markup once, before the first
+// details render, so a re-scan never resets the layout.
 renderConditionEntries(initialConditionEntries());
-applyConditionsVisibility();
+mountSidebarShell();
 const initial = readInitialRows();
 setRows(initial.rows, initial.selectedId);
 renderWindow(true);

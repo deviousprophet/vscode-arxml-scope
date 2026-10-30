@@ -42,15 +42,21 @@ function styleOf(html: string): string {
 suite('editor visual polish', () => {
 	test('the details inspector is outside the virtual tree region and has no view toggle', () => {
 		const html = page();
-		assert.ok(html.includes('<aside id="inspector" class="inspector" role="region" aria-label="Node details">'));
-		assert.ok(html.includes('id="details-toggle"'));
-		assert.ok(html.includes('aria-controls="inspector"'));
-		assert.ok(/id="details-toggle"[^>]*aria-pressed="true"/.test(html));
+		assert.ok(html.includes('<div id="inspector" class="inspector sb-pane-view" role="region" aria-label="Node details">'));
+		assert.ok(html.includes('id="side-tabs"'));
+		assert.ok(!html.includes('id="details-toggle"'), 'the details toggle is replaced by the tab strip');
 		assert.ok(!html.includes('id="view-toggle"'));
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));
 		assert.ok(html.includes('id="tree-window"'), 'the tree region is the virtual window');
 		assert.ok(!html.slice(html.indexOf('id="ecuc-rows"')).includes('id="inspector"'), 'the row payload has no shell');
+		const mainAt = html.indexOf('<div id="main">');
+		const resizerAt = html.indexOf('<div id="sidebar-resizer"');
+		assert.ok(mainAt >= 0 && resizerAt > mainAt, 'the sidebar follows the scroll container');
+		assert.ok(
+			!html.slice(mainAt, resizerAt).includes('id="inspector"'),
+			'the details panel is outside #main and survives a re-scan'
+		);
 	});
 
 	test('every row carries the definition path, short name and value the panel needs', () => {
@@ -114,7 +120,10 @@ suite('editor visual polish', () => {
 		assert.ok(update.includes('rowById.get(selectedId)'), 'the panel selects from the row map');
 		assert.ok(!update.includes('querySelector'), 'and never from the rendered DOM');
 		assert.ok(update.includes('revealItem(row.id)'));
-		assert.ok(update.includes("inspector.textContent = ''"), 'the panel is rebuilt from text nodes');
+		assert.ok(update.includes('detailsNodeBody'), 'the details are split into stable section bodies');
+		assert.ok(update.includes('detailsValueBody'));
+		assert.ok(update.includes('detailsReferenceBody'));
+		assert.ok(update.includes('detailsConditionsBody'));
 		assert.ok(!update.includes('innerHTML'), 'model text is never inserted as markup');
 
 		const details = functionSource(html, 'detailsValueInput');
@@ -124,7 +133,7 @@ suite('editor visual polish', () => {
 		assert.ok(details.includes("input.setAttribute('aria-label'"));
 	});
 
-	test('selection and a re-scan update the panel; the toggle controls it', () => {
+	test('selection and a re-scan update the panel; the tab strip owns visibility', () => {
 		const html = page();
 		const select = functionSource(html, 'setSelection');
 		assert.ok(select.includes('updateInspector()'), 'a selection fills the panel');
@@ -147,13 +156,12 @@ suite('editor visual polish', () => {
 			modelAt !== -1 && applyAt !== -1 && updateAt !== -1 && nextBranchAt !== -1 && updateAt < nextBranchAt,
 			'a re-scan refreshes the panel'
 		);
-		assert.ok(html.includes("detailsToggle.addEventListener('click'"));
-		assert.ok(html.includes('uiState.inspectorHidden = !uiState.inspectorHidden'));
-		assert.ok(html.includes('applyInspectorVisibility()'));
-		assert.ok(html.includes("detailsToggle.setAttribute('aria-pressed'"));
+		assert.ok(!html.includes('detailsToggle.addEventListener'), 'the details toggle is gone');
+		assert.ok(html.includes('mountSidebarShell()'), 'the shell binds once at boot');
+		assert.ok(!html.includes('uiState.inspectorHidden'));
 		assert.ok(!html.includes('viewToggle.addEventListener'));
 		assert.ok(!html.includes('uiState.view'));
-		assert.ok(html.includes('vscode.getState()'), 'the panel preference is restored on a reload');
+		assert.ok(html.includes('vscode.getState()'), 'the layout is restored on a reload');
 		assert.ok(html.includes('vscode.setState(uiState)'), 'and saved through the host state');
 	});
 

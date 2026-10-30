@@ -306,10 +306,14 @@ function beginDetailsEdit(rowId, field) {
 	if (!target) {
 		return false;
 	}
-	if (uiState.inspectorHidden === true) {
-		uiState.inspectorHidden = false;
-		applyInspectorVisibility();
-		vscode.setState(uiState);
+	if (uiState.tab !== 'details') {
+		// An edit always happens in the Details panel; the Conditions tab must not
+		// silently swallow it.
+		showSidebarTab('details');
+	}
+	if (typeof showSidebarSection === 'function') {
+		// The target field's section may be collapsed; reveal it before focus.
+		showSidebarSection(target === 'value' ? 'sb-details-value' : 'sb-details-node');
 	}
 	if (selectedId !== rowId) {
 		const item = renderedItemFor(rowId);
