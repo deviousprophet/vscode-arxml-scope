@@ -252,12 +252,19 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <div class="conditions-head">
 <span class="conditions-title">Condition values</span>
 <span id="conditions-count" class="conditions-count" hidden></span>
+<span id="conditions-values-count" class="conditions-count" hidden></span>
 <span class="grow"></span>
-<button id="conditions-add" class="tool" type="button">Add value</button>
-<button id="conditions-clear" class="tool" type="button">Clear all</button>
+</div>
+<div id="conditions-empty" class="conditions-empty" hidden>
+<p>No condition values yet.</p>
+<p class="conditions-hint">Add a constant used by <code>SW-SYSCOND</code>, for example <code>CANIPCORETYPE_SC = 1</code>.</p>
 </div>
 <div id="conditions-list" class="conditions-list"></div>
-<p class="conditions-hint">Values for the SW system constants used by SW-SYSCOND, for example <code>CANIPCORETYPE_SC = 1</code>.</p>
+<div class="conditions-actions">
+<button id="conditions-add" class="tool primary" type="button" title="Add a condition value" aria-label="Add condition value"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg><span>Add value</span></button>
+<span class="grow"></span>
+<button id="conditions-clear" class="tool secondary danger" type="button" title="Remove every condition value" aria-label="Clear all condition values" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.5 8h5l.5-8M7 7v3.5M9 7v3.5"/></svg><span>Clear all</span></button>
+</div>
 <div id="conditions-status" class="conditions-status" role="status" aria-live="polite"></div>
 </div>
 <div id="content">
@@ -596,6 +603,63 @@ body[data-view] {
 }
 .conditions-count[hidden] {
 	display: none;
+}
+.conditions-empty {
+	padding: 4px 0 10px;
+	color: var(--vscode-descriptionForeground);
+}
+.conditions-empty p {
+	margin: 0 0 4px;
+}
+.conditions-empty p:last-child {
+	margin-bottom: 0;
+}
+.conditions-empty .conditions-hint {
+	margin: 0;
+}
+.conditions-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.tool.primary {
+	height: 22px;
+	padding: 0 10px;
+	font-weight: 500;
+	color: var(--vscode-button-foreground);
+	background: var(--vscode-button-background);
+	border: 1px solid transparent;
+	border-radius: 2px;
+}
+.tool.primary:hover {
+	color: var(--vscode-button-foreground);
+	background: var(--vscode-button-hoverBackground);
+}
+.tool.secondary {
+	height: 22px;
+	padding: 0 10px;
+	color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+	background: var(--vscode-button-secondaryBackground, transparent);
+	border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+	border-radius: 2px;
+}
+.tool.secondary:hover {
+	color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+	background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+}
+.conditions-actions .danger {
+	color: var(--vscode-errorForeground);
+}
+.conditions-actions .danger:hover {
+	border-color: currentColor;
+}
+.tool[disabled] {
+	opacity: 0.45;
+	cursor: default;
+	pointer-events: none;
 }
 .conditions-list {
 	display: flex;
@@ -1362,7 +1426,9 @@ const conditionsPanel = document.getElementById('conditions-panel');
 const conditionsList = document.getElementById('conditions-list');
 const conditionsAdd = document.getElementById('conditions-add');
 const conditionsClear = document.getElementById('conditions-clear');
+const conditionsEmpty = document.getElementById('conditions-empty');
 const conditionsCount = document.getElementById('conditions-count');
+const conditionsValuesCount = document.getElementById('conditions-values-count');
 const conditionsStatus = document.getElementById('conditions-status');
 const conditionsScript = document.getElementById('ecuc-conditions');
 const svgNamespace = 'http://www.w3.org/2000/svg';
@@ -2199,6 +2265,20 @@ function initialConditionEntries() {
 	}
 }
 
+function updateConditionsChrome() {
+	const count = conditionsList ? conditionsList.querySelectorAll('.condition-row').length : 0;
+	if (conditionsEmpty) {
+		conditionsEmpty.hidden = count !== 0;
+	}
+	if (conditionsClear) {
+		conditionsClear.disabled = count === 0;
+	}
+	if (conditionsValuesCount) {
+		conditionsValuesCount.textContent = count + (count === 1 ? ' value' : ' values');
+		conditionsValuesCount.hidden = count === 0;
+	}
+}
+
 function renderConditionEntries(entries) {
 	if (!conditionsList) {
 		return;
@@ -2208,6 +2288,7 @@ function renderConditionEntries(entries) {
 	for (let at = 0; at < list.length; at++) {
 		conditionsList.appendChild(conditionRowElement(list[at]));
 	}
+	updateConditionsChrome();
 }
 
 function sendConditions() {
@@ -2228,6 +2309,7 @@ function addConditionEntry() {
 	}
 	const row = conditionRowElement({ name: '', value: '' });
 	conditionsList.appendChild(row);
+	updateConditionsChrome();
 	const nameInput = row.querySelector('.condition-name');
 	if (nameInput) {
 		nameInput.focus();
@@ -2239,6 +2321,7 @@ function removeConditionRow(row) {
 	if (row && row.parentNode) {
 		row.parentNode.removeChild(row);
 	}
+	updateConditionsChrome();
 	sendConditions();
 }
 
@@ -2246,6 +2329,7 @@ function clearConditionEntries() {
 	if (conditionsList) {
 		conditionsList.textContent = '';
 	}
+	updateConditionsChrome();
 	sendConditions();
 }
 

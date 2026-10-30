@@ -102,6 +102,14 @@ suite('conditions panel (design §6)', () => {
 		assert.ok(html.includes('id="conditions-add"'));
 		assert.ok(html.includes('id="conditions-clear"'));
 		assert.ok(html.includes('id="conditions-count"'));
+		assert.ok(html.includes('id="conditions-values-count"'));
+		assert.ok(html.includes('id="conditions-empty"'));
+		assert.ok(html.includes('class="conditions-actions"'));
+		assert.ok(/id="conditions-add" class="tool primary"/.test(html), 'Add is a primary action');
+		assert.ok(
+			/id="conditions-clear" class="tool secondary danger"[^>]*disabled/.test(html),
+			'Clear starts disabled and is visibly a secondary action'
+		);
 		assert.ok(html.includes('role="status" aria-live="polite"'), 'the panel status is announced');
 
 		const noticeAt = html.indexOf('id="notice"');
@@ -111,6 +119,37 @@ suite('conditions panel (design §6)', () => {
 		const treeAt = html.indexOf('id="tree"');
 		assert.ok(treeAt > contentAt, 'the panel is not inside #tree');
 		assert.ok(html.indexOf('id="ecuc-conditions"') > treeAt, 'the entries are data, not shell markup');
+	});
+
+	test('the actions are visibly styled and the empty state tracks the row count', () => {
+		const html = page();
+		const style = styleOf(html);
+		assert.ok(/\.tool\.primary\s*\{(?=[^}]*--vscode-button-background)(?=[^}]*--vscode-button-foreground)/.test(style));
+		assert.ok(/\.tool\.secondary\s*\{(?=[^}]*--vscode-button-secondaryBackground)(?=[^}]*--vscode-button-border)/.test(style));
+		assert.ok(/\.tool\[disabled\]\s*\{[^}]*opacity/.test(style));
+		assert.ok(/\.conditions-actions\s*\{[^}]*border-top/.test(style));
+
+		const empty = { hidden: true };
+		const clear = { disabled: false };
+		const values = { textContent: '', hidden: true };
+		const list = { querySelectorAll: () => [1, 2] };
+		const chrome = compileWith<{ updateConditionsChrome(): void }>(
+			html,
+			['updateConditionsChrome'],
+			['conditionsList', 'conditionsEmpty', 'conditionsClear', 'conditionsValuesCount'],
+			[list, empty, clear, values]
+		);
+		chrome.updateConditionsChrome();
+		assert.strictEqual(empty.hidden, true, 'rows hide the empty state');
+		assert.strictEqual(clear.disabled, false, 'rows enable Clear all');
+		assert.strictEqual(values.textContent, '2 values');
+		assert.strictEqual(values.hidden, false);
+
+		list.querySelectorAll = () => [];
+		chrome.updateConditionsChrome();
+		assert.strictEqual(empty.hidden, false, 'no rows show the empty state');
+		assert.strictEqual(clear.disabled, true, 'no rows disable Clear all');
+		assert.strictEqual(values.hidden, true, 'no rows hide the value count');
 	});
 
 	test('the embedded entries are escaped and parsed back exactly', () => {
@@ -145,8 +184,12 @@ suite('conditions panel (design §6)', () => {
 		assert.ok(!create.includes('innerHTML'), 'entries are never markup');
 		assert.ok(!functionSource(html, 'renderConditionEntries').includes('innerHTML'));
 		assert.ok(functionSource(html, 'renderConditionEntries').includes('appendChild(conditionRowElement'));
+		assert.ok(functionSource(html, 'renderConditionEntries').includes('updateConditionsChrome()'), 'the shell tracks the rows');
 		assert.ok(functionSource(html, 'addConditionEntry').includes('nameInput.focus()'), 'Add focuses the name');
+		assert.ok(functionSource(html, 'addConditionEntry').includes('updateConditionsChrome()'));
+		assert.ok(functionSource(html, 'removeConditionRow').includes('updateConditionsChrome()'));
 		assert.ok(functionSource(html, 'clearConditionEntries').includes("conditionsList.textContent = ''"));
+		assert.ok(functionSource(html, 'clearConditionEntries').includes('updateConditionsChrome()'));
 		assert.ok(!html.includes('innerHTML'), 'the page has no innerHTML path at all');
 	});
 
@@ -184,13 +227,20 @@ suite('conditions panel (design §6)', () => {
 	test('a host entries refresh replaces the panel rows and leaves other messages alone', () => {
 		const html = page();
 		const appended: unknown[] = [];
-		const list = { textContent: 'stale', appendChild: (item: unknown) => appended.push(item) };
+		const list = {
+			textContent: 'stale',
+			appendChild: (item: unknown) => appended.push(item),
+			querySelectorAll: () => appended,
+		};
+		const empty = { hidden: false };
+		const clear = { disabled: false };
+		const values = { textContent: '', hidden: true };
 		const row = { name: 'A_SC' };
 		const compiled = compileWith<{ applyConditionsMessage(message: unknown): boolean }>(
 			html,
-			['renderConditionEntries', 'applyConditionsMessage'],
-			['conditionsList', 'conditionRowElement'],
-			[list, () => row]
+			['renderConditionEntries', 'applyConditionsMessage', 'updateConditionsChrome'],
+			['conditionsList', 'conditionRowElement', 'conditionsEmpty', 'conditionsClear', 'conditionsValuesCount'],
+			[list, () => row, empty, clear, values]
 		);
 		assert.strictEqual(compiled.applyConditionsMessage({ type: 'model' }), false, 'other messages are not handled');
 		assert.strictEqual(compiled.applyConditionsMessage({ type: 'conditions', entries: [{}] }), true);
