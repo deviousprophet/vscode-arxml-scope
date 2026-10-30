@@ -42,10 +42,6 @@ type StructureNode = ContainerNode | ParameterNode;
 
 /** The node a structural action may target, or `undefined` for modules/references/unknown ids. */
 export function structureNodeFor(model: EcucDocumentModel, nodeId: string): StructureNode | undefined {
-	return structureNode(model, nodeId);
-}
-
-function structureNode(model: EcucDocumentModel, nodeId: string): StructureNode | undefined {
 	const node = buildNodeIndex(model).byId.get(nodeId)?.node;
 	return node?.kind === 'container' || node?.kind === 'parameter' ? node : undefined;
 }
@@ -112,7 +108,7 @@ export function defaultDuplicateName(name: string, siblings: readonly string[]):
 
 /** Why `name` cannot be a container duplicate's short name, or `undefined` when it can. */
 export function duplicateNameRefusal(model: EcucDocumentModel, nodeId: string, name: string): string | undefined {
-	const node = structureNode(model, nodeId);
+	const node = structureNodeFor(model, nodeId);
 	if (node?.kind !== 'container') {
 		return 'the node is not a container';
 	}
@@ -228,7 +224,7 @@ function duplicateInsertion(text: string, node: StructureNode, name: string | un
 
 /** A delete plan, or a refusal that leaves the document untouched. */
 export function planDelete(model: EcucDocumentModel, text: string, nodeId: string): StructurePlan {
-	const node = structureNode(model, nodeId);
+	const node = structureNodeFor(model, nodeId);
 	if (!node) {
 		return { ok: false, reason: 'only a container or parameter can be deleted' };
 	}
@@ -258,7 +254,7 @@ export function planDuplicate(
 	nodeId: string,
 	name?: string
 ): StructurePlan {
-	const node = structureNode(model, nodeId);
+	const node = structureNodeFor(model, nodeId);
 	if (!node) {
 		return { ok: false, reason: 'only a container or parameter can be duplicated' };
 	}
@@ -303,7 +299,7 @@ export async function applyStructureEdit(
 ): Promise<ApplyResult> {
 	const text = document.getText();
 	const model = scanEcucValues(text);
-	const node = structureNode(model, record.nodeId);
+	const node = structureNodeFor(model, record.nodeId);
 	if (!node) {
 		return { ok: false, reason: 'the node is no longer a container or parameter' };
 	}
