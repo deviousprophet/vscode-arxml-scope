@@ -235,6 +235,7 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <style nonce="${nonce}">${STYLE}</style>
 <style id="virtual-style" nonce="${nonce}">#tree-top{height:0px}#tree-bottom{height:0px}</style>
+<style id="row-menu-style" nonce="${nonce}">#row-menu{left:0;top:0}</style>
 </head>
 <body data-view="document">
 <div class="toolbar">
@@ -311,6 +312,10 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 <button id="stab-details" class="stab active" type="button" role="tab" aria-selected="true" aria-controls="sbp-details">Details</button>
 <button id="stab-conditions" class="stab" type="button" role="tab" aria-selected="false" aria-controls="sbp-conditions" tabindex="-1">Conditions</button>
 </div>
+</div>
+<div id="row-menu" class="row-menu" role="menu" aria-label="Row actions" hidden>
+<button class="row-menu-item" type="button" role="menuitem" data-action="duplicate">Duplicate</button>
+<button class="row-menu-item" type="button" role="menuitem" data-action="delete">Delete</button>
 </div>
 <script type="application/json" id="ecuc-rows" nonce="${nonce}">${payload}</script>
 <script type="application/json" id="ecuc-conditions" nonce="${nonce}">${conditionPayload}</script>
@@ -941,6 +946,41 @@ input[type="search"]::-webkit-search-decoration {
 	clip: rect(0, 0, 0, 0);
 	white-space: nowrap;
 	border: 0;
+}
+.row-menu {
+	position: fixed;
+	z-index: 40;
+	min-width: 150px;
+	padding: 4px;
+	border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, transparent));
+	border-radius: 5px;
+	background: var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
+	box-shadow: 0 4px 14px var(--vscode-widget-shadow, transparent);
+}
+.row-menu[hidden] {
+	display: none;
+}
+.row-menu-item {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	padding: 4px 10px;
+	border: 0;
+	border-radius: 3px;
+	background: transparent;
+	color: var(--vscode-menu-foreground, var(--vscode-foreground));
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.row-menu-item:hover,
+.row-menu-item:focus-visible {
+	background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
+	color: var(--vscode-menu-selectionForeground, var(--vscode-foreground));
+	outline: none;
+}
+.row-menu-item[data-action="delete"] {
+	color: var(--vscode-errorForeground, var(--vscode-menu-foreground, var(--vscode-foreground)));
 }
 
 #content {
@@ -1884,6 +1924,8 @@ const searchPrev = document.getElementById('search-prev');
 const searchNext = document.getElementById('search-next');
 const searchCount = document.getElementById('search-count');
 const searchBusy = document.getElementById('search-busy');
+const rowMenu = document.getElementById('row-menu');
+const rowMenuStyle = document.getElementById('row-menu-style');
 const conditionsPanel = document.getElementById('conditions-panel');
 const conditionsList = document.getElementById('conditions-list');
 const conditionsAdd = document.getElementById('conditions-add');
@@ -1934,6 +1976,7 @@ let subtreeIds = new Set();
 let guideLevels = [];
 let hoveredGuideId;
 let focusId;
+let menuNodeId;
 // Search is a jump control, not a visibility control: the whole row store is the
 // candidate set, and the collapsed set never removes a candidate. highlightQuery
 // carries the current query into the row primitives as the page's mark text.
@@ -2030,6 +2073,7 @@ function rebuildDisplay() {
 }
 
 function setRows(nextRows, nextSelectedId) {
+	hideRowMenu(false);
 	const incoming = Array.isArray(nextRows) ? nextRows : [];
 	const previousMatchId = currentMatchId();
 	const state = reconcileRowState(
@@ -2248,6 +2292,80 @@ function applyRoving(id) {
 	}
 }
 
+function hideRowMenu(restoreFocus) {
+	if (!rowMenu || rowMenu.hidden) {
+		return;
+	}
+	rowMenu.hidden = true;
+	const id = menuNodeId;
+	menuNodeId = undefined;
+	if (restoreFocus && id !== undefined) {
+		const element = renderedById.get(id);
+		if (element) {
+			element.focus({ preventScroll: true });
+		}
+	}
+}
+
+function showRowMenu(item, left, top) {
+	if (!rowMenu || !rowMenuStyle) {
+		return;
+	}
+	const kind = item.dataset.kind;
+	if (kind !== 'container' && kind !== 'parameter') {
+		return;
+	}
+	selectItem(item);
+	menuNodeId = item.dataset.nodeId;
+	rowMenu.hidden = false;
+	const bounds = rowMenu.getBoundingClientRect();
+	const x = Math.max(8, Math.min(left, window.innerWidth - bounds.width - 8));
+	const y = Math.max(8, Math.min(top, window.innerHeight - bounds.height - 8));
+	rowMenuStyle.textContent = '#row-menu{left:' + x + 'px;top:' + y + 'px}';
+	const first = rowMenu.querySelector('.row-menu-item');
+	if (first) {
+		first.focus({ preventScroll: true });
+	}
+}
+
+function onTreeContextMenu(event) {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	const item = event.target.closest('#tree [role="treeitem"]');
+	if (!item) {
+		return;
+	}
+	const kind = item.dataset.kind;
+	if (kind !== 'container' && kind !== 'parameter') {
+		return;
+	}
+	event.preventDefault();
+	showRowMenu(item, event.clientX, event.clientY);
+}
+
+function onRowMenuKeydown(event) {
+	if (!rowMenu || rowMenu.hidden) {
+		return;
+	}
+	const items = Array.from(rowMenu.querySelectorAll('.row-menu-item'));
+	if (event.key === 'Escape') {
+		event.preventDefault();
+		hideRowMenu(true);
+		return;
+	}
+	if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+		return;
+	}
+	event.preventDefault();
+	const at = items.indexOf(document.activeElement);
+	const step = event.key === 'ArrowDown' ? 1 : -1;
+	const next = items[(at + step + items.length) % items.length];
+	if (next) {
+		next.focus();
+	}
+}
+
 function applyGuideHover() {
 	for (const guide of treeWindow.querySelectorAll('.guide')) {
 		guide.classList.toggle(
@@ -2258,6 +2376,7 @@ function applyGuideHover() {
 }
 
 function renderWindow(force) {
+	hideRowMenu(false);
 	const state = virtualState();
 	const range = calcVisibleRange(state);
 	const start = range[0];
@@ -3533,6 +3652,37 @@ function onTreeHover(event) {
 document.addEventListener('click', onRowClick);
 document.addEventListener('dblclick', onRowDoubleClick);
 document.addEventListener('keydown', onTreeKeydown);
+tree.addEventListener('contextmenu', onTreeContextMenu);
+if (rowMenu) {
+	rowMenu.addEventListener('click', function (event) {
+		if (!(event.target instanceof Element)) {
+			return;
+		}
+		const item = event.target.closest('.row-menu-item');
+		if (!item || menuNodeId === undefined) {
+			return;
+		}
+		const nodeId = menuNodeId;
+		const action = item.dataset.action;
+		hideRowMenu(true);
+		if (action === 'delete' || action === 'duplicate') {
+			vscode.postMessage({ type: action, nodeId });
+		}
+	});
+	rowMenu.addEventListener('keydown', onRowMenuKeydown);
+	document.addEventListener('pointerdown', function (event) {
+		if (rowMenu.hidden) {
+			return;
+		}
+		if (event.target instanceof Element && event.target.closest('#row-menu')) {
+			return;
+		}
+		hideRowMenu(false);
+	});
+	window.addEventListener('scroll', function () { hideRowMenu(false); }, true);
+	window.addEventListener('resize', function () { hideRowMenu(false); });
+	window.addEventListener('blur', function () { hideRowMenu(false); });
+}
 tree.addEventListener('mouseover', onTreeHover);
 tree.addEventListener('mouseleave', function () {
 	if (hoveredGuideId !== undefined) {

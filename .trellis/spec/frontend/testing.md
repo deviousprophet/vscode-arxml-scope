@@ -111,6 +111,12 @@ known, missing, tail-resolved and malformed expressions; `renderRows.test.ts` as
 enter the selectable id list; `uxDocument.test.ts` asserts the token split, token CSS, bounded chip and
 wrapped `.condition-code`. Do not test these by re-implementing the evaluator or tokenizer in the test.
 
+Structural row actions are tested in two layers: `structureEdit.test.ts` drives the pure
+`lineSpan`/default-name/plan functions and applies a plan to a temporary document (one edit, one
+undo, stale bytes refused); `contextMenu.test.ts` asserts the page shell, the container/parameter
+filter, the posted message shape and the close paths. Modal confirmation lives in the provider and
+is not simulated by the page test; the host write is covered by the apply test.
+
 The mutation table for this pass is: re-add a Tree toggle/view state, Tree CSS/glyph/probes; re-add
 the line-number gutter/`data-line`/digits; re-add the repeating indent gradient; drop the
 bracket-guide computation or leak it to every row; drop brace hover; re-add inline `.value` editing;

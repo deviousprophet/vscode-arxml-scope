@@ -28,9 +28,12 @@ A plain open still uses VS Code's text editor. The custom editor is opt-in.
 ## Good to know
 
 - Reference resolution is **same-file** for now; no workspace index yet.
-- Only parameter `<VALUE>` text and container `<SHORT-NAME>` / `<DEFINITION-REF>` text are written.
-  References are not editable.
+- Only parameter `<VALUE>` text, container `<SHORT-NAME>` / `<DEFINITION-REF>` text, and whole
+  container/parameter elements (delete/duplicate) are written. References are not editable.
 - A value backed by CDATA is shown but not editable.
+- Right-click a container or parameter to **Duplicate** or **Delete**. Duplicate inserts the copy
+  after the original (a container copy asks for a unique short name); Delete removes the element.
+  Both ask for confirmation and one `Ctrl+Z` restores the previous bytes.
 - Condition values are stored per workspace, not written beside the ARXML.
 - Hover a condition chip to see each referenced system constant and its entered value, one per line.
   `(not set)` means the constant has no value yet; the row's dimmed state still shows the result.

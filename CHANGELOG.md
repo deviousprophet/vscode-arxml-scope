@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Condition constants discovered from the open document appear automatically; scanned constants are read-only and manual rows can be removed
 - Condition values use icon-only Edit, Save and Cancel actions
 - A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, a changes-only view, previous/next navigation, reveal-in-source and live refresh
+- A right-click **Duplicate** / **Delete** menu on container and parameter rows; both ask for confirmation, container duplicates ask for a unique short name, and each action is one undoable edit
 - An `ARXML Scope` context submenu for `Open with ECUC Editor` and `Reveal in ECUC Editor`
 
 ### Changed

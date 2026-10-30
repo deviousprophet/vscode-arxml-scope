@@ -81,6 +81,19 @@ only, and clicking a parameter's `.value-text` selects and opens the details edi
 is the details **Jump to target** action. The inline chevron (`twistyIcon`) is one shared row primitive
 in `rowViewScript()`; the editor and diff pages must not fork it.
 
+## Row context menu
+
+- `#row-menu` is one page-local `role="menu"` with **Duplicate** and **Delete** `role="menuitem"`
+  buttons. It opens only for `container` and `parameter` tree items; modules, references, braces and
+  comment rows keep the native menu. Right-click selects the row first (the same `selectItem` path)
+  and focuses the first item.
+- Per-open coordinates are written to the nonce `#row-menu-style` stylesheet (`#row-menu{left:…;top:…}`),
+  never to a `style` attribute. The position is clamped inside the viewport.
+- The items only post `{ type: 'duplicate' | 'delete', nodeId }`; confirmation and the write live in
+  the host. The menu closes on an action, `Escape`, an outside pointerdown, scroll, resize or blur,
+  and `setRows` hides it. `Escape` returns focus to the row.
+- ArrowUp/ArrowDown cycle the two items. There is no multi-select and no module/reference action.
+
 ## DOM contracts
 
 - **Search is the only query control and runs on Enter.** `#search-input` stays `type="search"` for

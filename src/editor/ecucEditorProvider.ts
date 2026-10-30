@@ -23,6 +23,12 @@ import { RenderOptions, renderHtml } from './renderHtml';
 import { buildRows } from './renderRows';
 import { buildNodeIndex } from './nodeId';
 import { applyEdit, buildEdit, buildFieldEdit } from './ecucEdit';
+import {
+	applyStructureEdit,
+	duplicateNameRefusal,
+	planDelete,
+	planDuplicate,
+} from './ecucStructureEdit';
 import { followReference, nodeIdForRange, revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
 
@@ -232,6 +238,10 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					if (EDIT_FIELDS.includes(field)) {
 						void this.editField(document, panel, message.nodeId, field, message.value);
 					}
+				} else if (message.type === 'delete') {
+					void this.deleteRow(document, panel, message.nodeId);
+				} else if (message.type === 'duplicate') {
+					void this.duplicateRow(document, panel, message.nodeId);
 				} else if (message.type === 'select') {
 					// A click in the tree is view state the host must know too: the re-scan
 					// payload carries the selection, so without this a document change would
@@ -321,6 +331,101 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		this.selections.set(document.uri.toString(), targetId);
 		panel.reveal();
 		await panel.webview.postMessage({ type: 'select', nodeId: targetId });
+	}
+
+	/**
+	 * Delete one container/parameter after a modal confirmation. The plan is built
+	 * against the current bytes; a refusal never writes and reports in Details.
+	 */
+	private async deleteRow(
+		document: vscode.TextDocument,
+		panel: vscode.WebviewPanel,
+		nodeId: string
+	): Promise<void> {
+		const text = document.getText();
+		const plan = planDelete(scanEcucValues(text), text, nodeId);
+		if (!plan.ok) {
+			await this.postStructureNotice(panel, plan.reason);
+			return;
+		}
+		const descendants =
+			plan.descendants > 0
+				? ` Its ${plan.descendants} descendant${plan.descendants === 1 ? '' : 's'} will also be deleted.`
+				: '';
+		const answer = await vscode.window.showWarningMessage(
+			`Delete "${plan.label}"?${descendants} You can undo with Ctrl+Z.`,
+			{ modal: true },
+			'Delete'
+		);
+		if (answer !== 'Delete') {
+			return;
+		}
+		const applied = await applyStructureEdit(document, plan.record);
+		if (!applied.ok) {
+			await this.postStructureNotice(panel, applied.reason);
+		}
+	}
+
+	/**
+	 * Duplicate one container/parameter after a modal confirmation. A container also
+	 * asks for a unique short name first; a parameter keeps its DEFINITION-REF, which
+	 * is the AUTOSAR multi-instance shape.
+	 */
+	private async duplicateRow(
+		document: vscode.TextDocument,
+		panel: vscode.WebviewPanel,
+		nodeId: string
+	): Promise<void> {
+		const initialText = document.getText();
+		const initial = planDuplicate(scanEcucValues(initialText), initialText, nodeId);
+		if (!initial.ok) {
+			await this.postStructureNotice(panel, initial.reason);
+			return;
+		}
+		let name = initial.record.duplicateName;
+		if (name !== undefined) {
+			const chosen = await vscode.window.showInputBox({
+				prompt: 'New short name for the duplicate',
+				value: name,
+				validateInput: (value) => duplicateNameRefusal(scanEcucValues(document.getText()), nodeId, value),
+			});
+			if (chosen === undefined) {
+				return;
+			}
+			name = chosen.trim();
+		}
+		const text = document.getText();
+		const plan = planDuplicate(scanEcucValues(text), text, nodeId, name);
+		if (!plan.ok) {
+			await this.postStructureNotice(panel, plan.reason);
+			return;
+		}
+		const message =
+			name === undefined
+				? `Duplicate parameter "${plan.label}"?`
+				: `Duplicate "${plan.label}" as "${name}"?`;
+		const answer = await vscode.window.showWarningMessage(
+			`${message} You can undo with Ctrl+Z.`,
+			{ modal: true },
+			'Duplicate'
+		);
+		if (answer !== 'Duplicate') {
+			return;
+		}
+		const applied = await applyStructureEdit(document, plan.record);
+		if (!applied.ok) {
+			await this.postStructureNotice(panel, applied.reason);
+		}
+	}
+
+	private async postStructureNotice(panel: vscode.WebviewPanel, message: string): Promise<void> {
+		await panel.webview.postMessage({
+			type: 'notice',
+			message,
+			kind: 'warn',
+			inline: true,
+			scope: 'details',
+		});
 	}
 
 	/**

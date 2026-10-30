@@ -84,8 +84,14 @@ that is not obvious from the code.
   section panes and collapsed sections persist through `getState()/setState()`. A legacy
   `inspectorHidden` is ignored; there is no toolbar Details/Conditions toggle and no second panel
   surface.
-- **Details editing is the only edit path.** The panel edits a parameter's `<VALUE>` and a
-  container's `<SHORT-NAME>` / `<DEFINITION-REF>` inner text. The value control follows the AUTOSAR
+- **Details editing is the only field edit path, and structural edits are confirmed.** The panel
+  edits a parameter's `<VALUE>` and a container's `<SHORT-NAME>` / `<DEFINITION-REF>` inner text.
+  A container or parameter row may also be **deleted or duplicated** from the page context menu; the
+  host asks for confirmation (and a unique short name for a container duplicate) before one
+  `WorkspaceEdit`. The page never writes. A structural plan re-scans and compares the recorded
+  element bytes before applying, so a moved node is a refusal, not a partial edit. Deleting an
+  own-line element removes its line and indentation; a duplicate is inserted after the original with
+  the document's own line break. One `Ctrl+Z` restores either action. The value control follows the AUTOSAR
   type: integer/float/text use an input with type-specific character checks; Boolean uses a
   true/false select. A parameter commits through `{ type: 'edit', nodeId, value }` (no `field`); a container
   commits the same message with `field: 'shortName' | 'definitionRef'`. The host normalises a

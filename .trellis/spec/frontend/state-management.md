@@ -95,6 +95,13 @@ name not referenced by the document) can be removed and that removal is persiste
 Drafts live only in Edit mode; only Save (including committing a new Add draft), Remove and
 Clear values send a `conditions` message. Opening Add alone sends nothing.
 
+Structural actions are stateless from the page's point of view: the menu posts one `delete` or
+`duplicate` message and closes. The host re-scans the document before planning and again inside
+`applyStructureEdit`, so a stale plan is refused. A successful write relies on the existing
+`onDidChangeTextDocument` re-scan; a deleted selection is cleared by `reconcileRowState`, while a
+duplicate and a parameter copy leave the original selected. The menu is never persisted and is
+hidden on any re-scan.
+
 ## Search state
 
 `searchInput.value` is the raw typed text. `searchQuery`, `searchMatches` (row indices) and
