@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Toolbar, sidebar shell, details body, search and highlight DOM contracts."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Webview state ownership, re-scan survival, layout persistence and search state."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No colour literals, no second renderer, test and accessibility rules."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Pure-helper, compiled page-function and mutation-testing conventions."}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "One-way dependency and pure query-module placement."}
-{"file": ".trellis/tasks/archive/2026-10/10-30-sidebar-control-parity/research/hex-scope-ui-reference.md", "reason": "Search and current-match highlight parity reference."}
