@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify filter/search field DOM, focus and ARIA."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify no second field style, no writes and no colour literals."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify candidate, wrapping and jump assertions fail when the feature is removed."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify filter state is untouched and search survives a re-scan."}
-{"file": ".trellis/tasks/10-30-sidebar-control-parity/research/hex-scope-ui-reference.md", "reason": "Confirm the toolbar/search layout follows the approved reference."}
