@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check Enter/run, streaming count, busy spinner, highlights and navigation."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Check cancellation, re-scan restart and committed/typed query split."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check no blocking full scan, no inline style and no file write."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Check the engine performance/cancellation tests and page assertions."}
