@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/components/component-document-tree.md", "reason": "Verify header placement and offset math"}
-{"file": ".trellis/spec/frontend/components/component-diff-view.md", "reason": "Verify word highlight, swap and added/removed behavior"}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify tests fail when the feature is deleted"}
