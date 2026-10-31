@@ -76,8 +76,16 @@ export function appendHighlighted(parent: PageElement, text: string, query?: str
 	}
 }
 
+/** Writes one field's text; the diff supplies a segment writer for word changes. */
+export type RowTextWriter = (target: PageElement, text: string) => void;
+
 /** The `= shownValue` span; the `=` is punctuation, not part of the value token. */
-export function valueSpan(row: RowViewFields, readOnly = false, query?: string): HTMLElement {
+export function valueSpan(
+	row: RowViewFields,
+	readOnly = false,
+	query?: string,
+	writeText?: RowTextWriter
+): HTMLElement {
 	const value = document.createElement('span');
 	value.className = 'value';
 	if (row.kind === 'parameter') {
@@ -93,7 +101,11 @@ export function valueSpan(row: RowViewFields, readOnly = false, query?: string):
 	value.appendChild(document.createTextNode(' '));
 	const text = document.createElement('span');
 	text.className = 'value-text';
-	appendHighlighted(text, row.shownValue || '', query);
+	if (writeText) {
+		writeText(text, row.shownValue || '');
+	} else {
+		appendHighlighted(text, row.shownValue || '', query);
+	}
 	value.appendChild(text);
 	return value;
 }
@@ -263,8 +275,34 @@ export function appendConditionTokens(parent: PageElement, text: string, query?:
 	}
 }
 
+/**
+ * Writes one meta part's text with its normal syntax and search treatment. A
+ * word-diff writer reuses it for the unchanged segments of a changed part.
+ */
+export function appendMetaPartText(
+	target: PageElement,
+	part: { cls: string; text: string },
+	query?: string
+): void {
+	if (part.cls === 'condition') {
+		appendConditionTokens(target, part.text, query);
+	} else if (part.cls === 'context' && part.text.indexOf('context ') === 0) {
+		const keyword = document.createElement('span');
+		keyword.className = 'keyword';
+		appendHighlighted(keyword, 'context', query);
+		target.appendChild(keyword);
+		target.appendChild(document.createTextNode(' '));
+		appendHighlighted(target, part.text.slice('context '.length), query);
+	} else {
+		appendHighlighted(target, part.text, query);
+	}
+}
+
+/** Handles one meta part; returning false falls back to the normal writer. */
+export type MetaPartWriter = (span: HTMLElement, part: { cls: string; text: string }) => boolean;
+
 /** The quiet-source meta chips (short name, variant, context, condition, annotation). */
-export function metaSpan(row: RowViewFields, query?: string): HTMLElement {
+export function metaSpan(row: RowViewFields, query?: string, writePart?: MetaPartWriter): HTMLElement {
 	const meta = document.createElement('span');
 	meta.className = 'row-meta';
 	for (const part of row.meta) {
@@ -274,17 +312,9 @@ export function metaSpan(row: RowViewFields, query?: string): HTMLElement {
 		if (part.state) {
 			span.dataset.state = part.state;
 		}
-		if (part.cls === 'condition') {
-			appendConditionTokens(span, part.text, query);
-		} else if (part.cls === 'context' && part.text.indexOf('context ') === 0) {
-			const keyword = document.createElement('span');
-			keyword.className = 'keyword';
-			appendHighlighted(keyword, 'context', query);
-			span.appendChild(keyword);
-			span.appendChild(document.createTextNode(' '));
-			appendHighlighted(span, part.text.slice('context '.length), query);
-		} else {
-			appendHighlighted(span, part.text, query);
+		const handled = writePart ? writePart(span, part) : false;
+		if (!handled) {
+			appendMetaPartText(span, part, query);
 		}
 		meta.appendChild(span);
 	}

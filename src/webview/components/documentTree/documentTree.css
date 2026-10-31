@@ -180,13 +180,23 @@ mark {
 }
 .document-tree-header {
 	flex: none;
-	padding: calc(var(--ecuc-lh) * 0.5) 0 0;
+	/* The header now lives inside `.document-tree-scroll`, whose top padding
+	 * supplies the gap above the title; own top padding would double it. The
+	 * bottom padding is part of the measured header, so the row offset math
+	 * accounts for the space between the meta lines and the first row. */
+	padding: 0 0 calc(var(--ecuc-lh) * 0.5);
 	margin: 0;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	line-height: var(--ecuc-lh);
 	white-space: pre;
 	color: var(--vscode-editor-foreground);
+}
+/* Preserve the editor's pre-scroll header-to-row gap (1 line): the scroller
+ * supplies 0.5 above, so the document header adds 1 below. Diff panes keep the
+ * base 0.5 gap and their measured header height. */
+body[data-view="document"]:not([data-page="diff"]) .document-tree-header {
+	padding-bottom: var(--ecuc-lh);
 }
 .document-tree-title {
 	padding: 0 10px;
@@ -254,7 +264,6 @@ mark {
 }
 body[data-view="document"] .document-tree-meta {
 	padding: 0 0 0 var(--content-pad);
-	margin-bottom: calc(var(--ecuc-lh) * 0.5);
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	line-height: var(--ecuc-lh);
@@ -461,7 +470,8 @@ body[data-view="document"] .row.k-module .label::before {
 	color: var(--tok-keyword);
 }
 body[data-view="document"] .node[data-subtree="true"] > .row,
-body[data-view="document"] .brace[data-subtree="true"] > .row {
+body[data-view="document"] .brace[data-subtree="true"] > .row,
+body[data-view="document"] .comment[data-subtree="true"] > .row {
 	background-color: var(--subtree-bg);
 }
 body[data-view="document"] .node[data-kind="parameter"][data-selected="true"] > .row {
@@ -508,7 +518,8 @@ body[data-view="document"] .document-tree-scroll[data-empty="true"] {
 		color: var(--vscode-editor-foreground);
 	}
 	body[data-view] .node[data-subtree="true"] > .row,
-	body[data-view] .brace[data-subtree="true"] > .row {
+	body[data-view] .brace[data-subtree="true"] > .row,
+	body[data-view] .comment[data-subtree="true"] > .row {
 		background: transparent;
 		outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
 		outline-offset: -1px;
@@ -543,7 +554,8 @@ body.vscode-high-contrast[data-view] .node[data-kind="container"] > .row > .labe
 	color: var(--vscode-editor-foreground);
 }
 body.vscode-high-contrast[data-view] .node[data-subtree="true"] > .row,
-body.vscode-high-contrast[data-view] .brace[data-subtree="true"] > .row {
+body.vscode-high-contrast[data-view] .brace[data-subtree="true"] > .row,
+body.vscode-high-contrast[data-view] .comment[data-subtree="true"] > .row {
 	background: transparent;
 	outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
 	outline-offset: -1px;

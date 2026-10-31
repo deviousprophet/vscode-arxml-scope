@@ -8,18 +8,20 @@
  */
 import './styles/tokens.css';
 import './styles/base.css';
-import type { DiffDocument, DiffRow } from '../core/diff/diffModel';
+import type { DiffCell, DiffDocument, DiffRow } from '../core/diff/diffModel';
 import {
 	diffVisibility,
 	flattenDiffDocument,
 	nextChangeIndex,
 	type DiffDisplayRow,
 } from '../core/diff/diffModel';
+import { diffWords } from '../core/diff/wordDiff';
 import { calcRowOffset, calcVisibleRange } from './render/virtualScroll';
 import {
 	buildDocumentBraceRow,
 	buildDocumentCommentRow,
 	buildDocumentNodeRow,
+	type DocumentWordDiff,
 } from './components/documentTree/documentRows';
 import { DiffView } from './components/diffView/diffView';
 import type { DocumentTreeHeader } from './components/documentTree/documentTreeView';
@@ -123,6 +125,8 @@ let rowIndexByKey = new Map<string, number>();
 let collapsed = new Set<string>();
 let selectedKey: string | undefined;
 let focusKey: string | undefined;
+let rowsRevision = 0;
+let subtreeCache: { key: string | undefined; revision: number; ids: Set<string> } | undefined;
 let visibility: boolean[] = [];
 let displayRows: DiffDisplayRow[] = [];
 let displayIndexByKey = new Map<string, number>();
@@ -162,16 +166,10 @@ function refreshVisibility() {
 }
 function buildHeightFn() {
 	const base = heights.row;
-	heightFn = function (index) {
-		const flat = displayRows[index];
-		const row = flat ? rows[flat.rowIndex] : undefined;
-		const previous = index > 0 ? displayRows[index - 1] : undefined;
-		const gap =
-			row &&
-			row.kind === 'module' &&
-			index > 0 &&
-			(!previous || previous.rowIndex !== flat.rowIndex);
-		return base + (gap ? base : 0);
+	// Diff rows are uniform: the Document-only module gap is not part of the
+	// comparison surface, so a module row is exactly one base row high.
+	heightFn = function () {
+		return base;
 	};
 }
 function rebuildDisplay() {
@@ -238,6 +236,8 @@ function setDocument(next: any): void {
 	}
 	diffDocument = next;
 	rows = next.rows;
+	rowsRevision++;
+	subtreeCache = undefined;
 	indexRows();
 	const present = new Set(rows.map(function (row) { return row.key; }));
 	collapsed = new Set(Array.from(collapsed).filter(function (key) { return present.has(key); }));
@@ -295,6 +295,21 @@ function measureDiffWidth() {
 		views.right.setContentWidth(diffContent);
 	}
 }
+function selectedSubtreeIds(): Set<string> {
+	if (subtreeCache && subtreeCache.key === selectedKey && subtreeCache.revision === rowsRevision) {
+		return subtreeCache.ids;
+	}
+	const ids = new Set<string>();
+	const at = selectedKey === undefined ? undefined : rowIndexByKey.get(selectedKey);
+	if (at !== undefined) {
+		const end = Math.min(rows.length, at + 1 + Math.max(0, rows[at].subtreeSize));
+		for (let index = at; index < end; index++) {
+			ids.add(rows[index].key);
+		}
+	}
+	subtreeCache = { key: selectedKey, revision: rowsRevision, ids };
+	return ids;
+}
 function documentOptions(flat: any, side: string): any {
 	const guides =
 		side === 'left'
@@ -309,7 +324,7 @@ function documentOptions(flat: any, side: string): any {
 		expandedIds: flat.expanded ? new Set([rows[flat.rowIndex].key]) : new Set(),
 		searchQuery: searchQuery,
 		currentId: currentMatchKey(),
-		subtreeIds: new Set(),
+		subtreeIds: selectedSubtreeIds(),
 		guides: guides
 	};
 }
@@ -345,16 +360,6 @@ function stripDocumentNode(node: any): any {
 	node.tabIndex = -1;
 	return node;
 }
-function carriesDiffGap(flat: any, displayIndex: number): boolean {
-	const row = flat ? rows[flat.rowIndex] : undefined;
-	const previous = displayIndex > 0 ? displayRows[displayIndex - 1] : undefined;
-	return (
-		!!row &&
-		row.kind === 'module' &&
-		displayIndex > 0 &&
-		(!previous || previous.rowIndex !== flat.rowIndex)
-	);
-}
 function displayLeft(row: any): any {
 	return swapped ? row.right : row.left;
 }
@@ -369,6 +374,35 @@ function displayStatus(row: any): any {
 }
 function hostSide(side: 'left' | 'right'): 'left' | 'right' {
 	return swapped ? (side === 'left' ? 'right' : 'left') : side;
+}
+/** The first meta part of one class, which is the only one the word diff pairs. */
+function metaPartText(cell: DiffCell | undefined, cls: string): string {
+	const part = cell ? cell.meta.find((candidate) => candidate.cls === cls) : undefined;
+	return part ? part.text : '';
+}
+/**
+ * The word pairs for the fields a changed row actually shows, on the displayed
+ * sides. Added and removed rows return nothing: their full-cell tint already
+ * says the whole line is new or gone, and an unchanged row renders as before.
+ */
+function wordDiffForRow(row: DiffRow): DocumentWordDiff | undefined {
+	if (displayStatus(row) !== 'changed') {
+		return undefined;
+	}
+	const left = displayLeft(row);
+	const right = displayRight(row);
+	if (!left || !right) {
+		return undefined;
+	}
+	return {
+		label: diffWords(left.label || '', right.label || ''),
+		value: diffWords(left.shownValue || '', right.shownValue || ''),
+		meta: {
+			condition: diffWords(metaPartText(left, 'condition'), metaPartText(right, 'condition')),
+			variant: diffWords(metaPartText(left, 'variant'), metaPartText(right, 'variant')),
+			context: diffWords(metaPartText(left, 'context'), metaPartText(right, 'context')),
+		},
+	};
 }
 function renderRow(index: number, pane: string): any {
 	const flat = displayRows[index];
@@ -425,9 +459,6 @@ function renderRow(index: number, pane: string): any {
 			element.tabIndex = -1;
 		}
 	}
-	if (carriesDiffGap(flat, index)) {
-		element.dataset.gap = 'true';
-	}
 	if (kind === 'blank') {
 		cell.dataset.empty = 'true';
 		element.appendChild(cell);
@@ -441,7 +472,9 @@ function renderRow(index: number, pane: string): any {
 				buildDocumentNodeRow(
 					documentRowForCell(cellRow, row),
 					Object.assign(options, {
-						selectedId: row.key === selectedKey ? row.key : undefined
+						selectedId: row.key === selectedKey ? row.key : undefined,
+						wordDiff: wordDiffForRow(row),
+						wordSide: side
 					})
 				)
 			);
@@ -567,10 +600,25 @@ function captureAnchor() {
 	if (!flat) {
 		return null;
 	}
-	return { key: rows[flat.rowIndex].key, delta: top - calcRowOffset(index, state) };
+	const native = views.left.getScrollTop();
+	return {
+		key: rows[flat.rowIndex].key,
+		delta: top - calcRowOffset(index, state),
+		// While any part of the header is on screen the row offset is clamped to
+		// zero, so the row anchor alone cannot restore the native position. Keep
+		// it verbatim: a refresh or a view switch at the top must not scroll the
+		// header out of view.
+		native,
+		inHeader: native < views.left.padTopHeight() + views.left.headerHeight(),
+	};
 }
 function restoreAnchor(anchor: any): void {
 	if (!anchor || !views || !displayIndexByKey.has(anchor.key)) {
+		return;
+	}
+	if (anchor.inHeader) {
+		views.left.setScrollTop(anchor.native);
+		views.right.setScrollTop(views.left.getScrollTop());
 		return;
 	}
 	const index = displayIndexByKey.get(anchor.key);
@@ -1169,6 +1217,8 @@ function resetDiffState(): void {
 	rows = [];
 	rowByKey = new Map();
 	rowIndexByKey = new Map();
+	rowsRevision++;
+	subtreeCache = undefined;
 	collapsed = new Set();
 	selectedKey = undefined;
 	focusKey = undefined;

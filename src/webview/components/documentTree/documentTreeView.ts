@@ -2,9 +2,11 @@
  * The reusable Document tree surface.
  *
  * One `DocumentTreeView` owns the schema/package header, the native vertical and
- * horizontal scroller, the virtual spacers and the rendered window. The host owns
- * the row model, selection and search: `renderRow(index, pane)` builds one row and
- * the component only decides which rows are on screen and where the scroll is.
+ * horizontal scroller, the virtual spacers and the rendered window. The header
+ * is the scroller's first content element, so it scrolls away with the rows.
+ * The host owns the row model, selection and search: `renderRow(index, pane)`
+ * builds one row and the component only decides which rows are on screen and
+ * where the scroll is.
  *
  * The editor mounts one instance, the diff mounts one per pane. Both pages import
  * the same class and the same virtual-scroll math; nothing is serialized into a
@@ -76,6 +78,7 @@ export class DocumentTreeView {
 	renderedRevision: number;
 	contentWidth: number;
 	padTop: number;
+	headerH: number;
 	expectedTop: number | undefined;
 	expectedLeft: number | undefined;
 	pendingNotify: boolean;
@@ -101,12 +104,13 @@ export class DocumentTreeView {
 		this.renderedRevision = -1;
 		this.contentWidth = 0;
 		this.padTop = -1;
+		this.headerH = -1;
 		this.expectedTop = undefined;
 		this.expectedLeft = undefined;
 		this.pendingNotify = false;
 	}
 
-	/** Create `root > header + scroll > top/window/bottom`. Idempotent. */
+	/** Create `root > scroll > header + top/window/bottom`. Idempotent. */
 	mount(): void {
 		if (!this.root) {
 			return;
@@ -134,22 +138,26 @@ export class DocumentTreeView {
 		this.windowEl.className = 'document-tree-window';
 		this.windowEl.setAttribute('role', 'presentation');
 		this.bottomSpacer = this.spacer('document-tree-bottom');
+		// The header is content, not a pinned strip: it scrolls away with the
+		// rows, so it lives inside the scroller before the top spacer.
+		this.scroll.appendChild(this.header);
 		this.scroll.appendChild(this.topSpacer);
 		this.scroll.appendChild(this.windowEl);
 		this.scroll.appendChild(this.bottomSpacer);
 
-		this.root.appendChild(this.header);
 		this.root.appendChild(this.scroll);
 
 		this.scroll.addEventListener('scroll', () => this.onScroll());
 		this.scroll.addEventListener('wheel', (event: any) => this.onWheel(event), { passive: false });
 		this.scroll.addEventListener('click', (event: any) => this.onClick(event));
 		this.padTop = -1;
+		this.headerH = -1;
 		this.setEmpty(false);
 	}
 
 	/** Replace the schema/package header (and optional file label). */
 	setHeader(header?: DocumentTreeHeader): void {
+		this.headerH = -1;
 		if (!this.meta || !this.title) {
 			return;
 		}
@@ -208,6 +216,7 @@ export class DocumentTreeView {
 	 * total height, viewport size and revision are unchanged does no DOM work.
 	 */
 	render(force?: boolean): void {
+		this.headerH = -1;
 		if (!this.scroll || !this.windowEl) {
 			return;
 		}
@@ -307,7 +316,7 @@ export class DocumentTreeView {
 		return element;
 	}
 
-	/** The scroll offset of the rows region, excluding the scroller's top padding. */
+	/** The scroll offset of the rows region, excluding the top padding. */
 	padTopHeight(): number {
 		if (this.padTop >= 0) {
 			return this.padTop;
@@ -325,14 +334,39 @@ export class DocumentTreeView {
 		return value;
 	}
 
-	/** The visible rows' top edge, in the same coordinates as the virtual math. */
-	getRowsScrollTop(): number {
-		return this.scroll ? Math.max(0, this.scroll.scrollTop - this.padTopHeight()) : 0;
+	/**
+	 * The header's measured height. The header is inside the scroller, so every
+	 * row offset is shifted by it; `0` means the header is absent or not
+	 * measurable yet (jsdom has no layout). Re-measured after `setHeader`,
+	 * `render` and the host's resize render.
+	 */
+	headerHeight(): number {
+		if (this.headerH >= 0) {
+			return this.headerH;
+		}
+		let value = 0;
+		if (this.header) {
+			const measured = this.header.offsetHeight;
+			if (typeof measured === 'number' && Number.isFinite(measured) && measured > 0) {
+				value = measured;
+			}
+		}
+		this.headerH = value;
+		return value;
 	}
 
-	/** Move the rows region to a logical offset (the top padding is added back). */
+	/** The visible rows' top edge, in the same coordinates as the virtual math. */
+	getRowsScrollTop(): number {
+		return this.scroll
+			? Math.max(0, this.scroll.scrollTop - this.padTopHeight() - this.headerHeight())
+			: 0;
+	}
+
+	/** Move the rows region to a logical offset (the header and top padding are added back). */
 	setRowsScrollTop(offset: number): void {
-		this.setScrollTop((Number.isFinite(offset) ? Math.max(0, offset) : 0) + this.padTopHeight());
+		this.setScrollTop(
+			(Number.isFinite(offset) ? Math.max(0, offset) : 0) + this.padTopHeight() + this.headerHeight()
+		);
 	}
 
 	setScrollTop(top: number): void {

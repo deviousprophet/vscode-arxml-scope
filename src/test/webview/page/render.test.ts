@@ -26,14 +26,60 @@ function editorDocument(overrides: Partial<EditorDocumentPayload> = {}): EditorD
 	};
 }
 
-function mount(): { dom: ReturnType<typeof installDom>; page: any; document: EditorDocumentPayload } {
+function annotationDocument(): EditorDocumentPayload {
+	const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>Pkg</SHORT-NAME>
+      <ELEMENTS>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>Mod</SHORT-NAME>
+          <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/Mod</DEFINITION-REF>
+          <CONTAINERS>
+            <ECUC-CONTAINER-VALUE>
+              <SHORT-NAME>Parent</SHORT-NAME>
+              <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Mod/Parent</DEFINITION-REF>
+              <SUB-CONTAINERS>
+                <ECUC-CONTAINER-VALUE>
+                  <SHORT-NAME>Child</SHORT-NAME>
+                  <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Mod/Child</DEFINITION-REF>
+                  <ANNOTATIONS>
+                    <ANNOTATION>
+                      <ANNOTATION-TEXT>
+                        <VERBATIM>
+                          <L-5 L="EN">child note</L-5>
+                        </VERBATIM>
+                      </ANNOTATION-TEXT>
+                    </ANNOTATION>
+                  </ANNOTATIONS>
+                </ECUC-CONTAINER-VALUE>
+              </SUB-CONTAINERS>
+            </ECUC-CONTAINER-VALUE>
+          </CONTAINERS>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>`;
+	const model = scanEcucValues(xml);
+	return {
+		rows: buildRows(model, { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows,
+		header: documentHeader(model),
+	};
+}
+
+function mount(payload: EditorDocumentPayload = editorDocument()): {
+	dom: ReturnType<typeof installDom>;
+	page: any;
+	document: EditorDocumentPayload;
+} {
 	const dom = installDom('editor');
 	const module = loadModule<typeof import('../../../webview/editorViewer')>('../../webview/editorViewer');
 	module.mountEditor();
-	const document = editorDocument();
 	dom.post({ type: 'conditions', entries: [] });
-	dom.post({ type: 'document', document });
-	return { dom, page: module, document };
+	dom.post({ type: 'document', document: payload });
+	return { dom, page: module, document: payload };
 }
 
 function rowFor(document: EditorDocumentPayload, label: string): EcucRow {
@@ -49,6 +95,21 @@ function clickRow(dom: ReturnType<typeof installDom>, label: string): any {
 	assert.ok(windowRow, `the rendered window contains ${label}`);
 	windowRow.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
 	return windowRow;
+}
+
+function rowNamed(dom: ReturnType<typeof installDom>, label: string): any {
+	const row = treeRows(dom.document).find(
+		(candidate) => candidate.querySelector('.label')?.textContent === label
+	);
+	assert.ok(row, `the rendered window contains ${label}`);
+	return row;
+}
+
+function commentNamed(dom: ReturnType<typeof installDom>, text: string): HTMLElement {
+	const nodes = Array.from(dom.document.querySelectorAll('#tree .comment[data-row-id]')) as HTMLElement[];
+	const node = nodes.find((candidate) => (candidate.textContent || '').includes(text));
+	assert.ok(node, `the rendered window contains the ${text} annotation`);
+	return node;
 }
 
 suite('editor bundled page', () => {
@@ -87,6 +148,14 @@ suite('editor bundled page', () => {
 				dom.document.querySelector('#tree .node')!.getAttribute('role') === 'treeitem',
 				'the row builder owns tree semantics'
 			);
+			const scroller = dom.document.querySelector('#tree > .document-tree-scroll') as HTMLElement;
+			assert.ok(scroller, 'the rows scroller is the tree root child');
+			assert.strictEqual(
+				scroller.firstElementChild!.className,
+				'document-tree-header',
+				'the Document header scrolls with the rows'
+			);
+			assert.strictEqual(dom.document.querySelector('#tree > .document-tree-header'), null);
 			assert.strictEqual(dom.document.querySelector('#tree').getAttribute('aria-label'), 'ECUC values');
 		} finally {
 			dom.restore();
@@ -133,6 +202,34 @@ suite('editor bundled page', () => {
 			clickRow(dom, 'ContA');
 			assert.ok(body.querySelector('#details-short-name'), 'a container gets its short-name editor');
 			assert.ok(body.querySelector('#details-definition-ref'), 'a container gets its definition editor');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('selecting a container highlights the annotation row of a descendant sub-container', () => {
+		const { dom } = mount(annotationDocument());
+		try {
+			clickRow(dom, 'Parent');
+			assert.strictEqual(rowNamed(dom, 'Parent').dataset.selected, 'true');
+			assert.strictEqual(rowNamed(dom, 'Child').dataset.subtree, 'true', 'the descendant node is highlighted');
+			const comment = commentNamed(dom, 'child note');
+			assert.strictEqual(comment.dataset.subtree, 'true', 'the descendant annotation is highlighted');
+			assert.strictEqual(comment.getAttribute('aria-hidden'), 'true');
+			assert.strictEqual(comment.getAttribute('tabindex'), null, 'the annotation is not focusable');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('clicking an annotation row does not change selection', () => {
+		const { dom } = mount(annotationDocument());
+		try {
+			clickRow(dom, 'Parent');
+			const comment = commentNamed(dom, 'child note');
+			comment.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			assert.strictEqual(rowNamed(dom, 'Parent').dataset.selected, 'true', 'the previous selection survives');
+			assert.strictEqual(rowNamed(dom, 'Child').dataset.selected, undefined, 'the annotation owner is not selected');
 		} finally {
 			dom.restore();
 		}

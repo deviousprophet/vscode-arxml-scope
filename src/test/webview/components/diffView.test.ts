@@ -25,6 +25,27 @@ suite('DiffView component', () => {
 		assert.ok(/\.diff-pane \+ \.diff-pane\s*\{[^}]*border-left:\s*3px/.test(css));
 		assert.ok(/\.diff-cell\s*\{[^}]*padding:\s*0;/.test(css));
 		assert.ok(/\.diff-row\[data-status="changed"\] > \.diff-cell/.test(css));
+		assert.ok(
+			/\.diff-row \.word-changed\[data-word-side="left"\]\s*\{[^}]*var\(--vscode-diffEditor-removedTextBackground/.test(css),
+			'changed words on the displayed left use the removed text background'
+		);
+		assert.ok(
+			/\.diff-row \.word-changed\[data-word-side="right"\]\s*\{[^}]*var\(--vscode-diffEditor-insertedTextBackground/.test(css),
+			'changed words on the displayed right use the inserted text background'
+		);
+		assert.ok(
+			/\.diff-row \.word-changed\[data-word-side="left"\]\s*\{[^}]*outline:\s*1px solid var\(--diff-removed-edge\)/.test(css),
+			'a changed word keeps its removed edge'
+		);
+		assert.ok(
+			/\.diff-row \.word-changed\[data-word-side="right"\]\s*\{[^}]*outline:\s*1px solid var\(--diff-added-edge\)/.test(css),
+			'a changed word keeps its added edge'
+		);
+		assert.ok(
+			/\.diff-row mark\s*\{[^}]*background:\s*var\(--match-bg\)/.test(css),
+			'a search mark keeps its background inside a changed word'
+		);
+		assert.ok(!/\.diff-row\[data-gap/.test(css), 'the diff has no module gap row');
 	});
 
 	test('mount creates one component per pane and mirrors the follower', () => {

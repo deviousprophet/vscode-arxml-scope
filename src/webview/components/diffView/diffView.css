@@ -134,9 +134,6 @@ body[data-page="diff"] .nav-btn:disabled {
 	align-items: stretch;
 	outline: none;
 }
-.diff-row[data-gap="true"] {
-	padding-top: var(--ecuc-lh);
-}
 .diff-cell {
 	flex: 1 1 auto;
 	min-width: 0;
@@ -172,6 +169,22 @@ body[data-page="diff"] .nav-btn:disabled {
 	background-color: var(--sel-bg);
 	outline: 1px solid var(--rail);
 	outline-offset: -1px;
+}
+/* Changed-word runs on a changed row. The pane's displayed side decides the
+ * colour, so a swap mirrors removed/inserted without touching the model. */
+.diff-row .word-changed[data-word-side="left"] {
+	background-color: var(--vscode-diffEditor-removedTextBackground, var(--diff-removed-bg));
+	outline: 1px solid var(--diff-removed-edge);
+}
+.diff-row .word-changed[data-word-side="right"] {
+	background-color: var(--vscode-diffEditor-insertedTextBackground, var(--diff-added-bg));
+	outline: 1px solid var(--diff-added-edge);
+}
+/* A search mark keeps its own background inside a changed word; the outline
+ * on the changed span stays visible around it. */
+.diff-row mark {
+	color: inherit;
+	background: var(--match-bg);
 }
 .diff-row:focus-visible > .diff-cell {
 	outline: 2px solid var(--rail);
@@ -226,6 +239,10 @@ body[data-page="diff"] .nav-btn:disabled {
 		outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
 		outline-offset: -1px;
 	}
+	.diff-row .word-changed[data-word-side] {
+		background: transparent;
+		outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
+	}
 }
 body.vscode-high-contrast .diff-row[data-status="changed"] > .diff-cell,
 body.vscode-high-contrast .diff-row[data-status="added"] > .diff-cell[data-side="right"],
@@ -243,6 +260,10 @@ body.vscode-high-contrast .diff-row:hover > .diff-cell {
 	background: transparent;
 	outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
 	outline-offset: -1px;
+}
+body.vscode-high-contrast .diff-row .word-changed[data-word-side] {
+	background: transparent;
+	outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
 }
 @media (max-width: 720px) {
 	.toolbar {

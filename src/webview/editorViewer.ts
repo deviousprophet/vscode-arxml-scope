@@ -389,11 +389,11 @@ function setSelection(id: string | undefined): void {
 			delete element.dataset.subtree;
 		}
 	}
-	for (const brace of (treeView ? treeView.getWindowElement() : tree).querySelectorAll('.brace')) {
-		if (brace.dataset.rowId !== undefined && subtreeIds.has(brace.dataset.rowId)) {
-			brace.dataset.subtree = 'true';
+	for (const structural of (treeView ? treeView.getWindowElement() : tree).querySelectorAll('.brace, .comment')) {
+		if (structural.dataset.rowId !== undefined && subtreeIds.has(structural.dataset.rowId)) {
+			structural.dataset.subtree = 'true';
 		} else {
-			delete brace.dataset.subtree;
+			delete structural.dataset.subtree;
 		}
 	}
 	updateInspector();
@@ -491,15 +491,7 @@ function onRowClick(event: any): void {
 	}
 	const item = event.target.closest('#tree [role="treeitem"]');
 	if (!item) {
-		const comment = event.target.closest('#tree .comment[data-row-id]');
-		if (comment) {
-			const id = comment.dataset.rowId;
-			const node = id === undefined ? undefined : renderedById.get(id);
-			if (id && node) {
-				selectItem(node);
-				syncSearchToSelection(id);
-			}
-		}
+		// Annotation rows are aria-hidden decoration: clicking one changes nothing.
 		return;
 	}
 	// One interaction, one effect: the twisty toggles without moving the selection,

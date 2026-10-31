@@ -6,11 +6,32 @@
  * definitions, so a label, value or meta chip cannot drift between them.
  */
 import type { EcucRow } from '../../../core/ecuc/renderRows';
-import { appendHighlighted, metaSpan, twistyIcon, valueSpan } from '../../render/rowView';
+import type { WordPair } from '../../../core/diff/wordDiff';
+import {
+	appendHighlighted,
+	appendMetaPartText,
+	metaSpan,
+	twistyIcon,
+	valueSpan,
+	type MetaPartWriter,
+	type PageElement,
+} from '../../render/rowView';
 
 export interface DocumentGuide {
 	level: number;
 	id: string;
+}
+
+/**
+ * Word-level changes for one changed diff row. Only the fields a changed row
+ * displays take part; an added or removed row supplies no word diff and keeps
+ * the full-cell tint.
+ */
+export interface DocumentWordDiff {
+	label?: WordPair;
+	value?: WordPair;
+	/** Keyed by meta class: `condition`, `variant` or `context`. */
+	meta?: Record<string, WordPair>;
 }
 
 export interface DocumentRowContext {
@@ -21,6 +42,9 @@ export interface DocumentRowContext {
 	subtreeIds: ReadonlySet<string>;
 	gap?: boolean;
 	guides?: readonly DocumentGuide[];
+	wordDiff?: DocumentWordDiff;
+	/** The displayed pane; the changed-word colour follows it after a swap. */
+	wordSide?: 'left' | 'right';
 }
 
 export function appendDocumentGuides(rowElement: HTMLElement, guides: readonly DocumentGuide[] | undefined): void {
@@ -36,6 +60,11 @@ export function appendDocumentGuides(rowElement: HTMLElement, guides: readonly D
 
 export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext): HTMLElement {
 	const inlineMeta = row.meta.filter((part) => part.cls !== 'annotation');
+	const wordDiff = context.wordDiff;
+	const wordSide = context.wordSide;
+	const writePlain = (target: PageElement, text: string): void => {
+		appendHighlighted(target, text);
+	};
 	const node = document.createElement('div');
 	node.className = inlineMeta.length > 0 ? 'node has-meta' : 'node';
 	node.setAttribute('role', 'treeitem');
@@ -85,13 +114,34 @@ export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext):
 	}
 	const label = document.createElement('span');
 	label.className = 'label';
-	appendHighlighted(label, row.label);
+	if (!appendWordSegments(label, wordDiff && wordDiff.label, wordSide, writePlain)) {
+		appendHighlighted(label, row.label);
+	}
 	rowElement.appendChild(label);
 	if (row.kind === 'parameter' || row.kind === 'reference') {
-		rowElement.appendChild(valueSpan(row));
+		rowElement.appendChild(
+			valueSpan(row, false, undefined, (target, text) => {
+				if (!appendWordSegments(target, wordDiff && wordDiff.value, wordSide, writePlain)) {
+					appendHighlighted(target, text);
+				}
+			})
+		);
 	}
 	if (inlineMeta.length > 0) {
-		rowElement.appendChild(metaSpan({ ...row, meta: inlineMeta }));
+		const counts = new Map<string, number>();
+		for (const part of inlineMeta) {
+			counts.set(part.cls, (counts.get(part.cls) || 0) + 1);
+		}
+		const writePart: MetaPartWriter = (span, part) => {
+			const pair = wordDiff && wordDiff.meta ? wordDiff.meta[part.cls] : undefined;
+			if (!pair || !wordSide || counts.get(part.cls) !== 1) {
+				return false;
+			}
+			return appendWordSegments(span, pair, wordSide, (target, text) =>
+				appendMetaPartText(target, { cls: part.cls, text })
+			);
+		};
+		rowElement.appendChild(metaSpan({ ...row, meta: inlineMeta }, undefined, writePart));
 	}
 	if (row.disabled) {
 		const suffix = document.createElement('span');
@@ -102,6 +152,36 @@ export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext):
 	appendDocumentGuides(rowElement, context.guides);
 	node.appendChild(rowElement);
 	return node;
+}
+
+/**
+ * Writes one field through a word pair. Unchanged runs use the field's normal
+ * writer (syntax colours and search marks); changed runs become a
+ * `.word-changed` span on the displayed side. Returns false when no pair is
+ * available, so the caller can fall back to the plain text.
+ */
+function appendWordSegments(
+	parent: PageElement,
+	pair: WordPair | undefined,
+	side: 'left' | 'right' | undefined,
+	writePlain: (target: PageElement, text: string) => void
+): boolean {
+	if (!pair || !side) {
+		return false;
+	}
+	const segments = side === 'left' ? pair.left : pair.right;
+	for (const segment of segments) {
+		if (!segment.changed) {
+			writePlain(parent, segment.text);
+			continue;
+		}
+		const span = document.createElement('span');
+		span.className = 'word-changed';
+		span.dataset.wordSide = side;
+		appendHighlighted(span, segment.text);
+		parent.appendChild(span);
+	}
+	return true;
 }
 
 export function twistySpan(): HTMLElement {
@@ -147,6 +227,9 @@ export function buildDocumentCommentRow(
 	node.className = 'comment';
 	node.setAttribute('aria-hidden', 'true');
 	node.dataset.rowId = rowId;
+	if (context.subtreeIds.has(rowId)) {
+		node.dataset.subtree = 'true';
+	}
 	if (context.gap) {
 		node.dataset.gap = 'true';
 	}
