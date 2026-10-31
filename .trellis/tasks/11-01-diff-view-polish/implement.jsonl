@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/components/component-document-tree.md", "reason": "Header ownership, virtual scroll math and row rendering contract"}
+{"file": ".trellis/spec/frontend/components/component-diff-view.md", "reason": "Pane rendering, swap and row status contract"}
+{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Diff tint, word highlight and contrast rules"}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Pure and page test conventions"}
