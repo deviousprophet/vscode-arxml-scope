@@ -29,7 +29,8 @@ src/test/webview/components/sidebar.test.ts
 ## Tests Required
 
 `src/test/webview/components/sidebar.test.ts`: tab switching, resizer, details/conditions parity,
-no global state reads.
+no global state reads. `src/test/webview/components/conditionsPanel.test.ts` covers the nested
+panel validation and callback.
 
 ## Anti-patterns
 

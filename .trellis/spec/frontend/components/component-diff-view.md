@@ -6,7 +6,8 @@
 
 Owns `src/webview/components/diffView/` (`diffView.ts`, `diffViewRender.ts`, `diffView.css`): the
 50/50 pane grid, two `DocumentTreeView` instances, pane headers, synchronized vertical/horizontal
-offsets and the diff toolbar slot. Host owns the diff model, view mode, selection, search and status.
+offsets and the diff toolbar slot. `diffViewRender.ts` is the pure body markup; `diffView.ts` is
+the mount/sync controller. Host owns the diff model, view mode, selection, search and status.
 
 ## Layout
 
@@ -29,11 +30,13 @@ interface DiffViewCallbacks {
 class DiffView {
     constructor(callbacks?: DiffViewCallbacks);
     mount(): void;
-    setDocument(document: DiffDocument): void;
-    setViewMode(mode: 'all' | 'diff'): void;
-    swap(): void;
+    syncPanes(pane: 'left' | 'right', top: number, left: number): void;
+    render(force: boolean): void;
+    setModel(model: any): void;
+    setContentWidth(width: number): void;
     setScrollTop(top: number): void;
     setScrollLeft(left: number): void;
+    resetHorizontal(): void;
 }
 ```
 

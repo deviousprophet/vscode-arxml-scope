@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Target runtime and module ownership"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Webview rendering and interaction contracts"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "CSP, escaping and forbidden patterns"}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Page and component test conventions"}
