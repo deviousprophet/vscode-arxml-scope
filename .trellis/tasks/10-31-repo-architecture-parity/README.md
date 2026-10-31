@@ -51,12 +51,13 @@ Hex Scope is the structural reference, not a source to paste. For every copied i
   ECUC large-file benchmark suite, CT `Benchmarks` job, typed benchmark summaries,
   test workspace/temp-dir fixes, line-by-line `.vscodeignore` audit (`vsce ls` = 11
   runtime files), root config alignment.
-- `10-31-trellis-docs-spec-parity` — **in progress**: `css-guidelines.md`,
-  `editor-lifecycle.md`, real `type-safety.md`, component spec completion, `docs/`,
-  `examples/`, README trim.
+- `10-31-trellis-docs-spec-parity` — **done** (`5e87171`): `css-guidelines.md`,
+  `editor-lifecycle.md`, real `type-safety.md`, all 9 component specs completed and
+  indexed, `docs/` + `examples/` with ECUC content, README reduced to a 47-line
+  landing page, stale architecture claims removed from the guides.
 - No `scripts/` folder exists.
 - Benchmark suite and benchmark CI job exist.
-- Next work: finish the docs/spec child, then final integration review and parent archive.
+- Next work: final integration review, code review, and parent archive.
 
 ## Status rule
 

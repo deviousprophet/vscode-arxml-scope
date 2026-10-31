@@ -32,15 +32,27 @@ asset or remove the copied reference. Never keep a copied path because it exists
 
 | Reference | Status |
 |---|---|
-| `.vscodeignore` | Audited line-by-line against Hex: dropped `.yarnrc`, `vsc-extension-quickstart.md`, `images/demo.gif` and the Hex re-includes; added `package-lock.json` and `.gitattributes`. `vsce ls` lists only the 11 runtime files |
+| `.vscodeignore` | Audited line-by-line against Hex: dropped `.yarnrc`, `vsc-extension-quickstart.md`, `images/demo.gif` and the Hex re-includes; added `package-lock.json` and `.gitattributes`. `vsce ls` lists the runtime files plus the intentional `docs/` and `examples/` documentation assets; no Hex-only path ships |
 | `images/demo.gif` in `.vscodeignore` | Removed — the file does not exist in ARXML Scope |
 | Root `scripts/` references | Removed with the scripts folder. `.github/scripts/`, `.trellis/scripts/` and `.agents/skills/*/scripts/` are real, ARXML/Trellis-owned paths |
-| `docs/`, `examples/`, `schemas/`, `syntaxes/` | Not present; do not create empty copies |
-| Hex parser/memory/overlay/profile/scripting terms | No source references found |
+| `docs/`, `examples/`, `schemas/`, `syntaxes/` | `docs/` now holds `README.md`, `ECUC_EDITOR.md` and `DIFF.md`; `examples/` holds `README.md` and the synthetic `synthetic-ecuc.arxml`. Both are real ECUC content, not Hex-shaped stubs. `schemas/` and `syntaxes/` remain intentionally absent: there is no shipped schema or grammar |
+| Hex parser/memory/overlay/profile/scripting terms | No source references found; the remaining spec wording now says “VS Code-style” instead of naming Hex Scope |
 | `src/test/benchmarks/` | Added `runBenchmark.ts` + `ecucLargeFileBenchmark.ts` (ECUC scan/rows/diff); `.fallowrc.json` entry added |
-| `.trellis/spec/frontend/directory-structure.md:52` | Stale: references `scripts/copy-webview-css.cjs`, which does not exist. Docs/spec child must remove it and add `src/test/benchmarks/` to the layout |
-| `.trellis/spec/frontend/testing.md` "Samples and benchmarks are evidence" | Stale: says the benchmark was removed; `npm run benchmark` and the CT `Benchmarks` job now run `ecucLargeFileBenchmark.ts`. Docs/spec child must update it |
+| `.trellis/spec/frontend/directory-structure.md:52` | **Resolved in `a6ef172`**: the `scripts/copy-webview-css.cjs` reference is gone; the layout now lists `dist/`/`out/` bundles and `src/test/benchmarks/`. Verified by the docs/spec child against the current tree |
+| `.trellis/spec/frontend/testing.md` "Samples and benchmarks are evidence" | **Resolved in `a6ef172`**: the benchmark paragraph now describes `npm run benchmark`, `ecucLargeFileBenchmark.ts`, the CT `Benchmarks` job and the JSON summary lines. Verified by the docs/spec child |
 | `package-lock.json` `esrecurse` entries | False positive: the dependency name contains the `srec` substring. ARXML-owned file, no action |
+
+## Additional findings resolved by the docs/spec child
+
+| Reference | Resolution |
+|---|---|
+| `.trellis/spec/frontend/component-guidelines.md`, `quality-guidelines.md`, `state-management.md`, `components/component-details-editor.md` | The re-scan payload was written as `{ type: 'model', rows, selectedId }`. The protocol has always been `{ type: 'document', document: { rows, selectedId, header } }`; every reference now matches `src/webviewProtocol.ts` and the page handlers |
+| `.trellis/spec/frontend/directory-structure.md` render/style listing | Listed `render/html.ts`, `render/jsonScript.ts` and `styles/index.ts`, none of which exist. Corrected to `render/dom.ts`, `render/pageError.ts`, the real render helpers and `styles/tokens.css` + `base.css` |
+| `.trellis/spec/frontend/components/component-diff-view.md` | Replaced the copied `setModel(model: any)` placeholder with the real `DocumentTreeViewModel` contract and removed the “matching Hex Scope” comparison |
+| `.trellis/spec/frontend/hook-guidelines.md` | Was a template with five “(To be filled by the team)” sections. Replaced with the real contract: no web framework, no hooks; component classes, imported pure modules and host modules are the equivalents |
+| `.trellis/spec/frontend/{component-guidelines,testing,state-management,quality-guidelines,type-safety}.md` | **Resolved by the docs/spec child**: the pages are a static `editorShell`/`diffShell` plus an esbuild bundle, not `renderHtml` with serialized `toString()` helpers. The stale `renderHtml` / `scriptTestUtils` / `virtualScrollScript` wording was replaced with the real modules and the jsdom-bundled page tests |
+| `.trellis/spec/frontend/components/index.md` | Replaced the two “to fill during extraction” rows with links to the existing ContextMenu and DetailsEditor specs and listed every component folder |
+| `.trellis/spec/frontend/index.md` | Added CSS Guidelines and Editor Lifecycle, marked Type Safety `Filled`, linked the guides index, and removed the `To fill` status |
 
 ## Gate
 
