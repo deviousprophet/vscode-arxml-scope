@@ -11,6 +11,7 @@ const ICONS = {
   timer: "\u23f1",
   clipboard: "\u{1F4CB}",
   log: "\u{1FAB5}",
+  zap: "\u26A1",
 };
 
 function appendSummary(markdown) {
@@ -29,6 +30,10 @@ function tailLines(logText, count) {
 function readLog() {
   return existsSync(logFile) ? readFileSync(logFile, "utf8") : "";
 }
+
+// ---------------------------------------------------------------------------
+// Mocha format
+// ---------------------------------------------------------------------------
 
 function firstNumber(pattern, text) {
   const match = pattern.exec(text);
@@ -57,6 +62,10 @@ function parseMochaStats(logText) {
   const fail = firstNumber(/([0-9]+) failing/, logText);
   const duration = passingDuration(logText);
   return { pass, fail, duration, total: pass + fail };
+}
+
+function hasMochaOutput(logText) {
+  return /[0-9]+ passing \([^)]+\)/.test(logText) || /[0-9]+ failing/.test(logText);
 }
 
 function testsDidNotRun(total) {
@@ -132,6 +141,15 @@ ${tailLines(logText, 30)}
 
 function summarizeMocha() {
   const logText = readLog();
+
+  // A benchmark log contains typed JSON records and no Mocha output; the typed
+  // summary below renders it, so an empty Mocha header would only be noise.
+  // A test log that failed before Mocha printed anything still renders the
+  // "tests were not executed" header and its tail below.
+  if (groupByType(logText).size > 0 && !hasMochaOutput(logText)) {
+    return;
+  }
+
   const stats = parseMochaStats(logText);
 
   // A successful run with no tests is not expected for this repository, but
@@ -145,4 +163,143 @@ function summarizeMocha() {
   renderMochaMissingRun(logText, stats.total);
 }
 
+// ---------------------------------------------------------------------------
+// Typed benchmark registry — a new benchmark type needs one renderer here
+// ---------------------------------------------------------------------------
+
+function tryParseJsonLine(line) {
+  // `trim` also drops a leading BOM, which `JSON.parse` rejects.
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("{")) {
+    return null;
+  }
+  try { return JSON.parse(trimmed); } catch { return null; }
+}
+
+function groupEntry(groups, line) {
+  const entry = tryParseJsonLine(line);
+  if (!entry || typeof entry._type !== "string") {
+    return;
+  }
+  if (!groups.has(entry._type)) {
+    groups.set(entry._type, []);
+  }
+  groups.get(entry._type).push(entry);
+}
+
+/** Group parsed log lines by _type. Lines without _type are ignored here. */
+function groupByType(logText) {
+  const groups = new Map();
+  logText.split(/\r?\n/).forEach(line => groupEntry(groups, line));
+  return groups;
+}
+
+function statusBadge() {
+  return runTestsOutcome === "success"
+    ? `${ICONS.passed} Passed`
+    : `${ICONS.failed} Failed`;
+}
+
+function renderFailureTail(logText) {
+  if (runTestsOutcome === "success" || !logText) {
+    return;
+  }
+  appendSummary(`
+<details>
+<summary>${ICONS.failed} Failure output</summary>
+
+\`\`\`
+${tailLines(logText, 40)}
+\`\`\`
+
+</details>
+`);
+}
+
+// -- Renderers registered by _type ------------------------------------------
+
+const registry = new Map();
+
+registry.set("large-file-load", (records) => {
+  const header = `| Name | Source (MiB) | Records | Elapsed (ms) | Retained (MiB) |
+|---|---:|---:|---:|---:|
+`;
+  const rows = records.map(r =>
+    `| ${[r.name, r.sourceMiB, r.records, r.elapsedMs, r.retainedMiB].map(v => v ?? "").join(" | ")} |\n`
+  ).join("");
+  return { body: `${header}${rows}\n` };
+});
+
+registry.set("large-file-summary", (records) => {
+  const s = records[0];
+  if (!s) {
+    return { body: "" };
+  }
+  return { body: `${ICONS.clipboard} Concurrent retained: **${s.concurrentRetainedMiB} MiB** (documents: ${s.documents?.join(", ") ?? ""})\n\n` };
+});
+
+registry.set("memory-release", (records) => {
+  const m = records[0];
+  if (!m) {
+    return { body: `${ICONS.failed} No measurement found.\n\n` };
+  }
+  return {
+    body: `| Baseline | Opened | Closed | Allocated | Retained |
+|---:|---:|---:|---:|---:|
+| ${m.baseline} | ${m.opened} | ${m.closed} | ${m.allocated} | ${m.retained} |
+
+`
+  };
+});
+
+// -- Typed-summary driver ---------------------------------------------------
+
+function renderUnknownType(type, records) {
+  return {
+    body: `\n<details>\n<summary>\`${type}\` (unknown benchmark type)</summary>\n\n\`\`\`json\n${records.map(r => JSON.stringify(r, null, 2)).join("\n")}\n\`\`\`\n\n</details>\n`
+  };
+}
+
+function typeDisplayName(type) {
+  return type
+    .split("-")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function renderTypedGroup(type, records, logText) {
+  const renderer = registry.get(type);
+  const { header = "", body = "" } = renderer
+    ? renderer(records, logText)
+    : renderUnknownType(type, records);
+  const text = `## ${typeDisplayName(type)}
+
+${statusBadge()}
+
+${header}${body}`;
+  if (text.trim()) {
+    appendSummary(text);
+  }
+}
+
+function summarizeTyped() {
+  const logText = readLog();
+  const groups = groupByType(logText);
+
+  if (groups.size === 0) {
+    return;
+  }
+
+  appendSummary(`\n---\n# ${ICONS.zap} Benchmark\n`);
+  for (const [type, records] of groups) {
+    renderTypedGroup(type, records, logText);
+  }
+  renderFailureTail(logText);
+}
+
+// ---------------------------------------------------------------------------
+// Main dispatch
+// ---------------------------------------------------------------------------
+
 summarizeMocha();
+summarizeTyped();

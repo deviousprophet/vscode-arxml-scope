@@ -45,9 +45,39 @@ jobs:
           name: unit-test-output-${{ github.sha }}
           overwrite: true
 
+  Benchmarks:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run All Benchmarks
+        id: run-benchmarks
+        run: |
+          set -o pipefail
+          npm run benchmark -- --continue 2>&1 | tee benchmark-output.log
+
+      - name: Upload Benchmark Results Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          path: benchmark-output.log
+          name: benchmark-output-${{ github.sha }}
+          overwrite: true
+
   Finalize:
     name: Finalize Workflow
-    needs: [UT_Test]
+    needs: [UT_Test, Benchmarks]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -57,11 +87,23 @@ jobs:
       - name: Check Job Results
         run: |
           UT_RESULT="${{ needs.UT_Test.result }}"
+          BENCHMARK_RESULT="${{ needs.Benchmarks.result }}"
+          FAILED=false
           if [[ "$UT_RESULT" != "success" ]]; then
             echo "Unit Test job: $UT_RESULT"
+            FAILED=true
+          else
+            echo "Unit Test job: $UT_RESULT"
+          fi
+          if [[ "$BENCHMARK_RESULT" != "success" ]]; then
+            echo "Benchmarks job: $BENCHMARK_RESULT"
+            FAILED=true
+          else
+            echo "Benchmarks job: $BENCHMARK_RESULT"
+          fi
+          if [[ "$FAILED" == "true" ]]; then
             exit 1
           fi
-          echo "Unit Test job: $UT_RESULT"
 
       - name: Download UT Test Log
         if: always()
@@ -70,10 +112,25 @@ jobs:
           name: unit-test-output-${{ github.sha }}
           path: .
 
+      - name: Download Benchmark Log
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-output-${{ github.sha }}
+          path: .
+
       - name: Unit Test Summary
         if: always()
         env:
           RUN_TESTS_OUTCOME: ${{ needs.UT_Test.outputs.run-tests-outcome }}
           LOG_FILE: unit-test-output.log
           SUITE_NAME: Unit Test Results
+        run: node .github/scripts/summarize-tests.mjs
+
+      - name: Benchmark Summary
+        if: always()
+        env:
+          RUN_TESTS_OUTCOME: ${{ needs.Benchmarks.result }}
+          LOG_FILE: benchmark-output.log
+          SUITE_NAME: Benchmark
         run: node .github/scripts/summarize-tests.mjs

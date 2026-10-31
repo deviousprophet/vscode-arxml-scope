@@ -1,0 +1,36 @@
+/* The one row context menu; coordinates come from a nonce stylesheet. */
+.row-menu {
+	position: fixed;
+	z-index: 40;
+	min-width: 150px;
+	padding: 4px;
+	border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, transparent));
+	border-radius: 5px;
+	background: var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
+	box-shadow: 0 4px 14px var(--vscode-widget-shadow, transparent);
+}
+.row-menu[hidden] {
+	display: none;
+}
+.row-menu-item {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	padding: 4px 10px;
+	border: 0;
+	border-radius: 3px;
+	background: transparent;
+	color: var(--vscode-menu-foreground, var(--vscode-foreground));
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.row-menu-item:hover,
+.row-menu-item:focus-visible {
+	background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
+	color: var(--vscode-menu-selectionForeground, var(--vscode-foreground));
+	outline: none;
+}
+.row-menu-item[data-action="delete"] {
+	color: var(--vscode-errorForeground, var(--vscode-menu-foreground, var(--vscode-foreground)));
+}

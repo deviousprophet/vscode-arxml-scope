@@ -1,0 +1,282 @@
+/*
+ * The two-pane comparison surface. Diff status is a render input owned by the
+ * composition root; the panes themselves are DocumentTree components.
+ */
+body[data-page="diff"] {
+	--diff-added-bg: var(--vscode-diffEditor-insertedLineBackground, var(--vscode-diffEditor-insertedTextBackground, transparent));
+	--diff-removed-bg: var(--vscode-diffEditor-removedLineBackground, var(--vscode-diffEditor-removedTextBackground, transparent));
+	--diff-changed-bg: var(--vscode-diffEditor-modifiedTextBackground, var(--vscode-editor-findMatchHighlightBackground, transparent));
+	--diff-added-edge: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-editorInfo-foreground, currentColor));
+	--diff-removed-edge: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-editorError-foreground, currentColor));
+	--diff-changed-edge: var(--vscode-gitDecoration-modifiedResourceForeground, var(--vscode-editorWarning-foreground, currentColor));
+}
+body[data-page="diff"] .toolbar {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: center;
+}
+.view-switch {
+	display: flex;
+	flex: none;
+	gap: 2px;
+}
+.view-tool[aria-pressed="true"],
+.icon-tool[aria-pressed="true"] {
+	color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+	background: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
+}
+body[data-page="diff"] .tool {
+	height: 22px;
+}
+body[data-page="diff"] .search-input {
+	height: 22px;
+	color: var(--vscode-input-foreground, var(--vscode-foreground));
+	background: var(--vscode-input-background, transparent);
+	border-color: var(--vscode-input-border, var(--vscode-panel-border, transparent));
+}
+body[data-page="diff"] .search-box .search-nav {
+	height: 22px;
+}
+body[data-page="diff"] .nav-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 22px;
+	padding: 0;
+	color: var(--tok-dim);
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	cursor: pointer;
+}
+body[data-page="diff"] .nav-btn:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground, transparent));
+	border-color: var(--vscode-panel-border, transparent);
+}
+body[data-page="diff"] .nav-btn:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+body[data-page="diff"] .nav-btn:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+.notice {
+	padding: 0 8px;
+	min-height: 18px;
+	font-size: 12px;
+	line-height: 18px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--tok-dim);
+}
+.notice:empty {
+	display: none;
+}
+.notice[data-kind="warn"] {
+	color: var(--vscode-editorWarning-foreground, var(--tok-dim));
+}
+#diff-body {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+}
+#diff-list {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	grid-auto-rows: minmax(0, 1fr);
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+}
+#diff-list[hidden] {
+	display: none;
+}
+.diff-pane {
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.diff-pane + .diff-pane {
+	border-left: 3px solid var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
+	box-shadow: none;
+}
+#diff-pane-right .document-tree-scroll {
+	overflow-y: hidden;
+}
+.diff-pane .document-tree-header {
+	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+#diff-measure {
+	position: absolute;
+	left: -10000px;
+	top: 0;
+	width: 240px;
+	visibility: hidden;
+	pointer-events: none;
+}
+.ch-probe {
+	position: absolute;
+	left: 0;
+	top: 0;
+	white-space: pre;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	font-weight: var(--vscode-editor-font-weight, normal);
+}
+.diff-row {
+	position: relative;
+	display: flex;
+	align-items: stretch;
+	outline: none;
+}
+.diff-cell {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: var(--ecuc-lh);
+	padding: 0;
+	box-sizing: border-box;
+}
+.diff-row:hover > .diff-cell {
+	background-color: var(--hover-bg);
+}
+.diff-row[data-status="changed"] > .diff-cell {
+	background-color: var(--diff-changed-bg);
+}
+.diff-row[data-status="added"] > .diff-cell[data-side="right"] {
+	background-color: var(--diff-added-bg);
+}
+.diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
+	background-color: var(--diff-removed-bg);
+}
+.diff-row[data-status="changed"] > .diff-cell[data-side="left"] {
+	box-shadow: inset 3px 0 0 var(--diff-changed-edge);
+}
+.diff-row[data-status="changed"] > .diff-cell[data-side="right"] {
+	box-shadow: inset -3px 0 0 var(--diff-changed-edge);
+}
+.diff-row[data-status="added"] > .diff-cell[data-side="right"] {
+	box-shadow: inset -3px 0 0 var(--diff-added-edge);
+}
+.diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
+	box-shadow: inset 3px 0 0 var(--diff-removed-edge);
+}
+.diff-row[data-selected="true"] > .diff-cell {
+	background-color: var(--sel-bg);
+	outline: 1px solid var(--rail);
+	outline-offset: -1px;
+}
+/* Changed-word runs on a changed row. The pane's displayed side decides the
+ * colour, so a swap mirrors removed/inserted without touching the model. */
+.diff-row .word-changed[data-word-side="left"] {
+	background-color: var(--vscode-diffEditor-removedTextBackground, var(--diff-removed-bg));
+	outline: 1px solid var(--diff-removed-edge);
+}
+.diff-row .word-changed[data-word-side="right"] {
+	background-color: var(--vscode-diffEditor-insertedTextBackground, var(--diff-added-bg));
+	outline: 1px solid var(--diff-added-edge);
+}
+.diff-row:focus-visible > .diff-cell {
+	outline: 2px solid var(--rail);
+	outline-offset: -2px;
+}
+.diff-cell[data-empty="true"] {
+	background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--vscode-editorGroup-border, transparent) 6px 7px);
+}
+.diff-row[data-search-current="true"] .diff-cell mark {
+	background: var(--match-hi);
+}
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
+.empty {
+	padding: 6px 10px;
+	color: var(--tok-comment);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
+	font-style: italic;
+}
+.empty[hidden] {
+	display: none;
+}
+.empty p {
+	margin: 0;
+}
+@media (forced-colors: active) {
+	.diff-row[data-status="changed"] > .diff-cell,
+	.diff-row[data-status="added"] > .diff-cell[data-side="right"],
+	.diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
+		background: transparent;
+		outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
+		outline-offset: -1px;
+	}
+	.diff-row[data-selected="true"] > .diff-cell {
+		background: transparent;
+		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
+		outline-offset: -1px;
+	}
+	.diff-row:hover > .diff-cell {
+		background: transparent;
+		outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
+		outline-offset: -1px;
+	}
+	.diff-row .word-changed[data-word-side] {
+		background: transparent;
+		outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
+	}
+}
+body.vscode-high-contrast .diff-row[data-status="changed"] > .diff-cell,
+body.vscode-high-contrast .diff-row[data-status="added"] > .diff-cell[data-side="right"],
+body.vscode-high-contrast .diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
+	background: transparent;
+	outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
+	outline-offset: -1px;
+}
+body.vscode-high-contrast .diff-row[data-selected="true"] > .diff-cell {
+	background: transparent;
+	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
+	outline-offset: -1px;
+}
+body.vscode-high-contrast .diff-row:hover > .diff-cell {
+	background: transparent;
+	outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
+	outline-offset: -1px;
+}
+body.vscode-high-contrast .diff-row .word-changed[data-word-side] {
+	background: transparent;
+	outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
+}
+@media (max-width: 720px) {
+	.toolbar {
+		padding: 0 4px;
+		gap: 3px;
+	}
+	.search-field {
+		flex: 1 1 0;
+	}
+	.notice,
+	.icon-tool .lbl {
+		display: none;
+	}
+	.tool {
+		padding: 0 4px;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.twisty svg {
+		transition: none;
+	}
+}

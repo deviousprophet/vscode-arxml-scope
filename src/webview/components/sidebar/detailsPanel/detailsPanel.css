@@ -1,0 +1,74 @@
+/* The Details panel body: one section, data-fed fields, no row DOM reads. */
+#inspector {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	padding: 0;
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+.inspector-empty {
+	padding: 6px 0;
+	color: var(--tok-dim);
+}
+.inspector-empty p {
+	margin: 0 0 6px;
+}
+.inspector-hint {
+	font-size: 0.9em;
+}
+.inspector-kind {
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 11px;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--tok-dim);
+}
+.inspector-label {
+	margin: 2px 0 10px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	font-weight: 600;
+	word-break: break-word;
+}
+.inspector-row {
+	margin: 0 0 9px;
+}
+.inspector-key {
+	display: block;
+	margin-bottom: 2px;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 11px;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--tok-dim);
+}
+.inspector-code {
+	margin: 0;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: 1.4;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.condition-code {
+	white-space: pre-wrap;
+}
+.inspector-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 12px;
+}
+.details-status {
+	flex: none;
+	padding: 4px 8px;
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	font-size: 11px;
+	color: var(--vscode-editorWarning-foreground, var(--vscode-descriptionForeground));
+}
+.details-status:empty {
+	display: none;
+}

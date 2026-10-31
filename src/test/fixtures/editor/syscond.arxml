@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic SW-SYSCOND fixture: every disable rule of the conditions child design. -->
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+    <AR-PACKAGES>
+        <AR-PACKAGE>
+            <SHORT-NAME>Pkg</SHORT-NAME>
+            <ELEMENTS>
+                <ECUC-MODULE-CONFIGURATION-VALUES>
+                    <SHORT-NAME>ModX</SHORT-NAME>
+                    <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/ModDefs/ModX</DEFINITION-REF>
+                    <CONTAINERS>
+                        <ECUC-CONTAINER-VALUE>
+                            <SHORT-NAME>ContA</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/ModDefs/ModX/ContA</DEFINITION-REF>
+                            <PARAMETER-VALUES>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModX/ContA/SelfOff</DEFINITION-REF>
+                                    <VALUE>1</VALUE>
+                                    <VARIATION-POINT>
+                                        <SW-SYSCOND>(CANIPCORETYPE_SC==0)</SW-SYSCOND>
+                                    </VARIATION-POINT>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModX/ContA/Sibling</DEFINITION-REF>
+                                    <VALUE>2</VALUE>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModX/ContA/LiteralOff</DEFINITION-REF>
+                                    <VALUE>3</VALUE>
+                                    <VARIATION-POINT>
+                                        <SW-SYSCOND>(1==0)</SW-SYSCOND>
+                                    </VARIATION-POINT>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModX/ContA/Missing</DEFINITION-REF>
+                                    <VALUE>4</VALUE>
+                                    <VARIATION-POINT>
+                                        <SW-SYSCOND>(MISSING_SC==1)</SW-SYSCOND>
+                                    </VARIATION-POINT>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModX/ContA/Malformed</DEFINITION-REF>
+                                    <VALUE>5</VALUE>
+                                    <VARIATION-POINT>
+                                        <SW-SYSCOND>(A==</SW-SYSCOND>
+                                    </VARIATION-POINT>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModX/ContA/TrueCond</DEFINITION-REF>
+                                    <VALUE>6</VALUE>
+                                    <VARIATION-POINT>
+                                        <SW-SYSCOND>(CANIPCORETYPE_SC==1)</SW-SYSCOND>
+                                    </VARIATION-POINT>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                            </PARAMETER-VALUES>
+                            <REFERENCE-VALUES>
+                                <ECUC-REFERENCE-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/Pkg/ModDefs/ModX/ContA/RefOff</DEFINITION-REF>
+                                    <VALUE-REF DEST="ECUC-CONTAINER-VALUE">/Pkg/ModX/ContB</VALUE-REF>
+                                    <VARIATION-POINT>
+                                        <SW-SYSCOND>(CANIPCORETYPE_SC==0)</SW-SYSCOND>
+                                    </VARIATION-POINT>
+                                </ECUC-REFERENCE-VALUE>
+                            </REFERENCE-VALUES>
+                            <SUB-CONTAINERS>
+                                <ECUC-CONTAINER-VALUE>
+                                    <SHORT-NAME>ContB</SHORT-NAME>
+                                    <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/ModDefs/ModX/ContB</DEFINITION-REF>
+                                    <VARIATION-POINT>
+                                        <SW-SYSCOND>(CANIPCORETYPE_SC==0)</SW-SYSCOND>
+                                    </VARIATION-POINT>
+                                    <PARAMETER-VALUES>
+                                        <ECUC-NUMERICAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModX/ContB/InsideNoCond</DEFINITION-REF>
+                                            <VALUE>7</VALUE>
+                                        </ECUC-NUMERICAL-PARAM-VALUE>
+                                        <ECUC-NUMERICAL-PARAM-VALUE>
+                                            <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModX/ContB/InsideTrue</DEFINITION-REF>
+                                            <VALUE>8</VALUE>
+                                            <VARIATION-POINT>
+                                                <SW-SYSCOND>(CANIPCORETYPE_SC==1)</SW-SYSCOND>
+                                            </VARIATION-POINT>
+                                        </ECUC-NUMERICAL-PARAM-VALUE>
+                                    </PARAMETER-VALUES>
+                                </ECUC-CONTAINER-VALUE>
+                            </SUB-CONTAINERS>
+                        </ECUC-CONTAINER-VALUE>
+                        <ECUC-CONTAINER-VALUE>
+                            <SHORT-NAME>ContTrue</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/ModDefs/ModX/ContTrue</DEFINITION-REF>
+                            <VARIATION-POINT>
+                                <SW-SYSCOND>(CANIPCORETYPE_SC==1)</SW-SYSCOND>
+                            </VARIATION-POINT>
+                            <PARAMETER-VALUES>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModX/ContTrue/Plain</DEFINITION-REF>
+                                    <VALUE>9</VALUE>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                            </PARAMETER-VALUES>
+                        </ECUC-CONTAINER-VALUE>
+                    </CONTAINERS>
+                </ECUC-MODULE-CONFIGURATION-VALUES>
+                <ECUC-MODULE-CONFIGURATION-VALUES>
+                    <SHORT-NAME>ModCond</SHORT-NAME>
+                    <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/ModDefs/ModCond</DEFINITION-REF>
+                    <VARIATION-POINT>
+                        <SW-SYSCOND>(CANIPCORETYPE_SC==0)</SW-SYSCOND>
+                    </VARIATION-POINT>
+                    <CONTAINERS>
+                        <ECUC-CONTAINER-VALUE>
+                            <SHORT-NAME>UnderMod</SHORT-NAME>
+                            <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/ModDefs/ModCond/UnderMod</DEFINITION-REF>
+                            <PARAMETER-VALUES>
+                                <ECUC-NUMERICAL-PARAM-VALUE>
+                                    <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModDefs/ModCond/UnderMod/UnderModParam</DEFINITION-REF>
+                                    <VALUE>10</VALUE>
+                                </ECUC-NUMERICAL-PARAM-VALUE>
+                            </PARAMETER-VALUES>
+                        </ECUC-CONTAINER-VALUE>
+                    </CONTAINERS>
+                </ECUC-MODULE-CONFIGURATION-VALUES>
+            </ELEMENTS>
+        </AR-PACKAGE>
+    </AR-PACKAGES>
+</AUTOSAR>

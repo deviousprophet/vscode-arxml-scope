@@ -34,6 +34,21 @@
         "command": "vscode-arxml-scope.revealInEcucEditor",
         "title": "Reveal in ECUC Editor",
         "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.selectAsFirst",
+        "title": "Select as First File to Compare",
+        "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.compareToStaged",
+        "title": "Compare with First File",
+        "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.compareSelected",
+        "title": "Compare Two ARXML Files…",
+        "category": "ARXML Scope"
       }
     ],
     "customEditors": [
@@ -48,15 +63,28 @@
         "priority": "option"
       }
     ],
+    "submenus": [
+      {
+        "id": "arxmlScope.actions",
+        "label": "ARXML Scope"
+      }
+    ],
     "menus": {
       "explorer/context": [
         {
-          "command": "vscode-arxml-scope.openEcucEditor",
+          "submenu": "arxmlScope.actions",
           "when": "resourceExtname == .arxml",
           "group": "navigation"
         }
       ],
       "editor/context": [
+        {
+          "submenu": "arxmlScope.actions",
+          "when": "resourceExtname == .arxml && activeCustomEditorId != 'vscode-arxml-scope.ecucEditor'",
+          "group": "navigation"
+        }
+      ],
+      "arxmlScope.actions": [
         {
           "command": "vscode-arxml-scope.openEcucEditor",
           "when": "resourceExtname == .arxml",
@@ -64,7 +92,22 @@
         },
         {
           "command": "vscode-arxml-scope.revealInEcucEditor",
-          "when": "resourceExtname == .arxml",
+          "when": "resourceExtname == .arxml && activeCustomEditorId != 'vscode-arxml-scope.ecucEditor' && editorTextFocus",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-arxml-scope.selectAsFirst",
+          "when": "resourceExtname == .arxml && !listMultiSelection && explorerViewletFocus",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-arxml-scope.compareToStaged",
+          "when": "resourceExtname == .arxml && !listMultiSelection && explorerViewletFocus && arxmlScope.hasCompareSelection",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-arxml-scope.compareSelected",
+          "when": "resourceExtname == .arxml && listDoubleSelection && explorerViewletFocus",
           "group": "navigation"
         }
       ]
@@ -124,25 +167,28 @@
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production && node scripts/check-webview-boot.cjs",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "node eslint-rules/require-escaped-html.test.mjs && eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "benchmark": "node src/test/benchmarks/runBenchmark.ts"
   },
   "devDependencies": {
-    "@types/vscode": "^1.125.0",
+    "@types/jsdom": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "typescript-eslint": "^8.61.1",
-    "eslint": "^10.5.0",
+    "@types/vscode": "^1.125.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
     "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
+    "jsdom": "^30.1.3",
     "npm-run-all": "^4.1.5",
     "typescript": "^6.0.3",
-    "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.0.0"
+    "typescript-eslint": "^8.61.1"
   },
   "overrides": {
     "diff": "^8.0.4",

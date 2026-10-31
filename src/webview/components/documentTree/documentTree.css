@@ -1,0 +1,605 @@
+.node {
+	outline: none;
+}
+.row {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 1ch;
+	align-items: baseline;
+	box-sizing: border-box;
+	height: var(--ecuc-lh);
+	padding: 0 0 0 var(--content-pad);
+	position: relative;
+}
+.row:hover {
+	background-color: var(--hover-bg);
+}
+.twisty {
+	position: absolute;
+	left: 2px;
+	top: 0;
+	bottom: 0;
+	width: 16px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--vscode-icon-foreground, var(--vscode-foreground));
+	opacity: 0;
+	transition: opacity 0.5s;
+}
+.twisty svg {
+	transition: transform 120ms ease;
+}
+.node[aria-expanded="true"] > .row > .twisty svg {
+	transform: rotate(90deg);
+}
+.label {
+	flex: 0 0 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 600;
+}
+.value {
+	flex: 0 0 auto;
+	justify-self: start;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--vscode-foreground);
+}
+.value[data-value-kind="numeric"] {
+	color: var(--tok-number);
+}
+.value[data-value-kind="textual"] {
+	color: var(--tok-string);
+}
+.value[data-value-kind="boolean"] {
+	color: var(--tok-keyword);
+}
+.row-meta {
+	display: flex;
+	flex: 0 0 auto;
+	flex-wrap: wrap;
+	gap: 2px 8px;
+	min-width: 0;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 0.9em;
+	color: var(--vscode-descriptionForeground);
+}
+.row-meta > span {
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.node:focus-visible > .row {
+	box-shadow: inset 2px 0 0 var(--rail);
+}
+.node[data-disabled="true"] > .row {
+	opacity: 0.55;
+	color: var(--vscode-disabledForeground);
+}
+.node[data-selected="true"] > .row {
+	background-color: var(--sel-bg);
+	box-shadow: inset 2px 0 0 var(--rail);
+}
+.document-tree:focus-within .node[data-selected="true"] > .row {
+	background-color: var(--sel-bg-focus);
+	box-shadow: inset 2px 0 0 var(--rail);
+}
+/* Selection never recolours syntax; the tint and rail carry the state. */
+.node.flash > .row {
+	animation: ecuc-flash 1s ease-out;
+}
+@keyframes ecuc-flash {
+	from { background-color: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground)); }
+	to { background-color: transparent; }
+}
+.short {
+	color: var(--tok-string);
+}
+.keyword {
+	color: var(--tok-keyword);
+}
+.variant {
+	color: var(--tok-meta);
+}
+.condition {
+	padding: 0 4px;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	color: var(--tok-meta);
+}
+/* A false condition is marked by its edge; the tokens keep their own colours. */
+.condition[data-state="false"] {
+	border-color: var(--vscode-errorForeground);
+}
+.annotation {
+	padding: 0 4px;
+	border: 1px solid var(--vscode-panel-border, transparent);
+	border-radius: 3px;
+	color: var(--tok-comment);
+	font-style: italic;
+}
+.punct {
+	color: var(--tok-punct);
+}
+.syscond-name {
+	color: var(--tok-key);
+}
+.syscond-number {
+	color: var(--tok-number);
+}
+.syscond-string {
+	color: var(--tok-string);
+}
+.syscond-operator {
+	color: var(--tok-keyword);
+}
+.syscond-literal {
+	color: var(--tok-keyword);
+}
+.syscond-punct {
+	color: var(--tok-punct);
+}
+.comment-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: pre;
+}
+.context {
+	color: var(--vscode-editor-foreground);
+}
+.context .keyword {
+	color: var(--tok-keyword);
+}
+mark {
+	color: inherit;
+	background: var(--match-bg);
+}
+.node[data-search-current="true"] > .row mark {
+	background: var(--match-hi);
+}
+
+/* Document view: quiet source. One editor surface, a fixed fold gutter and
+ * hover/focus affordances. The component root/scroll own the layout so the
+ * editor and each diff pane share one geometry. */
+.document-tree {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+}
+.document-tree-header {
+	flex: none;
+	/* The header now lives inside `.document-tree-scroll`, whose top padding
+	 * supplies the gap above the title; own top padding would double it. The
+	 * bottom padding is part of the measured header, so the row offset math
+	 * accounts for the space between the meta lines and the first row. */
+	padding: 0 0 calc(var(--ecuc-lh) * 0.5);
+	margin: 0;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
+	white-space: pre;
+	color: var(--vscode-editor-foreground);
+}
+/* Preserve the editor's pre-scroll header-to-row gap (1 line): the scroller
+ * supplies 0.5 above, so the document header adds 1 below. Diff panes keep the
+ * base 0.5 gap and their measured header height. */
+body[data-view="document"]:not([data-page="diff"]) .document-tree-header {
+	padding-bottom: var(--ecuc-lh);
+}
+.document-tree-title {
+	padding: 0 10px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 18px;
+	white-space: nowrap;
+}
+.document-tree-title[hidden] {
+	display: none;
+}
+.document-tree-meta {
+	padding-left: var(--content-pad);
+}
+.document-tree-meta .keyword {
+	color: var(--tok-keyword);
+}
+.document-tree-meta .number {
+	color: var(--tok-number);
+}
+.document-tree-meta .schema,
+.document-tree-meta .package {
+	font-family: inherit;
+	line-height: var(--ecuc-lh);
+}
+.document-tree-scroll {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+	box-sizing: border-box;
+	scrollbar-gutter: stable;
+	/* The window swaps spacer heights; browser scroll anchoring would fight the
+	 * virtual range and snap the viewport back to the top. */
+	overflow-anchor: none;
+	padding: calc(var(--ecuc-lh) * 0.5) 2ch calc(var(--ecuc-lh) * 3) 0;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	font-weight: var(--vscode-editor-font-weight, normal);
+	line-height: var(--ecuc-lh);
+	font-variant-ligatures: none;
+	tab-size: 4;
+	white-space: pre;
+}
+.document-tree-scroll[data-empty="true"] {
+	padding-top: 0;
+	padding-bottom: 0;
+}
+.document-tree-window {
+	display: flow-root;
+	min-width: var(--document-tree-content-width, 0px);
+}
+.document-tree-top {
+	height: var(--document-tree-top, 0px);
+}
+.document-tree-bottom {
+	height: var(--document-tree-bottom, 0px);
+}
+.v-spacer {
+	pointer-events: none;
+}
+body[data-view="document"] .document-tree-meta {
+	padding: 0 0 0 var(--content-pad);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
+	color: var(--vscode-editor-foreground);
+}
+body[data-view="document"] .document-tree-meta .schema,
+body[data-view="document"] .document-tree-meta .package {
+	font-family: inherit;
+}
+body[data-view="document"] .document-tree-meta .keyword {
+	color: var(--tok-keyword);
+}
+body[data-view="document"] .document-tree-meta .number {
+	color: var(--tok-number);
+}
+body[data-view="document"] .row {
+	background-color: transparent;
+}
+body[data-view="document"] .guide {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+	background: var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, #80808040));
+	opacity: 0.28;
+	pointer-events: none;
+}
+body[data-view="document"] .guide.guide-active {
+	opacity: 0.85;
+}
+body[data-view="document"] .row[data-level="1"] { padding-left: var(--content-pad); }
+body[data-view="document"] .row[data-level="2"] { padding-left: calc(var(--content-pad) + var(--indent) * 1); }
+body[data-view="document"] .row[data-level="3"] { padding-left: calc(var(--content-pad) + var(--indent) * 2); }
+body[data-view="document"] .row[data-level="4"] { padding-left: calc(var(--content-pad) + var(--indent) * 3); }
+body[data-view="document"] .row[data-level="5"] { padding-left: calc(var(--content-pad) + var(--indent) * 4); }
+body[data-view="document"] .row[data-level="6"] { padding-left: calc(var(--content-pad) + var(--indent) * 5); }
+body[data-view="document"] .row[data-level="7"] { padding-left: calc(var(--content-pad) + var(--indent) * 6); }
+body[data-view="document"] .row[data-level="8"] { padding-left: calc(var(--content-pad) + var(--indent) * 7); }
+body[data-view="document"] .row[data-level="9"] { padding-left: calc(var(--content-pad) + var(--indent) * 8); }
+body[data-view="document"] .row[data-level="10"] { padding-left: calc(var(--content-pad) + var(--indent) * 9); }
+body[data-view="document"] .row[data-level="11"] { padding-left: calc(var(--content-pad) + var(--indent) * 10); }
+body[data-view="document"] .row[data-level="12"] { padding-left: calc(var(--content-pad) + var(--indent) * 11); }
+body[data-view="document"] .row[data-level="13"] { padding-left: calc(var(--content-pad) + var(--indent) * 12); }
+body[data-view="document"] .row[data-level="14"] { padding-left: calc(var(--content-pad) + var(--indent) * 13); }
+body[data-view="document"] .row[data-level="15"] { padding-left: calc(var(--content-pad) + var(--indent) * 14); }
+body[data-view="document"] .row[data-level="16"] { padding-left: calc(var(--content-pad) + var(--indent) * 15); }
+body[data-view="document"] .row[data-level="17"] { padding-left: calc(var(--content-pad) + var(--indent) * 16); }
+body[data-view="document"] .row[data-level="18"] { padding-left: calc(var(--content-pad) + var(--indent) * 17); }
+body[data-view="document"] .row[data-level="19"] { padding-left: calc(var(--content-pad) + var(--indent) * 18); }
+body[data-view="document"] .row[data-level="20"] { padding-left: calc(var(--content-pad) + var(--indent) * 19); }
+body[data-view="document"] .row[data-level="21"] { padding-left: calc(var(--content-pad) + var(--indent) * 20); }
+body[data-view="document"] .row[data-level="22"] { padding-left: calc(var(--content-pad) + var(--indent) * 21); }
+body[data-view="document"] .row[data-level="23"] { padding-left: calc(var(--content-pad) + var(--indent) * 22); }
+body[data-view="document"] .row[data-level="24"] { padding-left: calc(var(--content-pad) + var(--indent) * 23); }
+body[data-view="document"] .guide[data-level="1"] { left: calc(var(--content-pad) + var(--indent) * 0 + 0.5ch); }
+body[data-view="document"] .guide[data-level="2"] { left: calc(var(--content-pad) + var(--indent) * 1 + 0.5ch); }
+body[data-view="document"] .guide[data-level="3"] { left: calc(var(--content-pad) + var(--indent) * 2 + 0.5ch); }
+body[data-view="document"] .guide[data-level="4"] { left: calc(var(--content-pad) + var(--indent) * 3 + 0.5ch); }
+body[data-view="document"] .guide[data-level="5"] { left: calc(var(--content-pad) + var(--indent) * 4 + 0.5ch); }
+body[data-view="document"] .guide[data-level="6"] { left: calc(var(--content-pad) + var(--indent) * 5 + 0.5ch); }
+body[data-view="document"] .guide[data-level="7"] { left: calc(var(--content-pad) + var(--indent) * 6 + 0.5ch); }
+body[data-view="document"] .guide[data-level="8"] { left: calc(var(--content-pad) + var(--indent) * 7 + 0.5ch); }
+body[data-view="document"] .guide[data-level="9"] { left: calc(var(--content-pad) + var(--indent) * 8 + 0.5ch); }
+body[data-view="document"] .guide[data-level="10"] { left: calc(var(--content-pad) + var(--indent) * 9 + 0.5ch); }
+body[data-view="document"] .guide[data-level="11"] { left: calc(var(--content-pad) + var(--indent) * 10 + 0.5ch); }
+body[data-view="document"] .guide[data-level="12"] { left: calc(var(--content-pad) + var(--indent) * 11 + 0.5ch); }
+body[data-view="document"] .guide[data-level="13"] { left: calc(var(--content-pad) + var(--indent) * 12 + 0.5ch); }
+body[data-view="document"] .guide[data-level="14"] { left: calc(var(--content-pad) + var(--indent) * 13 + 0.5ch); }
+body[data-view="document"] .guide[data-level="15"] { left: calc(var(--content-pad) + var(--indent) * 14 + 0.5ch); }
+body[data-view="document"] .guide[data-level="16"] { left: calc(var(--content-pad) + var(--indent) * 15 + 0.5ch); }
+body[data-view="document"] .guide[data-level="17"] { left: calc(var(--content-pad) + var(--indent) * 16 + 0.5ch); }
+body[data-view="document"] .guide[data-level="18"] { left: calc(var(--content-pad) + var(--indent) * 17 + 0.5ch); }
+body[data-view="document"] .guide[data-level="19"] { left: calc(var(--content-pad) + var(--indent) * 18 + 0.5ch); }
+body[data-view="document"] .guide[data-level="20"] { left: calc(var(--content-pad) + var(--indent) * 19 + 0.5ch); }
+body[data-view="document"] .guide[data-level="21"] { left: calc(var(--content-pad) + var(--indent) * 20 + 0.5ch); }
+body[data-view="document"] .guide[data-level="22"] { left: calc(var(--content-pad) + var(--indent) * 21 + 0.5ch); }
+body[data-view="document"] .guide[data-level="23"] { left: calc(var(--content-pad) + var(--indent) * 22 + 0.5ch); }
+body[data-view="document"] .guide[data-level="24"] { left: calc(var(--content-pad) + var(--indent) * 23 + 0.5ch); }
+body[data-view="document"] .node[data-gap="true"] {
+	padding-top: var(--ecuc-lh);
+}
+body[data-view="document"] .brace {
+	height: var(--ecuc-lh);
+}
+body[data-view="document"] .brace .row {
+	color: var(--tok-punct);
+}
+body[data-view="document"] .node:hover > .row {
+	background-color: var(--hover-bg);
+}
+body[data-view="document"] .twisty svg {
+	width: 16px;
+	height: 16px;
+}
+body[data-view="document"] .document-tree:hover .node[aria-expanded="true"] > .row > .twisty,
+body[data-view="document"] .document-tree:focus-within .node[aria-expanded="true"] > .row > .twisty,
+body[data-view="document"] .node:hover > .row > .twisty,
+body[data-view="document"] .node:focus-within > .row > .twisty {
+	opacity: 1;
+}
+body[data-view="document"] .node[aria-expanded="false"] > .row > .twisty {
+	opacity: 1;
+}
+body[data-view="document"] .node[aria-expanded="false"] > .row::after {
+	content: " { … }";
+	color: var(--tok-punct);
+}
+body[data-view="document"] .node[data-kind="container"][data-empty="true"] > .row::after {
+	content: " { }";
+	color: var(--tok-punct);
+}
+body[data-view="document"] .label {
+	flex: 0 0 auto;
+	overflow: visible;
+	text-overflow: clip;
+	white-space: pre;
+	font-weight: 400;
+	color: var(--vscode-editor-foreground);
+}
+body[data-view="document"] .node[data-kind="parameter"] > .row > .label,
+body[data-view="document"] .node[data-kind="reference"] > .row > .label {
+	color: var(--tok-key);
+}
+body[data-view="document"] .node[data-kind="container"] > .row > .label {
+	color: var(--container-accent);
+}
+body[data-view="document"] .node[data-kind="reference"] > .row > .value .value-text {
+	color: var(--vscode-symbolIcon-functionForeground, #DCDCAA);
+	font-style: italic;
+}
+body[data-view="document"] .value {
+	flex: 0 0 auto;
+	margin: 0;
+	max-width: none;
+	overflow: visible;
+	text-overflow: clip;
+	white-space: pre;
+}
+body[data-view="document"] .node[data-kind="parameter"] > .row > .value > .value-text {
+	cursor: pointer;
+}
+body[data-view="document"] .node[data-kind="parameter"] > .row > .value > .value-text:hover {
+	background-color: var(--vscode-toolbar-hoverBackground, var(--hover-bg));
+	border-radius: 2px;
+}
+body[data-view="document"] .row-meta {
+	display: flex;
+	flex: 0 0 auto;
+	flex-wrap: nowrap;
+	gap: 1ch;
+	margin: 0;
+	font-family: inherit;
+	font-size: inherit;
+	color: var(--vscode-editor-foreground);
+	white-space: pre;
+}
+body[data-view="document"] .row-meta > span {
+	max-width: none;
+	overflow: visible;
+	white-space: pre;
+	margin: 0;
+}
+body[data-view="document"] .variant,
+body[data-view="document"] .condition {
+	color: var(--tok-meta);
+}
+body[data-view="document"] .annotation {
+	color: var(--tok-comment);
+	font-style: italic;
+}
+body[data-view="document"] .context {
+	color: var(--vscode-editor-foreground);
+}
+body[data-view="document"] .condition {
+	padding: 0 4px;
+	border: 1px solid transparent;
+	border-radius: 3px;
+}
+body[data-view="document"] .condition[data-state="false"] {
+	border-color: var(--vscode-errorForeground);
+}
+body[data-view="document"] .row-meta > span.condition {
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 56ch;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+body[data-view="document"] .comment {
+	height: var(--ecuc-lh);
+}
+body[data-view="document"] .comment[data-gap="true"] {
+	height: calc(var(--ecuc-lh) * 2);
+	padding-top: var(--ecuc-lh);
+	box-sizing: border-box;
+}
+body[data-view="document"] .comment > .row {
+	color: var(--tok-comment);
+	font-style: italic;
+}
+body[data-view="document"] .row.k-module .label::before {
+	content: "module ";
+	color: var(--tok-keyword);
+}
+body[data-view="document"] .node[data-subtree="true"] > .row,
+body[data-view="document"] .brace[data-subtree="true"] > .row,
+body[data-view="document"] .comment[data-subtree="true"] > .row {
+	background-color: var(--subtree-bg);
+}
+body[data-view="document"] .node[data-kind="parameter"][data-selected="true"] > .row {
+	background-color: var(--sel-bg-focus);
+	box-shadow:
+		inset 2px 0 0 var(--rail),
+		inset 0 0 0 1px var(--sel-outline, transparent);
+}
+body[data-view="document"] .node[data-selected="true"] > .row {
+	background-color: var(--sel-bg-focus);
+	box-shadow:
+		inset 2px 0 0 var(--rail),
+		inset 0 0 0 1px var(--sel-outline, transparent);
+}
+body[data-view="document"] .node[data-kind="container"][data-selected="true"] > .row,
+body[data-view="document"] .node[data-kind="module"][data-selected="true"] > .row {
+	background-color: var(--sel-container-bg);
+}
+body[data-view="document"] .document-tree:focus-within .node[data-selected="true"] > .row {
+	background-color: var(--sel-bg-focus);
+	box-shadow:
+		inset 2px 0 0 var(--rail),
+		inset 0 0 0 1px var(--sel-outline, transparent);
+}
+body[data-view="document"] .document-tree:focus-within .node[data-kind="container"][data-selected="true"] > .row,
+body[data-view="document"] .document-tree:focus-within .node[data-kind="module"][data-selected="true"] > .row {
+	background-color: var(--sel-container-bg);
+}
+body[data-view="document"] .document-tree:focus-within .node[data-kind="parameter"][data-selected="true"] > .row {
+	box-shadow:
+		inset 2px 0 0 var(--rail),
+		inset 0 0 0 1px var(--sel-outline, transparent);
+}
+body[data-view="document"] .node:focus-visible > .row {
+	box-shadow: inset 2px 0 0 var(--rail);
+}
+body[data-view="document"] .document-tree-scroll[data-empty="true"] {
+	padding-top: 0;
+	padding-bottom: 0;
+}
+
+@media (forced-colors: active) {
+	body[data-view] .node[data-kind="container"] > .row > .label {
+		color: var(--vscode-editor-foreground);
+	}
+	body[data-view] .node[data-subtree="true"] > .row,
+	body[data-view] .brace[data-subtree="true"] > .row,
+	body[data-view] .comment[data-subtree="true"] > .row {
+		background: transparent;
+		outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
+		outline-offset: -1px;
+	}
+	body[data-view] .node[data-selected="true"] > .row,
+	body[data-view] .document-tree:focus-within .node[data-selected="true"] > .row {
+		background: transparent;
+		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
+		outline-offset: -1px;
+	}
+	body[data-view] .node:hover > .row {
+		background: transparent;
+		outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
+		outline-offset: -1px;
+	}
+	body[data-view] .node:focus-visible > .row {
+		box-shadow: none;
+		outline: 2px solid var(--vscode-focusBorder);
+		outline-offset: -2px;
+	}
+	body[data-view] mark {
+		color: var(--vscode-editor-foreground);
+		background: transparent;
+		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+	}
+	body[data-view] .node.flash > .row {
+		animation: none;
+		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+	}
+}
+body.vscode-high-contrast[data-view] .node[data-kind="container"] > .row > .label {
+	color: var(--vscode-editor-foreground);
+}
+body.vscode-high-contrast[data-view] .node[data-subtree="true"] > .row,
+body.vscode-high-contrast[data-view] .brace[data-subtree="true"] > .row,
+body.vscode-high-contrast[data-view] .comment[data-subtree="true"] > .row {
+	background: transparent;
+	outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
+	outline-offset: -1px;
+}
+body.vscode-high-contrast[data-view] .node[data-selected="true"] > .row,
+body.vscode-high-contrast[data-view] .document-tree:focus-within .node[data-selected="true"] > .row {
+	background: transparent;
+	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
+	outline-offset: -1px;
+}
+body.vscode-high-contrast[data-view] .node:hover > .row {
+	background: transparent;
+	outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
+	outline-offset: -1px;
+}
+body.vscode-high-contrast[data-view] .node:focus-visible > .row {
+	box-shadow: none;
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: -2px;
+}
+body.vscode-high-contrast[data-view] mark {
+	color: var(--vscode-editor-foreground);
+	background: transparent;
+	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+}
+body.vscode-high-contrast[data-view] .node.flash > .row {
+	animation: none;
+	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+}
+
+@media (max-width: 720px) {
+body[data-view="document"] {
+		--doc-pad: 2.5ch;
+		--indent: 3ch;
+		--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.twisty,
+	.twisty svg {
+		transition: none;
+	}
+	.node.flash > .row {
+		animation: ecuc-flash 1s steps(1, end);
+	}
+}

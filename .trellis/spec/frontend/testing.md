@@ -62,6 +62,8 @@ partial write cannot hide behind a message.
 | Everything | `npm test` |
 | Types only | `npm run check-types` |
 | Lint only | `npm run lint` |
+| Large-file benchmark | `npm run benchmark` |
+| One benchmark / keep going | `npm run benchmark -- <name>` / `npm run benchmark -- --continue` |
 | Core suites only | `npm run compile-tests` then `npx mocha --ui tdd "out/test/core/*.test.js"` |
 
 `npm test` drives a real VS Code instance through `vscode-test`, so the first run downloads VS Code
@@ -69,25 +71,27 @@ into `.vscode-test/` (gitignored). If that download is blocked by a proxy, the f
 — check before assuming a code defect. The suite uses the **TDD** mocha UI: plain `npx mocha` fails
 with `suite is not defined`.
 
-There is no webview DOM in the test host. Webview behaviour is therefore asserted at the level of the
-rendered page: the static shell, the escaped row JSON, the CSS, and the page's own inlined functions
-extracted with `scriptTestUtils` and compiled. Pure row/flatten/filter/window behaviour is tested
-directly; anything that depends on real DOM interaction has to be confirmed by hand in the Extension
-Development Host — say so in the task notes rather than implying it was tested.
+There is no real VS Code webview in the test host. Page behaviour is mounted into **jsdom** from the
+same static shell the host writes (`src/test/webview/pageTestUtils.ts`): `installDom` provides the
+window/document globals and a recording `acquireVsCodeApi`, then `loadModule` loads the compiled page
+entrypoint and the test drives the real `postMessage` protocol. The CSS is asserted as text and by
+selector. Pure row/flatten/search/window behaviour is tested directly; anything that depends on real
+browser layout, paint or focus has to be confirmed by hand in the Extension Development Host — say so
+in the task notes rather than implying it was tested.
 
 ## Manual checks happen in the Extension Development Host
 
 The in-repo preview harness (`preview:ecuc`, `preview:check`) and the `scripts/` directory were removed,
 so the page is no longer served with a stubbed `acquireVsCodeApi`. Open a fixture or a local `.arxml`
-in the ECUC editor and observe the real webview: layout, hover, focus, scroll, filter passes, the
+in the ECUC editor and observe the real webview: layout, hover, focus, scroll, search passes, the
 inspector and the reload path all need that host.
 
 A host observation is not a repeatable check. It cannot run in CI, so record it as host-observed with
 the file and the steps that produced it, and keep the real-host rows in the task's manual table.
 
-If a preview harness is reintroduced, it must wrap the production renderer; a second renderer is a test
-that agrees with itself. The row JSON must be compared against `buildRows`, not against a full-tree
-string.
+If a preview harness is reintroduced, it must wrap the production shell and bundled page; a second
+renderer is a test that agrees with itself. The page must be driven through the host protocol and its
+rows compared against `buildRows`, not against a full-tree string.
 
 ## The reference must be the post-processed output
 
@@ -102,8 +106,29 @@ not read by the renderer.
 
 Document markup/CSS tests are string assertions (the Document-only shell, layout/geometry, token
 selectors, fallbacks, no Tree/line-number/copy code), but the view/details behaviour must drive the
-page's own `applyInspectorVisibility`, `subtreeRowIds`, `guidesFor`, `reconcileRowState` and
-`detailsValueInput` extracted with `scriptTestUtils` against stub elements — not a host-side twin.
+page's own `subtreeRowIds`, `guidesFor`, `reconcileRowState` and `detailsValueInput` from their
+modules against jsdom elements — not a host-side twin.
+Condition/annotation presentation tests are value-first: `syscond.test.ts` asserts the `values` map for
+known, missing, tail-resolved and malformed expressions; `renderRows.test.ts` asserts `conditionTooltip`
+(multi-line, quoted strings, `(not set)`, no `true`/`false`) and that annotations become `comments`;
+`treeQuery.test.ts`/`virtualPage.test.ts` assert comment display rows sit above their node and never
+enter the selectable id list; `uxDocument.test.ts` asserts the token split, token CSS, bounded chip and
+wrapped `.condition-code`. Do not test these by re-implementing the evaluator or tokenizer in the test.
+
+Structural row actions are tested in two layers: `structureEdit.test.ts` drives the pure
+`lineSpan`/default-name/plan functions and applies a plan to a temporary document (one edit, one
+undo, stale bytes refused); `contextMenu.test.ts` asserts the page shell, the container/parameter
+filter, the posted message shape and the close paths. Modal confirmation lives in the provider and
+is not simulated by the page test; the host write is covered by the apply test.
+
+Diff tests assert the toolbar both ways: Search/Show all/Show diff only/Prev diff/Next diff/Swap
+sides are present, and Filter/changes checkbox/summary/Collapse/Expand are absent. `diffModel` tests
+cover query-free `diffVisibility` and collapse-aware flattening; page tests assert the search wiring, the
+`displayLeft`/`displayRight`/`displayStatus` projection, reveal-side mapping and the two
+`DocumentTreeView` scrollers.
+The headless diff probe drives typing (no marks), Enter (count/current), Shift+Enter, a view switch
+and a swap.
+
 The mutation table for this pass is: re-add a Tree toggle/view state, Tree CSS/glyph/probes; re-add
 the line-number gutter/`data-line`/digits; re-add the repeating indent gradient; drop the
 bracket-guide computation or leak it to every row; drop brace hover; re-add inline `.value` editing;
@@ -121,27 +146,33 @@ container/guide-hover/details/narrow/deep captures and a real-webview pass. Asse
 match the production CSS, never the prototype file. There is no source-line gutter to conflate; the
 row model carries no source-position fields.
 
-## Virtual page tests drive the page's serialized row code
+## Virtual page tests drive the compiled page module
 
 The virtual row renderer is tested at two levels. Pure modules (`renderRows`, `virtualScroll`,
-`filterRows`/`flattenRows`) have ordinary unit tests over values. The page's own copy is extracted
-from `renderHtml` with `scriptTestUtils` and compiled: `filterRows`, `flattenRows`, `ancestorIds`,
-`inspectorFields`, `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` and the
-virtual math are driven with real row data, so the page does not get a second implementation.
-`virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse/filter
-display lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan
-payload. Structural
+`treeQuery`, `rowSearch`) have ordinary unit tests over values. The page entrypoint is mounted in
+jsdom from the host's static shell and driven through the protocol: `installDom` + `loadModule` give
+the test the real `mountEditor`/`mountDiff` path, so `flattenRows`, `ancestorIds`, `reconcileRowState`,
+`subtreeRowIds`, `guidesFor`, the inspector and the virtual window run as they do in the shipped page
+— the test does not re-implement them.
+`virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse display
+lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan payload.
+`rowSearch.test.ts` pins the chunked engine: matches, progress, cancellation, the timing constants
+and a 150k-row completion threshold. Structural
 assertions (a window loop, spacers, no `innerHTML`/style attribute in the row builder, `data-level`
 CSS) are the regression guard; the real DOM pass is the Extension Development Host.
 
 Mutation checks for this layer: render the full row list instead of `[start,end)`, remove the
-top/bottom spacers, zero the overscan, drop subtree collapse/filter-ancestor logic, drop the filter
-generation guard, use `innerHTML` for row text, use an inline depth style, remove
-`aria-level`/posinset/setsize, remove focus restore, send full HTML on re-scan, use
-`#tree-window` as the offset, leak bracket guides outside their container, or leak the subtree tint
-to siblings; each must fail a test. Prefer the
-page's own functions over a grep-only assertion, and record which checks were observed in the real
-webview rather than unit-tested.
+top/bottom spacers, zero the overscan, drop subtree collapse logic, use `innerHTML` for row text, use
+an inline depth style, remove `aria-level`/posinset/setsize, remove focus restore, send full HTML on
+re-scan, use `#tree-window` as the offset, leak bracket guides outside their container, or leak the
+subtree tint to siblings; each must fail a test. Search mutations: run on input instead of Enter,
+skip the 120 ms debounce/24 ms slices, drop the generation token, rescan on next/previous, jump only
+on completion, or drop the fixed highlight tiers; each must fail a test. For the Conditions panel,
+the mutation set is: drop the row
+`symbols`, treat an empty value as a known empty string, skip discovery after `setRows`, invert the
+`unknown` badge, make Clear values delete rows, or forget a removed discovered row; each must fail a
+test. Prefer the page's own functions over a grep-only assertion, and record which checks were
+observed in the real webview rather than unit-tested.
 
 ## A CSS rule is not a contrast measurement
 
@@ -155,23 +186,43 @@ regression guard.
 
 The provider's `{ type: 'copy' }` branch and clipboard module were removed with the details Copy
 actions. The remaining source-level wiring is the details editor's `{ type: 'edit' }` post and the
-re-scan handler; the input's Enter/Escape/Tab and refusal behaviour are asserted through the page's
-own serialized functions and real-webview captures, while the provider write is behaviourally tested.
+re-scan handler; the input's Enter/Escape/Tab and refusal behaviour are asserted through the compiled
+page module in jsdom and real-webview captures, while the provider write is behaviourally tested.
 When you use a source assertion, say so in the task notes; do not present it as a behavioural test.
 
-## Samples and benchmarks are evidence
+## Benchmarks are committed evidence
 
-The dev-only sample generator and benchmark were removed with the harness. Evidence they produced
-stays in the task's research; the sample files were never committed and nothing in the repository or
-CI reads a local sample directory.
+`npm run benchmark` runs `src/test/benchmarks/runBenchmark.ts`. The runner discovers
+`src/test/benchmarks/*Benchmark.ts`, esbuild-bundles each to a temporary CJS file and executes it with
+`node --expose-gc`, then removes the temp directory. `--continue` keeps going after a failure; a bare
+argument filters by basename. A failed benchmark exits 1. The runner is a `.ts` file executed directly
+through Node's type stripping, so it needs Node 24 (the CT workflow pins `NODE_VERSION: '24'`); it is
+not compiled by `tsc`.
+
+`ecucLargeFileBenchmark.ts` generates a ~26 MiB synthetic ECUC ARXML in memory and measures scan, row
+build and a two-side diff: elapsed time plus retained heap after forced GC. It prints one JSON line per
+stage, for example:
+
+```json
+{"_type":"large-file-load","name":"scan","sourceMiB":26,"records":73884,"elapsedMs":262,"retainedMiB":79}
+{"_type":"large-file-summary","concurrentRetainedMiB":339,"documents":["left.arxml","right.arxml"]}
+```
+
+The CT `Benchmarks` job runs `npm run benchmark -- --continue`, uploads the log and renders it through
+`.github/scripts/summarize-tests.mjs`; `Finalize` requires both the UT and benchmark jobs. To add a
+benchmark: name the file `*Benchmark.ts`, keep it headless (no `vscode`, no DOM), emit `_type` JSON
+lines the summary registry understands (or extend the registry), and make a violated limit throw so
+the runner exits 1. `global.gc` is mandatory; a retained-memory number without forced GC is noise.
+Generated data is synthetic; never point a benchmark at a real customer directory.
 
 A benchmark is evidence, not a promise. It does not cover browser layout/paint or a real VS Code
-webview; record the webview observation separately. A single huge-file run is not a reason to add
-virtualisation. Generated samples are synthetic; never point a generator at a real customer directory.
+webview, so record the webview observation separately. A single huge-file run is not a reason to add
+virtualisation.
 
 ## The page's own helpers are the ones under test
 
-When a rule lives in the inlined page script, extract the page's copy with `scriptTestUtils` and drive
-it, rather than testing a host-side twin. `prepareFocus`'s initial-selection adoption is tested with a
-stubbed DOM in `uxPolish.test.ts`; the mutation "remove the adoption" fails it. A test that only greps
-for a call site can pass with the feature deleted.
+When a rule lives in a page module, import that module (or mount the bundled page in jsdom) and drive
+it, rather than testing a host-side twin. The initial-selection adoption is exercised by the page
+suites that post a `document` payload with `selectedId` and assert the rendered selection/focus; the
+mutation "remove the adoption" fails them. A test that only greps for a call site can pass with the
+feature deleted.
