@@ -21,4 +21,6 @@ same way.
 - [ ] Frontend spec index matches Hex Scope's set.
 - [ ] Guides index and thinking guides exist.
 - [ ] Docs/examples exist and are referenced from README.
+- [ ] Every copied Hex Scope doc/spec path or asset is reviewed by the parent `blind-copy-audit.md`;
+      missing paths are removed or replaced with real ARXML content.
 - [ ] No placeholder sections in component specs.

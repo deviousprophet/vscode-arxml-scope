@@ -4,7 +4,8 @@
 2. Complete contextMenu/detailsEditor component specs.
 3. Update frontend index and components index.
 4. Add docs/examples and link from README.
-5. Verify every component path has a spec and every spec is indexed.
+5. Run `blind-copy-audit.md` for docs/spec terms and remove hex-only references.
+6. Verify every component path has a spec and every spec is indexed.
 
 ## Rollback
 

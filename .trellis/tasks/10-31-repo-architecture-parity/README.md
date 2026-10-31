@@ -6,7 +6,9 @@ This task is the source of truth for the Hex Scope architecture-parity effort. R
 2. `gap-analysis.md` — file-by-file Hex Scope vs ARXML Scope comparison.
 3. `design.md` — target repository, runtime, components, configs, CI, specs.
 4. `implement.md` — staged execution and gates.
-5. Child tasks — independently verifiable deliverables.
+5. `gap-analysis.md` — file-by-file comparison.
+6. `blind-copy-audit.md` — copied paths/commands/specs that must be checked or removed.
+7. Child tasks — independently verifiable deliverables.
 
 ## The three user goals
 

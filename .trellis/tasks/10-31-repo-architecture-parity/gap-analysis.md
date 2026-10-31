@@ -42,7 +42,7 @@ Gaps:
 |---|---|---|---|
 | `.gitattributes` | `* text=auto eol=lf` + Trellis journal union | Missing global eol; extra fixture pin | Add global rule, keep fixture pin |
 | `.gitignore` | `dist`, `node_modules`, `.vscode-test/`, `*.vsix`, `src/**/*.js(.map)` | `src/test/data/` instead of src js rules | Align |
-| `.vscodeignore` | excludes out/src/tests; keeps webview CSS and examples | excludes scripts/sample/package-lock | Replace with Hex-style entries; drop scripts |
+| `.vscodeignore` | excludes out/src/tests; keeps webview CSS and examples | excludes scripts/sample/package-lock; stale `images/demo.gif` | Replace with Hex-style entries; remove `images/demo.gif` unless a real demo exists; drop scripts |
 | `.vscode-test.mjs` | temp workspace, no css loader | `mocha.require` scripts/css-loader, 10s timeout | Temp workspace; component tests via jsdom; no scripts |
 | `.fallowrc.json` | entry: extension + webview entrypoints + tests + benchmarks | entry: tests/esbuild/scripts/.github | Point at webview entrypoints, tests, benchmarks; drop scripts |
 | `esbuild.js` | 5 bundles: extension, script worker, parse worker, webview, diff | 1 extension bundle + CSS text loader | Add editor/diff webview bundles; remove text-loader need |

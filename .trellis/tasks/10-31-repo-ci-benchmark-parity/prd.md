@@ -15,6 +15,8 @@ benchmark suite.
 - Add the CT `Benchmarks` job with `npm run benchmark -- --continue`.
 - Keep `ci.yml → ct.yml → package.yml`; align `release.yml` and `fallow.yml`.
 - Add `docs/`, `examples/` where useful.
+- Run the parent `blind-copy-audit.md`: every copied path/glob/command/spec example must exist in
+  ARXML Scope or be removed. Known issue: `.vscodeignore` references missing `images/demo.gif`.
 
 ## Acceptance
 
