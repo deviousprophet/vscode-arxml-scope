@@ -49,7 +49,11 @@ function rowsFor(document: vscode.TextDocument) {
 	// The row document deliberately carries no source positions; the diff gets each
 	// cell's reveal range from the same node index that produced the ids.
 	const rangeOf: RangeLookup = (id) => index.byId.get(id)?.range;
-	return { rows, rangeOf };
+	const header = {
+		schema: model.schema ? model.schema.release : undefined,
+		packages: model.packages.map((pkg) => pkg.path.join('.')),
+	};
+	return { rows, rangeOf, header };
 }
 
 export class DiffPanel {
@@ -89,7 +93,8 @@ export class DiffPanel {
 			leftRows.rows,
 			rightRows.rows,
 			leftRows.rangeOf,
-			rightRows.rangeOf
+			rightRows.rangeOf,
+			{ left: leftRows.header, right: rightRows.header }
 		);
 		const html = renderDiffHtml(current, { nonce: randomBytes(16).toString('base64') });
 
@@ -148,7 +153,8 @@ export class DiffPanel {
 					nextLeftRows.rows,
 					nextRightRows.rows,
 					nextLeftRows.rangeOf,
-					nextRightRows.rangeOf
+					nextRightRows.rangeOf,
+					{ left: nextLeftRows.header, right: nextRightRows.header }
 				);
 				if (disposed || generation !== refreshGeneration) {
 					return;

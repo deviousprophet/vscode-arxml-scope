@@ -29,6 +29,8 @@ export interface DiffCell {
 	value?: string;
 	target?: string;
 	contextPaths?: string[];
+	/** Annotation lines shown above this row in the Document view. */
+	comments?: string[];
 	meta: MetaPart[];
 	range: Range;
 }
@@ -80,6 +82,9 @@ export interface FileLabel {
 export interface DiffDocument {
 	left: FileLabel;
 	right: FileLabel;
+	/** Schema/package lines shown above each pane's rows. */
+	leftHeader: DiffHeader;
+	rightHeader: DiffHeader;
 	/**
 	 * Pane headings in `[left, right]` order: the basename, or the shortest
 	 * trailing path suffix when both files share one. The page and the Details
@@ -89,6 +94,12 @@ export interface DiffDocument {
 	/** Pre-order, children contiguous. */
 	rows: DiffRow[];
 	summary: DiffSummary;
+}
+
+/** The small Document header repeated in each diff pane. */
+export interface DiffHeader {
+	schema?: string;
+	packages: string[];
 }
 
 /** One node of a side's row tree, built from the pre-order list. */
@@ -142,6 +153,7 @@ export function toDiffCell(row: EcucRow, range?: Range): DiffCell {
 		value: row.value,
 		target: row.target,
 		contextPaths: row.contextPaths ? row.contextPaths.slice() : undefined,
+		comments: row.comments ? row.comments.slice() : undefined,
 		meta: row.meta.map((part) => ({ cls: part.cls, text: part.text, title: part.title, ...(part.state ? { state: part.state } : {}) })),
 		range: range ? { start: range.start, end: range.end } : { start: 0, end: 0 },
 	};
@@ -562,10 +574,19 @@ export function buildDiffDocument(
 	leftRows: readonly EcucRow[],
 	rightRows: readonly EcucRow[],
 	leftRanges?: RangeLookup,
-	rightRanges?: RangeLookup
+	rightRanges?: RangeLookup,
+	headers?: { left: DiffHeader; right: DiffHeader }
 ): DiffDocument {
 	const rows = diffRows(leftRows, rightRows, leftRanges, rightRanges);
-	return { left, right, labels: disambiguatedLabels(left, right), rows, summary: summarizeDiff(rows) };
+	return {
+		left,
+		right,
+		leftHeader: headers ? headers.left : { packages: [] },
+		rightHeader: headers ? headers.right : { packages: [] },
+		labels: disambiguatedLabels(left, right),
+		rows,
+		summary: summarizeDiff(rows),
+	};
 }
 
 /** The page helpers below are serialized into the diff webview. */
@@ -611,6 +632,122 @@ export interface FlatDiffRow {
 	rowIndex: number;
 	level: number;
 	expanded: boolean;
+}
+
+/** One display line shared by both panes; a side without that line is blank. */
+export interface DiffDisplayRow {
+	rowIndex: number;
+	level: number;
+	left: 'node' | 'brace-open' | 'brace-close' | 'comment' | 'blank';
+	right: 'node' | 'brace-open' | 'brace-close' | 'comment' | 'blank';
+	commentLeft?: string;
+	commentRight?: string;
+	expanded: boolean;
+	guidesLeft: { level: number; id: string }[];
+	guidesRight: { level: number; id: string }[];
+}
+
+/**
+ * The structural display list: annotations, node rows and brace rows for both
+ * sides, aligned into one list so the panes share row positions and the
+ * virtual window. A side that lacks a structural row gets a blank cell.
+ */
+export function flattenDiffDocument(
+	rows: readonly DiffRow[],
+	options: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[] } = {}
+): DiffDisplayRow[] {
+	const count = rows.length;
+	const collapsed = options.collapsed;
+	const visible = options.visible;
+	let visiblePrefix: Int32Array | undefined;
+	if (visible) {
+		visiblePrefix = new Int32Array(count + 1);
+		for (let i = 0; i < count; i++) {
+			visiblePrefix[i + 1] = visiblePrefix[i] + (visible[i] ? 1 : 0);
+		}
+	}
+	const subtreeEnd = (index: number): number => Math.min(count, index + Math.max(0, rows[index].subtreeSize) + 1);
+	const hasVisibleDescendant = (index: number): boolean => {
+		const end = subtreeEnd(index);
+		if (end <= index + 1) {
+			return false;
+		}
+		if (visiblePrefix) {
+			return visiblePrefix[end] - visiblePrefix[index + 1] > 0;
+		}
+		return rows[index].hasChildren;
+	};
+	const out: DiffDisplayRow[] = [];
+
+	const walk = (start: number, leftOpen: { level: number; id: string }[], rightOpen: { level: number; id: string }[]): number => {
+		let index = start;
+		while (index < count) {
+			if (visible && !visible[index]) {
+				index = subtreeEnd(index);
+				continue;
+			}
+			const row = rows[index];
+			const nodeIndex = index;
+			const leftComments = row.left && row.left.comments ? row.left.comments : [];
+			const rightComments = row.right && row.right.comments ? row.right.comments : [];
+			const commentCount = Math.max(leftComments.length, rightComments.length);
+			const expanded =
+				row.hasChildren &&
+				hasVisibleDescendant(index) &&
+				!(collapsed ? collapsed.has(row.key) : false);
+			for (let at = 0; at < commentCount; at++) {
+				out.push({
+					rowIndex: index,
+					level: row.level,
+					left: at < leftComments.length ? 'comment' : 'blank',
+					right: at < rightComments.length ? 'comment' : 'blank',
+					commentLeft: at < leftComments.length ? leftComments[at] : undefined,
+					commentRight: at < rightComments.length ? rightComments[at] : undefined,
+					expanded: false,
+					guidesLeft: leftOpen.slice(),
+					guidesRight: rightOpen.slice()
+				});
+			}
+			out.push({
+				rowIndex: index,
+				level: row.level,
+				left: row.left ? 'node' : 'blank',
+				right: row.right ? 'node' : 'blank',
+				expanded: expanded,
+				guidesLeft: leftOpen.slice(),
+				guidesRight: rightOpen.slice()
+			});
+			if (expanded) {
+				out.push({
+					rowIndex: index,
+					level: row.level,
+					left: row.left ? 'brace-open' : 'blank',
+					right: row.right ? 'brace-open' : 'blank',
+					expanded: false,
+					guidesLeft: leftOpen.slice(),
+					guidesRight: rightOpen.slice()
+				});
+				const childLeft = row.left ? leftOpen.concat([{ level: row.level, id: row.key }]) : leftOpen;
+				const childRight = row.right ? rightOpen.concat([{ level: row.level, id: row.key }]) : rightOpen;
+				index = walk(index + 1, childLeft, childRight);
+				out.push({
+					rowIndex: nodeIndex,
+					level: row.level,
+					left: row.left ? 'brace-close' : 'blank',
+					right: row.right ? 'brace-close' : 'blank',
+					expanded: false,
+					guidesLeft: leftOpen.slice(),
+					guidesRight: rightOpen.slice()
+				});
+			} else {
+				index = subtreeEnd(index);
+			}
+		}
+		return index;
+	};
+
+	walk(0, [], []);
+	return out;
 }
 
 /**

@@ -27,6 +27,7 @@ import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
 import type { ConditionValue } from '../core/ecuc/syscond';
 import type { ConditionEntry } from './conditionValues';
 import { FlatRow, ancestorIds, carriesGroupGap, flattenRows, matchRangesScript, stepMatch } from './treeQuery';
+import { buildDocumentBraceRow, buildDocumentCommentRow, buildDocumentNodeRow, documentRowsScript } from './documentRows';
 import { escapeHtml } from './html';
 import { encodeJsonForScript } from './jsonScript';
 import { consoleErrorScript } from './pageError';
@@ -1907,6 +1908,21 @@ const CONSOLE_ERROR_SCRIPT = consoleErrorScript({
  * widget's script is emitted before this one and its document listeners claim
  * their events first; nothing here runs for an interaction it owns.
  */
+/**
+ * The Document row stylesheet, sliced from the editor surface so the diff page
+ * injects the exact same rules instead of a lookalike copy.
+ */
+export function documentViewStyles(): string {
+	const baseStart = STYLE.indexOf('.node {');
+	const baseEnd = STYLE.indexOf('.inspector-empty {');
+	const viewStart = STYLE.indexOf('/* Document view: quiet source.');
+	const viewEnd = STYLE.indexOf('@media (forced-colors: active) {');
+	if (baseStart < 0 || baseEnd <= baseStart || viewStart < 0 || viewEnd <= viewStart) {
+		return '';
+	}
+	return `${STYLE.slice(baseStart, baseEnd)}\n${STYLE.slice(viewStart, viewEnd)}`;
+}
+
 const TREE_SCRIPT = `
 const main = document.getElementById('main');
 const tree = document.getElementById('tree');
@@ -1953,6 +1969,7 @@ ${rowSearchScript()}
 ${stepMatch.toString()}
 ${flattenRows.toString()}
 ${carriesGroupGap.toString()}
+${documentRowsScript()}
 ${ancestorIds.toString()}
 ${inspectorFields.toString()}
 ${subtreeRowIds.toString()}

@@ -884,6 +884,8 @@ suite('search page', () => {
 			left: { name: 'left.arxml', path: '/work/left.arxml' },
 			right: { name: 'right.arxml', path: '/work/right.arxml' },
 			labels: ['left.arxml', 'right.arxml'],
+			leftHeader: { packages: [] },
+			rightHeader: { packages: [] },
 			rows: [],
 			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 },
 		};

@@ -19,7 +19,9 @@ import { pageErrorScript } from '../editor/pageError';
 import { rowSearchScript } from '../editor/rowSearch';
 import { rowViewScript } from '../editor/rowView';
 import { virtualScrollScript } from '../editor/virtualScroll';
-import { DiffDocument, DiffRow, diffVisibility, flattenDiffRows, nextChangeIndex } from './diffModel';
+import { buildDocumentBraceRow, buildDocumentCommentRow, buildDocumentNodeRow, documentRowsScript } from '../editor/documentRows';
+import { documentViewStyles } from '../editor/renderHtml';
+import { DiffDocument, DiffHeader, DiffRow, diffVisibility, flattenDiffDocument, nextChangeIndex } from './diffModel';
 
 export interface DiffRenderOptions {
 	/** Inline-script nonce; generated when absent. */
@@ -36,6 +38,25 @@ export function encodeDiffDocument(document: DiffDocument): string {
 }
 
 /** Builds the whole diff page. */
+function headerLines(header: DiffHeader): string[] {
+	const lines: string[] = [];
+	if (header.schema) {
+		lines.push(`<div class="schema"><span class="keyword">schema</span> <span class="number">${escapeHtml(header.schema)}</span></div>`);
+	}
+	for (const pkg of header.packages) {
+		lines.push(`<div class="package"><span class="keyword">package</span> ${escapeHtml(pkg)}</div>`);
+	}
+	return lines;
+}
+
+function paneHeaderHtml(header: DiffHeader, lineCount: number): string {
+	const lines = headerLines(header);
+	while (lines.length < lineCount) {
+		lines.push('<div class="package">&nbsp;</div>');
+	}
+	return lines.length > 0 ? `<div class="pane-meta">${lines.join('')}</div>` : '';
+}
+
 export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = {}): string {
 	const nonce = options.nonce ?? randomBytes(16).toString('base64');
 	const payload = encodeDiffDocument(diff);
@@ -43,15 +64,17 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 	const right = escapeHtml(diff.labels[1]);
 	const leftPath = escapeHtml(diff.left.path);
 	const rightPath = escapeHtml(diff.right.path);
+	const headerCount = Math.max(headerLines(diff.leftHeader).length, headerLines(diff.rightHeader).length);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
-<style nonce="${nonce}">${DIFF_STYLE}</style>
+<style nonce="${nonce}">${documentViewStyles()}
+${DIFF_STYLE}</style>
 <style id="virtual-style" nonce="${nonce}">#diff-top{height:0px}#diff-bottom{height:0px}</style>
 </head>
-<body>
+<body data-view="document">
 <div class="toolbar">
 <div class="toolbar-left">
 <div class="view-switch" role="group" aria-label="Diff view">
@@ -81,8 +104,8 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 <div id="diff-notice" class="notice" role="status" aria-live="polite"></div>
 <div id="diff-scroll">
 <div class="pane-headers" role="presentation">
-<div id="diff-left-header" class="pane-header" title="${leftPath}"><span id="diff-left-label">${left}</span></div>
-<div id="diff-right-header" class="pane-header" title="${rightPath}"><span id="diff-right-label">${right}</span></div>
+<div id="diff-left-header" class="pane-header" title="${leftPath}"><span id="diff-left-label">${left}</span>${paneHeaderHtml(diff.leftHeader, headerCount)}</div>
+<div id="diff-right-header" class="pane-header" title="${rightPath}"><span id="diff-right-label">${right}</span>${paneHeaderHtml(diff.rightHeader, headerCount)}</div>
 </div>
 <div id="diff-list" role="tree" aria-label="Semantic ECUC diff">
 <div id="diff-measure" aria-hidden="true"><span id="diff-ch-probe" class="ch-probe">${'0'.repeat(100)}</span><div class="diff-row probe"><div class="diff-cell"><span class="row"><span class="label">x</span></span></div><div class="diff-cell"><span class="row"><span class="label">x</span></span></div></div></div>
@@ -92,7 +115,7 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 </div>
 <div id="diff-empty" class="empty" hidden><p id="diff-empty-text"></p></div>
 </div>
-<div id="diff-hscroll" class="hscroll" role="group" aria-label="Scroll both diff panes horizontally" tabindex="0" hidden><div id="diff-hscroll-inner" class="hscroll-inner"></div></div>
+<div class="hscroll-row"><div id="diff-hscroll-left" class="hscroll" role="group" aria-label="Scroll the left diff pane horizontally" tabindex="0" hidden><div class="hscroll-inner"></div></div><div id="diff-hscroll-right" class="hscroll" role="group" aria-label="Scroll the right diff pane horizontally" tabindex="0" hidden><div class="hscroll-inner"></div></div></div>
 <script type="application/json" id="diff-document" nonce="${nonce}">${payload}</script>
 <script nonce="${nonce}">
 ${DIFF_PAGE_ERROR_SCRIPT}
@@ -154,11 +177,12 @@ export function diffPageScript(): string {
 diffInstallErrorSurface();
 const vscode = acquireVsCodeApi();
 ${rowViewScript()}
+${documentRowsScript()}
 ${virtualScrollScript()}
 ${matchRangesScript()}
 ${rowSearchScript()}
 ${diffVisibility.toString()}
-${flattenDiffRows.toString()}
+${flattenDiffDocument.toString()}
 ${nextChangeIndex.toString()}
 ${diffRowChars.toString()}
 ${diffContentWidth.toString()}
@@ -183,7 +207,9 @@ const leftHeader = document.getElementById('diff-left-header');
 const rightHeader = document.getElementById('diff-right-header');
 const empty = document.getElementById('diff-empty');
 const emptyText = document.getElementById('diff-empty-text');
-const hscroll = document.getElementById('diff-hscroll');
+const hscrollLeft = document.getElementById('diff-hscroll-left');
+const hscrollRight = document.getElementById('diff-hscroll-right');
+const hscrolls = [hscrollLeft, hscrollRight];
 const bufferRows = 10;
 const searchEngine = new RowSearchEngine();
 let searchQuery = '';
@@ -198,6 +224,8 @@ let swapped = false;
 let diffDocument = {
 	left: { name: '', path: '' },
 	right: { name: '', path: '' },
+	leftHeader: { packages: [] },
+	rightHeader: { packages: [] },
 	rows: [],
 	summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
 };
@@ -234,6 +262,8 @@ function readInitialDocument() {
 			left: { name: '', path: '' },
 			right: { name: '', path: '' },
 			labels: ['', ''],
+			leftHeader: { packages: [] },
+			rightHeader: { packages: [] },
 			rows: [],
 			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
 		};
@@ -244,6 +274,8 @@ function readInitialDocument() {
 			left: { name: '', path: '' },
 			right: { name: '', path: '' },
 			labels: ['', ''],
+			leftHeader: { packages: [] },
+			rightHeader: { packages: [] },
 			rows: [],
 			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
 		};
@@ -253,6 +285,8 @@ function readInitialDocument() {
 			left: { name: '', path: '' },
 			right: { name: '', path: '' },
 			labels: ['', ''],
+			leftHeader: { packages: [] },
+			rightHeader: { packages: [] },
 			rows: [],
 			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
 		};
@@ -286,14 +320,19 @@ function buildHeightFn() {
 	heightFn = function (index) {
 		const flat = displayRows[index];
 		const row = flat ? rows[flat.rowIndex] : undefined;
-		const gap = row && row.kind === 'module' && index > 0;
+		const previous = index > 0 ? displayRows[index - 1] : undefined;
+		const gap =
+			row &&
+			row.kind === 'module' &&
+			index > 0 &&
+			(!previous || previous.rowIndex !== flat.rowIndex);
 		return base + (gap ? base : 0);
 	};
 	heightVersion++;
 }
 
 function rebuildDisplay() {
-	displayRows = flattenDiffRows(rows, {
+	displayRows = flattenDiffDocument(rows, {
 		collapsed: collapsed,
 		visible: visibility
 	});
@@ -301,6 +340,9 @@ function rebuildDisplay() {
 	navigationVisible = new Array(rows.length).fill(false);
 	for (let at = 0; at < displayRows.length; at++) {
 		const flat = displayRows[at];
+		if (flat.left !== 'node' && flat.right !== 'node') {
+			continue;
+		}
 		const row = rows[flat.rowIndex];
 		displayIndexByKey.set(row.key, at);
 		navigationVisible[flat.rowIndex] = true;
@@ -321,6 +363,12 @@ function setDocument(next) {
 	}
 	if (!Array.isArray(next.labels) || next.labels.length !== 2) {
 		next.labels = [next.left ? next.left.name : '', next.right ? next.right.name : ''];
+	}
+	if (!next.leftHeader) {
+		next.leftHeader = { packages: [] };
+	}
+	if (!next.rightHeader) {
+		next.rightHeader = { packages: [] };
 	}
 	diffDocument = next;
 	rows = next.rows;
@@ -380,6 +428,14 @@ function applyDiffX(next) {
 	writeVirtualStyle();
 }
 
+function syncBars() {
+	for (const bar of hscrolls) {
+		if (bar && bar.scrollLeft !== diffX) {
+			bar.scrollLeft = diffX;
+		}
+	}
+}
+
 function measureDiffWidth() {
 	const probe = document.getElementById('diff-ch-probe');
 	let chWidth = 0;
@@ -399,10 +455,14 @@ function measureDiffWidth() {
 	if (diffX > max) {
 		diffX = max;
 	}
-	if (hscroll) {
-		hscroll.hidden = max <= 0;
-		if (hscroll.scrollLeft !== diffX) {
-			hscroll.scrollLeft = diffX;
+	if (hscrolls.length > 0) {
+		for (const bar of hscrolls) {
+			if (bar) {
+				bar.hidden = max <= 0;
+				if (bar.scrollLeft !== diffX) {
+					bar.scrollLeft = diffX;
+				}
+			}
 		}
 	}
 	writeVirtualStyle();
@@ -429,12 +489,13 @@ function virtualState() {
 }
 
 function writeVirtualStyle() {
-	const half = hscroll ? hscroll.clientWidth - paneWidth() : paneWidth();
+	const bar = hscrollLeft;
+	const half = bar ? bar.clientWidth - paneWidth() : 0;
 	const text =
 		'#diff-top{height:' + Math.max(0, spacerTop) + 'px}' +
 		'#diff-bottom{height:' + Math.max(0, spacerBottom) + 'px}' +
 		'#diff-scroll{--diff-x:-' + diffX + 'px}' +
-		'#diff-hscroll-inner{width:' + (diffContent + Math.max(0, half)) + 'px}';
+		'.hscroll-inner{width:' + (diffContent + Math.max(0, half)) + 'px}';
 	if (text === virtualStyleText) {
 		return;
 	}
@@ -448,32 +509,91 @@ function setSpacers(top, bottom) {
 	writeVirtualStyle();
 }
 
-function buildDiffCell(cell, side, row) {
+function documentOptions(flat, side) {
+	return {
+		selectedId: undefined,
+		expandedIds: flat.expanded ? new Set([rows[flat.rowIndex].key]) : new Set(),
+		searchQuery: searchQuery,
+		currentId: currentMatchKey(),
+		subtreeIds: new Set(),
+		guides: side === 'left' ? flat.guidesLeft : flat.guidesRight
+	};
+}
+
+function documentRowForCell(cell, row) {
+	return {
+		kind: cell.kind,
+		label: cell.label,
+		shortName: cell.shortName,
+		definitionRef: cell.definitionRef,
+		definitionDest: cell.definitionDest,
+		shownValue: cell.shownValue,
+		valueKind: cell.valueKind,
+		value: cell.value,
+		target: cell.target,
+		contextPaths: cell.contextPaths,
+		comments: cell.comments,
+		meta: cell.meta,
+		range: cell.range,
+		id: row.key,
+		level: row.level,
+		posinset: row.posinset,
+		setsize: row.setsize,
+		hasChildren: row.hasChildren,
+		title: cell.definitionRef,
+		empty: false,
+		disabled: false
+	};
+}
+
+function buildDiffCell(cell, side, row, flat, status) {
 	const wrapper = document.createElement('div');
 	wrapper.className = 'diff-cell';
 	wrapper.dataset.side = side;
-	const line = document.createElement('span');
-	line.className = 'row k-' + cell.kind + (cell.shownValue !== undefined ? ' has-value' : ' no-value');
-	line.dataset.level = String(row.level);
-	const twisty = document.createElement('span');
-	twisty.className = 'twisty';
-	twisty.setAttribute('aria-hidden', 'true');
-	if (row.hasChildren && (cell.kind === 'container' || cell.kind === 'module')) {
-		twisty.appendChild(twistyIcon());
-	}
-	line.appendChild(twisty);
-	const label = document.createElement('span');
-	label.className = 'label';
-	appendHighlighted(label, cell.label, highlightQuery);
-	line.appendChild(label);
-	if (cell.kind === 'parameter' || cell.kind === 'reference') {
-		line.appendChild(valueSpan(cell, true, highlightQuery));
-	}
-	if (cell.meta && cell.meta.length > 0) {
-		line.appendChild(metaSpan(cell, highlightQuery));
-	}
-	wrapper.appendChild(line);
+	wrapper.dataset.status = status;
+	const node = buildDocumentNodeRow(
+		documentRowForCell(cell, row),
+		Object.assign(documentOptions(flat, side), {
+			selectedId: row.key === selectedKey ? row.key : undefined
+		})
+	);
+	node.removeAttribute('role');
+	node.removeAttribute('aria-level');
+	node.removeAttribute('aria-posinset');
+	node.removeAttribute('aria-setsize');
+	node.removeAttribute('aria-selected');
+	node.removeAttribute('aria-expanded');
+	node.removeAttribute('tabindex');
+	node.tabIndex = -1;
+	wrapper.appendChild(node);
 	return wrapper;
+}
+
+function buildStructuralCell(kind, text, side, row, flat) {
+	const wrapper = document.createElement('div');
+	wrapper.className = 'diff-cell';
+	wrapper.dataset.side = side;
+	if (kind === 'blank') {
+		return wrapper;
+	}
+	const options = documentOptions(flat, side);
+	const element =
+		kind === 'comment'
+			? buildDocumentCommentRow(text || '', flat.level, row.key, options)
+			: buildDocumentBraceRow(kind, flat.level, row.key, options);
+	wrapper.appendChild(element);
+	return wrapper;
+}
+
+function carriesDiffGap(flat, displayIndex) {
+	const row = flat ? rows[flat.rowIndex] : undefined;
+	const previous = displayIndex > 0 ? displayRows[displayIndex - 1] : undefined;
+	return (
+		row &&
+		row.kind === 'module' &&
+		displayIndex > 0 &&
+		(!previous || previous.rowIndex !== flat.rowIndex)
+	);
 }
 
 function emptyCell(side) {
@@ -482,6 +602,19 @@ function emptyCell(side) {
 	wrapper.dataset.side = side;
 	wrapper.dataset.empty = 'true';
 	return wrapper;
+}
+
+function buildStructuralRow(flat, displayIndex) {
+	const row = rows[flat.rowIndex];
+	const element = document.createElement('div');
+	element.className = 'diff-row diff-structural';
+	element.setAttribute('aria-hidden', 'true');
+	if (carriesDiffGap(flat, displayIndex)) {
+		element.dataset.gap = 'true';
+	}
+	element.appendChild(buildStructuralCell(flat.left, flat.commentLeft, 'left', row, flat));
+	element.appendChild(buildStructuralCell(flat.right, flat.commentRight, 'right', row, flat));
+	return element;
 }
 
 function displayLeft(row) {
@@ -503,19 +636,19 @@ function hostSide(side) {
 	return swapped ? (side === 'left' ? 'right' : 'left') : side;
 }
 
-function buildDiffRow(row, displayIndex) {
-	const left = displayLeft(row);
-	const right = displayRight(row);
+function buildDiffRow(row, flat, displayIndex) {
+	const left = flat.left === 'node' ? displayLeft(row) : undefined;
+	const right = flat.right === 'node' ? displayRight(row) : undefined;
 	const status = displayStatus(row);
 	const element = document.createElement('div');
-	element.className = 'node diff-row';
+	element.className = 'diff-row';
 	element.setAttribute('role', 'treeitem');
 	element.setAttribute('aria-level', String(row.level));
 	element.setAttribute('aria-posinset', String(row.posinset));
 	element.setAttribute('aria-setsize', String(row.setsize));
 	element.setAttribute('aria-selected', row.key === selectedKey ? 'true' : 'false');
 	if (row.hasChildren) {
-		element.setAttribute('aria-expanded', displayRows[displayIndex] && displayRows[displayIndex].expanded ? 'true' : 'false');
+		element.setAttribute('aria-expanded', flat.expanded ? 'true' : 'false');
 	}
 	element.tabIndex = -1;
 	element.dataset.key = row.key;
@@ -526,7 +659,7 @@ function buildDiffRow(row, displayIndex) {
 	if (searchQuery.trim() !== '' && row.key === currentMatchKey()) {
 		element.dataset.searchCurrent = 'true';
 	}
-	if (row.kind === 'module' && displayIndex > 0) {
+	if (carriesDiffGap(flat, displayIndex)) {
 		element.dataset.gap = 'true';
 	}
 	const owner = left || right;
@@ -539,9 +672,16 @@ function buildDiffRow(row, displayIndex) {
 		badge.textContent = status;
 		element.appendChild(badge);
 	}
-	element.appendChild(left ? buildDiffCell(left, 'left', row) : emptyCell('left'));
-	element.appendChild(right ? buildDiffCell(right, 'right', row) : emptyCell('right'));
+	element.appendChild(left ? buildDiffCell(left, 'left', row, flat, status) : emptyCell('left'));
+	element.appendChild(right ? buildDiffCell(right, 'right', row, flat, status) : emptyCell('right'));
 	return element;
+}
+
+function buildDisplayRow(flat, displayIndex) {
+	const row = rows[flat.rowIndex];
+	return flat.left === 'node' || flat.right === 'node'
+		? buildDiffRow(row, flat, displayIndex)
+		: buildStructuralRow(flat, displayIndex);
 }
 
 function focusedKey() {
@@ -599,8 +739,10 @@ function renderWindow(force) {
 			continue;
 		}
 		const row = rows[flat.rowIndex];
-		const element = buildDiffRow(row, at);
-		renderedByKey.set(row.key, element);
+		const element = buildDisplayRow(flat, at);
+		if (flat.left === 'node' || flat.right === 'node') {
+			renderedByKey.set(row.key, element);
+		}
 		fragment.appendChild(element);
 	}
 	listWindow.textContent = '';
@@ -939,6 +1081,9 @@ function setView(changesOnly) {
 
 function setSwapped(next) {
 	swapped = next === true;
+	diffX = 0;
+	syncBars();
+	writeVirtualStyle();
 	updateViewButtons();
 	renderHeaders();
 	renderWindow(true);
@@ -1035,6 +1180,18 @@ function toggleCollapsed(key) {
 	refocus(focused);
 }
 
+function nextNodeIndex(from, direction) {
+	let at = from + direction;
+	while (at >= 0 && at < displayRows.length) {
+		const flat = displayRows[at];
+		if (flat.left === 'node' || flat.right === 'node') {
+			return at;
+		}
+		at += direction;
+	}
+	return -1;
+}
+
 function moveSelection(offset) {
 	if (displayRows.length === 0) {
 		return;
@@ -1043,8 +1200,18 @@ function moveSelection(offset) {
 	if (at === undefined) {
 		at = offset > 0 ? -1 : displayRows.length;
 	}
-	const next = Math.max(0, Math.min(displayRows.length - 1, at + offset));
-	selectKey(rows[displayRows[next].rowIndex].key, true);
+	const direction = offset >= 0 ? 1 : -1;
+	let next = at;
+	for (let step = 0; step < Math.abs(offset); step++) {
+		const candidate = nextNodeIndex(next, direction);
+		if (candidate < 0) {
+			break;
+		}
+		next = candidate;
+	}
+	if (next !== at && next >= 0) {
+		selectKey(rows[displayRows[next].rowIndex].key, true);
+	}
 }
 
 function selectedParent() {
@@ -1057,10 +1224,14 @@ function selectedChild() {
 		return undefined;
 	}
 	const at = displayIndexByKey.get(selectedKey);
-	if (at === undefined || at + 1 >= displayRows.length) {
+	if (at === undefined) {
 		return undefined;
 	}
-	const next = rows[displayRows[at + 1].rowIndex];
+	const childAt = nextNodeIndex(at, 1);
+	if (childAt < 0) {
+		return undefined;
+	}
+	const next = rows[displayRows[childAt].rowIndex];
 	return next.level > rows[displayRows[at].rowIndex].level ? next.key : undefined;
 }
 
@@ -1162,26 +1333,30 @@ scroll.addEventListener('scroll', function () {
 	});
 });
 scroll.addEventListener('wheel', function (event) {
-	if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+	const horizontal = event.shiftKey ? event.deltaY : event.deltaX;
+	const vertical = event.shiftKey ? 0 : Math.abs(event.deltaY);
+	if (Math.abs(horizontal) <= vertical) {
 		return;
 	}
 	if (maxDiffX() <= 0) {
 		return;
 	}
 	event.preventDefault();
-	applyDiffX(diffX + event.deltaX);
-	if (hscroll) {
-		hscroll.scrollLeft = diffX;
-	}
+	applyDiffX(diffX + horizontal);
+	syncBars();
 }, { passive: false });
-if (hscroll) {
-	hscroll.addEventListener('scroll', function () {
+for (const bar of hscrolls) {
+	if (!bar) {
+		continue;
+	}
+	bar.addEventListener('scroll', function () {
 		if (hscrollFrame !== 0) {
 			return;
 		}
 		hscrollFrame = requestAnimationFrame(function () {
 			hscrollFrame = 0;
-			applyDiffX(hscroll.scrollLeft);
+			applyDiffX(bar.scrollLeft);
+			syncBars();
 		});
 	});
 }
@@ -1282,7 +1457,7 @@ vscode.postMessage({ type: 'ready' });
 
 const DIFF_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
 	const level = at + 1;
-	return `.diff-cell > .row[data-level="${level}"] { padding-left: calc(var(--content-pad) + var(--indent) * ${at}); }`;
+	return `.diff-cell > .node > .row[data-level="${level}"], .diff-cell > .brace > .row[data-level="${level}"], .diff-cell > .comment > .row[data-level="${level}"] { padding-left: calc(var(--content-pad) + var(--indent) * ${at}); }`;
 }).join('\n');
 
 const DIFF_STYLE = `
@@ -1587,6 +1762,21 @@ input[type="search"]::-webkit-search-decoration {
 .pane-header + .pane-header {
 	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
+.pane-meta {
+	padding-left: var(--content-pad);
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: var(--ecuc-lh);
+	font-weight: 400;
+	color: var(--vscode-editor-foreground);
+	white-space: pre;
+}
+.pane-meta .keyword {
+	color: var(--tok-keyword);
+}
+.pane-meta .number {
+	color: var(--tok-number);
+}
 #diff-list {
 	position: relative;
 	padding: 4px 0 12px;
@@ -1687,18 +1877,15 @@ input[type="search"]::-webkit-search-decoration {
 .diff-cell[data-empty="true"] {
 	background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--vscode-editorGroup-border, transparent) 6px 7px);
 }
-.diff-cell > .row {
-	display: flex;
-	flex-wrap: nowrap;
-	gap: 1ch;
-	align-items: baseline;
-	box-sizing: border-box;
-	position: relative;
-	height: var(--ecuc-lh);
-	min-width: 0;
+.diff-cell > .node,
+.diff-cell > .brace,
+.diff-cell > .comment {
 	width: 100%;
-	padding: 0 0 0 var(--content-pad);
-	white-space: pre;
+	min-width: 0;
+}
+.diff-cell > .node > .row,
+.diff-cell > .brace > .row,
+.diff-cell > .comment > .row {
 	transform: translateX(var(--diff-x, 0px));
 }
 ${DIFF_LEVEL_RULES}
@@ -1716,9 +1903,9 @@ ${DIFF_LEVEL_RULES}
 	transition: opacity 0.2s;
 	cursor: pointer;
 }
-.diff-row:hover > .diff-cell > .row > .twisty,
-.diff-row:focus-visible > .diff-cell > .row > .twisty,
-.diff-row[aria-expanded="false"] > .diff-cell > .row > .twisty {
+.diff-row:hover .twisty,
+.diff-row:focus-visible .twisty,
+.diff-row[aria-expanded="false"] .twisty {
 	opacity: 1;
 }
 .twisty svg {
@@ -1857,12 +2044,19 @@ mark {
 .empty p {
 	margin: 0;
 }
-.hscroll {
+.hscroll-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 	flex: none;
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.hscroll {
 	height: 12px;
 	overflow-x: auto;
 	overflow-y: hidden;
-	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.hscroll + .hscroll {
+	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
 .hscroll[hidden] {
 	display: none;

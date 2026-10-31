@@ -21,8 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Condition constants discovered from the open document appear automatically; scanned constants are read-only and manual rows can be removed
 - Condition values use icon-only Edit, Save and Cancel actions
 - A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, **Show all** / **Show diff only**, Enter-driven Search, **Prev diff** / **Next diff**, **Swap sides** and reveal-in-source
-- The diff keeps both panes side by side on one screen; one horizontal scrollbar moves both sides together so the longest line can be read
-- Diff rows use the same fold gutter, indentation, label weight and meta typography as the Document view
+- The diff shows each file with its schema/package header, annotations, braces and bracket guides, using the same colours and typography as the Document view
+- Each diff pane has its own horizontal scrollbar; moving either one scrolls both sides in sync, and Shift+wheel over either pane does the same
 - Two files with the same name are disambiguated by their shortest differing path in the diff title and pane headers
 - The diff toolbar has no Filter, changes summary or global collapse/expand buttons; view and difference controls sit on the left, **Swap sides** is centred, and Search stays on the right; row-level collapse and one synchronized vertical scroll remain
 - A right-click **Duplicate** / **Delete** menu on container and parameter rows; both ask for confirmation, container duplicates ask for a unique short name, and each action is one undoable edit

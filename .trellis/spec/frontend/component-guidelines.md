@@ -314,20 +314,22 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
   horizontal padding, so the pane edge is the clip boundary. Keep the pane headers and the diff
   status tints.
-- **The diff has no bottom strip.** The page ends at the horizontal proxy bar. There is no
-  selected-row details region, comparison table, headings or reveal buttons; `Enter` on the selected
-  row is the reveal action. Do not reintroduce a strip without a new requirement.
-- **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`, so two
-  same-named files read as the same shortest path suffix in the window title and the pane headers.
-  Swap reverses the pair; do not recompute it in the page.
-- **Horizontal scrolling is shared and fixed.** Both panes always use `minmax(0, 1fr)` tracks and
-  fit the viewport. A proxy bar under the panes drives one `--diff-x` applied to `.diff-cell > .row`;
-  horizontal wheel over `#diff-scroll` does the same. Content width is the longest `diffRowChars`
-  estimate (Document padding + indent + text) plus one monospace font probe and `26 + 8`px for the
-  gutter and slack, with no cap. The proxy inner width is `contentWidth + proxyWidth - paneWidth`, so
-  its native maximum is exactly one pane width short of the content even with a vertical scrollbar.
-  The bar is hidden when content fits. Never widen the panes, keep per-pane offsets or write a
-  `style` attribute.
+- **Diff rows render the Document view.** Each pane reuses the Document stylesheet slice
+  (`documentViewStyles`) and the `documentRows.ts` builders for nodes, annotations, braces and
+  guides. The editor still keeps its page-local builder wrappers around the same CSS; a full
+  component extraction is a follow-up.
+  Schema/package lines sit under each pane header; annotations and `{` / `}` rows follow each side;
+  colours, font, gutter, indentation and meta typography match Document. Only the status tint and
+  edge marker are diff-specific, and they sit on the cell without recolouring tokens.
+- **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
+  selected-row table or reveal buttons.
+- **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the window
+  title and pane headers show the same shortest distinguishing suffix.
+- **Horizontal scrolling is per-pane but synchronized.** Each pane has its own scrollbar; moving
+  either one writes the same `--diff-x` to both. Shift+wheel over either pane does the same, and
+  plain wheel stays vertical. Content width is the longest rendered line across both panes plus the
+  Document gutter and slack, with no cap. Vertical scrolling remains one shared scroller. Swap resets
+  the horizontal offset to zero and leaves the vertical position untouched.
 - **Swap sides is display-only.** `displayLeft`/`displayRight`/`displayStatus` re-project the row,
   and `Enter` maps a displayed side back to the host's original side. The comparison documents are
   not recomputed and the single `#diff-scroll` is untouched; do not add pane-level scroll state.
