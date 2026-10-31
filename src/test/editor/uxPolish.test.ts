@@ -48,7 +48,9 @@ suite('editor visual polish', () => {
 		assert.ok(!html.includes('id="view-toggle"'));
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));
-		assert.ok(html.includes('id="tree-window"'), 'the tree region is the virtual window');
+		assert.ok(html.includes('id="tree" class="document-tree"'), 'the tree region is the shared component');
+		assert.ok(html.includes('class="document-tree-window"') === false, 'the window is created at runtime');
+		assert.ok(html.includes("this.windowEl.className = 'document-tree-window'"), 'the component creates the window');
 		assert.ok(!html.slice(html.indexOf('id="ecuc-rows"')).includes('id="inspector"'), 'the row payload has no shell');
 		const mainAt = html.indexOf('<div id="main">');
 		const resizerAt = html.indexOf('<div id="sidebar-resizer"');
@@ -69,7 +71,7 @@ suite('editor visual polish', () => {
 		assert.strictEqual(peer.target, '/PkgA/PkgB/ModX/ContA/ContB');
 
 		const script = page();
-		const build = functionSource(script, 'buildNodeRow');
+		const build = functionSource(script, 'buildDocumentNodeRow');
 		for (const field of [
 			"node.dataset.definitionRef = row.definitionRef",
 			"node.dataset.shortName = row.shortName || ''",
@@ -164,16 +166,16 @@ suite('editor visual polish', () => {
 
 	test('rows are flat flex rows and .value stays a direct child of .row', () => {
 		const script = page();
-		const build = functionSource(script, 'buildNodeRow');
+		const build = functionSource(script, 'buildDocumentNodeRow');
 		const value = functionSource(script, 'valueSpan');
 		assert.ok(build.includes("'row k-' + row.kind"), 'the kind classes');
 		assert.ok(build.includes("row.shownValue !== undefined ? ' has-value' : ' no-value'"));
-		assert.ok(build.includes('rowElement.appendChild(valueSpan(row))'), 'the value is appended directly to .row');
+		assert.ok(build.includes('rowElement.appendChild(window.valueSpan(row))'), 'the value is appended directly to .row');
 		assert.ok(!build.includes('glyphSpan'), 'no Tree glyph');
 		assert.ok(value.includes("value.className = 'value'"));
 		assert.ok(value.includes("text.className = 'value-text'"));
 		assert.ok(build.includes("row.meta.filter((part) => part.cls !== 'annotation')"), 'annotation meta leaves the row');
-		assert.ok(build.includes('metaSpan({ ...row, meta: inlineMeta })'), 'the remaining metadata line');
+		assert.ok(build.includes('window.metaSpan({ ...row, meta: inlineMeta })'), 'the remaining metadata line');
 		assert.ok(functionSource(script, 'metaSpan').includes("span.className = part.cls"));
 		assert.ok(functionSource(script, 'metaSpan').includes('span.title = part.title'));
 
@@ -192,7 +194,7 @@ suite('editor visual polish', () => {
 			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(style)
 		);
 		assert.ok(
-			/#tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
+			/.document-tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
 				style
 			)
 		);

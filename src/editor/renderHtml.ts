@@ -28,7 +28,7 @@ import type { ConditionValue } from '../core/ecuc/syscond';
 import type { ConditionEntry } from './conditionValues';
 import { FlatRow, ancestorIds, carriesGroupGap, flattenRows, matchRangesScript, stepMatch } from './treeQuery';
 import { buildDocumentBraceRow, buildDocumentCommentRow, buildDocumentNodeRow, documentRowsScript } from './documentRows';
-import { escapeHtml } from './html';
+import { DocumentTreeHeader, documentTreeStyles, documentTreeViewScript } from './documentTreeView';
 import { encodeJsonForScript } from './jsonScript';
 import { consoleErrorScript } from './pageError';
 import { EcucRow, MetaPart, ParameterFormat, RowCondition, buildRows } from './renderRows';
@@ -58,6 +58,19 @@ export interface RenderOptions {
 export interface RowPayload {
 	rows: EcucRow[];
 	selectedId?: string;
+	/** Schema/packages shown by the component header. */
+	header?: DocumentTreeHeader;
+}
+
+/**
+ * The schema/packages the component header shows. One owner, so the initial page
+ * and a later `{ type: 'model' }` push cannot disagree.
+ */
+export function documentHeader(model: EcucDocumentModel): DocumentTreeHeader {
+	return {
+		...(model.schema ? { schema: model.schema.release } : {}),
+		packages: model.packages.map((pkg) => pkg.path.join('.')),
+	};
 }
 
 /**
@@ -226,16 +239,15 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 	const payload = encodeRowDocument({
 		rows: document.rows,
 		selectedId: options.selectedId,
+		header: documentHeader(model),
 	});
 	const conditionPayload = encodeJsonForScript(options.conditionEntries ?? []);
-	const meta = headerHtml(model);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
-<style nonce="${nonce}">${STYLE}</style>
-<style id="virtual-style" nonce="${nonce}">#tree-top{height:0px}#tree-bottom{height:0px}</style>
+<style nonce="${nonce}">${STYLE}${documentTreeStyles()}</style>
 <style id="row-menu-style" nonce="${nonce}">#row-menu{left:0;top:0}</style>
 </head>
 <body data-view="document">
@@ -257,11 +269,8 @@ export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}
 </div>
 <div id="content">
 <div id="main">
-<div class="document">
-<div class="meta">${meta}</div>
-<div id="tree-measure" aria-hidden="true"><div class="node probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
-<div id="tree" class="tree" role="tree" aria-label="ECUC values"><div id="tree-top" class="v-spacer" role="presentation" aria-hidden="true"></div><div id="tree-window" role="presentation"></div><div id="tree-bottom" class="v-spacer" role="presentation" aria-hidden="true"></div></div>
-</div>
+<div id="tree-measure" aria-hidden="true"><div class="probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
+<div id="tree" class="document-tree" role="tree" aria-label="ECUC values"></div>
 </div>
 <div id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" title="Drag to resize sidebar" tabindex="0"></div>
 <aside id="sidebar" aria-label="ECUC sidebar">
@@ -332,22 +341,6 @@ ${TREE_SCRIPT}
 </html>`;
 }
 
-/** The small schema/package header that aligns with the gutter. */
-function headerHtml(model: EcucDocumentModel): string {
-	const meta: string[] = [];
-	if (model.schema) {
-		meta.push(
-			`<div class="schema"><span class="keyword">schema</span> <span class="number">${escapeHtml(
-				model.schema.release
-			)}</span></div>`
-		);
-	}
-	for (const pkg of model.packages) {
-		meta.push(`<div class="package"><span class="keyword">package</span> ${escapeHtml(pkg.path.join('.'))}</div>`);
-	}
-	return meta.join('');
-}
-
 /* ---------------------------------------------------------------------------------
  * Re-scan state (design §8). Serialized into the page with `toString()` so the
  * webview and the tests run the same code.
@@ -413,17 +406,6 @@ export function refusalShownInDetails(message: { inline?: boolean }, detailsHidd
 	return message.inline === true && detailsHidden === false;
 }
 
-const DOCUMENT_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
-	const level = at + 1;
-	const indent = level === 1 ? 'var(--content-pad)' : `calc(var(--content-pad) + var(--indent) * ${level - 1})`;
-	return `body[data-view="document"] .row[data-level="${level}"] { padding-left: ${indent}; }`;
-}).join('\n');
-
-const GUIDE_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
-	const level = at + 1;
-	return `body[data-view="document"] .guide[data-level="${level}"] { left: calc(var(--content-pad) + var(--indent) * ${level - 1} + 0.5ch); }`;
-}).join('\n');
-
 const STYLE = `
 html, body {
 	height: 100%;
@@ -441,44 +423,6 @@ body {
 }
 /* Quiet-source tokens: one definition for the Document surface. Plain declarations first are
  * the fallback for hosts without color-mix; the second declaration refines them. */
-body[data-view] {
-	--ecuc-fs: var(--vscode-editor-font-size, 13px);
-	--ecuc-lh: calc(var(--ecuc-fs) * 1.55);
-	--tok-keyword: var(--vscode-debugTokenExpression-boolean, var(--vscode-editor-foreground));
-	--tok-string: var(--vscode-debugTokenExpression-string, var(--vscode-editor-foreground));
-	--tok-number: var(--vscode-debugTokenExpression-number, var(--vscode-editor-foreground));
-	--tok-meta: var(--vscode-debugTokenExpression-name, var(--vscode-editor-foreground));
-	--tok-comment: var(--vscode-charts-green, var(--vscode-editor-foreground));
-	--tok-key: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
-	--tok-punct: var(--vscode-editor-foreground);
-	--tok-dim: var(--vscode-editor-foreground);
-	--hover-bg: var(--vscode-list-hoverBackground, transparent);
-	--sel-bg: var(--vscode-editor-background);
-	--sel-bg-focus: var(--vscode-editor-background);
-	--subtree-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
-	--sel-container-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
-	--container-accent: #4EC9B0;
-	/* Search match tiers: fixed dark-theme yellow, matching the reference UI. */
-	--match-bg: rgba(234, 179, 8, 0.32);
-	--match-hi: rgba(234, 179, 8, 0.7);
-	--fold-gutter: 26px;
-	--doc-pad: 3ch;
-	--indent: 4ch;
-	--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
-	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
-}
-@supports (color: color-mix(in srgb, currentColor 50%, transparent)) {
-	body[data-view] {
-		--tok-comment: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-editor-foreground)) 85%, var(--vscode-editor-background));
-		--tok-punct: color-mix(in srgb, var(--vscode-editor-foreground) 70%, var(--vscode-editor-background));
-		--tok-dim: color-mix(in srgb, var(--vscode-editor-foreground) 55%, var(--vscode-editor-background));
-		--sel-bg: color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background)) 14%, var(--vscode-editor-background));
-		--sel-bg-focus: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 24%, var(--vscode-editor-background));
-		--subtree-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 18%, transparent);
-		--sel-container-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 45%, transparent);
-		--sel-outline: color-mix(in srgb, var(--rail) 55%, transparent);
-	}
-}
 /* Shared button/field primitives. The editor, the details panel and the later
  * Conditions/Search children all use these classes; every colour is a theme
  * token. A control that is missing its semantic token falls back to the panel
@@ -989,13 +933,13 @@ input[type="search"]::-webkit-search-decoration {
 	min-height: 0;
 }
 #main {
+	display: flex;
+	flex-direction: column;
 	flex: 1 1 auto;
 	min-width: 0;
-	overflow: auto;
-	scroll-padding-left: var(--content-pad);
-	/* The window swaps spacer heights; browser scroll anchoring would fight the
-	 * virtual range and snap the viewport back to the top. */
-	overflow-anchor: none;
+	min-height: 0;
+	overflow: hidden;
+	position: relative;
 }
 #inspector {
 	display: flex;
@@ -1243,41 +1187,6 @@ body.sb-row-resizing {
 		transition-duration: 0s;
 	}
 }
-.document {
-	position: relative;
-}
-.meta {
-	padding: 6px 10px;
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	color: var(--vscode-editor-foreground);
-}
-.schema, .package {
-	font-family: inherit;
-}
-.meta .keyword {
-	color: var(--tok-keyword);
-}
-.meta .number {
-	color: var(--tok-number);
-}
-.number {
-	color: var(--tok-number);
-}
-.tree {
-	padding: 4px 0 12px;
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--ecuc-fs);
-}
-#tree[data-empty="true"] {
-	padding-top: 0;
-	padding-bottom: 0;
-}
-#tree-window {
-	display: flow-root;
-}
-.v-spacer {
-	pointer-events: none;
-}
 #tree-measure {
 	position: absolute;
 	left: -10000px;
@@ -1285,174 +1194,6 @@ body.sb-row-resizing {
 	width: 240px;
 	visibility: hidden;
 	pointer-events: none;
-}
-.node {
-	outline: none;
-}
-.row {
-	display: flex;
-	flex-wrap: nowrap;
-	gap: 1ch;
-	align-items: baseline;
-	box-sizing: border-box;
-	height: var(--ecuc-lh);
-	padding: 0 0 0 var(--content-pad);
-	position: relative;
-}
-.row:hover {
-	background-color: var(--hover-bg);
-}
-.twisty {
-	position: absolute;
-	left: 2px;
-	top: 0;
-	bottom: 0;
-	width: 16px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--vscode-icon-foreground, var(--vscode-foreground));
-	opacity: 0;
-	transition: opacity 0.5s;
-}
-.twisty svg {
-	transition: transform 120ms ease;
-}
-.node[aria-expanded="true"] > .row > .twisty svg {
-	transform: rotate(90deg);
-}
-.label {
-	flex: 0 0 auto;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-weight: 600;
-}
-.value {
-	flex: 0 0 auto;
-	justify-self: start;
-	min-width: 0;
-	max-width: 100%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	color: var(--vscode-foreground);
-}
-.value[data-value-kind="numeric"] {
-	color: var(--tok-number);
-}
-.value[data-value-kind="textual"] {
-	color: var(--tok-string);
-}
-.value[data-value-kind="boolean"] {
-	color: var(--tok-keyword);
-}
-.row-meta {
-	display: flex;
-	flex: 0 0 auto;
-	flex-wrap: wrap;
-	gap: 2px 8px;
-	min-width: 0;
-	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
-	font-size: 0.9em;
-	color: var(--vscode-descriptionForeground);
-}
-.row-meta > span {
-	min-width: 0;
-	max-width: 100%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.node:focus-visible > .row {
-	box-shadow: inset 2px 0 0 var(--rail);
-}
-.node[data-disabled="true"] > .row {
-	opacity: 0.55;
-	color: var(--vscode-disabledForeground);
-}
-.node[data-selected="true"] > .row {
-	background-color: var(--sel-bg);
-	box-shadow: inset 2px 0 0 var(--rail);
-}
-#tree:focus-within .node[data-selected="true"] > .row {
-	background-color: var(--sel-bg-focus);
-	box-shadow: inset 2px 0 0 var(--rail);
-}
-/* Selection never recolours syntax; the tint and rail carry the state. */
-.node.flash > .row {
-	animation: ecuc-flash 1s ease-out;
-}
-@keyframes ecuc-flash {
-	from { background-color: var(--vscode-editor-findMatchHighlightBackground, var(--vscode-list-hoverBackground)); }
-	to { background-color: transparent; }
-}
-.short {
-	color: var(--tok-string);
-}
-.keyword {
-	color: var(--tok-keyword);
-}
-.variant {
-	color: var(--tok-meta);
-}
-.condition {
-	padding: 0 4px;
-	border: 1px solid transparent;
-	border-radius: 3px;
-	color: var(--tok-meta);
-}
-/* A false condition is marked by its edge; the tokens keep their own colours. */
-.condition[data-state="false"] {
-	border-color: var(--vscode-errorForeground);
-}
-.annotation {
-	padding: 0 4px;
-	border: 1px solid var(--vscode-panel-border, transparent);
-	border-radius: 3px;
-	color: var(--tok-comment);
-	font-style: italic;
-}
-.punct {
-	color: var(--tok-punct);
-}
-.syscond-name {
-	color: var(--tok-key);
-}
-.syscond-number {
-	color: var(--tok-number);
-}
-.syscond-string {
-	color: var(--tok-string);
-}
-.syscond-operator {
-	color: var(--tok-keyword);
-}
-.syscond-literal {
-	color: var(--tok-keyword);
-}
-.syscond-punct {
-	color: var(--tok-punct);
-}
-.comment-text {
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: pre;
-}
-.context {
-	color: var(--vscode-editor-foreground);
-}
-.context .keyword {
-	color: var(--tok-keyword);
-}
-mark {
-	color: inherit;
-	background: var(--match-bg);
-}
-.node[data-search-current="true"] > .row mark {
-	background: var(--match-hi);
 }
 .inspector-empty {
 	padding: 6px 0;
@@ -1536,300 +1277,7 @@ mark {
 	gap: 4px;
 	margin-top: 12px;
 }
-/* Document view: quiet source. One editor surface, a fixed fold gutter and
- * hover/focus affordances. Layout variables live on body[data-view] so #main's
- * scroll padding sees them. */
-body[data-view="document"] #tree {
-	position: relative;
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--ecuc-fs);
-	font-weight: var(--vscode-editor-font-weight, normal);
-	line-height: var(--ecuc-lh);
-	font-variant-ligatures: none;
-	tab-size: 4;
-	white-space: pre;
-	padding: calc(var(--ecuc-lh) * 0.5) 2ch calc(var(--ecuc-lh) * 3) 0;
-}
-body[data-view="document"] .meta {
-	padding: calc(var(--ecuc-lh) * 0.5) 0 0 var(--content-pad);
-	margin-bottom: calc(var(--ecuc-lh) * 0.5);
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--ecuc-fs);
-	line-height: var(--ecuc-lh);
-	color: var(--vscode-editor-foreground);
-}
-body[data-view="document"] .schema,
-body[data-view="document"] .package {
-	font-family: inherit;
-}
-body[data-view="document"] .meta .keyword {
-	color: var(--tok-keyword);
-}
-body[data-view="document"] .meta .number {
-	color: var(--tok-number);
-}
-body[data-view="document"] .row {
-	background-color: transparent;
-}
-body[data-view="document"] .guide {
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	width: 1px;
-	background: var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, #80808040));
-	opacity: 0.28;
-	pointer-events: none;
-}
-body[data-view="document"] .guide.guide-active {
-	opacity: 0.85;
-}
-${DOCUMENT_LEVEL_RULES}
-${GUIDE_LEVEL_RULES}
-body[data-view="document"] .node[data-gap="true"] {
-	padding-top: var(--ecuc-lh);
-}
-body[data-view="document"] .brace {
-	height: var(--ecuc-lh);
-}
-body[data-view="document"] .brace .row {
-	color: var(--tok-punct);
-}
-body[data-view="document"] .node:hover > .row {
-	background-color: var(--hover-bg);
-}
-body[data-view="document"] .twisty svg {
-	width: 16px;
-	height: 16px;
-}
-body[data-view="document"] #tree:hover .node[aria-expanded="true"] > .row > .twisty,
-body[data-view="document"] #tree:focus-within .node[aria-expanded="true"] > .row > .twisty,
-body[data-view="document"] .node:hover > .row > .twisty,
-body[data-view="document"] .node:focus-within > .row > .twisty {
-	opacity: 1;
-}
-body[data-view="document"] .node[aria-expanded="false"] > .row > .twisty {
-	opacity: 1;
-}
-body[data-view="document"] .node[aria-expanded="false"] > .row::after {
-	content: " { … }";
-	color: var(--tok-punct);
-}
-body[data-view="document"] .node[data-kind="container"][data-empty="true"] > .row::after {
-	content: " { }";
-	color: var(--tok-punct);
-}
-body[data-view="document"] .label {
-	flex: 0 0 auto;
-	overflow: visible;
-	text-overflow: clip;
-	white-space: pre;
-	font-weight: 400;
-	color: var(--vscode-editor-foreground);
-}
-body[data-view="document"] .node[data-kind="parameter"] > .row > .label,
-body[data-view="document"] .node[data-kind="reference"] > .row > .label {
-	color: var(--tok-key);
-}
-body[data-view="document"] .node[data-kind="container"] > .row > .label {
-	color: var(--container-accent);
-}
-body[data-view="document"] .node[data-kind="reference"] > .row > .value .value-text {
-	color: var(--vscode-symbolIcon-functionForeground, #DCDCAA);
-	font-style: italic;
-}
-body[data-view="document"] .value {
-	flex: 0 0 auto;
-	margin: 0;
-	max-width: none;
-	overflow: visible;
-	text-overflow: clip;
-	white-space: pre;
-}
-body[data-view="document"] .node[data-kind="parameter"] > .row > .value > .value-text {
-	cursor: pointer;
-}
-body[data-view="document"] .node[data-kind="parameter"] > .row > .value > .value-text:hover {
-	background-color: var(--vscode-toolbar-hoverBackground, var(--hover-bg));
-	border-radius: 2px;
-}
-body[data-view="document"] .row-meta {
-	display: flex;
-	flex: 0 0 auto;
-	flex-wrap: nowrap;
-	gap: 1ch;
-	margin: 0;
-	font-family: inherit;
-	font-size: inherit;
-	color: var(--vscode-editor-foreground);
-	white-space: pre;
-}
-body[data-view="document"] .row-meta > span {
-	max-width: none;
-	overflow: visible;
-	white-space: pre;
-	margin: 0;
-}
-body[data-view="document"] .variant,
-body[data-view="document"] .condition {
-	color: var(--tok-meta);
-}
-body[data-view="document"] .annotation {
-	color: var(--tok-comment);
-	font-style: italic;
-}
-body[data-view="document"] .context {
-	color: var(--vscode-editor-foreground);
-}
-body[data-view="document"] .condition {
-	padding: 0 4px;
-	border: 1px solid transparent;
-	border-radius: 3px;
-}
-body[data-view="document"] .condition[data-state="false"] {
-	border-color: var(--vscode-errorForeground);
-}
-body[data-view="document"] .row-meta > span.condition {
-	flex: 0 1 auto;
-	min-width: 0;
-	max-width: 56ch;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-body[data-view="document"] .comment {
-	height: var(--ecuc-lh);
-}
-body[data-view="document"] .comment[data-gap="true"] {
-	height: calc(var(--ecuc-lh) * 2);
-	padding-top: var(--ecuc-lh);
-	box-sizing: border-box;
-}
-body[data-view="document"] .comment > .row {
-	color: var(--tok-comment);
-	font-style: italic;
-}
-body[data-view="document"] .row.k-module .label::before {
-	content: "module ";
-	color: var(--tok-keyword);
-}
-body[data-view="document"] .node[data-subtree="true"] > .row,
-body[data-view="document"] .brace[data-subtree="true"] > .row {
-	background-color: var(--subtree-bg);
-}
-body[data-view="document"] .node[data-kind="parameter"][data-selected="true"] > .row {
-	background-color: var(--sel-bg-focus);
-	box-shadow:
-		inset 2px 0 0 var(--rail),
-		inset 0 0 0 1px var(--sel-outline, transparent);
-}
-body[data-view="document"] .node[data-selected="true"] > .row {
-	background-color: var(--sel-bg-focus);
-	box-shadow:
-		inset 2px 0 0 var(--rail),
-		inset 0 0 0 1px var(--sel-outline, transparent);
-}
-body[data-view="document"] .node[data-kind="container"][data-selected="true"] > .row,
-body[data-view="document"] .node[data-kind="module"][data-selected="true"] > .row {
-	background-color: var(--sel-container-bg);
-}
-body[data-view="document"] #tree:focus-within .node[data-selected="true"] > .row {
-	background-color: var(--sel-bg-focus);
-	box-shadow:
-		inset 2px 0 0 var(--rail),
-		inset 0 0 0 1px var(--sel-outline, transparent);
-}
-body[data-view="document"] #tree:focus-within .node[data-kind="container"][data-selected="true"] > .row,
-body[data-view="document"] #tree:focus-within .node[data-kind="module"][data-selected="true"] > .row {
-	background-color: var(--sel-container-bg);
-}
-body[data-view="document"] #tree:focus-within .node[data-kind="parameter"][data-selected="true"] > .row {
-	box-shadow:
-		inset 2px 0 0 var(--rail),
-		inset 0 0 0 1px var(--sel-outline, transparent);
-}
-body[data-view="document"] .node:focus-visible > .row {
-	box-shadow: inset 2px 0 0 var(--rail);
-}
-body[data-view="document"] #tree[data-empty="true"] {
-	padding-top: 0;
-	padding-bottom: 0;
-}
-@media (forced-colors: active) {
-	body[data-view] .node[data-kind="container"] > .row > .label {
-		color: var(--vscode-editor-foreground);
-	}
-	body[data-view] .node[data-subtree="true"] > .row,
-	body[data-view] .brace[data-subtree="true"] > .row {
-		background: transparent;
-		outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
-		outline-offset: -1px;
-	}
-	body[data-view] .node[data-selected="true"] > .row,
-	body[data-view] #tree:focus-within .node[data-selected="true"] > .row {
-		background: transparent;
-		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
-		outline-offset: -1px;
-	}
-	body[data-view] .node:hover > .row {
-		background: transparent;
-		outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
-		outline-offset: -1px;
-	}
-	body[data-view] .node:focus-visible > .row {
-		box-shadow: none;
-		outline: 2px solid var(--vscode-focusBorder);
-		outline-offset: -2px;
-	}
-	body[data-view] mark {
-		color: var(--vscode-editor-foreground);
-		background: transparent;
-		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
-	}
-	body[data-view] .node.flash > .row {
-		animation: none;
-		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
-	}
-}
-body.vscode-high-contrast[data-view] .node[data-kind="container"] > .row > .label {
-	color: var(--vscode-editor-foreground);
-}
-body.vscode-high-contrast[data-view] .node[data-subtree="true"] > .row,
-body.vscode-high-contrast[data-view] .brace[data-subtree="true"] > .row {
-	background: transparent;
-	outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
-	outline-offset: -1px;
-}
-body.vscode-high-contrast[data-view] .node[data-selected="true"] > .row,
-body.vscode-high-contrast[data-view] #tree:focus-within .node[data-selected="true"] > .row {
-	background: transparent;
-	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
-	outline-offset: -1px;
-}
-body.vscode-high-contrast[data-view] .node:hover > .row {
-	background: transparent;
-	outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
-	outline-offset: -1px;
-}
-body.vscode-high-contrast[data-view] .node:focus-visible > .row {
-	box-shadow: none;
-	outline: 2px solid var(--vscode-focusBorder);
-	outline-offset: -2px;
-}
-body.vscode-high-contrast[data-view] mark {
-	color: var(--vscode-editor-foreground);
-	background: transparent;
-	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
-}
-body.vscode-high-contrast[data-view] .node.flash > .row {
-	animation: none;
-	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
-}
 @media (max-width: 720px) {
-	body[data-view="document"] {
-		--doc-pad: 2.5ch;
-		--indent: 3ch;
-		--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
-	}
 	.toolbar {
 		padding: 0 4px;
 		gap: 3px;
@@ -1909,27 +1357,11 @@ const CONSOLE_ERROR_SCRIPT = consoleErrorScript({
  * their events first; nothing here runs for an interaction it owns.
  */
 /**
- * The Document row stylesheet, sliced from the editor surface so the diff page
- * injects the exact same rules instead of a lookalike copy.
+ * The Document row stylesheet lives in `documentTreeView.ts` now; the editor and
+ * every diff pane inject that one string.
  */
-export function documentViewStyles(): string {
-	const varsStart = STYLE.indexOf('body[data-view] {\n\t--ecuc-fs');
-	const varsEnd = varsStart < 0 ? -1 : STYLE.indexOf('\n}', varsStart);
-	const baseStart = STYLE.indexOf('.node {');
-	const baseEnd = STYLE.indexOf('.inspector-empty {');
-	const viewStart = STYLE.indexOf('/* Document view: quiet source.');
-	const viewEnd = STYLE.indexOf('@media (forced-colors: active) {');
-	if (varsStart < 0 || varsEnd < 0 || baseStart < 0 || baseEnd <= baseStart || viewStart < 0 || viewEnd <= viewStart) {
-		return '';
-	}
-	return `${STYLE.slice(varsStart, varsEnd + 2)}\n${STYLE.slice(baseStart, baseEnd)}\n${STYLE.slice(viewStart, viewEnd)}`;
-}
-
 const TREE_SCRIPT = `
-const main = document.getElementById('main');
 const tree = document.getElementById('tree');
-const treeWindow = document.getElementById('tree-window');
-const virtualStyle = document.getElementById('virtual-style');
 const inspector = document.getElementById('inspector');
 const detailsStatus = document.getElementById('details-status');
 const detailsBody = document.getElementById('sb-details-body');
@@ -1951,7 +1383,6 @@ const conditionsValuesBadge = document.getElementById('sb-conditions-values-badg
 const conditionsStatus = document.getElementById('conditions-status');
 const conditionsScript = document.getElementById('ecuc-conditions');
 const svgNamespace = 'http://www.w3.org/2000/svg';
-const bufferRows = 10;
 const savedState = vscode.getState();
 // Tab, sidebar width, pane heights and collapsed sections are the whole
 // persisted layout. A legacy inspectorHidden flag is ignored (and not written back).
@@ -1966,6 +1397,7 @@ ${toggleCollapsed.toString()}
 ${collapsedIdsFor.toString()}
 ${moveTarget.toString()}
 ${virtualScrollScript()}
+${documentTreeViewScript()}
 ${matchRangesScript()}
 ${rowSearchScript()}
 ${stepMatch.toString()}
@@ -2008,14 +1440,13 @@ let searchFirstJumpDone = false;
 // only removable ones, so there is no dismissal set any more.
 let editingRow = null;
 let windowRange = [0, 0];
-let renderedDataVersion = -1;
-let dataVersion = 0;
 let renderedById = new Map();
 let heights = { document: 20 };
 let heightFn = function () { return heights.document; };
-let heightVersion = 0;
-let scrollFrame = 0;
 let typeAhead = { text: '', at: 0 };
+// The one Document surface. It owns the header, the native scroller, the
+// spacers and the rendered window; this page owns the row model and state.
+let treeView;
 
 function readInitialRows() {
 	const script = document.getElementById('ecuc-rows');
@@ -2045,7 +1476,7 @@ function buildHeightFn() {
 	heightFn = function (index) {
 		return base + (carriesGroupGap(rows, displayRows, index) ? base : 0);
 	};
-	heightVersion++;
+	syncTreeModel();
 }
 
 function measureHeights() {
@@ -2083,10 +1514,9 @@ function rebuildDisplay() {
 		}
 	}
 	buildHeightFn();
-	tree.dataset.empty = displayRows.length === 0 ? 'true' : 'false';
 }
 
-function setRows(nextRows, nextSelectedId) {
+function setRows(nextRows, nextSelectedId, nextHeader) {
 	hideRowMenu(false);
 	const incoming = Array.isArray(nextRows) ? nextRows : [];
 	const previousMatchId = currentMatchId();
@@ -2108,7 +1538,9 @@ function setRows(nextRows, nextSelectedId) {
 	subtreeIds = new Set(subtreeRowIds(selectedId, rows));
 	rebuildDisplay();
 	measureHeights();
-	dataVersion++;
+	if (nextHeader !== undefined) {
+		applyHeader(nextHeader);
+	}
 	// A re-scan keeps the search and, when the row survived, the current match; the
 	// matches themselves are recomputed against the new row indices.
 	if (searchQuery.trim() !== '') {
@@ -2122,165 +1554,54 @@ function setRows(nextRows, nextSelectedId) {
 	}
 }
 
-function treeWindowTop() {
-	// The rows region starts at #tree's content edge, before the top spacer. Using
-	// the window element's own position would move with that spacer, so a window
-	// update would look like a scroll back to the top; this offset is stable.
-	const mainRect = main.getBoundingClientRect();
-	const treeRect = tree.getBoundingClientRect();
-	const padding = parseFloat(getComputedStyle(tree).paddingTop) || 0;
-	return treeRect.top - mainRect.top + main.scrollTop + padding;
+function applyHeader(header) {
+	if (!treeView) {
+		return;
+	}
+	treeView.setHeader({
+		schema: header && header.schema ? header.schema : undefined,
+		packages: header && Array.isArray(header.packages) ? header.packages : []
+	});
 }
 
-function virtualState() {
+/** The host half of the component: the rows for one display index. */
+function documentRowOptions(displayIndex) {
+	const flat = displayRows[displayIndex];
 	return {
-		rowCount: displayRows.length,
-		rowHeight: heightFn,
-		containerHeight: main.clientHeight,
-		scrollTop: Math.max(0, main.scrollTop - treeWindowTop()),
-		bufferSize: bufferRows,
-		heightVersion: heightVersion
+		selectedId: selectedId,
+		expandedIds: expandedIds,
+		searchQuery: searchQuery,
+		currentId: currentMatchId(),
+		subtreeIds: subtreeIds,
+		gap: flat ? carriesGroupGap(rows, displayRows, displayIndex) : false,
+		guides: guideLevels[displayIndex] || []
 	};
 }
 
-function setSpacers(top, bottom) {
-	virtualStyle.textContent =
-		'#tree-top{height:' + Math.max(0, top) + 'px}' +
-		'#tree-bottom{height:' + Math.max(0, bottom) + 'px}';
+function treeModel() {
+	return {
+		rowCount: displayRows.length,
+		heightFn: heightFn,
+		renderRow: renderRow
+	};
 }
 
-function twistySpan() {
-	const span = document.createElement('span');
-	span.className = 'twisty';
-	span.setAttribute('aria-hidden', 'true');
-	span.appendChild(twistyIcon());
-	return span;
+function syncTreeModel() {
+	if (treeView) {
+		treeView.setModel(treeModel());
+	}
 }
 
 function buildNodeRow(row, displayIndex) {
-	const inlineMeta = row.meta.filter((part) => part.cls !== 'annotation');
-	const node = document.createElement('div');
-	node.className = inlineMeta.length > 0 ? 'node has-meta' : 'node';
-	node.setAttribute('role', 'treeitem');
-	node.setAttribute('aria-level', String(row.level));
-	node.setAttribute('aria-posinset', String(row.posinset));
-	node.setAttribute('aria-setsize', String(row.setsize));
-	node.setAttribute('aria-selected', row.id === selectedId ? 'true' : 'false');
-	if (row.hasChildren) {
-		node.setAttribute('aria-expanded', expandedIds.has(row.id) ? 'true' : 'false');
-	}
-	node.tabIndex = -1;
-	node.dataset.nodeId = row.id;
-	node.dataset.kind = row.kind;
-	node.dataset.definitionRef = row.definitionRef;
-	node.dataset.shortName = row.shortName || '';
-	if (row.kind === 'parameter') {
-		node.dataset.value = row.value || '';
-	}
-	if (row.kind === 'reference') {
-		node.dataset.target = row.target || '';
-	}
-	if (row.id === selectedId) {
-		node.dataset.selected = 'true';
-	}
-	if (searchQuery.trim() !== '' && row.id === currentMatchId()) {
-		node.dataset.searchCurrent = 'true';
-	}
-	if (subtreeIds.has(row.id) && row.id !== selectedId) {
-		node.dataset.subtree = 'true';
-	}
-	if (row.kind === 'module' && carriesGroupGap(rows, displayRows, displayIndex)) {
-		node.dataset.gap = 'true';
-	}
-	if (row.empty) {
-		node.dataset.empty = 'true';
-	}
-	if (row.disabled) {
-		node.dataset.disabled = 'true';
-	}
-	node.title = row.title;
-
-	const rowElement = document.createElement('span');
-	rowElement.className =
-		'row k-' + row.kind + (row.shownValue !== undefined ? ' has-value' : ' no-value');
-	rowElement.dataset.level = String(row.level);
-	if (row.hasChildren) {
-		rowElement.appendChild(twistySpan());
-	}
-	const label = document.createElement('span');
-	label.className = 'label';
-	appendHighlighted(label, row.label);
-	rowElement.appendChild(label);
-	if (row.kind === 'parameter' || row.kind === 'reference') {
-		rowElement.appendChild(valueSpan(row));
-	}
-	if (inlineMeta.length > 0) {
-		rowElement.appendChild(metaSpan({ ...row, meta: inlineMeta }));
-	}
-	if (row.disabled) {
-		const suffix = document.createElement('span');
-		suffix.className = 'sr-only';
-		suffix.textContent = '(disabled by condition)';
-		rowElement.appendChild(suffix);
-	}
-	appendGuides(rowElement, displayIndex);
-	node.appendChild(rowElement);
-	return node;
-}
-
-function appendGuides(rowElement, displayIndex) {
-	const guides = guideLevels[displayIndex] || [];
-	for (const segment of guides) {
-		const guide = document.createElement('span');
-		guide.className = 'guide';
-		guide.dataset.level = String(segment.level);
-		guide.dataset.containerId = segment.id;
-		guide.setAttribute('aria-hidden', 'true');
-		rowElement.appendChild(guide);
-	}
+	return buildDocumentNodeRow(row, documentRowOptions(displayIndex));
 }
 
 function buildBraceRow(flat, displayIndex) {
-	const node = document.createElement('div');
-	node.className = 'brace';
-	node.setAttribute('aria-hidden', 'true');
-	if (subtreeIds.has(rows[flat.rowIndex].id)) {
-		node.dataset.subtree = 'true';
-	}
-	node.dataset.rowId = rows[flat.rowIndex].id;
-	const rowElement = document.createElement('span');
-	rowElement.className = 'row brace-row';
-	rowElement.dataset.level = String(flat.level);
-	const mark = document.createElement('span');
-	mark.className = 'punct brace-mark';
-	mark.textContent = flat.type === 'brace-open' ? '{' : '}';
-	rowElement.appendChild(mark);
-	appendGuides(rowElement, displayIndex);
-	node.appendChild(rowElement);
-	return node;
+	return buildDocumentBraceRow(flat.type, flat.level, rows[flat.rowIndex].id, documentRowOptions(displayIndex));
 }
 
 function buildCommentRow(flat, displayIndex) {
-	const owner = rows[flat.rowIndex];
-	const node = document.createElement('div');
-	node.className = 'comment';
-	node.setAttribute('aria-hidden', 'true');
-	node.dataset.rowId = owner.id;
-	if (carriesGroupGap(rows, displayRows, displayIndex)) {
-		node.dataset.gap = 'true';
-	}
-	const rowElement = document.createElement('span');
-	rowElement.className = 'row comment-row';
-	rowElement.dataset.level = String(flat.level);
-	rowElement.appendChild(inspectorElement('span', 'punct comment-mark', '/* '));
-	const text = document.createElement('span');
-	text.className = 'comment-text';
-	appendHighlighted(text, flat.text);
-	rowElement.appendChild(text);
-	rowElement.appendChild(inspectorElement('span', 'punct comment-mark', ' */'));
-	appendGuides(rowElement, displayIndex);
-	node.appendChild(rowElement);
-	return node;
+	return buildDocumentCommentRow(flat.text, flat.level, rows[flat.rowIndex].id, documentRowOptions(displayIndex));
 }
 
 function buildDisplayRow(flat, displayIndex) {
@@ -2290,6 +1611,11 @@ function buildDisplayRow(flat, displayIndex) {
 	return flat.type === 'node'
 		? buildNodeRow(rows[flat.rowIndex], displayIndex)
 		: buildBraceRow(flat, displayIndex);
+}
+
+function renderRow(index) {
+	const flat = displayRows[index];
+	return flat ? buildDisplayRow(flat, index) : document.createElement('div');
 }
 
 function focusedNodeId() {
@@ -2384,7 +1710,11 @@ function onRowMenuKeydown(event) {
 }
 
 function applyGuideHover() {
-	for (const guide of treeWindow.querySelectorAll('.guide')) {
+	const win = treeView ? treeView.getWindowElement() : undefined;
+	if (!win) {
+		return;
+	}
+	for (const guide of win.querySelectorAll('.guide')) {
 		guide.classList.toggle(
 			'guide-active',
 			hoveredGuideId !== undefined && guide.dataset.containerId === hoveredGuideId
@@ -2392,35 +1722,27 @@ function applyGuideHover() {
 	}
 }
 
+/** Rebuild the id -> rendered row map from the component's current window. */
+function collectRendered() {
+	renderedById = new Map();
+	const win = treeView ? treeView.getWindowElement() : undefined;
+	if (!win) {
+		return;
+	}
+	const items = win.querySelectorAll('[role="treeitem"][data-node-id]');
+	for (let at = 0; at < items.length; at++) {
+		renderedById.set(items[at].dataset.nodeId, items[at]);
+	}
+}
+
 function renderWindow(force) {
 	hideRowMenu(false);
-	const state = virtualState();
-	const range = calcVisibleRange(state);
-	const start = range[0];
-	const end = range[1];
-	if (!force && start === windowRange[0] && end === windowRange[1] && renderedDataVersion === dataVersion) {
+	if (!treeView) {
 		return;
 	}
 	const previousFocus = focusedNodeId();
-	windowRange = [start, end];
-	renderedDataVersion = dataVersion;
-	const total = calcTotalHeight(state);
-	setSpacers(calcRowOffset(start, state), Math.max(0, total - calcRowOffset(end, state)));
-	const fragment = document.createDocumentFragment();
-	renderedById = new Map();
-	for (let at = start; at < end; at++) {
-		const flat = displayRows[at];
-		if (!flat) {
-			continue;
-		}
-		const element = buildDisplayRow(flat, at);
-		if (flat.type === 'node') {
-			renderedById.set(rows[flat.rowIndex].id, element);
-		}
-		fragment.appendChild(element);
-	}
-	treeWindow.textContent = '';
-	treeWindow.appendChild(fragment);
+	treeView.render(force === true);
+	windowRange = treeView.getVisibleRange();
 	const rovingId = resolveFocusId(
 		previousFocus,
 		Array.from(renderedById.keys()),
@@ -2447,16 +1769,8 @@ function expandAncestors(id) {
 }
 
 function ensureVisible(displayIndex) {
-	const state = virtualState();
-	const offset = calcRowOffset(displayIndex, state);
-	const height = heightFn(displayIndex);
-	const top = treeWindowTop();
-	const viewTop = main.scrollTop - top;
-	const viewBottom = viewTop + main.clientHeight;
-	if (offset < viewTop) {
-		main.scrollTop = top + offset;
-	} else if (offset + height > viewBottom) {
-		main.scrollTop = top + offset + height - main.clientHeight;
+	if (treeView) {
+		treeView.scrollToIndex(displayIndex);
 	}
 }
 
@@ -2494,7 +1808,7 @@ function setSelection(id) {
 			delete element.dataset.subtree;
 		}
 	}
-	for (const brace of treeWindow.querySelectorAll('.brace')) {
+	for (const brace of (treeView ? treeView.getWindowElement() : tree).querySelectorAll('.brace')) {
 		if (brace.dataset.rowId !== undefined && subtreeIds.has(brace.dataset.rowId)) {
 			brace.dataset.subtree = 'true';
 		} else {
@@ -2646,7 +1960,7 @@ function onTreeKeydown(event) {
 	}
 	const at = visibleNodeIds.indexOf(id);
 	const displayIndex = displayIndexById.get(id);
-	const page = Math.max(1, Math.floor(main.clientHeight / Math.max(1, heightFn(displayIndex === undefined ? 0 : displayIndex))));
+	const page = Math.max(1, Math.floor(treeView.clientHeight() / Math.max(1, heightFn(displayIndex === undefined ? 0 : displayIndex))));
 	const moved = moveTarget(event.key, at, visibleNodeIds.length, page);
 	if (moved !== undefined) {
 		event.preventDefault();
@@ -3822,15 +3136,6 @@ if (conditionsPanel) {
 	});
 }
 
-main.addEventListener('scroll', function () {
-	if (scrollFrame !== 0) {
-		return;
-	}
-	scrollFrame = requestAnimationFrame(function () {
-		scrollFrame = 0;
-		renderWindow(false);
-	});
-});
 window.addEventListener('resize', function () {
 	measureHeights();
 	renderWindow(true);
@@ -3838,8 +3143,8 @@ window.addEventListener('resize', function () {
 // At <=720px the sidebar stacks below #main, so switching tabs or collapsing a
 // section changes how many rows fit. Re-run the window only when the sidebar's
 // height actually changed; a width-only change (sidebar drag) leaves the row
-// count alone. Observing the sidebar rather than #main avoids a feedback loop
-// with #main's own scrollbars.
+// count alone. Observing the sidebar rather than the tree avoids a feedback loop
+// with the tree's own scrollbars.
 const sidebarPanel = document.getElementById('sidebar');
 let sidebarViewportHeight = sidebarPanel ? sidebarPanel.clientHeight : 0;
 if (sidebarPanel && typeof ResizeObserver !== 'undefined') {
@@ -3864,11 +3169,13 @@ window.addEventListener('message', function (event) {
 	}
 	if (message.type === 'model') {
 		clearDetailsStatus();
-		const scrollTop = main.scrollTop;
+		const scrollTop = treeView ? treeView.getScrollTop() : 0;
 		const previousFocus = focusedNodeId() || focusId;
-		setRows(message.rows, message.selectedId);
+		setRows(message.rows, message.selectedId, message.header);
 		renderWindow(true);
-		main.scrollTop = scrollTop;
+		if (treeView) {
+			treeView.setScrollTop(scrollTop);
+		}
 		if (selectedId !== undefined && displayIndexById.has(selectedId)) {
 			focusId = selectedId;
 			const index = displayIndexById.get(selectedId);
@@ -3915,7 +3222,12 @@ window.addEventListener('message', function (event) {
 // details render, so a re-scan never resets the layout.
 renderConditionEntries(initialConditionEntries());
 mountSidebarShell();
+treeView = new DocumentTreeView('#tree', 'document', {
+	onRender: collectRendered
+});
+treeView.mount();
 const initial = readInitialRows();
+applyHeader(initial.header);
 setRows(initial.rows, initial.selectedId);
 renderWindow(true);
 prepareFocus();

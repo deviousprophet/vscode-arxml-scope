@@ -29,16 +29,17 @@ suite('editor accessibility (AC8)', () => {
 		assert.ok(page.includes('role="tree"'));
 		assert.ok(page.includes('aria-label="ECUC values"'));
 		assert.ok(!page.includes('role="group"'), 'the flat tree drops group wrappers deliberately');
-		assert.ok(page.includes('id="tree-window" role="presentation"'), 'the window wrapper is presentational');
-		assert.ok(page.includes('id="tree-top" class="v-spacer" role="presentation" aria-hidden="true"'));
-		assert.ok(page.includes('id="tree-bottom" class="v-spacer" role="presentation" aria-hidden="true"'));
+		assert.ok(page.includes("this.windowEl.className = 'document-tree-window'"), 'the window wrapper exists');
+		assert.ok(page.includes("this.windowEl.setAttribute('role', 'presentation')"), 'the window wrapper is presentational');
+		assert.ok(page.includes("this.spacer('document-tree-top')"));
+		assert.ok(page.includes("this.spacer('document-tree-bottom')"));
 		assert.ok(page.includes('aria-live="polite"'), 'notices are announced');
 
-		const build = functionSource(page, 'buildNodeRow');
+		const build = functionSource(page, 'buildDocumentNodeRow');
 		for (const attribute of ['role', 'aria-level', 'aria-posinset', 'aria-setsize', 'aria-selected']) {
 			assert.ok(build.includes(`setAttribute('${attribute}'`), attribute);
 		}
-		assert.ok(build.includes("setAttribute('aria-expanded', expandedIds.has(row.id) ? 'true' : 'false')"));
+		assert.ok(build.includes("setAttribute('aria-expanded', context.expandedIds.has(row.id) ? 'true' : 'false')"));
 		assert.ok(build.includes('node.tabIndex = -1'), 'roving tabindex');
 		assert.ok(functionSource(page, 'applyRoving').includes('element.tabIndex = renderedId === id ? 0 : -1'));
 

@@ -790,13 +790,16 @@ suite('conditions panel (design §6)', () => {
 		assert.strictEqual(none.hidden, true);
 	});
 
-	test('buildNodeRow and metaSpan expose the disabled state and the chip state', () => {
+	test('buildDocumentNodeRow and metaSpan expose the disabled state and the chip state', () => {
 		const html = page();
-		const build = functionSource(html, 'buildNodeRow');
+		const build = functionSource(html, 'buildDocumentNodeRow');
 		assert.ok(build.includes("node.dataset.disabled = 'true'"));
 		assert.ok(build.includes("suffix.className = 'sr-only'"));
 		assert.ok(build.includes("suffix.textContent = '(disabled by condition)'"));
-		assert.ok(build.indexOf('metaSpan(row)') < build.indexOf("suffix.className = 'sr-only'"), 'the suffix follows the meta');
+		assert.ok(
+			build.indexOf('window.metaSpan({ ...row, meta: inlineMeta })') < build.indexOf("suffix.className = 'sr-only'"),
+			'the suffix follows the meta'
+		);
 
 		const meta = functionSource(html, 'metaSpan');
 		assert.ok(meta.includes('if (part.state)'));

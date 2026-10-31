@@ -963,7 +963,7 @@ suite('sidebar shell', () => {
 	test('the serialized shell is self-contained', () => {
 		const html = page();
 		const shellAt = html.indexOf('const HEADER_H = 22;');
-		const treeAt = html.indexOf('const main = document.getElementById');
+		const treeAt = html.indexOf("const tree = document.getElementById('tree');");
 		assert.ok(shellAt >= 0 && treeAt > shellAt, 'the shell script is emitted before the page script');
 		const shell = html.slice(shellAt, treeAt);
 		assert.ok(!shell.includes('exports.'), 'no CommonJS module-object reference leaks into the page');

@@ -96,23 +96,17 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.strictEqual(math.calcRowOffset(0, state), 0);
 		assert.strictEqual(math.calcRowOffset(rowCount, state), rowCount * 20);
 		assert.ok(
-			/for \(let at = start; at < end; at\+\+\)/.test(functionSource(html, 'renderWindow')),
-			'the renderer iterates the window, not the row store'
+			html.includes('for (let at = start; at < end; at++)'),
+			'the component iterates the window, not the row store'
 		);
-		const render = functionSource(html, 'renderWindow');
 		assert.ok(
-			render.includes('setSpacers(calcRowOffset(start, state), Math.max(0, total - calcRowOffset(end, state)))'),
+			html.includes('this.setSpacers(top, Math.max(0, total - calcRowOffset(end, state)))'),
 			'the top/bottom spacers keep the full scroll height'
 		);
-		assert.ok(render.includes('calcTotalHeight(state)'), 'the spacer total comes from the virtual math');
-		assert.ok(html.includes('const bufferRows = 10'), 'the overscan is a small constant');
-		const rowsTop = functionSource(html, 'treeWindowTop');
-		assert.ok(rowsTop.includes('tree.getBoundingClientRect()'), 'the rows offset comes from #tree');
-		assert.ok(rowsTop.includes('paddingTop'), 'and includes its padding');
-		assert.ok(
-			!rowsTop.includes('treeWindow.getBoundingClientRect()'),
-			'the window element moves with the top spacer; using it would look like a scroll to the top'
-		);
+		assert.ok(html.includes('calcTotalHeight(state)'), 'the spacer total comes from the virtual math');
+		assert.ok(html.includes('this.bufferSize = 10'), 'the overscan is a small constant');
+		assert.ok(html.includes('getRowsScrollTop()'), 'the component scrollTop excludes its own top padding');
+		assert.ok(!html.includes('treeWindowTop'), 'no separate rows-offset measurement remains');
 	});
 
 	test('design §4: collapse skips a contiguous subtree and Document adds brace rows', () => {
@@ -233,9 +227,11 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.deepStrictEqual(inlineGuides(display, [{ id: 'root' }, { id: 'a' }, { id: 'b' }]), guidesFor(display, [{ id: 'root' }, { id: 'a' }, { id: 'b' }]));
 		const inlineSubtree = evaluateFunction<typeof subtreeRowIds>(page(), 'subtreeRowIds');
 		assert.deepStrictEqual(inlineSubtree('root', rows), subtreeRowIds('root', rows));
-		const build = functionSource(page(), 'buildNodeRow');
-		assert.ok(build.includes('appendGuides(rowElement, displayIndex)'), 'every node row carries its open guides');
-		assert.ok(build.includes('node.dataset.subtree'), 'the selected container marks its descendants');
+		const build = functionSource(page(), 'documentRowOptions');
+		assert.ok(build.includes('guides: guideLevels[displayIndex] || []'), 'every node row carries its open guides');
+		const shared = functionSource(page(), 'buildDocumentNodeRow');
+		assert.ok(shared.includes('appendDocumentGuides(rowElement, context.guides)'), 'the shared builder paints the guides');
+		assert.ok(shared.includes('context.subtreeIds.has(row.id)'), 'the selected container marks its descendants');
 		const rebuild = functionSource(page(), 'rebuildDisplay');
 		assert.ok(rebuild.includes('guideLevels = guidesFor(displayRows, rows)'));
 		const setRows = functionSource(page(), 'setRows');
@@ -276,9 +272,9 @@ suite('virtual page (design §4, §5, §8)', () => {
 		const dropped = reconcileRowState(state, [{ id: 'a' }, { id: 'c' }]);
 		assert.strictEqual(dropped.selectedId, undefined, 'a selected row that is gone is dropped');
 		const handler = html.slice(html.indexOf("if (message.type === 'model')"));
-		assert.ok(handler.includes('setRows(message.rows, message.selectedId)'));
-		assert.ok(handler.includes('const scrollTop = main.scrollTop'), 'a re-scan captures the scroll position');
-		assert.ok(handler.includes('main.scrollTop = scrollTop'), 'and restores it where possible');
+		assert.ok(handler.includes('setRows(message.rows, message.selectedId, message.header)'));
+		assert.ok(handler.includes('const scrollTop = treeView ? treeView.getScrollTop() : 0'), 'a re-scan captures the scroll position');
+		assert.ok(handler.includes('treeView.setScrollTop(scrollTop)'), 'and restores it where possible');
 		assert.ok(!handler.includes('message.tree'), 'the re-scan carries rows, not full-tree HTML');
 		assert.ok(!html.includes('main.innerHTML'), 'there is no DOM-swap render path');
 		assert.ok(

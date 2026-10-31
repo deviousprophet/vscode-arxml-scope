@@ -11,10 +11,13 @@ full-tree HTML string and no second renderer.
 body (column)
   .toolbar                          survives a re-scan
   #content (row)
-    #main (flex: 1; overflow: auto)   ← the scroll container
-      .document
-        .meta                        schema/package header
-        #tree[role=tree]             contains the top spacer, #tree-window, bottom spacer
+    #main (flex: 1; overflow: hidden)  ← layout box only
+      #tree.document-tree[role=tree]  ← one DocumentTreeView instance
+        .document-tree-header          schema/package (and optional file label)
+        .document-tree-scroll          native vertical + horizontal scroller
+          .document-tree-top           virtual spacer
+          .document-tree-window        visible rows + overscan
+          .document-tree-bottom        virtual spacer
     #sidebar-resizer (6px)            survives a re-scan
     #sidebar                          Details / Conditions tab panels
       #sbp-details > #inspector > section.sb-section#sb-details (one body)
@@ -22,16 +25,17 @@ body (column)
     #side-tabs (28px)                 right-edge vertical tabs
 ```
 
-- `#main` is the **scroll container**. The page computes the rows-region offset from `#tree`'s
-  content edge (not from `#tree-window`, which moves with the top spacer), reads `main.scrollTop`,
-  and calls the pure `calcVisibleRange` math. Do not move the scroll container.
-- `#tree-window` holds only the viewport rows plus a small overscan (10 rows). Top/bottom spacers
-  preserve the full scroll height; their heights come from a nonce-carrying stylesheet
-  (`#virtual-style`), because the CSP blocks style attributes. `overflow-anchor: none` on `#main`
-  stops browser scroll anchoring from fighting the spacer swap.
-- The initial rows are escaped JSON in `<script type="application/json" id="ecuc-rows">`; the page
-  parses it and never evaluates model text. A re-scan posts `{ type: 'model', rows, selectedId }`,
-  not tree markup and no `digits`.
+- `DocumentTreeView` (`src/editor/documentTreeView.ts`) is the single owner of the header,
+  the two-axis native scroller, the spacers and the rendered window. It is serialized into the
+  editor and the diff; the editor mounts one instance and the diff mounts one per pane.
+- The host supplies `{ rowCount, heightFn, renderRow(index, pane) }`. The component calls
+  `calcVisibleRange` with overscan 10, writes spacer heights as `--document-tree-top` /
+  `--document-tree-bottom` CSSOM properties, and skips the DOM write when the slice key is
+  unchanged. `overflow-anchor: none` on the scroller stops browser scroll anchoring from fighting
+  the spacer swap.
+- The initial rows are escaped JSON in `<script type="application/json" id="ecuc-rows">`; the
+  payload also carries the header schema/packages. A re-scan posts
+  `{ type: 'model', rows, selectedId, header }`, not tree markup and no `digits`.
 - Anything that must survive a re-scan — the toolbar, the sidebar, the tabs, the inspector and the
   Conditions panel — lives outside the rows.
 - There is one Document presentation. There is no view toggle, no `view` state, no Tree CSS/probes/
@@ -115,7 +119,7 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
   slot stop the field from shifting. The Search control closes the toolbar, after Collapse/Expand.
 - **All matches are marked; the current match is stronger.** `appendHighlighted` wraps every
   case-insensitive occurrence in `<mark>` in the label, value and every visible meta fragment
-  (short name, variant, context, condition and annotation). `buildNodeRow` sets
+  (short name, variant, context, condition and annotation). `buildDocumentNodeRow` sets
   `data-search-current="true"` on the row that owns the current match. The page defines fixed
   dark-theme tiers `--match-bg: rgba(234, 179, 8, 0.32)` and `--match-hi: rgba(234, 179, 8, 0.7)`;
   all marks use the subtle tier and the current row uses the strong tier. Do not depend on
@@ -159,9 +163,9 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
 - Long labels/values/metadata use `white-space: pre` and horizontal scroll. The node's `title` remains
   the full `DEFINITION-REF`.
 - **Annotations are comment rows, not inline meta.** `flattenRows` emits one `comment` display row per
-  annotation directly above its node (`buildCommentRow`), using the node's level for indentation and
+  annotation directly above its node (`buildDocumentCommentRow`), using the node's level for indentation and
   guides. Comment rows are `aria-hidden`, fixed-height, never enter `visibleNodeIds`/`renderedById`,
-  and `buildNodeRow` filters `cls === 'annotation'` out of `metaSpan`. The annotation still lives in
+  and `buildDocumentNodeRow` filters `cls === 'annotation'` out of `metaSpan`. The annotation still lives in
   the row's `meta`/haystack and in Details. The module group's blank line belongs to the first display
   item of the group, so an annotated module carries it on its first comment row, not on the node row;
   `carriesGroupGap` is the one predicate the height function and both row builders share.
@@ -268,10 +272,11 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 | Hiding the Collapse/Expand labels at normal widths | The labelled-control test fails |
 | Inserting an editor into `.value` | The Document is read-only; the `.value` direct-child/test contract and click semantics fail |
 | Adding a Source block or copy action | The details panel exposes Jump/Reveal only; provider copy code was deleted |
-| Moving the scroll container out of `#main` | The virtual range and scroll position become a no-op |
-| Using `#tree-window` as the rows offset | It moves with the top spacer, so a window update looks like scrolling to the top |
-| Setting spacer heights with a style attribute | The CSP blocks inline styles; update the nonce-carrying `#virtual-style` sheet |
+| Reintroducing a page-local scroll container | The component owns the scroller; a second one desynchronizes the virtual range |
+| Measuring a row offset from the window element | It moves with the top spacer; the component keeps the scroll offset instead |
+| Setting spacer heights with a style attribute | The CSP blocks inline styles; the component writes its own CSSOM custom properties |
 | Using an inline `style` instead of `data-level` | The CSP blocks style attributes and the depth CSS cannot follow |
+| Assuming a serialized helper keeps its declaration name | Bundling both pages can rename one copy (`calcVisibleRange2`); `virtualScrollScript()` emits stable wrappers and `documentTreeViewScript()` wraps the class expression |
 | `innerHTML` with a model value | The value is text, not markup; use `textContent` |
 | Reading the inspector from the rendered row | An offscreen selection has no rendered row; use `rowById` |
 | Calling a string assertion or a test-host render a webview pass | Neither is a VS Code webview; the Extension Development Host still needs a check |
@@ -282,11 +287,13 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 
 - `diffModel.ts` is pure (no `vscode`); it owns projection, matching, status, merged order,
   summary and the page helpers. The panel only reads documents, scans and posts.
-- Both pages inject `rowViewScript()`; `valueSpan`/`metaSpan`/`appendHighlighted` bodies are
-  byte-identical (tested). Do not fork a row primitive into the diff page.
-- `diffPage.ts` reuses `virtualScrollScript()`; only the viewport window is in the DOM and the
-  spacer heights come from `calcRowOffset`/`calcTotalHeight`. The list offset comes from
-  `#diff-list`'s content edge, not `#diff-window`.
+- Both pages inject `rowViewScript()` and `documentRowsScript()`; `valueSpan`/`metaSpan`/
+  `appendHighlighted` and the node/brace/comment builders have one definition (tested). Do not fork a
+  row primitive into the diff page.
+- `diffPage.ts` mounts two `DocumentTreeView` instances; each one reuses `virtualScrollScript()`, so
+  only its viewport window is in the DOM and its spacers come from `calcRowOffset`/`calcTotalHeight`.
+  The panes share the aligned display list, `heightFn` and content width; the host syncs their
+  offsets.
 - `DiffCell.range` is injected from the host's `buildNodeIndex`; `EcucRow` still carries no
   source positions. Reveal forces `mode: 'beside'` so the diff tab survives `revealMode: replace`.
 - A paired row uses the left id as its page key; an added row uses `right:` + its right id, so a
@@ -312,26 +319,28 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 - **Diff rows reuse Document geometry.** Each pane starts with the 26px fold gutter, an absolute 16px
   twisty at `left: 2px`, Document content padding and the `--indent` step per level. Labels use the
   Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
-  horizontal padding, so the pane edge is the clip boundary. Keep the pane headers and the diff
-  status tints.
-- **Diff rows render the Document view.** Each pane reuses the Document stylesheet slice
-  (`documentViewStyles`) and the `documentRows.ts` builders for nodes, annotations, braces and
-  guides. The editor still keeps its page-local builder wrappers around the same CSS; a full
-  component extraction is a follow-up.
-  Schema/package lines sit under each pane header; annotations and `{` / `}` rows follow each side;
-  colours, font, gutter, indentation and meta typography match Document. Only the status tint and
-  edge marker are diff-specific, and they sit on the cell without recolouring tokens.
+  horizontal padding; the scroller is the clip boundary. Keep the pane headers and the diff status
+  tints.
+- **Both panes are `DocumentTreeView` instances.** The diff mounts one component per pane, shares the
+  aligned `DiffDisplayRow` list and `heightFn`, and reuses `documentTreeStyles()` plus the
+  `documentRows.ts` builders for nodes, annotations, braces and guides. Each component owns its header,
+  native scroller, spacers and virtual window. Schema/package lines sit under each pane's file label;
+  annotations and `{` / `}` rows follow each side; colours, font, gutter, indentation and meta
+  typography match Document. Only the status tint and edge marker are diff-specific, and they sit on
+  the cell without recolouring tokens. Status is an optional render input; the editor never sets it.
 - **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the window
   title and pane headers show the same shortest distinguishing suffix.
-- **Horizontal scrolling is per-pane but synchronized.** Each pane has its own scrollbar; moving
-  either one writes the same `--diff-x` to both. Shift+wheel over either pane does the same, and
-  plain wheel stays vertical. Content width is the longest rendered line across both panes plus the
-  Document gutter and slack, with no cap. Vertical scrolling remains one shared scroller. Swap resets
-  the horizontal offset to zero and leaves the vertical position untouched.
+- **Both axes are synchronized across two native scrollers.** Each pane has its own vertical and
+  horizontal scrollbar; the pane that scrolled is the driver and the host copies its offsets to the
+  follower, guarded by value comparison and the component's expected-offset suppression. Shift+wheel
+  over either pane writes the same horizontal offset to both; plain wheel stays vertical. Content
+  width is the longest rendered line across both panes plus the Document gutter and slack, with no
+  cap, and both components receive it so neither clamps early. Swap resets both horizontal offsets to
+  zero and leaves the vertical position untouched.
 - **Swap sides is display-only.** `displayLeft`/`displayRight`/`displayStatus` re-project the row,
   and `Enter` maps a displayed side back to the host's original side. The comparison documents are
-  not recomputed and the single `#diff-scroll` is untouched; do not add pane-level scroll state.
+  not recomputed and neither pane's vertical scroll is reset.
 - The manifest adds the three commands to the existing `arxmlScope.actions` submenu with
   `explorerViewletFocus`/`listDoubleSelection` guards; there is no flat `editor/context` diff entry.

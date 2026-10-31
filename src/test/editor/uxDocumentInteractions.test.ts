@@ -65,7 +65,7 @@ suite('editor Document interactions', () => {
 
 	test('a toggle is built only where the row has children, with no glyph or inline hint', () => {
 		const script = page();
-		const build = functionSource(script, 'buildNodeRow');
+		const build = functionSource(script, 'buildDocumentNodeRow');
 		assert.ok(build.includes('if (row.hasChildren)'), 'a leaf has no fold control');
 		assert.ok(build.includes('rowElement.appendChild(twistySpan())'), 'the fold control sits in the fixed gutter');
 		assert.ok(!build.includes('spacerSpan'), 'leaves do not need a spacer in the gutter');
@@ -139,8 +139,8 @@ suite('editor Document interactions', () => {
 
 	test('aria-expanded follows the displayed list', () => {
 		const script = page();
-		const build = functionSource(script, 'buildNodeRow');
-		assert.ok(build.includes("setAttribute('aria-expanded', expandedIds.has(row.id) ? 'true' : 'false')"));
+		const build = functionSource(script, 'buildDocumentNodeRow');
+		assert.ok(build.includes("setAttribute('aria-expanded', context.expandedIds.has(row.id) ? 'true' : 'false')"));
 		assert.ok(build.includes('if (row.hasChildren)'), 'a leaf never gains aria-expanded');
 
 		const rebuild = functionSource(script, 'rebuildDisplay');
@@ -149,7 +149,7 @@ suite('editor Document interactions', () => {
 		assert.ok(!rebuild.includes('descendantShown'), 'the page does not re-derive expansion from neighbours');
 		assert.ok(rebuild.includes('flattenRows(rows, {'), 'the display list is built from rows and collapse state');
 		assert.ok(!rebuild.includes('visible:'), 'the display list has no query visibility input');
-		assert.ok(rebuild.includes("tree.dataset.empty"), 'and the empty state follows the display list');
+		assert.ok(script.includes('this.setEmpty(rowCount === 0)'), 'and the empty state follows the display list');
 
 		const flip = functionSource(script, 'flipCollapsed');
 		assert.ok(flip.includes('toggleCollapsed('), 'the toggle flips membership');
@@ -173,10 +173,10 @@ suite('editor Document interactions', () => {
 
 	test('the page re-renders from rows without a DOM swap', () => {
 		const script = page();
-		assert.ok(script.includes('setRows(message.rows, message.selectedId)'));
+		assert.ok(script.includes('setRows(message.rows, message.selectedId, message.header)'));
 		assert.ok(!script.includes('main.innerHTML'), 'there is no DOM-swap render path');
 		assert.ok(!script.includes('reRenderTree'), 'the old tree swap is gone');
-		assert.ok(script.includes('treeWindow.textContent'), 'only the virtual window is replaced');
+		assert.ok(script.includes('this.windowEl.textContent'), 'only the component window is replaced');
 		const handler = script.slice(script.lastIndexOf("if (message.type === 'model')"));
 		assert.ok(handler.includes('updateInspector()'), 'a re-scan refreshes the details panel');
 	});
@@ -193,12 +193,12 @@ suite('editor Document interactions', () => {
 
 	test('the Document row carries level, position, group size and selection state', () => {
 		const script = page();
-		const build = functionSource(script, 'buildNodeRow');
+		const build = functionSource(script, 'buildDocumentNodeRow');
 		for (const attribute of ['role', 'aria-level', 'aria-posinset', 'aria-setsize', 'aria-selected']) {
 			assert.ok(build.includes(`setAttribute('${attribute}'`), attribute);
 		}
 		assert.ok(build.includes("node.tabIndex = -1"), 'roving tabindex');
-		assert.ok(build.includes('node.dataset.subtree'), 'the selected-subtree marker');
+		assert.ok(build.includes('context.subtreeIds.has(row.id)'), 'the selected-subtree marker');
 		assert.ok(!build.includes('dataset.line'), 'no source line');
 		assert.ok(functionSource(script, 'applyRoving').includes('element.tabIndex = renderedId === id ? 0 : -1'));
 	});

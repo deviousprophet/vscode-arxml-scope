@@ -81,11 +81,11 @@ suite('editor document view', () => {
 		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(style));
 		assert.ok(/--rail:\s*var\(--vscode-focusBorder/.test(style));
 
-		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*position:\s*relative/.test(style));
-		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*font-family:\s*var\(--vscode-editor-font-family/.test(style));
-		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*font-size:\s*var\(--ecuc-fs\)/.test(style));
-		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*line-height:\s*var\(--ecuc-lh\)/.test(style));
-		assert.ok(/body\[data-view="document"\] #tree\s*\{[^}]*white-space:\s*pre/.test(style));
+		assert.ok(/.document-tree-scroll\s*{[^}]*position:\s*relative/.test(style));
+		assert.ok(/.document-tree-scroll\s*{[^}]*font-family:\s*var\(--vscode-editor-font-family/.test(style));
+		assert.ok(/.document-tree-scroll\s*{[^}]*font-size:\s*var\(--ecuc-fs\)/.test(style));
+		assert.ok(/.document-tree-scroll\s*{[^}]*line-height:\s*var\(--ecuc-lh\)/.test(style));
+		assert.ok(/.document-tree-scroll\s*{[^}]*white-space:\s*pre/.test(style));
 		assert.ok(/\.row\s*\{[^}]*display:\s*flex/.test(style));
 		assert.ok(/\.row\s*\{[^}]*gap:\s*1ch/.test(style));
 		assert.ok(/\.row\s*\{[^}]*padding:\s*0 0 0 var\(--content-pad\)/.test(style));
@@ -116,13 +116,13 @@ suite('editor document view', () => {
 		);
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(style));
 		assert.ok(
-			/body\[data-view="document"\] \.meta\s*\{[^}]*padding:[^;]*var\(--content-pad\)/.test(style),
+			/body\[data-view="document"\] \.document-tree-meta\s*\{[^}]*padding:[^;]*var\(--content-pad\)/.test(style),
 			'the header aligns with the post-gutter content edge'
 		);
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-gap="true"\]\s*\{[^}]*padding-top:\s*var\(--ecuc-lh\)/.test(style)
 		);
-		assert.ok(/body\[data-view="document"\] \.meta\s*\{[^}]*margin-bottom:\s*calc\(var\(--ecuc-lh\) \* 0\.5\)/.test(style));
+		assert.ok(/body\[data-view="document"\] \.document-tree-meta\s*\{[^}]*margin-bottom:\s*calc\(var\(--ecuc-lh\) \* 0\.5\)/.test(style));
 		assert.ok(
 			/body\[data-view="document"\] \.condition\s*\{[^}]*border:\s*1px solid transparent/.test(style),
 			'the condition chip keeps a compact edge'
@@ -164,9 +164,9 @@ suite('editor document view', () => {
 			assert.ok(!('endColumn' in row), 'no end column');
 		}
 		assert.ok(!('digits' in payload()), 'no gutter width');
-		const build = functionSource(page(), 'buildNodeRow');
+		const build = functionSource(page(), 'buildDocumentNodeRow');
 		assert.ok(!build.includes('dataset.line'), 'the row has no line-number data');
-		const brace = functionSource(page(), 'buildBraceRow');
+		const brace = functionSource(page(), 'buildDocumentBraceRow');
 		assert.ok(!brace.includes('dataset.line'), 'braces stay unnumbered');
 	});
 
@@ -189,7 +189,7 @@ suite('editor document view', () => {
 		);
 		assert.ok(!/body\[data-view="document"\] \.row\.k-parameter \.label,[\s\S]*?--vscode-symbolIcon-variableForeground/.test(style));
 		assert.ok(/body\[data-view="document"\] \.node\[data-kind="parameter"\] > \.row > \.label,[\s\S]*?--tok-key/.test(style));
-		assert.ok(/body\[data-view="document"\] \.meta \.keyword\s*\{[^}]*--tok-keyword/.test(style));
+		assert.ok(/body\[data-view="document"\] \.document-tree-meta \.keyword\s*\{[^}]*--tok-keyword/.test(style));
 		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*--tok-keyword/.test(style));
 		assert.ok(/body\[data-view="document"\] \.variant,[\s\S]*?--tok-meta/.test(style));
 		assert.ok(!/body\[data-view="document"\] \.hex\s*\{/.test(style), 'the Document has no hex meta style');
@@ -202,7 +202,7 @@ suite('editor document view', () => {
 		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(style));
 		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(style));
 		assert.ok(
-			/body\[data-view="document"\] #tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
+			/body\[data-view="document"\] .document-tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
 				style
 			)
 		);
@@ -227,7 +227,7 @@ suite('editor document view', () => {
 			'a selected container keeps the visible fill'
 		);
 		assert.ok(
-			/body\[data-view="document"\] #tree:focus-within \.node\[data-kind="container"\]\[data-selected="true"\] > \.row,[\s\S]*?background-color:\s*var\(--sel-container-bg\)/.test(
+			/body\[data-view="document"\] .document-tree:focus-within \.node\[data-kind="container"\]\[data-selected="true"\] > \.row,[\s\S]*?background-color:\s*var\(--sel-container-bg\)/.test(
 				style
 			),
 			'the focused container keeps the visible fill'
@@ -262,7 +262,7 @@ suite('editor document view', () => {
 		assert.ok(/\.twisty\s*\{[^}]*width:\s*16px/.test(styleOf(html)), 'the chevron is 16px wide');
 		assert.ok(/\.twisty\s*\{[^}]*top:\s*0[^}]*bottom:\s*0/.test(styleOf(html)), 'the hit area spans the full row height');
 		assert.ok(
-			/body\[data-view="document"\] #tree:hover \.node\[aria-expanded="true"\] > \.row > \.twisty/.test(styleOf(html)),
+			/body\[data-view="document"\] .document-tree:hover \.node\[aria-expanded="true"\] > \.row > \.twisty/.test(styleOf(html)),
 			'expanded folds appear on tree hover'
 		);
 		assert.ok(
@@ -277,7 +277,7 @@ suite('editor document view', () => {
 			),
 			'an empty container is marked at rest'
 		);
-		assert.ok(functionSource(html, 'buildNodeRow').includes("node.dataset.empty = 'true'"), 'the marker is data-driven');
+		assert.ok(functionSource(html, 'buildDocumentNodeRow').includes("node.dataset.empty = 'true'"), 'the marker is data-driven');
 		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(styleOf(html)));
 		assert.ok(!html.includes('id="view-toggle"'));
 	});
@@ -301,11 +301,11 @@ suite('editor document view', () => {
 		assert.ok(module.meta.some((part) => part.cls === 'condition'));
 		assert.ok(module.meta.some((part) => part.cls === 'annotation'));
 
-		const script = functionSource(page(), 'buildNodeRow');
-		assert.ok(script.includes('appendHighlighted(label, row.label)'), 'the label');
-		assert.ok(script.includes('valueSpan(row)'), 'the value');
-		assert.ok(script.includes('metaSpan({ ...row, meta: inlineMeta })'), 'the metadata line');
-		assert.ok(script.includes('rowElement.appendChild(valueSpan(row))'), 'the value stays a direct row child');
+		const script = functionSource(page(), 'buildDocumentNodeRow');
+		assert.ok(script.includes('window.appendHighlighted(label, row.label)'), 'the label');
+		assert.ok(script.includes('window.valueSpan(row)'), 'the value');
+		assert.ok(script.includes('window.metaSpan({ ...row, meta: inlineMeta })'), 'the metadata line');
+		assert.ok(script.includes('rowElement.appendChild(window.valueSpan(row))'), 'the value stays a direct row child');
 	});
 
 	test('the value separator is muted punctuation and stays out of the value token', () => {
@@ -369,9 +369,9 @@ suite('editor document view', () => {
 
 	test('annotations render above their node and long conditions wrap in Details', () => {
 		const html = page();
-		const build = functionSource(html, 'buildCommentRow');
+		const build = functionSource(html, 'buildDocumentCommentRow');
 		assert.ok(build.includes("'row comment-row'"), 'a comment row uses the shared row layout');
-		assert.ok(build.includes("'comment-text'") && build.includes('appendHighlighted(text, flat.text)'), 'the annotation text is highlighted like the row');
+		assert.ok(build.includes("'comment-text'") && build.includes('window.appendHighlighted(body, text)'), 'the annotation text is highlighted like the row');
 		const display = functionSource(html, 'buildDisplayRow');
 		assert.ok(display.includes("flat.type === 'comment'"), 'comment rows are part of the display list');
 		assert.ok(
@@ -379,11 +379,11 @@ suite('editor document view', () => {
 			'the reserved height uses the shared gap predicate'
 		);
 		assert.ok(
-			functionSource(html, 'buildCommentRow').includes('carriesGroupGap(rows, displayRows, displayIndex)'),
+			functionSource(html, 'documentRowOptions').includes('carriesGroupGap(rows, displayRows, displayIndex)'),
 			'an annotated module carries the gap on its first comment'
 		);
 		assert.ok(
-			functionSource(html, 'buildNodeRow').includes('carriesGroupGap(rows, displayRows, displayIndex)'),
+			functionSource(html, 'documentRowOptions').includes('carriesGroupGap(rows, displayRows, displayIndex)'),
 			'a module without annotations keeps the gap on its node row'
 		);
 		const update = functionSource(html, 'updateInspector');
@@ -413,7 +413,8 @@ suite('editor document view', () => {
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.grow[\s\S]*?display:\s*none/.test(style));
 		assert.ok(/\.inspector-code\s*\{[^}]*white-space:\s*normal/.test(style));
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?#sidebar\s*\{[^}]*max-height:\s*45vh/.test(style));
-		assert.ok(/#main\s*\{[^}]*scroll-padding-left:\s*var\(--content-pad\)/.test(style));
+		assert.ok(/#main\s*\{[^}]*overflow:\s*hidden/.test(style), 'the page shell no longer owns the scroll');
+		assert.ok(/\.document-tree-scroll\s*\{[^}]*overflow:\s*auto/.test(style), 'the component owns both axes');
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(style));
 		assert.ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?steps\(1, end\)/.test(style));
 		assert.ok(/@media \(forced-colors: active\)[\s\S]*?body\[data-view\] mark/.test(style));

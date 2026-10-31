@@ -120,7 +120,8 @@ is not simulated by the page test; the host write is covered by the apply test.
 Diff tests assert the toolbar both ways: Search/Show all/Show diff only/Prev diff/Next diff/Swap
 sides are present, and Filter/changes checkbox/summary/Collapse/Expand are absent. `diffModel` tests
 cover query-free `diffVisibility` and collapse-aware flattening; page tests assert the search wiring, the
-`displayLeft`/`displayRight`/`displayStatus` projection, reveal-side mapping and one `#diff-scroll`.
+`displayLeft`/`displayRight`/`displayStatus` projection, reveal-side mapping and the two
+`DocumentTreeView` scrollers.
 The headless diff probe drives typing (no marks), Enter (count/current), Shift+Enter, a view switch
 and a swap.
 

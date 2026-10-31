@@ -24,13 +24,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The diff shows each file with its schema/package header, annotations, braces and bracket guides, using the same colours and typography as the Document view
 - Each diff pane has its own horizontal scrollbar; moving either one scrolls both sides in sync, and Shift+wheel over either pane does the same
 - Two files with the same name are disambiguated by their shortest differing path in the diff title and pane headers
-- The diff toolbar has no Filter, changes summary or global collapse/expand buttons; view and difference controls sit on the left, **Swap sides** is centred, and Search stays on the right; row-level collapse and one synchronized vertical scroll remain
+- The diff toolbar has no Filter, changes summary or global collapse/expand buttons; view and difference controls sit on the left, **Swap sides** is centred, and Search stays on the right; row-level collapse and both panes keep synchronized vertical scrolling
+- A reusable `DocumentTreeView` component owns the Document header, native scroller, virtual spacers and rendered window; the editor mounts one instance and the diff mounts one per pane
+- Each diff pane now virtualizes independently with its own native vertical and horizontal scrollbars, while either pane or bar drives the synchronized offsets
+- Shift+wheel over either diff pane scrolls both horizontally; plain wheel stays vertical
 - A right-click **Duplicate** / **Delete** menu on container and parameter rows; both ask for confirmation, container duplicates ask for a unique short name, and each action is one undoable edit
 - An `ARXML Scope` context submenu for `Open with ECUC Editor` and `Reveal in ECUC Editor`
 
 ### Changed
 
 - Recoverable ECUC warnings now appear beside the Conditions or Details panel they belong to, and page errors go to the webview debug console instead of the toolbar banner
+- The diff panes share the editor's Document stylesheet and row builders through the component; status tint remains diff-only
+- Swap sides resets both horizontal offsets while the vertical position is preserved
+
+### Fixed
+
+- The diff horizontal scrollbar is no longer clipped by a fixed 12px strip; both axes use the native scroller and keep the platform scrollbar height
 
 ### Removed
 

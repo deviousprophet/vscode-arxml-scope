@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Reusable component contract, Document row styles and diff surface invariants"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "CSP nonce sheet, no inline styles, no duplicate renderer"}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Component, virtual-window and performance test conventions"}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Host owns state; component owns scroll/DOM only"}

@@ -25,8 +25,11 @@ function payload(source = html()): RowPayload {
 suite('editor rendering (AC1)', () => {
 	test('AC1: the schema release and the package path are shown', () => {
 		const page = html();
-		assert.ok(page.includes('>schema</span> <span class="number">00048</span>'));
-		assert.ok(page.includes('>package</span> PkgA.PkgB'));
+		const header = payload(page).header;
+		assert.strictEqual(header?.schema, '00048');
+		assert.deepStrictEqual(header?.packages, ['PkgA.PkgB']);
+		assert.ok(page.includes("this.headerLine('schema', 'number', header.schema)"), 'the component builds the schema line');
+		assert.ok(page.includes("this.headerLine('package', '', pkg)"), 'the component builds package lines');
 	});
 
 	test('AC1: the console reporter is armed before the API and no banner is emitted', () => {
@@ -163,27 +166,17 @@ suite('editor rendering (AC1)', () => {
 
 	test('AC1: the page is the static virtual shell, not a rendered tree', () => {
 		const source = html();
-		assert.ok(source.includes('id="tree" class="tree" role="tree" aria-label="ECUC values"'));
-		assert.ok(source.includes('id="tree-top" class="v-spacer" role="presentation" aria-hidden="true"></div>'));
-		assert.ok(source.includes('id="tree-window" role="presentation"></div>'));
-		assert.ok(source.includes('id="tree-bottom" class="v-spacer" role="presentation" aria-hidden="true"></div>'));
-		const treeShell = /<div id="tree"[^>]*>(\s*)<div id="tree-top"/.exec(source);
-		assert.ok(treeShell);
-		assert.strictEqual(
-			treeShell[1],
-			'',
-			'no whitespace text between the tree container and the top spacer, which would shift the virtual rows'
-		);
-		assert.ok(
-			source.includes(
-				'aria-hidden="true"></div><div id="tree-window" role="presentation"></div><div id="tree-bottom"'
-			),
-			'the spacers and window are flush, so the scroll offset matches the first rendered row'
-		);
+		assert.ok(source.includes('id="tree" class="document-tree" role="tree" aria-label="ECUC values"'));
+		assert.ok(source.includes('class DocumentTreeView'), 'the shared component is inlined');
+		assert.ok(source.includes("this.windowEl = document.createElement('div')"), 'the window is component-owned');
+		assert.ok(source.includes('document-tree-window'), 'the window wrapper is presentational');
+		assert.ok(source.includes('id="tree-measure"'), 'the hidden height probe stays host-owned');
+		assert.ok(!source.includes('id="tree-top"'), 'no static spacer survives');
+		assert.ok(!source.includes('id="tree-window"'), 'no static window survives');
 		assert.ok(!source.includes('data-node-id="'), 'the initial markup has no tree rows');
 		assert.ok(!source.includes('<div class="node" role="treeitem"'), 'no full-tree DOM');
 		assert.ok(source.includes('id="ecuc-rows"'), 'the rows are data');
-		assert.ok(source.includes('setRows(message.rows, message.selectedId)'));
+		assert.ok(source.includes('setRows(message.rows, message.selectedId, message.header)'));
 		assert.ok(!source.includes('id="view-toggle"'), 'the Tree view toggle is gone');
 		assert.ok(!source.includes('data-ln-digits'), 'there is no line-number gutter');
 		assert.ok(!source.includes('data-line='), 'rows carry no source-line display data');

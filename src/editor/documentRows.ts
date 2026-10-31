@@ -4,7 +4,7 @@
  * The builders are serialized into both webviews with `toString()`, so they may
  * only reference page globals (`appendHighlighted`, `valueSpan`, `metaSpan`,
  * `twistyIcon`) and their own arguments. The shared CSS comes from
- * `documentViewStyles()` in `renderHtml.ts`.
+ * `documentTreeStyles()` in `documentTreeView.ts`.
  */
 declare const document: any;
 

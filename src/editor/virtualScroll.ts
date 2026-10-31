@@ -58,16 +58,26 @@ export function fixedRowHeight(height: number): RowHeight {
  * helpers they reference are declared alongside them.
  */
 export function virtualScrollScript(): string {
-	return `
-let cache;
-${rowCountOf.toString()}
-${heightAt.toString()}
-${cumulativeHeights.toString()}
-${rowAtOffset.toString()}
-${calcTotalHeight.toString()}
-${calcRowOffset.toString()}
-${calcVisibleRange.toString()}
-`;
+	// Bundling the editor and the diff can rename one copy of these functions.
+	// The page template always calls the stable names, so emit a wrapper whenever
+	// the compiler kept a different declaration name.
+	const stable: Array<[string, (...args: any[]) => any]> = [
+		['rowCountOf', rowCountOf],
+		['heightAt', heightAt],
+		['cumulativeHeights', cumulativeHeights],
+		['rowAtOffset', rowAtOffset],
+		['calcTotalHeight', calcTotalHeight],
+		['calcRowOffset', calcRowOffset],
+		['calcVisibleRange', calcVisibleRange]
+	];
+	let script = 'let cache;\n';
+	for (const [name, fn] of stable) {
+		script += `${fn.toString()}\n`;
+		if (fn.name !== name) {
+			script += `function ${name}() { return ${fn.name}.apply(this, arguments); }\n`;
+		}
+	}
+	return script;
 }
 
 /** The row count as a non-negative integer (defensive against fractional input). */

@@ -17,7 +17,7 @@ that is not obvious from the code.
 | A second renderer or copied markup for a preview | It diverges from the product; wrap the production `renderHtml` and assert containment. |
 | Reading a real customer file from a test | The repository is public. Fixtures are synthetic. |
 | Building the whole row list into the DOM | It restores the large-file lag; render the viewport window plus overscan only. |
-| Setting row depth or spacer heights with a style attribute | The CSP blocks inline styles; use `data-level` CSS and the nonce-carrying `#virtual-style` sheet. |
+| Setting row depth or spacer heights with a style attribute | The CSP blocks inline styles; use `data-level` CSS and the component's scoped CSSOM/spacer properties. |
 
 ## Rules the write path must keep
 

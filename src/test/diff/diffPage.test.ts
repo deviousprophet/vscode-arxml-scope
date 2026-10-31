@@ -128,24 +128,25 @@ suite('semantic diff page (design §3)', () => {
 			'Search sits in the right track'
 		);
 		assert.ok(
-			html.includes('id="diff-hscroll-left"') &&
-				html.includes('id="diff-hscroll-right"') &&
-				(html.match(/class="hscroll"/g) || []).length === 2,
-			'one horizontal scrollbar per pane'
+			html.includes('id="diff-pane-left"') &&
+				html.includes('id="diff-pane-right"') &&
+				(html.match(/class="document-tree diff-pane"/g) || []).length === 2,
+			'one DocumentTreeView root per pane'
 		);
+		assert.ok(!html.includes('id="diff-hscroll-left"') && !html.includes('hscroll-inner'), 'the proxy bars are gone');
 		assert.ok(!html.includes('id="diff-detail"'), 'the bottom details strip is gone');
 		assert.ok(!html.includes('detail-table') && !html.includes('detail-columns'), 'no strip table survives');
 		assert.ok(
 			!html.includes('diffFieldLabel') && !html.includes('diffCellFields') && !html.includes('diffFieldRank'),
 			'no field-strip helpers survive'
 		);
-		assert.strictEqual((html.match(/let diffX =/g) || []).length, 1, 'one shared horizontal offset');
+		assert.ok(!html.includes('let diffX ='), 'there is no shared horizontal offset');
 		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'), 'the empty state exists');
 		assert.ok(html.includes("'No differences'"), 'a pair with no changes has an explicit empty message');
 		assert.ok(!html.includes(' changed · '), 'the changed/added/removed summary text is gone');
-		assert.ok(html.includes('id="diff-left-label">left.arxml'), 'the left pane header');
-		assert.ok(html.includes('id="diff-right-label">right.arxml'), 'the right pane header');
-		assert.strictEqual((html.match(/id="diff-scroll"/g) || []).length, 1, 'one synchronized scroll container');
+		assert.ok(html.includes('diff-left-label') === false, 'the label is built by the component header');
+		assert.strictEqual((html.match(/id="diff-list"/g) || []).length, 1, 'one pane grid');
+		assert.ok(html.includes('id="diff-body"'), 'the pane grid owns the body');
 	});
 
 	test('the page serializes search and side-swap behavior', () => {
@@ -164,32 +165,40 @@ suite('semantic diff page (design §3)', () => {
 			functionSource(html, 'onKeyDown').includes("vscode.postMessage({ type: 'reveal'"),
 			'Enter still reveals the selected row'
 		);
-		const row = functionSource(html, 'buildDiffRow');
+		const row = functionSource(html, 'renderRow');
 		assert.ok(row.includes('displayLeft(row)') && row.includes('displayRight(row)'));
 		assert.ok(row.includes("element.dataset.status = status"), 'the displayed status is rendered');
 		assert.ok(row.includes("element.dataset.searchCurrent = 'true'"));
+		assert.ok(row.includes('buildDocumentNodeRow') && row.includes('buildDocumentCommentRow'), 'shared row builders');
+		assert.ok(row.includes('swapped ? flat.right : flat.left'), 'structural kinds follow the displayed side');
+		assert.ok(
+			functionSource(html, 'documentOptions').includes('flat.guidesRight') &&
+				functionSource(html, 'documentOptions').includes('flat.guidesLeft') &&
+				functionSource(html, 'documentOptions').includes('swapped'),
+			'guides follow the displayed side'
+		);
 		const swap = functionSource(html, 'setSwapped');
 		assert.ok(swap.includes('renderHeaders()') && swap.includes('renderWindow(true)'));
-		assert.ok(swap.includes('diffX = 0') && swap.includes('syncBars()'), 'swap resets both horizontal offsets');
-		assert.ok(!swap.includes('scrollTop'), 'swapping never resets the single vertical scroll container');
+		assert.ok(swap.includes('setScrollLeft(0)'), 'swap resets both horizontal offsets');
+		assert.ok(!swap.includes('setScrollTop'), 'swapping never resets the vertical position');
 	});
 
-	test('the shell is a tree with top/window/bottom spacers and a hidden probe', () => {
+	test('the shell is two tree roots with component spacers and a hidden probe', () => {
 		const html = page();
-		assert.ok(/id="diff-list"[^>]*role="tree"/.test(html));
-		assert.ok(html.includes('id="diff-top"'));
-		assert.ok(html.includes('id="diff-window"'));
-		assert.ok(html.includes('id="diff-bottom"'));
+		assert.ok(/id="diff-pane-left"[^>]*role="tree"/.test(html));
+		assert.ok(html.includes('id="diff-pane-right"'), 'the right pane root exists');
+		assert.ok((html.match(/class="document-tree diff-pane"/g) || []).length === 2, 'both panes are DocumentTreeView roots');
 		assert.ok(html.includes('id="diff-measure"'));
-		assert.ok(html.includes("setAttribute('role', 'treeitem')"), 'rows are treeitems');
-		assert.ok(html.includes("setAttribute('aria-level'"), 'rows expose their level');
-		assert.ok(html.includes("setAttribute('aria-posinset'"), 'rows expose their sibling position');
-		assert.ok(html.includes("setAttribute('aria-setsize'"), 'rows expose their sibling count');
-		assert.ok(html.includes("setAttribute('aria-expanded'"), 'containers expose expansion');
-		assert.ok(html.includes("setAttribute('aria-selected'"), 'rows expose selection');
+		assert.ok(html.includes('class DocumentTreeView'), 'the component is inlined');
+		assert.ok(html.includes("element.setAttribute('role', 'treeitem')"), 'rows are treeitems');
+		assert.ok(html.includes("element.setAttribute('aria-level'"), 'rows expose their level');
+		assert.ok(html.includes("element.setAttribute('aria-posinset'"), 'rows expose their sibling position');
+		assert.ok(html.includes("element.setAttribute('aria-setsize'"), 'rows expose their sibling count');
+		assert.ok(html.includes("element.setAttribute('aria-expanded'"), 'containers expose expansion');
+		assert.ok(html.includes("element.setAttribute('aria-selected'"), 'rows expose selection');
 		assert.ok(html.includes("'sr-only'"), 'a visually hidden status word is emitted');
 		assert.ok(html.includes('rowElement.dataset.level = String(row.level)'), 'depth is carried as data');
-		assert.ok(/\.diff-cell > \.node > \.row\[data-level="3"\]/.test(html), 'indentation comes from generated attribute CSS');
+		assert.ok(/body\[data-view="document"\] \.row\[data-level="3"\]\.?[^{]*\{[^}]*padding-left/.test(html), 'indentation comes from generated attribute CSS');
 	});
 
 	test('the CSP and nonce guard the page; model text is escaped JSON', () => {
@@ -238,29 +247,27 @@ suite('semantic diff page (design §3)', () => {
 			right.rangeOf
 		);
 		const html = page(document);
-		assert.ok(html.includes('id="diff-left-label">a/same.arxml'), 'the left header is disambiguated at first paint');
-		assert.ok(html.includes('id="diff-right-label">b/same.arxml'), 'the right header is disambiguated at first paint');
-
+		const captured: Array<{ title?: string; titleTitle?: string; schema?: string; packages?: string[]; lines?: number }> = [];
+		const views = {
+			left: { setHeader: (header: (typeof captured)[number]) => captured.push(header) },
+			right: { setHeader: (header: (typeof captured)[number]) => captured.push(header) }
+		};
 		const run = new Function(
 			'diffDocument',
 			'swapped',
-			'leftLabel',
-			'rightLabel',
-			'leftHeader',
-			'rightHeader',
-			`${functionSource(html, 'renderHeaders')}\nrenderHeaders();`
-		) as (document: DiffDocument, swapped: boolean, left: unknown, right: unknown, leftHeader: unknown, rightHeader: unknown) => void;
-		const leftEl = { textContent: '' };
-		const rightEl = { textContent: '' };
-		const leftHead = { title: '' };
-		const rightHead = { title: '' };
-		run(document, false, leftEl, rightEl, leftHead, rightHead);
-		assert.strictEqual(leftEl.textContent, 'a/same.arxml');
-		assert.strictEqual(rightEl.textContent, 'b/same.arxml');
-		run(document, true, leftEl, rightEl, leftHead, rightHead);
-		assert.strictEqual(leftEl.textContent, 'b/same.arxml', 'the label follows the displayed side');
-		assert.strictEqual(rightEl.textContent, 'a/same.arxml');
-		assert.strictEqual(leftHead.title, '/w/b/same.arxml', 'the tooltip follows the displayed side');
+			'views',
+			`${functionSource(html, 'headerOf')}\n${functionSource(html, 'headerLineCountOf')}\n${functionSource(html, 'renderHeaders')}\nrenderHeaders();`
+		) as (document: DiffDocument, swapped: boolean, views: unknown) => void;
+		run(document, false, views);
+		assert.strictEqual(captured[0].title, 'a/same.arxml');
+		assert.strictEqual(captured[0].titleTitle, '/w/a/same.arxml');
+		assert.strictEqual(captured[1].title, 'b/same.arxml');
+		assert.strictEqual(captured[1].titleTitle, '/w/b/same.arxml');
+		captured.length = 0;
+		run(document, true, views);
+		assert.strictEqual(captured[0].title, 'b/same.arxml', 'the label follows the displayed side');
+		assert.strictEqual(captured[1].title, 'a/same.arxml');
+		assert.strictEqual(captured[0].titleTitle, '/w/b/same.arxml', 'the tooltip follows the displayed side');
 	});
 
 	test('the width model counts indent, label, value and meta on the wider side', () => {
@@ -302,60 +309,16 @@ suite('semantic diff page (design §3)', () => {
 		assert.strictEqual(diffContentWidth(5000, 8), 40034, 'no cap: the range must reach the end of the longest line');
 	});
 
-	test('the shared offset clamps to the pane-limited content and sizes the proxy exactly', () => {
-		const factory = new Function(
-			'scroll',
-			'hscroll',
-			'virtualStyle',
-			`
-			let diffContent = 0;
-			let diffX = 0;
-			let spacerTop = 0;
-			let spacerBottom = 0;
-			let virtualStyleText = '';
-			const hscrollLeft = hscroll;
-			const hscrollRight = hscroll;
-			const hscrolls = [hscroll, hscroll];
-			${functionSource(page(), 'paneWidth')}
-			${functionSource(page(), 'maxDiffX')}
-			${functionSource(page(), 'writeVirtualStyle')}
-			${functionSource(page(), 'applyDiffX')}
-			return {
-				setContent: function (value) { diffContent = value; },
-				max: maxDiffX,
-				x: function () { return diffX; },
-				apply: applyDiffX,
-				render: writeVirtualStyle,
-				style: function () { return virtualStyle.textContent; }
-			};
-		`
-		) as (
-			scroll: { clientWidth: number },
-			hscroll: { clientWidth: number },
-			virtualStyle: { textContent: string }
-		) => {
-			setContent(value: number): void;
-			max(): number;
-			x(): number;
-			apply(next: number): void;
-			render(): void;
-			style(): string;
-		};
-		const horizontal = factory({ clientWidth: 900 }, { clientWidth: 1000 }, { textContent: '' });
-		horizontal.setContent(1450);
-		assert.strictEqual(horizontal.max(), 1000, 'content minus one 450px pane');
-		horizontal.render();
-		assert.ok(
-			horizontal.style().includes('.hscroll-inner{width:2000px}'),
-			'proxy width cancels its own client width, not the scroller width'
-		);
-		horizontal.apply(1500);
-		assert.strictEqual(horizontal.x(), 1000, 'the offset clamps to the pane limit');
-		assert.ok(horizontal.style().includes('#diff-scroll{--diff-x:-1000px}'));
-		horizontal.apply(-20);
-		assert.strictEqual(horizontal.x(), 0, 'the offset never goes negative');
-		horizontal.setContent(400);
-		assert.strictEqual(horizontal.max(), 0, 'content that fits has no range');
+	test('both panes share one content width, with no pane clamp', () => {
+		const html = page();
+		const measure = functionSource(html, 'measureDiffWidth');
+		assert.ok(measure.includes('diffContentWidth(maxChars, chWidth)'), 'the shared width model feeds both panes');
+		assert.ok(measure.includes('views.left.setContentWidth(diffContent)'));
+		assert.ok(measure.includes('views.right.setContentWidth(diffContent)'));
+		assert.ok(!html.includes('paneWidth()'), 'no half-pane clamp survives');
+		assert.ok(!html.includes('maxDiffX'), 'the native scrollbar clamps the offset');
+		assert.ok(html.includes('scrollbar-gutter: stable'), 'the native bar keeps its full height');
+		assert.strictEqual((html.match(/id="diff-ch-probe"/g) || []).length, 1);
 	});
 
 	test('diff rows use the Document gutter, indent and meta typography', () => {
@@ -373,7 +336,7 @@ suite('semantic diff page (design §3)', () => {
 			'rows start at the Document content pad'
 		);
 		assert.ok(
-			/\.diff-cell > \.node > \.row\[data-level="2"\][\s\S]*?padding-left:\s*calc\(var\(--content-pad\) \+ var\(--indent\) \* 1\)/.test(
+			/body\[data-view="document"\] \.row\[data-level="2"\][\s\S]*?padding-left:\s*calc\(var\(--content-pad\) \+ var\(--indent\) \* 1\)/.test(
 				style
 			),
 			'the level rule uses the Document formula'
@@ -393,72 +356,83 @@ suite('semantic diff page (design §3)', () => {
 		);
 	});
 
-	test('both panes stay 50/50 and one shared offset moves their content', () => {
+	test('both panes are components, vertical and horizontal offsets are mirrored, and status is diff-only', () => {
+		const html = page();
+		assert.ok(html.includes("new DocumentTreeView('#diff-pane-left'"), 'the left pane is a component');
+		assert.ok(html.includes("new DocumentTreeView('#diff-pane-right'"), 'the right pane is a component');
+		const sync = functionSource(html, 'syncPanes');
+		assert.ok(sync.includes('follower.setScrollTop(top)'), 'either pane drives the vertical offset');
+		assert.ok(sync.includes('follower.setScrollLeft(left)'), 'either bar drives the horizontal offset');
+		assert.ok(sync.includes('driver.setScrollLeft(left)'), 'the driver keeps the same horizontal value');
+		const editor = renderHtml(scanEcucValues(fixtureText('editor/render.arxml')), { nonce: 'test-nonce' });
+		assert.ok(!editor.includes("element.dataset.status = status"), 'the editor never passes diff status');
+		assert.ok(html.includes("element.dataset.status = status"), 'the diff row carries its status');
+	});
+
+	test('both panes stay 50/50 and each owns a native scroller', () => {
 		const html = page();
 		const style = styleOf(html);
 		assert.ok(
-			/\.pane-headers\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style),
-			'headers are half the viewport each'
+			/#diff-list\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style),
+			'the pane grid is half the viewport each'
 		);
 		assert.ok(
-			/\.diff-row, \.probe\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style),
-			'rows are half the viewport each'
+			/\.diff-row\s*\{[^}]*display:\s*flex/.test(style),
+			'a pane row is one flex cell'
 		);
 		assert.ok(!/--diff-col/.test(style), 'no column-widening variable');
-		assert.strictEqual((style.match(/overflow-x:\s*auto/g) || []).length, 1, 'one horizontal scroll surface');
+		assert.ok(!style.includes('hscroll'), 'the proxy bars are gone');
 		assert.ok(
-			/\.hscroll\s*\{[^}]*overflow-x:\s*auto[^}]*overflow-y:\s*hidden/.test(style),
-			'the proxy bar scrolls sideways only'
+			/\.document-tree-scroll\s*\{[^}]*overflow:\s*auto/.test(style),
+			'each pane uses the native scroller'
 		);
 		assert.ok(
-			/\.diff-cell > \.node > \.row,[\s\S]*?\.diff-cell > \.comment > \.row\s*\{[^}]*transform:\s*translateX\(var\(--diff-x, 0px\)\)/.test(
-				style
-			),
-			'both panes read the same offset'
+			/\.document-tree-scroll\s*\{[^}]*scrollbar-gutter:\s*stable/.test(style),
+			'the native scrollbar is not clipped by a fixed strip'
 		);
+		assert.ok(!/transform:\s*translateX/.test(style), 'the native scroll moves the rows, not a transform');
 		assert.ok(html.includes('id="diff-ch-probe"'), 'one font probe feeds the width model');
 		assert.strictEqual((html.match(/id="diff-ch-probe"/g) || []).length, 1);
 		assert.ok(/\.toolbar\s*\{[^}]*height:\s*26px/.test(style), 'the diff toolbar stays one 26px row');
 
 		const measure = functionSource(html, 'measureDiffWidth');
-		const maxX = functionSource(html, 'maxDiffX');
-		const pane = functionSource(html, 'paneWidth');
 		assert.ok(measure.includes('diffRowChars(row)') && measure.includes('diffContentWidth(maxChars, chWidth)'));
-		assert.ok(pane.includes('scroll.clientWidth / 2'), 'the pane is half the vertical scroller width');
-		assert.ok(maxX.includes('diffContent - paneWidth()'), 'the limit is one pane width short of the content');
-		assert.ok(
-			functionSource(html, 'writeVirtualStyle').includes('bar.clientWidth - paneWidth()'),
-			'the proxy maximum cancels the proxy width, not the scroller width'
-		);
-		assert.ok(measure.includes('maxDiffX()') && measure.includes('bar.hidden'), 'the bars appear only on overflow');
-		assert.ok(html.includes("scroll.addEventListener('wheel'"), 'horizontal wheel over a pane drives the offset');
-		assert.ok(html.includes('applyDiffX(diffX + horizontal)'));
-		assert.ok(html.includes('bar.scrollLeft = diffX'));
+		assert.ok(html.includes("scroll.addEventListener('wheel'"), 'Shift+wheel over a pane drives the offset');
+		assert.ok(html.includes('event.shiftKey'));
+		assert.ok(html.includes('scroll.scrollLeft ='), 'the component writes the native horizontal offset');
 		assert.ok(html.includes('new ResizeObserver'), 'a pane resize recomputes the width');
 		assert.ok(
-			functionSource(html, 'setSwapped').includes('diffX = 0') &&
-				functionSource(html, 'setSwapped').includes('syncBars()'),
+			functionSource(html, 'setSwapped').includes('setScrollLeft(0)'),
 			'swapping resets both horizontal offsets'
 		);
 	});
 
 	test('pane headers render their own schema and package lines', () => {
-		const document = documentOf();
-		const html = page({
-			...document,
+		const document: DiffDocument = {
+			...documentOf(),
 			leftHeader: { schema: '00048', packages: ['PkgA'] },
 			rightHeader: { schema: '00048', packages: ['PkgB', 'PkgC'] }
-		});
-		assert.ok(html.includes('id="diff-left-header"'), 'the left header exists');
-		assert.ok(html.includes('<span class="keyword">schema</span> <span class="number">00048</span>'));
-		assert.ok(html.includes('<span class="keyword">package</span> PkgA'));
-		assert.ok(html.includes('<span class="keyword">package</span> PkgB'));
-		assert.ok(html.includes('<span class="keyword">package</span> PkgC'));
-		assert.strictEqual(
-			(html.match(/<div class="package">&nbsp;<\/div>/g) || []).length,
-			1,
-			'the shorter header is padded so both panes start their rows at the same y'
-		);
+		};
+		const html = page(document);
+		const captured: Array<{ schema?: string; packages?: string[]; lines?: number }> = [];
+		const views = {
+			left: { setHeader: (header: (typeof captured)[number]) => captured.push(header) },
+			right: { setHeader: (header: (typeof captured)[number]) => captured.push(header) }
+		};
+		const run = new Function(
+			'diffDocument',
+			'swapped',
+			'views',
+			`${functionSource(html, 'headerOf')}\n${functionSource(html, 'headerLineCountOf')}\n${functionSource(html, 'renderHeaders')}\nrenderHeaders();`
+		) as (document: DiffDocument, swapped: boolean, views: unknown) => void;
+		run(document, false, views);
+		assert.deepStrictEqual(captured[0].packages, ['PkgA']);
+		assert.strictEqual(captured[0].schema, '00048');
+		assert.deepStrictEqual(captured[1].packages, ['PkgB', 'PkgC']);
+		assert.strictEqual(captured[0].lines, 3, 'the shorter header is padded so both panes start their rows at the same y');
+		assert.strictEqual(captured[1].lines, 3);
+		assert.ok(html.includes("this.headerLine('schema', 'number', header.schema)"), 'the component builds the schema line');
+		assert.ok(html.includes("this.headerLine('package', '', pkg)"), 'the component builds package lines');
 	});
 
 	test('the embedded document is the model the host built', () => {
@@ -503,21 +477,18 @@ suite('semantic diff page (design §3)', () => {
 		assert.strictEqual(flatten(rows).length, flattenDiffDocument(rows).length);
 	});
 
-	test('only the viewport window is built, with spacer heights from the virtual math', () => {
+	test('only the viewport window is built in each pane, with spacer heights from the shared math', () => {
 		const html = page();
-		const render = functionSource(html, 'renderWindow');
+		assert.ok(html.includes('for (let at = start; at < end; at++)'), 'the component iterates the window, not the row store');
+		assert.ok(html.includes('calcVisibleRange(state)'), 'the window comes from the shared math');
+		assert.ok(html.includes('calcTotalHeight(state)'), 'the total comes from the shared math');
 		assert.ok(
-			render.includes('for (let at = start; at < end; at++)'),
-			'the renderer iterates the window, not the row store'
-		);
-		assert.ok(render.includes('calcVisibleRange(state)'), 'the window comes from the shared math');
-		assert.ok(render.includes('calcTotalHeight(state)'), 'the total comes from the shared math');
-		assert.ok(
-			render.includes('setSpacers(calcRowOffset(start, state), Math.max(0, total - calcRowOffset(end, state)))'),
+			html.includes('this.setSpacers(top, Math.max(0, total - calcRowOffset(end, state)))'),
 			'the top/bottom spacers keep the full scroll height'
 		);
-		assert.ok(html.includes('const bufferRows = 10'), 'the overscan is a small constant');
-		assert.ok(html.includes("'#diff-top{height:'"), 'the nonce-carrying sheet carries the spacer heights');
+		assert.ok(html.includes('this.bufferSize = 10'), 'the overscan is a small constant');
+		assert.ok(html.includes('setProperty(\'--document-tree-top\''), 'the component carries the spacer heights');
+		assert.ok(html.includes('views.left.render(force === true)') && html.includes('views.right.render(force === true)'), 'both panes render their own window');
 	});
 
 	test('AC12: a large document is windowed by the shared virtual math', () => {

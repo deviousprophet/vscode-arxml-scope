@@ -862,9 +862,13 @@ suite('search page', () => {
 		assert.deepStrictEqual(marksOf(explicit), ['ContA'], 'an explicit query still bypasses the page fallback');
 		assert.strictEqual(textOf(all), text, 'highlighting preserves the full text');
 
-		const build = functionSource(html, 'buildNodeRow');
+		const build = functionSource(html, 'buildDocumentNodeRow');
 		assert.ok(build.includes("node.dataset.searchCurrent = 'true'"), 'the current row carries a data flag');
-		assert.ok(build.includes('row.id === currentMatchId()'), 'and it is the row at the current index');
+		assert.ok(build.includes('row.id === context.currentId'), 'and it is the row at the current index');
+		assert.ok(
+			functionSource(html, 'documentRowOptions').includes('currentId: currentMatchId()'),
+			'the page supplies the current match id'
+		);
 		const style = styleOf(html);
 		assert.ok(
 			/--match-bg:\s*rgba\(234, 179, 8, 0\.32\)/.test(style),

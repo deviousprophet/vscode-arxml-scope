@@ -13,15 +13,14 @@
  */
 import { randomBytes } from 'crypto';
 import { matchRangesScript } from '../editor/treeQuery';
-import { escapeHtml } from '../editor/html';
 import { encodeJsonForScript } from '../editor/jsonScript';
 import { pageErrorScript } from '../editor/pageError';
 import { rowSearchScript } from '../editor/rowSearch';
 import { rowViewScript } from '../editor/rowView';
 import { virtualScrollScript } from '../editor/virtualScroll';
 import { buildDocumentBraceRow, buildDocumentCommentRow, buildDocumentNodeRow, documentRowsScript } from '../editor/documentRows';
-import { documentViewStyles } from '../editor/renderHtml';
-import { DiffDocument, DiffHeader, DiffRow, diffVisibility, flattenDiffDocument, nextChangeIndex } from './diffModel';
+import { documentTreeStyles, documentTreeViewScript } from '../editor/documentTreeView';
+import { DiffDocument, DiffRow, diffVisibility, flattenDiffDocument, nextChangeIndex } from './diffModel';
 
 export interface DiffRenderOptions {
 	/** Inline-script nonce; generated when absent. */
@@ -38,41 +37,15 @@ export function encodeDiffDocument(document: DiffDocument): string {
 }
 
 /** Builds the whole diff page. */
-function headerLines(header: DiffHeader): string[] {
-	const lines: string[] = [];
-	if (header.schema) {
-		lines.push(`<div class="schema"><span class="keyword">schema</span> <span class="number">${escapeHtml(header.schema)}</span></div>`);
-	}
-	for (const pkg of header.packages) {
-		lines.push(`<div class="package"><span class="keyword">package</span> ${escapeHtml(pkg)}</div>`);
-	}
-	return lines;
-}
-
-function paneHeaderHtml(header: DiffHeader, lineCount: number): string {
-	const lines = headerLines(header);
-	while (lines.length < lineCount) {
-		lines.push('<div class="package">&nbsp;</div>');
-	}
-	return lines.length > 0 ? `<div class="pane-meta">${lines.join('')}</div>` : '';
-}
-
 export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = {}): string {
 	const nonce = options.nonce ?? randomBytes(16).toString('base64');
 	const payload = encodeDiffDocument(diff);
-	const left = escapeHtml(diff.labels[0]);
-	const right = escapeHtml(diff.labels[1]);
-	const leftPath = escapeHtml(diff.left.path);
-	const rightPath = escapeHtml(diff.right.path);
-	const headerCount = Math.max(headerLines(diff.leftHeader).length, headerLines(diff.rightHeader).length);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
-<style nonce="${nonce}">${DIFF_STYLE}
-${documentViewStyles()}</style>
-<style id="virtual-style" nonce="${nonce}">#diff-top{height:0px}#diff-bottom{height:0px}</style>
+<style nonce="${nonce}">${DIFF_STYLE}${documentTreeStyles()}</style>
 </head>
 <body data-view="document">
 <div class="toolbar">
@@ -102,20 +75,14 @@ ${documentViewStyles()}</style>
 </div>
 </div>
 <div id="diff-notice" class="notice" role="status" aria-live="polite"></div>
-<div id="diff-scroll">
-<div class="pane-headers" role="presentation">
-<div id="diff-left-header" class="pane-header" title="${leftPath}"><span id="diff-left-label">${left}</span>${paneHeaderHtml(diff.leftHeader, headerCount)}</div>
-<div id="diff-right-header" class="pane-header" title="${rightPath}"><span id="diff-right-label">${right}</span>${paneHeaderHtml(diff.rightHeader, headerCount)}</div>
+<div id="diff-body">
+<div id="diff-list" class="diff-panes" role="presentation">
+<div id="diff-pane-left" class="document-tree diff-pane" role="tree" aria-label="Semantic ECUC diff, left side"></div>
+<div id="diff-pane-right" class="document-tree diff-pane" role="group" aria-label="Semantic ECUC diff, right side"></div>
 </div>
-<div id="diff-list" role="tree" aria-label="Semantic ECUC diff">
-<div id="diff-measure" aria-hidden="true"><span id="diff-ch-probe" class="ch-probe">${'0'.repeat(100)}</span><div class="diff-row probe"><div class="diff-cell"><span class="row"><span class="label">x</span></span></div><div class="diff-cell"><span class="row"><span class="label">x</span></span></div></div></div>
-<div id="diff-top" class="v-spacer" role="presentation" aria-hidden="true"></div>
-<div id="diff-window" role="presentation"></div>
-<div id="diff-bottom" class="v-spacer" role="presentation" aria-hidden="true"></div>
-</div>
+<div id="diff-measure" aria-hidden="true"><span id="diff-ch-probe" class="ch-probe">${'0'.repeat(100)}</span><div class="diff-row probe"><div class="diff-cell"><span class="row"><span class="label">x</span></span></div></div></div>
 <div id="diff-empty" class="empty" hidden><p id="diff-empty-text"></p></div>
 </div>
-<div class="hscroll-row"><div id="diff-hscroll-left" class="hscroll" role="group" aria-label="Scroll the left diff pane horizontally" tabindex="0" hidden><div class="hscroll-inner"></div></div><div id="diff-hscroll-right" class="hscroll" role="group" aria-label="Scroll the right diff pane horizontally" tabindex="0" hidden><div class="hscroll-inner"></div></div></div>
 <script type="application/json" id="diff-document" nonce="${nonce}">${payload}</script>
 <script nonce="${nonce}">
 ${DIFF_PAGE_ERROR_SCRIPT}
@@ -172,6 +139,7 @@ export function diffContentWidth(maxChars: number, chWidth: number): number {
 }
 
 /** The page script: the shared primitives plus the diff DOM glue. */
+/** The page script: the shared primitives plus the diff DOM glue. */
 export function diffPageScript(): string {
 	return `
 diffInstallErrorSurface();
@@ -179,6 +147,7 @@ const vscode = acquireVsCodeApi();
 ${rowViewScript()}
 ${documentRowsScript()}
 ${virtualScrollScript()}
+${documentTreeViewScript()}
 ${matchRangesScript()}
 ${rowSearchScript()}
 ${diffVisibility.toString()}
@@ -187,10 +156,7 @@ ${nextChangeIndex.toString()}
 ${diffRowChars.toString()}
 ${diffContentWidth.toString()}
 
-const scroll = document.getElementById('diff-scroll');
 const list = document.getElementById('diff-list');
-const listWindow = document.getElementById('diff-window');
-const virtualStyle = document.getElementById('virtual-style');
 const notice = document.getElementById('diff-notice');
 const searchInput = document.getElementById('diff-search-input');
 const searchClear = document.getElementById('diff-search-clear');
@@ -201,16 +167,8 @@ const searchBusy = document.getElementById('diff-search-busy');
 const viewAll = document.getElementById('diff-view-all');
 const viewDiff = document.getElementById('diff-view-diff');
 const swapButton = document.getElementById('diff-swap');
-const leftLabel = document.getElementById('diff-left-label');
-const rightLabel = document.getElementById('diff-right-label');
-const leftHeader = document.getElementById('diff-left-header');
-const rightHeader = document.getElementById('diff-right-header');
 const empty = document.getElementById('diff-empty');
 const emptyText = document.getElementById('diff-empty-text');
-const hscrollLeft = document.getElementById('diff-hscroll-left');
-const hscrollRight = document.getElementById('diff-hscroll-right');
-const hscrolls = [hscrollLeft, hscrollRight];
-const bufferRows = 10;
 const searchEngine = new RowSearchEngine();
 let searchQuery = '';
 let highlightQuery = '';
@@ -241,18 +199,11 @@ let displayIndexByKey = new Map();
 let navigationVisible = [];
 let windowRange = [0, 0];
 let renderedByKey = new Map();
-let renderedDataVersion = -1;
-let dataVersion = 0;
 let heights = { row: 20 };
 let heightFn = function () { return heights.row; };
-let heightVersion = 0;
-let spacerTop = 0;
-let spacerBottom = 0;
 let diffContent = 0;
-let diffX = 0;
-let hscrollFrame = 0;
-let virtualStyleText = '';
-let scrollFrame = 0;
+let headerLineCount = 0;
+let views;
 
 function readInitialDocument() {
 	const script = document.getElementById('diff-document');
@@ -302,6 +253,16 @@ function hasChanges() {
 	return summary.changed + summary.added + summary.removed > 0;
 }
 
+function headerOf(header) {
+	return header || { packages: [] };
+}
+
+function headerLineCountOf(header) {
+	const value = headerOf(header);
+	let count = value.schema ? 1 : 0;
+	return count + (Array.isArray(value.packages) ? value.packages.length : 0);
+}
+
 function indexRows() {
 	rowByKey = new Map();
 	rowIndexByKey = new Map();
@@ -328,7 +289,6 @@ function buildHeightFn() {
 			(!previous || previous.rowIndex !== flat.rowIndex);
 		return base + (gap ? base : 0);
 	};
-	heightVersion++;
 }
 
 function rebuildDisplay() {
@@ -357,6 +317,51 @@ function rebuildDisplay() {
 	buildHeightFn();
 }
 
+function renderHeaders() {
+	const left = swapped ? diffDocument.right : diffDocument.left;
+	const right = swapped ? diffDocument.left : diffDocument.right;
+	const labels = swapped
+		? [diffDocument.labels[1], diffDocument.labels[0]]
+		: diffDocument.labels;
+	const leftHeader = headerOf(swapped ? diffDocument.rightHeader : diffDocument.leftHeader);
+	const rightHeader = headerOf(swapped ? diffDocument.leftHeader : diffDocument.rightHeader);
+	headerLineCount = Math.max(headerLineCountOf(leftHeader), headerLineCountOf(rightHeader));
+	if (!views) {
+		return;
+	}
+	views.left.setHeader({
+		title: labels[0],
+		titleTitle: left.path,
+		schema: leftHeader.schema,
+		packages: leftHeader.packages,
+		lines: headerLineCount
+	});
+	views.right.setHeader({
+		title: labels[1],
+		titleTitle: right.path,
+		schema: rightHeader.schema,
+		packages: rightHeader.packages,
+		lines: headerLineCount
+	});
+}
+
+function paneModel() {
+	return {
+		rowCount: displayRows.length,
+		heightFn: heightFn,
+		renderRow: renderRow,
+		contentWidth: diffContent
+	};
+}
+
+function applyModels() {
+	if (!views) {
+		return;
+	}
+	views.left.setModel(paneModel());
+	views.right.setModel(paneModel());
+}
+
 function setDocument(next) {
 	if (!next || !Array.isArray(next.rows)) {
 		return;
@@ -373,8 +378,6 @@ function setDocument(next) {
 	diffDocument = next;
 	rows = next.rows;
 	indexRows();
-	renderHeaders();
-	updateViewButtons();
 	const present = new Set(rows.map(function (row) { return row.key; }));
 	collapsed = new Set(Array.from(collapsed).filter(function (key) { return present.has(key); }));
 	if (selectedKey !== undefined && !rowByKey.has(selectedKey)) {
@@ -385,13 +388,14 @@ function setDocument(next) {
 	}
 	refreshVisibility();
 	rebuildDisplay();
-	// The probe lives inside #diff-list; a still-hidden list measures 0. Update the
-	// empty/rows layout before measuring so a refresh that introduces the first rows
-	// gets the real row height instead of the fallback.
+	// The empty/rows layout has to be in step before measuring; a still-hidden
+	// list would not be measured, and the probe lives outside the list anyway.
 	list.hidden = displayRows.length === 0;
 	measureHeights();
 	measureDiffWidth();
-	dataVersion++;
+	applyModels();
+	renderHeaders();
+	updateViewButtons();
 	if (searchQuery.trim() !== '') {
 		startSearch(searchQuery, currentMatchKey(), true);
 	}
@@ -401,8 +405,8 @@ function measureHeights() {
 	const measure = document.getElementById('diff-measure');
 	const element = measure ? measure.querySelector('.diff-cell') : null;
 	const measured = element ? element.getBoundingClientRect().height : 0;
-	// A hidden list measures 0; keep the last real height rather than resetting
-	// the window math to the fallback.
+	// The probe lives outside the row list, so a hidden pane still has its last
+	// real row height instead of resetting the window math to a fallback.
 	heights = { row: measured > 0 ? measured : heights.row > 0 ? heights.row : 20 };
 	buildHeightFn();
 }
@@ -410,32 +414,8 @@ function measureHeights() {
 /**
  * One content width per rebuild. The row font is monospace, so one font probe
  * plus character counts give the longest row without reading layout per row.
+ * Both panes share it so a synchronized horizontal offset cannot clamp early.
  */
-function paneWidth() {
-	return scroll.clientWidth / 2;
-}
-
-function maxDiffX() {
-	return Math.max(0, diffContent - paneWidth());
-}
-
-function applyDiffX(next) {
-	const clamped = Math.max(0, Math.min(next, maxDiffX()));
-	if (clamped === diffX) {
-		return;
-	}
-	diffX = clamped;
-	writeVirtualStyle();
-}
-
-function syncBars() {
-	for (const bar of hscrolls) {
-		if (bar && bar.scrollLeft !== diffX) {
-			bar.scrollLeft = diffX;
-		}
-	}
-}
-
 function measureDiffWidth() {
 	const probe = document.getElementById('diff-ch-probe');
 	let chWidth = 0;
@@ -451,72 +431,28 @@ function measureDiffWidth() {
 		}
 	}
 	diffContent = diffContentWidth(maxChars, chWidth);
-	const max = maxDiffX();
-	if (diffX > max) {
-		diffX = max;
+	if (views) {
+		views.left.setContentWidth(diffContent);
+		views.right.setContentWidth(diffContent);
 	}
-	if (hscrolls.length > 0) {
-		for (const bar of hscrolls) {
-			if (bar) {
-				bar.hidden = max <= 0;
-				if (bar.scrollLeft !== diffX) {
-					bar.scrollLeft = diffX;
-				}
-			}
-		}
-	}
-	writeVirtualStyle();
-}
-
-function listWindowTop() {
-	// The list starts below the sticky pane headers; its position is stable while
-	// the window swaps spacer heights, unlike #diff-window's own position.
-	const scrollRect = scroll.getBoundingClientRect();
-	const listRect = list.getBoundingClientRect();
-	const padding = parseFloat(getComputedStyle(list).paddingTop) || 0;
-	return listRect.top - scrollRect.top + scroll.scrollTop + padding;
-}
-
-function virtualState() {
-	return {
-		rowCount: displayRows.length,
-		rowHeight: heightFn,
-		containerHeight: scroll.clientHeight,
-		scrollTop: Math.max(0, scroll.scrollTop - listWindowTop()),
-		bufferSize: bufferRows,
-		heightVersion: heightVersion
-	};
-}
-
-function writeVirtualStyle() {
-	const bar = hscrollLeft;
-	const half = bar ? bar.clientWidth - paneWidth() : 0;
-	const text =
-		'#diff-top{height:' + Math.max(0, spacerTop) + 'px}' +
-		'#diff-bottom{height:' + Math.max(0, spacerBottom) + 'px}' +
-		'#diff-scroll{--diff-x:-' + diffX + 'px}' +
-		'.hscroll-inner{width:' + (diffContent + Math.max(0, half)) + 'px}';
-	if (text === virtualStyleText) {
-		return;
-	}
-	virtualStyleText = text;
-	virtualStyle.textContent = text;
-}
-
-function setSpacers(top, bottom) {
-	spacerTop = top;
-	spacerBottom = bottom;
-	writeVirtualStyle();
 }
 
 function documentOptions(flat, side) {
+	const guides =
+		side === 'left'
+			? swapped
+				? flat.guidesRight
+				: flat.guidesLeft
+			: swapped
+				? flat.guidesLeft
+				: flat.guidesRight;
 	return {
 		selectedId: undefined,
 		expandedIds: flat.expanded ? new Set([rows[flat.rowIndex].key]) : new Set(),
 		searchQuery: searchQuery,
 		currentId: currentMatchKey(),
 		subtreeIds: new Set(),
-		guides: side === 'left' ? flat.guidesLeft : flat.guidesRight
+		guides: guides
 	};
 }
 
@@ -541,48 +477,17 @@ function documentRowForCell(cell, row) {
 		setsize: row.setsize,
 		hasChildren: row.hasChildren,
 		title: cell.definitionRef,
-		empty: false,
+		empty: cell.kind === 'container' && !row.hasChildren,
 		disabled: false
 	};
 }
 
-function buildDiffCell(cell, side, row, flat, status) {
-	const wrapper = document.createElement('div');
-	wrapper.className = 'diff-cell';
-	wrapper.dataset.side = side;
-	wrapper.dataset.status = status;
-	const node = buildDocumentNodeRow(
-		documentRowForCell(cell, row),
-		Object.assign(documentOptions(flat, side), {
-			selectedId: row.key === selectedKey ? row.key : undefined
-		})
-	);
-	node.removeAttribute('role');
-	node.removeAttribute('aria-level');
-	node.removeAttribute('aria-posinset');
-	node.removeAttribute('aria-setsize');
-	node.removeAttribute('aria-selected');
-	node.removeAttribute('aria-expanded');
-	node.removeAttribute('tabindex');
-	node.tabIndex = -1;
-	wrapper.appendChild(node);
-	return wrapper;
-}
-
-function buildStructuralCell(kind, text, side, row, flat) {
-	const wrapper = document.createElement('div');
-	wrapper.className = 'diff-cell';
-	wrapper.dataset.side = side;
-	if (kind === 'blank') {
-		return wrapper;
+function stripDocumentNode(node) {
+	for (const name of ['role', 'aria-level', 'aria-posinset', 'aria-setsize', 'aria-selected', 'aria-expanded']) {
+		node.removeAttribute(name);
 	}
-	const options = documentOptions(flat, side);
-	const element =
-		kind === 'comment'
-			? buildDocumentCommentRow(text || '', flat.level, row.key, options)
-			: buildDocumentBraceRow(kind, flat.level, row.key, options);
-	wrapper.appendChild(element);
-	return wrapper;
+	node.tabIndex = -1;
+	return node;
 }
 
 function carriesDiffGap(flat, displayIndex) {
@@ -594,27 +499,6 @@ function carriesDiffGap(flat, displayIndex) {
 		displayIndex > 0 &&
 		(!previous || previous.rowIndex !== flat.rowIndex)
 	);
-}
-
-function emptyCell(side) {
-	const wrapper = document.createElement('div');
-	wrapper.className = 'diff-cell';
-	wrapper.dataset.side = side;
-	wrapper.dataset.empty = 'true';
-	return wrapper;
-}
-
-function buildStructuralRow(flat, displayIndex) {
-	const row = rows[flat.rowIndex];
-	const element = document.createElement('div');
-	element.className = 'diff-row diff-structural';
-	element.setAttribute('aria-hidden', 'true');
-	if (carriesDiffGap(flat, displayIndex)) {
-		element.dataset.gap = 'true';
-	}
-	element.appendChild(buildStructuralCell(flat.left, flat.commentLeft, 'left', row, flat));
-	element.appendChild(buildStructuralCell(flat.right, flat.commentRight, 'right', row, flat));
-	return element;
 }
 
 function displayLeft(row) {
@@ -636,58 +520,106 @@ function hostSide(side) {
 	return swapped ? (side === 'left' ? 'right' : 'left') : side;
 }
 
-function buildDiffRow(row, flat, displayIndex) {
-	const left = flat.left === 'node' ? displayLeft(row) : undefined;
-	const right = flat.right === 'node' ? displayRight(row) : undefined;
-	const status = displayStatus(row);
+function renderRow(index, pane) {
+	const flat = displayRows[index];
 	const element = document.createElement('div');
 	element.className = 'diff-row';
-	element.setAttribute('role', 'treeitem');
-	element.setAttribute('aria-level', String(row.level));
-	element.setAttribute('aria-posinset', String(row.posinset));
-	element.setAttribute('aria-setsize', String(row.setsize));
-	element.setAttribute('aria-selected', row.key === selectedKey ? 'true' : 'false');
-	if (row.hasChildren) {
-		element.setAttribute('aria-expanded', flat.expanded ? 'true' : 'false');
+	if (!flat) {
+		return element;
 	}
-	element.tabIndex = -1;
-	element.dataset.key = row.key;
-	element.dataset.status = status;
-	if (row.key === selectedKey) {
-		element.dataset.selected = 'true';
+	const row = rows[flat.rowIndex];
+	const side = pane === 'left' ? 'left' : 'right';
+	// The display list is in comparison-side order. A swap changes which kind
+	// belongs to the displayed pane, including braces/comments, so read the
+	// displayed side rather than always the comparison left.
+	const kind = side === 'left' ? (swapped ? flat.right : flat.left) : swapped ? flat.left : flat.right;
+	const leftKind = swapped ? flat.right : flat.left;
+	const rightKind = swapped ? flat.left : flat.right;
+	const cell = document.createElement('div');
+	cell.className = 'diff-cell';
+	cell.dataset.side = side;
+	element.dataset.side = side;
+	const nodeRow = leftKind === 'node' || rightKind === 'node';
+	const structural = !nodeRow;
+	if (structural) {
+		element.classList.add('diff-structural');
+		element.setAttribute('aria-hidden', 'true');
 	}
-	if (searchQuery.trim() !== '' && row.key === currentMatchKey()) {
-		element.dataset.searchCurrent = 'true';
+	const status = displayStatus(row);
+	if (nodeRow) {
+		element.dataset.status = status;
+		element.dataset.key = row.key;
+		if (row.key === selectedKey) {
+			element.dataset.selected = 'true';
+		}
+		if (searchQuery.trim() !== '' && row.key === currentMatchKey()) {
+			element.dataset.searchCurrent = 'true';
+		}
+		if (status !== 'unchanged') {
+			const badge = document.createElement('span');
+			badge.className = 'sr-only';
+			badge.textContent = status;
+			element.appendChild(badge);
+		}
+		if (side === 'left') {
+			// One focusable tree row per display line: an added row's blank left
+			// cell is still its treeitem, so keyboard navigation reaches it.
+			element.setAttribute('role', 'treeitem');
+			element.setAttribute('aria-level', String(row.level));
+			element.setAttribute('aria-posinset', String(row.posinset));
+			element.setAttribute('aria-setsize', String(row.setsize));
+			element.setAttribute('aria-selected', row.key === selectedKey ? 'true' : 'false');
+			if (row.hasChildren) {
+				element.setAttribute('aria-expanded', flat.expanded ? 'true' : 'false');
+			}
+			element.tabIndex = -1;
+		}
 	}
-	if (carriesDiffGap(flat, displayIndex)) {
+	if (carriesDiffGap(flat, index)) {
 		element.dataset.gap = 'true';
 	}
-	const owner = left || right;
-	if (owner) {
-		element.title = owner.definitionRef;
+	if (kind === 'blank') {
+		cell.dataset.empty = 'true';
+		element.appendChild(cell);
+		return element;
 	}
-	if (status !== 'unchanged') {
-		const badge = document.createElement('span');
-		badge.className = 'sr-only';
-		badge.textContent = status;
-		element.appendChild(badge);
+	const options = documentOptions(flat, side);
+	if (kind === 'node') {
+		const cellRow = side === 'left' ? displayLeft(row) : displayRight(row);
+		if (cellRow) {
+			const node = stripDocumentNode(
+				buildDocumentNodeRow(
+					documentRowForCell(cellRow, row),
+					Object.assign(options, {
+						selectedId: row.key === selectedKey ? row.key : undefined
+					})
+				)
+			);
+			element.title = cellRow.definitionRef;
+			cell.appendChild(node);
+		}
+	} else if (kind === 'comment') {
+		cell.appendChild(
+			buildDocumentCommentRow(
+				side === 'left'
+					? (swapped ? flat.commentRight : flat.commentLeft) || ''
+					: (swapped ? flat.commentLeft : flat.commentRight) || '',
+				flat.level,
+				row.key,
+				options
+			)
+		);
+	} else {
+		cell.appendChild(buildDocumentBraceRow(kind, flat.level, row.key, options));
 	}
-	element.appendChild(left ? buildDiffCell(left, 'left', row, flat, status) : emptyCell('left'));
-	element.appendChild(right ? buildDiffCell(right, 'right', row, flat, status) : emptyCell('right'));
+	element.appendChild(cell);
 	return element;
-}
-
-function buildDisplayRow(flat, displayIndex) {
-	const row = rows[flat.rowIndex];
-	return flat.left === 'node' || flat.right === 'node'
-		? buildDiffRow(row, flat, displayIndex)
-		: buildStructuralRow(flat, displayIndex);
 }
 
 function focusedKey() {
 	const active = document.activeElement;
 	if (active && active.closest) {
-		const item = active.closest('#diff-list [role="treeitem"]');
+		const item = active.closest('[data-key]');
 		if (item) {
 			return item.dataset.key;
 		}
@@ -696,8 +628,26 @@ function focusedKey() {
 }
 
 function applyRoving(key) {
-	for (const [renderedKey, element] of renderedByKey) {
-		element.tabIndex = renderedKey === key ? 0 : -1;
+	if (!views) {
+		return;
+	}
+	const win = views.left.getWindowElement();
+	const items = win.querySelectorAll('[role="treeitem"]');
+	for (let at = 0; at < items.length; at++) {
+		items[at].tabIndex = items[at].dataset.key === key ? 0 : -1;
+	}
+}
+
+/** Rebuild the key -> left row map from the component's current window. */
+function collectRendered() {
+	renderedByKey = new Map();
+	if (!views) {
+		return;
+	}
+	const win = views.left.getWindowElement();
+	const items = win.querySelectorAll('[data-key]');
+	for (let at = 0; at < items.length; at++) {
+		renderedByKey.set(items[at].dataset.key, items[at]);
 	}
 }
 
@@ -716,37 +666,16 @@ function refocus(key) {
 }
 
 function renderWindow(force) {
-	// Keep the list's layout state in step with the row list before measuring the
-	// scroll region; a refresh can turn the empty state into rows or vice versa.
+	// Keep the list's layout state in step with the row list before the
+	// component measures its scroll region.
 	list.hidden = displayRows.length === 0;
-	const state = virtualState();
-	const range = calcVisibleRange(state);
-	const start = range[0];
-	const end = range[1];
-	if (!force && start === windowRange[0] && end === windowRange[1] && renderedDataVersion === dataVersion) {
+	if (!views) {
 		return;
 	}
 	const previousFocus = focusedKey();
-	windowRange = [start, end];
-	renderedDataVersion = dataVersion;
-	const total = calcTotalHeight(state);
-	setSpacers(calcRowOffset(start, state), Math.max(0, total - calcRowOffset(end, state)));
-	const fragment = document.createDocumentFragment();
-	renderedByKey = new Map();
-	for (let at = start; at < end; at++) {
-		const flat = displayRows[at];
-		if (!flat) {
-			continue;
-		}
-		const row = rows[flat.rowIndex];
-		const element = buildDisplayRow(flat, at);
-		if (flat.left === 'node' || flat.right === 'node') {
-			renderedByKey.set(row.key, element);
-		}
-		fragment.appendChild(element);
-	}
-	listWindow.textContent = '';
-	listWindow.appendChild(fragment);
+	views.left.render(force === true);
+	views.right.render(force === true);
+	windowRange = views.left.getVisibleRange();
 	let rovingKey = previousFocus;
 	if (rovingKey === undefined || !renderedByKey.has(rovingKey)) {
 		rovingKey = focusKey !== undefined && renderedByKey.has(focusKey) ? focusKey : selectedKey;
@@ -764,72 +693,69 @@ function renderWindow(force) {
 }
 
 function ensureVisible(displayIndex) {
-	const state = virtualState();
-	const offset = calcRowOffset(displayIndex, state);
-	const height = heightFn(displayIndex);
-	const top = listWindowTop();
-	const viewTop = scroll.scrollTop - top;
-	const viewBottom = viewTop + scroll.clientHeight;
-	if (offset < viewTop) {
-		scroll.scrollTop = top + offset;
-	} else if (offset + height > viewBottom) {
-		scroll.scrollTop = top + offset + height - scroll.clientHeight;
+	if (!views) {
+		return;
 	}
+	views.left.scrollToIndex(displayIndex);
+	// The sync callback runs on the next scroll event; copy now so a focus or
+	// reveal shows the same window in both panes immediately.
+	views.right.setScrollTop(views.left.getScrollTop());
+}
+
+function anchorState(scrollTop) {
+	return {
+		rowCount: displayRows.length,
+		rowHeight: heightFn,
+		containerHeight: views.left.clientHeight(),
+		scrollTop: scrollTop,
+		bufferSize: 0,
+		heightVersion: 1
+	};
 }
 
 function captureAnchor() {
-	if (displayRows.length === 0) {
+	if (!views || displayRows.length === 0) {
 		return null;
 	}
-	const state = virtualState();
-	const anchorScroll = Math.max(0, scroll.scrollTop - listWindowTop());
-	for (let at = windowRange[0]; at < windowRange[1]; at++) {
-		const flat = displayRows[at];
-		if (flat) {
-			return { key: rows[flat.rowIndex].key, delta: anchorScroll - calcRowOffset(at, state) };
-		}
+	const top = views.left.getRowsScrollTop();
+	const state = anchorState(top);
+	const range = calcVisibleRange(state);
+	const index = range[0];
+	const flat = displayRows[index];
+	if (!flat) {
+		return null;
 	}
-	return null;
+	return { key: rows[flat.rowIndex].key, delta: top - calcRowOffset(index, state) };
 }
 
 function restoreAnchor(anchor) {
-	if (!anchor || !displayIndexByKey.has(anchor.key)) {
+	if (!anchor || !views || !displayIndexByKey.has(anchor.key)) {
 		return;
 	}
 	const index = displayIndexByKey.get(anchor.key);
-	const state = virtualState();
-	scroll.scrollTop = listWindowTop() + Math.max(0, calcRowOffset(index, state) + anchor.delta);
+	const state = anchorState(0);
+	views.left.setRowsScrollTop(Math.max(0, calcRowOffset(index, state) + anchor.delta));
+	views.right.setScrollTop(views.left.getScrollTop());
 }
 
 function updateSelection() {
-	for (const [key, element] of renderedByKey) {
-		const on = key === selectedKey;
-		element.setAttribute('aria-selected', on ? 'true' : 'false');
-		if (on) {
-			element.dataset.selected = 'true';
-		} else {
-			delete element.dataset.selected;
+	if (!views) {
+		return;
+	}
+	for (const view of [views.left, views.right]) {
+		const win = view.getWindowElement();
+		const items = win.querySelectorAll('[data-key]');
+		for (let at = 0; at < items.length; at++) {
+			const on = items[at].dataset.key === selectedKey;
+			if (items[at].getAttribute('role') === 'treeitem') {
+				items[at].setAttribute('aria-selected', on ? 'true' : 'false');
+			}
+			if (on) {
+				items[at].dataset.selected = 'true';
+			} else {
+				delete items[at].dataset.selected;
+			}
 		}
-	}
-}
-
-function renderHeaders() {
-	const left = swapped ? diffDocument.right : diffDocument.left;
-	const right = swapped ? diffDocument.left : diffDocument.right;
-	const labels = swapped
-		? [diffDocument.labels[1], diffDocument.labels[0]]
-		: diffDocument.labels;
-	if (leftLabel) {
-		leftLabel.textContent = labels[0];
-	}
-	if (rightLabel) {
-		rightLabel.textContent = labels[1];
-	}
-	if (leftHeader) {
-		leftHeader.title = left.path;
-	}
-	if (rightHeader) {
-		rightHeader.title = right.path;
 	}
 }
 
@@ -857,14 +783,16 @@ function updateEmptyState() {
 
 function applyView() {
 	const anchor = captureAnchor();
-	const scrollTop = scroll.scrollTop;
+	const scrollTop = views ? views.left.getScrollTop() : 0;
 	refreshVisibility();
 	rebuildDisplay();
+	applyModels();
 	renderWindow(true);
 	if (anchor && displayIndexByKey.has(anchor.key)) {
 		restoreAnchor(anchor);
-	} else {
-		scroll.scrollTop = scrollTop;
+	} else if (views) {
+		views.left.setScrollTop(scrollTop);
+		views.right.setScrollTop(views.left.getScrollTop());
 	}
 	renderWindow(true);
 	updateSelection();
@@ -922,6 +850,7 @@ function jumpToSearchMatch(index) {
 	}
 	if (expandAncestors(key)) {
 		rebuildDisplay();
+		applyModels();
 	}
 	const displayIndex = displayIndexByKey.get(key);
 	if (displayIndex === undefined) {
@@ -1081,9 +1010,11 @@ function setView(changesOnly) {
 
 function setSwapped(next) {
 	swapped = next === true;
-	diffX = 0;
-	syncBars();
-	writeVirtualStyle();
+	if (views) {
+		// Swap resets horizontal only; the vertical position is preserved.
+		views.left.setScrollLeft(0);
+		views.right.setScrollLeft(0);
+	}
 	updateViewButtons();
 	renderHeaders();
 	renderWindow(true);
@@ -1134,6 +1065,7 @@ function revealKey(key) {
 	}
 	if (expandAncestors(key)) {
 		rebuildDisplay();
+		applyModels();
 		renderWindow(true);
 	}
 	const displayIndex = displayIndexByKey.get(key);
@@ -1175,6 +1107,7 @@ function toggleCollapsed(key) {
 	}
 	collapsed = next;
 	rebuildDisplay();
+	applyModels();
 	renderWindow(true);
 	updateSelection();
 	refocus(focused);
@@ -1307,68 +1240,53 @@ function onKeyDown(event) {
 	}
 }
 
-list.addEventListener('click', function (event) {
-	if (!(event.target instanceof Element)) {
+function onPaneRowClick(index, event) {
+	const flat = displayRows[index];
+	if (!flat) {
 		return;
 	}
-	const item = event.target.closest('#diff-list [role="treeitem"]');
-	if (!item) {
+	const row = rows[flat.rowIndex];
+	if (!row) {
 		return;
 	}
-	const key = item.dataset.key;
-	if (event.target.closest('.twisty')) {
-		toggleCollapsed(key);
+	if (flat.left !== 'node' && flat.right !== 'node') {
 		return;
 	}
-	selectKey(key, true);
-});
-document.addEventListener('keydown', onKeyDown);
-scroll.addEventListener('scroll', function () {
-	if (scrollFrame !== 0) {
+	if (event && event.target && event.target.closest && event.target.closest('.twisty')) {
+		toggleCollapsed(row.key);
 		return;
 	}
-	scrollFrame = requestAnimationFrame(function () {
-		scrollFrame = 0;
-		renderWindow(false);
-	});
-});
-scroll.addEventListener('wheel', function (event) {
-	const horizontal = event.shiftKey ? event.deltaY : event.deltaX;
-	const vertical = event.shiftKey ? 0 : Math.abs(event.deltaY);
-	if (Math.abs(horizontal) <= vertical) {
-		return;
-	}
-	if (maxDiffX() <= 0) {
-		return;
-	}
-	event.preventDefault();
-	applyDiffX(diffX + horizontal);
-	syncBars();
-}, { passive: false });
-for (const bar of hscrolls) {
-	if (!bar) {
-		continue;
-	}
-	bar.addEventListener('scroll', function () {
-		if (hscrollFrame !== 0) {
-			return;
-		}
-		hscrollFrame = requestAnimationFrame(function () {
-			hscrollFrame = 0;
-			applyDiffX(bar.scrollLeft);
-			syncBars();
-		});
-	});
+	selectKey(row.key, true);
 }
+
+function syncPanes(pane, top, left) {
+	if (!views) {
+		return;
+	}
+	const driver = pane === 'left' ? views.left : views.right;
+	const follower = pane === 'left' ? views.right : views.left;
+	if (Math.abs(follower.getScrollTop() - top) >= 1) {
+		follower.setScrollTop(top);
+	}
+	if (Math.abs(follower.getScrollLeft() - left) >= 1) {
+		follower.setScrollLeft(left);
+	}
+	if (Math.abs(driver.getScrollLeft() - left) >= 1) {
+		driver.setScrollLeft(left);
+	}
+}
+
+document.addEventListener('keydown', onKeyDown);
 window.addEventListener('resize', function () {
 	measureHeights();
 	measureDiffWidth();
+	applyModels();
 	renderWindow(true);
 });
 if (typeof ResizeObserver === 'function') {
 	new ResizeObserver(function () {
 		measureDiffWidth();
-	}).observe(scroll);
+	}).observe(list);
 }
 
 document.getElementById('diff-prev').addEventListener('click', function () { gotoChange(-1); });
@@ -1429,13 +1347,14 @@ window.addEventListener('message', function (event) {
 		notice.textContent = '';
 		delete notice.dataset.kind;
 		const anchor = captureAnchor();
-		const scrollTop = scroll.scrollTop;
+		const scrollTop = views ? views.left.getScrollTop() : 0;
 		setDocument(message.document);
 		renderWindow(true);
 		if (anchor && displayIndexByKey.has(anchor.key)) {
 			restoreAnchor(anchor);
-		} else {
-			scroll.scrollTop = scrollTop;
+		} else if (views) {
+			views.left.setScrollTop(scrollTop);
+			views.right.setScrollTop(views.left.getScrollTop());
 		}
 		renderWindow(true);
 		updateSelection();
@@ -1446,6 +1365,19 @@ window.addEventListener('message', function (event) {
 	}
 });
 
+views = {
+	left: new DocumentTreeView('#diff-pane-left', 'left', {
+		onVisibleWindowChange: function (top, left) { syncPanes('left', top, left); },
+		onRender: collectRendered,
+		onRowClick: onPaneRowClick
+	}),
+	right: new DocumentTreeView('#diff-pane-right', 'right', {
+		onVisibleWindowChange: function (top, left) { syncPanes('right', top, left); },
+		onRowClick: onPaneRowClick
+	})
+};
+views.left.mount();
+views.right.mount();
 setDocument(readInitialDocument());
 renderWindow(true);
 updateSelection();
@@ -1454,11 +1386,6 @@ updateEmptyState();
 vscode.postMessage({ type: 'ready' });
 `;
 }
-
-const DIFF_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
-	const level = at + 1;
-	return `.diff-cell > .node > .row[data-level="${level}"], .diff-cell > .brace > .row[data-level="${level}"], .diff-cell > .comment > .row[data-level="${level}"] { padding-left: calc(var(--content-pad) + var(--indent) * ${at}); }`;
-}).join('\n');
 
 const DIFF_STYLE = `
 html, body {
@@ -1476,32 +1403,12 @@ body {
 	overflow: hidden;
 }
 body {
-	--ecuc-fs: var(--vscode-editor-font-size, 13px);
-	--ecuc-lh: calc(var(--ecuc-fs) * 1.55);
-	--tok-keyword: var(--vscode-debugTokenExpression-boolean, var(--vscode-editor-foreground));
-	--tok-string: var(--vscode-debugTokenExpression-string, var(--vscode-editor-foreground));
-	--tok-number: var(--vscode-debugTokenExpression-number, var(--vscode-editor-foreground));
-	--tok-meta: var(--vscode-debugTokenExpression-name, var(--vscode-editor-foreground));
-	--tok-comment: var(--vscode-charts-green, var(--vscode-editor-foreground));
-	--tok-key: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
-	--tok-punct: var(--vscode-editor-foreground);
-	--tok-dim: var(--vscode-descriptionForeground, var(--vscode-editor-foreground));
-	--container-accent: var(--vscode-symbolIcon-classForeground, var(--vscode-editor-foreground));
 	--diff-added-bg: var(--vscode-diffEditor-insertedLineBackground, var(--vscode-diffEditor-insertedTextBackground, transparent));
 	--diff-removed-bg: var(--vscode-diffEditor-removedLineBackground, var(--vscode-diffEditor-removedTextBackground, transparent));
 	--diff-changed-bg: var(--vscode-diffEditor-modifiedTextBackground, var(--vscode-editor-findMatchHighlightBackground, transparent));
 	--diff-added-edge: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-editorInfo-foreground, currentColor));
 	--diff-removed-edge: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-editorError-foreground, currentColor));
 	--diff-changed-edge: var(--vscode-gitDecoration-modifiedResourceForeground, var(--vscode-editorWarning-foreground, currentColor));
-	--hover-bg: var(--vscode-list-hoverBackground, transparent);
-	--sel-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
-	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
-	--match-bg: rgba(234, 179, 8, 0.32);
-	--match-hi: rgba(234, 179, 8, 0.7);
-	--fold-gutter: 26px;
-	--doc-pad: 3ch;
-	--indent: 4ch;
-	--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
 }
 .toolbar {
 	display: grid;
@@ -1735,66 +1642,34 @@ input[type="search"]::-webkit-search-decoration {
 .notice[data-kind="warn"] {
 	color: var(--vscode-editorWarning-foreground, var(--tok-dim));
 }
-#diff-scroll {
+#diff-body {
+	position: relative;
+	display: flex;
+	flex-direction: column;
 	flex: 1 1 auto;
-	min-height: 0;
-	overflow: auto;
-	overflow-anchor: none;
-}
-.pane-headers {
-	position: sticky;
-	top: 0;
-	z-index: 2;
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-	background: var(--vscode-editor-background);
-	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
-}
-.pane-header {
 	min-width: 0;
-	padding: 3px 10px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-weight: 600;
-	color: var(--vscode-foreground);
-}
-.pane-header + .pane-header {
-	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
-}
-.pane-meta {
-	padding-left: var(--content-pad);
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--ecuc-fs);
-	line-height: var(--ecuc-lh);
-	font-weight: 400;
-	color: var(--vscode-editor-foreground);
-	white-space: pre;
-}
-.pane-meta .keyword {
-	color: var(--tok-keyword);
-}
-.pane-meta .number {
-	color: var(--tok-number);
+	min-height: 0;
 }
 #diff-list {
-	position: relative;
-	padding: 4px 0 12px;
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--ecuc-fs);
-	font-weight: var(--vscode-editor-font-weight, normal);
-	line-height: var(--ecuc-lh);
-	font-variant-ligatures: none;
-	tab-size: 4;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	grid-auto-rows: minmax(0, 1fr);
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
 }
 #diff-list[hidden] {
 	display: none;
 }
-#diff-window {
-	display: flow-root;
+.diff-pane {
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
-.v-spacer {
-	pointer-events: none;
+.diff-pane + .diff-pane {
+	border-left: 0;
+	box-shadow: inset 1px 0 0 var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.diff-pane .document-tree-header {
+	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
 #diff-measure {
 	position: absolute;
@@ -1813,33 +1688,21 @@ input[type="search"]::-webkit-search-decoration {
 	font-size: var(--ecuc-fs);
 	font-weight: var(--vscode-editor-font-weight, normal);
 }
-#diff-measure .diff-row,
-#diff-measure .probe {
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-.diff-row, .probe {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-	align-items: stretch;
-	outline: none;
-}
 .diff-row {
 	position: relative;
+	display: flex;
+	align-items: stretch;
+	outline: none;
 }
 .diff-row[data-gap="true"] {
 	padding-top: var(--ecuc-lh);
 }
 .diff-cell {
-	display: flex;
-	align-items: baseline;
+	flex: 1 1 auto;
 	min-width: 0;
 	height: var(--ecuc-lh);
 	padding: 0;
-	overflow: hidden;
 	box-sizing: border-box;
-}
-.diff-cell[data-side="right"] {
-	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
 .diff-row:hover > .diff-cell {
 	background-color: var(--hover-bg);
@@ -1877,145 +1740,6 @@ input[type="search"]::-webkit-search-decoration {
 .diff-cell[data-empty="true"] {
 	background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--vscode-editorGroup-border, transparent) 6px 7px);
 }
-.diff-cell > .node,
-.diff-cell > .brace,
-.diff-cell > .comment {
-	width: 100%;
-	min-width: 0;
-}
-.diff-cell > .node > .row,
-.diff-cell > .brace > .row,
-.diff-cell > .comment > .row {
-	transform: translateX(var(--diff-x, 0px));
-}
-${DIFF_LEVEL_RULES}
-.twisty {
-	position: absolute;
-	left: 2px;
-	top: 0;
-	bottom: 0;
-	width: 16px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--vscode-icon-foreground, var(--vscode-foreground));
-	opacity: 0;
-	transition: opacity 0.2s;
-	cursor: pointer;
-}
-.diff-row:hover .twisty,
-.diff-row:focus-visible .twisty,
-.diff-row[aria-expanded="false"] .twisty {
-	opacity: 1;
-}
-.twisty svg {
-	transition: transform 120ms ease;
-}
-.diff-row[aria-expanded="true"] > .diff-cell > .row > .twisty svg {
-	transform: rotate(90deg);
-}
-.label {
-	flex: 0 0 auto;
-	white-space: pre;
-	font-weight: 600;
-	color: var(--vscode-editor-foreground);
-}
-.row.k-module .label::before {
-	content: "module ";
-	color: var(--tok-keyword);
-}
-.row.k-parameter > .label,
-.row.k-reference > .label {
-	color: var(--tok-key);
-}
-.row.k-container > .label {
-	color: var(--container-accent);
-}
-.value {
-	flex: 0 0 auto;
-	min-width: 0;
-	margin: 0;
-	white-space: pre;
-	color: var(--vscode-foreground);
-}
-.value .punct {
-	color: var(--tok-punct);
-}
-.value[data-value-kind="numeric"] {
-	color: var(--tok-number);
-}
-.value[data-value-kind="textual"] {
-	color: var(--tok-string);
-}
-.value[data-value-kind="boolean"] {
-	color: var(--tok-keyword);
-}
-.row.k-reference > .value .value-text {
-	color: var(--vscode-symbolIcon-functionForeground, var(--tok-meta));
-	font-style: italic;
-}
-.row-meta {
-	display: flex;
-	flex: 0 0 auto;
-	flex-wrap: nowrap;
-	gap: 1ch;
-	min-width: 0;
-	font-family: inherit;
-	font-size: inherit;
-	color: var(--vscode-editor-foreground);
-	white-space: pre;
-}
-.row-meta > span {
-	max-width: none;
-	overflow: visible;
-	white-space: pre;
-	margin: 0;
-}
-.short {
-	color: var(--tok-string);
-}
-.keyword {
-	color: var(--tok-keyword);
-}
-.variant {
-	color: var(--tok-meta);
-}
-.condition {
-	padding: 0 2px;
-	border: 1px solid transparent;
-	border-radius: 3px;
-	color: var(--tok-meta);
-}
-.condition[data-state="false"] {
-	border-color: var(--vscode-errorForeground, var(--diff-removed-edge));
-}
-.syscond-name {
-	color: var(--tok-key);
-}
-.syscond-number {
-	color: var(--tok-number);
-}
-.syscond-string {
-	color: var(--tok-string);
-}
-.syscond-operator,
-.syscond-literal {
-	color: var(--tok-keyword);
-}
-.syscond-punct {
-	color: var(--tok-punct);
-}
-.annotation {
-	color: var(--tok-comment);
-	font-style: italic;
-}
-.context {
-	color: var(--vscode-editor-foreground);
-}
-mark {
-	color: var(--vscode-editor-findMatchForeground, var(--vscode-foreground));
-	background: var(--match-bg);
-}
 .diff-row[data-search-current="true"] .diff-cell mark {
 	background: var(--match-hi);
 }
@@ -2043,28 +1767,6 @@ mark {
 }
 .empty p {
 	margin: 0;
-}
-.hscroll-row {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-	flex: none;
-	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
-}
-.hscroll {
-	min-height: 12px;
-	line-height: 0;
-	overflow-x: auto;
-	overflow-y: hidden;
-	scrollbar-gutter: stable;
-}
-.hscroll + .hscroll {
-	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
-}
-.hscroll[hidden] {
-	display: none;
-}
-.hscroll-inner {
-	height: 1px;
 }
 @media (forced-colors: active) {
 	.diff-row[data-status="changed"] > .diff-cell,
@@ -2103,10 +1805,6 @@ body.vscode-high-contrast .diff-row:hover > .diff-cell {
 	outline-offset: -1px;
 }
 @media (max-width: 720px) {
-	body {
-		--doc-pad: 2.5ch;
-		--indent: 3ch;
-	}
 	.toolbar {
 		padding: 0 4px;
 		gap: 3px;

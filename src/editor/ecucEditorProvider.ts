@@ -19,7 +19,7 @@ import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { ConditionValue } from '../core/ecuc/syscond';
 import { ConditionEntry, ConditionValueStore, parseConditionEntries } from './conditionValues';
-import { RenderOptions, renderHtml } from './renderHtml';
+import { RenderOptions, documentHeader, renderHtml } from './renderHtml';
 import { buildRows } from './renderRows';
 import { buildNodeIndex } from './nodeId';
 import { applyEdit, buildEdit, buildFieldEdit } from './ecucEdit';
@@ -167,6 +167,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				type: 'model',
 				rows: rowDocument.rows,
 				selectedId: current,
+				header: documentHeader(model),
 			});
 		};
 
