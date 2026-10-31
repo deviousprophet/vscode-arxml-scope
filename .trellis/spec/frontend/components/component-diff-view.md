@@ -33,6 +33,7 @@ class DiffView {
     syncPanes(pane: 'left' | 'right', top: number, left: number): void;
     render(force: boolean): void;
     setModel(model: DocumentTreeViewModel): void;
+    setHeader(header: { left: DocumentTreeHeader; right: DocumentTreeHeader }): void;
     setContentWidth(width: number): void;
     setScrollTop(top: number): void;
     setScrollLeft(left: number): void;

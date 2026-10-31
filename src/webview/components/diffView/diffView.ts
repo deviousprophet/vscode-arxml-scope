@@ -8,11 +8,12 @@
  */
 import './diffView.css';
 import { DocumentTreeView } from '../documentTree/documentTreeView';
+import type { DocumentTreeHeader, DocumentTreeViewModel } from '../documentTree/documentTreeView';
 export { renderDiffViewHtml } from './diffViewRender';
 
 export interface DiffViewCallbacks {
-	onVisibleWindowChange?(pane: string, top: number, left: number): void;
-	onRowClick?(pane: string, index: number, event: any): void;
+	onVisibleWindowChange?(pane: 'left' | 'right', top: number, left: number): void;
+	onRowClick?(pane: 'left' | 'right', index: number, event: MouseEvent): void;
 	onRender?(pane: string): void;
 }
 
@@ -78,7 +79,7 @@ export class DiffView {
 	 * is mirrored the same way; the component's expected-offset suppression stops
 	 * the follower's scroll event from bouncing back.
 	 */
-	syncPanes(pane: string, top: number, left: number): void {
+	syncPanes(pane: 'left' | 'right', top: number, left: number): void {
 		if (!this.left || !this.right) {
 			return;
 		}
@@ -103,7 +104,7 @@ export class DiffView {
 		this.right.render(force === true);
 	}
 
-	setModel(model: any): void {
+	setModel(model: DocumentTreeViewModel): void {
 		this.left.setModel(model);
 		this.right.setModel(model);
 	}
@@ -113,7 +114,7 @@ export class DiffView {
 		this.right.setContentWidth(width);
 	}
 
-	setHeader(header: any): void {
+	setHeader(header: { left: DocumentTreeHeader; right: DocumentTreeHeader }): void {
 		this.left.setHeader(header.left);
 		this.right.setHeader(header.right);
 	}

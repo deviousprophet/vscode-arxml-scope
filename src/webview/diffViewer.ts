@@ -1045,7 +1045,7 @@ function onPaneRowClick(index: number, event: any): void {
 	}
 	selectKey(row.key, true);
 }
-function syncPanes(pane: string, top: number, left: number): void {
+function syncPanes(pane: 'left' | 'right', top: number, left: number): void {
 	if (views) {
 		views.syncPanes(pane, top, left);
 	}
