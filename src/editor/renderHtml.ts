@@ -1913,14 +1913,16 @@ const CONSOLE_ERROR_SCRIPT = consoleErrorScript({
  * injects the exact same rules instead of a lookalike copy.
  */
 export function documentViewStyles(): string {
+	const varsStart = STYLE.indexOf('body[data-view] {\n\t--ecuc-fs');
+	const varsEnd = varsStart < 0 ? -1 : STYLE.indexOf('\n}', varsStart);
 	const baseStart = STYLE.indexOf('.node {');
 	const baseEnd = STYLE.indexOf('.inspector-empty {');
 	const viewStart = STYLE.indexOf('/* Document view: quiet source.');
 	const viewEnd = STYLE.indexOf('@media (forced-colors: active) {');
-	if (baseStart < 0 || baseEnd <= baseStart || viewStart < 0 || viewEnd <= viewStart) {
+	if (varsStart < 0 || varsEnd < 0 || baseStart < 0 || baseEnd <= baseStart || viewStart < 0 || viewEnd <= viewStart) {
 		return '';
 	}
-	return `${STYLE.slice(baseStart, baseEnd)}\n${STYLE.slice(viewStart, viewEnd)}`;
+	return `${STYLE.slice(varsStart, varsEnd + 2)}\n${STYLE.slice(baseStart, baseEnd)}\n${STYLE.slice(viewStart, viewEnd)}`;
 }
 
 const TREE_SCRIPT = `

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify one component is used by both views and styles match"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check no duplicated CSS/builders or inline style"}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Check virtual-window, sync and 10k-row tests"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Check component/host state split and swap reset"}

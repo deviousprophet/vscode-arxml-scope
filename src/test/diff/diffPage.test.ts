@@ -586,7 +586,7 @@ suite('semantic diff page (design §3)', () => {
 		const style = styleOf(page());
 		assert.ok(style.includes('var(--vscode-'), 'theme variables are used');
 		const literals = Array.from(new Set(style.match(/#[0-9a-fA-F]{3,8}\b/g) || [])).sort();
-		assert.deepStrictEqual(literals, ['#80808040', '#DCDCAA'], 'only the documented Document fallbacks remain');
+		assert.deepStrictEqual(literals, ['#4EC9B0', '#80808040', '#DCDCAA'], 'only the documented Document fallbacks remain');
 		assert.ok(style.includes('--vscode-diffEditor-insertedLineBackground'), 'added rows use the diff theme colour');
 		assert.ok(style.includes('--vscode-diffEditor-removedLineBackground'), 'removed rows use the diff theme colour');
 		assert.ok(style.includes('.diff-row[data-status="changed"] > .diff-cell'), 'a changed row marks both sides');

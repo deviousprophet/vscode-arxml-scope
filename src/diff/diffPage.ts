@@ -70,8 +70,8 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
-<style nonce="${nonce}">${documentViewStyles()}
-${DIFF_STYLE}</style>
+<style nonce="${nonce}">${DIFF_STYLE}
+${documentViewStyles()}</style>
 <style id="virtual-style" nonce="${nonce}">#diff-top{height:0px}#diff-bottom{height:0px}</style>
 </head>
 <body data-view="document">
@@ -2051,9 +2051,11 @@ mark {
 	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
 .hscroll {
-	height: 12px;
+	min-height: 12px;
+	line-height: 0;
 	overflow-x: auto;
 	overflow-y: hidden;
+	scrollbar-gutter: stable;
 }
 .hscroll + .hscroll {
 	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
