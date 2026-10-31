@@ -44,6 +44,10 @@ async function main() {
 		platform: 'node',
 		outfile: 'dist/extension.js',
 		external: ['vscode'],
+		// Component stylesheets are colocated with their component and imported
+		// as text; the composition root injects the string into the nonce
+		// stylesheet. Nothing is copied to disk.
+		loader: { '.css': 'text' },
 		logLevel: 'silent',
 		plugins: [
 			/* add to the end of plugins array */

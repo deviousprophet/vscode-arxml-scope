@@ -1,0 +1,59 @@
+/* Shared page reset and layout boxes. Tokens live in tokens.css. */
+html, body {
+	height: 100%;
+}
+body {
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: var(--vscode-font-size, 13px);
+	line-height: 1.4;
+	color: var(--vscode-foreground);
+	background: var(--vscode-editor-background);
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.grow {
+	flex: 1 1 auto;
+}
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+#content {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+#main {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	position: relative;
+}
+#tree-measure {
+	position: absolute;
+	left: -10000px;
+	top: 0;
+	width: 240px;
+	visibility: hidden;
+	pointer-events: none;
+}
+@media (max-width: 720px) {
+	.grow {
+		display: none;
+	}
+	#content {
+		flex-direction: column;
+	}
+}

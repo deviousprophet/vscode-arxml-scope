@@ -7,11 +7,11 @@
 import * as vscode from 'vscode';
 import { scanEcucValues } from './core/ecuc/scanner';
 import { ReferenceNode } from './core/ecuc/model';
-import { EcucEditorProvider, VIEW_TYPE, gateReason } from './editor/ecucEditorProvider';
-import { buildNodeIndex } from './editor/nodeId';
-import { followReference, innermostNodeIdAt, revealRangeInTextEditor } from './editor/navigation';
-import { CompareSelectionStore, fileName } from './diff/compareSelection';
-import { DiffPanel } from './diff/diffPanel';
+import { EcucEditorProvider, VIEW_TYPE, gateReason } from './host/ecucEditorProvider';
+import { buildNodeIndex } from './core/ecuc/nodeId';
+import { followReference, innermostNodeIdAt, revealRangeInTextEditor } from './host/navigation';
+import { CompareSelectionStore, fileName } from './host/compareSelection';
+import { DiffPanel } from './host/diffPanel';
 
 export function registerCommands(
 	context: vscode.ExtensionContext,

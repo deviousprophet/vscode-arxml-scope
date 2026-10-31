@@ -6,72 +6,82 @@
 src/
   extension.ts        activation, registrations
   commands.ts         command handlers and the activation gate
-  core/               pure logic. NO `vscode` imports. See the layering rule below.
-    ecuc/             detect.ts  scanner.ts  model.ts  order.ts  resolve.ts  validate.ts  syscond.ts
-    text/             offsets.ts (line/offset index)
-  editor/             the custom editor. May import `vscode`.
+  host/               VS Code effects. MAY import `vscode`.
     ecucEditorProvider.ts   provider: gate, scan, build rows, wire, re-scan
-    renderRows.ts           host row document: display order, meta, haystack (no source/digits)
-    virtualScroll.ts        pure cumulative heights, visible range, offsets, total
-    renderHtml.ts           the page shell, row window, row builder, page script
-    navigation.ts           node <-> source range, reference following
-    nodeId.ts               path-based node ids, stable across a re-scan
-    treeQuery.ts            tree rows: haystack, match ranges and flatten helpers
-    rowSearch.ts            chunked cancellable row search engine, serialized into the page
-    conditionValues.ts      SW-SYSCOND value entries and the workspaceState store
-    rowView.ts              page row primitives shared by the editor and diff pages
-    sidebarShell.ts         sidebar tabs, width, section panes/sashes and layout state
-    html.ts                 shared HTML text/attribute escaper
-    jsonScript.ts           shared inline-JSON encoder for webview payloads
-    pageError.ts            shared webview boot-error installer
     ecucEdit.ts             the edit record, region resolution, applyEdit
     ecucStructureEdit.ts    delete/duplicate plans and one-edit structure writes
-    ecucDetailsEditor.ts    the details-panel value editor (webview half)
-  diff/               the read-only semantic diff. `diffPanel.ts` and
-                      `compareSelection.ts` import `vscode`; `diffModel.ts` and
-                      `diffPage.ts` stay pure/page-only.
-    diffModel.ts            pure matching/status/merged order, page helpers, title
-    diffPage.ts             the diff shell and its serialized page script
     diffPanel.ts            the WebviewPanel lifecycle, refresh and reveal
     compareSelection.ts     the session-only first-file stash
+    conditionValues.ts      SW-SYSCOND entries and the workspaceState store
+    navigation.ts           node <-> source range, reference following
+    bootWatchdog.ts         the boot timeout
+  core/               pure logic. NO `vscode` imports and no DOM.
+    ecuc/             detect.ts  scanner.ts  model.ts  order.ts  resolve.ts  validate.ts  syscond.ts
+                      nodeId.ts  renderRows.ts  haystack.ts
+    text/             offsets.ts (line/offset index)
+    diff/             diffModel.ts (matching/status/merged order, pure)
+  webview/            browser-only page code. NO `vscode` imports.
+    editorViewer.ts         editor composition root: row model, selection, search, message bridge
+    diffViewer.ts           diff composition root: diff document, view mode, search, message bridge
+    components/
+      documentTree/         documentTreeView.ts  documentTreeState.ts  documentRows.ts  documentTree.css
+      diffView/             diffView.ts  diffViewRender.ts  diffView.css
+      toolbar/              toolbar.ts  toolbar.css
+      searchBar/            searchBar.ts  searchBar.css
+      sidebar/              sidebar.ts  sidebar.css
+        detailsPanel/       detailsPanel.ts  detailsPanel.css
+        conditionsPanel/    conditionsPanel.ts  conditionsPanel.css
+      contextMenu/          contextMenu.ts  contextMenu.css
+      detailsEditor/        detailsEditor.ts  detailsEditor.css
+    render/                 virtualScroll.ts  rowView.ts  rowSearch.ts  treeQuery.ts
+                            html.ts  jsonScript.ts  pageError.ts
+    styles/                 tokens.css  base.css  index.ts
   test/
-    core/               core suites
-    editor/             editor suites
-    diff/               diff suites
+    core/               pure suites (ecuc, text, diff model)
+    webview/
+      components/       <component-name>.test.ts (flat, one per component)
+      page/             full-page string suites
+      render/           shared render helper suites
+    extension/          host/provider/command integration suites
     fixtures/           synthetic input fixtures (pinned `-text`)
     expected/           hand-authored expected models
     data/               gitignored: real files for local experimentation. Never commit.
 ```
 
 Build outputs, all gitignored: `dist/` (esbuild bundle of `src/extension.ts`) and `out/` (`tsc` output
-used by the tests).
+used by the tests; `scripts/copy-webview-css.cjs` copies colocated stylesheets beside the compiled
+modules).
 
 ## The layering rule
 
-**`src/core/**` must not import `vscode`.** Dependencies point one way:
+**`src/core/**` must not import `vscode` or `src/webview/**`.** Dependencies point one way:
 
 ```
-extension.ts / commands.ts / editor/**  ──▶  core/**
+extension.ts / commands.ts / host/**  ──▶  core/**  ──▶  (nothing browser-specific)
+host/** / webview/**                   ──▶  webview/** component contracts
+webview/**                             ──▶  core/**
 ```
 
-`core/` is a pure library over text: detection, scanning, the information model, ordering, resolution,
-validation and the offset index. Keeping `vscode` out of it is what would let the same code serve a
-workspace index or a language server later, and it makes the core testable without a running editor.
+`core/` is a pure library over text: detection, scanning, the information model, ordering,
+resolution, validation, the row document and the offset index. Keeping `vscode` and DOM out of it is
+what lets the same code serve a workspace index or a language server later, and it makes the core
+testable without a running editor.
 
-Practical consequences:
-
-- A core function takes text and returns data. It does not read files, resolve URIs, or know about
-  workspaces.
-- If a core module needs something from the editor, the answer is a parameter, not an import.
-- The boundary is checked in review and in the parent acceptance criteria, not by the compiler — so
-  check it with a grep when you touch core.
+`webview/` is browser-only. It may import `core/` and its own components; it must never import
+`vscode` or a `host/` module (the pre-refactor `conditionValues` type import is the only allowed type
+reference and must stay `import type`).
 
 ## Where new code goes
 
 | Adding… | Goes in |
 |---|---|
 | Parsing, ordering, validation, anything over text | `src/core/` |
-| Anything that touches a document, a panel, a command or a setting | `src/editor/` or `src/commands.ts` |
-| A diff matching/status/order rule or a diff page helper | `src/diff/diffModel.ts` (pure); the page shell in `src/diff/diffPage.ts` |
+| A row/document model rule | `src/core/ecuc/` |
+| A diff matching/status/order rule | `src/core/diff/diffModel.ts` |
+| A document, panel, command or setting effect | `src/host/` or `src/commands.ts` |
+| A reusable UI unit with markup, input behaviour and styles | `src/webview/components/<Name>/` |
+| A page shell / provider bridge | `src/webview/editorViewer.ts` or `diffViewer.ts` |
+| A shared page helper (scroll, rows, search, escaping) | `src/webview/render/` |
+| Shared tokens, reset or layout boxes | `src/webview/styles/` |
 | A synthetic fixture for a core suite | `src/test/fixtures/` |
 | A real file you want to try locally | `src/test/data/` (gitignored) |

@@ -25,7 +25,7 @@ body (column)
     #side-tabs (28px)                 right-edge vertical tabs
 ```
 
-- `DocumentTreeView` (`src/editor/documentTreeView.ts`) is the single owner of the header,
+- `DocumentTreeView` (`src/webview/components/documentTree/documentTreeView.ts`) is the single owner of the header,
   the two-axis native scroller, the spacers and the rendered window. It is serialized into the
   editor and the diff; the editor mounts one instance and the diff mounts one per pane.
 - The host supplies `{ rowCount, heightFn, renderRow(index, pane) }`. The component calls
@@ -69,7 +69,7 @@ body (column)
 
 ## Event ownership
 
-The details editor (`ecucDetailsEditor.ts`) is emitted **before** the page script. Its controls live
+The details editor (`components/detailsEditor/detailsEditor.ts`) is emitted **before** the page script. Its controls live
 in the details panel, outside `#tree`, and each owns its own `Enter`/`Escape`/`Tab` keys:
 
 ```text
@@ -283,14 +283,14 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 
 ## Semantic diff surface
 
-`src/diff/**` is a second webview, not a second renderer. Its invariants:
+`src/webview/diffViewer.ts + src/core/diff/diffModel.ts` is a second webview, not a second renderer. Its invariants:
 
-- `diffModel.ts` is pure (no `vscode`); it owns projection, matching, status, merged order,
+- `core/diff/diffModel.ts` is pure (no `vscode`); it owns projection, matching, status, merged order,
   summary and the page helpers. The panel only reads documents, scans and posts.
 - Both pages inject `rowViewScript()` and `documentRowsScript()`; `valueSpan`/`metaSpan`/
   `appendHighlighted` and the node/brace/comment builders have one definition (tested). Do not fork a
   row primitive into the diff page.
-- `diffPage.ts` mounts two `DocumentTreeView` instances; each one reuses `virtualScrollScript()`, so
+- `webview/diffViewer.ts` mounts two `DocumentTreeView` instances; each one reuses `virtualScrollScript()`, so
   only its viewport window is in the DOM and its spacers come from `calcRowOffset`/`calcTotalHeight`.
   The panes share the aligned display list, `heightFn` and content width; the host syncs their
   offsets.

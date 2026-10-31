@@ -1,0 +1,30 @@
+/* The details field editor: one input per field, inline refusal reason. */
+.details-value {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	padding: 2px 4px;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	line-height: 1.4;
+	color: var(--vscode-input-foreground);
+	background: var(--vscode-input-background);
+	border: 1px solid var(--vscode-input-border, var(--vscode-focusBorder));
+}
+.details-value:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+.details-value[aria-invalid="true"] {
+	border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-editorError-foreground, var(--vscode-errorForeground)));
+}
+.details-value-error {
+	display: block;
+	margin-top: 3px;
+	color: var(--vscode-errorForeground);
+	font-style: italic;
+	white-space: pre-wrap;
+}
+.details-value-error:empty {
+	display: none;
+}

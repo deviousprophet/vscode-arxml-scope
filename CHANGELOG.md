@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Recoverable ECUC warnings now appear beside the Conditions or Details panel they belong to, and page errors go to the webview debug console instead of the toolbar banner
 - The diff panes share the editor's Document stylesheet and row builders through the component; status tint remains diff-only
 - Swap sides resets both horizontal offsets while the vertical position is preserved
+- The webview moved to a component architecture: every reusable unit lives under
+  `src/webview/components/<Name>/` with its markup, input behaviour and colocated CSS, the editor and
+  diff are composition roots (`editorViewer.ts` / `diffViewer.ts`), host effects live in `src/host/`
+  and pure models in `src/core/`; tests mirror the ownership under `src/test/{core,webview,extension}`
 
 ### Fixed
 

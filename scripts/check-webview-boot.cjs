@@ -1,8 +1,8 @@
 /**
  * Packaging gate: the webview scripts must survive the production build.
  *
- * renderHtml.ts / renderDiffHtml.ts / virtualScroll.ts / ecucDetailsEditor.ts /
- * rowView.ts inject page logic via `Function.prototype.toString()`. If the
+ * editorViewer / diffViewer / virtualScroll / detailsEditor / rowView inject
+ * page logic via `Function.prototype.toString()`. If the
  * bundler renames those declarations (e.g. identifier minification), the page's
  * own code still calls the original names and the installed VSIX dies at boot
  * with `ReferenceError`. The dev build never catches this because it is not
@@ -73,10 +73,10 @@ function embeddedJson(html, id) {
 	await esbuild.build({
 		stdin: {
 			contents: [
-				"export { renderHtml } from './src/editor/renderHtml';",
-				"export { renderDiffHtml } from './src/diff/diffPage';",
-				"export { buildDiffDocument } from './src/diff/diffModel';",
-				"export { buildRows } from './src/editor/renderRows';",
+				"export { renderHtml } from './src/webview/editorViewer';",
+				"export { renderDiffHtml } from './src/webview/diffViewer';",
+				"export { buildDiffDocument } from './src/core/diff/diffModel';",
+				"export { buildRows } from './src/core/ecuc/renderRows';",
 				"export { scanEcucValues } from './src/core/ecuc/scanner';",
 			].join('\n'),
 			resolveDir: repo,
@@ -92,6 +92,7 @@ function embeddedJson(html, id) {
 		platform: 'node',
 		outfile,
 		external: ['vscode'],
+		loader: { '.css': 'text' },
 		logLevel: 'error',
 	});
 	const { renderHtml, renderDiffHtml, buildDiffDocument, buildRows, scanEcucValues } = require(outfile);

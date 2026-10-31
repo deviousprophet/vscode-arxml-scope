@@ -1,0 +1,391 @@
+/*
+ * Shared button/field primitives. The editor toolbar, the details panel and the
+ * Conditions/Search children all use these classes; every colour is a theme
+ * token. A control that is missing its semantic token falls back to the panel
+ * border rather than a literal colour.
+ */
+.sb-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	border-radius: 3px;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 10px;
+	font-weight: 600;
+	padding: 2px 8px;
+	cursor: pointer;
+	white-space: nowrap;
+	user-select: none;
+}
+.sb-btn-primary {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid transparent;
+}
+.sb-btn-primary:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+.sb-btn-secondary {
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	border: 1px solid var(--vscode-panel-border, var(--vscode-editorGroup-border));
+}
+.sb-btn-secondary:hover {
+	color: var(--vscode-foreground);
+	border-color: currentColor;
+}
+.sb-btn-add {
+	background: transparent;
+	color: var(--vscode-textLink-foreground);
+	border: 1px dashed var(--vscode-panel-border, var(--vscode-editorGroup-border));
+}
+.sb-btn-add:hover {
+	background: var(--vscode-list-hoverBackground);
+	border-style: solid;
+}
+.sb-btn-danger {
+	background: transparent;
+	color: var(--vscode-errorForeground);
+	border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+}
+.sb-btn-danger:hover {
+	background: var(--vscode-inputValidation-errorBackground, var(--vscode-list-hoverBackground));
+	border-color: var(--vscode-errorForeground);
+}
+.sb-btn:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+.sb-btn:focus-visible,
+.nav-btn:focus-visible,
+.act-btn:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+.nav-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	background: transparent;
+	color: var(--vscode-foreground);
+	border: 1px solid transparent;
+	border-radius: 4px;
+	cursor: pointer;
+}
+.nav-btn:hover {
+	background: var(--vscode-list-hoverBackground);
+	border-color: var(--vscode-panel-border, transparent);
+}
+.act-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	opacity: 0;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	border: 0;
+	border-radius: 2px;
+	cursor: pointer;
+}
+.parent:hover .act-btn,
+.parent:focus-within .act-btn,
+.act-btn:focus-visible {
+	opacity: 1;
+}
+.act-btn:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+
+/* ── Sidebar shell: resizer, tab strip, tab panels ─────────────────────── */
+#sidebar {
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 auto;
+	width: var(--sidebar-w, 360px);
+	min-width: var(--sidebar-w, 360px);
+	max-width: var(--sidebar-w, 360px);
+	overflow: hidden;
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+#sidebar-resizer {
+	width: 6px;
+	flex: 0 0 6px;
+	box-sizing: border-box;
+	cursor: col-resize;
+	background: transparent;
+	border-left: 1px solid transparent;
+	border-right: 1px solid transparent;
+	transition: background 0.12s ease, border-color 0.12s ease;
+}
+#sidebar-resizer:hover,
+#sidebar-resizer.dragging {
+	background: var(--vscode-list-hoverBackground);
+	border-left-color: var(--vscode-focusBorder);
+	border-right-color: var(--vscode-focusBorder);
+}
+#sidebar-resizer:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+body.sb-col-resizing {
+	cursor: col-resize;
+	user-select: none;
+}
+body.sb-row-resizing {
+	cursor: row-resize;
+	user-select: none;
+}
+#side-tabs {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 28px;
+	flex: 0 0 28px;
+	gap: 2px;
+	padding: 6px 0;
+	overflow: hidden;
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+	border-left: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.stab {
+	writing-mode: vertical-rl;
+	transform: none;
+	padding: 10px 5px;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	white-space: nowrap;
+	color: var(--vscode-descriptionForeground);
+	background: transparent;
+	border: 0;
+	border-right: 3px solid transparent;
+	cursor: pointer;
+	transition: color 0.12s, background-color 0.12s, border-color 0.12s;
+}
+.stab:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-list-hoverBackground);
+}
+.stab.active {
+	color: var(--vscode-textLink-foreground);
+	border-right-color: var(--vscode-textLink-foreground);
+	background: var(--vscode-list-inactiveSelectionBackground, transparent);
+}
+.stab:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+.sb-tab-panel {
+	display: none;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+}
+.sb-tab-panel.active {
+	display: flex;
+}
+.sb-tab-panel > div {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	box-sizing: border-box;
+}
+/* ── Section panes: 22px header, independently scrolling body, drag sash ── */
+.sb-pane-view {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+.sb-pane {
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 auto;
+	flex-basis: var(--sb-pane-h, auto);
+	min-height: 0;
+	overflow: hidden;
+	box-sizing: border-box;
+	transition: flex-basis 0.15s ease-out;
+}
+/* A sash drag must track the pointer exactly; collapse/expand is the only
+ * layout change that animates (150ms). */
+.sb-pane-view.dragging .sb-pane,
+.sb-pane-view.no-transition .sb-pane {
+	transition: none;
+}
+.sb-section-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 22px;
+	line-height: 22px;
+	overflow: hidden;
+	flex: 0 0 22px;
+	box-sizing: border-box;
+	padding-left: 8px;
+}
+.sb-section-head[role="button"] {
+	cursor: pointer;
+	user-select: none;
+}
+.sb-section-head[role="button"]:hover {
+	background: var(--vscode-list-hoverBackground, transparent);
+}
+.sb-section-head:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+.sb-section-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1 1 auto;
+	min-width: 0;
+	margin: 0;
+	font: inherit;
+	color: inherit;
+}
+.sb-section-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 3ch;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	color: var(--vscode-descriptionForeground);
+}
+/* Decorative chevron: points right at rest, rotates down when expanded. */
+.sb-section-chevron {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	height: 14px;
+	flex: 0 0 14px;
+	font-size: 14px;
+	line-height: 1;
+	color: var(--vscode-descriptionForeground);
+	transition: transform 0.15s ease-out;
+}
+.sb-section-chevron::before {
+	content: '\203A';
+}
+.sb-section-head[aria-expanded="true"] .sb-section-chevron {
+	transform: rotate(90deg);
+}
+.sb-section-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 0 0 auto;
+	margin-left: auto;
+	margin-right: 8px;
+}
+.sb-section-actions .sb-section-action {
+	max-height: 22px;
+	padding: 2px 8px;
+	font-size: 10px;
+	line-height: 1.2;
+	white-space: nowrap;
+}
+.sb-section-badge {
+	flex: 0 0 auto;
+	padding: 0 6px;
+	border: 1px solid var(--vscode-panel-border, var(--vscode-editorGroup-border));
+	border-radius: 8px;
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 16px;
+	letter-spacing: 0;
+	text-transform: none;
+	white-space: nowrap;
+	color: var(--vscode-descriptionForeground);
+}
+.sb-section-badge[hidden] {
+	display: none;
+}
+.sb-pane .sb-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 8px 10px 12px;
+	box-sizing: border-box;
+}
+.sb-pane-sash {
+	height: 6px;
+	flex: 0 0 6px;
+	box-sizing: border-box;
+	cursor: row-resize;
+	user-select: none;
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	transition: background 0.12s ease, border-color 0.12s ease;
+}
+.sb-pane-sash:hover,
+.sb-pane-sash.dragging {
+	background: var(--vscode-list-hoverBackground);
+	border-top-color: var(--vscode-focusBorder);
+}
+.sb-pane-sash.disabled {
+	cursor: default;
+	opacity: 0.4;
+}
+.sb-pane-sash:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.sb-pane,
+	.sb-section-chevron {
+		transition-duration: 0s;
+	}
+}
+@media (max-width: 720px) {
+	#sidebar {
+		width: auto;
+		min-width: 0;
+		max-width: none;
+		max-height: 45vh;
+		flex: 0 0 auto;
+		border-left: 0;
+		border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	}
+	#sidebar-resizer {
+		display: none;
+	}
+	#side-tabs {
+		flex-direction: row;
+		width: auto;
+		flex: 0 0 28px;
+		height: 28px;
+		padding: 0 6px;
+		border-left: 0;
+		border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	}
+	.stab {
+		writing-mode: horizontal-tb;
+		height: 28px;
+		padding: 0 8px;
+		border-right: 0;
+		border-bottom: 3px solid transparent;
+	}
+	.stab.active {
+		border-right-color: transparent;
+		border-bottom-color: var(--vscode-textLink-foreground);
+	}
+}

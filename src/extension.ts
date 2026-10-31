@@ -2,9 +2,9 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { registerCommands } from './commands';
-import { ConditionValueStore } from './editor/conditionValues';
-import { EcucEditorProvider, VIEW_TYPE } from './editor/ecucEditorProvider';
-import { CompareSelectionStore } from './diff/compareSelection';
+import { ConditionValueStore } from './host/conditionValues';
+import { EcucEditorProvider, VIEW_TYPE } from './host/ecucEditorProvider';
+import { CompareSelectionStore } from './host/compareSelection';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed

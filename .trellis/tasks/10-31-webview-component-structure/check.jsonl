@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/frontend/components/component-template.md", "reason": "Verify component ownership and test location"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify one renderer, root scoping and DOM contracts"}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Verify webview/host/core placement"}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify tests mirror the new structure"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify no CSP or escaping regressions"}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify host/component state split"}
