@@ -180,12 +180,6 @@ body[data-page="diff"] .nav-btn:disabled {
 	background-color: var(--vscode-diffEditor-insertedTextBackground, var(--diff-added-bg));
 	outline: 1px solid var(--diff-added-edge);
 }
-/* A search mark keeps its own background inside a changed word; the outline
- * on the changed span stays visible around it. */
-.diff-row mark {
-	color: inherit;
-	background: var(--match-bg);
-}
 .diff-row:focus-visible > .diff-cell {
 	outline: 2px solid var(--rail);
 	outline-offset: -2px;

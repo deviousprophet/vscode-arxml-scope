@@ -41,10 +41,6 @@ suite('DiffView component', () => {
 			/\.diff-row \.word-changed\[data-word-side="right"\]\s*\{[^}]*outline:\s*1px solid var\(--diff-added-edge\)/.test(css),
 			'a changed word keeps its added edge'
 		);
-		assert.ok(
-			/\.diff-row mark\s*\{[^}]*background:\s*var\(--match-bg\)/.test(css),
-			'a search mark keeps its background inside a changed word'
-		);
 		assert.ok(!/\.diff-row\[data-gap/.test(css), 'the diff has no module gap row');
 	});
 

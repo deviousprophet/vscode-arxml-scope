@@ -241,6 +241,36 @@ suite('DocumentTreeView component', () => {
 		}
 	});
 
+	test('a scroll render reuses the measured header height', () => {
+		const h = harness();
+		try {
+			const header = (h.view as any).header as FakeElement;
+			let reads = 0;
+			Object.defineProperty(header, 'offsetHeight', {
+				configurable: true,
+				get() {
+					reads++;
+					return 34;
+				}
+			});
+			h.view.render(true);
+			assert.strictEqual(reads, 1, 'the first render measures the header once');
+			h.view.setScrollTop(40);
+			h.view.setScrollTop(80);
+			h.view.render(false);
+			assert.strictEqual(reads, 1, 'scroll renders reuse the cached header height');
+			const scroll = h.view.scroll as FakeElement;
+			scroll.clientWidth = 260;
+			assert.strictEqual(h.view.headerHeight(), 34);
+			assert.strictEqual(reads, 2, 'a width change re-measures the header');
+			h.view.setHeader({ schema: '00048', packages: ['PkgA'] });
+			assert.strictEqual(h.view.headerHeight(), 34);
+			assert.strictEqual(reads, 3, 'setHeader invalidates the cache');
+		} finally {
+			h.restore();
+		}
+	});
+
 	test('the render key skips an unchanged slice and invalidate forces a rebuild', () => {
 		const h = harness();
 		try {
@@ -334,6 +364,10 @@ suite('DocumentTreeView component', () => {
 		);
 		assert.ok(!/\.hscroll/.test(styles), 'no proxy scrollbar');
 		assert.ok(!/height:\s*12px/.test(styles), 'no clipped scrollbar strip');
+		assert.ok(
+			/^mark\s*\{[^}]*background:\s*var\(--match-bg\)/m.test(styles),
+			'a search mark keeps its background on both pages'
+		);
 		assert.ok(webviewCss('styles', 'tokens.css').includes('--container-accent: #4EC9B0'), 'shared tokens live in styles/');
 		assert.ok(styles.includes('body[data-view="document"] .row[data-level="3"]'));
 	});

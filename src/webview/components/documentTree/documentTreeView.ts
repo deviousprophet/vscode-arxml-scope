@@ -79,6 +79,7 @@ export class DocumentTreeView {
 	contentWidth: number;
 	padTop: number;
 	headerH: number;
+	headerW: number;
 	expectedTop: number | undefined;
 	expectedLeft: number | undefined;
 	pendingNotify: boolean;
@@ -105,6 +106,7 @@ export class DocumentTreeView {
 		this.contentWidth = 0;
 		this.padTop = -1;
 		this.headerH = -1;
+		this.headerW = -1;
 		this.expectedTop = undefined;
 		this.expectedLeft = undefined;
 		this.pendingNotify = false;
@@ -152,12 +154,14 @@ export class DocumentTreeView {
 		this.scroll.addEventListener('click', (event: any) => this.onClick(event));
 		this.padTop = -1;
 		this.headerH = -1;
+		this.headerW = -1;
 		this.setEmpty(false);
 	}
 
 	/** Replace the schema/package header (and optional file label). */
 	setHeader(header?: DocumentTreeHeader): void {
 		this.headerH = -1;
+		this.headerW = -1;
 		if (!this.meta || !this.title) {
 			return;
 		}
@@ -216,7 +220,6 @@ export class DocumentTreeView {
 	 * total height, viewport size and revision are unchanged does no DOM work.
 	 */
 	render(force?: boolean): void {
-		this.headerH = -1;
 		if (!this.scroll || !this.windowEl) {
 			return;
 		}
@@ -337,11 +340,13 @@ export class DocumentTreeView {
 	/**
 	 * The header's measured height. The header is inside the scroller, so every
 	 * row offset is shifted by it; `0` means the header is absent or not
-	 * measurable yet (jsdom has no layout). Re-measured after `setHeader`,
-	 * `render` and the host's resize render.
+	 * measurable yet (jsdom has no layout). The measurement is cached until
+	 * `setHeader` invalidates it or the scroller's client width changes, since a
+	 * resize can reflow the title/meta lines; plain renders reuse it.
 	 */
 	headerHeight(): number {
-		if (this.headerH >= 0) {
+		const width = this.scroll ? this.scroll.clientWidth : 0;
+		if (this.headerH >= 0 && this.headerW === width) {
 			return this.headerH;
 		}
 		let value = 0;
@@ -352,6 +357,7 @@ export class DocumentTreeView {
 			}
 		}
 		this.headerH = value;
+		this.headerW = width;
 		return value;
 	}
 

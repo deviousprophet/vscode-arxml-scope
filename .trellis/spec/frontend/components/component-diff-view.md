@@ -54,7 +54,9 @@ class DiffView {
 - Split line is 3px and diff-specific; the editor's resizer and pane sashes are 6px.
 - Status tint is diff-only; Document view never sets it.
 - A changed row may carry a word diff for the fields it displays (label, value/target, condition,
-  variant, context). Added/removed rows never carry one: their full-cell tint is the only treatment.
+  variant, context). Repeated condition/variant/context chips pair by display index, so every chip
+  highlights its own pair. Added/removed rows never carry one: their full-cell tint is the only
+  treatment.
 - Word runs are chosen from the displayed side, so Swap mirrors removed/inserted colours with the panes.
 - Search `<mark>` keeps its own background inside a changed word; the word span keeps its 1px outline.
 - One `selectedKey` drives selection in both panes. The subtree key set is recomputed from the merged
@@ -66,7 +68,8 @@ class DiffView {
 - Both panes show the same aligned display row; each side renders its own node/brace/comment/blank.
 - Pane drivers mirror offsets without feedback loops.
 - A changed row renders unchanged words normally and wraps changed runs in
-  `.word-changed[data-word-side="left|right"]`; only rendered rows compute word pairs.
+  `.word-changed[data-word-side="left|right"]`; changed runs still go through the field writer, so
+  condition token colours and search marks survive. Only rendered rows compute word pairs.
 
 ## Validation & Error Matrix
 

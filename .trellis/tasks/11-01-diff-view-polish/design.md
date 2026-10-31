@@ -27,15 +27,20 @@ getRowsScrollTop(): number    // max(0, scrollTop - padTopHeight() - headerHeigh
 setRowsScrollTop(offset)      // setScrollTop(offset + padTopHeight() + headerHeight())
 ```
 
-- Recompute/cached header height after `setHeader`, `render`, and resize.
+- Cache the header height; invalidate it after `setHeader`/`mount` and when `scroll.clientWidth`
+  differs from the width used for the last measurement (a resize can reflow the header lines). Plain
+  scroll renders reuse the measurement instead of re-reading `offsetHeight`.
 - `scrollToIndex`, `virtualState`, `getVisibleRange` inherit the corrected offset; no other math
   changes.
+- A refresh or a `Show all`/`Show diff only` switch while any part of a header is on screen restores
+  the native scroll offset verbatim, so the header does not jump out of view. Once the header is
+  scrolled away the row anchor keeps the first visible row stable.
 - The header stays `role="presentation"`, `aria-hidden` where appropriate, not a tree item and not in
   the search haystack.
 - Diff panes already pad the shorter header to `header.lines`; that keeps both scroll heights equal,
   so synchronized scrolling starts rows at the same y.
-- In jsdom `offsetHeight` is 0; tests stub it and assert the offset arithmetic and DOM order
-  (`scroll > header`).
+- In jsdom `offsetHeight` is 0; tests stub it and assert the offset arithmetic, DOM order
+  (`scroll > header`) and that repeated renders reuse the measurement.
 
 ## 3. Inline word diff
 

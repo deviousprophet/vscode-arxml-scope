@@ -438,10 +438,55 @@ suite('semantic diff page', () => {
 			assert.strictEqual(left!.querySelector('.condition')!.textContent, '(A == 1)');
 			assert.strictEqual(left!.querySelector('.condition .word-changed')!.textContent, '1');
 			assert.strictEqual(right!.querySelector('.condition .word-changed')!.textContent, '2');
+			assert.strictEqual(
+				left!.querySelector('.condition .word-changed .syscond-number')!.textContent,
+				'1',
+				'the changed condition token keeps its syntax colour'
+			);
+			assert.strictEqual(
+				right!.querySelector('.condition .word-changed .syscond-number')!.textContent,
+				'2'
+			);
 			assert.strictEqual(left!.querySelector('.variant .word-changed')!.textContent, 'alpha');
 			assert.strictEqual(right!.querySelector('.variant .word-changed')!.textContent, 'beta');
 			assert.strictEqual(left!.querySelector('.context .word-changed')!.textContent, 'B');
 			assert.strictEqual(left!.querySelector('.context .keyword')!.textContent, 'context');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('repeated condition chips pair by index in both panes', () => {
+		const changed = wordRow({
+			left: wordCell({
+				meta: [
+					{ cls: 'condition', text: '[A == 1]', title: '' },
+					{ cls: 'condition', text: '<X == 1>', title: '' },
+				],
+			}),
+			right: wordCell({
+				meta: [
+					{ cls: 'condition', text: '[A == 2]', title: '' },
+					{ cls: 'condition', text: '<X == 2>', title: '' },
+				],
+			}),
+		});
+		const { dom } = mount(wordDocument([changed]));
+		try {
+			const left = dom.document.querySelector('#diff-pane-left .diff-row[data-key="p1"]') as HTMLElement;
+			const right = dom.document.querySelector('#diff-pane-right .diff-row[data-key="p1"]') as HTMLElement;
+			assert.strictEqual(left.querySelectorAll('.condition').length, 2, 'both chips render');
+			assert.strictEqual(right.querySelectorAll('.condition').length, 2);
+			assert.deepStrictEqual(
+				Array.from(left.querySelectorAll('.condition .word-changed')).map((node) => node.textContent),
+				['1', '1'],
+				'both left chips highlight their own pair'
+			);
+			assert.deepStrictEqual(
+				Array.from(right.querySelectorAll('.condition .word-changed')).map((node) => node.textContent),
+				['2', '2'],
+				'both right chips highlight their own pair'
+			);
 		} finally {
 			dom.restore();
 		}
@@ -744,12 +789,18 @@ suite('semantic diff page', () => {
 		const { dom } = mount(document);
 		try {
 			// jsdom has no layout; a real header would be measured once it is on
-			// screen. The resize path re-measures the same way a real window does.
+			// screen. Stub the height, then change the scroller width and fire the
+			// resize path: the width change is what makes the component re-measure
+			// the cached header height, exactly as a real window resize does.
+			const scroller = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
+			const rightScroller = dom.document.querySelector('#diff-pane-right .document-tree-scroll') as HTMLElement;
 			for (const header of Array.from(dom.document.querySelectorAll('#diff-list .document-tree-header'))) {
 				Object.defineProperty(header, 'offsetHeight', { value: 40, configurable: true });
 			}
+			for (const pane of [scroller, rightScroller]) {
+				Object.defineProperty(pane, 'clientWidth', { value: 880, configurable: true });
+			}
 			dom.window.dispatchEvent(new dom.window.Event('resize'));
-			const scroller = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
 			assert.strictEqual(scroller.scrollTop, 0, 'the header is fully visible');
 			dom.post({ type: 'document', document });
 			assert.strictEqual(scroller.scrollTop, 0, 'a refresh at the top keeps the header visible');

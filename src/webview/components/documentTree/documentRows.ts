@@ -5,7 +5,7 @@
  * `textContent`/`appendHighlighted`, never markup. Both pages import the same
  * definitions, so a label, value or meta chip cannot drift between them.
  */
-import type { EcucRow } from '../../../core/ecuc/renderRows';
+import type { EcucRow, MetaPart } from '../../../core/ecuc/renderRows';
 import type { WordPair } from '../../../core/diff/wordDiff';
 import {
 	appendHighlighted,
@@ -22,6 +22,12 @@ export interface DocumentGuide {
 	id: string;
 }
 
+/** The meta classes a changed row word-diffs, taken from the row model. */
+export type DocumentWordDiffMetaClass = Extract<MetaPart['cls'], 'condition' | 'variant' | 'context'>;
+
+/** One pair per chip of each class, in display order; extras stay plain. */
+export const WORD_DIFF_META_CLASSES: readonly DocumentWordDiffMetaClass[] = ['condition', 'variant', 'context'];
+
 /**
  * Word-level changes for one changed diff row. Only the fields a changed row
  * displays take part; an added or removed row supplies no word diff and keeps
@@ -30,8 +36,7 @@ export interface DocumentGuide {
 export interface DocumentWordDiff {
 	label?: WordPair;
 	value?: WordPair;
-	/** Keyed by meta class: `condition`, `variant` or `context`. */
-	meta?: Record<string, WordPair>;
+	meta?: Partial<Record<DocumentWordDiffMetaClass, WordPair[]>>;
 }
 
 export interface DocumentRowContext {
@@ -128,13 +133,17 @@ export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext):
 		);
 	}
 	if (inlineMeta.length > 0) {
-		const counts = new Map<string, number>();
-		for (const part of inlineMeta) {
-			counts.set(part.cls, (counts.get(part.cls) || 0) + 1);
-		}
+		const metaIndexes = new Map<string, number>();
 		const writePart: MetaPartWriter = (span, part) => {
-			const pair = wordDiff && wordDiff.meta ? wordDiff.meta[part.cls] : undefined;
-			if (!pair || !wordSide || counts.get(part.cls) !== 1) {
+			if (!wordDiff || !wordSide || !isWordDiffMetaClass(part.cls)) {
+				return false;
+			}
+			// Count every chip of a class, paired or not, so the pair index
+			// matches the display order even when one side has extra chips.
+			const at = metaIndexes.get(part.cls) || 0;
+			metaIndexes.set(part.cls, at + 1);
+			const pair = wordDiff.meta ? wordDiff.meta[part.cls]?.[at] : undefined;
+			if (!pair) {
 				return false;
 			}
 			return appendWordSegments(span, pair, wordSide, (target, text) =>
@@ -155,10 +164,11 @@ export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext):
 }
 
 /**
- * Writes one field through a word pair. Unchanged runs use the field's normal
- * writer (syntax colours and search marks); changed runs become a
- * `.word-changed` span on the displayed side. Returns false when no pair is
- * available, so the caller can fall back to the plain text.
+ * Writes one field through a word pair. Both unchanged and changed runs go
+ * through the field's normal writer, so condition token colours and search
+ * marks survive; changed runs are wrapped in `.word-changed` on the displayed
+ * side first. Returns false when no pair is available, so the caller can fall
+ * back to the plain text.
  */
 function appendWordSegments(
 	parent: PageElement,
@@ -178,10 +188,15 @@ function appendWordSegments(
 		const span = document.createElement('span');
 		span.className = 'word-changed';
 		span.dataset.wordSide = side;
-		appendHighlighted(span, segment.text);
+		writePlain(span, segment.text);
 		parent.appendChild(span);
 	}
 	return true;
+}
+
+/** Whether a meta class takes part in the word diff. */
+function isWordDiffMetaClass(cls: string): cls is DocumentWordDiffMetaClass {
+	return WORD_DIFF_META_CLASSES.some((candidate) => candidate === cls);
 }
 
 export function twistySpan(): HTMLElement {

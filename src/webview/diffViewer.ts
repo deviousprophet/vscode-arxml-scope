@@ -15,12 +15,14 @@ import {
 	nextChangeIndex,
 	type DiffDisplayRow,
 } from '../core/diff/diffModel';
-import { diffWords } from '../core/diff/wordDiff';
+import { diffWords, type WordPair } from '../core/diff/wordDiff';
+import type { MetaPart } from '../core/ecuc/renderRows';
 import { calcRowOffset, calcVisibleRange } from './render/virtualScroll';
 import {
 	buildDocumentBraceRow,
 	buildDocumentCommentRow,
 	buildDocumentNodeRow,
+	WORD_DIFF_META_CLASSES,
 	type DocumentWordDiff,
 } from './components/documentTree/documentRows';
 import { DiffView } from './components/diffView/diffView';
@@ -375,15 +377,24 @@ function displayStatus(row: any): any {
 function hostSide(side: 'left' | 'right'): 'left' | 'right' {
 	return swapped ? (side === 'left' ? 'right' : 'left') : side;
 }
-/** The first meta part of one class, which is the only one the word diff pairs. */
-function metaPartText(cell: DiffCell | undefined, cls: string): string {
-	const part = cell ? cell.meta.find((candidate) => candidate.cls === cls) : undefined;
-	return part ? part.text : '';
+/** Every meta part text of one class, in display order. */
+function metaPartTexts(cell: DiffCell | undefined, cls: MetaPart['cls']): string[] {
+	if (!cell) {
+		return [];
+	}
+	const texts: string[] = [];
+	for (const part of cell.meta) {
+		if (part.cls === cls) {
+			texts.push(part.text);
+		}
+	}
+	return texts;
 }
 /**
  * The word pairs for the fields a changed row actually shows, on the displayed
- * sides. Added and removed rows return nothing: their full-cell tint already
- * says the whole line is new or gone, and an unchanged row renders as before.
+ * sides. Meta chips pair by index, so repeated chips of one class stay aligned.
+ * Added and removed rows return nothing: their full-cell tint already says the
+ * whole line is new or gone, and an unchanged row renders as before.
  */
 function wordDiffForRow(row: DiffRow): DocumentWordDiff | undefined {
 	if (displayStatus(row) !== 'changed') {
@@ -394,14 +405,22 @@ function wordDiffForRow(row: DiffRow): DocumentWordDiff | undefined {
 	if (!left || !right) {
 		return undefined;
 	}
+	const meta: DocumentWordDiff['meta'] = {};
+	for (const cls of WORD_DIFF_META_CLASSES) {
+		const leftTexts = metaPartTexts(left, cls);
+		const rightTexts = metaPartTexts(right, cls);
+		const pairs: WordPair[] = [];
+		for (let at = 0; at < Math.min(leftTexts.length, rightTexts.length); at++) {
+			pairs.push(diffWords(leftTexts[at], rightTexts[at]));
+		}
+		if (pairs.length > 0) {
+			meta[cls] = pairs;
+		}
+	}
 	return {
 		label: diffWords(left.label || '', right.label || ''),
 		value: diffWords(left.shownValue || '', right.shownValue || ''),
-		meta: {
-			condition: diffWords(metaPartText(left, 'condition'), metaPartText(right, 'condition')),
-			variant: diffWords(metaPartText(left, 'variant'), metaPartText(right, 'variant')),
-			context: diffWords(metaPartText(left, 'context'), metaPartText(right, 'context')),
-		},
+		meta,
 	};
 }
 function renderRow(index: number, pane: string): any {
