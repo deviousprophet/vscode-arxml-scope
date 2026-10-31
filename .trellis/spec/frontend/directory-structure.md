@@ -43,14 +43,15 @@ src/
       page/             full-page string suites
       render/           shared render helper suites
     extension/          host/provider/command integration suites
+    benchmarks/         runBenchmark.ts plus *Benchmark.ts suites (Node, esbuild at run time)
     fixtures/           synthetic input fixtures (pinned `-text`)
     expected/           hand-authored expected models
     data/               gitignored: real files for local experimentation. Never commit.
 ```
 
-Build outputs, all gitignored: `dist/` (esbuild bundle of `src/extension.ts`) and `out/` (`tsc` output
-used by the tests; `scripts/copy-webview-css.cjs` copies colocated stylesheets beside the compiled
-modules).
+Build outputs, all gitignored: `dist/` (esbuild bundles: `extension.js`, `editorViewer.js`/`.css`,
+`diffViewer.js`/`.css`) and `out/` (`tsc` output used by the tests; `src/test/webview/cssImportHook.ts`
+teaches `require()` to accept `.css` and mirrors the stylesheets into `out/` before the suites load).
 
 ## The layering rule
 
@@ -84,4 +85,5 @@ reference and must stay `import type`).
 | A shared page helper (scroll, rows, search, escaping) | `src/webview/render/` |
 | Shared tokens, reset or layout boxes | `src/webview/styles/` |
 | A synthetic fixture for a core suite | `src/test/fixtures/` |
+| A large-file benchmark | `src/test/benchmarks/<name>Benchmark.ts` |
 | A real file you want to try locally | `src/test/data/` (gitignored) |

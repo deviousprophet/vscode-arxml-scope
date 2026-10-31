@@ -62,6 +62,8 @@ partial write cannot hide behind a message.
 | Everything | `npm test` |
 | Types only | `npm run check-types` |
 | Lint only | `npm run lint` |
+| Large-file benchmark | `npm run benchmark` |
+| One benchmark / keep going | `npm run benchmark -- <name>` / `npm run benchmark -- --continue` |
 | Core suites only | `npm run compile-tests` then `npx mocha --ui tdd "out/test/core/*.test.js"` |
 
 `npm test` drives a real VS Code instance through `vscode-test`, so the first run downloads VS Code
@@ -185,15 +187,32 @@ re-scan handler; the input's Enter/Escape/Tab and refusal behaviour are asserted
 own serialized functions and real-webview captures, while the provider write is behaviourally tested.
 When you use a source assertion, say so in the task notes; do not present it as a behavioural test.
 
-## Samples and benchmarks are evidence
+## Benchmarks are committed evidence
 
-The dev-only sample generator and benchmark were removed with the harness. Evidence they produced
-stays in the task's research; the sample files were never committed and nothing in the repository or
-CI reads a local sample directory.
+`npm run benchmark` runs `src/test/benchmarks/runBenchmark.ts`. The runner discovers
+`src/test/benchmarks/*Benchmark.ts`, esbuild-bundles each to a temporary CJS file and executes it with
+`node --expose-gc`, then removes the temp directory. `--continue` keeps going after a failure; a bare
+argument filters by basename. A failed benchmark exits 1.
+
+`ecucLargeFileBenchmark.ts` generates a ~26 MiB synthetic ECUC ARXML in memory and measures scan, row
+build and a two-side diff: elapsed time plus retained heap after forced GC. It prints one JSON line per
+stage, for example:
+
+```json
+{"_type":"large-file-load","name":"scan","sourceMiB":26,"records":73884,"elapsedMs":262,"retainedMiB":79}
+{"_type":"large-file-summary","concurrentRetainedMiB":339,"documents":["left.arxml","right.arxml"]}
+```
+
+The CT `Benchmarks` job runs `npm run benchmark -- --continue`, uploads the log and renders it through
+`.github/scripts/summarize-tests.mjs`; `Finalize` requires both the UT and benchmark jobs. To add a
+benchmark: name the file `*Benchmark.ts`, keep it headless (no `vscode`, no DOM), emit `_type` JSON
+lines the summary registry understands (or extend the registry), and make a violated limit throw so
+the runner exits 1. `global.gc` is mandatory; a retained-memory number without forced GC is noise.
+Generated data is synthetic; never point a benchmark at a real customer directory.
 
 A benchmark is evidence, not a promise. It does not cover browser layout/paint or a real VS Code
-webview; record the webview observation separately. A single huge-file run is not a reason to add
-virtualisation. Generated samples are synthetic; never point a generator at a real customer directory.
+webview, so record the webview observation separately. A single huge-file run is not a reason to add
+virtualisation.
 
 ## The page's own helpers are the ones under test
 

@@ -139,12 +139,20 @@ that is not obvious from the code.
 - **The Details tab is one section.** `updateInspector` rewrites only `#sb-details-body`; Node, value,
   reference, condition and annotation fields plus Jump/Reveal share that scrolling body. Do not split
   them back into panes or add sashes to Details.
-- **Samples and benchmarks are dev-only.** The sample directory is outside the repository and
-  synthetic; no committed script or CI step reads it. A benchmark is evidence, not a performance promise.
+- **Benchmarks are committed and CI-run.** `npm run benchmark` discovers
+  `src/test/benchmarks/*Benchmark.ts`; the CT `Benchmarks` job and its summary read the JSON `_type`
+  lines. A benchmark must stay headless (no `vscode`, no DOM) and synthetic. A benchmark is evidence,
+  not a performance promise.
+- **Packaging is verified from the VSIX, not the ignore file.** Before calling a config change done,
+  run `npx @vscode/vsce ls` and confirm only runtime files ship. `.vscodeignore` gotchas: `.*/**`
+  does not exclude a dot-named directory that is a junction, so use `**/.vscode-test*`; root dot-files
+  such as `.gitattributes` need their own line. Every kept line must name an existing path or
+  generated output — never copy Hex Scope's list wholesale.
 
 ## Before calling work done
 
 - `npm run check-types`, `npm run lint` and `npm test` are green.
+- `npm run package` is green and `npx @vscode/vsce ls` lists only runtime files.
 - Every new assertion fails when its feature is deleted (`testing.md`).
 - Anything that could not be verified in this environment is stated plainly as unverified — not
   implied to have passed.
