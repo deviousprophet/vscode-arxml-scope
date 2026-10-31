@@ -84,6 +84,14 @@ This removes the need for:
 - Fill component specs for contextMenu and detailsEditor.
 - Keep per-component specs next to the component implementation.
 
+## Adaptation, not copy-paste
+
+- Copy folder/process shapes, not domain behavior.
+- Component names and contracts are adapted to ECUC (DocumentTree, DiffView, SearchBar, Sidebar).
+- Do not port hex memory, overlay, profile, scripting, Intel HEX/SREC/binary parsers or fixtures.
+- Workflows/benchmarks keep the same structure with ECUC commands, ARXML fixtures and ECUC metrics.
+- Docs/spec examples use ECUC terminology only.
+
 ## Migration order
 
 1. **Bundle the webview runtime** (editor + diff), add protocols, switch host shells to URIs, delete

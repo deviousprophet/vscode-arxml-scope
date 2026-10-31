@@ -42,6 +42,9 @@ ECUC domain distinct.
 
 - ECUC scanning, rows, conditions, annotations, sidebar, search and semantic diff behavior stays.
 - Large ARXML files remain virtualized and responsive in both views.
+- Hex Scope structure is adapted, never pasted blindly: no hex memory/overlay/scripting features,
+  no hex parsers, no hex fixtures or terminology. Workflow shape is shared; ECUC commands, fixtures,
+  benchmarks and docs are domain-specific.
 
 ## Acceptance Criteria
 

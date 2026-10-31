@@ -16,6 +16,19 @@ This task is the source of truth for the Hex Scope architecture-parity effort. R
 3. Plan deeply here so a future session cannot miss a point. If the local Hex Scope checkout is
    unavailable, use `https://github.com/deviousprophet/vscode-hex-scope` as the source of truth.
 
+## Adaptation rule (not blind copy)
+
+Hex Scope is the structural reference, not a source to paste. For every copied item, adapt it to ECUC:
+
+- Keep the ECUC scanner, rows, conditions, annotations, details and semantic diff.
+- Do not copy hex filesystem/memory/overlay/profile/scripting features.
+- Rename hex components/helpers to ECUC concepts; a component boundary may be reused, its hex
+  behaviour may not.
+- CI/workflow shape is shared; commands and fixtures are ECUC.
+- Benchmarks measure ECUC scan, row build, diff build and memory, not Intel HEX/SREC parsing.
+- Docs/examples use synthetic ARXML, not hex dumps.
+- Component specs use ECUC examples; no placeholder hex terminology.
+
 ## Non-negotiable points
 
 - Delete the `scripts/` folder; no boot/CSS helper scripts.
@@ -28,12 +41,15 @@ This task is the source of truth for the Hex Scope architecture-parity effort. R
 
 ## Current state (update when work lands)
 
-- `10-31-webview-component-structure` is `in_progress`: webview folders/components exist, but the
-  runtime is still server-rendered and `scripts/` remains.
-- Working tree has uncommitted component/restructure changes. Do not discard them; finish and
-  commit that child before starting the bundle-runtime child.
-- `scripts/` currently contains `check-webview-boot.cjs`, `css-loader.cjs`, `copy-webview-css.cjs`.
+- `10-31-webview-component-structure` — **done** (`1d43994`): one component root,
+  composition roots, host/core split, 431 tests at that point.
+- `10-31-webview-bundle-runtime` — **done** (`746ce11`): bundled editor/diff entrypoints,
+  typed protocols, static shells, `scripts/` deleted, 381 passing, package exit 0.
+- Remaining children: `10-31-repo-ci-benchmark-parity` and
+  `10-31-trellis-docs-spec-parity`.
+- No `scripts/` folder exists.
 - No benchmark suite or benchmark CI job yet.
+- Next work: repo configs/CI/CT + ECUC benchmark, then spec/docs parity.
 
 ## Status rule
 
