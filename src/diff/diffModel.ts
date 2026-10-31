@@ -679,11 +679,16 @@ export function flattenDiffDocument(
 	};
 	const out: DiffDisplayRow[] = [];
 
-	const walk = (start: number, leftOpen: { level: number; id: string }[], rightOpen: { level: number; id: string }[]): number => {
+	const walk = (
+		start: number,
+		end: number,
+		leftOpen: { level: number; id: string }[],
+		rightOpen: { level: number; id: string }[]
+	): number => {
 		let index = start;
-		while (index < count) {
+		while (index < end) {
 			if (visible && !visible[index]) {
-				index = subtreeEnd(index);
+				index = Math.min(end, subtreeEnd(index));
 				continue;
 			}
 			const row = rows[index];
@@ -729,7 +734,7 @@ export function flattenDiffDocument(
 				});
 				const childLeft = row.left ? leftOpen.concat([{ level: row.level, id: row.key }]) : leftOpen;
 				const childRight = row.right ? rightOpen.concat([{ level: row.level, id: row.key }]) : rightOpen;
-				index = walk(index + 1, childLeft, childRight);
+				index = walk(index + 1, Math.min(end, subtreeEnd(index)), childLeft, childRight);
 				out.push({
 					rowIndex: nodeIndex,
 					level: row.level,
@@ -740,13 +745,13 @@ export function flattenDiffDocument(
 					guidesRight: rightOpen.slice()
 				});
 			} else {
-				index = subtreeEnd(index);
+				index = Math.min(end, subtreeEnd(index));
 			}
 		}
 		return index;
 	};
 
-	walk(0, [], []);
+	walk(0, count, [], []);
 	return out;
 }
 

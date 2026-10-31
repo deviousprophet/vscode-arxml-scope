@@ -78,6 +78,9 @@ export class DocumentTreeView {
 	frame: number;
 	revision: number;
 	lastKey: string;
+	renderedStart: number | undefined;
+	renderedEnd: number | undefined;
+	renderedRevision: number;
 	contentWidth: number;
 	padTop: number;
 	expectedTop: number | undefined;
@@ -100,6 +103,9 @@ export class DocumentTreeView {
 		this.frame = 0;
 		this.revision = 0;
 		this.lastKey = '';
+		this.renderedStart = undefined;
+		this.renderedEnd = undefined;
+		this.renderedRevision = -1;
 		this.contentWidth = 0;
 		this.padTop = -1;
 		this.expectedTop = undefined;
@@ -219,6 +225,9 @@ export class DocumentTreeView {
 			this.windowEl.textContent = '';
 			this.setSpacers(0, 0);
 			this.lastKey = '';
+			this.renderedStart = undefined;
+			this.renderedEnd = undefined;
+			this.renderedRevision = -1;
 			if (this.callbacks.onRender) {
 				this.callbacks.onRender([0, 0]);
 			}
@@ -248,19 +257,41 @@ export class DocumentTreeView {
 		const top = calcRowOffset(start, state);
 		this.setSpacers(top, Math.max(0, total - calcRowOffset(end, state)));
 		const focused = this.focusedIndex();
-		const fragment = document.createDocumentFragment();
-		for (let at = start; at < end; at++) {
-			const element = model.renderRow(at, this.pane);
-			if (!element) {
-				continue;
+		const overlap =
+			this.renderedStart !== undefined &&
+			this.renderedEnd !== undefined &&
+			start < this.renderedEnd &&
+			end > this.renderedStart;
+		const full = force === true || this.renderedRevision !== this.revision || !overlap;
+		if (full) {
+			const fragment = document.createDocumentFragment();
+			for (let at = start; at < end; at++) {
+				fragment.appendChild(this.buildRow(model, at));
 			}
-			if (element.dataset) {
-				element.dataset.documentIndex = String(at);
+			this.windowEl.textContent = '';
+			this.windowEl.appendChild(fragment);
+			this.renderedStart = start;
+			this.renderedEnd = end;
+		} else {
+			const windowEl = this.windowEl;
+			while (this.renderedStart !== undefined && this.renderedStart < start) {
+				windowEl.removeChild(windowEl.firstChild);
+				this.renderedStart++;
 			}
-			fragment.appendChild(element);
+			while (this.renderedEnd !== undefined && this.renderedEnd > end) {
+				windowEl.removeChild(windowEl.lastChild);
+				this.renderedEnd--;
+			}
+			while (this.renderedStart !== undefined && this.renderedStart > start) {
+				this.renderedStart--;
+				windowEl.insertBefore(this.buildRow(model, this.renderedStart), windowEl.firstChild);
+			}
+			while (this.renderedEnd !== undefined && this.renderedEnd < end) {
+				windowEl.appendChild(this.buildRow(model, this.renderedEnd));
+				this.renderedEnd++;
+			}
 		}
-		this.windowEl.textContent = '';
-		this.windowEl.appendChild(fragment);
+		this.renderedRevision = this.revision;
 		if (focused !== undefined) {
 			const element = this.elementAt(focused);
 			if (element && typeof element.focus === 'function') {
@@ -270,6 +301,17 @@ export class DocumentTreeView {
 		if (this.callbacks.onRender) {
 			this.callbacks.onRender([start, end]);
 		}
+	}
+
+	buildRow(model: DocumentTreeViewModel, index: number): any {
+		const element = model.renderRow(index, this.pane);
+		if (!element) {
+			return document.createTextNode('');
+		}
+		if (element.dataset) {
+			element.dataset.documentIndex = String(index);
+		}
+		return element;
 	}
 
 	/** The scroll offset of the rows region, excluding the scroller's top padding. */

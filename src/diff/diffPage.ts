@@ -1378,6 +1378,16 @@ views = {
 };
 views.left.mount();
 views.right.mount();
+const rightScroller = views.right.root ? views.right.root.querySelector('.document-tree-scroll') : null;
+if (rightScroller) {
+	rightScroller.addEventListener('wheel', function (event) {
+		if (event.shiftKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+			return;
+		}
+		event.preventDefault();
+		views.left.setScrollTop(views.left.getScrollTop() + event.deltaY);
+	}, { passive: false });
+}
 setDocument(readInitialDocument());
 renderWindow(true);
 updateSelection();
@@ -1665,8 +1675,11 @@ input[type="search"]::-webkit-search-decoration {
 	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
 .diff-pane + .diff-pane {
-	border-left: 0;
-	box-shadow: inset 1px 0 0 var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	border-left: 3px solid var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
+	box-shadow: none;
+}
+#diff-pane-right .document-tree-scroll {
+	overflow-y: hidden;
 }
 .diff-pane .document-tree-header {
 	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
