@@ -14,6 +14,7 @@
 | [Quality Guidelines](./quality-guidelines.md) | Forbidden patterns and the rules every change must keep | Filled |
 | [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
 | [Component Guidelines](./component-guidelines.md) | Webview shell, event ownership, DOM contracts, theme/a11y | Filled |
+| [Components](./components/index.md) | Reusable webview component folders, contracts and per-component specs | Filled |
 | [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | Not applicable — no web framework |
 | [State Management](./state-management.md) | Host/webview split, re-scan survival, persistence | Filled |
 

@@ -71,7 +71,7 @@ with `suite is not defined`.
 
 There is no webview DOM in the test host. Webview behaviour is therefore asserted at the level of the
 rendered page: the static shell, the escaped row JSON, the CSS, and the page's own inlined functions
-extracted with `scriptTestUtils` and compiled. Pure row/flatten/filter/window behaviour is tested
+extracted with `scriptTestUtils` and compiled. Pure row/flatten/search/window behaviour is tested
 directly; anything that depends on real DOM interaction has to be confirmed by hand in the Extension
 Development Host — say so in the task notes rather than implying it was tested.
 
@@ -79,7 +79,7 @@ Development Host — say so in the task notes rather than implying it was tested
 
 The in-repo preview harness (`preview:ecuc`, `preview:check`) and the `scripts/` directory were removed,
 so the page is no longer served with a stubbed `acquireVsCodeApi`. Open a fixture or a local `.arxml`
-in the ECUC editor and observe the real webview: layout, hover, focus, scroll, filter passes, the
+in the ECUC editor and observe the real webview: layout, hover, focus, scroll, search passes, the
 inspector and the reload path all need that host.
 
 A host observation is not a repeatable check. It cannot run in CI, so record it as host-observed with
@@ -104,6 +104,27 @@ Document markup/CSS tests are string assertions (the Document-only shell, layout
 selectors, fallbacks, no Tree/line-number/copy code), but the view/details behaviour must drive the
 page's own `applyInspectorVisibility`, `subtreeRowIds`, `guidesFor`, `reconcileRowState` and
 `detailsValueInput` extracted with `scriptTestUtils` against stub elements — not a host-side twin.
+Condition/annotation presentation tests are value-first: `syscond.test.ts` asserts the `values` map for
+known, missing, tail-resolved and malformed expressions; `renderRows.test.ts` asserts `conditionTooltip`
+(multi-line, quoted strings, `(not set)`, no `true`/`false`) and that annotations become `comments`;
+`treeQuery.test.ts`/`virtualPage.test.ts` assert comment display rows sit above their node and never
+enter the selectable id list; `uxDocument.test.ts` asserts the token split, token CSS, bounded chip and
+wrapped `.condition-code`. Do not test these by re-implementing the evaluator or tokenizer in the test.
+
+Structural row actions are tested in two layers: `structureEdit.test.ts` drives the pure
+`lineSpan`/default-name/plan functions and applies a plan to a temporary document (one edit, one
+undo, stale bytes refused); `contextMenu.test.ts` asserts the page shell, the container/parameter
+filter, the posted message shape and the close paths. Modal confirmation lives in the provider and
+is not simulated by the page test; the host write is covered by the apply test.
+
+Diff tests assert the toolbar both ways: Search/Show all/Show diff only/Prev diff/Next diff/Swap
+sides are present, and Filter/changes checkbox/summary/Collapse/Expand are absent. `diffModel` tests
+cover query-free `diffVisibility` and collapse-aware flattening; page tests assert the search wiring, the
+`displayLeft`/`displayRight`/`displayStatus` projection, reveal-side mapping and the two
+`DocumentTreeView` scrollers.
+The headless diff probe drives typing (no marks), Enter (count/current), Shift+Enter, a view switch
+and a swap.
+
 The mutation table for this pass is: re-add a Tree toggle/view state, Tree CSS/glyph/probes; re-add
 the line-number gutter/`data-line`/digits; re-add the repeating indent gradient; drop the
 bracket-guide computation or leak it to every row; drop brace hover; re-add inline `.value` editing;
@@ -124,24 +145,29 @@ row model carries no source-position fields.
 ## Virtual page tests drive the page's serialized row code
 
 The virtual row renderer is tested at two levels. Pure modules (`renderRows`, `virtualScroll`,
-`filterRows`/`flattenRows`) have ordinary unit tests over values. The page's own copy is extracted
-from `renderHtml` with `scriptTestUtils` and compiled: `filterRows`, `flattenRows`, `ancestorIds`,
-`inspectorFields`, `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` and the
-virtual math are driven with real row data, so the page does not get a second implementation.
-`virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse/filter
-display lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan
-payload. Structural
+`treeQuery`, `rowSearch`) have ordinary unit tests over values. The page's own copy is extracted from
+`renderHtml` with `scriptTestUtils` and compiled: the `RowSearchEngine`, `flattenRows`, `ancestorIds`,
+`inspectorFields`, `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` and the virtual
+math are driven with real row data, so the page does not get a second implementation.
+`virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse display
+lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan payload.
+`rowSearch.test.ts` pins the chunked engine: matches, progress, cancellation, the timing constants
+and a 150k-row completion threshold. Structural
 assertions (a window loop, spacers, no `innerHTML`/style attribute in the row builder, `data-level`
 CSS) are the regression guard; the real DOM pass is the Extension Development Host.
 
 Mutation checks for this layer: render the full row list instead of `[start,end)`, remove the
-top/bottom spacers, zero the overscan, drop subtree collapse/filter-ancestor logic, drop the filter
-generation guard, use `innerHTML` for row text, use an inline depth style, remove
-`aria-level`/posinset/setsize, remove focus restore, send full HTML on re-scan, use
-`#tree-window` as the offset, leak bracket guides outside their container, or leak the subtree tint
-to siblings; each must fail a test. Prefer the
-page's own functions over a grep-only assertion, and record which checks were observed in the real
-webview rather than unit-tested.
+top/bottom spacers, zero the overscan, drop subtree collapse logic, use `innerHTML` for row text, use
+an inline depth style, remove `aria-level`/posinset/setsize, remove focus restore, send full HTML on
+re-scan, use `#tree-window` as the offset, leak bracket guides outside their container, or leak the
+subtree tint to siblings; each must fail a test. Search mutations: run on input instead of Enter,
+skip the 120 ms debounce/24 ms slices, drop the generation token, rescan on next/previous, jump only
+on completion, or drop the fixed highlight tiers; each must fail a test. For the Conditions panel,
+the mutation set is: drop the row
+`symbols`, treat an empty value as a known empty string, skip discovery after `setRows`, invert the
+`unknown` badge, make Clear values delete rows, or forget a removed discovered row; each must fail a
+test. Prefer the page's own functions over a grep-only assertion, and record which checks were
+observed in the real webview rather than unit-tested.
 
 ## A CSS rule is not a contrast measurement
 

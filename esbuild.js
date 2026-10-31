@@ -23,22 +23,35 @@ const esbuildProblemMatcherPlugin = {
 	},
 };
 
+/**
+ * The extension host imports webview components for their static HTML builders.
+ * Those modules carry side-effect CSS imports that only the browser bundles need;
+ * stub them for the Node bundle so no CSS artifact is emitted beside extension.js.
+ * @type {import('esbuild').Plugin}
+ */
+const ignoreCssPlugin = {
+	name: 'ignore-css',
+	setup(build) {
+		build.onResolve({ filter: /\.css$/ }, args => ({
+			path: args.path,
+			namespace: 'ignore-css',
+		}));
+		build.onLoad({ filter: /.*/, namespace: 'ignore-css' }, () => ({
+			contents: '',
+			loader: 'js',
+		}));
+	},
+};
+
 async function main() {
+	// Extension host bundle
 	const ctx = await esbuild.context({
 		entryPoints: [
 			'src/extension.ts'
 		],
 		bundle: true,
 		format: 'cjs',
-		// Never rename identifiers: the webview script is injected via
-		// `Function.prototype.toString()` (renderHtml.ts, virtualScroll.ts,
-		// ecucDetailsEditor.ts), and the page's own code calls those functions by
-		// their source names. Identifier minification renames the declarations but
-		// not the call sites in the template, so the installed VSIX died at boot
-		// with `ReferenceError: createFilterDebouncer is not defined`.
-		minifyWhitespace: production,
-		minifySyntax: production,
-		minifyIdentifiers: false,
+		minify: production,
 		sourcemap: !production,
 		sourcesContent: false,
 		platform: 'node',
@@ -46,15 +59,55 @@ async function main() {
 		external: ['vscode'],
 		logLevel: 'silent',
 		plugins: [
-			/* add to the end of plugins array */
+			ignoreCssPlugin,
 			esbuildProblemMatcherPlugin,
 		],
 	});
+
+	// Editor webview bundle: a real browser IIFE. Component CSS is emitted as
+	// dist/editorViewer.css next to the script and loaded through asWebviewUri.
+	const ctxEditor = await esbuild.context({
+		entryPoints: [
+			'src/webview/editorViewer.ts'
+		],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: !production,
+		sourcesContent: false,
+		platform: 'browser',
+		outfile: 'dist/editorViewer.js',
+		logLevel: 'silent',
+		plugins: [
+			esbuildProblemMatcherPlugin,
+		],
+	});
+
+	// Diff webview bundle: independent page, same shared components and CSS.
+	const ctxDiff = await esbuild.context({
+		entryPoints: [
+			'src/webview/diffViewer.ts'
+		],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: !production,
+		sourcesContent: false,
+		platform: 'browser',
+		outfile: 'dist/diffViewer.js',
+		logLevel: 'silent',
+		plugins: [
+			esbuildProblemMatcherPlugin,
+		],
+	});
+
 	if (watch) {
-		await ctx.watch();
+		await Promise.all([ctx.watch(), ctxEditor.watch(), ctxDiff.watch()]);
 	} else {
 		await ctx.rebuild();
-		await ctx.dispose();
+		await ctxEditor.rebuild();
+		await ctxDiff.rebuild();
+		await Promise.all([ctx.dispose(), ctxEditor.dispose(), ctxDiff.dispose()]);
 	}
 }
 

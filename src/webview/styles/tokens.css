@@ -1,0 +1,44 @@
+/*
+ * Quiet-source tokens: one definition for the Document surface and the diff.
+ * Plain declarations first are the fallback for hosts without color-mix; the
+ * @supports block refines them. Component CSS may only consume these names or
+ * a --vscode-* property.
+ */
+body[data-view] {
+	--ecuc-fs: var(--vscode-editor-font-size, 13px);
+	--ecuc-lh: calc(var(--ecuc-fs) * 1.55);
+	--tok-keyword: var(--vscode-debugTokenExpression-boolean, var(--vscode-editor-foreground));
+	--tok-string: var(--vscode-debugTokenExpression-string, var(--vscode-editor-foreground));
+	--tok-number: var(--vscode-debugTokenExpression-number, var(--vscode-editor-foreground));
+	--tok-meta: var(--vscode-debugTokenExpression-name, var(--vscode-editor-foreground));
+	--tok-comment: var(--vscode-charts-green, var(--vscode-editor-foreground));
+	--tok-key: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
+	--tok-punct: var(--vscode-editor-foreground);
+	--tok-dim: var(--vscode-editor-foreground);
+	--hover-bg: var(--vscode-list-hoverBackground, transparent);
+	--sel-bg: var(--vscode-editor-background);
+	--sel-bg-focus: var(--vscode-editor-background);
+	--subtree-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
+	--sel-container-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
+	--container-accent: #4EC9B0;
+	/* Search match tiers: fixed dark-theme yellow, matching the reference UI. */
+	--match-bg: rgba(234, 179, 8, 0.32);
+	--match-hi: rgba(234, 179, 8, 0.7);
+	--fold-gutter: 26px;
+	--doc-pad: 3ch;
+	--indent: 4ch;
+	--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
+	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
+}
+@supports (color: color-mix(in srgb, currentColor 50%, transparent)) {
+	body[data-view] {
+		--tok-comment: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-editor-foreground)) 85%, var(--vscode-editor-background));
+		--tok-punct: color-mix(in srgb, var(--vscode-editor-foreground) 70%, var(--vscode-editor-background));
+		--tok-dim: color-mix(in srgb, var(--vscode-editor-foreground) 55%, var(--vscode-editor-background));
+		--sel-bg: color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background)) 14%, var(--vscode-editor-background));
+		--sel-bg-focus: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 24%, var(--vscode-editor-background));
+		--subtree-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 18%, transparent);
+		--sel-container-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 45%, transparent);
+		--sel-outline: color-mix(in srgb, var(--rail) 55%, transparent);
+	}
+}

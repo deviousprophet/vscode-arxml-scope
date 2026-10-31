@@ -1,20 +1,25 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
+    "src/extension.ts",
+    "src/webview/editorViewer.ts",
+    "src/webview/diffViewer.ts",
     "src/test/**/*.test.ts",
     ".vscode-test.mjs",
     "esbuild.js",
-    ".github/scripts/*.mjs",
-    "scripts/*.js"
+    ".github/scripts/*.mjs"
   ],
   "ignorePatterns": [
     ".opencode/**",
     ".agents/**",
     ".codegraph/**",
-    ".fallow/**",
+    ".fallow/**"
   ],
   "ignoreDependencies": [
     "@vscode/test-electron"
+  ],
+  "dynamicallyLoaded": [
+    "src/webview/styles/*.css"
   ],
   "usedClassMembers": [
     {
