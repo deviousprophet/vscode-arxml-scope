@@ -5,13 +5,7 @@
  * click wiring. It holds no document, selection or search state: every action
  * is reported through a callback the composition root provides.
  */
-import toolbarCss from './toolbar.css';
-
-declare const document: any;
-
-export function toolbarStyles(): string {
-	return toolbarCss;
-}
+import './toolbar.css';
 
 export interface EditorToolbarCallbacks {
 	onCollapseAll?(): void;
@@ -134,10 +128,4 @@ export class DiffToolbar {
 			button.addEventListener('click', action);
 		}
 	}
-}
-
-/** The classes serialized into the page before the composition root runs. */
-export function toolbarScript(): string {
-	return `const EditorToolbar = (${EditorToolbar.toString()});
-const DiffToolbar = (${DiffToolbar.toString()});`;
 }

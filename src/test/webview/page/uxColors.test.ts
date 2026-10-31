@@ -1,22 +1,16 @@
 /**
- * AC14 — semantic element colours. The reference ARTEXT grammar distinguishes keywords,
- * strings, booleans, numeric literals, entity/type names and variables; this suite asserts the
- * custom viewer maps those scopes to theme variables without changing the `.value` contract.
- *
- * The stylesheet is asserted, and the values are asserted against the rendered markup. The
- * actual contrast is measured in the browser harness and recorded in `implement.md`; a CSS rule
- * alone is not a contrast measurement.
+ * AC14 — semantic element colours. The stylesheet maps value kinds to theme
+ * variables without changing the `.value` contract; the row model owns the kind.
  */
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../../core/ecuc/scanner';
-import { renderHtml } from '../../../webview/editorViewer';
 import { buildRows } from '../../../core/ecuc/renderRows';
+import { webviewCss } from '../cssTestUtils';
 import { fixtureText } from '../../core/modelTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
-/** Uppercase/mixed-case booleans are legal AUTOSAR values; the reference grammar highlights them. */
 const BOOLEAN_CASE_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
 <AUTOSAR xmlns="http://autosar.org/schema/r4.0">
   <AR-PACKAGES>
@@ -48,26 +42,13 @@ const BOOLEAN_CASE_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
   </AR-PACKAGES>
 </AUTOSAR>`;
 
-
-function rows(): ReturnType<typeof buildRows>['rows'] {
-	return buildRows(scanEcucValues(fixtureText(FIXTURE))).rows;
+function style(): string {
+	return webviewCss('components', 'documentTree', 'documentTree.css') + webviewCss('styles', 'tokens.css');
 }
 
-function page(): string {
-	return renderHtml(scanEcucValues(fixtureText(FIXTURE)), { nonce: 'test-nonce' });
-}
-
-function styleOf(html: string): string {
-	const match = /<style[^>]*>([\s\S]*?)<\/style>/.exec(html);
-	assert.ok(match, 'one inlined style block');
-	return match[1];
-}
-
-/** The `data-value-kind` the row builder will use for the parameter named `name`. */
 function kindFor(name: string): string | undefined {
-	const row = rows().find(
-		(candidate) => candidate.definitionRef === `/PkgA/PkgB/ModDefs/ModX/ContA/${name}`
-	);
+	const rows = buildRows(scanEcucValues(fixtureText(FIXTURE))).rows;
+	const row = rows.find((candidate) => candidate.definitionRef === `/PkgA/PkgB/ModDefs/ModX/ContA/${name}`);
 	assert.ok(row, `the ${name} row exists`);
 	return row.valueKind;
 }
@@ -77,8 +58,6 @@ suite('editor semantic colours (AC14)', () => {
 		assert.strictEqual(kindFor('IniValue'), 'numeric');
 		assert.strictEqual(kindFor('Title'), 'textual');
 		assert.strictEqual(kindFor('Flag'), 'boolean');
-		// The class contract is unchanged; the widget and search still select `.value`.
-		assert.ok(page().includes("value.className = 'value'"));
 		const upper = buildRows(scanEcucValues(BOOLEAN_CASE_FIXTURE), {}).rows;
 		assert.strictEqual(
 			upper.filter((row) => row.valueKind === 'boolean').length,
@@ -88,38 +67,38 @@ suite('editor semantic colours (AC14)', () => {
 	});
 
 	test('AC14: the Tree kind glyphs and accent borders are removed', () => {
-		const style = styleOf(page());
-		assert.ok(!style.includes('.glyph'), 'no Tree glyphs');
-		assert.ok(!/\.row\.k-module\s*\{[^}]*--vscode-symbolIcon/.test(style), 'no module kind border');
-		assert.ok(!/\.row\.k-container\s*\{[^}]*--vscode-symbolIcon/.test(style), 'no container kind border');
-		assert.ok(!/\.row\.k-parameter\s*\{[^}]*--vscode-symbolIcon/.test(style), 'no parameter kind border');
-		assert.ok(!/\.row\.k-reference\s*\{[^}]*--vscode-symbolIcon/.test(style), 'no reference kind border');
+		const css = style();
+		assert.ok(!css.includes('.glyph'), 'no Tree glyphs');
+		for (const kind of ['module', 'container', 'parameter', 'reference']) {
+			assert.ok(
+				!new RegExp(`\\.row\\.k-${kind}\\s*\\{[^}]*--vscode-symbolIcon`).test(css),
+				`no ${kind} kind border`
+			);
+		}
 	});
 
 	test('AC14: value types, references and short names use their semantic scopes', () => {
-		const style = styleOf(page());
-		assert.ok(/\.value\[data-value-kind="numeric"\]\s*\{[^}]*--tok-number/.test(style));
-		assert.ok(/\.value\[data-value-kind="textual"\]\s*\{[^}]*--tok-string/.test(style));
-		assert.ok(/\.value\[data-value-kind="boolean"\]\s*\{[^}]*--tok-keyword/.test(style));
-		assert.ok(!/\.target\s*\{/.test(style), 'reference targets have no Document link style');
-		assert.ok(!/\.target:hover \.value-text/.test(style), 'reference targets have no hover underline');
-		assert.ok(/\.short\s*\{[^}]*--tok-string/.test(style));
+		const css = style();
+		assert.ok(/\.value\[data-value-kind="numeric"\]\s*\{[^}]*--tok-number/.test(css));
+		assert.ok(/\.value\[data-value-kind="textual"\]\s*\{[^}]*--tok-string/.test(css));
+		assert.ok(/\.value\[data-value-kind="boolean"\]\s*\{[^}]*--tok-keyword/.test(css));
+		assert.ok(!/\.target\s*\{/.test(css), 'reference targets have no Document link style');
+		assert.ok(!/\.target:hover \.value-text/.test(css), 'reference targets have no hover underline');
+		assert.ok(/\.short\s*\{[^}]*--tok-string/.test(css));
 	});
 
 	test('AC14: selection is a tint and does not recolour syntax', () => {
-		const style = styleOf(page());
-		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(style));
-		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(style));
+		const css = style();
+		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(css));
+		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(css));
+		assert.ok(/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(css));
 		assert.ok(
-			/\.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(style)
-		);
-		assert.ok(
-			/.document-tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
-				style
+			/\.document-tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
+				css
 			)
 		);
-		assert.ok(!style.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
-		const hexes = [...style.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
+		assert.ok(!css.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
+		const hexes = [...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
 		assert.deepStrictEqual(
 			hexes.sort(),
 			['#4EC9B0', '#80808040', '#DCDCAA'].sort(),

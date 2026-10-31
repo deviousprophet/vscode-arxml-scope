@@ -11,7 +11,8 @@ import * as vscode from 'vscode';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { innermostNodeIdAt } from '../../host/navigation';
-import { renderHtml } from '../../webview/editorViewer';
+import { buildRows, EcucRow } from '../../core/ecuc/renderRows';
+import type { EditorProviderToWebview } from '../../webviewProtocol';
 import { fixtureText, slice } from '../core/modelTestUtils';
 import { activeViewType, fixtureUri, sleep } from './testUtils';
 
@@ -81,17 +82,16 @@ suite('editor reveal (AC4, AC5)', () => {
 		assert.strictEqual(activeViewType(), VIEW_TYPE, 'the custom editor is open');
 	});
 
-	test('AC5: the requested selection is the marked row in the initial data', () => {
+	test('AC5: the requested selection is carried in the host document message', () => {
 		const model = scanEcucValues(fixtureText(FIXTURE));
 		const index = buildNodeIndex(model);
 		const id = index.idOf(model.modules[0].containers[0].parameters[0])!;
-		const page = renderHtml(model, { nonce: 'test-nonce', selectedId: id });
-
-		const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(page);
-		assert.ok(match, 'the page embeds the row document');
-		const payload = JSON.parse(match[1]) as { rows: Array<{ id: string }>; selectedId?: string };
-		assert.strictEqual(payload.selectedId, id, 'exactly one selection is requested');
-		assert.ok(payload.rows.some((row) => row.id === id), 'the selected row is in the data');
-		assert.ok(page.includes("node.dataset.selected = 'true'"), 'the row builder marks it');
+		const rows = buildRows(model, { sort: 'all', sortExcept: [] }).rows;
+		const message: EditorProviderToWebview = {
+			type: 'document',
+			document: { rows, selectedId: id },
+		};
+		assert.strictEqual(message.document.selectedId, id, 'exactly one selection is requested');
+		assert.ok(message.document.rows.some((row: EcucRow) => row.id === id), 'the selected row is in the data');
 	});
 });

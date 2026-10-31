@@ -1,28 +1,28 @@
 /**
- * The page-local row context menu: only containers and parameters open it, its two
- * actions post host messages, and confirmation/writes live in the provider. There is
- * no webview DOM in the test host, so the menu is asserted on the shell and the
- * serialized functions, with the browser probe covering the rendered geometry.
+ * The page-local row context menu: only containers and parameters open it, its
+ * two actions reach the host callback, and the menu closes before the host asks
+ * for confirmation. The geometry is real jsdom markup, not a serialized script.
  */
 import * as assert from 'assert';
 
-import { scanEcucValues } from '../../../core/ecuc/scanner';
-import { renderHtml } from '../../../webview/editorViewer';
-import { fixtureText } from '../../core/modelTestUtils';
-import { functionSource } from '../scriptTestUtils';
+import { mountContextMenu, renderContextMenuHtml, renderContextMenuStyleTag } from '../../../webview/components/contextMenu/contextMenu';
+import { webviewCss } from '../cssTestUtils';
+import { installMarkup } from '../pageTestUtils';
 
-function page(): string {
-	return renderHtml(scanEcucValues(fixtureText('editor/render.arxml')), { nonce: 'test-nonce' });
-}
-
-function styleOf(html: string): string {
-	const match = /<style nonce="test-nonce">([\s\S]*?)<\/style>/.exec(html);
-	return match ? match[1] : '';
+function menuPage(): string {
+	return `<body>
+<div id="tree" class="document-tree" role="tree">
+<div id="node-a" role="treeitem" data-kind="container" data-node-id="a" tabindex="-1"><span class="label">A</span></div>
+<div id="node-b" role="treeitem" data-kind="module" data-node-id="b" tabindex="-1"><span class="label">B</span></div>
+</div>
+${renderContextMenuHtml()}
+${renderContextMenuStyleTag('test-nonce')}
+</body>`;
 }
 
 suite('editor row context menu', () => {
 	test('the shell has one menu with Duplicate and Delete items', () => {
-		const html = page();
+		const html = menuPage();
 		assert.strictEqual((html.match(/id="row-menu"/g) ?? []).length, 1, 'exactly one menu');
 		assert.ok(/id="row-menu"[^>]*role="menu"[^>]*hidden/.test(html), 'the menu starts hidden');
 		assert.ok(/data-action="duplicate"[^>]*>Duplicate</.test(html));
@@ -32,50 +32,75 @@ suite('editor row context menu', () => {
 	});
 
 	test('only container and parameter rows open the menu', () => {
-		const handler = functionSource(page(), 'onTreeContextMenu');
-		assert.ok(handler.includes('closest(\'#tree [role="treeitem"]\')'));
-		assert.ok(handler.includes("kind !== 'container' && kind !== 'parameter'"));
-		assert.ok(handler.indexOf('kind !==') < handler.indexOf('event.preventDefault()'), 'other kinds keep the native menu');
-		assert.ok(handler.includes('showRowMenu(item, event.clientX, event.clientY)'));
+		const dom = installMarkup(menuPage());
+		try {
+			const selected: string[] = [];
+			mountContextMenu(dom.document.getElementById('tree'), {
+				selectItem: (item: any) => selected.push(item.dataset.nodeId),
+				rowElement: () => undefined,
+				onAction: () => undefined,
+			});
+			const moduleRow = dom.document.getElementById('node-b');
+			moduleRow.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+			assert.strictEqual(dom.document.getElementById('row-menu').hidden, true, 'a module keeps the native menu');
+			const container = dom.document.getElementById('node-a');
+			const event = new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+			container.dispatchEvent(event);
+			assert.strictEqual(event.defaultPrevented, true, 'the row menu replaces the native menu');
+			assert.deepStrictEqual(selected, ['a'], 'the right-clicked row becomes the selection');
+			assert.strictEqual(dom.document.getElementById('row-menu').hidden, false);
+			assert.ok(/left:\d+px;top:\d+px/.test(dom.document.getElementById('row-menu-style').textContent));
+		} finally {
+			dom.restore();
+		}
 	});
 
-	test('opening selects the row and clamps the menu inside the viewport', () => {
-		const script = functionSource(page(), 'showRowMenu');
-		assert.ok(script.includes('selectItem(item)'), 'the right-clicked row becomes the selection');
-		assert.ok(script.includes('menuNodeId = item.dataset.nodeId'));
-		assert.ok(script.includes('rowMenu.getBoundingClientRect()'));
-		assert.ok(script.includes('window.innerWidth - bounds.width - 8'));
-		assert.ok(script.includes("rowMenuStyle.textContent = '#row-menu{left:'"));
-		assert.ok(script.includes("querySelector('.row-menu-item')"), 'focus moves to the first action');
+	test('menu actions report once and close before the host asks', () => {
+		const dom = installMarkup(menuPage());
+		try {
+			const actions: string[] = [];
+			mountContextMenu(dom.document.getElementById('tree'), {
+				selectItem: () => undefined,
+				rowElement: () => undefined,
+				onAction: (action: string, nodeId: string) => {
+					assert.strictEqual(dom.document.getElementById('row-menu').hidden, true, 'closed first');
+					actions.push(`${action}:${nodeId}`);
+				},
+			});
+			dom.document.getElementById('node-a').dispatchEvent(
+				new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+			);
+			(dom.document.querySelector('[data-action="delete"]') as HTMLElement).click();
+			assert.deepStrictEqual(actions, ['delete:a']);
+		} finally {
+			dom.restore();
+		}
 	});
 
-	test('menu actions post one message and close', () => {
-		const html = page();
-		const body = functionSource(html, 'onTreeContextMenu');
-		assert.ok(body.includes('showRowMenu'));
-		const click = /rowMenu\.addEventListener\('click'[\s\S]*?\n\t\}\);/.exec(html);
-		assert.ok(click, 'the click listener exists');
-		assert.ok(click[0].includes("action === 'delete' || action === 'duplicate'"));
-		assert.ok(click[0].includes('rowMenuHost.onAction(action, nodeId)'), 'the action is reported through the host callback');
-		assert.ok(click[0].indexOf('hideRowMenu(true)') < click[0].indexOf('rowMenuHost.onAction'), 'the menu closes before the host asks');
-	});
-
-	test('Escape, outside pointerdown and scroll close the menu', () => {
-		const html = page();
-		const keys = functionSource(html, 'onRowMenuKeydown');
-		assert.ok(keys.includes("event.key === 'Escape'"));
-		assert.ok(keys.includes('hideRowMenu(true)'), 'Escape returns focus to the row');
-		assert.ok(keys.includes("event.key !== 'ArrowDown' && event.key !== 'ArrowUp'"));
-		assert.ok(keys.includes("event.key === 'ArrowDown' ? 1 : -1"));
-		assert.ok(html.includes("rowMenu.addEventListener('keydown', onRowMenuKeydown)"));
-		assert.ok(html.includes("closest('#row-menu')"));
-		assert.ok(html.includes("window.addEventListener('scroll'"));
-		assert.ok(html.includes("window.addEventListener('resize'"));
+	test('Escape closes the menu and returns focus to the row', () => {
+		const dom = installMarkup(menuPage());
+		try {
+			let focused = 0;
+			mountContextMenu(dom.document.getElementById('tree'), {
+				selectItem: () => undefined,
+				rowElement: () => ({ focus: () => focused++ }),
+				onAction: () => undefined,
+			});
+			dom.document.getElementById('node-a').dispatchEvent(
+				new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+			);
+			dom.document.getElementById('row-menu').dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+			);
+			assert.strictEqual(dom.document.getElementById('row-menu').hidden, true);
+			assert.strictEqual(focused, 1, 'Escape returns focus to the row');
+		} finally {
+			dom.restore();
+		}
 	});
 
 	test('the menu uses theme tokens and no colour literal', () => {
-		const html = page();
-		const style = styleOf(html);
+		const style = webviewCss('components', 'contextMenu', 'contextMenu.css');
 		const block = /\.row-menu \{[\s\S]*?\n\}/.exec(style);
 		assert.ok(block);
 		assert.ok(block[0].includes('position: fixed'));

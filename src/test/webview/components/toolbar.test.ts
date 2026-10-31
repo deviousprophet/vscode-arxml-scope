@@ -9,8 +9,8 @@ import {
 	EditorToolbar,
 	renderDiffToolbarHtml,
 	renderEditorToolbarHtml,
-	toolbarScript,
 } from '../../../webview/components/toolbar/toolbar';
+import { installMarkup } from '../pageTestUtils';
 
 suite('Toolbar component', () => {
 	test('the editor strip is grow, Collapse, Expand, then the Search slot', () => {
@@ -39,41 +39,48 @@ suite('Toolbar component', () => {
 		assert.ok(/id="diff-swap"[^>]*aria-pressed="false"/.test(html));
 	});
 
-	test('the serialized classes own their mount and pressed-state setters', () => {
-		const script = toolbarScript();
-		assert.ok(script.includes('const EditorToolbar = ('));
-		assert.ok(script.includes('const DiffToolbar = ('));
-		for (const name of ['mount()', 'setViewMode(changesOnly)', 'setSwapped(swapped)']) {
-			assert.ok(script.includes(name), `${name} is part of the contract`);
-		}
-		assert.ok(!script.includes('vscode'), 'the component never posts provider messages');
-		assert.ok(!script.includes('rowById'), 'the component never reads host row data');
-	});
-
-	test('mount reports clicks without owning the actions', () => {
-		const savedDocument = (globalThis as unknown as { document?: unknown }).document;
-		const savedAdd = (globalThis as unknown as { addEventListener?: unknown }).addEventListener;
-		const handlers: Record<string, () => void> = {};
-		const button = (id: string) => ({
-			addEventListener(_type: string, handler: () => void) {
-				handlers[id] = handler;
-			},
-		});
-		(globalThis as unknown as { document: unknown }).document = {
-			getElementById: (id: string) => button(id),
-		};
+	test('mount is idempotent and reports one action per click', () => {
+		const dom = installMarkup(`<body>${renderEditorToolbarHtml('<div class="search-box"></div>')}</body>`);
 		try {
 			let collapsed = 0;
-			const toolbar = new EditorToolbar({ onCollapseAll: () => collapsed++ });
+			let expanded = 0;
+			const toolbar = new EditorToolbar({ onCollapseAll: () => collapsed++, onExpandAll: () => expanded++ });
 			toolbar.mount();
 			toolbar.mount();
-			handlers['collapse-all']();
-			assert.strictEqual(collapsed, 1, 'mount is idempotent and reports once');
+			dom.document.getElementById('collapse-all').click();
+			dom.document.getElementById('expand-all').click();
+			assert.strictEqual(collapsed, 1);
+			assert.strictEqual(expanded, 1);
 		} finally {
-			(globalThis as unknown as { document?: unknown }).document = savedDocument;
-			(globalThis as unknown as { addEventListener?: unknown }).addEventListener = savedAdd;
+			dom.restore();
 		}
-		const diff = new DiffToolbar();
-		assert.strictEqual(diff.mounted, false);
+		assert.strictEqual(new DiffToolbar().mounted, false);
+	});
+
+	test('the diff toolbar reports view, navigation and swap, and paints pressed state', () => {
+		const dom = installMarkup(`<body>${renderDiffToolbarHtml('<div class="search-box"></div>')}</body>`);
+		try {
+			const calls: string[] = [];
+			const toolbar = new DiffToolbar({
+				onViewAll: () => calls.push('all'),
+				onViewDiff: () => calls.push('diff'),
+				onPrev: () => calls.push('prev'),
+				onNext: () => calls.push('next'),
+				onSwap: () => calls.push('swap'),
+			});
+			toolbar.mount();
+			dom.document.getElementById('diff-view-all').click();
+			dom.document.getElementById('diff-view-diff').click();
+			dom.document.getElementById('diff-prev').click();
+			dom.document.getElementById('diff-next').click();
+			dom.document.getElementById('diff-swap').click();
+			assert.deepStrictEqual(calls, ['all', 'diff', 'prev', 'next', 'swap']);
+			toolbar.setViewMode(true);
+			assert.strictEqual(dom.document.getElementById('diff-view-diff').getAttribute('aria-pressed'), 'true');
+			toolbar.setSwapped(true);
+			assert.strictEqual(dom.document.getElementById('diff-swap').getAttribute('aria-pressed'), 'true');
+		} finally {
+			dom.restore();
+		}
 	});
 });

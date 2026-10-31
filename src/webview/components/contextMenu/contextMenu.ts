@@ -3,22 +3,21 @@
  * Only container and parameter rows open it; the composition root receives the
  * action and decides what the write/confirmation is.
  */
-import contextMenuCss from './contextMenu.css';
-
-export function contextMenuStyles(): string {
-	return contextMenuCss;
-}
-
-/** Coordinates live in a nonce stylesheet; the menu never writes a style attr. */
-export function renderContextMenuStyleTag(nonce: string): string {
-	return `<style id="row-menu-style" nonce="${nonce}">#row-menu{left:0;top:0}</style>`;
-}
+import './contextMenu.css';
 
 export function renderContextMenuHtml(): string {
 	return `<div id="row-menu" class="row-menu" role="menu" aria-label="Row actions" hidden>
 <button class="row-menu-item" type="button" role="menuitem" data-action="duplicate">Duplicate</button>
 <button class="row-menu-item" type="button" role="menuitem" data-action="delete">Delete</button>
 </div>`;
+}
+
+/**
+ * The menu's coordinates live in a nonce stylesheet; the menu never writes a
+ * style attribute. The host shell includes this tag next to the static markup.
+ */
+export function renderContextMenuStyleTag(nonce: string): string {
+	return `<style id="row-menu-style" nonce="${nonce}">#row-menu{left:0;top:0}</style>`;
 }
 
 export interface ContextMenuHost {
@@ -30,18 +29,17 @@ export interface ContextMenuHost {
 	onAction(action: string, nodeId: string): void;
 }
 
-export function contextMenuScript(): string {
-	return `
-let rowMenu;
-let rowMenuStyle;
-let menuNodeId;
-let rowMenuHost = {
+let rowMenu: any;
+let rowMenuStyle: any;
+let menuNodeId: string | undefined;
+let rowMenuHost: ContextMenuHost = {
 	selectItem: function () {},
 	rowElement: function () { return undefined; },
 	onAction: function () {}
 };
 
-function mountContextMenu(treeElement, host) {
+/** Bind the static menu markup and the tree's contextmenu gesture. */
+export function mountContextMenu(treeElement: any, host: ContextMenuHost): void {
 	rowMenuHost = host || rowMenuHost;
 	rowMenu = document.getElementById('row-menu');
 	rowMenuStyle = document.getElementById('row-menu-style');
@@ -51,11 +49,11 @@ function mountContextMenu(treeElement, host) {
 	if (!rowMenu) {
 		return;
 	}
-	rowMenu.addEventListener('click', function (event) {
+	rowMenu.addEventListener('click', function (event: any) {
 		if (!(event.target instanceof Element)) {
 			return;
 		}
-		const item = event.target.closest('.row-menu-item');
+		const item: any = event.target.closest('.row-menu-item');
 		if (!item || menuNodeId === undefined) {
 			return;
 		}
@@ -67,7 +65,7 @@ function mountContextMenu(treeElement, host) {
 		}
 	});
 	rowMenu.addEventListener('keydown', onRowMenuKeydown);
-	document.addEventListener('pointerdown', function (event) {
+	document.addEventListener('pointerdown', function (event: any) {
 		if (rowMenu.hidden) {
 			return;
 		}
@@ -81,7 +79,7 @@ function mountContextMenu(treeElement, host) {
 	window.addEventListener('blur', function () { hideRowMenu(false); });
 }
 
-function hideRowMenu(restoreFocus) {
+export function hideRowMenu(restoreFocus: boolean): void {
 	if (!rowMenu || rowMenu.hidden) {
 		return;
 	}
@@ -96,7 +94,7 @@ function hideRowMenu(restoreFocus) {
 	}
 }
 
-function showRowMenu(item, left, top) {
+function showRowMenu(item: any, left: number, top: number): void {
 	if (!rowMenu || !rowMenuStyle) {
 		return;
 	}
@@ -117,11 +115,11 @@ function showRowMenu(item, left, top) {
 	}
 }
 
-function onTreeContextMenu(event) {
+function onTreeContextMenu(event: any): void {
 	if (!(event.target instanceof Element)) {
 		return;
 	}
-	const item = event.target.closest('#tree [role="treeitem"]');
+	const item: any = event.target.closest('#tree [role="treeitem"]');
 	if (!item) {
 		return;
 	}
@@ -133,11 +131,11 @@ function onTreeContextMenu(event) {
 	showRowMenu(item, event.clientX, event.clientY);
 }
 
-function onRowMenuKeydown(event) {
+function onRowMenuKeydown(event: any): void {
 	if (!rowMenu || rowMenu.hidden) {
 		return;
 	}
-	const items = Array.from(rowMenu.querySelectorAll('.row-menu-item'));
+	const items = Array.from(rowMenu.querySelectorAll('.row-menu-item')) as any[];
 	if (event.key === 'Escape') {
 		event.preventDefault();
 		hideRowMenu(true);
@@ -153,6 +151,4 @@ function onRowMenuKeydown(event) {
 	if (next) {
 		next.focus();
 	}
-}
-`;
 }

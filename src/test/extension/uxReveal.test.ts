@@ -24,8 +24,7 @@ import { activeViewType, fixtureUri, sleep } from './testUtils';
 interface StubMessage {
 	type?: string;
 	nodeId?: string;
-	rows?: Array<{ id: string }>;
-	selectedId?: string;
+	document?: { rows?: Array<{ id: string }>; selectedId?: string };
 }
 
 interface Stub {
@@ -174,10 +173,10 @@ suite('editor reveal (AC1, AC2)', () => {
 			assert.ok(await vscode.workspace.applyEdit(edit));
 			await sleep(100);
 
-			const pushed = stub.messages.filter((message) => message.type === 'model').at(-1);
+			const pushed = stub.messages.filter((message) => message.type === 'document').at(-1);
 			assert.ok(pushed, 'the re-scan is pushed');
-			assert.strictEqual(pushed.selectedId, id, 'the click’s selection survives the re-scan');
-			assert.ok(pushed.rows?.some((row) => row.id === id), 'and the node is still in the row data');
+			assert.strictEqual(pushed.document?.selectedId, id, 'the click’s selection survives the re-scan');
+			assert.ok(pushed.document?.rows?.some((row) => row.id === id), 'and the node is still in the row data');
 		});
 	});
 

@@ -26,8 +26,7 @@ import { sleep } from './testUtils';
 
 interface StubMessage {
 	type?: string;
-	rows?: EcucRow[];
-	selectedId?: string;
+	document?: { rows?: EcucRow[]; selectedId?: string };
 	nodeId?: string;
 }
 
@@ -178,9 +177,9 @@ function containerNamed(model: EcucDocumentModel, name: string) {
 
 /** The escaped initial row document, parsed exactly as the page does. */
 function initialPayload(html: string): { rows: EcucRow[]; selectedId?: string } {
-	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(html);
-	assert.ok(match, 'the page embeds the row document');
-	return JSON.parse(match[1]) as { rows: EcucRow[]; selectedId?: string };
+	assert.ok(html.includes('editorViewer.js'), 'the page is the bundled entrypoint');
+	assert.ok(!html.includes('ecuc-rows'), 'the static shell embeds no rows');
+	return { rows: [] };
 }
 
 suite('editor re-scan (design §1.5, §2.2)', () => {
@@ -191,11 +190,7 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 			provider.resolveCustomTextEditor(document, stub.panel, new vscode.CancellationTokenSource().token);
 
 			const initial = initialPayload(stub.raw.webview.html);
-			assert.ok(initial.rows.some((row) => row.label === 'NavCont'), 'the first paint receives the rows');
-			assert.ok(
-				initial.rows.some((row) => row.kind === 'parameter' && row.value === '7'),
-				'the first paint carries the value'
-			);
+			assert.strictEqual(initial.rows.length, 0, 'the shell carries no row payload');
 			assert.strictEqual(stub.messages.length, 0, 'nothing is pushed before the document changes');
 
 			// Count the platform's own change events for this document, so "one refresh
@@ -214,10 +209,10 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 			assert.ok(events >= 1, 'the platform reported the change');
 			assert.strictEqual(stub.messages.length, events, 'exactly one push per document change');
 			const pushed = stub.messages.at(-1)!;
-			assert.strictEqual(pushed.type, 'model');
-			assert.ok(Array.isArray(pushed.rows), 'the payload is row data, not a tree string');
-			assert.ok(pushed.rows!.some((row) => row.kind === 'parameter' && row.value === '8'), 'the new value');
-			assert.ok(!pushed.rows!.some((row) => row.kind === 'parameter' && row.value === '7'), 'not the stale one');
+			assert.strictEqual(pushed.type, 'document');
+			assert.ok(Array.isArray(pushed.document?.rows), 'the payload is row data, not a tree string');
+			assert.ok(pushed.document!.rows.some((row) => row.kind === 'parameter' && row.value === '8'), 'the new value');
+			assert.ok(!pushed.document!.rows.some((row) => row.kind === 'parameter' && row.value === '7'), 'not the stale one');
 
 			// The subscription must not outlive the panel.
 			stub.dispose();
@@ -265,10 +260,10 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 			assert.ok(await vscode.workspace.applyEdit(edit));
 			await sleep(50);
 
-			const refreshed = stub.messages.filter((message) => message.type === 'model').at(-1);
+			const refreshed = stub.messages.filter((message) => message.type === 'document').at(-1);
 			assert.ok(refreshed, 'the re-scan is pushed');
-			assert.strictEqual(refreshed.selectedId, id, 'the selection survives the re-scan');
-			assert.ok(refreshed.rows?.some((row) => row.id === id), 'the node is still in the row data');
+			assert.strictEqual(refreshed.document?.selectedId, id, 'the selection survives the re-scan');
+			assert.ok(refreshed.document?.rows?.some((row) => row.id === id), 'the node is still in the row data');
 		});
 	});
 
@@ -278,15 +273,17 @@ suite('editor re-scan (design §1.5, §2.2)', () => {
 			const stub = stubPanel();
 			provider.resolveCustomTextEditor(document, stub.panel, new vscode.CancellationTokenSource().token);
 
-			const sorted = stub.raw.webview.html;
-			assert.ok(sorted.indexOf('ContA') < sorted.indexOf('ContZ'), 'the default is `sort all`');
+			const staticShell = stub.raw.webview.html;
+			assert.ok(staticShell.includes('editorViewer.js'), 'the page is the bundled entrypoint');
 			assert.strictEqual(stub.messages.length, 0, 'nothing is pushed before a change');
 
 			const config = vscode.workspace.getConfiguration('arxmlScope.ecuc.editor');
 			try {
 				await config.update('sort', 'declaration', vscode.ConfigurationTarget.Global);
-				await waitFor('the settings re-render', () => stub.messages.some((message) => message.type === 'model'));
-				const rows = stub.messages.filter((message) => message.type === 'model').at(-1)!.rows ?? [];
+				await waitFor('the settings re-render', () =>
+					stub.messages.some((message) => message.type === 'document')
+				);
+				const rows = stub.messages.filter((message) => message.type === 'document').at(-1)!.document!.rows ?? [];
 				const order = rows.map((row) => row.label);
 				assert.ok(order.indexOf('ContZ') < order.indexOf('ContA'), 'declaration order is pushed now');
 			} finally {

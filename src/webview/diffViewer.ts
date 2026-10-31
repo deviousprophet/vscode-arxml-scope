@@ -1,80 +1,39 @@
 /**
- * The semantic diff page (task design §3).
+ * The semantic-diff webview entrypoint.
  *
- * The shell is static and the initial `DiffDocument` is escaped JSON; the page
- * builds every row with `document.createElement` and `textContent`. The row
- * primitives come from `rowView.ts` and the window math from `virtualScroll.ts`,
- * so the editor and the diff cannot disagree about a label, a value or a spacer.
- *
- * The pure helpers (`diffVisibility`, `flattenDiffRows`, `nextChangeIndex`) are
- * serialized with `toString()` and driven by the unit tests, so the page has no
- * second implementation of a view rule. Every colour is a `--vscode-*` variable
- * (a literal may only appear as a fallback inside `var(...)`).
+ * The host writes a static shell and posts the complete `DiffDocument`; the
+ * page builds every row with `document.createElement` and `textContent`. Row
+ * primitives and window math are imported from their one owner, so the editor
+ * and the diff cannot disagree about a label, a value or a spacer.
  */
-import { randomBytes } from 'crypto';
-import { matchRangesScript } from './render/treeQuery';
-import { encodeJsonForScript } from './render/jsonScript';
-import { pageErrorScript } from './render/pageError';
-import { rowSearchScript } from './render/rowSearch';
-import { rowViewScript } from './render/rowView';
-import { virtualScrollScript } from './render/virtualScroll';
-import { buildDocumentBraceRow, buildDocumentCommentRow, buildDocumentNodeRow, documentRowsScript } from './components/documentTree/documentRows';
-import { documentTreeStyles, documentTreeViewScript } from './components/documentTree/documentTreeView';
-import { DiffDocument, DiffRow, diffVisibility, flattenDiffDocument, nextChangeIndex } from '../core/diff/diffModel';
-import { diffViewScript, diffViewStyles, renderDiffViewHtml } from './components/diffView/diffView';
-import { renderDiffToolbarHtml, toolbarScript, toolbarStyles } from './components/toolbar/toolbar';
-import { renderSearchBarHtml, searchBarScript, searchBarStyles } from './components/searchBar/searchBar';
-import { sharedStyles } from './styles';
-export interface DiffRenderOptions {
-	/** Inline-script nonce; generated when absent. */
-	nonce?: string;
-}
-/**
- * Serialises the diff document for a `<script type="application/json">` block.
- * The shared encoder escapes the characters that could close the element; the
- * page calls `JSON.parse` and never evaluates it.
- */
-export function encodeDiffDocument(document: DiffDocument): string {
-	return encodeJsonForScript(document);
-}
-/** Builds the whole diff page. */
-export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = {}): string {
-	const nonce = options.nonce ?? randomBytes(16).toString('base64');
-	const payload = encodeDiffDocument(diff);
-	const style = [
-		sharedStyles(),
-		documentTreeStyles(),
-		toolbarStyles(),
-		searchBarStyles(),
-		diffViewStyles(),
-	].join('\n');
-	const searchHtml = renderSearchBarHtml('diff-', 'Search the diff');
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
-<style nonce="${nonce}">${style}</style>
-</head>
-<body data-view="document" data-page="diff">
-${renderDiffToolbarHtml(searchHtml)}
-<div id="diff-notice" class="notice" role="status" aria-live="polite"></div>
-${renderDiffViewHtml()}
-<script type="application/json" id="diff-document" nonce="${nonce}">${payload}</script>
-<script nonce="${nonce}">
-${DIFF_PAGE_ERROR_SCRIPT}
-${diffPageScript()}
-</script>
-</body>
-</html>`;
-}
-/**
- * The rendered character width of one diff row: indent, label, value and meta.
- * The row font is monospace and meta fragments render at the same size, so a
- * character count is a faithful width model; the wider side wins.
- *
- * Serialized into the page with `toString()`: keep the body self-contained.
- */
+import './styles/tokens.css';
+import './styles/base.css';
+import type { DiffDocument, DiffRow } from '../core/diff/diffModel';
+import {
+	diffVisibility,
+	flattenDiffDocument,
+	nextChangeIndex,
+	type DiffDisplayRow,
+} from '../core/diff/diffModel';
+import { calcRowOffset, calcVisibleRange } from './render/virtualScroll';
+import {
+	buildDocumentBraceRow,
+	buildDocumentCommentRow,
+	buildDocumentNodeRow,
+} from './components/documentTree/documentRows';
+import { DiffView } from './components/diffView/diffView';
+import type { DocumentTreeHeader } from './components/documentTree/documentTreeView';
+import { DiffToolbar } from './components/toolbar/toolbar';
+import { SearchBar } from './components/searchBar/searchBar';
+import { RowSearchEngine } from './render/rowSearch';
+import { setHighlightQuery } from './render/rowView';
+import { installNoticeErrors } from './render/pageError';
+import { postToHost, resetVsCodeApi } from './vscodeApi';
+import type { DiffProviderToWebview } from '../diffProtocol';
+
+export type { DiffDocument, DiffProviderToWebview, DiffWebviewToProvider } from '../diffProtocol';
+
+/** The rendered character width of one diff row: indent, label, value and meta. */
 export function diffRowChars(row: DiffRow): number {
 	let widest = 0;
 	const sides = [row.left, row.right];
@@ -100,128 +59,92 @@ export function diffRowChars(row: DiffRow): number {
 	}
 	return widest;
 }
-/**
- * The rendered width of the longest row: monospace character count plus cell
- * padding and a little twisty/gap slack. No cap, so scrolling can reach the end
- * of the longest line.
- *
- * Serialized into the page with `toString()`: keep the body self-contained.
- */
+
+/** The rendered width of the longest row: monospace characters plus padding/slack. */
 export function diffContentWidth(maxChars: number, chWidth: number): number {
 	const safeChars = maxChars > 0 ? maxChars : 0;
 	const safeChar = chWidth > 0 ? chWidth : 0;
 	return Math.ceil(safeChars * safeChar) + 26 + 8;
 }
-/** The page script: the shared primitives plus the diff DOM glue. */
-/** The page script: the shared primitives plus the diff DOM glue. */
-export function diffPageScript(): string {
-	return `
-diffInstallErrorSurface();
-const vscode = acquireVsCodeApi();
-${rowViewScript()}
-${documentRowsScript()}
-${virtualScrollScript()}
-${documentTreeViewScript()}
-${diffViewScript()}
-${toolbarScript()}
-${searchBarScript()}
-${matchRangesScript()}
-${rowSearchScript()}
-${diffVisibility.toString()}
-${flattenDiffDocument.toString()}
-${nextChangeIndex.toString()}
-${diffRowChars.toString()}
-${diffContentWidth.toString()}
-const list = document.getElementById('diff-list');
-const notice = document.getElementById('diff-notice');
-let searchBar;
-let toolbar;
-const empty = document.getElementById('diff-empty');
-const emptyText = document.getElementById('diff-empty-text');
+
+/** The candidate rows for Search: the active view decides whether unchanged rows count. */
+export function searchCandidatesFor(rows: readonly DiffRow[], changesOnly: boolean): DiffRow[] {
+	return changesOnly ? rows.filter((row) => row.status !== 'unchanged') : rows.slice();
+}
+
+/** The pane headers for the displayed order; a swap follows. */
+export function diffPaneHeaders(
+	document: DiffDocument,
+	swapped: boolean
+): { left: DocumentTreeHeader; right: DocumentTreeHeader; labels: string[] } {
+	const left = swapped ? document.right : document.left;
+	const right = swapped ? document.left : document.right;
+	const labels = swapped ? [document.labels[1], document.labels[0]] : document.labels;
+	const leftHeader = headerOf(swapped ? document.rightHeader : document.leftHeader);
+	const rightHeader = headerOf(swapped ? document.leftHeader : document.rightHeader);
+	const lines = Math.max(headerLineCountOf(leftHeader), headerLineCountOf(rightHeader));
+	return {
+		left: { title: labels[0], titleTitle: left.path, schema: leftHeader.schema, packages: leftHeader.packages, lines },
+		right: { title: labels[1], titleTitle: right.path, schema: rightHeader.schema, packages: rightHeader.packages, lines },
+		labels,
+	};
+}
+
+
+let list: any;
+let notice: any;
+let searchBar: SearchBar;
+let toolbar: DiffToolbar;
+let empty: any;
+let emptyText: any;
+let reportError: (text: string) => void = function () {};
 const searchEngine = new RowSearchEngine();
 let searchQuery = '';
-let highlightQuery = '';
-let searchMatches = [];
+
+let searchMatches: string[] = [];
 let searchIndex = -1;
 let searchRunning = false;
 let searchFirstJumpDone = false;
-let searchCandidates = [];
+let searchCandidates: DiffRow[] = [];
 let showChangesOnly = false;
 let swapped = false;
-let diffDocument = {
+let diffDocument: DiffDocument = {
 	left: { name: '', path: '' },
 	right: { name: '', path: '' },
+	labels: ['', ''],
 	leftHeader: { packages: [] },
 	rightHeader: { packages: [] },
 	rows: [],
 	summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
 };
-let rows = [];
-let rowByKey = new Map();
-let rowIndexByKey = new Map();
-let collapsed = new Set();
-let selectedKey;
-let focusKey;
-let visibility = [];
-let displayRows = [];
-let displayIndexByKey = new Map();
-let navigationVisible = [];
-let windowRange = [0, 0];
-let renderedByKey = new Map();
+let rows: DiffRow[] = [];
+let rowByKey = new Map<string, DiffRow>();
+let rowIndexByKey = new Map<string, number>();
+let collapsed = new Set<string>();
+let selectedKey: string | undefined;
+let focusKey: string | undefined;
+let visibility: boolean[] = [];
+let displayRows: DiffDisplayRow[] = [];
+let displayIndexByKey = new Map<string, number>();
+let navigationVisible: boolean[] = [];
+let windowRange: [number, number] = [0, 0];
+let renderedByKey = new Map<string, HTMLElement>();
 let heights = { row: 20 };
-let heightFn = function () { return heights.row; };
+let heightFn: (index: number) => number = function () { return heights.row; };
 let diffContent = 0;
 let headerLineCount = 0;
-let views;
-function readInitialDocument() {
-	const script = document.getElementById('diff-document');
-	if (!script) {
-		window.diffReportError('The diff data is missing from this page.');
-		return {
-			left: { name: '', path: '' },
-			right: { name: '', path: '' },
-			labels: ['', ''],
-			leftHeader: { packages: [] },
-			rightHeader: { packages: [] },
-			rows: [],
-			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
-		};
-	}
-	try {
-		const parsed = JSON.parse(script.textContent || '{}');
-		return parsed && Array.isArray(parsed.rows) ? parsed : {
-			left: { name: '', path: '' },
-			right: { name: '', path: '' },
-			labels: ['', ''],
-			leftHeader: { packages: [] },
-			rightHeader: { packages: [] },
-			rows: [],
-			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
-		};
-	} catch (error) {
-		window.diffReportError('The diff data could not be read: ' + error.message);
-		return {
-			left: { name: '', path: '' },
-			right: { name: '', path: '' },
-			labels: ['', ''],
-			leftHeader: { packages: [] },
-			rightHeader: { packages: [] },
-			rows: [],
-			summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
-		};
-	}
-}
-function summaryOf(next) {
+let views: DiffView | undefined;
+function summaryOf(next: any): any {
 	return next && next.summary ? next.summary : { changed: 0, added: 0, removed: 0, unchanged: 0 };
 }
 function hasChanges() {
 	const summary = summaryOf(diffDocument);
 	return summary.changed + summary.added + summary.removed > 0;
 }
-function headerOf(header) {
+function headerOf(header: any): any {
 	return header || { packages: [] };
 }
-function headerLineCountOf(header) {
+function headerLineCountOf(header: any): number {
 	const value = headerOf(header);
 	let count = value.schema ? 1 : 0;
 	return count + (Array.isArray(value.packages) ? value.packages.length : 0);
@@ -277,31 +200,13 @@ function rebuildDisplay() {
 	buildHeightFn();
 }
 function renderHeaders() {
-	const left = swapped ? diffDocument.right : diffDocument.left;
-	const right = swapped ? diffDocument.left : diffDocument.right;
-	const labels = swapped
-		? [diffDocument.labels[1], diffDocument.labels[0]]
-		: diffDocument.labels;
-	const leftHeader = headerOf(swapped ? diffDocument.rightHeader : diffDocument.leftHeader);
-	const rightHeader = headerOf(swapped ? diffDocument.leftHeader : diffDocument.rightHeader);
-	headerLineCount = Math.max(headerLineCountOf(leftHeader), headerLineCountOf(rightHeader));
+	const headers = diffPaneHeaders(diffDocument, swapped);
+	headerLineCount = headers.left.lines ?? 0;
 	if (!views) {
 		return;
 	}
-	views.left.setHeader({
-		title: labels[0],
-		titleTitle: left.path,
-		schema: leftHeader.schema,
-		packages: leftHeader.packages,
-		lines: headerLineCount
-	});
-	views.right.setHeader({
-		title: labels[1],
-		titleTitle: right.path,
-		schema: rightHeader.schema,
-		packages: rightHeader.packages,
-		lines: headerLineCount
-	});
+	views.left.setHeader(headers.left);
+	views.right.setHeader(headers.right);
 }
 function paneModel() {
 	return {
@@ -318,7 +223,7 @@ function applyModels() {
 	views.left.setModel(paneModel());
 	views.right.setModel(paneModel());
 }
-function setDocument(next) {
+function setDocument(next: any): void {
 	if (!next || !Array.isArray(next.rows)) {
 		return;
 	}
@@ -390,7 +295,7 @@ function measureDiffWidth() {
 		views.right.setContentWidth(diffContent);
 	}
 }
-function documentOptions(flat, side) {
+function documentOptions(flat: any, side: string): any {
 	const guides =
 		side === 'left'
 			? swapped
@@ -408,7 +313,7 @@ function documentOptions(flat, side) {
 		guides: guides
 	};
 }
-function documentRowForCell(cell, row) {
+function documentRowForCell(cell: any, row: any): any {
 	return {
 		kind: cell.kind,
 		label: cell.label,
@@ -433,39 +338,39 @@ function documentRowForCell(cell, row) {
 		disabled: false
 	};
 }
-function stripDocumentNode(node) {
+function stripDocumentNode(node: any): any {
 	for (const name of ['role', 'aria-level', 'aria-posinset', 'aria-setsize', 'aria-selected', 'aria-expanded']) {
 		node.removeAttribute(name);
 	}
 	node.tabIndex = -1;
 	return node;
 }
-function carriesDiffGap(flat, displayIndex) {
+function carriesDiffGap(flat: any, displayIndex: number): boolean {
 	const row = flat ? rows[flat.rowIndex] : undefined;
 	const previous = displayIndex > 0 ? displayRows[displayIndex - 1] : undefined;
 	return (
-		row &&
+		!!row &&
 		row.kind === 'module' &&
 		displayIndex > 0 &&
 		(!previous || previous.rowIndex !== flat.rowIndex)
 	);
 }
-function displayLeft(row) {
+function displayLeft(row: any): any {
 	return swapped ? row.right : row.left;
 }
-function displayRight(row) {
+function displayRight(row: any): any {
 	return swapped ? row.left : row.right;
 }
-function displayStatus(row) {
+function displayStatus(row: any): any {
 	if (!swapped) {
 		return row.status;
 	}
 	return row.status === 'added' ? 'removed' : row.status === 'removed' ? 'added' : row.status;
 }
-function hostSide(side) {
+function hostSide(side: 'left' | 'right'): 'left' | 'right' {
 	return swapped ? (side === 'left' ? 'right' : 'left') : side;
 }
-function renderRow(index, pane) {
+function renderRow(index: number, pane: string): any {
 	const flat = displayRows[index];
 	const element = document.createElement('div');
 	element.className = 'diff-row';
@@ -563,14 +468,14 @@ function renderRow(index, pane) {
 function focusedKey() {
 	const active = document.activeElement;
 	if (active && active.closest) {
-		const item = active.closest('[data-key]');
+		const item = active.closest('[data-key]') as HTMLElement | null;
 		if (item) {
 			return item.dataset.key;
 		}
 	}
 	return undefined;
 }
-function applyRoving(key) {
+function applyRoving(key: string | undefined): void {
 	if (!views) {
 		return;
 	}
@@ -593,7 +498,7 @@ function collectRendered() {
 	}
 }
 /** Restores focus to a row that survived a rebuild; a removed row is left alone. */
-function refocus(key) {
+function refocus(key: string | undefined): void {
 	if (key === undefined) {
 		return;
 	}
@@ -605,7 +510,7 @@ function refocus(key) {
 	applyRoving(key);
 	element.focus({ preventScroll: true });
 }
-function renderWindow(force) {
+function renderWindow(force?: boolean): void {
 	// Keep the list's layout state in step with the row list before the
 	// component measures its scroll region.
 	list.hidden = displayRows.length === 0;
@@ -631,7 +536,7 @@ function renderWindow(force) {
 		}
 	}
 }
-function ensureVisible(displayIndex) {
+function ensureVisible(displayIndex: number): void {
 	if (!views) {
 		return;
 	}
@@ -640,11 +545,11 @@ function ensureVisible(displayIndex) {
 	// reveal shows the same window in both panes immediately.
 	views.right.setScrollTop(views.left.getScrollTop());
 }
-function anchorState(scrollTop) {
+function anchorState(scrollTop: number): any {
 	return {
 		rowCount: displayRows.length,
 		rowHeight: heightFn,
-		containerHeight: views.left.clientHeight(),
+		containerHeight: views ? views.left.clientHeight() : 0,
 		scrollTop: scrollTop,
 		bufferSize: 0,
 		heightVersion: 1
@@ -664,13 +569,13 @@ function captureAnchor() {
 	}
 	return { key: rows[flat.rowIndex].key, delta: top - calcRowOffset(index, state) };
 }
-function restoreAnchor(anchor) {
+function restoreAnchor(anchor: any): void {
 	if (!anchor || !views || !displayIndexByKey.has(anchor.key)) {
 		return;
 	}
 	const index = displayIndexByKey.get(anchor.key);
 	const state = anchorState(0);
-	views.left.setRowsScrollTop(Math.max(0, calcRowOffset(index, state) + anchor.delta));
+	views.left.setRowsScrollTop(Math.max(0, calcRowOffset(index as number, state) + anchor.delta));
 	views.right.setScrollTop(views.left.getScrollTop());
 }
 function updateSelection() {
@@ -731,11 +636,11 @@ function applyView() {
 function currentMatchKey() {
 	return searchIndex >= 0 && searchIndex < searchMatches.length ? searchMatches[searchIndex] : undefined;
 }
-function setSearchBusy(busy) {
+function setSearchBusy(busy: boolean): void {
 	searchRunning = busy === true;
 	renderSearchUi();
 }
-function searchIndexOfKey(key) {
+function searchIndexOfKey(key: string | undefined): number {
 	return key === undefined ? -1 : searchMatches.indexOf(key);
 }
 function renderSearchUi() {
@@ -753,7 +658,7 @@ function renderSearchUi() {
 		searchBar.setCount((searchIndex + 1) + ' / ' + searchMatches.length);
 	}
 }
-function jumpToSearchMatch(index) {
+function jumpToSearchMatch(index: number): void {
 	const key = searchMatches[index];
 	if (key === undefined) {
 		return;
@@ -775,14 +680,14 @@ function jumpToSearchMatch(index) {
 	renderSearchUi();
 	searchBar.focus();
 }
-function cycleSearch(direction) {
+function cycleSearch(direction: number): void {
 	if (searchMatches.length === 0) {
 		return;
 	}
 	searchIndex = (searchIndex + direction + searchMatches.length) % searchMatches.length;
 	jumpToSearchMatch(searchIndex);
 }
-function startSearch(query, previousKey, immediate) {
+function startSearch(query: string, previousKey?: string, immediate?: boolean): void {
 	const text = query || '';
 	if (text.trim() === '') {
 		resetSearchResults();
@@ -790,13 +695,11 @@ function startSearch(query, previousKey, immediate) {
 	}
 	searchEngine.clear();
 	searchQuery = text;
-	highlightQuery = text;
+	setHighlightQuery(text);
 	searchMatches = [];
 	searchIndex = -1;
 	searchFirstJumpDone = previousKey !== undefined;
-	searchCandidates = showChangesOnly
-		? rows.filter(function (row) { return row.status !== 'unchanged'; })
-		: rows;
+	searchCandidates = searchCandidatesFor(rows, showChangesOnly);
 	setSearchBusy(true);
 	renderWindow(true);
 	searchEngine.search(
@@ -853,15 +756,15 @@ function startSearch(query, previousKey, immediate) {
 function resetSearchResults() {
 	searchEngine.clear();
 	searchQuery = '';
+	setHighlightQuery('');
 	searchMatches = [];
 	searchIndex = -1;
 	searchCandidates = [];
-	highlightQuery = '';
 	searchFirstJumpDone = false;
 	setSearchBusy(false);
 	renderWindow(true);
 }
-function executeSearch(direction) {
+function executeSearch(direction: number): void {
 	const query = searchBar.value();
 	if (query.trim() === '') {
 		resetSearchResults();
@@ -873,7 +776,7 @@ function executeSearch(direction) {
 	}
 	cycleSearch(direction === -1 ? -1 : 1);
 }
-function clearSearch(focusInput) {
+function clearSearch(focusInput: boolean): void {
 	searchBar.setValue('');
 	resetSearchResults();
 	if (focusInput) {
@@ -898,7 +801,7 @@ function focusListAfterSearch() {
 		element.focus({ preventScroll: true });
 	}
 }
-function setView(changesOnly) {
+function setView(changesOnly: boolean): void {
 	if (showChangesOnly === changesOnly) {
 		return;
 	}
@@ -906,7 +809,7 @@ function setView(changesOnly) {
 	updateViewButtons();
 	applyView();
 }
-function setSwapped(next) {
+function setSwapped(next: boolean): void {
 	swapped = next === true;
 	if (views) {
 		// Swap resets horizontal only; the vertical position is preserved.
@@ -918,7 +821,7 @@ function setSwapped(next) {
 	renderWindow(true);
 	updateSelection();
 }
-function selectKey(key, shouldFocus) {
+function selectKey(key: string, shouldFocus?: boolean): void {
 	if (!rowByKey.has(key)) {
 		return;
 	}
@@ -938,7 +841,7 @@ function selectKey(key, shouldFocus) {
 		}
 	}
 }
-function expandAncestors(key) {
+function expandAncestors(key: string): boolean {
 	let changed = false;
 	let row = rowByKey.get(key);
 	const seen = new Set([key]);
@@ -954,7 +857,7 @@ function expandAncestors(key) {
 	}
 	return changed;
 }
-function revealKey(key) {
+function revealKey(key: string): void {
 	if (!rowByKey.has(key)) {
 		return;
 	}
@@ -978,15 +881,15 @@ function revealKey(key) {
 		element.focus({ preventScroll: true });
 	}
 }
-function gotoChange(direction) {
+function gotoChange(direction: number): void {
 	const from = selectedKey === undefined ? undefined : rowIndexByKey.get(selectedKey);
-	const index = nextChangeIndex(rows, navigationVisible, from === undefined ? -1 : from, direction);
+	const index = nextChangeIndex(rows, navigationVisible, from === undefined ? -1 : from, direction === -1 ? -1 : 1);
 	if (index < 0) {
 		return;
 	}
 	revealKey(rows[index].key);
 }
-function toggleCollapsed(key) {
+function toggleCollapsed(key: string): void {
 	const row = rowByKey.get(key);
 	if (!row || !row.hasChildren) {
 		return;
@@ -1005,7 +908,7 @@ function toggleCollapsed(key) {
 	updateSelection();
 	refocus(focused);
 }
-function nextNodeIndex(from, direction) {
+function nextNodeIndex(from: number, direction: number): number {
 	let at = from + direction;
 	while (at >= 0 && at < displayRows.length) {
 		const flat = displayRows[at];
@@ -1016,7 +919,7 @@ function nextNodeIndex(from, direction) {
 	}
 	return -1;
 }
-function moveSelection(offset) {
+function moveSelection(offset: number): void {
 	if (displayRows.length === 0) {
 		return;
 	}
@@ -1056,7 +959,7 @@ function selectedChild() {
 	const next = rows[displayRows[childAt].rowIndex];
 	return next.level > rows[displayRows[at].rowIndex].level ? next.key : undefined;
 }
-function onKeyDown(event) {
+function onKeyDown(event: any): void {
 	if (!(event.target instanceof Element)) {
 		return;
 	}
@@ -1118,13 +1021,13 @@ function onKeyDown(event) {
 	} else if (event.key === 'Enter') {
 		event.preventDefault();
 		const side = displayLeft(row) ? hostSide('left') : hostSide('right');
-		vscode.postMessage({ type: 'reveal', side: side, key: key });
+		postToHost({ type: 'reveal', side: side, key: key });
 	} else if (event.key === ' ') {
 		event.preventDefault();
 		selectKey(key, true);
 	}
 }
-function onPaneRowClick(index, event) {
+function onPaneRowClick(index: number, event: any): void {
 	const flat = displayRows[index];
 	if (!flat) {
 		return;
@@ -1142,11 +1045,13 @@ function onPaneRowClick(index, event) {
 	}
 	selectKey(row.key, true);
 }
-function syncPanes(pane, top, left) {
+function syncPanes(pane: string, top: number, left: number): void {
 	if (views) {
 		views.syncPanes(pane, top, left);
 	}
 }
+/** Bind the document-level gestures once the page refs exist. */
+function mountDiffDomListeners(): void {
 document.addEventListener('keydown', onKeyDown);
 window.addEventListener('resize', function () {
 	measureHeights();
@@ -1159,12 +1064,13 @@ if (typeof ResizeObserver === 'function') {
 		measureDiffWidth();
 	}).observe(list);
 }
-window.addEventListener('message', function (event) {
-	const message = event.data;
+}
+/** One host protocol message. */
+export function handleDiffMessage(message: DiffProviderToWebview): void {
 	if (!message) {
 		return;
 	}
-	if (message.type === 'diff') {
+	if (message.type === 'document') {
 		notice.textContent = '';
 		delete notice.dataset.kind;
 		const anchor = captureAnchor();
@@ -1181,10 +1087,29 @@ window.addEventListener('message', function (event) {
 		updateSelection();
 		updateEmptyState();
 	} else if (message.type === 'error') {
-		notice.textContent = message.message || 'The comparison could not be refreshed.';
-		notice.dataset.kind = 'warn';
+		showDiffError(message.message || 'The comparison could not be refreshed.');
 	}
-});
+}
+
+function showDiffError(message: string): void {
+	notice.textContent = message;
+	notice.dataset.kind = 'warn';
+}
+
+export function mountDiff(): void {
+	resetDiffState();
+	list = document.getElementById('diff-list');
+	notice = document.getElementById('diff-notice');
+	empty = document.getElementById('diff-empty');
+	emptyText = document.getElementById('diff-empty-text');
+	reportError = installNoticeErrors(document, window, {
+		noticeId: 'diff-notice',
+		label: 'The diff page failed',
+	}).report;
+	window.addEventListener('message', function (event) {
+		handleDiffMessage(event.data as DiffProviderToWebview);
+	});
+	mountDiffDomListeners();
 views = new DiffView({
 	onRender: function (pane) {
 		if (pane === 'left') {
@@ -1211,6 +1136,7 @@ searchBar = new SearchBar('diff-', {
 	onEscape: function () { clearSearch(true); focusListAfterSearch(); },
 	onInput: function (value) {
 		if (value === searchQuery) {
+			setHighlightQuery(value);
 			renderSearchUi();
 			return;
 		}
@@ -1222,18 +1148,53 @@ searchBar = new SearchBar('diff-', {
 	}
 });
 searchBar.mount();
-setDocument(readInitialDocument());
 renderWindow(true);
 updateSelection();
 updateViewButtons();
 updateEmptyState();
-vscode.postMessage({ type: 'ready' });
-`;
+postToHost({ type: 'ready' });
 }
-/** Boot error surface; shared with the editor page and pointed at the diff notice. */
-const DIFF_PAGE_ERROR_SCRIPT = pageErrorScript({
-	installerName: 'diffInstallErrorSurface',
-	reporterName: 'diffReportError',
-	noticeId: 'diff-notice',
-	label: 'The diff page failed',
-});
+
+/** A page reload starts from the initial protocol state, exactly like a fresh bundle. */
+function resetDiffState(): void {
+	diffDocument = {
+		left: { name: '', path: '' },
+		right: { name: '', path: '' },
+		labels: ['', ''],
+		leftHeader: { packages: [] },
+		rightHeader: { packages: [] },
+		rows: [],
+		summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
+	};
+	rows = [];
+	rowByKey = new Map();
+	rowIndexByKey = new Map();
+	collapsed = new Set();
+	selectedKey = undefined;
+	focusKey = undefined;
+	visibility = [];
+	displayRows = [];
+	displayIndexByKey = new Map();
+	navigationVisible = [];
+	windowRange = [0, 0];
+	renderedByKey = new Map();
+	heights = { row: 20 };
+	heightFn = function () { return heights.row; };
+	diffContent = 0;
+	headerLineCount = 0;
+	views = undefined;
+	searchQuery = '';
+	searchMatches = [];
+	searchIndex = -1;
+	searchCandidates = [];
+	searchRunning = false;
+	searchFirstJumpDone = false;
+	showChangesOnly = false;
+	swapped = false;
+	resetVsCodeApi();
+	setHighlightQuery('');
+}
+
+if (typeof document !== 'undefined' && document.getElementById('diff-list')) {
+	mountDiff();
+}

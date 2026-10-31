@@ -7,11 +7,9 @@
  * Rows are small, so the scanner batches rows between clock checks instead of
  * checking the clock for every comparison.
  *
- * `RowSearchEngine` is serialized into the page with `toString()`. Keep its body
- * self-contained: it may reference the constants emitted by `rowSearchScript()`
- * and the `haystack` field, nothing else.
+ * Runs over any store whose rows carry a lower-cased `haystack`, so the editor
+ * and the semantic diff share one chunked engine.
  */
-import type { TreeRow } from './treeQuery';
 
 export interface RowSearchHandlers {
 	onProgressUpdate?(matches: number[], percentComplete: number): void;
@@ -64,7 +62,7 @@ export class RowSearchEngine {
 	 * the time slicing.
 	 */
 	search(
-		rows: readonly TreeRow[],
+		rows: readonly { haystack: string }[],
 		query: string,
 		handlers: RowSearchHandlers,
 		immediate = false
@@ -110,7 +108,7 @@ export class RowSearchEngine {
 	}
 
 	private runChunked(
-		rows: readonly TreeRow[],
+		rows: readonly { haystack: string }[],
 		needle: string,
 		handlers: RowSearchHandlers,
 		token: number
@@ -154,19 +152,4 @@ export class RowSearchEngine {
 
 		step();
 	}
-}
-
-/** The page copy: timing constants plus the self-contained class. */
-export function rowSearchScript(): string {
-	const source = RowSearchEngine.toString();
-	// A production minifier can turn the class declaration into an anonymous
-	// class expression (`class { ... }`). Stop it from becoming a bare statement.
-	const declaration = /^\s*class\s+RowSearchEngine\b/.test(source)
-		? source
-		: `const RowSearchEngine = ${source};`;
-	return `const SEARCH_DEBOUNCE_MS = ${SEARCH_DEBOUNCE_MS};
-const SEARCH_CHUNK_BUDGET_MS = ${SEARCH_CHUNK_BUDGET_MS};
-const SEARCH_PROGRESS_THROTTLE_MS = ${SEARCH_PROGRESS_THROTTLE_MS};
-const SEARCH_ROW_BATCH = ${SEARCH_ROW_BATCH};
-${declaration}`;
 }

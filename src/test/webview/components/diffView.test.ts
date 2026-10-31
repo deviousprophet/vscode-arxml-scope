@@ -4,62 +4,9 @@
  */
 import * as assert from 'assert';
 
-import {
-	DiffView,
-	diffViewStyles,
-	renderDiffViewHtml,
-} from '../../../webview/components/diffView/diffView';
-
-interface FakeTree {
-	root: unknown;
-	top: number;
-	leftValue: number;
-	mounted: number;
-	mount(): void;
-	setScrollTop(value: number): void;
-	getScrollTop(): number;
-	setScrollLeft(value: number): void;
-	getScrollLeft(): number;
-}
-
-function fakeTree(): FakeTree {
-	return {
-		root: undefined,
-		top: 0,
-		leftValue: 0,
-		mounted: 0,
-		mount() {
-			this.mounted++;
-		},
-		setScrollTop(value: number) {
-			this.top = value;
-		},
-		getScrollTop() {
-			return this.top;
-		},
-		setScrollLeft(value: number) {
-			this.leftValue = value;
-		},
-		getScrollLeft() {
-			return this.leftValue;
-		},
-	};
-}
-
-function withGlobals<T>(run: () => T): T {
-	const globals = globalThis as unknown as Record<string, unknown>;
-	const saved = { document: globals.document, tree: globals.DocumentTreeView };
-	globals.document = { getElementById: () => undefined };
-	globals.DocumentTreeView = function (this: FakeTree) {
-		return fakeTree();
-	};
-	try {
-		return run();
-	} finally {
-		globals.document = saved.document;
-		globals.DocumentTreeView = saved.tree;
-	}
-}
+import { DiffView, renderDiffViewHtml } from '../../../webview/components/diffView/diffView';
+import { webviewCss } from '../cssTestUtils';
+import { installMarkup } from '../pageTestUtils';
 
 suite('DiffView component', () => {
 	test('the body owns two DocumentTree roots, a probe and the empty state', () => {
@@ -73,15 +20,16 @@ suite('DiffView component', () => {
 	});
 
 	test('the pane grid and split are component CSS', () => {
-		const css = diffViewStyles();
+		const css = webviewCss('components', 'diffView', 'diffView.css') + webviewCss('components', 'documentTree', 'documentTree.css');
 		assert.ok(/#diff-list\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(css));
 		assert.ok(/\.diff-pane \+ \.diff-pane\s*\{[^}]*border-left:\s*3px/.test(css));
 		assert.ok(/\.diff-cell\s*\{[^}]*padding:\s*0;/.test(css));
 		assert.ok(/\.diff-row\[data-status="changed"\] > \.diff-cell/.test(css));
 	});
 
-	test('mount creates one component per pane and syncs the follower', () => {
-		withGlobals(() => {
+	test('mount creates one component per pane and mirrors the follower', () => {
+		const dom = installMarkup(`<body>${renderDiffViewHtml()}</body>`);
+		try {
 			const view = new DiffView();
 			view.mount();
 			view.mount();
@@ -96,13 +44,15 @@ suite('DiffView component', () => {
 			view.resetHorizontal();
 			assert.strictEqual(view.left.getScrollLeft(), 0);
 			assert.strictEqual(view.right.getScrollLeft(), 0);
-		});
+		} finally {
+			dom.restore();
+		}
 	});
 
-	test('the serialized class has no host model or message access', () => {
+	test('the component owns no host model or message access', () => {
 		const source = DiffView.toString();
-		assert.ok(source.includes("new DocumentTreeView('#diff-pane-left'"));
-		assert.ok(source.includes("new DocumentTreeView('#diff-pane-right'"));
+		assert.ok(source.includes("'#diff-pane-left'"));
+		assert.ok(source.includes("'#diff-pane-right'"));
 		assert.ok(source.includes('syncPanes('));
 		assert.ok(!source.includes('vscode'), 'no provider messages');
 		assert.ok(!source.includes('diffDocument'), 'no host diff document');

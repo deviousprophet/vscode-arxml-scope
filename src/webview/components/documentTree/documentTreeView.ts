@@ -6,16 +6,16 @@
  * the row model, selection and search: `renderRow(index, pane)` builds one row and
  * the component only decides which rows are on screen and where the scroll is.
  *
- * The class (and its stylesheet) is serialized into both webview pages: the editor
- * mounts one instance, the diff mounts one per pane. A page needs
- * `virtualScrollScript()` for `calcVisibleRange`/`calcTotalHeight`/`calcRowOffset`
- * before it constructs this class.
+ * The editor mounts one instance, the diff mounts one per pane. Both pages import
+ * the same class and the same virtual-scroll math; nothing is serialized into a
+ * page template.
  *
  * The component never writes a style attribute with model text. The only CSSOM
  * writes are its own geometry custom properties (`--document-tree-*`), the same
  * technique the sidebar uses, which the nonce CSP allows.
  */
-import documentTreeCss from './documentTree.css';
+import './documentTree.css';
+import { calcRowOffset, calcTotalHeight, calcVisibleRange } from '../../render/virtualScroll';
 
 /** One schema/package header line, in Document order. */
 export interface DocumentTreeHeader {
@@ -52,14 +52,6 @@ export interface DocumentTreeViewCallbacks {
 	/** Called after a window render with the slice that was rendered. */
 	onRender?(range: [number, number]): void;
 }
-
-declare const document: any;
-declare const requestAnimationFrame: any;
-declare const cancelAnimationFrame: any;
-declare function getComputedStyle(element: any): any;
-declare function calcVisibleRange(state: any): [number, number];
-declare function calcTotalHeight(state: any): number;
-declare function calcRowOffset(index: number, state: any): number;
 
 /** The default overscan; small and fixed so one frame stays O(viewport). */
 
@@ -494,7 +486,7 @@ export class DocumentTreeView {
 		if (typeof this.windowEl.contains === 'function' && !this.windowEl.contains(active)) {
 			return undefined;
 		}
-		const item = active.closest ? active.closest('[data-document-index]') : null;
+		const item = active.closest ? (active.closest('[data-document-index]') as HTMLElement | null) : null;
 		if (!item || !item.dataset) {
 			return undefined;
 		}
@@ -579,17 +571,4 @@ export class DocumentTreeView {
 			this.callbacks.onVisibleWindowChange(this.getScrollTop(), this.getScrollLeft());
 		}
 	}
-}
-
-/**
- * The class source for a webview. A bundler may drop the declaration name or
- * rename it; wrapping the class expression gives the page one stable binding.
- */
-export function documentTreeViewScript(): string {
-	return `const DocumentTreeView = (${DocumentTreeView.toString()});`;
-}
-
-/** The Document stylesheet shared byte-for-byte by the editor and the diff. */
-export function documentTreeStyles(): string {
-	return documentTreeCss;
 }

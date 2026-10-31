@@ -6,11 +6,9 @@
  * root supplies the row list and receives the committed entries; persistence is
  * the host's job.
  */
-import conditionsPanelCss from './conditionsPanel.css';
+import './conditionsPanel.css';
+import type { ConditionEntry } from '../../../../core/ecuc/conditionEntry';
 
-export function conditionsPanelStyles(): string {
-	return conditionsPanelCss;
-}
 
 /** The one validation rule for a row name, shared by Save and the tests. */
 export function conditionEntryError(name: string, others: readonly string[] = []): string {
@@ -69,38 +67,34 @@ export function renderConditionsPanelHtml(): string {
  * `mountConditionsPanel()` after the shell exists, then feeds rows with
  * `setConditionRows` and receives committed entries through `setConditionsCallback`.
  */
-export function conditionsPanelScript(): string {
-	return `
-let conditionsPanel;
-let conditionsList;
-let conditionsAdd;
-let conditionsClear;
-let conditionsEmpty;
-let conditionsCount;
-let conditionsValuesBadge;
-let conditionsStatus;
-let conditionsScript;
-let conditionsRows = [];
-let editingConditionRow = null;
-let onConditionsChange = function () {};
-let reportConditionsError = function () {};
 
-function setConditionRows(next) {
+let conditionsPanel: any;
+let conditionsList: any;
+let conditionsAdd: any;
+let conditionsClear: any;
+let conditionsEmpty: any;
+let conditionsCount: any;
+let conditionsValuesBadge: any;
+let conditionsStatus: any;
+let conditionsRows: any[] = [];
+let editingConditionRow: any = null;
+let onConditionsChange: (entries: ConditionEntry[]) => void = function () {};
+let reportConditionsError: (text: string) => void = function () {};
+
+export function setConditionRows(next: unknown): void {
 	conditionsRows = Array.isArray(next) ? next : [];
 }
 
-function setConditionsCallback(callback) {
+export function setConditionsCallback(callback: (entries: ConditionEntry[]) => void): void {
 	onConditionsChange = callback;
 }
 
-function setConditionsErrorReporter(reporter) {
+export function setConditionsErrorReporter(reporter: (text: string) => void): void {
 	reportConditionsError = reporter;
 }
 
-${conditionNameValid.toString()}
-${conditionEntryError.toString()}
 
-function conditionIconButton(className, label, title, pathData) {
+function conditionIconButton(className: string, label: string, title: string, pathData: string): any {
 	const button = document.createElement('button');
 	button.type = 'button';
 	button.className = 'act-btn ' + className;
@@ -128,7 +122,7 @@ function conditionIconButton(className, label, title, pathData) {
  * pencil/trash actions; edit mode shows the value input (and the name input for
  * an unsaved new row) with primary Save and secondary Cancel.
  */
-function renderConditionRow(row) {
+function renderConditionRow(row: any): void {
 	if (!row) {
 		return;
 	}
@@ -222,7 +216,7 @@ function renderConditionRow(row) {
 }
 
 /** Creates a row from an entry and its committed flags, then renders it. */
-function conditionRowElement(entry, options) {
+function conditionRowElement(entry: any, options?: { auto?: boolean; editing?: boolean; isNew?: boolean }): any {
 	const row = document.createElement('div');
 	row.className = 'condition-row parent';
 	const name = entry && typeof entry.name === 'string' ? entry.name.trim() : '';
@@ -240,7 +234,7 @@ function conditionRowElement(entry, options) {
  * The badge means "no committed value". A draft never shows it, and the draft
  * input is never read here; data-value is the only source.
  */
-function updateConditionRowState(row) {
+function updateConditionRowState(row: any): void {
 	if (!row) {
 		return;
 	}
@@ -253,9 +247,9 @@ function updateConditionRowState(row) {
 	state.hidden = editing || value !== '';
 }
 
-function discoveredConditionSymbols() {
-	const seen = new Set();
-	const out = [];
+function discoveredConditionSymbols(): string[] {
+	const seen = new Set<string>();
+	const out: string[] = [];
 	for (let at = 0; at < conditionsRows.length; at++) {
 		const condition = conditionsRows[at] ? conditionsRows[at].condition : undefined;
 		const symbols = condition && Array.isArray(condition.symbols) ? condition.symbols : [];
@@ -270,8 +264,8 @@ function discoveredConditionSymbols() {
 	return out;
 }
 
-function existingConditionNames() {
-	const names = new Set();
+function existingConditionNames(): Set<string> {
+	const names = new Set<string>();
 	if (!conditionsList) {
 		return names;
 	}
@@ -286,8 +280,8 @@ function existingConditionNames() {
 }
 
 /** The committed names of every other row, for duplicate validation. */
-function conditionOtherNames(row) {
-	const names = [];
+function conditionOtherNames(row: any): string[] {
+	const names: string[] = [];
 	if (!conditionsList) {
 		return names;
 	}
@@ -310,7 +304,7 @@ function conditionOtherNames(row) {
  * loses its Remove action but keeps its committed value; an editing row is
  * never rebuilt, so a draft survives a re-scan.
  */
-function syncConditionRowAutoFlags() {
+function syncConditionRowAutoFlags(): void {
 	if (!conditionsList) {
 		return;
 	}
@@ -332,7 +326,7 @@ function syncConditionRowAutoFlags() {
 	}
 }
 
-function ensureDiscoveredConditionRows() {
+export function ensureDiscoveredConditionRows(): void {
 	if (!conditionsList) {
 		return;
 	}
@@ -350,8 +344,8 @@ function ensureDiscoveredConditionRows() {
 }
 
 /** The committed entries only; a draft input or an unsaved row is never read. */
-function readConditionEntries() {
-	const entries = [];
+function readConditionEntries(): ConditionEntry[] {
+	const entries: ConditionEntry[] = [];
 	if (!conditionsList) {
 		return entries;
 	}
@@ -376,20 +370,7 @@ function readConditionEntries() {
 	return entries;
 }
 
-function initialConditionEntries() {
-	if (!conditionsScript) {
-		return [];
-	}
-	try {
-		const parsed = JSON.parse(conditionsScript.textContent || '[]');
-		return Array.isArray(parsed) ? parsed : [];
-	} catch (error) {
-		reportConditionsError('The condition values could not be read: ' + error.message);
-		return [];
-	}
-}
-
-function updateConditionsChrome() {
+function updateConditionsChrome(): void {
 	let count = 0;
 	let missing = 0;
 	let total = 0;
@@ -421,7 +402,7 @@ function updateConditionsChrome() {
 	}
 }
 
-function renderConditionEntries(entries) {
+export function renderConditionEntries(entries: unknown): void {
 	if (!conditionsList) {
 		return;
 	}
@@ -438,11 +419,11 @@ function renderConditionEntries(entries) {
 	updateConditionsChrome();
 }
 
-function sendConditions() {
+function sendConditions(): void {
 	onConditionsChange(readConditionEntries());
 }
 
-function focusConditionEditor(row) {
+function focusConditionEditor(row: any): void {
 	if (!row) {
 		return;
 	}
@@ -456,7 +437,7 @@ function focusConditionEditor(row) {
 	}
 }
 
-function beginConditionEdit(row) {
+function beginConditionEdit(row: any): void {
 	if (!row) {
 		return;
 	}
@@ -475,7 +456,7 @@ function beginConditionEdit(row) {
 	updateConditionsChrome();
 }
 
-function saveConditionEdit(row) {
+function saveConditionEdit(row: any): void {
 	if (!row) {
 		return;
 	}
@@ -512,7 +493,7 @@ function saveConditionEdit(row) {
 	sendConditions();
 }
 
-function cancelConditionEdit(row) {
+function cancelConditionEdit(row: any): void {
 	if (!row) {
 		return;
 	}
@@ -537,7 +518,7 @@ function cancelConditionEdit(row) {
 	updateConditionsChrome();
 }
 
-function addConditionEntry() {
+function addConditionEntry(): void {
 	if (!conditionsList) {
 		return;
 	}
@@ -557,7 +538,7 @@ function addConditionEntry() {
 	updateConditionsChrome();
 }
 
-function removeConditionRow(row) {
+function removeConditionRow(row: any): void {
 	if (!row) {
 		return;
 	}
@@ -578,7 +559,7 @@ function removeConditionRow(row) {
 	sendConditions();
 }
 
-function clearConditionEntries() {
+function clearConditionEntries(): void {
 	if (editingConditionRow) {
 		cancelConditionEdit(editingConditionRow);
 	}
@@ -593,13 +574,13 @@ function clearConditionEntries() {
 	sendConditions();
 }
 
-function setConditionsStatus(message) {
+export function setConditionsStatus(message: string): void {
 	if (conditionsStatus) {
 		conditionsStatus.textContent = message || '';
 	}
 }
 
-function applyDisabledCount() {
+export function applyDisabledCount(): void {
 	if (!conditionsCount) {
 		return;
 	}
@@ -614,7 +595,7 @@ function applyDisabledCount() {
 }
 
 /** Applies a host entries refresh (a reloaded page) and reports whether it handled the message. */
-function applyConditionsMessage(message) {
+export function applyConditionsMessage(message: any): boolean {
 	if (!message || message.type !== 'conditions') {
 		return false;
 	}
@@ -622,7 +603,9 @@ function applyConditionsMessage(message) {
 	return true;
 }
 
-function mountConditionsPanel() {
+export function mountConditionsPanel(): void {
+	editingConditionRow = null;
+	conditionsRows = [];
 	conditionsPanel = document.getElementById('conditions-panel');
 	conditionsList = document.getElementById('conditions-list');
 	conditionsAdd = document.getElementById('conditions-add');
@@ -631,7 +614,6 @@ function mountConditionsPanel() {
 	conditionsCount = document.getElementById('conditions-count');
 	conditionsValuesBadge = document.getElementById('sb-conditions-values-badge');
 	conditionsStatus = document.getElementById('conditions-status');
-	conditionsScript = document.getElementById('ecuc-conditions');
 	if (conditionsAdd) {
 		conditionsAdd.addEventListener('click', addConditionEntry);
 	}
@@ -639,7 +621,7 @@ function mountConditionsPanel() {
 		conditionsClear.addEventListener('click', clearConditionEntries);
 	}
 	if (conditionsPanel) {
-		conditionsPanel.addEventListener('click', function (event) {
+		conditionsPanel.addEventListener('click', function (event: any) {
 			if (!(event.target instanceof Element)) {
 				return;
 			}
@@ -657,7 +639,7 @@ function mountConditionsPanel() {
 				removeConditionRow(row);
 			}
 		});
-		conditionsPanel.addEventListener('input', function (event) {
+		conditionsPanel.addEventListener('input', function (event: any) {
 			const target = event.target;
 			if (target && target.classList && target.classList.contains('condition-name')) {
 				target.setAttribute('aria-invalid', 'false');
@@ -666,7 +648,7 @@ function mountConditionsPanel() {
 				}
 			}
 		});
-		conditionsPanel.addEventListener('keydown', function (event) {
+		conditionsPanel.addEventListener('keydown', function (event: any) {
 			if (!(event.target instanceof Element) || event.target.tagName !== 'INPUT') {
 				return;
 			}
@@ -685,7 +667,5 @@ function mountConditionsPanel() {
 			}
 		});
 	}
-	renderConditionEntries(initialConditionEntries());
-}
-`;
+	renderConditionEntries([]);
 }

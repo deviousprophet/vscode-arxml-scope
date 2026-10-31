@@ -5,11 +5,9 @@
  * Enter/Escape/Tab behaviour. The composition root owns row data, selection and
  * the actual write: every commit is reported through `host.commitEdit`.
  */
-import detailsEditorCss from './detailsEditor.css';
-
-export function detailsEditorStyles(): string {
-	return detailsEditorCss;
-}
+import './detailsEditor.css';
+import { inspectorElement } from '../../render/dom';
+import type { EditorProviderToWebview } from '../../../webviewProtocol';
 
 /**
  * True when `data` contains only characters the details control may accept for
@@ -46,14 +44,32 @@ export interface DetailsEditorHost {
 	focusAdjacentParameter(fromId: string, direction: string): string | undefined;
 }
 
-export function detailsEditorScript(): string {
-	return `
-${detailsInputAllowed.toString()}
-let detailsEdits = {};
-let pendingMove = null;
-let pendingFieldFocus = null;
-let flashId = null;
-let detailsEditorHost = {
+interface DetailsEdit {
+	rowId: string;
+	field: string;
+	input: any;
+	error: any;
+	pending: boolean;
+	type?: string;
+	original: string;
+}
+
+interface PendingMove {
+	dir: 'prev' | 'next';
+	from: string;
+}
+
+interface PendingFieldFocus {
+	rowId: string;
+	field: string;
+	dir: 'prev' | 'next';
+}
+
+let detailsEdits: Record<string, DetailsEdit> = {};
+let pendingMove: PendingMove | null = null;
+let pendingFieldFocus: PendingFieldFocus | null = null;
+let flashId: string | null = null;
+let detailsEditorHost: DetailsEditorHost = {
 	getRow: function () { return undefined; },
 	getSelectedId: function () { return undefined; },
 	isDetailsTab: function () { return true; },
@@ -69,11 +85,11 @@ let detailsEditorHost = {
 	focusAdjacentParameter: function () { return undefined; }
 };
 
-function setDetailsEditorHost(host) {
+export function setDetailsEditorHost(host: DetailsEditorHost): void {
 	detailsEditorHost = host || detailsEditorHost;
 }
 
-function clearDetailsError(edit) {
+function clearDetailsError(edit: DetailsEdit | null): void {
 	if (!edit) {
 		return;
 	}
@@ -83,7 +99,7 @@ function clearDetailsError(edit) {
 	}
 }
 
-function setDetailsError(edit, reason) {
+function setDetailsError(edit: DetailsEdit | null, reason: string): void {
 	if (!edit) {
 		return;
 	}
@@ -98,7 +114,7 @@ function setDetailsError(edit, reason) {
 	edit.error.textContent = '/* ' + reason + ' */';
 }
 
-function detailsSelectionChanged(rowId) {
+function detailsSelectionChanged(rowId: string | undefined): void {
 	for (const field of Object.keys(detailsEdits)) {
 		if (detailsEdits[field].rowId !== rowId) {
 			detailsEdits = {};
@@ -107,7 +123,7 @@ function detailsSelectionChanged(rowId) {
 	}
 }
 
-function detailsFieldId(field) {
+function detailsFieldId(field: string): string {
 	if (field === 'shortName') {
 		return 'details-short-name';
 	}
@@ -117,12 +133,12 @@ function detailsFieldId(field) {
 	return 'details-value';
 }
 
-function detailsStoredEdit(row, field) {
+function detailsStoredEdit(row: any, field: string): DetailsEdit | null {
 	const previous = detailsEdits[field];
 	return previous && previous.rowId === row.id ? previous : null;
 }
 
-function detailsErrorSpan() {
+function detailsErrorSpan(): any {
 	const error = document.createElement('span');
 	error.className = 'details-value-error';
 	error.setAttribute('role', 'status');
@@ -131,7 +147,7 @@ function detailsErrorSpan() {
 }
 
 /** The container field a Tab moves to, or undefined at either end of the pair. */
-function detailsFieldSibling(field, dir) {
+function detailsFieldSibling(field: string, dir: string): string | undefined {
 	if (field === 'shortName') {
 		return dir === 'prev' ? undefined : 'definitionRef';
 	}
@@ -141,8 +157,8 @@ function detailsFieldSibling(field, dir) {
 	return undefined;
 }
 
-function detailsRegisterKeydown(input, edit) {
-	input.addEventListener('keydown', function (event) {
+function detailsRegisterKeydown(input: any, edit: DetailsEdit): void {
+	input.addEventListener('keydown', function (event: any) {
 		if (event.key === 'Enter') {
 			event.preventDefault();
 			event.stopPropagation();
@@ -168,9 +184,9 @@ function detailsRegisterKeydown(input, edit) {
 			event.preventDefault();
 			event.stopPropagation();
 			if (edit.field === 'value') {
-				pendingMove = { dir: dir, from: edit.rowId };
+				pendingMove = { dir: dir as 'prev' | 'next', from: edit.rowId };
 			} else {
-				pendingFieldFocus = { rowId: edit.rowId, field: edit.field, dir: dir };
+				pendingFieldFocus = { rowId: edit.rowId, field: edit.field, dir: dir as 'prev' | 'next' };
 			}
 			commitDetailsEdit(edit.field);
 		}
@@ -183,13 +199,22 @@ function detailsRegisterKeydown(input, edit) {
 	});
 }
 
-function detailsValueInput(row, data) {
+/** A page reload starts from a clean draft state. */
+export function resetDetailsEditorState(): void {
+	detailsEdits = {};
+	pendingMove = null;
+	pendingFieldFocus = null;
+	flashId = null;
+}
+
+/** The details value control for one parameter row (input or Boolean select). */
+export function detailsValueInput(row: any, data: any): any {
 	const rowElement = document.createElement('div');
 	rowElement.className = 'inspector-row';
 	rowElement.appendChild(inspectorElement('span', 'inspector-key', 'Value'));
 	const type = row.parameterType || data.type || '';
 	const boolean = type === 'Boolean' && /^(true|false)$/i.test(String(row.value ?? ''));
-	const input = document.createElement(boolean ? 'select' : 'input');
+	const input: any = document.createElement(boolean ? 'select' : 'input');
 	input.id = 'details-value';
 	input.className = 'details-value';
 	input.setAttribute('data-node-id', row.id);
@@ -217,7 +242,7 @@ function detailsValueInput(row, data) {
 	const error = detailsErrorSpan();
 	rowElement.appendChild(input);
 	rowElement.appendChild(error);
-	const edit = {
+	const edit: DetailsEdit = {
 		rowId: row.id,
 		field: 'value',
 		input: input,
@@ -232,7 +257,7 @@ function detailsValueInput(row, data) {
 		edit.input.setAttribute('aria-invalid', 'true');
 	}
 	detailsRegisterKeydown(input, edit);
-	input.addEventListener('beforeinput', function (event) {
+	input.addEventListener('beforeinput', function (event: any) {
 		if (event.data && !detailsInputAllowed(type, event.data)) {
 			event.preventDefault();
 		}
@@ -240,11 +265,11 @@ function detailsValueInput(row, data) {
 	return rowElement;
 }
 
-function detailsFieldInput(row, field, label, value) {
+function detailsFieldInput(row: any, field: string, label: string, value: string): any {
 	const rowElement = document.createElement('div');
 	rowElement.className = 'inspector-row';
 	rowElement.appendChild(inspectorElement('span', 'inspector-key', label));
-	const input = document.createElement('input');
+	const input: any = document.createElement('input');
 	input.id = detailsFieldId(field);
 	input.className = 'details-value';
 	input.type = 'text';
@@ -260,7 +285,7 @@ function detailsFieldInput(row, field, label, value) {
 	const error = detailsErrorSpan();
 	rowElement.appendChild(input);
 	rowElement.appendChild(error);
-	const edit = {
+	const edit: DetailsEdit = {
 		rowId: row.id,
 		field: field,
 		input: input,
@@ -277,7 +302,7 @@ function detailsFieldInput(row, field, label, value) {
 	return rowElement;
 }
 
-function detailsContainerFields(row, data) {
+export function detailsContainerFields(row: any, data: any): any {
 	const fields = document.createElement('div');
 	fields.className = 'inspector-fields';
 	// An absent element has no text range to write; showing an editor for it would offer
@@ -291,8 +316,8 @@ function detailsContainerFields(row, data) {
 	return fields;
 }
 
-function focusDetailsInput() {
-	const input = document.getElementById('details-value');
+function focusDetailsInput(): boolean {
+	const input: any = document.getElementById('details-value');
 	if (!input) {
 		return false;
 	}
@@ -303,8 +328,8 @@ function focusDetailsInput() {
 	return true;
 }
 
-function focusDetailsField(field) {
-	const input = document.getElementById(detailsFieldId(field));
+function focusDetailsField(field: string): boolean {
+	const input: any = document.getElementById(detailsFieldId(field));
 	if (!input) {
 		return false;
 	}
@@ -315,7 +340,7 @@ function focusDetailsField(field) {
 	return true;
 }
 
-function detailsFirstField(row) {
+function detailsFirstField(row: any): string | undefined {
 	if (row.kind === 'container') {
 		if (row.shortName) {
 			return 'shortName';
@@ -328,7 +353,8 @@ function detailsFirstField(row) {
 	return undefined;
 }
 
-function beginDetailsEdit(rowId, field) {
+/** Open the first field of a row (or one named field) in the Details panel. */
+export function beginDetailsEdit(rowId: string, field?: string): boolean {
 	const row = detailsEditorHost.getRow(rowId);
 	if (!row) {
 		return false;
@@ -359,7 +385,7 @@ function beginDetailsEdit(rowId, field) {
 	return focusDetailsField(target);
 }
 
-function cancelDetailsEdit(field) {
+function cancelDetailsEdit(field: string): void {
 	const edit = detailsEdits[field];
 	if (!edit || edit.pending) {
 		return;
@@ -369,7 +395,7 @@ function cancelDetailsEdit(field) {
 	edit.input.focus();
 }
 
-function commitDetailsEdit(field) {
+function commitDetailsEdit(field: string): void {
 	const edit = detailsEdits[field];
 	if (!edit || edit.pending) {
 		return;
@@ -384,8 +410,8 @@ function commitDetailsEdit(field) {
 	}
 }
 
-function flashRow(nodeId) {
-	const item = detailsEditorHost.renderedItem(nodeId);
+function flashRow(nodeId: string | undefined): void {
+	const item = nodeId === undefined ? undefined : detailsEditorHost.renderedItem(nodeId);
 	if (!item) {
 		return;
 	}
@@ -393,14 +419,14 @@ function flashRow(nodeId) {
 	setTimeout(() => item.classList.remove('flash'), 1000);
 }
 
-function beginAdjacentDetailsEdit(move) {
+function beginAdjacentDetailsEdit(move: PendingMove): void {
 	const id = detailsEditorHost.focusAdjacentParameter(move.from, move.dir);
 	if (id) {
 		beginDetailsEdit(id);
 	}
 }
 
-function beginFieldDetailsEdit(focus) {
+function beginFieldDetailsEdit(focus: PendingFieldFocus): void {
 	const next = detailsFieldSibling(focus.field, focus.dir);
 	if (!next) {
 		return;
@@ -419,12 +445,16 @@ function beginFieldDetailsEdit(focus) {
 	beginDetailsEdit(row.id, next);
 }
 
-window.addEventListener('message', function (event) {
-	const message = event.data;
+/**
+ * The page's protocol handler for the Details editor. A re-scan clears every
+ * draft (the row may have moved or been removed); a pending move/focus runs
+ * after the new row store has painted.
+ */
+export function handleDetailsEditorMessage(message: EditorProviderToWebview): void {
 	if (!message) {
 		return;
 	}
-	if (message.type === 'model') {
+	if (message.type === 'document') {
 		const flash = flashId;
 		const move = pendingMove;
 		const focus = pendingFieldFocus;
@@ -455,15 +485,13 @@ window.addEventListener('message', function (event) {
 			pendingMove = null;
 			pendingFieldFocus = null;
 			flashId = null;
-			const reason =
-				typeof message.message === 'string' && message.message !== ''
-					? message.message
-					: 'The value was refused.';
+			const reason = typeof message.message === 'string' && message.message !== '' ? message.message : 'The value was refused.';
 			setDetailsError(edit, reason);
 			edit.input.focus();
 			return;
 		}
 	}
-});
-`;
 }
+
+/** Clear the stored draft when the selection moves to another row. */
+export { detailsSelectionChanged };

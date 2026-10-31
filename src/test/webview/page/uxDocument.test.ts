@@ -1,47 +1,51 @@
 /**
- * The Document-only quiet-source surface: no Tree toggle or Tree CSS, no source-line gutter,
- * bracket guides and selected-subtree highlighting, the editor surface/tokens, selection/focus,
- * details width, the details value editor and the layout state defaults.
- *
- * There is no webview DOM in the test host. The page's own `loadUiState` helper is driven
- * directly; the rest is asserted on the row data, the shell, its styles and the inlined
- * script. The browser pass is the rendered evidence.
+ * The Document-only quiet-source surface: one editor view, the sidebar shell,
+ * the tokens and the row data. The bundled page is exercised in
+ * `render.test.ts`; this suite pins the stylesheet and data contracts.
  */
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../../core/ecuc/scanner';
-import { RowPayload, renderHtml } from '../../../webview/editorViewer';
-import { refusalShownInDetails } from '../../../webview/components/sidebar/detailsPanel/detailsPanel';
+import { buildRows } from '../../../core/ecuc/renderRows';
+import { SORT_EXCEPTIONS } from '../../../core/ecuc/order';
+import { flattenRows } from '../../../webview/render/treeQuery';
+import { buildDocumentNodeRow } from '../../../webview/components/documentTree/documentRows';
 import { conditionTokens } from '../../../webview/render/rowView';
+import { refusalShownInDetails } from '../../../webview/components/sidebar/detailsPanel/detailsPanel';
 import { loadUiState } from '../../../webview/components/sidebar/sidebar';
+import { editorShell } from '../../../host/webviewShell';
 import { fixtureText } from '../../core/modelTestUtils';
-import { functionSource } from '../scriptTestUtils';
+import { webviewCss } from '../cssTestUtils';
+import { installMarkup } from '../pageTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
-function text(): string {
-	return fixtureText(FIXTURE);
+function style(): string {
+	return [
+		webviewCss('styles', 'tokens.css'),
+		webviewCss('styles', 'base.css'),
+		webviewCss('components', 'documentTree', 'documentTree.css'),
+		webviewCss('components', 'toolbar', 'toolbar.css'),
+		webviewCss('components', 'sidebar', 'sidebar.css'),
+	].join('\n');
 }
 
-function page(): string {
-	return renderHtml(scanEcucValues(text()), { nonce: 'test-nonce' });
+function shell(): string {
+	return editorShell({
+		cspSource: 'https://webview.test',
+		scriptUri: 'https://webview.test/editorViewer.js',
+		styleUri: 'https://webview.test/editorViewer.css',
+		nonce: 'test-nonce',
+	});
 }
 
-function payload(source = page()): RowPayload {
-	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(source);
-	assert.ok(match, 'the page embeds the row document');
-	return JSON.parse(match[1]) as RowPayload;
-}
-
-function styleOf(html: string): string {
-	const match = /<style[^>]*>([\s\S]*?)<\/style>/.exec(html);
-	assert.ok(match, 'one inlined style block');
-	return match[1];
+function rows() {
+	return buildRows(scanEcucValues(fixtureText(FIXTURE)), { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows;
 }
 
 suite('editor document view', () => {
 	test('Document is the only view; the sidebar shell and details exist', () => {
-		const html = page();
+		const html = shell();
 		assert.ok(html.includes('<body data-view="document">'));
 		assert.ok(!html.includes('id="view-toggle"'), 'the Tree view toggle is gone');
 		assert.ok(!html.includes('view-document') && !html.includes('view-tree'), 'no view switch labels');
@@ -58,487 +62,222 @@ suite('editor document view', () => {
 		assert.ok(html.includes('Select a line to see its details.'));
 		assert.ok(html.includes('Click a line or press Space.'));
 		assert.ok(!html.includes('id="notice"'), 'there is no notice banner under Search');
-		assert.ok(!html.includes('data-kind="warn"'), 'the toolbar warning surface is gone');
-		assert.ok(!html.includes('data-ln-digits'), 'no line-number gutter width');
 		assert.ok(!html.includes('data-line='), 'no source-line display data');
 		assert.ok(!html.includes('class="glyph"'), 'no Tree glyph column');
 		assert.ok(!html.includes('class="view-switch"'), 'no Tree view CSS');
 	});
 
 	test('the document CSS is one editor surface with the quiet-source tokens', () => {
-		const style = styleOf(page());
-		assert.ok(/body\[data-view\]\s*\{[^}]*--ecuc-fs:\s*var\(--vscode-editor-font-size, 13px\)/.test(style));
-		assert.ok(/body\[data-view\]\s*\{[^}]*--ecuc-lh:\s*calc\(var\(--ecuc-fs\) \* 1\.55\)/.test(style));
-		assert.ok(/--tok-keyword:\s*var\(--vscode-debugTokenExpression-boolean/.test(style));
-		assert.ok(/--tok-string:\s*var\(--vscode-debugTokenExpression-string/.test(style));
-		assert.ok(/--tok-number:\s*var\(--vscode-debugTokenExpression-number/.test(style));
-		assert.ok(/--tok-meta:\s*var\(--vscode-debugTokenExpression-name/.test(style));
-		assert.ok(/--tok-comment:\s*color-mix/.test(style));
-		assert.ok(/--tok-key:\s*var\(--vscode-symbolIcon-variableForeground/.test(style));
-		assert.ok(/--tok-punct:\s*color-mix/.test(style));
-		assert.ok(/--tok-dim:\s*color-mix/.test(style));
-		assert.ok(/--hover-bg:\s*var\(--vscode-list-hoverBackground/.test(style));
-		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(style));
-		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(style));
-		assert.ok(/--rail:\s*var\(--vscode-focusBorder/.test(style));
+		const css = style();
+		assert.ok(/body\[data-view\]\s*\{[^}]*--ecuc-fs:\s*var\(--vscode-editor-font-size, 13px\)/.test(css));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--ecuc-lh:\s*calc\(var\(--ecuc-fs\) \* 1\.55\)/.test(css));
+		assert.ok(/--tok-keyword:\s*var\(--vscode-debugTokenExpression-boolean/.test(css));
+		assert.ok(/--tok-string:\s*var\(--vscode-debugTokenExpression-string/.test(css));
+		assert.ok(/--tok-number:\s*var\(--vscode-debugTokenExpression-number/.test(css));
+		assert.ok(/--tok-meta:\s*var\(--vscode-debugTokenExpression-name/.test(css));
+		assert.ok(/--tok-comment:\s*color-mix/.test(css));
+		assert.ok(/--tok-key:\s*var\(--vscode-symbolIcon-variableForeground/.test(css));
+		assert.ok(/--tok-punct:\s*color-mix/.test(css));
+		assert.ok(/--tok-dim:\s*color-mix/.test(css));
+		assert.ok(/--hover-bg:\s*var\(--vscode-list-hoverBackground/.test(css));
+		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(css));
+		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(css));
+		assert.ok(/--rail:\s*var\(--vscode-focusBorder/.test(css));
 
-		assert.ok(/.document-tree-scroll\s*{[^}]*position:\s*relative/.test(style));
-		assert.ok(/.document-tree-scroll\s*{[^}]*font-family:\s*var\(--vscode-editor-font-family/.test(style));
-		assert.ok(/.document-tree-scroll\s*{[^}]*font-size:\s*var\(--ecuc-fs\)/.test(style));
-		assert.ok(/.document-tree-scroll\s*{[^}]*line-height:\s*var\(--ecuc-lh\)/.test(style));
-		assert.ok(/.document-tree-scroll\s*{[^}]*white-space:\s*pre/.test(style));
-		assert.ok(/\.row\s*\{[^}]*display:\s*flex/.test(style));
-		assert.ok(/\.row\s*\{[^}]*gap:\s*1ch/.test(style));
-		assert.ok(/\.row\s*\{[^}]*padding:\s*0 0 0 var\(--content-pad\)/.test(style));
-		assert.ok(/body\[data-view\]\s*\{[^}]*--doc-pad:\s*3ch/.test(style));
-		assert.ok(/body\[data-view\]\s*\{[^}]*--indent:\s*4ch/.test(style));
-		assert.ok(/body\[data-view\]\s*\{[^}]*--fold-gutter:\s*26px/.test(style));
+		assert.ok(/.document-tree-scroll\s*{[^}]*position:\s*relative/.test(css));
+		assert.ok(/.document-tree-scroll\s*{[^}]*font-family:\s*var\(--vscode-editor-font-family/.test(css));
+		assert.ok(/.document-tree-scroll\s*{[^}]*font-size:\s*var\(--ecuc-fs\)/.test(css));
+		assert.ok(/.document-tree-scroll\s*{[^}]*line-height:\s*var\(--ecuc-lh\)/.test(css));
+		assert.ok(/.document-tree-scroll\s*{[^}]*white-space:\s*pre/.test(css));
+		assert.ok(/\.row\s*\{[^}]*display:\s*flex/.test(css));
+		assert.ok(/\.row\s*\{[^}]*gap:\s*1ch/.test(css));
+		assert.ok(/\.row\s*\{[^}]*padding:\s*0 0 0 var\(--content-pad\)/.test(css));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--doc-pad:\s*3ch/.test(css));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--indent:\s*4ch/.test(css));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--fold-gutter:\s*26px/.test(css));
 		assert.ok(
-			/body\[data-view\]\s*\{[^}]*--content-pad:\s*calc\(var\(--fold-gutter\) \+ var\(--doc-pad\)\)/.test(style)
+			/body\[data-view\]\s*\{[^}]*--content-pad:\s*calc\(var\(--fold-gutter\) \+ var\(--doc-pad\)\)/.test(css)
 		);
 		assert.ok(
 			/body\[data-view="document"\] \.row\[data-level="3"\]\s*\{[^}]*padding-left:\s*calc\(var\(--content-pad\) \+ var\(--indent\) \* 2\)/.test(
-				style
+				css
 			)
 		);
-		assert.ok(
-			!/body\[data-view="document"\] \.brace \.row\[data-level="3"\]/.test(style),
-			'brace rows use the same indentation as labels'
-		);
-		assert.ok(!/--ln-w|--ln-digits|--gut/.test(style), 'no line-number/gutter variables');
-		assert.ok(!/row::before\s*\{[^}]*attr\(data-line\)/.test(style), 'no line-number pseudo-element');
-		assert.ok(!/repeating-linear-gradient/.test(style), 'no continuous indent guides');
-		assert.ok(/\.guide\s*\{[^}]*opacity:\s*0\.28/.test(style), 'bracket guides start faded');
-		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(style), 'hover makes the guide clearer');
+		assert.ok(!/--ln-w|--ln-digits|--gut/.test(css), 'no line-number/gutter variables');
+		assert.ok(/\.guide\s*\{[^}]*opacity:\s*0\.28/.test(css), 'bracket guides start faded');
+		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(css), 'hover makes the guide clearer');
 		assert.ok(
 			/body\[data-view="document"\] \.guide\[data-level="3"\]\s*\{[^}]*left:\s*calc\(var\(--content-pad\) \+ var\(--indent\) \* 2 \+ 0\.5ch\)/.test(
-				style
+				css
 			)
 		);
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(style));
-		assert.ok(
-			/body\[data-view="document"\] \.document-tree-meta\s*\{[^}]*padding:[^;]*var\(--content-pad\)/.test(style),
-			'the header aligns with the post-gutter content edge'
-		);
-		assert.ok(
-			/body\[data-view="document"\] \.node\[data-gap="true"\]\s*\{[^}]*padding-top:\s*var\(--ecuc-lh\)/.test(style)
-		);
-		assert.ok(/body\[data-view="document"\] \.document-tree-meta\s*\{[^}]*margin-bottom:\s*calc\(var\(--ecuc-lh\) \* 0\.5\)/.test(style));
-		assert.ok(
-			/body\[data-view="document"\] \.condition\s*\{[^}]*border:\s*1px solid transparent/.test(style),
-			'the condition chip keeps a compact edge'
-		);
-		assert.ok(
-			/body\[data-view="document"\] \.condition\[data-state="false"\]\s*\{[^}]*border-color:\s*var\(--vscode-errorForeground\)/.test(
-				style
-			),
-			'a false condition is marked by its edge'
-		);
-		assert.ok(/body\[data-view="document"\] \.comment > \.row\s*\{[^}]*--tok-comment/.test(style));
-		assert.ok(/body\[data-view="document"\] \.comment\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(style));
-		assert.ok(
-			/body\[data-view="document"\] \.comment\[data-gap="true"\]\s*\{[^}]*height:\s*calc\(var\(--ecuc-lh\) \* 2\)[^}]*padding-top:\s*var\(--ecuc-lh\)[^}]*box-sizing:\s*border-box/.test(
-				style
-			),
-			'an annotated module carries the group gap above its comment'
-		);
-		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*content:\s*"module /.test(style));
-		assert.ok(!/body\[data-view="document"\] \.row-meta\s*\{[^}]*display:\s*none/.test(style), 'metadata is not hidden');
-		assert.ok(!/body\[data-view="tree"\]/.test(style), 'no Tree scoped CSS');
-	});
-
-	test('the review fixes keep the dark-only contrast tiers', () => {
-		const style = styleOf(page());
-		assert.ok(/@supports \(color: color-mix\(in srgb, currentColor 50%, transparent\)\)/.test(style));
-		assert.ok(/body\[data-view\]\s*\{[^}]*--sel-bg: color-mix\([^;]*14%/.test(style));
-		assert.ok(/body\[data-view\]\s*\{[^}]*--subtree-bg: color-mix\([^;]*18%/.test(style));
-		assert.ok(!/body\.vscode-light/.test(style), 'light theme is not supported');
+		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(css));
+		assert.ok(/body\[data-view="document"\] \.comment\[data-gap="true"\]\s*\{[^}]*height:\s*calc\(var\(--ecuc-lh\) \* 2\)/.test(css));
+		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*content:\s*"module /.test(css));
+		assert.ok(!/body\[data-view="tree"\]/.test(css), 'no Tree scoped CSS');
 	});
 
 	test('rows carry no display-only source positions or line-number width', () => {
-		const rows = payload().rows;
-		for (const row of rows) {
-			assert.ok(!('sourceLine' in row), 'no source line');
-			assert.ok(!('line' in row), 'no 0-based line');
-			assert.ok(!('column' in row), 'no column');
-			assert.ok(!('endLine' in row), 'no end line');
-			assert.ok(!('endColumn' in row), 'no end column');
+		for (const row of rows()) {
+			for (const key of ['sourceLine', 'line', 'column', 'endLine', 'endColumn']) {
+				assert.ok(!(key in row), `no ${key}`);
+			}
 		}
-		assert.ok(!('digits' in payload()), 'no gutter width');
-		const build = functionSource(page(), 'buildDocumentNodeRow');
-		assert.ok(!build.includes('dataset.line'), 'the row has no line-number data');
-		const brace = functionSource(page(), 'buildDocumentBraceRow');
-		assert.ok(!brace.includes('dataset.line'), 'braces stay unnumbered');
 	});
 
 	test('document labels and reference values use the dark semantic accents', () => {
-		const style = styleOf(page());
-		assert.ok(/body\[data-view="document"\] \.label\s*\{[^}]*color:\s*var\(--vscode-editor-foreground\)/.test(style));
-		assert.ok(!/body\[data-view="document"\] \.row\.k-module \.label\s*\{/.test(style), 'no module-path label colour');
+		const css = style();
+		assert.ok(/body\[data-view="document"\] \.label\s*\{[^}]*color:\s*var\(--vscode-editor-foreground\)/.test(css));
+		assert.ok(/--container-accent:\s*#4EC9B0/.test(css), 'the dark container accent is fixed green');
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-kind="container"\] > \.row > \.label\s*\{[^}]*color:\s*var\(--container-accent\)/.test(
-				style
-			),
-			'a container is green like a type'
+				css
+			)
 		);
-		assert.ok(/--container-accent:\s*#4EC9B0/.test(style), 'the dark container accent is fixed green');
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-kind="reference"\] > \.row > \.value \.value-text\s*\{[^}]*--vscode-symbolIcon-functionForeground[^}]*font-style:\s*italic/.test(
-				style
-			),
-			'a reference value is yellow and italic'
+				css
+			)
 		);
-		assert.ok(!/body\[data-view="document"\] \.row\.k-parameter \.label,[\s\S]*?--vscode-symbolIcon-variableForeground/.test(style));
-		assert.ok(/body\[data-view="document"\] \.node\[data-kind="parameter"\] > \.row > \.label,[\s\S]*?--tok-key/.test(style));
-		assert.ok(/body\[data-view="document"\] \.document-tree-meta \.keyword\s*\{[^}]*--tok-keyword/.test(style));
-		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*--tok-keyword/.test(style));
-		assert.ok(/body\[data-view="document"\] \.variant,[\s\S]*?--tok-meta/.test(style));
-		assert.ok(!/body\[data-view="document"\] \.hex\s*\{/.test(style), 'the Document has no hex meta style');
-		assert.ok(!/body\[data-view="document"\] \.target\s*\{/.test(style), 'reference targets have no Document link style');
-		assert.ok(!/\.target:hover \.value-text/.test(style), 'reference targets have no hover underline');
+		assert.ok(/body\[data-view="document"\] \.node\[data-kind="parameter"\] > \.row > \.label,[\s\S]*?--tok-key/.test(css));
+		assert.ok(/body\[data-view="document"\] \.document-tree-meta \.keyword\s*\{[^}]*--tok-keyword/.test(css));
+		assert.ok(!/body\[data-view="document"\] \.hex\s*\{/.test(css), 'the Document has no hex meta style');
+		assert.ok(!/body\[data-view="document"\] \.target\s*\{/.test(css), 'reference targets have no Document link style');
 	});
 
 	test('quiet selection, focus rail and read-only values', () => {
-		const style = styleOf(page());
-		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(style));
-		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(style));
+		const css = style();
+		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(css));
+		assert.ok(/body\[data-view="document"\] \.node\[data-selected="true"\] > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(css));
 		assert.ok(
 			/body\[data-view="document"\] .document-tree:focus-within \.node\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)/.test(
-				style
+				css
 			)
 		);
-		assert.ok(/body\[data-view="document"\] \.node:focus-visible > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(style));
-		assert.ok(!style.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
-		assert.ok(!/body\[data-view="document"\] \.row\.k-parameter > \.value\s*\{[^}]*border-bottom/.test(style), 'no edit underline');
-		assert.ok(!style.includes('.value-edit'), 'no inline document editor');
-		assert.ok(
-			/body\[data-view="document"\] \.node\[data-kind="parameter"\] > \.row > \.value > \.value-text\s*\{[^}]*cursor:\s*pointer/.test(
-				style
-			)
-		);
-		assert.ok(
-			/body\[data-view="document"\] \.node\[data-subtree="true"\] > \.row,/.test(style),
-			'a selected container tints its subtree'
-		);
-		assert.ok(/--sel-container-bg: color-mix\([^;]*45%/.test(style), 'the selected container uses the visible neutral fill');
-		assert.ok(
-			/body\[data-view="document"\] \.node\[data-kind="container"\]\[data-selected="true"\] > \.row,[\s\S]*?background-color:\s*var\(--sel-container-bg\)/.test(
-				style
-			),
-			'a selected container keeps the visible fill'
-		);
-		assert.ok(
-			/body\[data-view="document"\] .document-tree:focus-within \.node\[data-kind="container"\]\[data-selected="true"\] > \.row,[\s\S]*?background-color:\s*var\(--sel-container-bg\)/.test(
-				style
-			),
-			'the focused container keeps the visible fill'
-		);
+		assert.ok(/body\[data-view="document"\] \.node:focus-visible > \.row\s*\{[^}]*box-shadow:\s*inset 2px 0 0 var\(--rail\)/.test(css));
+		assert.ok(!css.includes('--ecuc-selection-fg'), 'selection never recolours syntax');
+		assert.ok(!css.includes('.value-edit'), 'no inline document editor');
+		assert.ok(/--sel-container-bg: color-mix\([^;]*45%/.test(css));
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-kind="parameter"\]\[data-selected="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--sel-bg-focus\)[^}]*--sel-outline/.test(
-				style
-			),
-			'a selected parameter has a stronger outline'
+				css
+			)
 		);
 	});
 
-	test('the strip is compact and flat', () => {
-		const style = styleOf(page());
-		assert.ok(/\.toolbar\s*\{[^}]*height:\s*26px/.test(style));
-		assert.ok(/\.toolbar\s*\{[^}]*padding:\s*0 8px/.test(style));
-		assert.ok(/\.toolbar\s*\{[^}]*flex-wrap:\s*nowrap/.test(style));
-		assert.ok(/\.search-input\s*\{[^}]*height:\s*26px[^}]*var\(--vscode-input-background\)/.test(style));
-		assert.ok(/\.tool\s*\{[^}]*background:\s*transparent[^}]*border:\s*0/.test(style));
-		assert.ok(!style.includes('.view-switch'), 'no view switch');
-	});
-
-	test('the strip keeps the collapse/expand and details controls', () => {
-		const html = page();
-		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"[^>]*>[\s\S]*?<span class="lbl">Collapse<\/span>/.test(html));
-		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"[^>]*>[\s\S]*?<span class="lbl">Expand<\/span>/.test(html));
-		assert.ok(/id="collapse-all"[^>]*class="[^"]*sb-btn sb-btn-secondary/.test(html), 'toolbar controls use the shared secondary button');
-		assert.ok(/id="expand-all"[^>]*class="[^"]*sb-btn sb-btn-secondary/.test(html));
-		assert.ok(/\.icon-tool\s*\{[^}]*min-width:\s*28px/.test(styleOf(html)));
-		assert.ok(/\.twisty\s*\{[^}]*opacity:\s*0;/.test(styleOf(html)), 'expanded folds start hidden');
-		assert.ok(/\.twisty\s*\{[^}]*left:\s*2px/.test(styleOf(html)), 'the chevron is inset 2px into the gutter');
-		assert.ok(/\.twisty\s*\{[^}]*width:\s*16px/.test(styleOf(html)), 'the chevron is 16px wide');
-		assert.ok(/\.twisty\s*\{[^}]*top:\s*0[^}]*bottom:\s*0/.test(styleOf(html)), 'the hit area spans the full row height');
+	test('the strip is compact and keeps Collapse/Expand with opposite glyphs', () => {
+		const html = shell();
+		const css = style();
+		assert.ok(/\.toolbar\s*\{[^}]*height:\s*26px/.test(css));
+		assert.ok(/\.toolbar\s*\{[^}]*padding:\s*0 8px/.test(css));
+		assert.ok(/\.toolbar\s*\{[^}]*flex-wrap:\s*nowrap/.test(css));
+		assert.ok(/\.tool\s*\{[^}]*background:\s*transparent[^}]*border:\s*0/.test(css));
+		assert.ok(!css.includes('.view-switch'), 'no view switch');
+		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"/.test(html));
+		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"/.test(html));
+		assert.ok(/\.icon-tool\s*\{[^}]*min-width:\s*28px/.test(css));
+		assert.ok(/\.twisty\s*\{[^}]*opacity:\s*0;/.test(css), 'expanded folds start hidden');
+		assert.ok(/\.twisty\s*\{[^}]*left:\s*2px/.test(css), 'the chevron is inset into the gutter');
 		assert.ok(
-			/body\[data-view="document"\] .document-tree:hover \.node\[aria-expanded="true"\] > \.row > \.twisty/.test(styleOf(html)),
-			'expanded folds appear on tree hover'
-		);
-		assert.ok(
-			/body\[data-view="document"\] \.node\[aria-expanded="false"\] > \.row > \.twisty\s*\{[^}]*opacity:\s*1/.test(
-				styleOf(html)
-			),
+			/body\[data-view="document"\] \.node\[aria-expanded="false"\] > \.row > \.twisty\s*\{[^}]*opacity:\s*1/.test(css),
 			'collapsed folds stay visible'
 		);
 		assert.ok(
 			/body\[data-view="document"\] \.node\[data-kind="container"\]\[data-empty="true"\] > \.row::after\s*\{[^}]*content:\s*" \{ \}"/.test(
-				styleOf(html)
+				css
 			),
 			'an empty container is marked at rest'
 		);
-		assert.ok(functionSource(html, 'buildDocumentNodeRow').includes("node.dataset.empty = 'true'"), 'the marker is data-driven');
-		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(styleOf(html)));
-		assert.ok(!html.includes('id="view-toggle"'));
+		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(css));
+		const collapse = html.match(/id="collapse-all"[\s\S]*?<\/svg>/)?.[0] ?? '';
+		const expand = html.match(/id="expand-all"[\s\S]*?<\/svg>/)?.[0] ?? '';
+		assert.ok(collapse.includes('M4 2.25l4 4 4-4'), 'Collapse points inward');
+		assert.ok(expand.includes('M4 6.25 8 2.25l4 4'), 'Expand points outward');
 	});
 
 	test('the document keeps every parent §6 field and the direct .value', () => {
-		const rows = payload().rows;
-		const contA = rows.find((row) => row.label === 'ContA')!;
+		const list = rows();
+		const contA = list.find((row) => row.label === 'ContA')!;
 		assert.ok(contA.meta.some((part) => part.cls === 'short' && part.text === '"ContA"'));
-		const module = rows.find((row) => row.kind === 'module')!;
+		const module = list.find((row) => row.kind === 'module')!;
 		assert.ok(module.meta.some((part) => part.cls === 'variant'));
-		const ini = rows.find((row) => row.label === 'IniValue')!;
-		assert.ok(!ini.meta.some((part) => part.text.indexOf('(= 0x') === 0), 'no hex meta in the Document');
-		assert.strictEqual(ini.parameterType, 'Integer');
-		assert.deepStrictEqual(ini.formats, [
-			{ label: 'Decimal', value: '63' },
-			{ label: 'Hexadecimal', value: '0x3F' },
-			{ label: 'Binary', value: '0b00111111' },
-		]);
-		const peer = rows.find((row) => row.label === 'PeerIref')!;
-		assert.ok(peer.meta.some((part) => part.cls === 'context'));
 		assert.ok(module.meta.some((part) => part.cls === 'condition'));
 		assert.ok(module.meta.some((part) => part.cls === 'annotation'));
+		const ini = list.find((row) => row.label === 'IniValue')!;
+		assert.ok(!ini.meta.some((part) => part.text.indexOf('(= 0x') === 0), 'no hex meta in the Document');
+		assert.strictEqual(ini.parameterType, 'Integer');
+		const peer = list.find((row) => row.label === 'PeerIref')!;
+		assert.ok(peer.meta.some((part) => part.cls === 'context'));
 
-		const script = functionSource(page(), 'buildDocumentNodeRow');
-		assert.ok(script.includes('window.appendHighlighted(label, row.label)'), 'the label');
-		assert.ok(script.includes('window.valueSpan(row)'), 'the value');
-		assert.ok(script.includes('window.metaSpan({ ...row, meta: inlineMeta })'), 'the metadata line');
-		assert.ok(script.includes('rowElement.appendChild(window.valueSpan(row))'), 'the value stays a direct row child');
+		const dom = installMarkup('<body></body>');
+		try {
+			const node = buildDocumentNodeRow(ini, {
+				expandedIds: new Set(),
+				searchQuery: '',
+				subtreeIds: new Set(),
+			});
+			assert.strictEqual(node.querySelector('.row > .label')?.textContent, 'IniValue');
+			assert.ok(node.querySelector('.row > .value > .value-text'), 'the value stays a direct row child');
+		} finally {
+			dom.restore();
+		}
 	});
 
 	test('the value separator is muted punctuation and stays out of the value token', () => {
-		const script = page();
-		const value = functionSource(script, 'valueSpan');
-		assert.ok(value.includes("punct.className = 'punct'"));
-		assert.ok(value.includes("punct.textContent = '='"));
-		assert.ok(value.includes("text.className = 'value-text'"));
-		const style = styleOf(script);
-		assert.ok(/\.punct\s*\{[^}]*--tok-punct/.test(style));
-		assert.ok(/body\[data-view="document"\] \.value\s*\{[^}]*flex:\s*0 0 auto/.test(style));
+		const dom = installMarkup('<body></body>');
+		try {
+			const node = buildDocumentNodeRow(rows().find((row) => row.label === 'IniValue')!, {
+				expandedIds: new Set(),
+				searchQuery: '',
+				subtreeIds: new Set(),
+			});
+			const punct = node.querySelector('.value > .punct')!;
+			assert.strictEqual(punct.textContent, '=');
+			assert.strictEqual(node.querySelector('.value > .value-text')!.textContent, '63');
+			assert.ok(!node.querySelector('.value-text')!.textContent!.includes('='));
+		} finally {
+			dom.restore();
+		}
+		const tokens = conditionTokens('A == 1 && B != "x"');
+		assert.strictEqual(tokens.map((token) => 'A == 1 && B != "x"'.slice(token.start, token.end)).join(''), 'A == 1 && B != "x"');
+		assert.ok(tokens.some((token) => token.cls === 'syscond-name'));
+		assert.ok(tokens.some((token) => token.cls === 'syscond-number'));
+		assert.ok(tokens.some((token) => token.cls === 'syscond-string'));
+		assert.ok(tokens.some((token) => token.cls === 'syscond-operator'));
 	});
 
-	test('condition expressions are split into distinct syntax tokens without losing text', () => {
-		const expression = '(CANIPCORETYPE_SC == 1 && OTHER_SC != 0)';
-		const tokens = conditionTokens(expression);
-		assert.deepStrictEqual(
-			tokens.map((token) => `${token.cls}:${expression.slice(token.start, token.end)}`),
+	test('annotations render above their node and the sidebar width is specified', () => {
+		const display = flattenRows(
 			[
-				'syscond-punct:(',
-				'syscond-name:CANIPCORETYPE_SC',
-				': ',
-				'syscond-operator:==',
-				': ',
-				'syscond-number:1',
-				': ',
-				'syscond-operator:&&',
-				': ',
-				'syscond-name:OTHER_SC',
-				': ',
-				'syscond-operator:!=',
-				': ',
-				'syscond-number:0',
-				'syscond-punct:)',
-			]
+				{ id: 'm', parentId: null, level: 1, subtreeSize: 1, hasChildren: true, haystack: 'm', comments: ['[Note] above'] },
+				{ id: 'p', parentId: 'm', level: 2, subtreeSize: 0, hasChildren: false, haystack: 'p' },
+			],
+			{ braces: true }
 		);
-		assert.strictEqual(tokens.map((token) => expression.slice(token.start, token.end)).join(''), expression);
-
-		const typed = conditionTokens('(0x10 == -2 && "a b" == A.B)');
-		assert.deepStrictEqual(
-			typed.map((token) => `${token.cls}:${'(0x10 == -2 && "a b" == A.B)'.slice(token.start, token.end)}`),
-			[
-				'syscond-punct:(',
-				'syscond-number:0x10',
-				': ',
-				'syscond-operator:==',
-				': ',
-				'syscond-number:-2',
-				': ',
-				'syscond-operator:&&',
-				': ',
-				'syscond-string:"a b"',
-				': ',
-				'syscond-operator:==',
-				': ',
-				'syscond-name:A.B',
-				'syscond-punct:)',
-			]
-		);
-	});
-
-	test('annotations render above their node and long conditions wrap in Details', () => {
-		const html = page();
-		const build = functionSource(html, 'buildDocumentCommentRow');
-		assert.ok(build.includes("'row comment-row'"), 'a comment row uses the shared row layout');
-		assert.ok(build.includes("'comment-text'") && build.includes('window.appendHighlighted(body, text)'), 'the annotation text is highlighted like the row');
-		const display = functionSource(html, 'buildDisplayRow');
-		assert.ok(display.includes("flat.type === 'comment'"), 'comment rows are part of the display list');
-		assert.ok(
-			functionSource(html, 'buildHeightFn').includes('carriesGroupGap(rows, displayRows, index)'),
-			'the reserved height uses the shared gap predicate'
-		);
-		assert.ok(
-			functionSource(html, 'documentRowOptions').includes('carriesGroupGap(rows, displayRows, displayIndex)'),
-			'an annotated module carries the gap on its first comment'
-		);
-		assert.ok(
-			functionSource(html, 'documentRowOptions').includes('carriesGroupGap(rows, displayRows, displayIndex)'),
-			'a module without annotations keeps the gap on its node row'
-		);
-		const update = functionSource(html, 'updateInspector');
-		assert.ok(update.includes("conditionCodeRow('Condition'"));
-		assert.ok(update.includes("conditionCodeRow('Conditions'"));
-		const style = styleOf(html);
-		assert.ok(/\.condition-code\s*\{[^}]*white-space:\s*pre-wrap/.test(style));
-		assert.ok(
-			/body\[data-view="document"\] \.row-meta > span\.condition\s*\{[^}]*max-width:\s*56ch[^}]*text-overflow:\s*ellipsis/.test(
-				style
-			),
-			'the tree chip stays one bounded line'
-		);
-	});
-
-	test('the sidebar width and narrow layout are specified', () => {
-		const style = styleOf(page());
-		assert.ok(/#sidebar\s*\{[^}]*width:\s*var\(--sidebar-w, 360px\)/.test(style));
-		assert.ok(/#sidebar\s*\{[^}]*min-width:\s*var\(--sidebar-w, 360px\)/.test(style));
-		assert.ok(/#sidebar\s*\{[^}]*border-left:\s*1px solid/.test(style));
-		assert.ok(/#sidebar-resizer\s*\{[^}]*cursor:\s*col-resize/.test(style));
-		assert.ok(/#sidebar-resizer\s*\{[^}]*width:\s*6px/.test(style));
-		assert.ok(/#side-tabs\s*\{[^}]*width:\s*28px/.test(style));
-		assert.ok(/\.stab\s*\{[^}]*writing-mode:\s*vertical-rl/.test(style));
-		assert.ok(/\.stab\.active\s*\{[^}]*border-right-color:\s*var\(--vscode-textLink-foreground\)/.test(style));
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.icon-tool \.lbl[\s\S]*?display:\s*none/.test(style));
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.grow[\s\S]*?display:\s*none/.test(style));
-		assert.ok(/\.inspector-code\s*\{[^}]*white-space:\s*normal/.test(style));
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?#sidebar\s*\{[^}]*max-height:\s*45vh/.test(style));
-		assert.ok(/#main\s*\{[^}]*overflow:\s*hidden/.test(style), 'the page shell no longer owns the scroll');
-		assert.ok(/\.document-tree-scroll\s*\{[^}]*overflow:\s*auto/.test(style), 'the component owns both axes');
-		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(style));
-		assert.ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?steps\(1, end\)/.test(style));
-		assert.ok(/@media \(forced-colors: active\)[\s\S]*?body\[data-view\] mark/.test(style));
-		assert.ok(/body\.vscode-high-contrast\[data-view\] \.node\.flash/.test(style));
-		assert.ok(
-			/body\.vscode-high-contrast\[data-view\] \.node\[data-subtree="true"\] > \.row[\s\S]*?background:\s*transparent/.test(style),
-			'high contrast uses an outline, not the subtree fill'
-		);
-		assert.ok(
-			/body\.vscode-high-contrast\[data-view\] \.node\[data-kind="container"\] > \.row > \.label[\s\S]*?color:\s*var\(--vscode-editor-foreground\)/.test(style),
-			'high contrast keeps the container name readable instead of forcing the dark green'
-		);
-		assert.ok(
-			/@media \(forced-colors: active\)[\s\S]*?data-subtree="true"[\s\S]*?outline:/.test(style),
-			'forced colors also replaces the subtree fill'
-		);
-	});
-
-	test('an invalid edit keeps the text and adds a details comment reason', () => {
-		const html = page();
-		assert.ok(html.includes('details-value'));
-		assert.ok(html.includes('details-value-error'));
-		assert.ok(html.includes("error.textContent = '/* ' + reason + ' */'"));
-		assert.ok(html.includes("'aria-invalid', 'true'"));
-		assert.ok(html.includes('edit.input.focus()'));
-		const style = styleOf(html);
-		assert.ok(/\.details-value-error\s*\{[^}]*--vscode-errorForeground/.test(style));
-		assert.ok(/\.details-value\[aria-invalid="true"\]\s*\{[^}]*--vscode-inputValidation-errorBorder/.test(style));
+		assert.deepStrictEqual(display.map((row) => row.type).slice(0, 2), ['comment', 'node']);
+		const css = webviewCss('components', 'sidebar', 'sidebar.css');
+		assert.ok(/--sidebar-w/.test(css));
+		assert.ok(/@media \(max-width: 720px\)/.test(css));
 	});
 
 	test('a field refusal is left to the details panel', () => {
-		const html = page();
-		assert.ok(
-			html.includes("refusalShownInDetails(message, uiState.tab !== 'details')"),
-			'the message handler asks whether the Details tab already answered'
-		);
-		assert.ok(html.includes('clearDetailsStatus()'), 'the details status is cleared when the field already answers');
-		assert.ok(html.includes('setDetailsStatus(message)'), 'recoverable warnings go to the Details status');
-		assert.ok(!html.includes('id="notice"'), 'there is no toolbar banner');
-		assert.ok(html.includes('id="details-status"'), 'the Details tab has a status line');
-
-		assert.strictEqual(refusalShownInDetails({ inline: true }, false), true, 'visible details owns the refusal');
-		assert.strictEqual(refusalShownInDetails({ inline: true }, true), false, 'another tab uses the Details status');
-		assert.strictEqual(refusalShownInDetails({}, false), false, 'page-level problems use the Details status');
-	});
-
-	test('recoverable status lines route away from the toolbar and clear on the next action', () => {
-		const html = page();
-		assert.ok(html.includes('id="details-status"'), 'the Details tab has a status line');
-		assert.ok(html.includes("if (message.scope === 'conditions')"), 'condition warnings are scoped to Conditions');
-		assert.ok(html.includes('setConditionsStatus(message.message'), 'and go to its status line');
-		assert.ok(html.includes('setDetailsStatus(message)'), 'other recoverable warnings go to Details');
-		assert.ok(!html.includes('id="notice"'), 'there is no toolbar banner');
-		assert.ok(
-			/if \(message\.type === 'model'\) \{\s*clearDetailsStatus\(\)/.test(html),
-			'a model refresh clears the Details status'
-		);
-		assert.ok(html.includes('clearDetailsStatus();'), 'the status has one clear path');
-		assert.ok(/\.details-status:empty\s*\{[^}]*display:\s*none/.test(styleOf(html)));
+		assert.strictEqual(refusalShownInDetails({ inline: true }, false), true);
+		assert.strictEqual(refusalShownInDetails({ inline: true }, true), false);
+		assert.strictEqual(refusalShownInDetails({}, false), false);
 	});
 
 	test('the layout state defaults and persistence path are present', () => {
-		const script = page();
-		assert.ok(script.includes('let uiState = loadUiState(undefined)') && script.includes('setSidebarState(vscode.getState())'), 'the shell state is validated on boot');
-		assert.ok(script.includes('let persistUiState = function') && script.includes('setSidebarPersistence'), 'persistence is wired by the root');
-		assert.ok(script.includes('vscode.setState(uiState)'));
-		assert.ok(!script.includes('uiState.view'));
-		assert.ok(!script.includes('uiState.inspectorHidden'), 'the legacy inspector flag is dropped');
-		assert.ok(!script.includes('viewToggle'));
-	});
-
-	test('AC8: an invalid saved layout falls back to Details, 360px and no panes', () => {
-		const defaults = loadUiState(undefined);
-		assert.deepStrictEqual(defaults, { tab: 'details', sidebarWidth: 360, panes: {}, collapsed: [] });
-		assert.deepStrictEqual(loadUiState(null), defaults);
-		assert.deepStrictEqual(loadUiState({}), defaults);
-		assert.deepStrictEqual(loadUiState([]), defaults);
-		assert.strictEqual(loadUiState({ tab: 'nope' }).tab, 'details', 'an unknown tab falls back to Details');
-		assert.strictEqual(loadUiState({ sidebarWidth: 'wide' }).sidebarWidth, 360, 'an invalid width is ignored');
-		assert.strictEqual(loadUiState({ sidebarWidth: 1200 }).sidebarWidth, 900, 'a saved width is clamped');
-		assert.strictEqual(loadUiState({ sidebarWidth: 100 }).sidebarWidth, 260, 'a too-small width is clamped');
-		assert.deepStrictEqual(loadUiState({ panes: [] }).panes, {}, 'an array is not a pane map');
-		assert.deepStrictEqual(loadUiState({ panes: { a: 'x', b: -1 } }).panes, {});
-		assert.deepStrictEqual(loadUiState({ collapsed: ['a', 3, 'b'] }).collapsed, ['a', 'b']);
-		assert.deepStrictEqual(
-			loadUiState({ inspectorHidden: true }),
-			defaults,
-			'the legacy hide flag is ignored rather than written back'
-		);
-		assert.strictEqual(loadUiState({ tab: 'conditions' }).tab, 'conditions', 'the saved tab is restored');
-		assert.deepStrictEqual(loadUiState({ panes: { 'sb-details': 120 }, collapsed: ['sb-conditions-values'] }), {
+		assert.deepStrictEqual(loadUiState(undefined), {
 			tab: 'details',
 			sidebarWidth: 360,
-			panes: { 'sb-details': 120 },
-			collapsed: ['sb-conditions-values'],
+			panes: {},
+			collapsed: [],
 		});
-	});
-
-	test('R7: Collapse and Expand have different, semantically opposite glyphs', () => {
-		const html = page();
-		const details = /<button id="collapse-all"[\s\S]*?<\/button>/.exec(html);
-		const expand = /<button id="expand-all"[\s\S]*?<\/button>/.exec(html);
-		assert.ok(details && expand, 'both toolbar controls exist');
-
-		const collapsePath = /<path d="([^"]+)"/.exec(details[0])?.[1];
-		const expandPath = /<path d="([^"]+)"/.exec(expand[0])?.[1];
-		assert.ok(collapsePath && expandPath, 'both carry an inline SVG path');
-		assert.notStrictEqual(collapsePath, expandPath, 'the two controls do not look the same');
-
-		// Expand spreads outward: a chevron whose apex is above the top edge and one whose
-		// apex is below the bottom edge. Collapse squeezes inward: apexes point at the centre.
-		assert.ok(expandPath!.startsWith('M4 6.25 8 2.25l4 4'), 'the upper chevron points up and away');
-		assert.ok(expandPath!.includes('M4 9.75l4 4 4-4'), 'the lower chevron points down and away');
-		assert.ok(collapsePath!.startsWith('M4 2.25l4 4 4-4'), 'the upper chevron points down toward the centre');
-		assert.ok(collapsePath!.includes('M4 13.75l4-4 4 4'), 'the lower chevron points up toward the centre');
-
-		assert.ok(/id="collapse-all"[^>]*title="Collapse every container"/.test(html));
-		assert.ok(/id="expand-all"[^>]*title="Expand every container"/.test(html));
-		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"/.test(html));
-		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"/.test(html));
-		assert.ok(html.includes('<span class="lbl">Collapse</span>'));
-		assert.ok(html.includes('<span class="lbl">Expand</span>'));
-		assert.ok(/id="collapse-all"[^>]*><svg[^>]*stroke-linejoin="round"/.test(html));
-		assert.ok(/id="expand-all"[^>]*><svg[^>]*stroke-linejoin="round"/.test(html));
+		assert.deepStrictEqual(loadUiState({ inspectorHidden: true }), {
+			tab: 'details',
+			sidebarWidth: 360,
+			panes: {},
+			collapsed: [],
+		});
 	});
 });

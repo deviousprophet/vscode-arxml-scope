@@ -5,10 +5,48 @@
 import * as assert from 'assert';
 
 import {
-	detailsEditorScript,
-	detailsEditorStyles,
 	detailsInputAllowed,
+	detailsValueInput,
+	handleDetailsEditorMessage,
+	setDetailsEditorHost,
 } from '../../../webview/components/detailsEditor/detailsEditor';
+import { webviewCss } from '../cssTestUtils';
+import { installMarkup } from '../pageTestUtils';
+
+function row(overrides: Record<string, unknown> = {}): any {
+	return {
+		id: 'p1',
+		kind: 'parameter',
+		label: 'IniValue',
+		value: '63',
+		parameterType: 'Integer',
+		valueKind: 'numeric',
+		shortName: '',
+		definitionRef: '/P/M/C/IniValue',
+		meta: [],
+		hasChildren: false,
+		...overrides,
+	};
+}
+
+function host(overrides: Record<string, unknown> = {}): any {
+	return {
+		getRow: (id: string) => (id === 'p1' ? row() : undefined),
+		getSelectedId: () => 'p1',
+		isDetailsTab: () => true,
+		showTab: () => undefined,
+		showSection: () => undefined,
+		renderedItem: () => undefined,
+		selectItem: () => undefined,
+		setSelection: () => undefined,
+		postSelect: () => undefined,
+		focusRow: () => true,
+		updateInspector: () => undefined,
+		commitEdit: () => undefined,
+		focusAdjacentParameter: () => undefined,
+		...overrides,
+	};
+}
 
 suite('DetailsEditor component', () => {
 	test('insertion guards follow the parameter type without rewriting text', () => {
@@ -24,36 +62,68 @@ suite('DetailsEditor component', () => {
 	});
 
 	test('the component CSS owns the input and its inline refusal reason', () => {
-		const css = detailsEditorStyles();
+		const css = webviewCss('components', 'detailsEditor', 'detailsEditor.css');
 		assert.ok(/\.details-value\s*\{[^}]*--vscode-input-background/.test(css));
 		assert.ok(/\.details-value\[aria-invalid="true"\]\s*\{[^}]*--vscode-inputValidation-errorBorder/.test(css));
 		assert.ok(/\.details-value-error\s*\{[^}]*--vscode-errorForeground/.test(css));
 	});
 
-	test('commits and selection reach the host through callbacks', () => {
-		const script = detailsEditorScript();
-		for (const name of [
-			'detailsInputAllowed',
-			'detailsRegisterKeydown',
-			'detailsValueInput',
-			'beginDetailsEdit',
-			'commitDetailsEdit',
-		]) {
-			assert.ok(script.includes(`function ${name}(`), `${name} is emitted`);
+	test('Integer and Float get a text input; Boolean gets a true/false select', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			const integer = detailsValueInput(row(), { type: 'Integer' });
+			const input = integer.querySelector('input');
+			assert.ok(input, 'an input for a numeric parameter');
+			assert.strictEqual(input.id, 'details-value');
+			assert.strictEqual(input.getAttribute('data-field'), 'value');
+			assert.ok(input.getAttribute('aria-label').includes('IniValue'));
+			const bool = detailsValueInput(row({ parameterType: 'Boolean', value: 'true' }), { type: 'Boolean' });
+			const select = bool.querySelector('select');
+			assert.ok(select, 'Boolean uses a select');
+			assert.deepStrictEqual(
+				Array.from(select.options).map((option: any) => option.value),
+				['true', 'false']
+			);
+		} finally {
+			dom.restore();
 		}
-		assert.ok(script.includes('detailsEditorHost.commitEdit('));
-		assert.ok(script.includes('detailsEditorHost.getRow('));
-		assert.ok(script.includes('detailsEditorHost.showTab('));
-		assert.ok(!script.includes('vscode'), 'the component never posts provider messages');
-		assert.ok(!script.includes('rowById'), 'the component never reads the host row map directly');
 	});
 
-	test('the serialized script keeps Enter, Escape and Tab owned by the field', () => {
-		const script = detailsEditorScript();
-		assert.ok(script.includes("event.key === 'Enter'"));
-		assert.ok(script.includes("event.key === 'Escape'"));
-		assert.ok(script.includes("event.key === 'Tab'"));
-		assert.ok(script.includes('stopPropagation()'));
-		assert.ok(script.includes("event.shiftKey ? 'prev' : 'next'"));
+	test('Enter commits through the host and Escape restores the original text', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			const commits: any[] = [];
+			setDetailsEditorHost(host({ commitEdit: (message: any) => commits.push(message) }));
+			const container = detailsValueInput(row(), { type: 'Integer' });
+			const input = container.querySelector('input');
+			input.value = '99';
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			assert.deepStrictEqual(commits, [{ type: 'edit', nodeId: 'p1', value: '99' }]);
+			// A committed edit waits for the host's next document message; emulate that
+			// re-scan, then Escape on a fresh field restores the committed row value.
+			handleDetailsEditorMessage({ type: 'document', document: { rows: [] } });
+			const fresh = detailsValueInput(row(), { type: 'Integer' }).querySelector('input');
+			fresh.value = 'broken';
+			fresh.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+			assert.strictEqual(fresh.value, '63', 'Escape restores the row value');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a refusal marks the waiting field invalid and shows the reason inline', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			setDetailsEditorHost(host());
+			const container = detailsValueInput(row(), { type: 'Integer' });
+			const input = container.querySelector('input');
+			input.value = 'x';
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			handleDetailsEditorMessage({ type: 'notice', message: 'Not an integer.', kind: 'warn', inline: true });
+			assert.strictEqual(input.getAttribute('aria-invalid'), 'true');
+			assert.strictEqual(container.querySelector('.details-value-error').textContent, '/* Not an integer. */');
+		} finally {
+			dom.restore();
+		}
 	});
 });

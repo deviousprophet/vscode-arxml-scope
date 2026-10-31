@@ -28,9 +28,8 @@ export interface MatchRange {
 
 /**
  * Every case-insensitive occurrence of `query` in `text`. The empty query matches
- * nothing, so the caller decides what "no query" means. Serialized into the
- * webview with `toString()`, so searching and highlighting share this one
- * definition.
+ * nothing, so the caller decides what "no query" means. Searching and
+ * highlighting share this one definition.
  */
 export function matchRanges(text: string, query: string): MatchRange[] {
 	const needle = query.trim().toLowerCase();
@@ -168,8 +167,6 @@ export function flattenRows(rows: readonly TreeRow[], options: FlattenOptions = 
  * annotated module carries it on its first comment row; without comments the
  * node row carries it, exactly as before. The CSS and `heightFn` both call this,
  * so the reserved height and the painted padding can never disagree.
- *
- * Serialized into the page with `toString()`: keep the body self-contained.
  */
 export function carriesGroupGap(
 	rows: readonly { kind: string }[],
@@ -189,26 +186,6 @@ export function carriesGroupGap(
 	}
 	const previous = display[index - 1];
 	return !previous || previous.rowIndex !== flat.rowIndex;
-}
-
-/**
- * The serialized matcher, with a stable page name.
- *
- * Bundling the editor and diff pages can rename one copy of `matchRanges` (for
- * example to `matchRanges2`). `appendHighlighted` is serialized separately and
- * always calls `matchRanges`, so the page gets a stable wrapper when the
- * compiler renamed the implementation.
- */
-export function matchRangesScript(): string {
-	const source = matchRanges.toString();
-	const name = matchRanges.name;
-	if (name === 'matchRanges') {
-		return source;
-	}
-	return `${source}
-function matchRanges(text, query) {
-	return ${name}(text, query);
-}`;
 }
 
 /**

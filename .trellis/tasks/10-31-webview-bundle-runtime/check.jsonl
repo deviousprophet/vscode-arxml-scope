@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Verify webview entrypoints and host split"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify CSP and no serialized injection"}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify tests remain green"}

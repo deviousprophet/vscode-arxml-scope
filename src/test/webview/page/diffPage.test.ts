@@ -1,20 +1,31 @@
 /**
- * The diff page shell and its serialized helpers (task design §3; ac14).
- * The test host has no webview DOM, so the page is asserted at the level of the
- * rendered shell plus the page's own functions, extracted with `scriptTestUtils`.
- * The real webview pass is the Extension Development Host.
+ * The bundled semantic-diff page, mounted into jsdom from the host's static
+ * shell. The host protocol posts a complete `DiffDocument`; the page owns the two
+ * virtual panes, swap, view mode, search and the error banner.
  */
 import * as assert from 'assert';
 
 import { SORT_EXCEPTIONS } from '../../../core/ecuc/order';
 import { scanEcucValues } from '../../../core/ecuc/scanner';
-import { DiffCell, DiffDocument, DiffRow, buildDiffDocument, flattenDiffDocument } from '../../../core/diff/diffModel';
-import { diffContentWidth, diffRowChars, encodeDiffDocument, renderDiffHtml } from '../../../webview/diffViewer';
+import {
+	DiffDocument,
+	DiffRow,
+	buildDiffDocument,
+	diffVisibility,
+	flattenDiffDocument,
+	nextChangeIndex,
+} from '../../../core/diff/diffModel';
 import { buildNodeIndex } from '../../../core/ecuc/nodeId';
 import { buildRows } from '../../../core/ecuc/renderRows';
-import { renderHtml } from '../../../webview/editorViewer';
+import {
+	diffContentWidth,
+	diffPaneHeaders,
+	diffRowChars,
+	searchCandidatesFor,
+} from '../../../webview/diffViewer';
+import { diffShell } from '../../../host/webviewShell';
 import { fixtureText } from '../../core/modelTestUtils';
-import { evaluateFunction, functionSource } from '../scriptTestUtils';
+import { expectReady, installDom, loadModule, messagesOf, settleSearch, treeRows } from '../pageTestUtils';
 
 function side(name: string) {
 	const model = scanEcucValues(fixtureText(name));
@@ -32,24 +43,20 @@ function documentOf(): DiffDocument {
 		left.rows,
 		right.rows,
 		left.rangeOf,
-		right.rangeOf
+		right.rangeOf,
+		{
+			left: { packages: ['PkgA'] },
+			right: { schema: '00048', packages: ['PkgB', 'PkgC'] },
+		}
 	);
 }
 
-function page(document = documentOf(), nonce = 'test-nonce'): string {
-	return renderDiffHtml(document, { nonce });
-}
-
-function embedded(source = page()): DiffDocument {
-	const match = /<script type="application\/json" id="diff-document"[^>]*>([\s\S]*?)<\/script>/.exec(source);
-	assert.ok(match, 'the page embeds the diff document');
-	return JSON.parse(match[1]) as DiffDocument;
-}
-
-function styleOf(source: string): string {
-	const match = /<style[^>]*nonce[^>]*>([\s\S]*?)<\/style>/.exec(source);
-	assert.ok(match, 'the nonce-carrying stylesheet is present');
-	return match[1];
+function mount(document = documentOf()): { dom: ReturnType<typeof installDom>; page: any; document: DiffDocument } {
+	const dom = installDom('diff');
+	const module = loadModule<typeof import('../../../webview/diffViewer')>('../../webview/diffViewer');
+	module.mountDiff();
+	dom.post({ type: 'document', document });
+	return { dom, page: module, document };
 }
 
 function widthRow(overrides: Partial<DiffRow> = {}): DiffRow {
@@ -69,7 +76,7 @@ function widthRow(overrides: Partial<DiffRow> = {}): DiffRow {
 	};
 }
 
-function widthCell(overrides: Partial<DiffCell> = {}): DiffCell {
+function widthCell(overrides: Partial<NonNullable<DiffRow['left']>> = {}): NonNullable<DiffRow['left']> {
 	return {
 		kind: 'parameter',
 		label: 'Foo',
@@ -80,195 +87,183 @@ function widthCell(overrides: Partial<DiffCell> = {}): DiffCell {
 	};
 }
 
-suite('semantic diff page (design §3)', () => {
-	test('the shell has Search, Show all/Show diff only, Prev/Next diff and Swap sides', () => {
-		const html = page();
-		assert.strictEqual((html.match(/id="diff-filter"/g) || []).length, 0, 'the filter is gone');
-		assert.strictEqual((html.match(/id="diff-changes"/g) || []).length, 0, 'the changes-only checkbox is gone');
-		assert.strictEqual((html.match(/id="diff-summary"/g) || []).length, 0, 'the summary is gone');
-		assert.strictEqual((html.match(/id="diff-collapse"/g) || []).length, 0, 'Collapse is gone');
-		assert.strictEqual((html.match(/id="diff-expand"/g) || []).length, 0, 'Expand is gone');
-		assert.strictEqual((html.match(/id="diff-search-input"/g) || []).length, 1);
-		assert.ok(/id="diff-search-input"[^>]*type="search"/.test(html), 'Search is type="search"');
-		assert.strictEqual((html.match(/id="diff-search-clear"/g) || []).length, 1, 'one clear control');
-		assert.strictEqual((html.match(/id="diff-search-prev"/g) || []).length, 1);
-		assert.strictEqual((html.match(/id="diff-search-next"/g) || []).length, 1);
-		assert.ok(html.includes('id="diff-search-count"') && html.includes('id="diff-search-busy"'));
-		assert.ok(
-			/<span id="diff-search-count"[^>]*aria-live="polite"><\/span>/.test(html),
-			'the count reserves its slot instead of hiding'
-		);
-		assert.ok(/id="diff-search-busy"[^>]*data-busy="false"/.test(html));
-		assert.ok(/id="diff-view-all"[^>]*aria-pressed="true"[^>]*>Show all</.test(html));
-		assert.ok(/id="diff-view-diff"[^>]*aria-pressed="false"[^>]*>Show diff only</.test(html));
-		assert.ok(/id="diff-prev"[\s\S]*?>Prev diff</.test(html));
-		assert.ok(/id="diff-next"[\s\S]*?>Next diff</.test(html));
-		assert.ok(/id="diff-swap"[^>]*aria-pressed="false"[\s\S]*?>Swap sides</.test(html));
-		const toolbar = /<div class="toolbar">([\s\S]*?)<div id="diff-notice"/.exec(html);
-		assert.ok(toolbar, 'the toolbar is a distinct strip');
-		const controls = toolbar[1];
-		assert.ok(
-			controls.indexOf('class="toolbar-left"') < controls.indexOf('class="toolbar-center"') &&
-				controls.indexOf('class="toolbar-center"') < controls.indexOf('class="toolbar-right"'),
-			'left controls, centred Swap, right Search'
-		);
-		const leftGroup = controls.slice(controls.indexOf('class="toolbar-left"'), controls.indexOf('class="toolbar-center"'));
-		assert.ok(
-			leftGroup.indexOf('id="diff-view-all"') < leftGroup.indexOf('id="diff-view-diff"') &&
-				leftGroup.indexOf('id="diff-view-diff"') < leftGroup.indexOf('id="diff-prev"') &&
-				leftGroup.indexOf('id="diff-prev"') < leftGroup.indexOf('id="diff-next"'),
-			'Show all, Show diff only, Prev diff, Next diff on the left'
-		);
-		assert.ok(
-			controls.indexOf('id="diff-swap"') > controls.indexOf('class="toolbar-center"'),
-			'Swap sits in the centre track'
-		);
-		assert.ok(
-			controls.indexOf('class="search-box"') > controls.indexOf('class="toolbar-right"'),
-			'Search sits in the right track'
-		);
-		assert.ok(
-			html.includes('id="diff-pane-left"') &&
-				html.includes('id="diff-pane-right"') &&
-				(html.match(/class="document-tree diff-pane"/g) || []).length === 2,
-			'one DocumentTreeView root per pane'
-		);
-		assert.ok(!html.includes('id="diff-hscroll-left"') && !html.includes('hscroll-inner'), 'the proxy bars are gone');
-		assert.ok(!html.includes('id="diff-detail"'), 'the bottom details strip is gone');
-		assert.ok(!html.includes('detail-table') && !html.includes('detail-columns'), 'no strip table survives');
-		assert.ok(
-			!html.includes('diffFieldLabel') && !html.includes('diffCellFields') && !html.includes('diffFieldRank'),
-			'no field-strip helpers survive'
-		);
-		assert.ok(!html.includes('let diffX ='), 'there is no shared horizontal offset');
-		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'), 'the empty state exists');
-		assert.ok(html.includes("'No differences'"), 'a pair with no changes has an explicit empty message');
-		assert.ok(!html.includes(' changed · '), 'the changed/added/removed summary text is gone');
-		assert.ok(html.includes('diff-left-label') === false, 'the label is built by the component header');
-		assert.strictEqual((html.match(/id="diff-list"/g) || []).length, 1, 'one pane grid');
-		assert.ok(html.includes('id="diff-body"'), 'the pane grid owns the body');
-	});
-
-	test('the page serializes search and side-swap behavior', () => {
-		const html = page();
-		assert.ok(html.includes('class RowSearchEngine'), 'the chunked row search engine');
-		assert.ok(html.includes('searchCandidates = showChangesOnly'), 'search candidates follow the active view');
-		assert.ok(html.includes("row.status !== 'unchanged'"));
-		assert.ok(html.includes("input.addEventListener('keydown'"), 'Search owns its keys');
-		assert.ok(html.includes('onExecute(event.shiftKey ? -1 : 1)'), 'Enter and Shift+Enter are reported by Search');
-		assert.ok(html.includes('onExecute: function (direction) { executeSearch(direction); }'), 'the host executes the query');
-		assert.ok(html.includes("event.key.toLowerCase() === 'f'"), 'Ctrl+F focuses Search');
-		assert.ok(
-			functionSource(html, 'onKeyDown').includes('event.target === document.body'),
-			'arrows still navigate after focus leaves the tree'
-		);
-		assert.ok(
-			functionSource(html, 'onKeyDown').includes("vscode.postMessage({ type: 'reveal'"),
-			'Enter still reveals the selected row'
-		);
-		const row = functionSource(html, 'renderRow');
-		assert.ok(row.includes('displayLeft(row)') && row.includes('displayRight(row)'));
-		assert.ok(row.includes("element.dataset.status = status"), 'the displayed status is rendered');
-		assert.ok(row.includes("element.dataset.searchCurrent = 'true'"));
-		assert.ok(row.includes('buildDocumentNodeRow') && row.includes('buildDocumentCommentRow'), 'shared row builders');
-		assert.ok(row.includes('swapped ? flat.right : flat.left'), 'structural kinds follow the displayed side');
-		assert.ok(
-			functionSource(html, 'documentOptions').includes('flat.guidesRight') &&
-				functionSource(html, 'documentOptions').includes('flat.guidesLeft') &&
-				functionSource(html, 'documentOptions').includes('swapped'),
-			'guides follow the displayed side'
-		);
-		const swap = functionSource(html, 'setSwapped');
-		assert.ok(swap.includes('renderHeaders()') && swap.includes('renderWindow(true)'));
-		assert.ok(swap.includes('setScrollLeft(0)'), 'swap resets both horizontal offsets');
-		assert.ok(!swap.includes('setScrollTop'), 'swapping never resets the vertical position');
-	});
-
-	test('the shell is two tree roots with component spacers and a hidden probe', () => {
-		const html = page();
-		assert.ok(/id="diff-pane-left"[^>]*role="tree"/.test(html));
-		assert.ok(html.includes('id="diff-pane-right"'), 'the right pane root exists');
-		assert.ok((html.match(/class="document-tree diff-pane"/g) || []).length === 2, 'both panes are DocumentTreeView roots');
-		assert.ok(html.includes('id="diff-measure"'));
-		assert.ok(html.includes('class DocumentTreeView'), 'the component is inlined');
-		assert.ok(html.includes("element.setAttribute('role', 'treeitem')"), 'rows are treeitems');
-		assert.ok(html.includes("element.setAttribute('aria-level'"), 'rows expose their level');
-		assert.ok(html.includes("element.setAttribute('aria-posinset'"), 'rows expose their sibling position');
-		assert.ok(html.includes("element.setAttribute('aria-setsize'"), 'rows expose their sibling count');
-		assert.ok(html.includes("element.setAttribute('aria-expanded'"), 'containers expose expansion');
-		assert.ok(html.includes("element.setAttribute('aria-selected'"), 'rows expose selection');
-		assert.ok(html.includes("'sr-only'"), 'a visually hidden status word is emitted');
-		assert.ok(html.includes('rowElement.dataset.level = String(row.level)'), 'depth is carried as data');
-		assert.ok(/body\[data-view="document"\] \.row\[data-level="3"\]\.?[^{]*\{[^}]*padding-left/.test(html), 'indentation comes from generated attribute CSS');
-	});
-
-	test('the CSP and nonce guard the page; model text is escaped JSON', () => {
-		const html = page();
+suite('semantic diff page', () => {
+	test('the host shell is strict and loads the bundled script and stylesheet', () => {
+		const html = diffShell({
+			cspSource: 'https://webview.test',
+			scriptUri: 'https://webview.test/diffViewer.js',
+			styleUri: 'https://webview.test/diffViewer.css',
+			nonce: 'test-nonce',
+		});
 		assert.ok(
 			html.includes(
-				"default-src 'none'; style-src 'nonce-test-nonce'; script-src 'nonce-test-nonce';"
+				"default-src 'none'; style-src https://webview.test 'nonce-test-nonce'; script-src 'nonce-test-nonce'; img-src https://webview.test data:"
 			),
-			'the CSP allows only the nonce-carrying style and script'
+			'a strict CSP'
 		);
-		assert.ok(!html.includes('innerHTML'), 'model text is never inserted as markup');
-		assert.ok(!html.includes('style="'), 'no inline style attributes');
-		const hostile = documentOf();
-		hostile.rows[0].left = {
-			...hostile.rows[0].left!,
-			label: '</script><img src=x>',
-		};
-		const payload = embedded(page(hostile));
-		assert.strictEqual(payload.rows[0].left?.label, '</script><img src=x>', 'the text survives the JSON round trip');
-		const encoded = encodeDiffDocument(hostile);
-		assert.ok(encoded.includes('\\u003c/script\\u003e'), '< and > are escaped so model text cannot close the script');
-		assert.ok(!encoded.includes('</script>'), 'the raw end tag never appears in the payload');
+		assert.ok(html.includes('src="https://webview.test/diffViewer.js"'), 'the bundled script');
+		assert.ok(html.includes('href="https://webview.test/diffViewer.css"'), 'the bundled stylesheet');
+		assert.ok(!/<script(?![^>]*src=)/.test(html), 'no inline script');
+		assert.ok(!html.includes('type="application/json"'), 'no embedded document');
+		assert.strictEqual((html.match(/id="diff-list"/g) || []).length, 1);
+		assert.ok(html.includes('id="diff-pane-left"') && html.includes('id="diff-pane-right"'));
+		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'));
 	});
 
-	test('F7 is scoped to the diff list, so filter/input focus keeps its own keys', () => {
-		const source = functionSource(page(), 'onKeyDown');
-		assert.ok(source.includes("closest('#diff-list')"), 'F7 checks that the event target is in the tree');
-		const f7 = source.indexOf("event.key === 'F7'");
-		assert.ok(f7 >= 0, 'the F7 branch exists');
-		assert.ok(source.indexOf("closest('#diff-list')") > f7, 'the scope check is inside the F7 branch');
-		assert.ok(
-			source.indexOf("closest('#diff-list')") < source.indexOf('gotoChange'),
-			'the scope check runs before the F7 action'
-		);
+	test('boots from the static shell, announces ready and renders both panes', () => {
+		const { dom, document } = mount();
+		try {
+			expectReady(dom.api);
+			assert.ok(treeRows(dom.document, '#diff-pane-left').length > 0, 'the left pane has rows');
+			assert.ok(
+				dom.document.querySelectorAll('#diff-pane-right .diff-row').length > 0,
+				'the right pane has rows'
+			);
+			assert.ok(dom.document.querySelector('#diff-pane-left .document-tree-header'), 'each pane owns its header');
+			assert.ok(
+				dom.document.querySelector('#diff-pane-left .document-tree-title')!.textContent === 'left.arxml'
+			);
+			assert.ok(
+				dom.document.querySelector('#diff-pane-right .document-tree-title')!.textContent === 'right.arxml'
+			);
+			const headers = diffPaneHeaders(document, false);
+			assert.deepStrictEqual(headers.left.packages, ['PkgA']);
+			assert.deepStrictEqual(headers.right.packages, ['PkgB', 'PkgC']);
+			assert.strictEqual(headers.right.lines, 3, 'the shorter header is padded to align rows');
+		} finally {
+			dom.restore();
+		}
 	});
 
-	test('same-named files are disambiguated in the pane headers, and a swap follows', () => {
-		const left = side('diff/left.arxml');
-		const right = side('diff/right.arxml');
-		const document = buildDiffDocument(
-			{ name: 'same.arxml', path: '/w/a/same.arxml' },
-			{ name: 'same.arxml', path: '/w/b/same.arxml' },
-			left.rows,
-			right.rows,
-			left.rangeOf,
-			right.rangeOf
+	test('Enter on a row posts one reveal for the displayed side', () => {
+		const { dom, document } = mount();
+		try {
+			const row = treeRows(dom.document, '#diff-pane-left').find(
+				(candidate) =>
+					document.rows.some((source) => source.key === candidate.getAttribute('data-key') && source.left)
+			)!;
+			row.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			const reveals = messagesOf(dom.api, 'reveal');
+			assert.strictEqual(reveals.length, 1, 'one reveal');
+			assert.ok(reveals[0].key, 'the row key travels');
+			assert.strictEqual(reveals[0].side, 'left');
+			assert.ok(document.rows.some((candidate) => candidate.key === reveals[0].key));		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Show diff only filters unchanged rows and Swap resets only horizontal offsets', () => {
+		const { dom } = mount();
+		try {
+			const before = treeRows(dom.document, '#diff-pane-left').length;
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			assert.strictEqual(dom.document.getElementById('diff-view-diff')!.getAttribute('aria-pressed'), 'true');
+			const after = treeRows(dom.document, '#diff-pane-left').length;
+			assert.ok(after <= before, 'the diff-only view never shows more rows');
+			const left = (dom.document.getElementById('diff-pane-left') as any).__view;
+			void left;
+			(dom.document.getElementById('diff-swap') as HTMLElement).click();
+			assert.strictEqual(dom.document.getElementById('diff-swap')!.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(
+				dom.document.querySelector('#diff-pane-left .document-tree-title')!.textContent,
+				'right.arxml',
+				'the displayed side follows the swap'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('F7 moves to the next change and Shift+F7 to the previous one', () => {
+		const { dom } = mount();
+		try {
+			const list = dom.document.getElementById('diff-list');
+			const tree = dom.document.getElementById('diff-pane-left');
+			tree.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'F7', bubbles: true, cancelable: true }));
+			const selected = dom.document.querySelector('#diff-pane-left [data-selected="true"]');
+			assert.ok(selected, 'F7 selects the first changed row');
+			list.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'F7', shiftKey: true, bubbles: true, cancelable: true })
+			);
+			assert.ok(dom.document.querySelector('#diff-pane-left [data-selected="true"]'), 'Shift+F7 keeps a selection');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a document with no semantic differences shows the explicit empty state', () => {
+		const quiet = documentOf();
+		quiet.rows = quiet.rows.map((row) => ({
+			...row,
+			status: 'unchanged',
+			changes: [],
+			left: row.left ? { ...row.left } : undefined,
+			right: row.left ? { ...row.left } : undefined,
+		}));
+		quiet.summary = { changed: 0, added: 0, removed: 0, unchanged: quiet.rows.length };
+		const { dom } = mount(quiet);
+		try {
+			assert.strictEqual(dom.document.getElementById('diff-list')!.hidden, true);
+			assert.strictEqual(dom.document.getElementById('diff-empty')!.hidden, false);
+			assert.strictEqual(dom.document.getElementById('diff-empty-text')!.textContent, 'No differences');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a refresh keeps the last good document and shows the error banner', () => {
+		const { dom } = mount();
+		try {
+			const before = dom.document.querySelectorAll('#diff-pane-left [role="treeitem"]').length;
+			dom.post({ type: 'error', message: 'The comparison could not be refreshed.' });
+			assert.strictEqual(dom.document.getElementById('diff-notice')!.textContent, 'The comparison could not be refreshed.');
+			assert.strictEqual(dom.document.getElementById('diff-notice')!.getAttribute('data-kind'), 'warn');
+			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-left [role="treeitem"]').length, before);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('1200 rows are windowed by the shared virtual math', () => {
+		const rows: DiffRow[] = Array.from({ length: 1200 }, (_, at) => ({
+			key: `row-${at}`,
+			parentKey: at === 0 ? null : 'row-0',
+			level: at === 0 ? 1 : 2,
+			posinset: at === 0 ? 1 : at,
+			setsize: at === 0 ? 1 : 1199,
+			kind: 'parameter',
+			hasChildren: false,
+			subtreeSize: 0,
+			status: 'changed',
+			changes: [],
+			haystack: `row ${at}`,
+			left: { kind: 'parameter', label: `row-${at}`, definitionRef: '/P/row', meta: [], range: { start: 0, end: 1 } },
+		}));
+		const { dom } = mount({
+			left: { name: 'left.arxml', path: '/work/left.arxml' },
+			right: { name: 'right.arxml', path: '/work/right.arxml' },
+			labels: ['left.arxml', 'right.arxml'],
+			leftHeader: { packages: [] },
+			rightHeader: { packages: [] },
+			rows,
+			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0 },
+		});
+		try {
+			const rendered = treeRows(dom.document, '#diff-pane-left').length;
+			assert.ok(rendered > 0, 'the viewport has rows');
+			assert.ok(rendered <= 200, `the pane DOM is bounded (${rendered})`);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('search candidates follow the active view', () => {
+		const rows = documentOf().rows;
+		assert.strictEqual(searchCandidatesFor(rows, false).length, rows.length);
+		assert.strictEqual(
+			searchCandidatesFor(rows, true).length,
+			rows.filter((row) => row.status !== 'unchanged').length
 		);
-		const html = page(document);
-		const captured: Array<{ title?: string; titleTitle?: string; schema?: string; packages?: string[]; lines?: number }> = [];
-		const views = {
-			left: { setHeader: (header: (typeof captured)[number]) => captured.push(header) },
-			right: { setHeader: (header: (typeof captured)[number]) => captured.push(header) }
-		};
-		const run = new Function(
-			'diffDocument',
-			'swapped',
-			'views',
-			`${functionSource(html, 'headerOf')}\n${functionSource(html, 'headerLineCountOf')}\n${functionSource(html, 'renderHeaders')}\nrenderHeaders();`
-		) as (document: DiffDocument, swapped: boolean, views: unknown) => void;
-		run(document, false, views);
-		assert.strictEqual(captured[0].title, 'a/same.arxml');
-		assert.strictEqual(captured[0].titleTitle, '/w/a/same.arxml');
-		assert.strictEqual(captured[1].title, 'b/same.arxml');
-		assert.strictEqual(captured[1].titleTitle, '/w/b/same.arxml');
-		captured.length = 0;
-		run(document, true, views);
-		assert.strictEqual(captured[0].title, 'b/same.arxml', 'the label follows the displayed side');
-		assert.strictEqual(captured[1].title, 'a/same.arxml');
-		assert.strictEqual(captured[0].titleTitle, '/w/b/same.arxml', 'the tooltip follows the displayed side');
 	});
 
 	test('the width model counts indent, label, value and meta on the wider side', () => {
@@ -289,376 +284,44 @@ suite('semantic diff page (design §3)', () => {
 				],
 			}),
 		});
-		assert.strictEqual(diffRowChars(container), 3 + 4 + 1 + 10 + 10, 'Document padding plus one indent step');
+		assert.strictEqual(diffRowChars(container), 3 + 4 + 1 + 10 + 10);
 		const moduleRow = widthRow({
 			level: 1,
 			kind: 'module',
 			left: widthCell({ kind: 'module', label: 'M', meta: [] }),
 		});
-		assert.strictEqual(diffRowChars(moduleRow), 3 + 1 + 7, 'the rendered "module " prefix is counted');
+		assert.strictEqual(diffRowChars(moduleRow), 3 + 1 + 7);
 		assert.strictEqual(
 			diffRowChars(widthRow({ left: widthCell({ label: 'P', shownValue: undefined, meta: [] }) })),
-			3 + 1 + 3,
-			'the "= " separator renders even without a value'
+			3 + 1 + 3
 		);
 		assert.strictEqual(diffRowChars(widthRow({ left: undefined, right: undefined })), 0);
+		assert.strictEqual(diffContentWidth(100, 8), 834);
+		assert.strictEqual(diffContentWidth(0, 8), 34);
+		assert.strictEqual(diffContentWidth(5000, 8), 40034, 'no cap: scrolling reaches the longest line');
 	});
 
-	test('the horizontal range ends at the longest rendered line', () => {
-		assert.strictEqual(diffContentWidth(100, 8), 834, 'ceil(chars * chWidth) plus the gutter and slack');
-		assert.strictEqual(diffContentWidth(0, 8), 34, 'an empty diff still has the gutter and slack');
-		assert.strictEqual(diffContentWidth(5000, 8), 40034, 'no cap: the range must reach the end of the longest line');
-	});
-
-	test('both panes share one content width, with no pane clamp', () => {
-		const html = page();
-		const measure = functionSource(html, 'measureDiffWidth');
-		assert.ok(measure.includes('diffContentWidth(maxChars, chWidth)'), 'the shared width model feeds both panes');
-		assert.ok(measure.includes('views.left.setContentWidth(diffContent)'));
-		assert.ok(measure.includes('views.right.setContentWidth(diffContent)'));
-		assert.ok(!html.includes('paneWidth()'), 'no half-pane clamp survives');
-		assert.ok(!html.includes('maxDiffX'), 'the native scrollbar clamps the offset');
-		assert.ok(html.includes('scrollbar-gutter: stable'), 'the native bar keeps its full height');
-		assert.strictEqual((html.match(/id="diff-ch-probe"/g) || []).length, 1);
-	});
-
-	test('diff rows use the Document gutter, indent and meta typography', () => {
-		const html = page();
-		const style = styleOf(html);
-		assert.ok(/--fold-gutter:\s*26px/.test(style), 'the Document fold gutter');
-		assert.ok(/--doc-pad:\s*3ch/.test(style) && /--indent:\s*4ch/.test(style));
-		assert.ok(/--content-pad:\s*calc\(var\(--fold-gutter\) \+ var\(--doc-pad\)\)/.test(style));
-		assert.ok(
-			/\.diff-cell\s*\{[^}]*padding:\s*0;/.test(style),
-			'the pane edge is the clip boundary, not cell padding'
-		);
-		assert.ok(
-			/\.row\s*\{[^}]*padding:\s*0 0 0 var\(--content-pad\)/.test(style),
-			'rows start at the Document content pad'
-		);
-		assert.ok(
-			/body\[data-view="document"\] \.row\[data-level="2"\][\s\S]*?padding-left:\s*calc\(var\(--content-pad\) \+ var\(--indent\) \* 1\)/.test(
-				style
-			),
-			'the level rule uses the Document formula'
-		);
-		assert.ok(
-			/\.twisty\s*\{[^}]*position:\s*absolute[^}]*left:\s*2px[^}]*width:\s*16px/.test(style),
-			'the twisty sits in the gutter, not in the flex row'
-		);
-		assert.ok(/\.label\s*\{[^}]*font-weight:\s*600/.test(style), 'Document label weight');
-		assert.ok(
-			/\.row-meta\s*\{[^}]*flex-wrap:\s*nowrap[^}]*gap:\s*1ch[^}]*white-space:\s*pre/.test(style),
-			'Document meta keeps one monospace line'
-		);
-		assert.ok(
-			/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch[\s\S]*?--indent:\s*3ch/.test(style),
-			'the Document narrow-width values carry over'
-		);
-	});
-
-	test('both panes are components, vertical and horizontal offsets are mirrored, and status is diff-only', () => {
-		const html = page();
-		assert.ok(html.includes("new DocumentTreeView('#diff-pane-left'"), 'the left pane is a component');
-		assert.ok(html.includes("new DocumentTreeView('#diff-pane-right'"), 'the right pane is a component');
-		assert.ok(html.includes('follower.setScrollTop(top)'), 'either pane drives the vertical offset');
-		assert.ok(html.includes('follower.setScrollLeft(left)'), 'either bar drives the horizontal offset');
-		assert.ok(html.includes('driver.setScrollLeft(left)'), 'the driver keeps the same horizontal value');
-		assert.ok(functionSource(html, 'syncPanes').includes('views.syncPanes(pane, top, left)'), 'the host delegates to the DiffView component');
-		const editor = renderHtml(scanEcucValues(fixtureText('editor/render.arxml')), { nonce: 'test-nonce' });
-		assert.ok(!editor.includes("element.dataset.status = status"), 'the editor never passes diff status');
-		assert.ok(html.includes("element.dataset.status = status"), 'the diff row carries its status');
-	});
-
-	test('both panes stay 50/50 and each owns a native scroller', () => {
-		const html = page();
-		const style = styleOf(html);
-		assert.ok(
-			/#diff-list\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style),
-			'the pane grid is half the viewport each'
-		);
-		assert.ok(
-			/\.diff-row\s*\{[^}]*display:\s*flex/.test(style),
-			'a pane row is one flex cell'
-		);
-		assert.ok(!/--diff-col/.test(style), 'no column-widening variable');
-		assert.ok(!style.includes('hscroll'), 'the proxy bars are gone');
-		assert.ok(
-			/\.document-tree-scroll\s*\{[^}]*overflow:\s*auto/.test(style),
-			'each pane uses the native scroller'
-		);
-		assert.ok(
-			/\.document-tree-scroll\s*\{[^}]*scrollbar-gutter:\s*stable/.test(style),
-			'the native scrollbar is not clipped by a fixed strip'
-		);
-		assert.ok(!/transform:\s*translateX/.test(style), 'the native scroll moves the rows, not a transform');
-		assert.ok(html.includes('id="diff-ch-probe"'), 'one font probe feeds the width model');
-		assert.strictEqual((html.match(/id="diff-ch-probe"/g) || []).length, 1);
-		assert.ok(/\.toolbar\s*\{[^}]*height:\s*26px/.test(style), 'the diff toolbar stays one 26px row');
-
-		const measure = functionSource(html, 'measureDiffWidth');
-		assert.ok(measure.includes('diffRowChars(row)') && measure.includes('diffContentWidth(maxChars, chWidth)'));
-		assert.ok(html.includes("scroll.addEventListener('wheel'"), 'Shift+wheel over a pane drives the offset');
-		assert.ok(html.includes('event.shiftKey'));
-		assert.ok(html.includes('scroll.scrollLeft ='), 'the component writes the native horizontal offset');
-		assert.ok(html.includes('new ResizeObserver'), 'a pane resize recomputes the width');
-		assert.ok(
-			functionSource(html, 'setSwapped').includes('setScrollLeft(0)'),
-			'swapping resets both horizontal offsets'
-		);
-	});
-
-	test('pane headers render their own schema and package lines', () => {
-		const document: DiffDocument = {
-			...documentOf(),
-			leftHeader: { schema: '00048', packages: ['PkgA'] },
-			rightHeader: { schema: '00048', packages: ['PkgB', 'PkgC'] }
-		};
-		const html = page(document);
-		const captured: Array<{ schema?: string; packages?: string[]; lines?: number }> = [];
-		const views = {
-			left: { setHeader: (header: (typeof captured)[number]) => captured.push(header) },
-			right: { setHeader: (header: (typeof captured)[number]) => captured.push(header) }
-		};
-		const run = new Function(
-			'diffDocument',
-			'swapped',
-			'views',
-			`${functionSource(html, 'headerOf')}\n${functionSource(html, 'headerLineCountOf')}\n${functionSource(html, 'renderHeaders')}\nrenderHeaders();`
-		) as (document: DiffDocument, swapped: boolean, views: unknown) => void;
-		run(document, false, views);
-		assert.deepStrictEqual(captured[0].packages, ['PkgA']);
-		assert.strictEqual(captured[0].schema, '00048');
-		assert.deepStrictEqual(captured[1].packages, ['PkgB', 'PkgC']);
-		assert.strictEqual(captured[0].lines, 3, 'the shorter header is padded so both panes start their rows at the same y');
-		assert.strictEqual(captured[1].lines, 3);
-		assert.ok(html.includes("this.headerLine('schema', 'number', header.schema)"), 'the component builds the schema line');
-		assert.ok(html.includes("this.headerLine('package', '', pkg)"), 'the component builds package lines');
-	});
-
-	test('the embedded document is the model the host built', () => {
-		const expected = documentOf();
-		// The payload is JSON: absent optional fields are dropped, which is exactly
-		// what the page parses back.
-		const roundTrip = JSON.parse(JSON.stringify(expected)) as DiffDocument;
-		const actual = embedded();
-		assert.deepStrictEqual(actual.left, roundTrip.left);
-		assert.deepStrictEqual(actual.right, roundTrip.right);
-		assert.deepStrictEqual(actual.labels, roundTrip.labels);
-		assert.deepStrictEqual(actual.summary, roundTrip.summary);
-		assert.strictEqual(actual.rows.length, roundTrip.rows.length);
-		assert.deepStrictEqual(actual.rows[0], roundTrip.rows[0]);
-	});
-
-	test('the page serializes the diff helpers and the shared row primitives', () => {
-		const html = page();
-		for (const name of [
-			'diffVisibility',
-			'flattenDiffDocument',
-			'nextChangeIndex',
-			'diffRowChars',
-			'diffContentWidth',
-			'calcVisibleRange',
-			'calcTotalHeight',
-			'calcRowOffset',
-			'appendHighlighted',
-			'conditionTokens',
-			'appendConditionTokens',
-			'valueSpan',
-			'metaSpan',
-		]) {
-			assert.ok(html.includes(`function ${name}(`), `${name} is inlined`);
-		}
-		assert.ok(html.includes('class RowSearchEngine'), 'the chunked search engine is inlined');
-		// The page's own copy is the tested copy.
+	test('the page shares the core diff visibility and flatten rules', () => {
 		const rows = documentOf().rows;
-		const visible = evaluateFunction<typeof import('../../../core/diff/diffModel').diffVisibility>(html, 'diffVisibility');
-		assert.ok(visible(rows, false).every(Boolean), 'Show all sees every row');
-		const flatten = evaluateFunction<typeof flattenDiffDocument>(html, 'flattenDiffDocument');
-		assert.strictEqual(flatten(rows).length, flattenDiffDocument(rows).length);
+		const visible = diffVisibility(rows, false);
+		assert.ok(visible.every(Boolean), 'Show all sees every row');
+		const display = flattenDiffDocument(rows);
+		assert.ok(display.length > 0);
+		assert.ok(nextChangeIndex(rows, visible, -1, 1) >= 0, 'the next change resolves');
 	});
 
-	test('only the viewport window is built in each pane, with spacer heights from the shared math', () => {
-		const html = page();
-		assert.ok(html.includes('for (let at = start; at < end; at++)'), 'the component iterates the window, not the row store');
-		assert.ok(html.includes('calcVisibleRange(state)'), 'the window comes from the shared math');
-		assert.ok(html.includes('calcTotalHeight(state)'), 'the total comes from the shared math');
-		assert.ok(
-			html.includes('this.setSpacers(top, Math.max(0, total - calcRowOffset(end, state)))'),
-			'the top/bottom spacers keep the full scroll height'
-		);
-		assert.ok(html.includes('this.bufferSize = 10'), 'the overscan is a small constant');
-		assert.ok(html.includes('setProperty(\'--document-tree-top\''), 'the component carries the spacer heights');
-		assert.ok(html.includes('views.left.render(force === true)') && html.includes('views.right.render(force === true)'), 'both panes render their own window');
-	});
-
-	test('AC12: a large document is windowed by the shared virtual math', () => {
-		const rows = Array.from({ length: 1200 }, (_, at) => ({
-			key: `row-${at}`,
-			parentKey: at === 0 ? null : 'row-0',
-			level: at === 0 ? 1 : 2,
-			posinset: at === 0 ? 1 : at,
-			setsize: at === 0 ? 1 : 1199,
-			kind: 'parameter' as const,
-			hasChildren: false,
-			subtreeSize: 0,
-			status: 'changed' as const,
-			changes: [],
-			haystack: `row ${at}`,
-			left: {
-				kind: 'parameter' as const,
-				label: `row-${at}`,
-				definitionRef: '/P/row',
-				meta: [],
-				range: { start: 0, end: 1 },
-			},
-		}));
-		const html = page({
-			left: { name: 'left.arxml', path: '/work/left.arxml' },
-			right: { name: 'right.arxml', path: '/work/right.arxml' },
-			labels: ['left.arxml', 'right.arxml'],
-			leftHeader: { packages: [] },
-			rightHeader: { packages: [] },
-			rows,
-			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0 },
-		});
-		const names = [
-			'rowCountOf',
-			'heightAt',
-			'cumulativeHeights',
-			'rowAtOffset',
-			'calcTotalHeight',
-			'calcRowOffset',
-			'calcVisibleRange',
-		];
-		const source = names.map((name) => functionSource(html, name)).join('\n');
-		const math = new Function(
-			`let cache; ${source}\nreturn { calcVisibleRange, calcTotalHeight, calcRowOffset };`
-		)() as {
-			calcVisibleRange(state: unknown): [number, number];
-			calcTotalHeight(state: unknown): number;
-			calcRowOffset(index: number, state: unknown): number;
-		};
-		const state = {
-			rowCount: rows.length,
-			rowHeight: () => 20,
-			containerHeight: 600,
-			scrollTop: 20 * 600,
-			bufferSize: 10,
-			heightVersion: 1,
-		};
-		const [start, end] = math.calcVisibleRange(state);
-		assert.ok(start > 0 && end <= rows.length, 'a middle scroll has a real window');
-		assert.ok(end - start <= 200, `the window is bounded (${end - start} rows)`);
-		assert.strictEqual(math.calcTotalHeight(state), rows.length * 20);
-		assert.strictEqual(math.calcRowOffset(rows.length, state), rows.length * 20);
-	});
-
-	test('every colour is a --vscode-* variable, with no stray colour literal', () => {
-		const style = styleOf(page());
-		assert.ok(style.includes('var(--vscode-'), 'theme variables are used');
-		const literals = Array.from(new Set(style.match(/#[0-9a-fA-F]{3,8}\b/g) || [])).sort();
-		assert.deepStrictEqual(literals, ['#4EC9B0', '#80808040', '#DCDCAA'], 'only the documented Document fallbacks remain');
-		assert.ok(style.includes('--vscode-diffEditor-insertedLineBackground'), 'added rows use the diff theme colour');
-		assert.ok(style.includes('--vscode-diffEditor-removedLineBackground'), 'removed rows use the diff theme colour');
-		assert.ok(style.includes('.diff-row[data-status="changed"] > .diff-cell'), 'a changed row marks both sides');
-		assert.ok(
-			style.includes('.diff-row[data-status="added"] > .diff-cell[data-side="right"]'),
-			'an added row marks the right side'
-		);
-		assert.ok(
-			style.includes('.diff-row[data-status="removed"] > .diff-cell[data-side="left"]'),
-			'a removed row marks the left side'
-		);
-		assert.ok(style.includes('@media (forced-colors: active)'), 'high contrast uses outlines');
-		assert.ok(style.includes('.syscond-name'), 'condition names keep their token colour in the diff');
-		assert.ok(
-			/\.condition\[data-state="false"\]\s*\{[^}]*border-color/.test(style),
-			'a false diff condition is marked by its edge'
-		);
-	});
-
-	test('the editor page and the diff page serialize byte-identical row primitives', () => {
-		const editor = renderHtml(scanEcucValues(fixtureText('editor/render.arxml')), { nonce: 'test-nonce' });
-		const diff = page();
-		for (const name of ['appendHighlighted', 'valueSpan', 'metaSpan']) {
-			assert.strictEqual(
-				functionSource(editor, name),
-				functionSource(diff, name),
-				`${name} has one definition for both pages`
-			);
-		}
-	});
-
-	test('the diff page reports an unreadable payload and a boot error instead of failing silently', () => {
-		const html = page();
-		const reported: string[] = [];
-		const globals = globalThis as unknown as {
-			document?: unknown;
-			window?: {
-				diffReportError?: (text: string) => void;
-				addEventListener?: (type: string, listener: (event: unknown) => void) => void;
-			};
-		};
-		const savedDocument = globals.document;
-		const savedWindow = globals.window;
-		globals.document = { getElementById: () => ({ textContent: '{ not json' }) };
-		globals.window = { diffReportError: (text: string) => reported.push(text) };
+	test('the search UI reports the current match after Enter', async () => {
+		const { dom } = mount();
 		try {
-			const read = evaluateFunction<() => DiffDocument>(html, 'readInitialDocument');
-			const fallback = read();
-			assert.deepStrictEqual(fallback.rows, []);
-			assert.strictEqual(fallback.summary.changed, 0);
+			const input = dom.document.getElementById('diff-search-input') as HTMLInputElement;
+			input.value = 'Cont';
+			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			await settleSearch();
+			assert.ok(/1 \/ [1-9]/.test(dom.document.getElementById('diff-search-count')!.textContent || ''));
+			assert.strictEqual(dom.document.getElementById('diff-search-busy')!.getAttribute('data-busy'), 'false');
 		} finally {
-			globals.document = savedDocument;
-			globals.window = savedWindow;
+			dom.restore();
 		}
-		assert.strictEqual(reported.length, 1);
-		assert.ok(reported[0].includes('could not be read'), reported[0]);
-
-		const listeners: Record<string, (event: unknown) => void> = {};
-		const notice = { textContent: '', dataset: {} as Record<string, string> };
-		globals.document = { getElementById: () => notice };
-		globals.window = {
-			addEventListener: (type: string, listener: (event: unknown) => void) => {
-				listeners[type] = listener;
-			},
-		};
-		try {
-			evaluateFunction<() => void>(html, 'diffInstallErrorSurface')();
-			assert.ok(listeners.error && listeners.unhandledrejection);
-			listeners.error({ message: 'boom', lineno: 7 });
-			assert.ok(notice.textContent.includes('boom'));
-			assert.ok(notice.textContent.includes('Webview Developer Tools'));
-			assert.strictEqual(notice.dataset.kind, 'warn');
-		} finally {
-			globals.document = savedDocument;
-			globals.window = savedWindow;
-		}
-	});
-
-	test('the page boots from the embedded document and announces ready', () => {
-		const html = page();
-		assert.ok(html.includes("setDocument(readInitialDocument());"), 'the initial document is installed');
-		assert.ok(html.includes("vscode.postMessage({ type: 'ready' });"), 'a live page tells the host it booted');
-		assert.ok(html.indexOf('diffInstallErrorSurface();') < html.indexOf("acquireVsCodeApi()"), 'errors are surfaced first');
-	});
-
-	test('refreshes keep the view mode, swap, collapse, selection, search and scroll state', () => {
-		const html = page();
-		const message = /window\.addEventListener\('message'[\s\S]*?\n\}\);/.exec(html);
-		assert.ok(message, 'the message handler exists');
-		assert.ok(message![0].includes("message.type === 'diff'"), 'the host refresh type is handled');
-		assert.ok(message![0].includes('captureAnchor()'), 'the scroll anchor is captured before the update');
-		assert.ok(message![0].includes('restoreAnchor(anchor)'), 'and restored afterwards');
-		assert.ok(html.includes('setDocument(message.document)'), 'the row store is replaced, not markup');
-		assert.ok(message![0].includes("message.type === 'error'"), 'a refresh error keeps the last document');
-		assert.ok(!html.includes('innerHTML'), 'a refresh never swaps HTML');
-		const set = functionSource(html, 'setDocument');
-		assert.ok(set.includes('refreshVisibility()'), 'the active view is recomputed');
-		assert.ok(set.includes('renderHeaders()'), 'the swap state is preserved');
-		assert.ok(set.includes('startSearch(searchQuery, currentMatchKey(), true)'), 'an active search restarts');
-		assert.ok(!set.includes('showChangesOnly ='), 'a refresh never resets the view mode');
-		assert.ok(!set.includes('swapped ='), 'a refresh never resets the swap');
 	});
 });

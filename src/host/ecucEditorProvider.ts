@@ -19,8 +19,7 @@ import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { ConditionValue } from '../core/ecuc/syscond';
 import { ConditionEntry, ConditionValueStore, parseConditionEntries } from './conditionValues';
-import { RenderOptions, documentHeader, renderHtml } from '../webview/editorViewer';
-import { buildRows } from '../core/ecuc/renderRows';
+import { buildRows, RowBuildOptions } from '../core/ecuc/renderRows';
 import { buildNodeIndex } from '../core/ecuc/nodeId';
 import { applyEdit, buildEdit, buildFieldEdit } from './ecucEdit';
 import {
@@ -31,6 +30,9 @@ import {
 } from './ecucStructureEdit';
 import { followReference, nodeIdForRange, revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
+import { editorShell } from './webviewShell';
+import { editorMessageType, documentHeader } from '../webviewProtocol';
+import type { EditorWebviewToProvider } from '../webviewProtocol';
 
 export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
 
@@ -41,17 +43,6 @@ const BOOT_TIMEOUT_MS = 10_000;
 type EditField = 'value' | 'shortName' | 'definitionRef';
 
 const EDIT_FIELDS: readonly EditField[] = ['value', 'shortName', 'definitionRef'];
-
-interface WebviewMessage {
-	type?: string;
-	nodeId?: string;
-	/** The field the edit targets; old webview code omits it, which means `value`. */
-	field?: EditField;
-	/** The text the user typed, for `type: 'edit'` (parent design §8). */
-	value?: string;
-	/** Raw condition entries for `type: 'conditions'`; validated before use. */
-	entries?: unknown;
-}
 
 /**
  * Why a document cannot be rendered, or `undefined` when it can (AC2, parent R2).
@@ -94,9 +85,33 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	 * `ConditionValueStore` over `context.workspaceState`.
 	 */
 	private conditionEntries: ConditionEntry[];
+	/** Persists the normalized condition entries; absent in unit tests. */
+	private readonly conditionStore?: ConditionValueStore;
+	/** The extension root, for `asWebviewUri` on the bundled page assets. */
+	private readonly extensionUri: vscode.Uri;
 
-	constructor(private readonly conditionStore?: ConditionValueStore) {
+	constructor(conditionStore?: ConditionValueStore, extensionUri?: vscode.Uri) {
+		this.conditionStore = conditionStore;
 		this.conditionEntries = conditionStore?.load() ?? [];
+		this.extensionUri =
+			extensionUri ??
+			vscode.extensions.getExtension('deviousprophet.vscode-arxml-scope')?.extensionUri ??
+			vscode.Uri.file(path.join(__dirname, '..'));
+	}
+
+	/** The editor page's static shell plus its bundled script/style URIs. */
+	private html(webview: vscode.Webview): string {
+		const cspSource = webview.cspSource || 'https://webview.test';
+		const asset = (name: string): string =>
+			typeof webview.asWebviewUri === 'function'
+				? webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'dist', name)).toString()
+				: `https://webview.test/${name}`;
+		return editorShell({
+			cspSource,
+			scriptUri: asset('editorViewer.js'),
+			styleUri: asset('editorViewer.css'),
+			nonce: randomBytes(16).toString('base64'),
+		});
 	}
 
 	/** The evaluation map, rebuilt from the same normalization `load` applies. */
@@ -123,7 +138,6 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 
 		const disposables: vscode.Disposable[] = [];
-		const nonce = randomBytes(16).toString('base64');
 		const selectedId = this.pending.get(key) ?? this.selections.get(key);
 		this.pending.delete(key);
 		if (selectedId !== undefined) {
@@ -131,14 +145,11 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 		let model = scanEcucValues(document.getText());
 
-		panel.webview.options = { enableScripts: true };
-		panel.webview.html = renderHtml(model, {
-			...editorSettings(),
-			conditions: this.conditionValues(),
-			conditionEntries: this.conditionEntries.slice(),
-			nonce,
-			selectedId,
-		});
+		panel.webview.options = {
+			enableScripts: true,
+			localResourceRoots: [this.extensionUri],
+		};
+		panel.webview.html = this.html(panel.webview);
 
 		// A page whose script never runs cannot say so. If the boot message does not
 		// arrive, say it here — otherwise a dead page is just a header and an empty
@@ -155,19 +166,19 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		// change, which re-renders the model that is already scanned (parent AC3).
 		const push = (): void => {
 			const current = this.selections.get(key);
-			const options: RenderOptions = {
+			const options: RowBuildOptions = {
 				...editorSettings(),
 				conditions: this.conditionValues(),
-				selectedId: current,
 			};
 			const rowDocument = buildRows(model, options);
-			// `type: 'model'` is kept because the details editor clears its pending
-			// state on that message; the payload is row data, not full-tree HTML.
+			// The page owns the row store; a re-scan replaces it without markup.
 			void panel.webview.postMessage({
-				type: 'model',
-				rows: rowDocument.rows,
-				selectedId: current,
-				header: documentHeader(model),
+				type: 'document',
+				document: {
+					rows: rowDocument.rows,
+					selectedId: current,
+					header: documentHeader(model),
+				},
 			});
 		};
 
@@ -193,16 +204,18 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		);
 
 		disposables.push(
-			panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
-				if (!message) {
+			panel.webview.onDidReceiveMessage((raw: unknown) => {
+				if (!editorMessageType(raw)) {
 					return;
 				}
+				const message = raw as EditorWebviewToProvider;
 				if (message.type === 'ready') {
 					boot.settle();
-					// The page can be reloaded without reopening the panel. The embedded
-					// entries are only the first-paint copy; re-post the host's current
-					// entries so a reload cannot show (and then save) stale values.
+					// The page can be reloaded without reopening the panel; re-post the
+					// host's current entries and the row document so a reload cannot show
+					// stale values or an empty tree.
 					void panel.webview.postMessage({ type: 'conditions', entries: this.conditionEntries });
+					push();
 					return;
 				}
 				if (message.type === 'conditions') {
@@ -226,28 +239,30 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					push();
 					return;
 				}
-				if (typeof message.nodeId !== 'string') {
+				const nodeId =
+					'nodeId' in message && typeof message.nodeId === 'string' ? message.nodeId : undefined;
+				if (nodeId === undefined) {
 					return;
 				}
 				if (message.type === 'reveal') {
-					void this.revealNode(document, model, message.nodeId, panel);
+					void this.revealNode(document, model, nodeId, panel);
 				} else if (message.type === 'follow') {
-					void this.followReference(document, model, message.nodeId, panel);
+					void this.followReference(document, model, nodeId, panel);
 				} else if (message.type === 'edit' && typeof message.value === 'string') {
 					const field: EditField = message.field ?? 'value';
 					// An unknown field is ignored rather than guessed at.
 					if (EDIT_FIELDS.includes(field)) {
-						void this.editField(document, panel, message.nodeId, field, message.value);
+						void this.editField(document, panel, nodeId, field, message.value);
 					}
 				} else if (message.type === 'delete') {
-					void this.deleteRow(document, panel, message.nodeId);
+					void this.deleteRow(document, panel, nodeId);
 				} else if (message.type === 'duplicate') {
-					void this.duplicateRow(document, panel, message.nodeId);
+					void this.duplicateRow(document, panel, nodeId);
 				} else if (message.type === 'select') {
 					// A click in the tree is view state the host must know too: the re-scan
 					// payload carries the selection, so without this a document change would
 					// move the selection back (UX child design §4.1, AC4).
-					this.selections.set(key, message.nodeId);
+					this.selections.set(key, nodeId);
 				}
 			})
 		);

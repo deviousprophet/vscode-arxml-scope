@@ -1,6 +1,6 @@
 /**
  * The chunked row-search engine: timing, cancellation, progress and large-row
- * performance. The page serializes this exact class into the webview.
+ * performance. Both bundled pages run this exact class.
  */
 import * as assert from 'assert';
 
@@ -10,7 +10,6 @@ import {
 	SEARCH_DEBOUNCE_MS,
 	SEARCH_PROGRESS_THROTTLE_MS,
 	SEARCH_ROW_BATCH,
-	rowSearchScript,
 } from '../../../webview/render/rowSearch';
 import { TreeRow } from '../../../webview/render/treeQuery';
 
@@ -44,10 +43,6 @@ suite('row search engine', () => {
 		assert.strictEqual(SEARCH_CHUNK_BUDGET_MS, 24);
 		assert.strictEqual(SEARCH_PROGRESS_THROTTLE_MS, 150);
 		assert.strictEqual(SEARCH_ROW_BATCH, 512);
-		const script = rowSearchScript();
-		assert.ok(script.includes('class RowSearchEngine'));
-		assert.ok(script.includes('SEARCH_DEBOUNCE_MS = 120'));
-		assert.ok(script.includes('SEARCH_CHUNK_BUDGET_MS = 24'));
 	});
 
 	test('progress streams partial matches and always finishes with the full set', async () => {

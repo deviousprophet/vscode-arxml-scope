@@ -6,14 +6,9 @@
  * offsets. The composition root owns the diff model, rows, selection, search and
  * status; it supplies rows through the DocumentTree models.
  */
-import diffViewCss from './diffView.css';
+import './diffView.css';
+import { DocumentTreeView } from '../documentTree/documentTreeView';
 export { renderDiffViewHtml } from './diffViewRender';
-
-declare const DocumentTreeView: any;
-
-export function diffViewStyles(): string {
-	return diffViewCss;
-}
 
 export interface DiffViewCallbacks {
 	onVisibleWindowChange?(pane: string, top: number, left: number): void;
@@ -21,8 +16,6 @@ export interface DiffViewCallbacks {
 	onRender?(pane: string): void;
 }
 
-
-/** The page controller, serialized with `toString()` into the diff page. */
 export class DiffView {
 	callbacks: DiffViewCallbacks;
 	left: any;
@@ -170,8 +163,4 @@ export class DiffView {
 		this.left.setScrollLeft(0);
 		this.right.setScrollLeft(0);
 	}
-}
-
-export function diffViewScript(): string {
-	return `const DiffView = (${DiffView.toString()});`;
 }

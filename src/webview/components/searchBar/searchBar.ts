@@ -6,13 +6,7 @@
  * and what a query means; it receives every action through callbacks and feeds
  * the count/busy/navigation state back with setters.
  */
-import searchBarCss from './searchBar.css';
-
-declare const document: any;
-
-export function searchBarStyles(): string {
-	return searchBarCss;
-}
+import './searchBar.css';
 
 export interface SearchBarCallbacks {
 	/** Enter/F3: run a changed query or move through the current match set. */
@@ -43,7 +37,7 @@ export function renderSearchBarHtml(prefix: string, ariaLabel: string): string {
 </div>`;
 }
 
-/** The page controller, serialized with `toString()` into the page. */
+/** The page controller; the composition root instantiates it. */
 export class SearchBar {
 	prefix: string;
 	callbacks: SearchBarCallbacks;
@@ -169,25 +163,20 @@ export class SearchBar {
 	}
 
 	setNavigationEnabled(enabled: boolean): void {
-		const prev = document.getElementById(this.id('search-prev'));
+		const prev = document.getElementById(this.id('search-prev')) as HTMLButtonElement | null;
 		if (prev) {
 			prev.disabled = !enabled;
 		}
-		const next = document.getElementById(this.id('search-next'));
+		const next = document.getElementById(this.id('search-next')) as HTMLButtonElement | null;
 		if (next) {
 			next.disabled = !enabled;
 		}
 	}
 
-	setClearVisible(visible: boolean): void {
+		setClearVisible(visible: boolean): void {
 		const clear = document.getElementById(this.id('search-clear'));
 		if (clear) {
 			clear.hidden = !visible;
 		}
 	}
-}
-
-/** The class source for a webview; the composition root instantiates it. */
-export function searchBarScript(): string {
-	return `const SearchBar = (${SearchBar.toString()});`;
 }

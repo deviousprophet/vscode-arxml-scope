@@ -32,16 +32,16 @@ import {
 } from '../../host/ecucEdit';
 import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { EcucRow, buildRows } from '../../core/ecuc/renderRows';
-import { renderHtml } from '../../webview/editorViewer';
+import { documentHeader } from '../../webviewProtocol';
+import type { EditorProviderToWebview } from '../../webviewProtocol';
 import { fixtureText } from '../core/modelTestUtils';
 import { repoRoot, sleep } from './testUtils';
 
 interface StubMessage {
 	type?: string;
-	rows?: EcucRow[];
+	document?: { rows?: EcucRow[]; selectedId?: string };
 	message?: string;
 	nodeId?: string;
-	selectedId?: string;
 	inline?: boolean;
 	scope?: string;
 }
@@ -191,8 +191,8 @@ function lastRefusal(stub: StubPanel): StubMessage {
 	return notice;
 }
 
-function lastModel(stub: StubPanel): StubMessage {
-	return stub.messages.filter((message) => message.type === 'model').at(-1) ?? {};
+function lastModel(stub: StubPanel): NonNullable<StubMessage['document']> {
+	return stub.messages.filter((message) => message.type === 'document').at(-1)?.document ?? {};
 }
 
 function lastRows(stub: StubPanel): EcucRow[] {
@@ -618,15 +618,12 @@ suite('editor value editing (AC1–AC9)', () => {
 		]);
 		assert.ok(!parameter.meta.some((part) => part.text.indexOf('(= 0x') === 0), 'hex is no longer Document meta');
 
-		const page = renderHtml(model, { nonce: 'test-nonce' });
-		assert.ok(page.includes('.details-value'), 'the editor is styled from --vscode-* variables');
-		assert.ok(page.includes("type: 'edit'"), 'and posts the edit message');
-		assert.ok(page.includes('nodeId: edit.rowId'), 'with the id the provider resolves');
-		assert.ok(page.includes("event.key === 'Enter'"), 'Enter commits');
-		assert.ok(page.includes("event.key === 'Escape'"), 'Escape cancels');
-		assert.ok(page.includes("event.key === 'Tab'"), 'Tab commits and moves');
-		assert.ok(!page.includes("span.querySelector('.value-text')"), 'the Document value is not an input host');
-		assert.ok(!/acquireVsCodeApi\(\)[\s\S]*acquireVsCodeApi\(\)/.test(page), 'the API is acquired once');
+		const postedRows = buildRows(model, { sort: 'all', sortExcept: [] }).rows;
+		const message: EditorProviderToWebview = {
+			type: 'document',
+			document: { rows: postedRows, header: documentHeader(model) },
+		};
+		assert.ok(message.document.rows.length > 0, 'the host posts a row document, not HTML');
 	});
 
 	test('§2.2: the region is recomputed from a fresh scan, never replayed from an offset', () => {

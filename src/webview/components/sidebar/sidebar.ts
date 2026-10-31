@@ -5,13 +5,10 @@
  * Owns the shell markup and the tab/width/pane state. The composition root
  * persists that state through a callback and seeds it from the page state.
  */
-import sidebarCss from './sidebar.css';
+import './sidebar.css';
 import { renderDetailsPanelHtml } from './detailsPanel/detailsPanel';
 import { renderConditionsPanelHtml } from './conditionsPanel/conditionsPanel';
 
-export function sidebarStyles(): string {
-	return sidebarCss;
-}
 
 /** The resizer, the panel area and the vertical tab strip. */
 export function renderSidebarHtml(): string {
@@ -61,9 +58,8 @@ export interface SidebarUiState {
  * window actually has left of the tab strip. A non-finite width falls back to
  * the minimum; a viewport too small for the minimum keeps the minimum.
  *
- * The bounds are literals so the serialized page copy is self-contained (the
- * CJS build rewrites exported module constants to module-object references).
- * The exported bounds are pinned by the tests.
+ * The bounds are literals so the page copy is self-contained and the tests can
+ * pin the same values the stylesheet uses.
  */
 export function clampSidebarWidth(width: number, viewport: number, tabsWidth: number): number {
 	const min = 260;
@@ -82,8 +78,8 @@ export function clampSidebarWidth(width: number, viewport: number, tabsWidth: nu
  * is left evenly, the last fresh pane absorbs rounding, and one expanded pane
  * always fills the pool. Collapsed panes are not in the result.
  *
- * `minPane` mirrors MIN_PANE (HEADER_H + 60) as a literal for the same
- * self-contained-copy reason; the tests pin both values.
+ * `minPane` mirrors MIN_PANE (HEADER_H + 60) as a literal; the tests pin both
+ * values.
  */
 export function allocatePanes(free: number, panes: readonly PaneSpec[]): Map<string, number> {
 	const minPane = 82;
@@ -141,8 +137,8 @@ export function allocatePanes(free: number, panes: readonly PaneSpec[]): Map<str
  * `inspectorHidden` flag is ignored (not carried forward, not written back).
  */
 export function loadUiState(saved: unknown): SidebarUiState {
-	// The default width is a literal for the same self-contained-copy reason as
-	// the clamp bounds; DEFAULT_SIDEBAR_WIDTH is asserted to match in the tests.
+	// The default width is a literal; DEFAULT_SIDEBAR_WIDTH is asserted to match
+	// in the tests.
 	const defaultWidth = 360;
 	const minWidth = 260;
 	const maxWidth = 900;
@@ -176,54 +172,53 @@ export function loadUiState(saved: unknown): SidebarUiState {
 }
 
 /**
- * The page half of the shell. It binds the static markup that `renderHtml`
- * writes: tab buttons, the sidebar resizer, section headers and sashes.
+ * The page half of the shell. It binds the static markup the host shell writes:
+ * tab buttons, the sidebar resizer, section headers and sashes.
  *
- * The script is emitted before `TREE_SCRIPT`; `mountSidebarShell()` is called
- * at boot, after `uiState` exists. It reads `uiState`/`persistUiState` from the
- * page and never touches rows or Conditions values.
+ * `mountSidebarShell()` is called at boot, after `setSidebarState` has seeded
+ * `uiState`. It reads `uiState`/`persistUiState` and never touches rows or
+ * Conditions values.
  */
-export function sidebarShellScript(): string {
-	return `
-const HEADER_H = ${HEADER_H};
-const MIN_PANE = ${MIN_PANE};
-const SASH_H = ${SASH_H};
-const SASH_STEP = ${SASH_STEP};
-let sidebarPaneViews = [];
-let uiState = loadUiState(undefined);
-let persistUiState = function () {};
 
-${clampSidebarWidth.toString()}
-${allocatePanes.toString()}
-${loadUiState.toString()}
+let sidebarPaneViews: SidebarPaneView[] = [];
+let uiState: SidebarUiState = loadUiState(undefined);
+let persistUiState: () => void = function () {};
 
-function sidebarTabName(button) {
+
+
+
+
+export function sidebarTabName(button: any): SidebarTab {
 	const controls = button.getAttribute('aria-controls');
 	return controls === 'sbp-conditions' ? 'conditions' : 'details';
 }
 
-function setSidebarState(savedState) {
+export function setSidebarState(savedState: unknown): void {
 	uiState = loadUiState(savedState);
 }
 
-function setSidebarPersistence(persist) {
+export function setSidebarPersistence(persist: () => void): void {
 	persistUiState = persist;
 }
 
-function layoutSidebarPanes() {
+export function layoutSidebarPanes(): void {
 	for (let at = 0; at < sidebarPaneViews.length; at++) {
 		sidebarPaneViews[at].layout();
 	}
 }
 
+export function getSidebarState(): SidebarUiState {
+	return uiState;
+}
+
 /** Show one tab panel and move the roving focus when a key asked for it. */
-function activateSidebarTab(name, focusTab) {
+export function activateSidebarTab(name: string, focusTab?: boolean): void {
 	const next = name === 'conditions' ? 'conditions' : 'details';
 	const changed = uiState.tab !== next;
 	uiState.tab = next;
 	const tabs = document.getElementById('side-tabs');
 	if (tabs) {
-		const buttons = tabs.querySelectorAll('.stab');
+		const buttons = tabs.querySelectorAll('.stab') as unknown as any[];
 		for (let at = 0; at < buttons.length; at++) {
 			const button = buttons[at];
 			const active = sidebarTabName(button) === next;
@@ -235,7 +230,7 @@ function activateSidebarTab(name, focusTab) {
 			}
 		}
 	}
-	const panels = document.querySelectorAll('.sb-tab-panel');
+	const panels = document.querySelectorAll('.sb-tab-panel') as unknown as any[];
 	for (let at = 0; at < panels.length; at++) {
 		const panel = panels[at];
 		const active = panel.id === 'sbp-' + next;
@@ -254,14 +249,14 @@ function activateSidebarTab(name, focusTab) {
 }
 
 /** The details editor calls this so a hidden tab cannot swallow an edit. */
-function showSidebarTab(name) {
+export function showSidebarTab(name: string): void {
 	if (uiState.tab !== (name === 'conditions' ? 'conditions' : 'details')) {
 		activateSidebarTab(name, false);
 	}
 }
 
 /** Expand a Details section before focusing a field inside it. */
-function showSidebarSection(id) {
+export function showSidebarSection(id: string): void {
 	for (let at = 0; at < sidebarPaneViews.length; at++) {
 		if (sidebarPaneViews[at].showSection(id)) {
 			return;
@@ -269,7 +264,7 @@ function showSidebarSection(id) {
 	}
 }
 
-function sidebarTabsWidth() {
+function sidebarTabsWidth(): number {
 	const tabs = document.getElementById('side-tabs');
 	return tabs ? tabs.getBoundingClientRect().width || 28 : 28;
 }
@@ -279,7 +274,7 @@ function sidebarTabsWidth() {
  * this window has. The preference itself stays untouched, so widening the
  * window restores it instead of baking in the transient clamp.
  */
-function displayedSidebarWidth() {
+function displayedSidebarWidth(): number {
 	return clampSidebarWidth(uiState.sidebarWidth, window.innerWidth, sidebarTabsWidth());
 }
 
@@ -288,7 +283,7 @@ function displayedSidebarWidth() {
  * preference; mount/resize apply a clamped display width and leave the
  * preference alone.
  */
-function applySidebarWidth(width, persist) {
+function applySidebarWidth(width: number, persist: boolean): void {
 	const sidebar = document.getElementById('sidebar');
 	const resizer = document.getElementById('sidebar-resizer');
 	if (!sidebar) {
@@ -308,12 +303,12 @@ function applySidebarWidth(width, persist) {
 	}
 }
 
-function onTabKeydown(event, button) {
+export function onTabKeydown(event: any, button: any): void {
 	const tabs = document.getElementById('side-tabs');
 	if (!tabs) {
 		return;
 	}
-	const buttons = tabs.querySelectorAll('.stab');
+	const buttons = tabs.querySelectorAll('.stab') as unknown as any[];
 	let index = -1;
 	for (let at = 0; at < buttons.length; at++) {
 		if (buttons[at] === button) {
@@ -345,15 +340,22 @@ function onTabKeydown(event, button) {
  * can be hidden (an inactive tab), in which case clientHeight is 0 and the
  * layout is deferred until the tab is shown.
  */
-class SidebarPaneView {
-	constructor(root) {
+export class SidebarPaneView {
+	root: any;
+	sections: any[];
+	sizing: Map<string, any>;
+	collapsed: Map<string, boolean>;
+	collapseAnimating: boolean;
+	observer: ResizeObserver | null;
+
+	constructor(root: any) {
 		this.root = root;
 		this.sections = [];
 		this.sizing = new Map();
 		this.collapsed = new Map();
 		this.collapseAnimating = false;
 		this.observer = null;
-		const nodes = root.querySelectorAll('.sb-section');
+		const nodes = root.querySelectorAll('.sb-section') as unknown as any[];
 		for (let at = 0; at < nodes.length; at++) {
 			const section = nodes[at];
 			const id = section.dataset ? section.dataset.paneId : undefined;
@@ -379,12 +381,12 @@ class SidebarPaneView {
 		this.layout();
 	}
 
-	savedPane(id) {
+	savedPane(id: string): number | null {
 		const saved = uiState.panes[id];
 		return typeof saved === 'number' && Number.isFinite(saved) && saved > 0 ? Math.max(MIN_PANE, saved) : null;
 	}
 
-	sectionEntry(id) {
+	sectionEntry(id: string): any {
 		for (let at = 0; at < this.sections.length; at++) {
 			if (this.sections[at].id === id) {
 				return this.sections[at];
@@ -394,7 +396,7 @@ class SidebarPaneView {
 	}
 
 	/** Expand one section of this view; false when the view does not own it. */
-	showSection(id) {
+	showSection(id: string): boolean {
 		const entry = this.sectionEntry(id);
 		if (!entry) {
 			return false;
@@ -405,11 +407,11 @@ class SidebarPaneView {
 		return true;
 	}
 
-	isCollapsed(id) {
+	isCollapsed(id: string): boolean {
 		return this.collapsed.get(id) === true;
 	}
 
-	persistCollapsed(id, collapsed) {
+	persistCollapsed(id: string, collapsed: boolean): void {
 		const list = uiState.collapsed.filter((other) => other !== id);
 		if (collapsed) {
 			list.push(id);
@@ -418,15 +420,15 @@ class SidebarPaneView {
 		persistUiState();
 	}
 
-	bindHead(section, head, id) {
+	bindHead(section: any, head: any, id: string): void {
 		const view = this;
-		head.addEventListener('click', function (event) {
+		head.addEventListener('click', function (event: any) {
 			if (event.target instanceof Element && event.target.closest('.sb-section-actions')) {
 				return;
 			}
 			view.setCollapsed(id, !view.isCollapsed(id), true);
 		});
-		head.addEventListener('keydown', function (event) {
+		head.addEventListener('keydown', function (event: any) {
 			if (event.target !== head) {
 				return;
 			}
@@ -443,7 +445,7 @@ class SidebarPaneView {
 		});
 	}
 
-	setCollapsed(id, collapsed, persist) {
+	setCollapsed(id: string, collapsed: boolean, persist: boolean): void {
 		const entry = this.sectionEntry(id);
 		if (!entry) {
 			return;
@@ -467,7 +469,7 @@ class SidebarPaneView {
 		}
 	}
 
-	neighbors(sash) {
+	neighbors(sash: any): { aboveId: string; belowId: string } | null {
 		const above = sash.previousElementSibling;
 		const below = sash.nextElementSibling;
 		const aboveId = above && above.classList && above.classList.contains('sb-section') ? above.dataset.paneId : undefined;
@@ -478,12 +480,12 @@ class SidebarPaneView {
 		return { aboveId: aboveId, belowId: belowId };
 	}
 
-	bindSashes() {
-		const sashes = this.root.querySelectorAll('.sb-pane-sash');
+	bindSashes(): void {
+		const sashes = this.root.querySelectorAll('.sb-pane-sash') as unknown as any[];
 		for (let at = 0; at < sashes.length; at++) {
 			const sash = sashes[at];
 			const view = this;
-			sash.addEventListener('mousedown', function (event) {
+			sash.addEventListener('mousedown', function (event: any) {
 				if (event.button !== 0) {
 					return;
 				}
@@ -497,7 +499,7 @@ class SidebarPaneView {
 				document.body.classList.add('sb-row-resizing');
 				let lastY = event.clientY;
 				let moved = false;
-				const onMove = function (moveEvent) {
+				const onMove = function (moveEvent: any) {
 					const delta = moveEvent.clientY - lastY;
 					lastY = moveEvent.clientY;
 					if (delta !== 0) {
@@ -505,7 +507,7 @@ class SidebarPaneView {
 						view.shiftPane(pair.aboveId, pair.belowId, delta);
 					}
 				};
-				const stopDrag = function () {
+				const stopDrag = function (): void {
 					sash.classList.remove('dragging');
 					view.root.classList.remove('dragging');
 					document.body.classList.remove('sb-row-resizing');
@@ -520,7 +522,7 @@ class SidebarPaneView {
 				window.addEventListener('mousemove', onMove);
 				window.addEventListener('mouseup', stopDrag);
 			});
-			sash.addEventListener('keydown', function (event) {
+			sash.addEventListener('keydown', function (event: any) {
 				const pair = view.neighbors(sash);
 				if (!pair) {
 					return;
@@ -559,7 +561,7 @@ class SidebarPaneView {
 	}
 
 	/** Resize the pane above a sash; the pane below absorbs the delta. */
-	shiftPane(aboveId, belowId, delta) {
+	shiftPane(aboveId: string, belowId: string, delta: number): void {
 		const above = this.sizing.get(aboveId);
 		const below = this.sizing.get(belowId);
 		if (!above || !below) {
@@ -574,7 +576,7 @@ class SidebarPaneView {
 		this.layout();
 	}
 
-	persistPane(id) {
+	persistPane(id: string): void {
 		const sizing = this.sizing.get(id);
 		if (!sizing || sizing.saved === null) {
 			return;
@@ -582,8 +584,8 @@ class SidebarPaneView {
 		uiState.panes[id] = Math.round(sizing.saved);
 	}
 
-	paintSashStates() {
-		const sashes = this.root.querySelectorAll('.sb-pane-sash');
+	paintSashStates(): void {
+		const sashes = this.root.querySelectorAll('.sb-pane-sash') as unknown as any[];
 		for (let at = 0; at < sashes.length; at++) {
 			const sash = sashes[at];
 			const pair = this.neighbors(sash);
@@ -600,7 +602,7 @@ class SidebarPaneView {
 	}
 
 	/** Allocate every pane. Non-collapse passes are instant (no animation). */
-	layout() {
+	layout(): void {
 		const height = this.root.clientHeight;
 		if (height <= 0) {
 			// An inactive tab panel (display:none) has no height; its panes keep
@@ -644,8 +646,8 @@ class SidebarPaneView {
 	}
 }
 
-function bindSidebarResizer(resizer) {
-	resizer.addEventListener('mousedown', function (event) {
+function bindSidebarResizer(resizer: any): void {
+	resizer.addEventListener('mousedown', function (event: any) {
 		if (event.button !== 0) {
 			return;
 		}
@@ -656,7 +658,7 @@ function bindSidebarResizer(resizer) {
 		let moved = false;
 		resizer.classList.add('dragging');
 		document.body.classList.add('sb-col-resizing');
-		const onMove = function (moveEvent) {
+		const onMove = function (moveEvent: any) {
 			const delta = startX - moveEvent.clientX;
 			if (delta !== 0) {
 				moved = true;
@@ -664,7 +666,7 @@ function bindSidebarResizer(resizer) {
 			lastWidth = startWidth + delta;
 			applySidebarWidth(lastWidth, false);
 		};
-		const stopDrag = function () {
+		const stopDrag = function (): void {
 			resizer.classList.remove('dragging');
 			document.body.classList.remove('sb-col-resizing');
 			window.removeEventListener('mousemove', onMove);
@@ -677,7 +679,7 @@ function bindSidebarResizer(resizer) {
 		window.addEventListener('mousemove', onMove);
 		window.addEventListener('mouseup', stopDrag);
 	});
-	resizer.addEventListener('keydown', function (event) {
+	resizer.addEventListener('keydown', function (event: any) {
 		// The resizer is the sidebar's left edge, so ArrowLeft moves it left
 		// (a wider sidebar) and ArrowRight narrows it: the same
 		// move-the-separator rule as a pane sash.
@@ -691,7 +693,7 @@ function bindSidebarResizer(resizer) {
 }
 
 /** Bind the static shell and apply the saved tab, width, panes and sections. */
-function mountSidebarShell() {
+export function mountSidebarShell(): void {
 	const sidebar = document.getElementById('sidebar');
 	const resizer = document.getElementById('sidebar-resizer');
 	const tabs = document.getElementById('side-tabs');
@@ -699,18 +701,18 @@ function mountSidebarShell() {
 		return;
 	}
 	sidebarPaneViews = [];
-	const views = document.querySelectorAll('.sb-pane-view');
+	const views = document.querySelectorAll('.sb-pane-view') as unknown as any[];
 	for (let at = 0; at < views.length; at++) {
 		sidebarPaneViews.push(new SidebarPaneView(views[at]));
 	}
 	applySidebarWidth(uiState.sidebarWidth, false);
-	const buttons = tabs.querySelectorAll('.stab');
+	const buttons = tabs.querySelectorAll('.stab') as unknown as any[];
 	for (let at = 0; at < buttons.length; at++) {
 		const button = buttons[at];
 		button.addEventListener('click', function () {
 			activateSidebarTab(sidebarTabName(button), false);
 		});
-		button.addEventListener('keydown', function (event) {
+		button.addEventListener('keydown', function (event: any) {
 			onTabKeydown(event, button);
 		});
 	}
@@ -722,6 +724,4 @@ function mountSidebarShell() {
 		applySidebarWidth(uiState.sidebarWidth, false);
 		layoutSidebarPanes();
 	});
-}
-`;
 }

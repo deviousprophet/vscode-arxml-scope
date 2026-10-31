@@ -15,25 +15,21 @@ import * as vscode from 'vscode';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { DiffDocument, FileLabel, RangeLookup, buildDiffDocument, compareTitle } from '../core/diff/diffModel';
-import { renderDiffHtml } from '../webview/diffViewer';
+import { diffShell } from './webviewShell';
 import { fileName } from './compareSelection';
 import { gateReason } from './ecucEditorProvider';
 import { revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
 import { buildNodeIndex } from '../core/ecuc/nodeId';
 import { buildRows } from '../core/ecuc/renderRows';
+import { diffMessageType } from '../diffProtocol';
+import type { DiffWebviewToProvider } from '../diffProtocol';
 
 /** Re-scan debounce: one edit produces one refresh (design §4.1). */
 const REFRESH_DEBOUNCE_MS = 150;
 
 /** How long the page may take to report `ready` before the host warns. */
 const BOOT_TIMEOUT_MS = 10_000;
-
-interface WebviewMessage {
-	type?: string;
-	side?: 'left' | 'right';
-	key?: string;
-}
 
 function label(uri: vscode.Uri): FileLabel {
 	return { name: fileName(uri), path: uri.fsPath };
@@ -96,8 +92,6 @@ export class DiffPanel {
 			rightRows.rangeOf,
 			{ left: leftRows.header, right: rightRows.header }
 		);
-		const html = renderDiffHtml(current, { nonce: randomBytes(16).toString('base64') });
-
 		const panel = vscode.window.createWebviewPanel(
 			DiffPanel.viewType,
 			compareTitle(leftLabel, rightLabel),
@@ -113,7 +107,22 @@ export class DiffPanel {
 		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 		let refreshGeneration = 0;
 
-		panel.webview.html = html;
+		panel.webview.html = diffShell({
+			cspSource: panel.webview.cspSource || 'https://webview.test',
+			scriptUri:
+				typeof panel.webview.asWebviewUri === 'function'
+					? panel.webview
+							.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'dist', 'diffViewer.js'))
+							.toString()
+					: 'https://webview.test/diffViewer.js',
+			styleUri:
+				typeof panel.webview.asWebviewUri === 'function'
+					? panel.webview
+							.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'dist', 'diffViewer.css'))
+							.toString()
+					: 'https://webview.test/diffViewer.css',
+			nonce: randomBytes(16).toString('base64'),
+		});
 
 		const boot = watchBoot(() => {
 			void vscode.window.showWarningMessage(
@@ -160,7 +169,7 @@ export class DiffPanel {
 					return;
 				}
 				current = next;
-				await panel.webview.postMessage({ type: 'diff', document: next });
+				await panel.webview.postMessage({ type: 'document', document: next });
 			} catch (error) {
 				if (disposed || generation !== refreshGeneration) {
 					return;
@@ -216,19 +225,17 @@ export class DiffPanel {
 		);
 
 		disposables.push(
-			panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
-				if (!message) {
+			panel.webview.onDidReceiveMessage((raw: unknown) => {
+				if (!diffMessageType(raw)) {
 					return;
 				}
+				const message = raw as DiffWebviewToProvider;
 				if (message.type === 'ready') {
 					boot.settle();
+					void panel.webview.postMessage({ type: 'document', document: current });
 					return;
 				}
-				if (
-					message.type === 'reveal' &&
-					(message.side === 'left' || message.side === 'right') &&
-					typeof message.key === 'string'
-				) {
+				if (message.type === 'reveal') {
 					void reveal(message.side, message.key);
 				}
 			})

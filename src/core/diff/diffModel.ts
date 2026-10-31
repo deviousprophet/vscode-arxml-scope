@@ -11,8 +11,8 @@
  * and collapse rules.
  *
  * Pure: no `vscode` import and no DOM. The page helpers at the end
- * (`diffVisibility`, `flattenDiffRows`, `nextChangeIndex`) are serialized with
- * `toString()` and unit-tested directly.
+ * The pure helpers (`diffVisibility`, `flattenDiffRows`, `nextChangeIndex`) are
+ * imported by the bundled diff page and unit-tested directly.
  */
 import { Range } from '../ecuc/model';
 import { EcucRow, MetaPart } from '../ecuc/renderRows';
@@ -589,7 +589,7 @@ export function buildDiffDocument(
 	};
 }
 
-/** The page helpers below are serialized into the diff webview. */
+/** The pure page helpers below are imported by the bundled diff entrypoint. */
 
 /**
  * Changes-only visibility. Every row is visible in Show all; Show diff only keeps

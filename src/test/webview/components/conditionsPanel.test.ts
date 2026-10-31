@@ -1,13 +1,12 @@
 /**
- * ConditionsPanel component: name validation, the panel markup and the
- * callback that reports committed entries to the host.
+ * ConditionsPanel component: name validation and the panel markup. The live
+ * add/edit/remove flow is exercised through the mounted editor page.
  */
 import * as assert from 'assert';
 
 import {
 	conditionEntryError,
 	conditionNameValid,
-	conditionsPanelScript,
 	renderConditionsPanelHtml,
 } from '../../../webview/components/sidebar/conditionsPanel/conditionsPanel';
 
@@ -19,9 +18,7 @@ suite('ConditionsPanel component', () => {
 		assert.ok(html.includes('id="conditions-add"'));
 		assert.ok(html.includes('id="conditions-clear"'));
 		assert.ok(html.includes('id="conditions-status"'));
-		const script = conditionsPanelScript();
-		assert.ok(script.includes('onConditionsChange(readConditionEntries())'), 'entries are reported to the host');
-		assert.ok(!script.includes('vscode'), 'the component never posts provider messages');
+		assert.ok(html.includes('id="conditions-empty"'));
 	});
 
 	test('name validation is one rule for Save and the tests', () => {

@@ -1,213 +1,275 @@
 /**
- * AC1 — every entity the model carries is present in the row document with the
- * correct label and value. The page builds its rows from this data; there is no
- * full-tree HTML string to assert against.
+ * The bundled editor page, mounted into jsdom from the same static shell the
+ * host writes. The host → page protocol is driven through `postMessage` and the
+ * page's own DOM is asserted: rows, details, search, editing and virtualization.
  */
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../../core/ecuc/scanner';
-import { RowPayload, encodeRowDocument, renderHtml } from '../../../webview/editorViewer';
+import { buildRows, EcucRow } from '../../../core/ecuc/renderRows';
+import { SORT_EXCEPTIONS } from '../../../core/ecuc/order';
+import { installConsoleErrors } from '../../../webview/render/pageError';
+import type { EditorDocumentPayload } from '../../../webviewProtocol';
+import { documentHeader } from '../../../webviewProtocol';
+import { editorShell } from '../../../host/webviewShell';
 import { fixtureText } from '../../core/modelTestUtils';
-import { evaluateFunction, functionSource } from '../scriptTestUtils';
+import { expectReady, installDom, loadModule, messagesOf, rowLabels, settleSearch, treeRows } from '../pageTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
-function html(): string {
-	return renderHtml(scanEcucValues(fixtureText(FIXTURE)), { nonce: 'test-nonce' });
+function editorDocument(overrides: Partial<EditorDocumentPayload> = {}): EditorDocumentPayload {
+	const model = scanEcucValues(fixtureText(FIXTURE));
+	return {
+		rows: buildRows(model, { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows,
+		header: documentHeader(model),
+		...overrides,
+	};
 }
 
-function payload(source = html()): RowPayload {
-	const match = /<script type="application\/json" id="ecuc-rows"[^>]*>([\s\S]*?)<\/script>/.exec(source);
-	assert.ok(match, 'the page embeds the row document');
-	return JSON.parse(match[1]) as RowPayload;
+function mount(): { dom: ReturnType<typeof installDom>; page: any; document: EditorDocumentPayload } {
+	const dom = installDom('editor');
+	const module = loadModule<typeof import('../../../webview/editorViewer')>('../../webview/editorViewer');
+	module.mountEditor();
+	const document = editorDocument();
+	dom.post({ type: 'conditions', entries: [] });
+	dom.post({ type: 'document', document });
+	return { dom, page: module, document };
 }
 
-suite('editor rendering (AC1)', () => {
-	test('AC1: the schema release and the package path are shown', () => {
-		const page = html();
-		const header = payload(page).header;
-		assert.strictEqual(header?.schema, '00048');
-		assert.deepStrictEqual(header?.packages, ['PkgA.PkgB']);
-		assert.ok(page.includes("this.headerLine('schema', 'number', header.schema)"), 'the component builds the schema line');
-		assert.ok(page.includes("this.headerLine('package', '', pkg)"), 'the component builds package lines');
-	});
+function rowFor(document: EditorDocumentPayload, label: string): EcucRow {
+	const row = document.rows.find((candidate) => candidate.label === label);
+	assert.ok(row, `the fixture has ${label}`);
+	return row;
+}
 
-	test('AC1: the console reporter is armed before the API and no banner is emitted', () => {
-		const page = html();
-		assert.ok(
-			page.indexOf('window.ecucReportError = report') !== -1 &&
-				page.indexOf('window.ecucReportError = report') < page.indexOf('acquireVsCodeApi'),
-			'the console reporter is armed before the API is acquired'
-		);
-		assert.ok(!page.includes('id="notice"'), 'there is no notice element');
-		assert.ok(!page.includes('ecucInstallErrorSurface'), 'the UI error installer is gone');
-		assert.ok(!page.includes('The ECUC editor page failed'), 'the old banner text is gone');
-		assert.ok(page.includes("postMessage({ type: 'ready' })"), 'a live page tells the host it booted');
-	});
+function clickRow(dom: ReturnType<typeof installDom>, label: string): any {
+	const windowRow = treeRows(dom.document).find(
+		(row) => row.querySelector('.label')?.textContent === label
+	);
+	assert.ok(windowRow, `the rendered window contains ${label}`);
+	windowRow.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+	return windowRow;
+}
 
-	test('AC1: an uncaught error and a rejected promise both go to the debug console', () => {
-		const page = html();
-		const listeners: Record<string, (event: unknown) => void> = {};
-		const logged: string[] = [];
-		const fakeWindow = {
-			addEventListener: (type: string, listener: (event: unknown) => void) => {
-				listeners[type] = listener;
-			},
-		};
-		const fakeConsole = {
-			error: (...args: unknown[]) => {
-				logged.push(args.map(String).join(' '));
-			},
-		};
-		const installer = new Function(
-			'window',
-			'console',
-			`${functionSource(page, 'ecucInstallConsoleErrors')}\nreturn ecucInstallConsoleErrors;`
-		)(fakeWindow, fakeConsole) as () => void;
-		installer();
-		assert.ok(listeners.error, 'uncaught errors are listened for');
-		assert.ok(listeners.unhandledrejection, 'rejected promises are listened for');
-		listeners.error({ message: 'boom', lineno: 12 });
-		listeners.unhandledrejection({ reason: new Error('no boot') });
-		assert.strictEqual(logged.length, 2, 'both failures are logged once');
-		assert.ok(logged[0].includes('ECUC editor:'), logged[0]);
-		assert.ok(logged[0].includes('boom'), logged[0]);
-		assert.ok(logged[0].includes('(line 12)'), logged[0]);
-		assert.ok(logged[1].includes('no boot'), logged[1]);
-	});
-
-	test('AC2: an unreadable row payload is reported instead of an empty tree', () => {
-		const page = html();
-		const reported: string[] = [];
-		const globals = globalThis as unknown as {
-			document?: unknown;
-			window?: { ecucReportError?: (text: string) => void };
-		};
-		const savedDocument = globals.document;
-		const savedWindow = globals.window;
-		globals.document = { getElementById: () => ({ textContent: '{ not json' }) };
-		globals.window = { ecucReportError: (text: string) => reported.push(text) };
-		try {
-			const readInitialRows = evaluateFunction<() => { rows: unknown[] }>(page, 'readInitialRows');
-			assert.deepStrictEqual(readInitialRows(), { rows: [] }, 'the caller still gets an empty page');
-		} finally {
-			globals.document = savedDocument;
-			globals.window = savedWindow;
-		}
-		assert.strictEqual(reported.length, 1, 'exactly one report');
-		assert.ok(reported[0].includes('could not be read'), reported[0]);
-	});
-
-	test('AC1: the module row carries its dotted DEFINITION-REF path, short name and variant', () => {
-		const rows = payload().rows;
-		const module = rows.find((row) => row.kind === 'module');
-		assert.ok(module, 'the fixture has a module');
-		assert.strictEqual(module.label, 'PkgA.PkgB.ModDefs.ModX', 'the full dotted definition path');
-		assert.strictEqual(module.shortName, 'ModX');
-		assert.strictEqual(module.definitionRef, '/PkgA/PkgB/ModDefs/ModX');
-		assert.ok(
-			module.meta.some((part) => part.cls === 'variant' && part.text === '(VariantPreCompile)'),
-			'the camelized implementation variant'
-		);
-	});
-
-	test('AC1: conditions and annotations are carried as values, including an unlabelled annotation', () => {
-		const module = payload().rows.find((row) => row.kind === 'module')!;
-		const texts = module.meta.map((part) => part.text);
-		assert.ok(texts.includes('[(A == B)]'), 'SW-SYSCOND');
-		assert.ok(texts.includes('<Crit1 == 1 && Crit2 == 2>'), 'post-build variant conditions');
-		assert.ok(texts.includes('[Note] module note'), 'a labelled annotation');
-		const container = payload().rows.find((row) => row.label === 'ContA')!;
-		assert.ok(container.meta.some((part) => part.text === 'container note'), 'an annotation with no label');
-	});
-
-	test('AC1: containers are labelled by their DEFINITION-REF tail', () => {
-		const labels = payload().rows.filter((row) => row.kind === 'container').map((row) => row.label);
-		assert.deepStrictEqual(labels, ['ContA', 'ContB']);
-	});
-
-	test('AC1: parameters show their tail, value and details formats', () => {
-		const rows = payload().rows;
-		const ini = rows.find((row) => row.label === 'IniValue')!;
-		assert.strictEqual(ini.kind, 'parameter');
-		assert.strictEqual(ini.value, '63');
-		assert.strictEqual(ini.shownValue, '63');
-		assert.strictEqual(ini.valueKind, 'numeric');
-		assert.strictEqual(ini.parameterType, 'Integer');
-		assert.deepStrictEqual(ini.formats, [
-			{ label: 'Decimal', value: '63' },
-			{ label: 'Hexadecimal', value: '0x3F' },
-			{ label: 'Binary', value: '0b00111111' },
-		]);
-		assert.ok(!ini.meta.some((part) => part.text.indexOf('(= 0x') === 0), 'no hex in the Document meta');
-		assert.strictEqual(rows.find((row) => row.label === 'Title')!.shownValue, '"hello"', 'text is quoted');
-		assert.strictEqual(rows.find((row) => row.label === 'Flag')!.shownValue, 'true', 'a boolean is bare');
-	});
-
-	test('AC1: references show their tail and the dotted target, with instance context', () => {
-		const rows = payload().rows;
-		const peerRef = rows.find((row) => row.label === 'PeerRef')!;
-		assert.strictEqual(peerRef.kind, 'reference');
-		assert.strictEqual(peerRef.shownValue, 'PkgA.PkgB.ModX.ContA.ContB');
-		const peerIref = rows.find((row) => row.label === 'PeerIref')!;
-		assert.strictEqual(peerIref.target, '/PkgA/PkgB/ModX/ContA/ContB', 'the raw target is kept for follow');
-		assert.deepStrictEqual(peerIref.contextPaths, ['PkgA.PkgB.ModX.ContA']);
-		assert.ok(peerIref.meta.some((part) => part.text === 'context PkgA.PkgB.ModX.ContA'));
-	});
-
-	test('AC1: a container and a parameter expose the full DEFINITION-REF path on hover', () => {
-		const rows = payload().rows;
-		assert.strictEqual(rows.find((row) => row.label === 'ContA')!.title, '/PkgA/PkgB/ModDefs/ModX/ContA');
-		assert.strictEqual(
-			rows.find((row) => row.label === 'IniValue')!.title,
-			'/PkgA/PkgB/ModDefs/ModX/ContA/IniValue'
-		);
-	});
-
-	test('AC1: the page is the static virtual shell, not a rendered tree', () => {
-		const source = html();
-		assert.ok(source.includes('id="tree" class="document-tree" role="tree" aria-label="ECUC values"'));
-		assert.ok(source.includes('class DocumentTreeView'), 'the shared component is inlined');
-		assert.ok(source.includes("this.windowEl = document.createElement('div')"), 'the window is component-owned');
-		assert.ok(source.includes('document-tree-window'), 'the window wrapper is presentational');
-		assert.ok(source.includes('id="tree-measure"'), 'the hidden height probe stays host-owned');
-		assert.ok(!source.includes('id="tree-top"'), 'no static spacer survives');
-		assert.ok(!source.includes('id="tree-window"'), 'no static window survives');
-		assert.ok(!source.includes('data-node-id="'), 'the initial markup has no tree rows');
-		assert.ok(!source.includes('<div class="node" role="treeitem"'), 'no full-tree DOM');
-		assert.ok(source.includes('id="ecuc-rows"'), 'the rows are data');
-		assert.ok(source.includes('setRows(message.rows, message.selectedId, message.header)'));
-		assert.ok(!source.includes('id="view-toggle"'), 'the Tree view toggle is gone');
-		assert.ok(!source.includes('data-ln-digits'), 'there is no line-number gutter');
-		assert.ok(!source.includes('data-line='), 'rows carry no source-line display data');
-		assert.ok(!source.includes('class="glyph"'), 'the Tree glyph column is gone');
-	});
-
-	test('AC1: the initial row JSON escapes model text so it cannot close the script', () => {
-		const module = payload().rows.find((row) => row.kind === 'module')!;
-		const encoded = encodeRowDocument({
-			rows: [{ ...module, label: '</script><script>alert(1)</script>', definitionRef: '</script>' }],
+suite('editor bundled page', () => {
+	test('the host shell is strict and loads the bundled script and stylesheet', () => {
+		const html = editorShell({
+			cspSource: 'https://webview.test',
+			scriptUri: 'https://webview.test/editorViewer.js',
+			styleUri: 'https://webview.test/editorViewer.css',
+			nonce: 'test-nonce',
 		});
-		assert.ok(!encoded.includes('</script>'), 'no raw closing tag');
-		const decoded = JSON.parse(encoded) as RowPayload;
-		assert.strictEqual(decoded.rows[0].label, '</script><script>alert(1)</script>');
-		assert.strictEqual(decoded.rows[0].definitionRef, '</script>');
+		assert.ok(
+			html.includes(
+				"default-src 'none'; style-src https://webview.test 'nonce-test-nonce'; script-src 'nonce-test-nonce'; img-src https://webview.test data:"
+			),
+			'a strict CSP'
+		);
+		assert.ok(html.includes('src="https://webview.test/editorViewer.js"'), 'the bundled script');
+		assert.ok(html.includes('href="https://webview.test/editorViewer.css"'), 'the bundled stylesheet');
+		assert.ok(!/<script(?![^>]*src=)[^>]*>[\s\S]*?<\/script>/.test(html), 'no inline page script');
+		assert.ok(!html.includes('type="application/json"'), 'no embedded document');
+		assert.ok(!html.includes('Function.prototype.toString'), 'no serialized page functions');
+		assert.strictEqual((html.match(/id="tree"/g) || []).length, 1);
+		assert.ok(html.includes('id="sidebar"') && html.includes('id="row-menu"'));
 	});
 
-	test('AC1: every colour comes from a --vscode-* variable, and assets are inlined', () => {
-		const page = html();
-		const style = /<style[^>]*>([\s\S]*?)<\/style>/.exec(page);
-		assert.ok(style, 'one inlined style block');
-		assert.ok(style[1].includes('var(--vscode-'), 'theming through CSS custom properties');
-		const hexes = [...style[1].matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
-		for (const hex of hexes) {
+	test('boots from the static shell, announces ready and renders the posted document', () => {
+		const { dom } = mount();
+		try {
+			expectReady(dom.api);
+			assert.ok(treeRows(dom.document).length > 0, 'the posted rows are in the tree');
+			const labels = rowLabels(dom.document);
+			assert.ok(labels.includes('PkgA.PkgB.ModDefs.ModX'), 'the module label');
+			assert.ok(labels.includes('ContA'), 'the container label');
+			assert.ok(labels.includes('IniValue'), 'the parameter label');
 			assert.ok(
-				['#4EC9B0', '#80808040', '#DCDCAA'].includes(hex),
-				`${hex} is a semantic fallback inside a --vscode-* variable`
+				dom.document.querySelector('#tree .node')!.getAttribute('role') === 'treeitem',
+				'the row builder owns tree semantics'
 			);
+			assert.strictEqual(dom.document.querySelector('#tree').getAttribute('aria-label'), 'ECUC values');
+		} finally {
+			dom.restore();
 		}
-		assert.ok(page.includes('nonce="test-nonce"'), 'style and script carry the nonce');
-		assert.ok(page.includes("default-src 'none'"), 'a CSP meta is present');
-		assert.ok(!/<script[^>]+src=/.test(page), 'nothing is loaded remotely');
+	});
+
+	test('the row primitives carry the data the details panel needs, without model markup', () => {
+		const { dom } = mount();
+		try {
+			const module = treeRows(dom.document).find(
+				(row) => row.querySelector('.label')?.textContent === 'PkgA.PkgB.ModDefs.ModX'
+			)!;
+			assert.strictEqual(module.dataset.kind, 'module');
+			assert.strictEqual(module.dataset.definitionRef, '/PkgA/PkgB/ModDefs/ModX');
+			const parameter = treeRows(dom.document).find(
+				(row) => row.querySelector('.label')?.textContent === 'IniValue'
+			)!;
+			assert.strictEqual(parameter.dataset.value, '63');
+			assert.strictEqual(parameter.querySelector('.value-text')!.textContent, '63');
+			assert.strictEqual(parameter.querySelector('.value')!.getAttribute('data-value-kind'), 'numeric');
+			assert.ok(!dom.document.querySelector('#tree').innerHTML.includes('<script'), 'model text is never markup');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('selection fills the one Details body and the value editor owns the type', () => {
+		const { dom, document } = mount();
+		try {
+			clickRow(dom, 'IniValue');
+			const body = dom.document.getElementById('sb-details-body');
+			assert.ok(body.textContent.includes('IniValue'));
+			assert.ok(body.textContent.includes('Integer'));
+			const value = body.querySelector('#details-value') as HTMLInputElement;
+			assert.ok(value, 'the parameter value input is in Details');
+			assert.strictEqual(value.value, '63');
+			assert.deepStrictEqual(
+				Array.from(body.querySelectorAll('.inspector-code')).map((code: any) => code.textContent).slice(-3),
+				['63', '0x3F', '0b00111111']
+			);
+			assert.ok(rowFor(document, 'PeerIref'), 'the fixture has a reference');
+			clickRow(dom, 'PeerIref');
+			assert.ok(body.textContent.includes('Jump to target'), 'a followable reference gets the jump action');
+			clickRow(dom, 'ContA');
+			assert.ok(body.querySelector('#details-short-name'), 'a container gets its short-name editor');
+			assert.ok(body.querySelector('#details-definition-ref'), 'a container gets its definition editor');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Enter in the details editor posts one edit and a re-scan keeps the selection', () => {
+		const { dom, document } = mount();
+		try {
+			clickRow(dom, 'IniValue');
+			const input = dom.document.getElementById('details-value') as HTMLInputElement;
+			input.value = '99';
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			assert.deepStrictEqual(messagesOf(dom.api, 'edit'), [
+				{ type: 'edit', nodeId: rowFor(document, 'IniValue').id, value: '99' },
+			]);
+			const selected = rowFor(document, 'IniValue').id;
+			dom.post({ type: 'document', document: editorDocument({ selectedId: selected }) });
+			assert.strictEqual(
+				dom.document.querySelector('[data-selected="true"]')?.getAttribute('data-node-id'),
+				selected,
+				'a re-scan keeps the host selection'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a plain click selects, a double click reveals and Ctrl+Enter reveals', async () => {
+		const { dom, document } = mount();
+		try {
+			const item = clickRow(dom, 'IniValue');
+			assert.deepStrictEqual(messagesOf(dom.api, 'select'), [
+				{ type: 'select', nodeId: rowFor(document, 'IniValue').id },
+			]);
+			item.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+			assert.deepStrictEqual(messagesOf(dom.api, 'reveal'), [
+				{ type: 'reveal', nodeId: rowFor(document, 'IniValue').id },
+			]);
+			item.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true })
+			);
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 2, 'Ctrl+Enter is the deliberate reveal');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('search runs on Enter through the chunked engine and keeps the current match', async () => {
+		const { dom } = mount();
+		try {
+			const input = dom.document.getElementById('search-input') as HTMLInputElement;
+			input.value = 'IniValue';
+			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			await settleSearch();
+			const count = dom.document.getElementById('search-count')!.textContent;
+			assert.ok(/1 \/ [1-9]/.test(count), `the count reports the first match (${count})`);
+			assert.strictEqual(dom.document.getElementById('search-busy')!.getAttribute('data-busy'), 'false');
+			assert.ok(
+				dom.document.getElementById('tree')!.innerHTML.includes('<mark>IniValue</mark>'),
+				'the rendered row carries the search mark'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a large document renders only the viewport window plus overscan', () => {
+		const rows: EcucRow[] = Array.from({ length: 6000 }, (_, at) => ({
+			id: `row-${at}`,
+			kind: 'parameter' as const,
+			level: 2,
+			parentId: at === 0 ? null : 'row-0',
+			subtreeSize: 0,
+			posinset: at + 1,
+			setsize: 6000,
+			hasChildren: false,
+			label: `Param${at}`,
+			definitionRef: `/P/M/C/Param${at}`,
+			shownValue: String(at),
+			valueKind: 'numeric' as const,
+			title: '',
+			meta: [],
+			haystack: `param${at} ${at}`,
+		}));
+		const dom = installDom('editor');
+		try {
+			loadModule<typeof import('../../../webview/editorViewer')>('../../webview/editorViewer').mountEditor();
+			dom.post({ type: 'conditions', entries: [] });
+			dom.post({ type: 'document', document: { rows } });
+			const rendered = treeRows(dom.document).length;
+			assert.ok(rendered > 0, 'the viewport has rows');
+			assert.ok(rendered <= 200, `the DOM is bounded by the window+overscan (${rendered})`);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the Conditions panel saves one entry and posts it to the host', () => {
+		const { dom } = mount();
+		try {
+			(dom.document.getElementById('conditions-add') as HTMLElement).click();
+			const row = dom.document.querySelector('#conditions-list .condition-row:last-child')!;
+			const name = row.querySelector('.condition-name') as HTMLInputElement;
+			const value = row.querySelector('.condition-value') as HTMLInputElement;
+			name.value = 'A_SC';
+			value.value = '1';
+			(row.querySelector('.condition-save') as HTMLElement).click();
+			assert.deepStrictEqual(messagesOf(dom.api, 'conditions'), [
+				{ type: 'conditions', entries: [{ name: 'A_SC', value: '1' }] },
+			]);
+			const pushed = messagesOf(dom.api, 'conditions');
+			dom.post({ type: 'conditions', entries: [{ name: 'B_SC', value: '2' }] });
+			assert.strictEqual(
+				dom.document.querySelector('#conditions-list .condition-name-text')!.textContent,
+				'B_SC',
+				'a host entries push replaces the list'
+			);
+			void pushed;
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the page reports an unhandled error to the webview console, not a banner', () => {
+		const { dom } = mount();
+		try {
+			assert.ok(!dom.document.getElementById('notice'), 'there is no notice element');
+			const logged: string[] = [];
+			const surface = installConsoleErrors(
+				{ addEventListener: () => undefined },
+				{ error: (text: string) => logged.push(text) }
+			);
+			surface.report('boom');
+			assert.ok(logged.some((line) => line.includes('ECUC editor:') && line.includes('boom')), logged.join('\n'));
+		} finally {
+			dom.restore();
+		}
 	});
 });

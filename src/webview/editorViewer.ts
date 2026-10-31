@@ -1,252 +1,120 @@
 /**
- * The ECUC editor composition root.
+ * The ECUC editor webview entrypoint.
  *
- * The host builds a compact row document (`buildRows`) and this module turns it
- * into the page shell: toolbar, DocumentTree, sidebar (Details/Conditions) and
- * the row context menu. Every reusable unit lives under `components/` and owns
- * its markup, CSS and input behaviour; this root owns the row model, selection,
- * search, the provider bridge and the page-level DOM effects.
- *
- * Everything is inlined — no asset files, no remote loads — because the CSP
- * forbids them. Component CSS is imported as text by each component and injected
- * into the page's nonce stylesheet.
+ * The host writes a static shell and posts an `EditorDocumentPayload`; this
+ * module mounts the toolbar, Document tree, sidebar and row menu, and owns the
+ * row store, selection, search, the provider bridge and the page-level DOM
+ * effects. Every reusable unit lives under `components/` and owns its markup,
+ * CSS and input behaviour.
  */
-import { randomBytes } from 'crypto';
-import { EcucDocumentModel, SortMode } from '../core/ecuc/model';
-import type { ConditionValue } from '../core/ecuc/syscond';
-import type { ConditionEntry } from '../core/ecuc/conditionEntry';
-import { FlatRow, ancestorIds, carriesGroupGap, flattenRows, matchRangesScript, stepMatch } from './render/treeQuery';
+import './styles/tokens.css';
+import './styles/base.css';
+import type { EcucRow } from '../core/ecuc/renderRows';
+import {
+	FlatRow,
+	ancestorIds,
+	carriesGroupGap,
+	flattenRows,
+	stepMatch,
+} from './render/treeQuery';
 import {
 	buildDocumentBraceRow,
 	buildDocumentCommentRow,
 	buildDocumentNodeRow,
-	documentRowsScript,
 } from './components/documentTree/documentRows';
+import { DocumentTreeView, DocumentTreeHeader } from './components/documentTree/documentTreeView';
 import {
-	DocumentTreeHeader,
-	documentTreeStyles,
-	documentTreeViewScript,
-} from './components/documentTree/documentTreeView';
-import { documentTreeStateScript } from './components/documentTree/documentTreeState';
-import { encodeJsonForScript } from './render/jsonScript';
-import { consoleErrorScript } from './render/pageError';
-import { EcucRow, MetaPart, ParameterFormat, RowCondition, buildRows } from '../core/ecuc/renderRows';
-import { rowSearchScript } from './render/rowSearch';
-import { rowViewScript } from './render/rowView';
+	GuideSegment,
+	collapsedIdsFor,
+	guidesFor,
+	moveTarget,
+	reconcileRowState,
+	resolveFocusId,
+	subtreeRowIds,
+	toggleCollapsed,
+} from './components/documentTree/documentTreeState';
+import { RowSearchEngine } from './render/rowSearch';
 import {
-	renderSidebarHtml,
-	sidebarShellScript,
-	sidebarStyles,
+	getSidebarState,
+	mountSidebarShell,
+	setSidebarPersistence,
+	setSidebarState,
+	showSidebarSection,
+	showSidebarTab,
+	SidebarUiState,
 } from './components/sidebar/sidebar';
-import { detailsPanelScript, detailsPanelStyles } from './components/sidebar/detailsPanel/detailsPanel';
+import { inspectorFields, refusalShownInDetails } from './components/sidebar/detailsPanel/detailsPanel';
 import {
-	conditionsPanelScript,
-	conditionsPanelStyles,
+	applyDisabledCount,
+	ensureDiscoveredConditionRows,
+	mountConditionsPanel,
+	renderConditionEntries,
+	setConditionRows,
+	setConditionsCallback,
+	setConditionsErrorReporter,
+	setConditionsStatus,
 } from './components/sidebar/conditionsPanel/conditionsPanel';
-import { detailsEditorScript, detailsEditorStyles } from './components/detailsEditor/detailsEditor';
-import { virtualScrollScript } from './render/virtualScroll';
 import {
-	toolbarScript,
-	renderEditorToolbarHtml,
-	toolbarStyles,
-} from './components/toolbar/toolbar';
-import {
-	renderSearchBarHtml,
-	searchBarScript,
-	searchBarStyles,
-} from './components/searchBar/searchBar';
-import {
-	contextMenuScript,
-	contextMenuStyles,
-	renderContextMenuHtml,
-	renderContextMenuStyleTag,
-} from './components/contextMenu/contextMenu';
-import { sharedStyles } from './styles';
+	beginDetailsEdit,
+	detailsContainerFields,
+	detailsSelectionChanged,
+	detailsValueInput,
+	handleDetailsEditorMessage,
+	resetDetailsEditorState,
+	setDetailsEditorHost,
+} from './components/detailsEditor/detailsEditor';
+import { EditorToolbar } from './components/toolbar/toolbar';
+import { SearchBar } from './components/searchBar/searchBar';
+import { hideRowMenu, mountContextMenu } from './components/contextMenu/contextMenu';
+import { appendConditionTokens, setHighlightQuery } from './render/rowView';
+import { installConsoleErrors } from './render/pageError';
+import { postToHost, readPageState, resetVsCodeApi, writePageState } from './vscodeApi';
+import type { EditorDocumentHeader, EditorProviderToWebview } from '../webviewProtocol';
 
-export { encodeJsonForScript };
+export type { EditorDocumentHeader, EditorDocumentPayload, EditorProviderToWebview } from '../webviewProtocol';
+export { documentHeader } from '../webviewProtocol';
 
-export interface RenderOptions {
-	/** Inline-script nonce; generated when absent. */
-	nonce?: string;
-	sort?: SortMode;
-	sortExcept?: readonly string[];
-	/** Node to select on load (child design §2.4, source → editor). */
-	selectedId?: string;
-	/** SW system-constant values, evaluated once per row build. */
-	conditions?: ReadonlyMap<string, ConditionValue>;
-	/** The host's normalized entries, embedded for the Conditions panel. */
-	conditionEntries?: readonly ConditionEntry[];
-}
 
-/** The initial row payload the page parses before its first render. */
-export interface RowPayload {
-	rows: EcucRow[];
-	selectedId?: string;
-	/** Schema/packages shown by the component header. */
-	header?: DocumentTreeHeader;
-}
+let tree: any;
+let inspector: any;
+let detailsStatus: any;
+let detailsBody: any;
 
-/**
- * The schema/packages the component header shows. One owner, so the initial page
- * and a later `{ type: 'model' }` push cannot disagree.
- */
-export function documentHeader(model: EcucDocumentModel): DocumentTreeHeader {
-	return {
-		...(model.schema ? { schema: model.schema.release } : {}),
-		packages: model.packages.map((pkg) => pkg.path.join('.')),
-	};
-}
-
-/**
- * Serialises the row document for a `<script type="application/json">` block.
- * The shared encoder escapes the characters that could close the element; the
- * page calls `JSON.parse` and never evaluates it.
- */
-export function encodeRowDocument(payload: RowPayload): string {
-	return encodeJsonForScript(payload);
-}
-
-/** Builds the whole page. */
-export function renderHtml(model: EcucDocumentModel, options: RenderOptions = {}): string {
-	const nonce = options.nonce ?? randomBytes(16).toString('base64');
-	const document = buildRows(model, {
-		sort: options.sort,
-		sortExcept: options.sortExcept,
-		conditions: options.conditions,
-	});
-	const payload = encodeRowDocument({
-		rows: document.rows,
-		selectedId: options.selectedId,
-		header: documentHeader(model),
-	});
-	const conditionPayload = encodeJsonForScript(options.conditionEntries ?? []);
-	const style = [
-		sharedStyles(),
-		documentTreeStyles(),
-		toolbarStyles(),
-		searchBarStyles(),
-		sidebarStyles(),
-		detailsPanelStyles(),
-		detailsEditorStyles(),
-		conditionsPanelStyles(),
-		contextMenuStyles(),
-	].join('\n');
-	const searchHtml = renderSearchBarHtml('', 'Search the ECUC tree');
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
-<style nonce="${nonce}">${style}</style>
-${renderContextMenuStyleTag(nonce)}
-</head>
-<body data-view="document">
-${renderEditorToolbarHtml(searchHtml)}
-<div id="content">
-<div id="main">
-<div id="tree-measure" aria-hidden="true"><div class="probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
-<div id="tree" class="document-tree" role="tree" aria-label="ECUC values"></div>
-</div>
-${renderSidebarHtml()}
-</div>
-${renderContextMenuHtml()}
-<script type="application/json" id="ecuc-rows" nonce="${nonce}">${payload}</script>
-<script type="application/json" id="ecuc-conditions" nonce="${nonce}">${conditionPayload}</script>
-<script nonce="${nonce}">
-${CONSOLE_ERROR_SCRIPT}
-const vscode = acquireVsCodeApi();
-${contextMenuScript()}
-${detailsEditorScript()}
-${rowViewScript()}
-${sidebarShellScript()}
-${conditionsPanelScript()}
-${toolbarScript()}
-${searchBarScript()}
-${TREE_SCRIPT}
-</script>
-</body>
-</html>`;
-}
-
-/**
- * Install the console-only reporter before anything that can throw. Errors are
- * visible in the webview devtools console; the page never paints a banner.
- */
-const CONSOLE_ERROR_SCRIPT = consoleErrorScript({
-	installerName: 'ecucInstallConsoleErrors',
-	reporterName: 'ecucReportError',
-	label: 'ECUC editor',
-	install: true,
-});
-
-/**
- * The page: row store, flatten/collapse, virtual window, selection/focus, search,
- * the inspector and the message bridge. Component scripts are emitted before it.
- */
-const TREE_SCRIPT = `
-const tree = document.getElementById('tree');
-const inspector = document.getElementById('inspector');
-const detailsStatus = document.getElementById('details-status');
-const detailsBody = document.getElementById('sb-details-body');
-${documentTreeStateScript()}
-${detailsPanelScript()}
-${virtualScrollScript()}
-${documentTreeViewScript()}
-${matchRangesScript()}
-${rowSearchScript()}
-${stepMatch.toString()}
-${flattenRows.toString()}
-${carriesGroupGap.toString()}
-${documentRowsScript()}
-${ancestorIds.toString()}
-
-let rows = [];
-let rowById = new Map();
-let rowIndexById = new Map();
-let displayRows = [];
-let displayIndexById = new Map();
-let visibleNodeIds = [];
-let expandedIds = new Set();
-let collapsed = new Set();
-let selectedId;
-let subtreeIds = new Set();
-let guideLevels = [];
-let hoveredGuideId;
-let focusId;
+let rows: EcucRow[] = [];
+let rowById = new Map<string, EcucRow>();
+let rowIndexById = new Map<string, number>();
+let displayRows: FlatRow[] = [];
+let displayIndexById = new Map<string, number>();
+let visibleNodeIds: string[] = [];
+let expandedIds = new Set<string>();
+let collapsed = new Set<string>();
+let selectedId: string | undefined;
+let subtreeIds = new Set<string>();
+let guideLevels: GuideSegment[][] = [];
+let hoveredGuideId: string | undefined;
+let focusId: string | undefined;
 // Search is a jump control, not a visibility control: the whole row store is the
-// candidate set, and the collapsed set never removes a candidate. highlightQuery
-// carries the current query into the row primitives as the page's mark text.
+// candidate set, and the collapsed set never removes a candidate. The query is
+// mirrored into the row primitives for the mark text.
 let searchQuery = '';
-let searchMatches = [];
+let searchMatches: number[] = [];
 let searchIndex = -1;
-let highlightQuery = '';
+
 const searchEngine = new RowSearchEngine();
 let searchRunning = false;
 let searchFirstJumpDone = false;
 // Discovery derives row names from the current document; manual rows are the
 // only removable ones, so there is no dismissal set any more.
-let windowRange = [0, 0];
-let renderedById = new Map();
+let windowRange: [number, number] = [0, 0];
+let renderedById = new Map<string, HTMLElement>();
 let heights = { document: 20 };
-let heightFn = function () { return heights.document; };
+let heightFn: (index: number) => number = function () { return heights.document; };
 let typeAhead = { text: '', at: 0 };
 // The one Document surface. It owns the header, the native scroller, the
 // spacers and the rendered window; this page owns the row model and state.
-let treeView;
-
-function readInitialRows() {
-	const script = document.getElementById('ecuc-rows');
-	if (!script) {
-		window.ecucReportError('The row data is missing from this page.');
-		return { rows: [] };
-	}
-	try {
-		return JSON.parse(script.textContent || '{}');
-	} catch (error) {
-		window.ecucReportError('The row data could not be read: ' + error.message);
-		return { rows: [] };
-	}
-}
+let treeView: DocumentTreeView | undefined;
+let searchBar: SearchBar;
+let reportError: (text: string) => void = function () {};
 
 function indexRows() {
 	rowById = new Map();
@@ -302,7 +170,7 @@ function rebuildDisplay() {
 	buildHeightFn();
 }
 
-function setRows(nextRows, nextSelectedId, nextHeader) {
+function setRows(nextRows: any, nextSelectedId?: string, nextHeader?: DocumentTreeHeader): void {
 	hideRowMenu(false);
 	const incoming = Array.isArray(nextRows) ? nextRows : [];
 	const previousMatchId = currentMatchId();
@@ -335,13 +203,13 @@ function setRows(nextRows, nextSelectedId, nextHeader) {
 	} else {
 		searchMatches = [];
 		searchIndex = -1;
-		highlightQuery = '';
+		setHighlightQuery('');
 		setSearchBusy(false);
 		renderSearchUi();
 	}
 }
 
-function applyHeader(header) {
+function applyHeader(header: DocumentTreeHeader | undefined): void {
 	if (!treeView) {
 		return;
 	}
@@ -352,7 +220,7 @@ function applyHeader(header) {
 }
 
 /** The host half of the component: the rows for one display index. */
-function documentRowOptions(displayIndex) {
+function documentRowOptions(displayIndex: number): any {
 	const flat = displayRows[displayIndex];
 	return {
 		selectedId: selectedId,
@@ -379,19 +247,19 @@ function syncTreeModel() {
 	}
 }
 
-function buildNodeRow(row, displayIndex) {
+function buildNodeRow(row: EcucRow, displayIndex: number): any {
 	return buildDocumentNodeRow(row, documentRowOptions(displayIndex));
 }
 
-function buildBraceRow(flat, displayIndex) {
+function buildBraceRow(flat: any, displayIndex: number): any {
 	return buildDocumentBraceRow(flat.type, flat.level, rows[flat.rowIndex].id, documentRowOptions(displayIndex));
 }
 
-function buildCommentRow(flat, displayIndex) {
+function buildCommentRow(flat: any, displayIndex: number): any {
 	return buildDocumentCommentRow(flat.text, flat.level, rows[flat.rowIndex].id, documentRowOptions(displayIndex));
 }
 
-function buildDisplayRow(flat, displayIndex) {
+function buildDisplayRow(flat: any, displayIndex: number): any {
 	if (flat.type === 'comment') {
 		return buildCommentRow(flat, displayIndex);
 	}
@@ -400,7 +268,7 @@ function buildDisplayRow(flat, displayIndex) {
 		: buildBraceRow(flat, displayIndex);
 }
 
-function renderRow(index) {
+function renderRow(index: number): any {
 	const flat = displayRows[index];
 	return flat ? buildDisplayRow(flat, index) : document.createElement('div');
 }
@@ -408,7 +276,7 @@ function renderRow(index) {
 function focusedNodeId() {
 	const active = document.activeElement;
 	if (active && active.closest) {
-		const item = active.closest('#tree [role="treeitem"]');
+		const item = active.closest('#tree [role="treeitem"]') as HTMLElement | null;
 		if (item) {
 			return item.dataset.nodeId;
 		}
@@ -416,7 +284,7 @@ function focusedNodeId() {
 	return undefined;
 }
 
-function applyRoving(id) {
+function applyRoving(id: string | undefined): void {
 	for (const [renderedId, element] of renderedById) {
 		element.tabIndex = renderedId === id ? 0 : -1;
 	}
@@ -448,7 +316,7 @@ function collectRendered() {
 	}
 }
 
-function renderWindow(force) {
+function renderWindow(force?: boolean): void {
 	hideRowMenu(false);
 	if (!treeView) {
 		return;
@@ -471,7 +339,7 @@ function renderWindow(force) {
 	applyGuideHover();
 }
 
-function expandAncestors(id) {
+function expandAncestors(id: string): boolean {
 	let changed = false;
 	for (const ancestorId of ancestorIds(rows, id)) {
 		if (collapsed.delete(ancestorId)) {
@@ -481,13 +349,13 @@ function expandAncestors(id) {
 	return changed;
 }
 
-function ensureVisible(displayIndex) {
+function ensureVisible(displayIndex: number): void {
 	if (treeView) {
 		treeView.scrollToIndex(displayIndex);
 	}
 }
 
-function focusRow(id) {
+function focusRow(id: string): boolean {
 	const displayIndex = displayIndexById.get(id);
 	if (displayIndex === undefined) {
 		return false;
@@ -504,7 +372,7 @@ function focusRow(id) {
 	return true;
 }
 
-function setSelection(id) {
+function setSelection(id: string | undefined): void {
 	selectedId = id;
 	subtreeIds = new Set(subtreeRowIds(id, rows));
 	for (const [renderedId, element] of renderedById) {
@@ -531,7 +399,7 @@ function setSelection(id) {
 	updateInspector();
 }
 
-function selectItem(item) {
+function selectItem(item: any): void {
 	if (!item) {
 		return;
 	}
@@ -543,24 +411,24 @@ function selectItem(item) {
 	applyRoving(id);
 	item.focus({ preventScroll: true });
 	setSelection(id);
-	vscode.postMessage({ type: 'select', nodeId: id });
+	postToHost({ type: 'select', nodeId: id });
 }
 
-function revealItem(item) {
+function revealItem(item: any): void {
 	const id = typeof item === 'string' ? item : item && item.dataset ? item.dataset.nodeId : undefined;
 	if (id) {
-		vscode.postMessage({ type: 'reveal', nodeId: id });
+		postToHost({ type: 'reveal', nodeId: id });
 	}
 }
 
-function followItem(item) {
+function followItem(item: any): void {
 	const id = typeof item === 'string' ? item : item && item.dataset ? item.dataset.nodeId : undefined;
 	if (id) {
-		vscode.postMessage({ type: 'follow', nodeId: id });
+		postToHost({ type: 'follow', nodeId: id });
 	}
 }
 
-function flipCollapsed(id, keepFocusId) {
+function flipCollapsed(id: string, keepFocusId?: string): void {
 	const row = rowById.get(id);
 	if (!row || !row.hasChildren) {
 		return;
@@ -602,7 +470,7 @@ function prepareFocus() {
 	}
 }
 
-function typeAheadJump(character) {
+function typeAheadJump(character: string): void {
 	const now = Date.now();
 	typeAhead.text = (now - typeAhead.at > 2000 ? '' : typeAhead.text) + character.toLowerCase();
 	typeAhead.at = now;
@@ -617,7 +485,7 @@ function typeAheadJump(character) {
 	}
 }
 
-function onRowClick(event) {
+function onRowClick(event: any): void {
 	if (!(event.target instanceof Element)) {
 		return;
 	}
@@ -647,7 +515,7 @@ function onRowClick(event) {
 	}
 }
 
-function onRowDoubleClick(event) {
+function onRowDoubleClick(event: any): void {
 	if (!(event.target instanceof Element)) {
 		return;
 	}
@@ -658,7 +526,7 @@ function onRowDoubleClick(event) {
 	revealItem(item);
 }
 
-function onTreeKeydown(event) {
+function onTreeKeydown(event: any): void {
 	if (!(event.target instanceof Element)) {
 		return;
 	}
@@ -673,7 +541,7 @@ function onTreeKeydown(event) {
 	}
 	const at = visibleNodeIds.indexOf(id);
 	const displayIndex = displayIndexById.get(id);
-	const page = Math.max(1, Math.floor(treeView.clientHeight() / Math.max(1, heightFn(displayIndex === undefined ? 0 : displayIndex))));
+	const page = Math.max(1, Math.floor((treeView ? treeView.clientHeight() : 0) / Math.max(1, heightFn(displayIndex === undefined ? 0 : displayIndex))));
 	const moved = moveTarget(event.key, at, visibleNodeIds.length, page);
 	if (moved !== undefined) {
 		event.preventDefault();
@@ -738,7 +606,7 @@ function expandAll() {
 	renderWindow(true);
 }
 
-function focusAdjacentParameter(fromId, direction) {
+function focusAdjacentParameter(fromId: string, direction: string): string | undefined {
 	const parameters = visibleNodeIds.filter(function (id) {
 		const row = rowById.get(id);
 		return row && row.kind === 'parameter';
@@ -754,7 +622,7 @@ function focusAdjacentParameter(fromId, direction) {
 	return focusRow(nextId) ? nextId : undefined;
 }
 
-function renderedItemFor(id) {
+function renderedItemFor(id: string): HTMLElement | undefined {
 	return renderedById.get(id);
 }
 
@@ -766,7 +634,7 @@ function currentMatchId() {
 }
 
 /** The index of a row id in the current match list, or -1. */
-function searchIndexOfId(id) {
+function searchIndexOfId(id: string | undefined): number {
 	if (id === undefined) {
 		return -1;
 	}
@@ -774,7 +642,7 @@ function searchIndexOfId(id) {
 	return rowIndex === undefined ? -1 : searchMatches.indexOf(rowIndex);
 }
 
-function setSearchBusy(busy) {
+function setSearchBusy(busy: boolean): void {
 	searchRunning = busy === true;
 	renderSearchUi();
 }
@@ -783,7 +651,7 @@ function setSearchBusy(busy) {
  * Start a chunked search. previousId is preserved across progress/completion
  * and a re-scan; immediate skips the 120 ms debounce for a re-scan.
  */
-function startSearch(query, previousId, immediate) {
+function startSearch(query: string, previousId?: string, immediate?: boolean): void {
 	const text = query || '';
 	if (text.trim() === '') {
 		resetSearchResults();
@@ -791,7 +659,7 @@ function startSearch(query, previousId, immediate) {
 	}
 	searchEngine.clear();
 	searchQuery = text;
-	highlightQuery = text;
+	setHighlightQuery(text);
 	searchMatches = [];
 	searchIndex = -1;
 	searchFirstJumpDone = previousId !== undefined;
@@ -868,7 +736,7 @@ function renderSearchUi() {
 }
 
 /** Move to one match: expand ancestors, rebuild, scroll, select, keep focus in Search. */
-function jumpToSearchMatch(index) {
+function jumpToSearchMatch(index: number): void {
 	const rowIndex = searchMatches[index];
 	if (rowIndex === undefined) {
 		return;
@@ -887,18 +755,18 @@ function jumpToSearchMatch(index) {
 	}
 	ensureVisible(displayIndex);
 	setSelection(id);
-	vscode.postMessage({ type: 'select', nodeId: id });
+	postToHost({ type: 'select', nodeId: id });
 	renderWindow(true);
 	renderSearchUi();
 	searchBar.focus();
 }
 
 /** Cycle matches with wrapping; no-op when the query has no candidates. */
-function cycleSearch(direction) {
+function cycleSearch(direction: number): void {
 	if (searchMatches.length === 0) {
 		return;
 	}
-	searchIndex = stepMatch(searchMatches, searchIndex, direction);
+	searchIndex = stepMatch(searchMatches, searchIndex, direction === -1 ? -1 : 1);
 	jumpToSearchMatch(searchIndex);
 }
 
@@ -908,7 +776,7 @@ function resetSearchResults() {
 	searchQuery = '';
 	searchMatches = [];
 	searchIndex = -1;
-	highlightQuery = '';
+	setHighlightQuery('');
 	searchFirstJumpDone = false;
 	setSearchBusy(false);
 	renderSearchUi();
@@ -916,7 +784,7 @@ function resetSearchResults() {
 }
 
 /** Enter: start a changed query, or move through the current result set. */
-function executeSearch(direction) {
+function executeSearch(direction: number): void {
 	const query = searchBar.value();
 	if (query.trim() === '') {
 		resetSearchResults();
@@ -930,7 +798,7 @@ function executeSearch(direction) {
 }
 
 /** Clear the search and its highlight; optionally return focus to it. */
-function clearSearch(focusInput) {
+function clearSearch(focusInput: boolean): void {
 	searchBar.setValue('');
 	resetSearchResults();
 	if (focusInput) {
@@ -952,7 +820,7 @@ function focusTreeAfterSearch() {
 }
 
 /** A row click while search is active makes that row the current match. */
-function syncSearchToSelection(id) {
+function syncSearchToSelection(id: string): void {
 	if (searchQuery.trim() === '') {
 		return;
 	}
@@ -969,7 +837,7 @@ function syncSearchToSelection(id) {
 	}
 }
 
-function inspectorElement(tag, className, text) {
+function inspectorElement(tag: string, className?: string, text?: string): HTMLElement {
 	const element = document.createElement(tag);
 	if (className) {
 		element.className = className;
@@ -980,7 +848,7 @@ function inspectorElement(tag, className, text) {
 	return element;
 }
 
-function inspectorRow(key, value) {
+function inspectorRow(key: string, value: string): HTMLElement {
 	const row = inspectorElement('div', 'inspector-row');
 	row.appendChild(inspectorElement('span', 'inspector-key', key));
 	row.appendChild(inspectorElement('div', 'inspector-code', value));
@@ -988,7 +856,7 @@ function inspectorRow(key, value) {
 }
 
 /** A Details row whose value is a token-coloured, wrapped condition expression. */
-function conditionCodeRow(key, text) {
+function conditionCodeRow(key: string, text: string): HTMLElement {
 	const row = inspectorElement('div', 'inspector-row');
 	row.appendChild(inspectorElement('span', 'inspector-key', key));
 	const code = inspectorElement('div', 'inspector-code condition-code');
@@ -997,7 +865,7 @@ function conditionCodeRow(key, text) {
 	return row;
 }
 
-function paneActions(body) {
+function paneActions(body: HTMLElement): HTMLElement {
 	const actions = inspectorElement('div', 'inspector-actions');
 	body.appendChild(actions);
 	return actions;
@@ -1011,7 +879,7 @@ function clearDetailsStatus() {
 	delete detailsStatus.dataset.kind;
 }
 
-function setDetailsStatus(message) {
+function setDetailsStatus(message: any): void {
 	if (!detailsStatus) {
 		return;
 	}
@@ -1095,18 +963,18 @@ function updateInspector() {
 	}
 	const actions = paneActions(detailsBody);
 	if (row.kind === 'reference' && row.followable === true) {
-		const jump = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Jump to target');
+		const jump = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Jump to target') as HTMLButtonElement;
 		jump.type = 'button';
 		jump.addEventListener('click', function () { followItem(row.id); });
 		actions.appendChild(jump);
 	}
-	const reveal = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Reveal in source');
+	const reveal = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Reveal in source') as HTMLButtonElement;
 	reveal.type = 'button';
 	reveal.addEventListener('click', function () { revealItem(row.id); });
 	actions.appendChild(reveal);
 }
 
-function onTreeHover(event) {
+function onTreeHover(event: any): void {
 	if (!(event.target instanceof Element)) {
 		return;
 	}
@@ -1132,13 +1000,15 @@ function onTreeHover(event) {
 	}
 }
 
+/** Bind the document-level gestures once the page refs exist. */
+function mountEditorDomListeners(): void {
 document.addEventListener('click', onRowClick);
 document.addEventListener('dblclick', onRowDoubleClick);
 document.addEventListener('keydown', onTreeKeydown);
 mountContextMenu(tree, {
 	selectItem: selectItem,
 	rowElement: renderedItemFor,
-	onAction: function (action, nodeId) { vscode.postMessage({ type: action, nodeId }); }
+	onAction: function (action, nodeId) { postToHost({ type: action, nodeId }); }
 });
 tree.addEventListener('mouseover', onTreeHover);
 tree.addEventListener('mouseleave', function () {
@@ -1151,7 +1021,7 @@ document.addEventListener('focusin', function (event) {
 	if (!(event.target instanceof Element)) {
 		return;
 	}
-	const item = event.target.closest('#tree [role="treeitem"]');
+	const item = event.target.closest('#tree [role="treeitem"]') as HTMLElement | null;
 	if (item) {
 		focusId = item.dataset.nodeId;
 		applyRoving(focusId);
@@ -1191,20 +1061,23 @@ if (sidebarPanel && typeof ResizeObserver !== 'undefined') {
 	});
 	sidebarViewportObserver.observe(sidebarPanel);
 }
+}
 
-window.addEventListener('message', function (event) {
-	const message = event.data;
+/** One host protocol message. The Details editor sees it first so a re-scan clears drafts. */
+export function handleEditorMessage(message: EditorProviderToWebview): void {
 	if (!message) {
 		return;
 	}
-	if (applyConditionsMessage(message)) {
+	handleDetailsEditorMessage(message);
+	if (message.type === 'conditions') {
+		renderConditionEntries(message.entries);
 		return;
 	}
-	if (message.type === 'model') {
+	if (message.type === 'document') {
 		clearDetailsStatus();
 		const scrollTop = treeView ? treeView.getScrollTop() : 0;
 		const previousFocus = focusedNodeId() || focusId;
-		setRows(message.rows, message.selectedId, message.header);
+		setRows(message.document.rows, message.document.selectedId, message.document.header);
 		renderWindow(true);
 		if (treeView) {
 			treeView.setScrollTop(scrollTop);
@@ -1212,7 +1085,7 @@ window.addEventListener('message', function (event) {
 		if (selectedId !== undefined && displayIndexById.has(selectedId)) {
 			focusId = selectedId;
 			const index = displayIndexById.get(selectedId);
-			if (index < windowRange[0] || index >= windowRange[1]) {
+			if (index !== undefined && (index < windowRange[0] || index >= windowRange[1])) {
 				ensureVisible(index);
 			}
 		} else if (previousFocus !== undefined && displayIndexById.has(previousFocus)) {
@@ -1237,36 +1110,52 @@ window.addEventListener('message', function (event) {
 			setConditionsStatus(message.message || '');
 			return;
 		}
-		if (refusalShownInDetails(message, uiState.tab !== 'details')) {
+		if (refusalShownInDetails(message, getSidebarState().tab !== 'details')) {
 			// The details editor answers this field inline; there is no separate banner.
 			clearDetailsStatus();
 			return;
 		}
 		// Recoverable warnings belong in the Details tab.
 		setDetailsStatus(message);
+	} else if (message.type === 'error') {
+		setDetailsStatus({ message: message.message, kind: 'warn' } as any);
 	}
-});
+}
 
+
+// The host warns when this never arrives: a page whose script is blocked cannot
+// report its own failure, so the absence of this message is the only signal.
+export function mountEditor(): void {
+	resetEditorState();
+	tree = document.getElementById('tree');
+	inspector = document.getElementById('inspector');
+	detailsStatus = document.getElementById('details-status');
+	detailsBody = document.getElementById('sb-details-body');
+	reportError = installConsoleErrors(window, console, 'ECUC editor').report;
+	window.addEventListener('message', function (event) {
+		handleEditorMessage(event.data as EditorProviderToWebview);
+	});
+	mountEditorDomListeners();
 // Components are mounted once; the shell (tab, width, pane heights, collapsed
 // sections) survives a re-scan because it lives outside the rows.
-setSidebarState(vscode.getState());
-setSidebarPersistence(function () { vscode.setState(uiState); });
+setSidebarState(readPageState<SidebarUiState>());
+setSidebarPersistence(function () { writePageState(getSidebarState()); });
 setConditionRows([]);
-setConditionsCallback(function (entries) { vscode.postMessage({ type: 'conditions', entries }); });
-setConditionsErrorReporter(window.ecucReportError);
+setConditionsCallback(function (entries) { postToHost({ type: 'conditions', entries }); });
+setConditionsErrorReporter(reportError);
 setDetailsEditorHost({
 	getRow: function (id) { return rowById.get(id); },
 	getSelectedId: function () { return selectedId; },
-	isDetailsTab: function () { return uiState.tab === 'details'; },
+	isDetailsTab: function () { return getSidebarState().tab === 'details'; },
 	showTab: showSidebarTab,
 	showSection: showSidebarSection,
 	renderedItem: renderedItemFor,
 	selectItem: selectItem,
 	setSelection: setSelection,
-	postSelect: function (id) { vscode.postMessage({ type: 'select', nodeId: id }); },
+	postSelect: function (id) { postToHost({ type: 'select', nodeId: id }); },
 	focusRow: focusRow,
 	updateInspector: updateInspector,
-	commitEdit: function (message) { vscode.postMessage(message); },
+	commitEdit: function (message) { postToHost(message); },
 	focusAdjacentParameter: focusAdjacentParameter
 });
 mountConditionsPanel();
@@ -1280,6 +1169,7 @@ searchBar = new SearchBar('', {
 	onEscape: function () { clearSearch(false); focusTreeAfterSearch(); },
 	onInput: function (value) {
 		if (value === searchQuery) {
+			setHighlightQuery(value);
 			renderSearchUi();
 			return;
 		}
@@ -1295,14 +1185,47 @@ treeView = new DocumentTreeView('#tree', 'document', {
 	onRender: collectRendered
 });
 treeView.mount();
-const initial = readInitialRows();
-applyHeader(initial.header);
-setRows(initial.rows, initial.selectedId);
+setRows([], undefined);
 renderWindow(true);
 prepareFocus();
 applyDisabledCount();
 updateInspector();
 // The host warns when this never arrives: a page whose script is blocked cannot
 // report its own failure, so the absence of this message is the only signal.
-vscode.postMessage({ type: 'ready' });
-`;
+postToHost({ type: 'ready' });
+}
+
+/** A page reload starts from the initial protocol state, exactly like a fresh bundle. */
+function resetEditorState(): void {
+	rows = [];
+	rowById = new Map();
+	rowIndexById = new Map();
+	displayRows = [];
+	displayIndexById = new Map();
+	visibleNodeIds = [];
+	expandedIds = new Set();
+	collapsed = new Set();
+	selectedId = undefined;
+	subtreeIds = new Set();
+	guideLevels = [];
+	hoveredGuideId = undefined;
+	focusId = undefined;
+	searchQuery = '';
+	searchMatches = [];
+	searchIndex = -1;
+	searchRunning = false;
+	searchFirstJumpDone = false;
+	windowRange = [0, 0];
+	renderedById = new Map();
+	heights = { document: 20 };
+	heightFn = function () { return heights.document; };
+	typeAhead = { text: '', at: 0 };
+	treeView = undefined;
+	resetVsCodeApi();
+	resetDetailsEditorState();
+	setHighlightQuery('');
+}
+
+if (typeof document !== 'undefined' && document.getElementById('tree')) {
+	mountEditor();
+}

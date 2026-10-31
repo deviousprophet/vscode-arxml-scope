@@ -6,6 +6,8 @@ export default defineConfig({
 		// The extension-host suites drive real documents, edits and undo; several
 		// wait up to 5s for the platform. Mocha's 2s default made those waits flaky.
 		timeout: 10000,
-		require: ['./scripts/css-loader.cjs'],
+		// Webview modules import their colocated CSS; the compiled test tree has no
+		// CSS loader, so the hook swallows those requires and mirrors the files.
+		require: ['./out/test/webview/cssImportHook.js'],
 	},
 });

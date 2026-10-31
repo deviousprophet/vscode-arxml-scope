@@ -14,6 +14,4 @@ eslint-rules/**
 .fallowrc.json
 .*/**
 AGENTS.md
-scripts/**
-sample/**
-package-lock.json
+images/demo.gif

@@ -46,38 +46,11 @@ interface HeightCache {
 /** The last computed list. Scroll handlers reuse one height function per row set. */
 let cache: HeightCache | undefined;
 
-/** A constant height function, used by Document node/brace rows and by tests. */
+/**
+ * A constant height function, used by Document node/brace rows and by tests.
+ */
 export function fixedRowHeight(height: number): RowHeight {
 	return () => height;
-}
-
-/**
- * A self-contained copy of the virtual-scroll math for the inlined page. The
- * module's functions are serialized rather than re-written, so the page and the
- * unit tests keep one implementation; only the cache variable and the private
- * helpers they reference are declared alongside them.
- */
-export function virtualScrollScript(): string {
-	// Bundling the editor and the diff can rename one copy of these functions.
-	// The page template always calls the stable names, so emit a wrapper whenever
-	// the compiler kept a different declaration name.
-	const stable: Array<[string, (...args: any[]) => any]> = [
-		['rowCountOf', rowCountOf],
-		['heightAt', heightAt],
-		['cumulativeHeights', cumulativeHeights],
-		['rowAtOffset', rowAtOffset],
-		['calcTotalHeight', calcTotalHeight],
-		['calcRowOffset', calcRowOffset],
-		['calcVisibleRange', calcVisibleRange]
-	];
-	let script = 'let cache;\n';
-	for (const [name, fn] of stable) {
-		script += `${fn.toString()}\n`;
-		if (fn.name !== name) {
-			script += `function ${name}() { return ${fn.name}.apply(this, arguments); }\n`;
-		}
-	}
-	return script;
 }
 
 /** The row count as a non-negative integer (defensive against fractional input). */

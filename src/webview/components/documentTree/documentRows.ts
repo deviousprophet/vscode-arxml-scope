@@ -1,15 +1,12 @@
 /**
  * The Document row primitives shared by the editor and the semantic diff.
  *
- * The builders are serialized into both webviews with `toString()`, so they may
- * only reference page globals (`appendHighlighted`, `valueSpan`, `metaSpan`,
- * `twistyIcon`) and their own arguments. The shared CSS comes from
- * `documentTreeStyles()` in `documentTreeView.ts`.
+ * The builders append real DOM nodes only; model text always travels through
+ * `textContent`/`appendHighlighted`, never markup. Both pages import the same
+ * definitions, so a label, value or meta chip cannot drift between them.
  */
-declare const document: any;
-
 import type { EcucRow } from '../../../core/ecuc/renderRows';
-declare const window: any;
+import { appendHighlighted, metaSpan, twistyIcon, valueSpan } from '../../render/rowView';
 
 export interface DocumentGuide {
 	level: number;
@@ -26,7 +23,7 @@ export interface DocumentRowContext {
 	guides?: readonly DocumentGuide[];
 }
 
-export function appendDocumentGuides(rowElement: any, guides: readonly DocumentGuide[] | undefined): void {
+export function appendDocumentGuides(rowElement: HTMLElement, guides: readonly DocumentGuide[] | undefined): void {
 	for (const segment of guides || []) {
 		const guide = document.createElement('span');
 		guide.className = 'guide';
@@ -37,7 +34,7 @@ export function appendDocumentGuides(rowElement: any, guides: readonly DocumentG
 	}
 }
 
-export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext): any {
+export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext): HTMLElement {
 	const inlineMeta = row.meta.filter((part) => part.cls !== 'annotation');
 	const node = document.createElement('div');
 	node.className = inlineMeta.length > 0 ? 'node has-meta' : 'node';
@@ -88,13 +85,13 @@ export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext):
 	}
 	const label = document.createElement('span');
 	label.className = 'label';
-	window.appendHighlighted(label, row.label);
+	appendHighlighted(label, row.label);
 	rowElement.appendChild(label);
 	if (row.kind === 'parameter' || row.kind === 'reference') {
-		rowElement.appendChild(window.valueSpan(row) as any);
+		rowElement.appendChild(valueSpan(row));
 	}
 	if (inlineMeta.length > 0) {
-		rowElement.appendChild(window.metaSpan({ ...row, meta: inlineMeta }) as any);
+		rowElement.appendChild(metaSpan({ ...row, meta: inlineMeta }));
 	}
 	if (row.disabled) {
 		const suffix = document.createElement('span');
@@ -107,11 +104,11 @@ export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext):
 	return node;
 }
 
-function twistySpan(): any {
+export function twistySpan(): HTMLElement {
 	const span = document.createElement('span');
 	span.className = 'twisty';
 	span.setAttribute('aria-hidden', 'true');
-	span.appendChild(window.twistyIcon() as any);
+	span.appendChild(twistyIcon());
 	return span;
 }
 
@@ -120,7 +117,7 @@ export function buildDocumentBraceRow(
 	level: number,
 	rowId: string,
 	context: DocumentRowContext
-): any {
+): HTMLElement {
 	const node = document.createElement('div');
 	node.className = 'brace';
 	node.setAttribute('aria-hidden', 'true');
@@ -145,7 +142,7 @@ export function buildDocumentCommentRow(
 	level: number,
 	rowId: string,
 	context: DocumentRowContext
-): any {
+): HTMLElement {
 	const node = document.createElement('div');
 	node.className = 'comment';
 	node.setAttribute('aria-hidden', 'true');
@@ -159,7 +156,7 @@ export function buildDocumentCommentRow(
 	rowElement.appendChild(textSpan('span', 'punct comment-mark', '/* '));
 	const body = document.createElement('span');
 	body.className = 'comment-text';
-	window.appendHighlighted(body, text);
+	appendHighlighted(body, text);
 	rowElement.appendChild(body);
 	rowElement.appendChild(textSpan('span', 'punct comment-mark', ' */'));
 	appendDocumentGuides(rowElement, context.guides);
@@ -167,14 +164,9 @@ export function buildDocumentCommentRow(
 	return node;
 }
 
-function textSpan(tag: string, className: string, text: string): any {
+function textSpan(tag: string, className: string, text: string): HTMLElement {
 	const element = document.createElement(tag);
 	element.className = className;
 	element.textContent = text;
 	return element;
-}
-
-/** The serialized builders and their private helpers, for a webview page. */
-export function documentRowsScript(): string {
-	return `${appendDocumentGuides.toString()}${twistySpan.toString()}${textSpan.toString()}${buildDocumentNodeRow.toString()}${buildDocumentBraceRow.toString()}${buildDocumentCommentRow.toString()}`;
 }

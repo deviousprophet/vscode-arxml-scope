@@ -2,8 +2,7 @@
  * Pure display-state helpers for the Document tree.
  *
  * These decide re-scan state, focus, subtree highlighting and bracket guides.
- * Each is serialized into the page with `toString()`, so its body stays
- * self-contained; the editor and diff keep their own host state.
+ * The editor and diff keep their own host state; both import the same rules.
  */
 import type { FlatRow } from '../../render/treeQuery';
 
@@ -141,16 +140,4 @@ export function guidesFor(
 		}
 	}
 	return guides;
-}
-
-/** The display-state helpers serialized into an editor page. */
-export function documentTreeStateScript(): string {
-	return `${pruneCollapsed.toString()}
-${toggleCollapsed.toString()}
-${collapsedIdsFor.toString()}
-${moveTarget.toString()}
-${reconcileRowState.toString()}
-${resolveFocusId.toString()}
-${subtreeRowIds.toString()}
-${guidesFor.toString()}`;
 }

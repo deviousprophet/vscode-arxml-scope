@@ -13,7 +13,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// opened `.arxml` in the text editor (parent D14, AC3): the view is reachable only
 	// through the command, the menu entry, or *Open With…*.
 	// Condition values are per-workspace state, never a file beside the ARXML.
-	const ecucProvider = new EcucEditorProvider(new ConditionValueStore(context.workspaceState));
+	const ecucProvider = new EcucEditorProvider(new ConditionValueStore(context.workspaceState), context.extensionUri);
 	context.subscriptions.push(
 		vscode.window.registerCustomEditorProvider(VIEW_TYPE, ecucProvider, {
 			webviewOptions: { retainContextWhenHidden: true },

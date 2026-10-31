@@ -3,12 +3,8 @@
  * labels, values, actions and status. It owns the markup and the pure row ->
  * fields projection; the composition root paints the body from row data.
  */
-import detailsPanelCss from './detailsPanel.css';
+import './detailsPanel.css';
 import type { EcucRow, MetaPart, ParameterFormat, RowCondition } from '../../../../core/ecuc/renderRows';
-
-export function detailsPanelStyles(): string {
-	return detailsPanelCss;
-}
 
 /** The fields the details panel shows, read from a row (not from a DOM node). */
 export interface InspectorFields {
@@ -30,7 +26,7 @@ export interface InspectorFields {
 /**
  * Reads the inspector's fields from the row data. The panel therefore works for
  * a selected row that is outside the rendered window; it never queries the tree
- * DOM. Serialized into the page so the test and the panel share one definition.
+ * DOM. The test and the panel share one definition.
  */
 export function inspectorFields(row: EcucRow): InspectorFields {
 	const parts = (cls: MetaPart['cls']): string[] =>
@@ -91,8 +87,3 @@ export function renderDetailsPanelHtml(): string {
 </div>`;
 }
 
-/** The pure row -> fields projection serialized into the editor page. */
-export function detailsPanelScript(): string {
-	return `${inspectorFields.toString()}
-${refusalShownInDetails.toString()}`;
-}

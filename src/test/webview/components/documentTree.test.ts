@@ -9,8 +9,8 @@
  */
 import * as assert from 'assert';
 
-import { DocumentTreeView, documentTreeStyles, documentTreeViewScript } from '../../../webview/components/documentTree/documentTreeView';
-import { tokensStyles } from '../../../webview/styles';
+import { DocumentTreeView } from '../../../webview/components/documentTree/documentTreeView';
+import { webviewCss } from '../cssTestUtils';
 import { calcRowOffset, calcTotalHeight, calcVisibleRange } from '../../../webview/render/virtualScroll';
 
 interface FakeElement {
@@ -265,19 +265,14 @@ suite('DocumentTreeView component', () => {
 		}
 	});
 
-	test('the stylesheet and serialized class are the one shared surface', () => {
-		const styles = documentTreeStyles();
+	test('the stylesheet is the one shared surface', () => {
+		const styles = webviewCss('components', 'documentTree', 'documentTree.css');
 		assert.ok(/\.document-tree-scroll\s*\{[^}]*overflow:\s*auto/.test(styles), 'native two-axis scroller');
 		assert.ok(/\.document-tree-scroll\s*\{[^}]*scrollbar-gutter:\s*stable/.test(styles), 'native bar keeps its height');
 		assert.ok(/\.document-tree-window\s*\{[^}]*min-width:\s*var\(--document-tree-content-width/.test(styles));
 		assert.ok(!/\.hscroll/.test(styles), 'no proxy scrollbar');
 		assert.ok(!/height:\s*12px/.test(styles), 'no clipped scrollbar strip');
-		assert.ok(tokensStyles().includes('--container-accent: #4EC9B0'), 'shared tokens live in styles/');
+		assert.ok(webviewCss('styles', 'tokens.css').includes('--container-accent: #4EC9B0'), 'shared tokens live in styles/');
 		assert.ok(styles.includes('body[data-view="document"] .row[data-level="3"]'));
-		const script = documentTreeViewScript();
-		assert.ok(script.includes('const DocumentTreeView = ('), 'the page gets one stable binding');
-		assert.ok(script.includes('class'), 'the class source is inlined');
-		assert.ok(script.includes('setScrollTop'));
-		assert.ok(script.includes('onWheel'));
 	});
 });
