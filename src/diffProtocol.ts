@@ -20,7 +20,7 @@ export type DiffProviderToWebview =
 export type DiffWebviewToProvider =
 	/** The page mounted and is listening; the host answers with `document`. */
 	| { type: 'ready' }
-	/** Reveal one row in its source file; `side` is the displayed pane. */
+	/** Reveal one row in its source file; `side` is the host row side (the page maps the displayed pane through `hostSide`). */
 	| { type: 'reveal'; side: 'left' | 'right'; key: string };
 
 /** The message type, or `undefined` for a payload that is not a protocol message. */
