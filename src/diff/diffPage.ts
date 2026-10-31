@@ -19,7 +19,7 @@ import { pageErrorScript } from '../editor/pageError';
 import { rowSearchScript } from '../editor/rowSearch';
 import { rowViewScript } from '../editor/rowView';
 import { virtualScrollScript } from '../editor/virtualScroll';
-import { DiffCell, DiffDocument, DiffRow, diffVisibility, flattenDiffRows, nextChangeIndex } from './diffModel';
+import { DiffDocument, DiffRow, diffVisibility, flattenDiffRows, nextChangeIndex } from './diffModel';
 
 export interface DiffRenderOptions {
 	/** Inline-script nonce; generated when absent. */
@@ -53,17 +53,18 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 </head>
 <body>
 <div class="toolbar">
-<span class="toolbar-slot" aria-hidden="true"></span>
-<div class="toolbar-center">
-<button id="diff-swap" class="tool icon-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h9m0 0-2.5-2.5M12 5 9.5 7.5M13 11H4m0 0 2.5-2.5M4 11l2.5 2.5"/></svg><span class="lbl">Swap sides</span></button>
-</div>
-<div class="toolbar-right">
+<div class="toolbar-left">
 <div class="view-switch" role="group" aria-label="Diff view">
 <button id="diff-view-all" class="tool view-tool" type="button" aria-pressed="true">Show all</button>
 <button id="diff-view-diff" class="tool view-tool" type="button" aria-pressed="false">Show diff only</button>
 </div>
 <button id="diff-prev" class="tool icon-tool" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg><span class="lbl">Prev diff</span></button>
 <button id="diff-next" class="tool icon-tool" type="button" title="Next difference (F7)" aria-label="Next difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg><span class="lbl">Next diff</span></button>
+</div>
+<div class="toolbar-center">
+<button id="diff-swap" class="tool icon-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h9m0 0-2.5-2.5M12 5 9.5 7.5M13 11H4m0 0 2.5-2.5M4 11l2.5 2.5"/></svg><span class="lbl">Swap sides</span></button>
+</div>
+<div class="toolbar-right">
 <div class="search-box">
 <div class="search-field">
 <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l3.5 3.5"/></svg></span>
@@ -91,7 +92,7 @@ export function renderDiffHtml(diff: DiffDocument, options: DiffRenderOptions = 
 </div>
 <div id="diff-empty" class="empty" hidden><p id="diff-empty-text"></p></div>
 </div>
-<div id="diff-detail" class="detail" role="region" aria-label="Selected row changes"></div>
+<div id="diff-hscroll" class="hscroll" role="group" aria-label="Scroll both diff panes horizontally" tabindex="0" hidden><div id="diff-hscroll-inner" class="hscroll-inner"></div></div>
 <script type="application/json" id="diff-document" nonce="${nonce}">${payload}</script>
 <script nonce="${nonce}">
 ${DIFF_PAGE_ERROR_SCRIPT}
@@ -99,118 +100,6 @@ ${diffPageScript()}
 </script>
 </body>
 </html>`;
-}
-
-/**
- * The rail label for a compared field, in the Details vocabulary.
- *
- * Serialized into the page with `toString()`: keep the body self-contained.
- */
-export function diffFieldLabel(field: string): string {
-	switch (field) {
-		case 'definition ref':
-			return 'Definition';
-		case 'definition dest':
-			return 'Definition DEST';
-		case 'short name':
-			return 'Short name';
-		case 'variant':
-			return 'Variant';
-		case 'value':
-		case 'shown value':
-			return 'Value';
-		case 'target':
-			return 'Target';
-		case 'context':
-			return 'Context';
-		case 'condition':
-			return 'Condition';
-		case 'annotation':
-			return 'Annotations';
-		default:
-			return field;
-	}
-}
-
-/**
- * The canonical position of a field in the strip, so the same field always sits
- * in the same place. Unknown fields sort last instead of disappearing.
- *
- * Serialized into the page with `toString()`: keep the body self-contained.
- */
-export function diffFieldRank(field: string): number {
-	switch (field) {
-		case 'definition ref':
-			return 0;
-		case 'definition dest':
-			return 1;
-		case 'short name':
-			return 2;
-		case 'variant':
-			return 3;
-		case 'value':
-		case 'shown value':
-			return 4;
-		case 'target':
-			return 5;
-		case 'context':
-			return 6;
-		case 'condition':
-			return 7;
-		case 'annotation':
-			return 8;
-		default:
-			return 99;
-	}
-}
-
-/**
- * The fields an added or removed row shows: everything present on the one side
- * that survives, in canonical order. Empty fields are dropped, so a bare
- * container lists only what it actually carries.
- *
- * Serialized into the page with `toString()`: keep the body self-contained.
- */
-export function diffCellFields(cell: DiffCell): { field: string; text: string }[] {
-	const out: { field: string; text: string }[] = [];
-	if (!cell) {
-		return out;
-	}
-	const push = function (field: string, text: string): void {
-		if (text !== '') {
-			out.push({ field: field, text: text });
-		}
-	};
-	const metaOf = function (cls: string): string {
-		const parts: string[] = [];
-		for (const part of cell.meta) {
-			if (part.cls === cls) {
-				parts.push(part.text);
-			}
-		}
-		return parts.join('\n');
-	};
-	let context = '';
-	if (cell.contextPaths && cell.contextPaths.length > 0) {
-		context = cell.contextPaths.join(', ');
-	} else {
-		for (const part of cell.meta) {
-			if (part.cls === 'context') {
-				context = part.text.indexOf('context ') === 0 ? part.text.slice('context '.length) : part.text;
-				break;
-			}
-		}
-	}
-	push('definition ref', cell.definitionRef);
-	push('definition dest', cell.definitionDest === undefined ? '' : cell.definitionDest);
-	push('short name', cell.shortName === undefined ? '' : cell.shortName);
-	push('variant', metaOf('variant'));
-	push('value', cell.shownValue === undefined ? (cell.value === undefined ? '' : cell.value) : cell.shownValue);
-	push('target', cell.target === undefined ? '' : cell.target);
-	push('context', context);
-	push('condition', metaOf('condition'));
-	push('annotation', metaOf('annotation'));
-	return out;
 }
 
 /**
@@ -227,7 +116,7 @@ export function diffRowChars(row: DiffRow): number {
 		if (!cell) {
 			continue;
 		}
-		let chars = 2 * row.level + cell.label.length;
+		let chars = 3 + 4 * (row.level - 1) + cell.label.length;
 		if (cell.kind === 'module') {
 			// `.k-module .label::before` renders "module ".
 			chars += 7;
@@ -247,18 +136,16 @@ export function diffRowChars(row: DiffRow): number {
 }
 
 /**
- * One column width: never narrower than half the viewport, wide enough for the
- * longest row, and capped so a pathological line cannot create an unusable
- * scroll range. 20px covers the cell padding, 8px the twisty and gaps.
+ * The rendered width of the longest row: monospace character count plus cell
+ * padding and a little twisty/gap slack. No cap, so scrolling can reach the end
+ * of the longest line.
  *
  * Serialized into the page with `toString()`: keep the body self-contained.
  */
-export function diffColumnWidth(maxChars: number, chWidth: number, half: number, cap: number): number {
+export function diffContentWidth(maxChars: number, chWidth: number): number {
 	const safeChars = maxChars > 0 ? maxChars : 0;
 	const safeChar = chWidth > 0 ? chWidth : 0;
-	const safeHalf = half > 0 ? half : 0;
-	const need = Math.ceil(safeChars * safeChar) + 20 + 8;
-	return Math.min(Math.max(safeHalf, need), cap);
+	return Math.ceil(safeChars * safeChar) + 26 + 8;
 }
 
 /** The page script: the shared primitives plus the diff DOM glue. */
@@ -273,11 +160,8 @@ ${rowSearchScript()}
 ${diffVisibility.toString()}
 ${flattenDiffRows.toString()}
 ${nextChangeIndex.toString()}
-${diffFieldLabel.toString()}
-${diffFieldRank.toString()}
-${diffCellFields.toString()}
 ${diffRowChars.toString()}
-${diffColumnWidth.toString()}
+${diffContentWidth.toString()}
 
 const scroll = document.getElementById('diff-scroll');
 const list = document.getElementById('diff-list');
@@ -299,7 +183,7 @@ const leftHeader = document.getElementById('diff-left-header');
 const rightHeader = document.getElementById('diff-right-header');
 const empty = document.getElementById('diff-empty');
 const emptyText = document.getElementById('diff-empty-text');
-const detail = document.getElementById('diff-detail');
+const hscroll = document.getElementById('diff-hscroll');
 const bufferRows = 10;
 const searchEngine = new RowSearchEngine();
 let searchQuery = '';
@@ -336,7 +220,9 @@ let heightFn = function () { return heights.row; };
 let heightVersion = 0;
 let spacerTop = 0;
 let spacerBottom = 0;
-let diffColumn = 0;
+let diffContent = 0;
+let diffX = 0;
+let hscrollFrame = 0;
 let virtualStyleText = '';
 let scrollFrame = 0;
 
@@ -456,7 +342,7 @@ function setDocument(next) {
 	// gets the real row height instead of the fallback.
 	list.hidden = displayRows.length === 0;
 	measureHeights();
-	measureColumnWidth();
+	measureDiffWidth();
 	dataVersion++;
 	if (searchQuery.trim() !== '') {
 		startSearch(searchQuery, currentMatchKey(), true);
@@ -474,10 +360,27 @@ function measureHeights() {
 }
 
 /**
- * One column width per rebuild. The row font is monospace, so one font probe plus
- * character counts give every row's width without reading layout per row.
+ * One content width per rebuild. The row font is monospace, so one font probe
+ * plus character counts give the longest row without reading layout per row.
  */
-function measureColumnWidth() {
+function paneWidth() {
+	return scroll.clientWidth / 2;
+}
+
+function maxDiffX() {
+	return Math.max(0, diffContent - paneWidth());
+}
+
+function applyDiffX(next) {
+	const clamped = Math.max(0, Math.min(next, maxDiffX()));
+	if (clamped === diffX) {
+		return;
+	}
+	diffX = clamped;
+	writeVirtualStyle();
+}
+
+function measureDiffWidth() {
 	const probe = document.getElementById('diff-ch-probe');
 	let chWidth = 0;
 	if (probe) {
@@ -491,11 +394,18 @@ function measureColumnWidth() {
 			maxChars = chars;
 		}
 	}
-	const next = diffColumnWidth(maxChars, chWidth, scroll.clientWidth / 2, 1600);
-	if (next !== diffColumn) {
-		diffColumn = next;
-		writeVirtualStyle();
+	diffContent = diffContentWidth(maxChars, chWidth);
+	const max = maxDiffX();
+	if (diffX > max) {
+		diffX = max;
 	}
+	if (hscroll) {
+		hscroll.hidden = max <= 0;
+		if (hscroll.scrollLeft !== diffX) {
+			hscroll.scrollLeft = diffX;
+		}
+	}
+	writeVirtualStyle();
 }
 
 function listWindowTop() {
@@ -519,10 +429,12 @@ function virtualState() {
 }
 
 function writeVirtualStyle() {
+	const half = hscroll ? hscroll.clientWidth - paneWidth() : paneWidth();
 	const text =
 		'#diff-top{height:' + Math.max(0, spacerTop) + 'px}' +
 		'#diff-bottom{height:' + Math.max(0, spacerBottom) + 'px}' +
-		(diffColumn > 0 ? '#diff-scroll{--diff-col:' + diffColumn + 'px}' : '');
+		'#diff-scroll{--diff-x:-' + diffX + 'px}' +
+		'#diff-hscroll-inner{width:' + (diffContent + Math.max(0, half)) + 'px}';
 	if (text === virtualStyleText) {
 		return;
 	}
@@ -759,128 +671,6 @@ function updateSelection() {
 	}
 }
 
-function detailElement(tag, className, text) {
-	const element = document.createElement(tag);
-	if (className) {
-		element.className = className;
-	}
-	if (text !== undefined) {
-		element.textContent = text;
-	}
-	return element;
-}
-
-function revealButton(side, row) {
-	const button = detailElement('button', 'tool', side === 'left' ? 'Open left in source' : 'Open right in source');
-	button.type = 'button';
-	button.addEventListener('click', function () {
-		vscode.postMessage({ type: 'reveal', side: hostSide(side), key: row.key });
-	});
-	return button;
-}
-
-function updateDetail() {
-	detail.textContent = '';
-	const row = selectedKey === undefined ? undefined : rowByKey.get(selectedKey);
-	if (!row) {
-		detail.appendChild(detailElement('p', 'detail-hint', 'Select a row to see its changes.'));
-		return;
-	}
-	const left = displayLeft(row);
-	const right = displayRight(row);
-	const status = displayStatus(row);
-	const owner = left || right;
-	const head = detailElement('div', 'detail-head');
-	head.appendChild(detailElement('span', 'detail-kind', row.kind));
-	head.appendChild(detailElement('span', 'detail-label', owner ? owner.label : row.key));
-	head.appendChild(detailElement('span', 'detail-status status-' + status, status));
-	head.appendChild(detailElement('span', 'detail-spacer'));
-	const actions = detailElement('div', 'detail-actions');
-	if (left) {
-		actions.appendChild(revealButton('left', row));
-	}
-	if (right) {
-		actions.appendChild(revealButton('right', row));
-	}
-	if (actions.childNodes.length > 0) {
-		head.appendChild(actions);
-	}
-	detail.appendChild(head);
-
-	const fields = [];
-	if (status === 'changed') {
-		for (const change of row.changes.slice().sort(function (a, b) {
-			return diffFieldRank(a.field) - diffFieldRank(b.field);
-		})) {
-			fields.push(
-				swapped
-					? { field: change.field, left: change.right, right: change.left }
-					: { field: change.field, left: change.left, right: change.right }
-			);
-		}
-	} else if (status === 'added' && right) {
-		for (const entry of diffCellFields(right)) {
-			fields.push({ field: entry.field, left: '', right: entry.text, missing: 'left' });
-		}
-	} else if (status === 'removed' && left) {
-		for (const entry of diffCellFields(left)) {
-			fields.push({ field: entry.field, left: entry.text, right: '', missing: 'right' });
-		}
-	}
-	if (fields.length === 0) {
-		const note = status === 'unchanged' ? 'No differences for this row.' : 'No fields to compare for this row.';
-		detail.appendChild(detailElement('p', 'detail-note', note));
-		return;
-	}
-	const labels = swapped
-		? [diffDocument.labels[1], diffDocument.labels[0]]
-		: diffDocument.labels;
-	const paths = swapped
-		? [diffDocument.right.path, diffDocument.left.path]
-		: [diffDocument.left.path, diffDocument.right.path];
-	const table = detailElement('div', 'detail-table');
-	table.setAttribute('role', 'table');
-	table.setAttribute('aria-label', labels[0] + ' versus ' + labels[1]);
-	const headings = detailElement('div', 'detail-columns');
-	headings.setAttribute('role', 'row');
-	const rail = detailElement('span', 'detail-field');
-	rail.setAttribute('role', 'columnheader');
-	headings.appendChild(rail);
-	const leftHead = detailElement('span', 'detail-side-head detail-left', labels[0]);
-	leftHead.setAttribute('role', 'columnheader');
-	leftHead.title = paths[0];
-	headings.appendChild(leftHead);
-	const rightHead = detailElement('span', 'detail-side-head detail-right', labels[1]);
-	rightHead.setAttribute('role', 'columnheader');
-	rightHead.title = paths[1];
-	headings.appendChild(rightHead);
-	table.appendChild(headings);
-	for (const entry of fields) {
-		const line = detailElement('div', 'detail-change');
-		line.setAttribute('role', 'row');
-		const field = detailElement('span', 'detail-field', diffFieldLabel(entry.field));
-		field.setAttribute('role', 'rowheader');
-		line.appendChild(field);
-		line.appendChild(detailSideCell('detail-left', entry.left, entry.field, entry.missing === 'left'));
-		line.appendChild(detailSideCell('detail-right', entry.right, entry.field, entry.missing === 'right'));
-		table.appendChild(line);
-	}
-	detail.appendChild(table);
-}
-
-function detailSideCell(sideClass, text, field, missing) {
-	const cell = detailElement('span', 'detail-side ' + sideClass + (missing ? ' detail-missing' : ''));
-	cell.setAttribute('role', 'cell');
-	if (missing) {
-		cell.textContent = '— not in this file —';
-	} else if (field === 'condition') {
-		appendConditionTokens(cell, text);
-	} else {
-		cell.textContent = text;
-	}
-	return cell;
-}
-
 function renderHeaders() {
 	const left = swapped ? diffDocument.right : diffDocument.left;
 	const right = swapped ? diffDocument.left : diffDocument.right;
@@ -937,7 +727,6 @@ function applyView() {
 	renderWindow(true);
 	updateSelection();
 	updateEmptyState();
-	updateDetail();
 	if (searchQuery.trim() !== '') {
 		startSearch(searchQuery, currentMatchKey(), true);
 	}
@@ -1002,7 +791,6 @@ function jumpToSearchMatch(index) {
 	focusKey = key;
 	renderWindow(true);
 	updateSelection();
-	updateDetail();
 	renderSearchUi();
 	if (searchInput) {
 		searchInput.focus({ preventScroll: true });
@@ -1155,7 +943,6 @@ function setSwapped(next) {
 	renderHeaders();
 	renderWindow(true);
 	updateSelection();
-	updateDetail();
 }
 
 function selectKey(key, shouldFocus) {
@@ -1170,7 +957,6 @@ function selectKey(key, shouldFocus) {
 	}
 	renderWindow(true);
 	updateSelection();
-	updateDetail();
 	const element = renderedByKey.get(key);
 	if (element) {
 		applyRoving(key);
@@ -1214,7 +1000,6 @@ function revealKey(key) {
 	ensureVisible(displayIndex);
 	renderWindow(true);
 	updateSelection();
-	updateDetail();
 	const element = renderedByKey.get(key);
 	if (element) {
 		applyRoving(key);
@@ -1300,10 +1085,7 @@ function onKeyDown(event) {
 		return;
 	}
 	const item = event.target.closest('#diff-list [role="treeitem"]');
-	const fallback =
-		!item &&
-		selectedKey !== undefined &&
-		(event.target === document.body || event.target.closest('#diff-detail') !== null);
+	const fallback = !item && selectedKey !== undefined && event.target === document.body;
 	if (!item && !fallback) {
 		return;
 	}
@@ -1379,14 +1161,38 @@ scroll.addEventListener('scroll', function () {
 		renderWindow(false);
 	});
 });
+scroll.addEventListener('wheel', function (event) {
+	if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+		return;
+	}
+	if (maxDiffX() <= 0) {
+		return;
+	}
+	event.preventDefault();
+	applyDiffX(diffX + event.deltaX);
+	if (hscroll) {
+		hscroll.scrollLeft = diffX;
+	}
+}, { passive: false });
+if (hscroll) {
+	hscroll.addEventListener('scroll', function () {
+		if (hscrollFrame !== 0) {
+			return;
+		}
+		hscrollFrame = requestAnimationFrame(function () {
+			hscrollFrame = 0;
+			applyDiffX(hscroll.scrollLeft);
+		});
+	});
+}
 window.addEventListener('resize', function () {
 	measureHeights();
-	measureColumnWidth();
+	measureDiffWidth();
 	renderWindow(true);
 });
 if (typeof ResizeObserver === 'function') {
 	new ResizeObserver(function () {
-		measureColumnWidth();
+		measureDiffWidth();
 	}).observe(scroll);
 }
 
@@ -1459,7 +1265,6 @@ window.addEventListener('message', function (event) {
 		renderWindow(true);
 		updateSelection();
 		updateEmptyState();
-		updateDetail();
 	} else if (message.type === 'error') {
 		notice.textContent = message.message || 'The comparison could not be refreshed.';
 		notice.dataset.kind = 'warn';
@@ -1471,14 +1276,13 @@ renderWindow(true);
 updateSelection();
 updateViewButtons();
 updateEmptyState();
-updateDetail();
 vscode.postMessage({ type: 'ready' });
 `;
 }
 
 const DIFF_LEVEL_RULES = Array.from({ length: 24 }, (_, at) => {
 	const level = at + 1;
-	return `.diff-cell > .row[data-level="${level}"] { padding-left: calc(var(--indent) * ${at}); }`;
+	return `.diff-cell > .row[data-level="${level}"] { padding-left: calc(var(--content-pad) + var(--indent) * ${at}); }`;
 }).join('\n');
 
 const DIFF_STYLE = `
@@ -1519,7 +1323,10 @@ body {
 	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
 	--match-bg: rgba(234, 179, 8, 0.32);
 	--match-hi: rgba(234, 179, 8, 0.7);
-	--indent: 2ch;
+	--fold-gutter: 26px;
+	--doc-pad: 3ch;
+	--indent: 4ch;
+	--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
 }
 .toolbar {
 	display: grid;
@@ -1533,7 +1340,11 @@ body {
 	color: var(--tok-dim);
 	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
-.toolbar-slot {
+.toolbar-left {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 6px;
 	min-width: 0;
 }
 .toolbar-center {
@@ -1754,16 +1565,13 @@ input[type="search"]::-webkit-search-decoration {
 	min-height: 0;
 	overflow: auto;
 	overflow-anchor: none;
-	/* First paint, before the page measures the longest row. */
-	--diff-col: 50vw;
 }
 .pane-headers {
 	position: sticky;
 	top: 0;
 	z-index: 2;
 	display: grid;
-	grid-template-columns: var(--diff-col) var(--diff-col);
-	width: calc(var(--diff-col) * 2);
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 	background: var(--vscode-editor-background);
 	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
@@ -1794,7 +1602,6 @@ input[type="search"]::-webkit-search-decoration {
 }
 #diff-window {
 	display: flow-root;
-	width: calc(var(--diff-col) * 2);
 }
 .v-spacer {
 	pointer-events: none;
@@ -1822,7 +1629,7 @@ input[type="search"]::-webkit-search-decoration {
 }
 .diff-row, .probe {
 	display: grid;
-	grid-template-columns: var(--diff-col) var(--diff-col);
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 	align-items: stretch;
 	outline: none;
 }
@@ -1837,7 +1644,7 @@ input[type="search"]::-webkit-search-decoration {
 	align-items: baseline;
 	min-width: 0;
 	height: var(--ecuc-lh);
-	padding: 0 10px;
+	padding: 0;
 	overflow: hidden;
 	box-sizing: border-box;
 }
@@ -1885,20 +1692,34 @@ input[type="search"]::-webkit-search-decoration {
 	flex-wrap: nowrap;
 	gap: 1ch;
 	align-items: baseline;
+	box-sizing: border-box;
+	position: relative;
+	height: var(--ecuc-lh);
 	min-width: 0;
 	width: 100%;
+	padding: 0 0 0 var(--content-pad);
 	white-space: pre;
+	transform: translateX(var(--diff-x, 0px));
 }
 ${DIFF_LEVEL_RULES}
 .twisty {
-	flex: 0 0 16px;
+	position: absolute;
+	left: 2px;
+	top: 0;
+	bottom: 0;
+	width: 16px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	align-self: stretch;
 	color: var(--vscode-icon-foreground, var(--vscode-foreground));
-	opacity: 0.55;
+	opacity: 0;
+	transition: opacity 0.2s;
 	cursor: pointer;
+}
+.diff-row:hover > .diff-cell > .row > .twisty,
+.diff-row:focus-visible > .diff-cell > .row > .twisty,
+.diff-row[aria-expanded="false"] > .diff-cell > .row > .twisty {
+	opacity: 1;
 }
 .twisty svg {
 	transition: transform 120ms ease;
@@ -1909,7 +1730,7 @@ ${DIFF_LEVEL_RULES}
 .label {
 	flex: 0 0 auto;
 	white-space: pre;
-	font-weight: 400;
+	font-weight: 600;
 	color: var(--vscode-editor-foreground);
 }
 .row.k-module .label::before {
@@ -1952,6 +1773,8 @@ ${DIFF_LEVEL_RULES}
 	flex-wrap: nowrap;
 	gap: 1ch;
 	min-width: 0;
+	font-family: inherit;
+	font-size: inherit;
 	color: var(--vscode-editor-foreground);
 	white-space: pre;
 }
@@ -1959,6 +1782,7 @@ ${DIFF_LEVEL_RULES}
 	max-width: none;
 	overflow: visible;
 	white-space: pre;
+	margin: 0;
 }
 .short {
 	color: var(--tok-string);
@@ -2033,101 +1857,18 @@ mark {
 .empty p {
 	margin: 0;
 }
-#diff-detail {
+.hscroll {
 	flex: none;
-	max-height: 22vh;
-	overflow: auto;
-	padding: 6px 10px;
+	height: 12px;
+	overflow-x: auto;
+	overflow-y: hidden;
 	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
-	background: var(--vscode-editor-background);
-	user-select: text;
 }
-.detail-hint,
-.detail-note {
-	margin: 2px 0;
-	color: var(--tok-dim);
-	font-style: italic;
+.hscroll[hidden] {
+	display: none;
 }
-.detail-head {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	align-items: baseline;
-}
-.detail-spacer {
-	flex: 1 1 auto;
-}
-.detail-kind {
-	font-size: 11px;
-	color: var(--tok-dim);
-}
-.detail-label {
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-weight: 600;
-}
-.detail-status {
-	font-size: 11px;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-}
-.detail-status.status-changed {
-	color: var(--diff-changed-edge);
-}
-.detail-status.status-added {
-	color: var(--diff-added-edge);
-}
-.detail-status.status-removed {
-	color: var(--diff-removed-edge);
-}
-.detail-table {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	margin-top: 6px;
-}
-.detail-columns,
-.detail-change {
-	display: grid;
-	grid-template-columns: 14ch minmax(0, 1fr) minmax(0, 1fr);
-	gap: 8px;
-	align-items: baseline;
-}
-.detail-columns {
-	position: sticky;
-	top: 0;
-	z-index: 1;
-	background: var(--vscode-editor-background);
-	padding-bottom: 2px;
-}
-.detail-side-head {
-	font-weight: 600;
-	color: var(--tok-dim);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.detail-field {
-	color: var(--tok-dim);
-}
-.detail-side {
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-}
-.detail-missing {
-	color: var(--tok-dim);
-	font-style: italic;
-}
-.detail-left {
-	color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-editorError-foreground, var(--vscode-foreground)));
-}
-.detail-right {
-	color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-editorInfo-foreground, var(--vscode-foreground)));
-}
-.detail-actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
+.hscroll-inner {
+	height: 1px;
 }
 @media (forced-colors: active) {
 	.diff-row[data-status="changed"] > .diff-cell,
@@ -2166,6 +1907,10 @@ body.vscode-high-contrast .diff-row:hover > .diff-cell {
 	outline-offset: -1px;
 }
 @media (max-width: 720px) {
+	body {
+		--doc-pad: 2.5ch;
+		--indent: 3ch;
+	}
 	.toolbar {
 		padding: 0 4px;
 		gap: 3px;
@@ -2179,10 +1924,6 @@ body.vscode-high-contrast .diff-row:hover > .diff-cell {
 	}
 	.tool {
 		padding: 0 4px;
-	}
-	.detail-columns,
-	.detail-change {
-		grid-template-columns: minmax(0, 1fr);
 	}
 }
 @media (prefers-reduced-motion: reduce) {

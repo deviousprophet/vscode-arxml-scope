@@ -303,30 +303,33 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 - The diff is read-only: no `WorkspaceEdit`, `writeFile`, `applyEdit`, repair or derived file.
   Refresh is a full re-scan after a 150 ms debounce; the page keeps the view mode, swap state,
   collapse, selection, search and scroll.
-- The diff toolbar puts **Swap sides** in a centred track and the right track ends with
-  **Show all** / **Show diff only**, **Prev diff**, **Next diff**, then Search; Search is always the
-  last control and its count/busy slots stay in the flow. There is no Filter, no changes checkbox, no
-  changed/added/removed summary and no global Collapse/Expand. Search uses `RowSearchEngine`
+- The diff toolbar has three tracks: the left group is **Show all** / **Show diff only**,
+  **Prev diff**, **Next diff**; **Swap sides** is centred; the right group is Search. Search is always
+  the last control and its count/busy slots stay in the flow. There is no Filter, no changes checkbox,
+  no changed/added/removed summary and no global Collapse/Expand. Search uses `RowSearchEngine`
   (Enter-only, chunked, cancellable); its candidates are the changed rows in diff-only view, all rows
   otherwise. Search never hides rows.
-- **The diff strip mirrors Details for one row.** `updateDetail` shows a head (kind, label, status,
-  reveal actions) and a `role="table"` whose sticky heading row carries `DiffDocument.labels`.
-  `changed` rows list only `row.changes`, sorted by `diffFieldRank`; `added`/`removed` list the
-  surviving cell through `diffCellFields` and put `— not in this file —` in the missing column;
-  `unchanged` shows only `No differences for this row.` There is no definition line, no `Type`, no
-  format and no condition-state/Disabled row. The strip is outside `#diff-scroll`, caps at `22vh`
-  and scrolls internally.
+- **Diff rows reuse Document geometry.** Each pane starts with the 26px fold gutter, an absolute 16px
+  twisty at `left: 2px`, Document content padding and the `--indent` step per level. Labels use the
+  Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
+  horizontal padding, so the pane edge is the clip boundary. Keep the pane headers and the diff
+  status tints.
+- **The diff has no bottom strip.** The page ends at the horizontal proxy bar. There is no
+  selected-row details region, comparison table, headings or reveal buttons; `Enter` on the selected
+  row is the reveal action. Do not reintroduce a strip without a new requirement.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`, so two
-  same-named files read as the same shortest path suffix in the window title, the pane headers and
-  the strip. Swap reverses the pair; do not recompute it in the page.
-- **Horizontal scrolling is one scrollbar.** `#diff-scroll` is the only horizontal surface; both
-  tracks use `var(--diff-col)` and `#diff-window`/`.pane-headers` are `calc(var(--diff-col) * 2)`
-  wide. The width comes from `diffRowChars` + one monospace font probe, clamped to 1600px and never
-  below half the viewport, written to the nonce `#virtual-style` sheet. Never add a `style`
-  attribute, a per-pane offset or a scroll listener.
+  same-named files read as the same shortest path suffix in the window title and the pane headers.
+  Swap reverses the pair; do not recompute it in the page.
+- **Horizontal scrolling is shared and fixed.** Both panes always use `minmax(0, 1fr)` tracks and
+  fit the viewport. A proxy bar under the panes drives one `--diff-x` applied to `.diff-cell > .row`;
+  horizontal wheel over `#diff-scroll` does the same. Content width is the longest `diffRowChars`
+  estimate (Document padding + indent + text) plus one monospace font probe and `26 + 8`px for the
+  gutter and slack, with no cap. The proxy inner width is `contentWidth + proxyWidth - paneWidth`, so
+  its native maximum is exactly one pane width short of the content even with a vertical scrollbar.
+  The bar is hidden when content fits. Never widen the panes, keep per-pane offsets or write a
+  `style` attribute.
 - **Swap sides is display-only.** `displayLeft`/`displayRight`/`displayStatus` re-project the row,
-  detail changes swap their columns, and reveal buttons map a displayed side back to the host's
-  original side. The comparison documents are not recomputed and the single `#diff-scroll` is
-  untouched; do not add pane-level scroll state.
+  and `Enter` maps a displayed side back to the host's original side. The comparison documents are
+  not recomputed and the single `#diff-scroll` is untouched; do not add pane-level scroll state.
 - The manifest adds the three commands to the existing `arxmlScope.actions` submenu with
   `explorerViewletFocus`/`listDoubleSelection` guards; there is no flat `editor/context` diff entry.

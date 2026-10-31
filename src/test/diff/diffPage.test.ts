@@ -9,7 +9,7 @@ import * as assert from 'assert';
 import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { DiffCell, DiffDocument, DiffRow, buildDiffDocument, flattenDiffRows } from '../../diff/diffModel';
-import { diffCellFields, diffColumnWidth, diffFieldLabel, diffFieldRank, diffRowChars, encodeDiffDocument, renderDiffHtml } from '../../diff/diffPage';
+import { diffContentWidth, diffRowChars, encodeDiffDocument, renderDiffHtml } from '../../diff/diffPage';
 import { buildNodeIndex } from '../../editor/nodeId';
 import { buildRows } from '../../editor/renderRows';
 import { renderHtml } from '../../editor/renderHtml';
@@ -52,101 +52,7 @@ function styleOf(source: string): string {
 	return match[1];
 }
 
-/** The smallest DOM the strip renderer needs, so `updateDetail` can be driven. */
-class FakeElement {
-	readonly tagName: string;
-	className = '';
-	title = '';
-	children: FakeElement[] = [];
-	readonly attributes: Record<string, string> = {};
-	private text = '';
-
-	constructor(tagName: string) {
-		this.tagName = tagName;
-	}
-
-	get textContent(): string {
-		return this.text;
-	}
-
-	set textContent(value: string) {
-		this.text = value;
-		if (value === '') {
-			this.children = [];
-		}
-	}
-
-	appendChild(child: FakeElement): void {
-		this.children.push(child);
-	}
-
-	get childNodes(): FakeElement[] {
-		return this.children;
-	}
-
-	setAttribute(name: string, value: string): void {
-		this.attributes[name] = value;
-	}
-
-	addEventListener(): void {
-		// The test never clicks a reveal button.
-	}
-}
-
-function fakeDocument(): { createElement: (tag: string) => FakeElement } {
-	return { createElement: (tag) => new FakeElement(tag) };
-}
-
-type DetailRenderer = (document: DiffDocument, row: DiffRow | undefined, swapped: boolean) => FakeElement;
-
-/** Compiles the page's own strip renderer with its real helpers and a fake DOM. */
-function compileDetail(html: string): DetailRenderer {
-	const factory = new Function(
-		'document',
-		'vscode',
-		`
-		${functionSource(html, 'detailElement')}
-		${functionSource(html, 'revealButton')}
-		${functionSource(html, 'detailSideCell')}
-		${functionSource(html, 'diffFieldLabel')}
-		${functionSource(html, 'diffFieldRank')}
-		${functionSource(html, 'diffCellFields')}
-		${functionSource(html, 'displayLeft')}
-		${functionSource(html, 'displayRight')}
-		${functionSource(html, 'displayStatus')}
-		let detail;
-		let selectedKey;
-		let rowByKey = new Map();
-		let diffDocument = { left: { path: '' }, right: { path: '' }, labels: ['', ''] };
-		let swapped = false;
-		function appendConditionTokens(parent, text) { parent.textContent = text; }
-		${functionSource(html, 'updateDetail')}
-		return function (documentModel, row, isSwapped) {
-			detail = document.createElement('div');
-			diffDocument = documentModel;
-			selectedKey = row === undefined ? undefined : row.key;
-			rowByKey = row === undefined ? new Map() : new Map([[row.key, row]]);
-			swapped = isSwapped === true;
-			updateDetail();
-			return detail;
-		};
-	`
-	);
-	return factory(fakeDocument(), { postMessage: () => undefined }) as DetailRenderer;
-}
-
-function descendants(element: FakeElement, className: string): FakeElement[] {
-	const out: FakeElement[] = [];
-	for (const child of element.children) {
-		if (child.className.split(' ').includes(className)) {
-			out.push(child);
-		}
-		out.push(...descendants(child, className));
-	}
-	return out;
-}
-
-function detailRow(overrides: Partial<DiffRow> = {}): DiffRow {
+function widthRow(overrides: Partial<DiffRow> = {}): DiffRow {
 	return {
 		key: 'p1',
 		parentKey: null,
@@ -163,7 +69,7 @@ function detailRow(overrides: Partial<DiffRow> = {}): DiffRow {
 	};
 }
 
-function detailCell(overrides: Partial<DiffCell> = {}): DiffCell {
+function widthCell(overrides: Partial<DiffCell> = {}): DiffCell {
 	return {
 		kind: 'parameter',
 		label: 'Foo',
@@ -171,16 +77,6 @@ function detailCell(overrides: Partial<DiffCell> = {}): DiffCell {
 		meta: [],
 		range: { start: 0, end: 1 },
 		...overrides,
-	};
-}
-
-function labels(): DiffDocument {
-	return {
-		left: { name: 'left.arxml', path: '/work/left.arxml' },
-		right: { name: 'right.arxml', path: '/work/right.arxml' },
-		labels: ['left.arxml', 'right.arxml'],
-		rows: [],
-		summary: { changed: 0, added: 0, removed: 0, unchanged: 0 },
 	};
 }
 
@@ -212,16 +108,37 @@ suite('semantic diff page (design §3)', () => {
 		assert.ok(toolbar, 'the toolbar is a distinct strip');
 		const controls = toolbar[1];
 		assert.ok(
-			controls.indexOf('class="toolbar-center"') < controls.indexOf('class="toolbar-right"'),
-			'Swap sits between the two flexible slots'
+			controls.indexOf('class="toolbar-left"') < controls.indexOf('class="toolbar-center"') &&
+				controls.indexOf('class="toolbar-center"') < controls.indexOf('class="toolbar-right"'),
+			'left controls, centred Swap, right Search'
+		);
+		const leftGroup = controls.slice(controls.indexOf('class="toolbar-left"'), controls.indexOf('class="toolbar-center"'));
+		assert.ok(
+			leftGroup.indexOf('id="diff-view-all"') < leftGroup.indexOf('id="diff-view-diff"') &&
+				leftGroup.indexOf('id="diff-view-diff"') < leftGroup.indexOf('id="diff-prev"') &&
+				leftGroup.indexOf('id="diff-prev"') < leftGroup.indexOf('id="diff-next"'),
+			'Show all, Show diff only, Prev diff, Next diff on the left'
 		);
 		assert.ok(
-			controls.indexOf('id="diff-view-all"') < controls.indexOf('id="diff-prev"') &&
-				controls.indexOf('id="diff-prev"') < controls.indexOf('id="diff-next"') &&
-				controls.indexOf('id="diff-next"') < controls.indexOf('class="search-box"'),
-			'Show all, Show diff only, Prev diff, Next diff, then Search'
+			controls.indexOf('id="diff-swap"') > controls.indexOf('class="toolbar-center"'),
+			'Swap sits in the centre track'
 		);
-		assert.ok(/id="diff-detail"[^>]*role="region"/.test(html), 'the detail strip is a region');
+		assert.ok(
+			controls.indexOf('class="search-box"') > controls.indexOf('class="toolbar-right"'),
+			'Search sits in the right track'
+		);
+		assert.ok(
+			html.includes('id="diff-hscroll"') && html.includes('id="diff-hscroll-inner"'),
+			'one horizontal proxy scroller sits under the panes'
+		);
+		assert.ok(!html.includes('id="diff-detail"'), 'the bottom details strip is gone');
+		assert.ok(!html.includes('detail-table') && !html.includes('detail-columns'), 'no strip table survives');
+		assert.ok(
+			!html.includes('diffFieldLabel') && !html.includes('diffCellFields') && !html.includes('diffFieldRank'),
+			'no field-strip helpers survive'
+		);
+		assert.strictEqual((html.match(/let diffX =/g) || []).length, 1, 'one shared horizontal offset');
+		assert.strictEqual((html.match(/id="diff-hscroll"/g) || []).length, 1, 'one horizontal proxy');
 		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'), 'the empty state exists');
 		assert.ok(html.includes("'No differences'"), 'a pair with no changes has an explicit empty message');
 		assert.ok(!html.includes(' changed · '), 'the changed/added/removed summary text is gone');
@@ -239,19 +156,17 @@ suite('semantic diff page (design §3)', () => {
 		assert.ok(html.includes('executeSearch(event.shiftKey ? -1 : 1)'), 'Enter and Shift+Enter navigate');
 		assert.ok(html.includes("event.key.toLowerCase() === 'f'"), 'Ctrl+F focuses Search');
 		assert.ok(
-			functionSource(html, 'onKeyDown').includes("closest('#diff-detail')"),
-			'arrows still navigate after selecting strip text'
+			functionSource(html, 'onKeyDown').includes('event.target === document.body'),
+			'arrows still navigate after focus leaves the tree'
+		);
+		assert.ok(
+			functionSource(html, 'onKeyDown').includes("vscode.postMessage({ type: 'reveal'"),
+			'Enter still reveals the selected row'
 		);
 		const row = functionSource(html, 'buildDiffRow');
 		assert.ok(row.includes('displayLeft(row)') && row.includes('displayRight(row)'));
 		assert.ok(row.includes("element.dataset.status = status"), 'the displayed status is rendered');
 		assert.ok(row.includes("element.dataset.searchCurrent = 'true'"));
-		const detail = functionSource(html, 'updateDetail');
-		assert.ok(detail.includes('displayStatus(row)'));
-		assert.ok(detail.includes('diffDocument.labels'), 'the strip headings follow the panes');
-		assert.ok(detail.includes('displayLeft(row)') && detail.includes('displayRight(row)'), 'the strip shows the displayed sides');
-		const reveal = functionSource(html, 'revealButton');
-		assert.ok(reveal.includes("side: hostSide(side)"), 'a displayed side maps back to the host side');
 		const swap = functionSource(html, 'setSwapped');
 		assert.ok(swap.includes('renderHeaders()') && swap.includes('renderWindow(true)'));
 		assert.ok(!swap.includes('scrollTop'), 'swapping never resets the single scroll container');
@@ -346,220 +261,16 @@ suite('semantic diff page (design §3)', () => {
 		assert.strictEqual(leftHead.title, '/w/b/same.arxml', 'the tooltip follows the displayed side');
 	});
 
-	test('the strip vocabulary maps every compared field and keeps canonical order', () => {
-		assert.strictEqual(diffFieldLabel('definition ref'), 'Definition');
-		assert.strictEqual(diffFieldLabel('definition dest'), 'Definition DEST');
-		assert.strictEqual(diffFieldLabel('short name'), 'Short name');
-		assert.strictEqual(diffFieldLabel('variant'), 'Variant');
-		assert.strictEqual(diffFieldLabel('value'), 'Value');
-		assert.strictEqual(diffFieldLabel('shown value'), 'Value');
-		assert.strictEqual(diffFieldLabel('target'), 'Target');
-		assert.strictEqual(diffFieldLabel('context'), 'Context');
-		assert.strictEqual(diffFieldLabel('condition'), 'Condition');
-		assert.strictEqual(diffFieldLabel('annotation'), 'Annotations');
-		assert.strictEqual(diffFieldLabel('mystery'), 'mystery', 'unknown fields survive as-is');
-
-		const fields = [
-			'annotation',
-			'condition',
-			'context',
-			'target',
-			'value',
-			'variant',
-			'short name',
-			'definition dest',
-			'definition ref',
-			'mystery',
-		];
-		assert.deepStrictEqual(
-			fields.slice().sort((a, b) => diffFieldRank(a) - diffFieldRank(b)),
-			[
-				'definition ref',
-				'definition dest',
-				'short name',
-				'variant',
-				'value',
-				'target',
-				'context',
-				'condition',
-				'annotation',
-				'mystery',
-			]
-		);
-	});
-
-	test('an added or removed cell lists only its non-empty fields in canonical order', () => {
-		assert.deepStrictEqual(
-			diffCellFields(
-				detailCell({
-					definitionRef: '/P/Foo',
-					shortName: '',
-					shownValue: '7',
-					value: '7',
-					meta: [
-						{ cls: 'variant', text: 'variant pre', title: '' },
-						{ cls: 'condition', text: 'A == 1', title: '' },
-						{ cls: 'condition', text: 'B == 2', title: '' },
-						{ cls: 'annotation', text: 'one', title: '' },
-						{ cls: 'annotation', text: 'two', title: '' },
-					],
-				})
-			),
-			[
-				{ field: 'definition ref', text: '/P/Foo' },
-				{ field: 'variant', text: 'variant pre' },
-				{ field: 'value', text: '7' },
-				{ field: 'condition', text: 'A == 1\nB == 2' },
-				{ field: 'annotation', text: 'one\ntwo' },
-			],
-			'empty fields are dropped and meta groups are joined'
-		);
-		assert.deepStrictEqual(
-			diffCellFields(detailCell({ definitionRef: '/P/C', contextPaths: ['A.B', 'C.D'], meta: [] })),
-			[
-				{ field: 'definition ref', text: '/P/C' },
-				{ field: 'context', text: 'A.B, C.D' },
-			],
-			'a container reports its context path list'
-		);
-	});
-
-	test('the strip styles reserve 22vh, stick its headings and hide the old definition line', () => {
-		const html = page();
-		const style = styleOf(html);
-		assert.ok(/#diff-detail\s*\{[^}]*max-height:\s*22vh[^}]*overflow:\s*auto/.test(style), 'the strip scrolls internally');
-		assert.ok(/#diff-detail\s*\{[^}]*user-select:\s*text/.test(style), 'the values are selectable');
-		assert.ok(/\.detail-columns\s*\{[^}]*position:\s*sticky[^}]*top:\s*0/.test(style), 'headings stick');
-		assert.ok(/\.detail-columns,\s*\.detail-change\s*\{[^}]*14ch minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style));
-		assert.ok(/\.detail-missing\s*\{[^}]*--tok-dim[^}]*font-style:\s*italic/.test(style));
-		assert.ok(!/\.detail-definition/.test(style), 'the separate definition line is gone');
-		const update = functionSource(html, 'updateDetail');
-		assert.ok(update.includes("'detail-table'") && update.includes("'detail-columns'"), 'one table renderer');
-		assert.ok(update.includes('diffDocument.labels'), 'the headings come from the model labels');
-		assert.ok(
-			functionSource(html, 'detailSideCell').includes("'— not in this file —'"),
-			'the missing column explains itself'
-		);
-		assert.ok(update.includes("'No differences for this row.'"));
-		assert.ok(update.includes("'Select a row to see its changes.'"));
-		assert.ok(!update.includes('detail-definition'), 'the definition line is not rebuilt');
-	});
-
-	test('a changed row lists only its differing fields, sorted canonically', () => {
-		const render = compileDetail(page());
-		const row = detailRow({
-			changes: [
-				{ field: 'condition', left: 'A == 1', right: 'A == 2' },
-				{ field: 'value', left: '1', right: '2' },
-				{ field: 'definition ref', left: '/P/Foo', right: '/P/Bar' },
-			],
-			left: detailCell({ shortName: 'Same' }),
-			right: detailCell({ shortName: 'Same', definitionRef: '/P/Bar' }),
-		});
-		const detail = render(labels(), row, false);
-		const table = descendants(detail, 'detail-table')[0];
-		assert.ok(table, 'a changed row has a table');
-		assert.strictEqual(table.attributes.role, 'table');
-		assert.strictEqual(table.attributes['aria-label'], 'left.arxml versus right.arxml');
-		const headings = descendants(table, 'detail-columns')[0];
-		assert.deepStrictEqual(
-			headings.children.map((cell) => cell.textContent),
-			['', 'left.arxml', 'right.arxml']
-		);
-		const lines = descendants(table, 'detail-change');
-		assert.deepStrictEqual(
-			lines.map((line) => line.children[0].textContent),
-			['Definition', 'Value', 'Condition'],
-			'canonical order, no unchanged Short name row'
-		);
-		assert.deepStrictEqual(
-			lines.map((line) => [line.children[1].textContent, line.children[2].textContent]),
-			[
-				['/P/Foo', '/P/Bar'],
-				['1', '2'],
-				['A == 1', 'A == 2'],
-			]
-		);
-		assert.strictEqual(descendants(detail, 'detail-actions')[0].children.length, 2, 'both sides reveal');
-	});
-
-	test('an added row lists the surviving side and marks the missing column', () => {
-		const render = compileDetail(page());
-		const row = detailRow({
-			status: 'added',
-			right: detailCell({
-				definitionRef: '/P/New',
-				shownValue: '7',
-				meta: [{ cls: 'annotation', text: 'note', title: '' }],
-			}),
-		});
-		const detail = render(labels(), row, false);
-		const lines = descendants(detail, 'detail-change');
-		assert.deepStrictEqual(
-			lines.map((line) => [line.children[1].textContent, line.children[2].textContent]),
-			[
-				['— not in this file —', '/P/New'],
-				['— not in this file —', '7'],
-				['— not in this file —', 'note'],
-			]
-		);
-		assert.ok(lines.every((line) => line.children[1].className.includes('detail-missing')));
-		assert.ok(lines.every((line) => !line.children[2].className.includes('detail-missing')));
-
-		const swapped = render(labels(), row, true);
-		const flipped = descendants(swapped, 'detail-change');
-		assert.deepStrictEqual(
-			flipped.map((line) => [line.children[1].textContent, line.children[2].textContent]),
-			[
-				['/P/New', '— not in this file —'],
-				['7', '— not in this file —'],
-				['note', '— not in this file —'],
-			],
-			'after Swap sides the surviving file is the left column'
-		);
-	});
-
-	test('swap flips the strip values and headings together', () => {
-		const render = compileDetail(page());
-		const row = detailRow({
-			changes: [{ field: 'value', left: '1', right: '2' }],
-			left: detailCell(),
-			right: detailCell(),
-		});
-		const detail = render(labels(), row, true);
-		assert.deepStrictEqual(
-			descendants(detail, 'detail-columns')[0].children.map((cell) => cell.textContent),
-			['', 'right.arxml', 'left.arxml']
-		);
-		const line = descendants(detail, 'detail-change')[0];
-		assert.deepStrictEqual([line.children[1].textContent, line.children[2].textContent], ['2', '1']);
-	});
-
-	test('unchanged and unselected rows show a note, never a table', () => {
-		const render = compileDetail(page());
-		const unchanged = render(labels(), detailRow({ status: 'unchanged' }), false);
-		assert.strictEqual(descendants(unchanged, 'detail-table').length, 0);
-		assert.deepStrictEqual(
-			descendants(unchanged, 'detail-note').map((note) => note.textContent),
-			['No differences for this row.']
-		);
-		const none = render(labels(), undefined, false);
-		assert.deepStrictEqual(
-			descendants(none, 'detail-hint').map((hint) => hint.textContent),
-			['Select a row to see its changes.']
-		);
-	});
-
 	test('the width model counts indent, label, value and meta on the wider side', () => {
-		const parameter = detailRow({
+		const parameter = widthRow({
 			level: 1,
-			left: detailCell({ label: 'Foo', shownValue: '123', meta: [] }),
-			right: detailCell({ label: 'LongerName', shownValue: '12345', meta: [] }),
+			left: widthCell({ label: 'Foo', shownValue: '123', meta: [] }),
+			right: widthCell({ label: 'LongerName', shownValue: '12345', meta: [] }),
 		});
-		assert.strictEqual(diffRowChars(parameter), 2 + 10 + 5 + 3, 'the longer side wins');
-		const container = detailRow({
+		assert.strictEqual(diffRowChars(parameter), 3 + 10 + 5 + 3, 'the longer side wins');
+		const container = widthRow({
 			level: 2,
-			left: detailCell({
+			left: widthCell({
 				kind: 'container',
 				label: 'C',
 				meta: [
@@ -568,57 +279,157 @@ suite('semantic diff page (design §3)', () => {
 				],
 			}),
 		});
-		assert.strictEqual(diffRowChars(container), 4 + 1 + 10 + 10, 'indent and one gap per fragment');
-		const moduleRow = detailRow({
+		assert.strictEqual(diffRowChars(container), 3 + 4 + 1 + 10 + 10, 'Document padding plus one indent step');
+		const moduleRow = widthRow({
 			level: 1,
 			kind: 'module',
-			left: detailCell({ kind: 'module', label: 'M', meta: [] }),
+			left: widthCell({ kind: 'module', label: 'M', meta: [] }),
 		});
-		assert.strictEqual(diffRowChars(moduleRow), 2 + 1 + 7, 'the rendered "module " prefix is counted');
+		assert.strictEqual(diffRowChars(moduleRow), 3 + 1 + 7, 'the rendered "module " prefix is counted');
 		assert.strictEqual(
-			diffRowChars(detailRow({ left: detailCell({ label: 'P', shownValue: undefined, meta: [] }) })),
-			2 + 1 + 3,
+			diffRowChars(widthRow({ left: widthCell({ label: 'P', shownValue: undefined, meta: [] }) })),
+			3 + 1 + 3,
 			'the "= " separator renders even without a value'
 		);
-		assert.strictEqual(diffRowChars(detailRow({ left: undefined, right: undefined })), 0);
+		assert.strictEqual(diffRowChars(widthRow({ left: undefined, right: undefined })), 0);
 	});
 
-	test('a column is at least half the viewport, fits the longest row and is capped', () => {
-		assert.strictEqual(diffColumnWidth(10, 8, 500, 1600), 500, 'short content keeps the half-viewport column');
-		assert.strictEqual(diffColumnWidth(100, 8, 500, 1600), 828, 'the longest row widens both tracks');
-		assert.strictEqual(diffColumnWidth(5000, 8, 500, 1600), 1600, 'a pathological line is clamped');
+	test('the horizontal range ends at the longest rendered line', () => {
+		assert.strictEqual(diffContentWidth(100, 8), 834, 'ceil(chars * chWidth) plus the gutter and slack');
+		assert.strictEqual(diffContentWidth(0, 8), 34, 'an empty diff still has the gutter and slack');
+		assert.strictEqual(diffContentWidth(5000, 8), 40034, 'no cap: the range must reach the end of the longest line');
 	});
 
-	test('the tracks share one width and one scrollbar moves both panes', () => {
+	test('the shared offset clamps to the pane-limited content and sizes the proxy exactly', () => {
+		const factory = new Function(
+			'scroll',
+			'hscroll',
+			'virtualStyle',
+			`
+			let diffContent = 0;
+			let diffX = 0;
+			let spacerTop = 0;
+			let spacerBottom = 0;
+			let virtualStyleText = '';
+			${functionSource(page(), 'paneWidth')}
+			${functionSource(page(), 'maxDiffX')}
+			${functionSource(page(), 'writeVirtualStyle')}
+			${functionSource(page(), 'applyDiffX')}
+			return {
+				setContent: function (value) { diffContent = value; },
+				max: maxDiffX,
+				x: function () { return diffX; },
+				apply: applyDiffX,
+				render: writeVirtualStyle,
+				style: function () { return virtualStyle.textContent; }
+			};
+		`
+		) as (
+			scroll: { clientWidth: number },
+			hscroll: { clientWidth: number },
+			virtualStyle: { textContent: string }
+		) => {
+			setContent(value: number): void;
+			max(): number;
+			x(): number;
+			apply(next: number): void;
+			render(): void;
+			style(): string;
+		};
+		const horizontal = factory({ clientWidth: 900 }, { clientWidth: 1000 }, { textContent: '' });
+		horizontal.setContent(1450);
+		assert.strictEqual(horizontal.max(), 1000, 'content minus one 450px pane');
+		horizontal.render();
+		assert.ok(
+			horizontal.style().includes('#diff-hscroll-inner{width:2000px}'),
+			'proxy width cancels its own client width, not the scroller width'
+		);
+		horizontal.apply(1500);
+		assert.strictEqual(horizontal.x(), 1000, 'the offset clamps to the pane limit');
+		assert.ok(horizontal.style().includes('#diff-scroll{--diff-x:-1000px}'));
+		horizontal.apply(-20);
+		assert.strictEqual(horizontal.x(), 0, 'the offset never goes negative');
+		horizontal.setContent(400);
+		assert.strictEqual(horizontal.max(), 0, 'content that fits has no range');
+	});
+
+	test('diff rows use the Document gutter, indent and meta typography', () => {
 		const html = page();
 		const style = styleOf(html);
-		assert.ok(/#diff-scroll\s*\{[^}]*--diff-col:\s*50vw/.test(style), 'the first paint has a half-viewport column');
+		assert.ok(/--fold-gutter:\s*26px/.test(style), 'the Document fold gutter');
+		assert.ok(/--doc-pad:\s*3ch/.test(style) && /--indent:\s*4ch/.test(style));
+		assert.ok(/--content-pad:\s*calc\(var\(--fold-gutter\) \+ var\(--doc-pad\)\)/.test(style));
 		assert.ok(
-			/\.pane-headers\s*\{[^}]*grid-template-columns:\s*var\(--diff-col\) var\(--diff-col\)[^}]*width:\s*calc\(var\(--diff-col\) \* 2\)/.test(
+			/\.diff-cell\s*\{[^}]*padding:\s*0;/.test(style),
+			'the pane edge is the clip boundary, not cell padding'
+		);
+		assert.ok(
+			/\.diff-cell > \.row\s*\{[^}]*box-sizing:\s*border-box[^}]*position:\s*relative[^}]*height:\s*var\(--ecuc-lh\)[^}]*padding:\s*0 0 0 var\(--content-pad\)/.test(
 				style
 			),
-			'the header row is as wide as its tracks'
+			'rows start at the Document content pad'
 		);
 		assert.ok(
-			/#diff-window\s*\{[^}]*width:\s*calc\(var\(--diff-col\) \* 2\)/.test(style),
-			'the row window is as wide as its tracks'
+			/\.diff-cell > \.row\[data-level="2"\]\s*\{\s*padding-left:\s*calc\(var\(--content-pad\) \+ var\(--indent\) \* 1\)/.test(
+				style
+			),
+			'the level rule uses the Document formula'
 		);
 		assert.ok(
-			/#diff-measure \.diff-row,\s*#diff-measure \.probe\s*\{[^}]*minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style),
-			'the hidden probe is never widened'
+			/\.twisty\s*\{[^}]*position:\s*absolute[^}]*left:\s*2px[^}]*width:\s*16px/.test(style),
+			'the twisty sits in the gutter, not in the flex row'
 		);
-		assert.ok(/#diff-scroll\s*\{[^}]*overflow:\s*auto/.test(style), 'the diff scroller is the scroll surface');
-		assert.strictEqual((style.match(/overflow-x:/g) || []).length, 0, 'no second horizontal scroll surface');
+		assert.ok(/\.label\s*\{[^}]*font-weight:\s*600/.test(style), 'Document label weight');
+		assert.ok(
+			/\.row-meta\s*\{[^}]*flex-wrap:\s*nowrap[^}]*gap:\s*1ch[^}]*white-space:\s*pre/.test(style),
+			'Document meta keeps one monospace line'
+		);
+		assert.ok(
+			/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch[\s\S]*?--indent:\s*3ch/.test(style),
+			'the Document narrow-width values carry over'
+		);
+	});
+
+	test('both panes stay 50/50 and one shared offset moves their content', () => {
+		const html = page();
+		const style = styleOf(html);
+		assert.ok(
+			/\.pane-headers\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style),
+			'headers are half the viewport each'
+		);
+		assert.ok(
+			/\.diff-row, \.probe\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(style),
+			'rows are half the viewport each'
+		);
+		assert.ok(!/--diff-col/.test(style), 'no column-widening variable');
+		assert.strictEqual((style.match(/overflow-x:\s*auto/g) || []).length, 1, 'one horizontal scroll surface');
+		assert.ok(
+			/\.hscroll\s*\{[^}]*overflow-x:\s*auto[^}]*overflow-y:\s*hidden/.test(style),
+			'the proxy bar scrolls sideways only'
+		);
+		assert.ok(
+			/\.diff-cell > \.row\s*\{[^}]*transform:\s*translateX\(var\(--diff-x, 0px\)\)/.test(style),
+			'both panes read the same offset'
+		);
 		assert.ok(html.includes('id="diff-ch-probe"'), 'one font probe feeds the width model');
 		assert.strictEqual((html.match(/id="diff-ch-probe"/g) || []).length, 1);
 		assert.ok(/\.toolbar\s*\{[^}]*height:\s*26px/.test(style), 'the diff toolbar stays one 26px row');
 
-		const measure = functionSource(html, 'measureColumnWidth');
-		assert.ok(measure.includes('diffRowChars(row)') && measure.includes('scroll.clientWidth / 2'));
-		assert.ok(measure.includes('diffColumnWidth(maxChars, chWidth, scroll.clientWidth / 2, 1600)'));
-		assert.ok(measure.includes('writeVirtualStyle()'));
+		const measure = functionSource(html, 'measureDiffWidth');
+		const maxX = functionSource(html, 'maxDiffX');
+		const pane = functionSource(html, 'paneWidth');
+		assert.ok(measure.includes('diffRowChars(row)') && measure.includes('diffContentWidth(maxChars, chWidth)'));
+		assert.ok(pane.includes('scroll.clientWidth / 2'), 'the pane is half the vertical scroller width');
+		assert.ok(maxX.includes('diffContent - paneWidth()'), 'the limit is one pane width short of the content');
+		assert.ok(
+			functionSource(html, 'writeVirtualStyle').includes('hscroll.clientWidth - paneWidth()'),
+			'the proxy maximum cancels the proxy width, not the scroller width'
+		);
+		assert.ok(measure.includes('maxDiffX()') && measure.includes('hscroll.hidden'), 'the bar appears only on overflow');
+		assert.ok(html.includes("scroll.addEventListener('wheel'"), 'horizontal wheel over a pane drives the offset');
+		assert.ok(html.includes('applyDiffX(diffX + event.deltaX)'));
+		assert.ok(html.includes('hscroll.scrollLeft = diffX'));
 		assert.ok(html.includes('new ResizeObserver'), 'a pane resize recomputes the width');
-		assert.ok(functionSource(html, 'setSpacers').includes('writeVirtualStyle()'), 'spacers and width share one sheet write');
 		assert.ok(!functionSource(html, 'setSwapped').includes('scrollLeft'), 'swapping keeps the horizontal offset');
 	});
 
@@ -642,11 +453,8 @@ suite('semantic diff page (design §3)', () => {
 			'diffVisibility',
 			'flattenDiffRows',
 			'nextChangeIndex',
-			'diffFieldLabel',
-			'diffFieldRank',
-			'diffCellFields',
 			'diffRowChars',
-			'diffColumnWidth',
+			'diffContentWidth',
 			'calcVisibleRange',
 			'calcTotalHeight',
 			'calcRowOffset',

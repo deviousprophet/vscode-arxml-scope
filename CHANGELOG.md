@@ -21,10 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Condition constants discovered from the open document appear automatically; scanned constants are read-only and manual rows can be removed
 - Condition values use icon-only Edit, Save and Cancel actions
 - A read-only semantic diff for two ECUC-Values ARXML files, with aligned panes, **Show all** / **Show diff only**, Enter-driven Search, **Prev diff** / **Next diff**, **Swap sides** and reveal-in-source
-- The diff scrolls both panes with one horizontal scrollbar when a line is longer than its pane
-- The strip below the diff shows only the selected row's changed fields, with both file names above the values and a clear marker for values missing from one file
-- Two files with the same name are disambiguated by their shortest differing path in the diff title, pane headers and comparison strip
-- The diff toolbar has no Filter, changes summary or global collapse/expand buttons; **Swap sides** sits centred while the view, difference and Search controls share the right edge; row-level collapse and one synchronized scroll remain
+- The diff keeps both panes side by side on one screen; one horizontal scrollbar moves both sides together so the longest line can be read
+- Diff rows use the same fold gutter, indentation, label weight and meta typography as the Document view
+- Two files with the same name are disambiguated by their shortest differing path in the diff title and pane headers
+- The diff toolbar has no Filter, changes summary or global collapse/expand buttons; view and difference controls sit on the left, **Swap sides** is centred, and Search stays on the right; row-level collapse and one synchronized vertical scroll remain
 - A right-click **Duplicate** / **Delete** menu on container and parameter rows; both ask for confirmation, container duplicates ask for a unique short name, and each action is one undoable edit
 - An `ARXML Scope` context submenu for `Open with ECUC Editor` and `Reveal in ECUC Editor`
 
