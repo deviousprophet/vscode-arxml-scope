@@ -47,11 +47,16 @@ Hex Scope is the structural reference, not a source to paste. For every copied i
   composition roots, host/core split, 431 tests at that point.
 - `10-31-webview-bundle-runtime` — **done** (`746ce11`): bundled editor/diff entrypoints,
   typed protocols, static shells, `scripts/` deleted, 381 passing, package exit 0.
-- Remaining children: `10-31-repo-ci-benchmark-parity` and
-  `10-31-trellis-docs-spec-parity`.
+- `10-31-repo-ci-benchmark-parity` — **done** (`9a0f6e5`..`9dfee40`, archived `df0931b`):
+  ECUC large-file benchmark suite, CT `Benchmarks` job, typed benchmark summaries,
+  test workspace/temp-dir fixes, line-by-line `.vscodeignore` audit (`vsce ls` = 11
+  runtime files), root config alignment.
+- `10-31-trellis-docs-spec-parity` — **in progress**: `css-guidelines.md`,
+  `editor-lifecycle.md`, real `type-safety.md`, component spec completion, `docs/`,
+  `examples/`, README trim.
 - No `scripts/` folder exists.
-- No benchmark suite or benchmark CI job yet.
-- Next work: repo configs/CI/CT + ECUC benchmark, then spec/docs parity.
+- Benchmark suite and benchmark CI job exist.
+- Next work: finish the docs/spec child, then final integration review and parent archive.
 
 ## Status rule
 
