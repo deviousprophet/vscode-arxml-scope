@@ -14,7 +14,7 @@ that is not obvious from the code.
 | Generating an expected fixture from the code under test | A snapshot agrees with the code by construction. See `testing.md`. |
 | Editing a committed fixture from a test | It passes once, then fails forever and silently rewrites the repository. |
 | Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. The fixed `--container-accent` and the fixed search match tiers (`--match-bg`/`--match-hi`) are the documented dark-pass exceptions. |
-| A second renderer or copied markup for a preview | It diverges from the product; wrap the production `renderHtml` and assert containment. |
+| A second renderer or copied markup for a preview | It diverges from the product; wrap the production shell (`editorShell` / `diffShell`) and its bundled page, and assert containment. |
 | Reading a real customer file from a test | The repository is public. Fixtures are synthetic. |
 | Building the whole row list into the DOM | It restores the large-file lag; render the viewport window plus overscan only. |
 | Setting row depth or spacer heights with a style attribute | The CSP blocks inline styles; use `data-level` CSS and the component's scoped CSSOM/spacer properties. |
@@ -79,8 +79,8 @@ that is not obvious from the code.
   payload or source-position fields back to the row model. Bracket guides are the only vertical
   rules; they run from opening to closing brace, fade at rest and activate on hover. A repeating
   indent gradient is forbidden.
-- **Defaults are Document and the Details tab.** `renderHtml` writes `data-view="document"` and
-  selects the Details sidebar tab by default; Conditions starts hidden. The tab, sidebar width,
+- **Defaults are Document and the Details tab.** `editorShell` writes `data-view="document"` and the
+  sidebar mounts with Details selected by default; Conditions starts hidden. The tab, sidebar width,
   section panes and collapsed sections persist through `getState()/setState()`. A legacy
   `inspectorHidden` is ignored; there is no toolbar Details/Conditions toggle and no second panel
   surface.
@@ -98,8 +98,9 @@ that is not obvious from the code.
   missing `field` to `value` and ignores an unknown one. Enter commits, Escape restores, Tab moves
   (adjacent parameter for a value, the other container field for a container). A refusal keeps the
   typed text, marks the control invalid and shows the reason beside the field. Recoverable warnings
-  never use a banner: condition-name warnings go to the Conditions status, and follow/reveal/edit
-  failures go to the Details status. The editor has no notice element; page errors are console-only.
+  never use a banner: condition-name warnings go to the Conditions status; follow failures and field
+  refusals that cannot be shown inline go to the Details status. The editor has no notice element;
+  page errors are console-only.
   Only
   a container is editable this
   way; a module rename is refused because its short name is part of every container id. The panel
@@ -121,7 +122,7 @@ that is not obvious from the code.
 - **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels at
   normal widths; labels may hide only at <=720px. The fixed gutter keeps the row control at the far
   left instead of indenting it with the label.
-- **A re-scan keeps state, not markup.** The host posts `{ type: 'model', rows, selectedId }`; the
+- **A re-scan keeps state, not markup.** The host posts `{ type: 'document', document: { rows, selectedId, header } }`; the
   page reconciles selection, collapse, search and scroll, rebuilds the display list and renders the
   window. There is no `innerHTML` tree swap and no second refresh path.
 - **Search runs on Enter through the chunked engine, never a synchronous full scan.** Typing only
@@ -147,7 +148,7 @@ that is not obvious from the code.
   run `npx @vscode/vsce ls` and confirm only runtime files ship. `.vscodeignore` gotchas: `.*/**`
   does not exclude a dot-named directory that is a junction, so use `**/.vscode-test*`; root dot-files
   such as `.gitattributes` need their own line. Every kept line must name an existing path or
-  generated output — never copy Hex Scope's list wholesale.
+  generated output — never copy another repository's ignore list wholesale.
 
 ## Before calling work done
 

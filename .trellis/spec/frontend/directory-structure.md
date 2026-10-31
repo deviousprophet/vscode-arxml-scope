@@ -15,9 +15,10 @@ src/
     conditionValues.ts      SW-SYSCOND entries and the workspaceState store
     navigation.ts           node <-> source range, reference following
     bootWatchdog.ts         the boot timeout
+    webviewShell.ts         the static editor/diff HTML shells and CSP
   core/               pure logic. NO `vscode` imports and no DOM.
-    ecuc/             detect.ts  scanner.ts  model.ts  order.ts  resolve.ts  validate.ts  syscond.ts
-                      nodeId.ts  renderRows.ts  haystack.ts
+    ecuc/             detect.ts  scanner.ts  model.ts  conditionEntry.ts  order.ts  resolve.ts
+                      validate.ts  syscond.ts  nodeId.ts  renderRows.ts  haystack.ts
     text/             offsets.ts (line/offset index)
     diff/             diffModel.ts (matching/status/merged order, pure)
   webview/            browser-only page code. NO `vscode` imports.
@@ -34,13 +35,13 @@ src/
       contextMenu/          contextMenu.ts  contextMenu.css
       detailsEditor/        detailsEditor.ts  detailsEditor.css
     render/                 virtualScroll.ts  rowView.ts  rowSearch.ts  treeQuery.ts
-                            html.ts  jsonScript.ts  pageError.ts
-    styles/                 tokens.css  base.css  index.ts
+                            dom.ts  pageError.ts
+    styles/                 tokens.css  base.css
   test/
     core/               pure suites (ecuc, text, diff model)
     webview/
       components/       <component-name>.test.ts (flat, one per component)
-      page/             full-page string suites
+      page/             full-page jsdom suites (static shell + compiled page module)
       render/           shared render helper suites
     extension/          host/provider/command integration suites
     benchmarks/         runBenchmark.ts plus *Benchmark.ts suites (Node, esbuild at run time)
@@ -69,8 +70,8 @@ what lets the same code serve a workspace index or a language server later, and 
 testable without a running editor.
 
 `webview/` is browser-only. It may import `core/` and its own components; it must never import
-`vscode` or a `host/` module (the pre-refactor `conditionValues` type import is the only allowed type
-reference and must stay `import type`).
+`vscode` or a `host/` module. Shared protocol shapes come from `webviewProtocol.ts` /
+`diffProtocol.ts` as `import type`, so the page bundle carries no host runtime.
 
 ## Where new code goes
 
@@ -86,4 +87,4 @@ reference and must stay `import type`).
 | Shared tokens, reset or layout boxes | `src/webview/styles/` |
 | A synthetic fixture for a core suite | `src/test/fixtures/` |
 | A large-file benchmark | `src/test/benchmarks/<name>Benchmark.ts` |
-| A real file you want to try locally | `src/test/data/` (gitignored) |
+| A real file you want to try locally | `src/test/data/` (gitignored; create it locally) |

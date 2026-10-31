@@ -1,9 +1,9 @@
 # Component Guidelines
 
-This repository has no web framework. The ECUC editor is one inlined HTML page produced by
-`renderHtml`, with plain CSS and plain script. The host emits a compact **row document** from
-`buildRows`; the page flattens that row list and renders only a virtual window. There is no
-full-tree HTML string and no second renderer.
+This repository has no web framework. The ECUC editor is a static HTML shell (`editorShell` in
+`src/host/webviewShell.ts`) plus one esbuild browser bundle per page, with plain CSS. The host emits a compact
+**row document** from `buildRows`; the page flattens that row list and renders only a virtual window.
+There is no full-tree HTML string and no second renderer.
 
 ## Shell vs virtual window
 
@@ -25,17 +25,17 @@ body (column)
     #side-tabs (28px)                 right-edge vertical tabs
 ```
 
-- `DocumentTreeView` (`src/webview/components/documentTree/documentTreeView.ts`) is the single owner of the header,
-  the two-axis native scroller, the spacers and the rendered window. It is serialized into the
-  editor and the diff; the editor mounts one instance and the diff mounts one per pane.
+- `DocumentTreeView` (`src/webview/components/documentTree/documentTreeView.ts`) is the single owner of
+  the header, the two-axis native scroller, the spacers and the rendered window. Both pages import the
+  same class; the editor mounts one instance and the diff mounts one per pane.
 - The host supplies `{ rowCount, heightFn, renderRow(index, pane) }`. The component calls
   `calcVisibleRange` with overscan 10, writes spacer heights as `--document-tree-top` /
   `--document-tree-bottom` CSSOM properties, and skips the DOM write when the slice key is
   unchanged. `overflow-anchor: none` on the scroller stops browser scroll anchoring from fighting
   the spacer swap.
-- The initial rows are escaped JSON in `<script type="application/json" id="ecuc-rows">`; the
-  payload also carries the header schema/packages. A re-scan posts
-  `{ type: 'model', rows, selectedId, header }`, not tree markup and no `digits`.
+- The shell carries no model data. After the page posts `ready`, the host sends the first payload and
+  every re-scan as `{ type: 'document', document: { rows, selectedId, header } }`, not tree markup and
+  no `digits`. The header carries the schema/packages.
 - Anything that must survive a re-scan — the toolbar, the sidebar, the tabs, the inspector and the
   Conditions panel — lives outside the rows.
 - There is one Document presentation. There is no view toggle, no `view` state, no Tree CSS/probes/
@@ -43,7 +43,7 @@ body (column)
 
 ## Sidebar shell
 
-- The right side is a Hex Scope-style sidebar: a 28px vertical tab strip (**Details**, **Conditions**)
+- The right side is a VS Code-style sidebar: a 28px vertical tab strip (**Details**, **Conditions**)
   at the far right, a resizable panel area, and one visible tab panel at a time. Details is the
   default. There is no toolbar Details/Conditions toggle and no second panel surface.
 - `#inspector` remains the Details panel root. It contains one stable `sb-details` section body;
@@ -63,14 +63,15 @@ body (column)
   `.sb-btn-danger`, `.nav-btn` and `.act-btn`. Toolbar, details actions, Conditions actions and the
   Search field use those classes; do not add a one-off button style. The field uses `.search-input`
   (26px, input tokens, 3px radius) and the native search cancel is suppressed.
-- Page errors are console-only. An early installer defines `window.ecucReportError`, forwards
-  uncaught errors and unhandled rejections to `console.error`, and paints no banner. Recoverable
-  warnings use the Conditions or Details status line. Do not reintroduce a toolbar notice.
+- Editor page errors are console-only. `installConsoleErrors` subscribes `error` and
+  `unhandledrejection` to `console.error` and returns the `report` function the page uses; it paints no
+  banner. The diff page uses `installNoticeErrors` to write its notice strip. Recoverable warnings use
+  the Conditions or Details status line. Do not reintroduce a toolbar notice.
 
 ## Event ownership
 
-The details editor (`components/detailsEditor/detailsEditor.ts`) is emitted **before** the page script. Its controls live
-in the details panel, outside `#tree`, and each owns its own `Enter`/`Escape`/`Tab` keys:
+The details editor (`components/detailsEditor/detailsEditor.ts`) is imported into the page bundle. Its
+controls live in the details panel, outside `#tree`, and each owns its own `Enter`/`Escape`/`Tab` keys:
 
 ```text
 details control keys  →  details editor commit/cancel/move
@@ -83,7 +84,7 @@ The page's `onRowClick` handles the row interactions. One interaction, one effec
 without moving selection, a reference target is plain text in the Document, clicking `=`/label selects
 only, and clicking a parameter's `.value-text` selects and opens the details editor. Reference follow
 is the details **Jump to target** action. The inline chevron (`twistyIcon`) is one shared row primitive
-in `rowViewScript()`; the editor and diff pages must not fork it.
+in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
 
 ## Row context menu
 
@@ -103,8 +104,9 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
 - **Search is the only query control and runs on Enter.** `#search-input` stays `type="search"` for
   its searchbox role; Chromium's native cancel/decoration pseudo-elements are suppressed so the one
   custom `#search-clear` X is the only clear control. Typing only updates the field and the clear X;
-  it never runs, marks, scrolls or jumps. Enter executes a changed query, and a second Enter cycles;
-  Shift+Enter goes backwards. Escape clears and returns focus to the tree. The page uses a chunked
+  it never starts a run, scrolls or jumps, and a changed query clears the previous result set. Enter
+  executes that changed query, and a second Enter cycles; Shift+Enter goes backwards. Escape clears
+  and returns focus to the tree. The page uses a chunked
   `RowSearchEngine` with a 120 ms debounce, 24 ms time slices, a 512-row batch, a generation token
   and 150 ms progress throttling. `#search-busy` is the spinner while a run is active. Do not add a
   second query field, a separate find bar or a synchronous full-store scan.
@@ -132,22 +134,22 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
   actions live in a fixed 100px `.condition-actions` column and the name/value text spans match the
   input border/padding geometry, so the name, `=` and value columns do not jump when a row enters
   edit mode. Clear is `.sb-btn-secondary`, Add is `.sb-btn-add`. Scanned constants (names referenced
-  by the current document) are read-only and have no Remove; only manual rows can be removed. Clear
+  by the current document) can be edited but have no Remove; only manual rows can be removed. Clear
   values empties the committed `data-value` values and keeps the rows. The `unknown` badge is visible
   only for an empty committed value outside edit mode. Do not put text labels back on Save/Cancel.
 - **`.value` is a direct child of `.row`.** `valueSpan` and tests depend on it. No input is inserted
   into `.value`; the details input is separate.
 - Document rows are a single flex line with `gap: 1ch`, no border and no fixed label column. Depth is
   `data-level` + generated attribute CSS
-  (`padding-left: calc(var(--content-pad) + var(--indent) * n)`), where `--content-pad` is the 26px
-  fold gutter plus `--doc-pad`. Never use a style attribute for depth.
+  (`padding-left: calc(var(--content-pad) + var(--indent) * (level - 1))`), where `--content-pad` is
+  the 26px fold gutter plus `--doc-pad`. Never use a style attribute for depth.
 - The fold gutter is a fixed 26px column at the far left of every row. The 16px Codicon outline
   chevron is absolutely positioned 2px from the row's left edge and spans the full row height; leaves
   reserve the gutter but have no twisty child. Expanded chevrons are hover/focus-only; collapsed
   chevrons stay visible. Brace rows use the same indentation as labels (no extra fold offset).
-- Secondary fields live in `.row-meta`, inline after the value in Document. It is not `.meta` — that
-  is the schema/package container. Search highlights `.row-meta .short`, `.label` and
-  `.value .value-text`.
+- Secondary fields live in `.row-meta`, inline after the value in Document. It is not
+  `.document-tree-meta`, which is the schema/package container above the rows. Search highlights
+  `.row-meta .short`, `.label` and `.value .value-text`.
 - The row builder writes the inspector's primary identity as data: `data-node-id`, `data-kind`,
   `data-definition-ref`, `data-short-name`, `data-value` (parameters), `data-target` (references).
   There are no source line/column attributes and no `data-ln-digits`.
@@ -193,24 +195,26 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
 - The webview owns: `selectedId`, `focusId`, the collapsed id set, the viewport range/scroll
   position, type-ahead, the details edit, the sidebar tab/width/pane state and the search state. The
   host owns: the panel map, the selection map and a pending selection.
-- A re-scan sends `{ type: 'model', rows, selectedId }`. `setRows` rebuilds the row maps, prunes the
-  collapsed set, preserves scroll where possible, captures the current search match by id, recomputes
-  the selected branch and re-renders the window. `reconcileRowState` is the serialized policy;
+- A re-scan sends `{ type: 'document', document: { rows, selectedId, header } }`. `setRows` rebuilds
+  the row maps, prunes the collapsed set, captures the current search match by id, recomputes the
+  selected branch and re-renders the window; `handleEditorMessage` captures and restores the scroll
+  position around it. `reconcileRowState` (in `documentTreeState.ts`) is the shared policy;
   `resolveFocusId` restores focus by id when the row remains rendered. The old `reRenderTree` DOM swap
   is gone.
-- The initial row payload carries the host selection; `prepareFocus` expands its ancestors if
-  needed, scrolls it into the rendered window and fills the inspector.
+- The initial row payload carries the host selection. `handleEditorMessage` installs it, expands its
+  ancestors when needed, scrolls it into the rendered window and updates the inspector. `prepareFocus`
+  only establishes the initial roving focus while the row store is still empty.
 - Only layout state is persisted through `acquireVsCodeApi().getState()/setState()`: `tab`,
   `sidebarWidth`, `panes` and `collapsed`. A missing or invalid state falls back to Details, 360px
   and default section heights; a legacy `inspectorHidden` is ignored and never written back. The
   reload round trip is observed in the Extension Development Host.
 - The pure state helpers (`pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`,
-  `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor`, `inspectorFields`) are real functions
-  serialized into the page with `toString()`. The tests extract and drive the page's copy; do not
-  create a second implementation.
-- `searchRows` scans the whole row store and `flattenRows` builds the display list from the collapsed
-  set only. Search never writes the collapsed set; a jump expands ancestors explicitly. There is no
-  second visibility input to the display list.
+  `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` in `documentTreeState.ts`;
+  `inspectorFields` in `detailsPanel.ts`) are ordinary exports imported by the page bundle and the
+  tests. Do not create a second implementation.
+- `RowSearchEngine` scans the row store in chunks and `flattenRows` builds the display list from the
+  collapsed set only. Search does not filter the row store; a jump expands ancestors explicitly. There
+  is no second visibility input to the display list.
 
 ## Theme and accessibility
 
@@ -245,10 +249,9 @@ in `rowViewScript()`; the editor and diff pages must not fork it.
 
 ## Manual previews
 
-The in-repo preview harness (`preview:ecuc`, `preview:check` and `scripts/`) has been removed, together
-with the sample generator and benchmark. The production `renderHtml` page is therefore observed in the
-Extension Development Host: open a fixture or a local `.arxml` in the ECUC editor and inspect the real
-webview.
+The in-repo preview harness (`preview:ecuc`, `preview:check`) and the `scripts/` directory have been
+removed. The production `editorShell`/`diffShell` page is therefore observed in the Extension
+Development Host: open a fixture or a local `.arxml` in the ECUC editor and inspect the real webview.
 
 The host is not a repeatable check: its observations cannot run in CI, so record them as
 host-observed with the file and the steps that produced them. If a preview harness is reintroduced, it
@@ -262,7 +265,7 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 | Mistake | Why it fails |
 |---|---|
 | Building the full row DOM instead of the virtual window | The lag this task removes comes back; the window tests and DOM count fail |
-| Putting the row builder behind a second renderer or copied markup | It diverges from the product; wrap `renderHtml` instead |
+| Putting the row builder behind a second renderer or copied markup | It diverges from the product; wrap the production shell and bundled page instead |
 | Re-adding a Tree view toggle/CSS/glyph | The Document-only contract and tests fail; the Tree view was deliberately removed |
 | Re-adding line numbers/`data-line`/`digits` | The no-gutter contract and alignment tests fail |
 | Re-adding a repeating indent gradient | The bracket-guide contract fails |
@@ -276,7 +279,7 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 | Measuring a row offset from the window element | It moves with the top spacer; the component keeps the scroll offset instead |
 | Setting spacer heights with a style attribute | The CSP blocks inline styles; the component writes its own CSSOM custom properties |
 | Using an inline `style` instead of `data-level` | The CSP blocks style attributes and the depth CSS cannot follow |
-| Assuming a serialized helper keeps its declaration name | Bundling both pages can rename one copy (`calcVisibleRange2`); `virtualScrollScript()` emits stable wrappers and `documentTreeViewScript()` wraps the class expression |
+| Duplicating the virtual-scroll math instead of importing it | The page and the diff would drift on window bounds, spacer height and overscan; import `render/virtualScroll.ts` in both |
 | `innerHTML` with a model value | The value is text, not markup; use `textContent` |
 | Reading the inspector from the rendered row | An offscreen selection has no rendered row; use `rowById` |
 | Calling a string assertion or a test-host render a webview pass | Neither is a VS Code webview; the Extension Development Host still needs a check |
@@ -287,11 +290,12 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 
 - `core/diff/diffModel.ts` is pure (no `vscode`); it owns projection, matching, status, merged order,
   summary and the page helpers. The panel only reads documents, scans and posts.
-- Both pages inject `rowViewScript()` and `documentRowsScript()`; `valueSpan`/`metaSpan`/
-  `appendHighlighted` and the node/brace/comment builders have one definition (tested). Do not fork a
-  row primitive into the diff page.
-- `webview/diffViewer.ts` mounts two `DocumentTreeView` instances; each one reuses `virtualScrollScript()`, so
-  only its viewport window is in the DOM and its spacers come from `calcRowOffset`/`calcTotalHeight`.
+- Both pages import `render/rowView.ts` and `components/documentTree/documentRows.ts`; `valueSpan`,
+  `metaSpan`, `appendHighlighted` and the node/brace/comment builders have one definition (tested). Do
+  not fork a row primitive into the diff page.
+- `webview/diffViewer.ts` mounts two `DocumentTreeView` instances; each one imports
+  `render/virtualScroll.ts`, so only its viewport window is in the DOM and its spacers come from
+  `calcRowOffset`/`calcTotalHeight`.
   The panes share the aligned display list, `heightFn` and content width; the host syncs their
   offsets.
 - `DiffCell.range` is injected from the host's `buildNodeIndex`; `EcucRow` still carries no
@@ -314,15 +318,15 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   **Prev diff**, **Next diff**; **Swap sides** is centred; the right group is Search. Search is always
   the last control and its count/busy slots stay in the flow. There is no Filter, no changes checkbox,
   no changed/added/removed summary and no global Collapse/Expand. Search uses `RowSearchEngine`
-  (Enter-only, chunked, cancellable); its candidates are the changed rows in diff-only view, all rows
-  otherwise. Search never hides rows.
+  (Enter-only, chunked, cancellable); its candidates are the changed/added/removed rows in diff-only
+  view, all rows otherwise. Search never hides rows.
 - **Diff rows reuse Document geometry.** Each pane starts with the 26px fold gutter, an absolute 16px
   twisty at `left: 2px`, Document content padding and the `--indent` step per level. Labels use the
   Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
   horizontal padding; the scroller is the clip boundary. Keep the pane headers and the diff status
   tints.
 - **Both panes are `DocumentTreeView` instances.** The diff mounts one component per pane, shares the
-  aligned `DiffDisplayRow` list and `heightFn`, and reuses `documentTreeStyles()` plus the
+  aligned `DiffDisplayRow` list and `heightFn`, and imports the same `documentTree.css` plus the
   `documentRows.ts` builders for nodes, annotations, braces and guides. Each component owns its header,
   native scroller, spacers and virtual window. Schema/package lines sit under each pane's file label;
   annotations and `{` / `}` rows follow each side; colours, font, gutter, indentation and meta
@@ -332,10 +336,11 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the window
   title and pane headers show the same shortest distinguishing suffix.
-- **Both axes are synchronized across two native scrollers.** Each pane has its own vertical and
-  horizontal scrollbar; the pane that scrolled is the driver and the host copies its offsets to the
-  follower, guarded by value comparison and the component's expected-offset suppression. Shift+wheel
-  over either pane writes the same horizontal offset to both; plain wheel stays vertical. Content
+- **Both axes are synchronized across two native scrollers.** Each pane has its own horizontal
+  scrollbar; only the left pane shows the vertical bar (the right scroller sets `overflow-y: hidden`).
+  The pane that scrolled is the driver and the host copies its offsets to the follower, guarded by
+  value comparison and the component's expected-offset suppression. Shift+wheel over either pane
+  writes the same horizontal offset to both; plain wheel stays vertical. Content
   width is the longest rendered line across both panes plus the Document gutter and slack, with no
   cap, and both components receive it so neither clamps early. Swap resets both horizontal offsets to
   zero and leaves the vertical position untouched.

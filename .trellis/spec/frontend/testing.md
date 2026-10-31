@@ -71,11 +71,13 @@ into `.vscode-test/` (gitignored). If that download is blocked by a proxy, the f
 — check before assuming a code defect. The suite uses the **TDD** mocha UI: plain `npx mocha` fails
 with `suite is not defined`.
 
-There is no webview DOM in the test host. Webview behaviour is therefore asserted at the level of the
-rendered page: the static shell, the escaped row JSON, the CSS, and the page's own inlined functions
-extracted with `scriptTestUtils` and compiled. Pure row/flatten/search/window behaviour is tested
-directly; anything that depends on real DOM interaction has to be confirmed by hand in the Extension
-Development Host — say so in the task notes rather than implying it was tested.
+There is no real VS Code webview in the test host. Page behaviour is mounted into **jsdom** from the
+same static shell the host writes (`src/test/webview/pageTestUtils.ts`): `installDom` provides the
+window/document globals and a recording `acquireVsCodeApi`, then `loadModule` loads the compiled page
+entrypoint and the test drives the real `postMessage` protocol. The CSS is asserted as text and by
+selector. Pure row/flatten/search/window behaviour is tested directly; anything that depends on real
+browser layout, paint or focus has to be confirmed by hand in the Extension Development Host — say so
+in the task notes rather than implying it was tested.
 
 ## Manual checks happen in the Extension Development Host
 
@@ -87,9 +89,9 @@ inspector and the reload path all need that host.
 A host observation is not a repeatable check. It cannot run in CI, so record it as host-observed with
 the file and the steps that produced it, and keep the real-host rows in the task's manual table.
 
-If a preview harness is reintroduced, it must wrap the production renderer; a second renderer is a test
-that agrees with itself. The row JSON must be compared against `buildRows`, not against a full-tree
-string.
+If a preview harness is reintroduced, it must wrap the production shell and bundled page; a second
+renderer is a test that agrees with itself. The page must be driven through the host protocol and its
+rows compared against `buildRows`, not against a full-tree string.
 
 ## The reference must be the post-processed output
 
@@ -104,8 +106,8 @@ not read by the renderer.
 
 Document markup/CSS tests are string assertions (the Document-only shell, layout/geometry, token
 selectors, fallbacks, no Tree/line-number/copy code), but the view/details behaviour must drive the
-page's own `applyInspectorVisibility`, `subtreeRowIds`, `guidesFor`, `reconcileRowState` and
-`detailsValueInput` extracted with `scriptTestUtils` against stub elements — not a host-side twin.
+page's own `subtreeRowIds`, `guidesFor`, `reconcileRowState` and `detailsValueInput` from their
+modules against jsdom elements — not a host-side twin.
 Condition/annotation presentation tests are value-first: `syscond.test.ts` asserts the `values` map for
 known, missing, tail-resolved and malformed expressions; `renderRows.test.ts` asserts `conditionTooltip`
 (multi-line, quoted strings, `(not set)`, no `true`/`false`) and that annotations become `comments`;
@@ -144,13 +146,14 @@ container/guide-hover/details/narrow/deep captures and a real-webview pass. Asse
 match the production CSS, never the prototype file. There is no source-line gutter to conflate; the
 row model carries no source-position fields.
 
-## Virtual page tests drive the page's serialized row code
+## Virtual page tests drive the compiled page module
 
 The virtual row renderer is tested at two levels. Pure modules (`renderRows`, `virtualScroll`,
-`treeQuery`, `rowSearch`) have ordinary unit tests over values. The page's own copy is extracted from
-`renderHtml` with `scriptTestUtils` and compiled: the `RowSearchEngine`, `flattenRows`, `ancestorIds`,
-`inspectorFields`, `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` and the virtual
-math are driven with real row data, so the page does not get a second implementation.
+`treeQuery`, `rowSearch`) have ordinary unit tests over values. The page entrypoint is mounted in
+jsdom from the host's static shell and driven through the protocol: `installDom` + `loadModule` give
+the test the real `mountEditor`/`mountDiff` path, so `flattenRows`, `ancestorIds`, `reconcileRowState`,
+`subtreeRowIds`, `guidesFor`, the inspector and the virtual window run as they do in the shipped page
+— the test does not re-implement them.
 `virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse display
 lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan payload.
 `rowSearch.test.ts` pins the chunked engine: matches, progress, cancellation, the timing constants
@@ -183,8 +186,8 @@ regression guard.
 
 The provider's `{ type: 'copy' }` branch and clipboard module were removed with the details Copy
 actions. The remaining source-level wiring is the details editor's `{ type: 'edit' }` post and the
-re-scan handler; the input's Enter/Escape/Tab and refusal behaviour are asserted through the page's
-own serialized functions and real-webview captures, while the provider write is behaviourally tested.
+re-scan handler; the input's Enter/Escape/Tab and refusal behaviour are asserted through the compiled
+page module in jsdom and real-webview captures, while the provider write is behaviourally tested.
 When you use a source assertion, say so in the task notes; do not present it as a behavioural test.
 
 ## Benchmarks are committed evidence
@@ -216,7 +219,8 @@ virtualisation.
 
 ## The page's own helpers are the ones under test
 
-When a rule lives in the inlined page script, extract the page's copy with `scriptTestUtils` and drive
-it, rather than testing a host-side twin. `prepareFocus`'s initial-selection adoption is tested with a
-stubbed DOM in `uxPolish.test.ts`; the mutation "remove the adoption" fails it. A test that only greps
-for a call site can pass with the feature deleted.
+When a rule lives in a page module, import that module (or mount the bundled page in jsdom) and drive
+it, rather than testing a host-side twin. The initial-selection adoption is exercised by the page
+suites that post a `document` payload with `selectedId` and assert the rendered selection/focus; the
+mutation "remove the adoption" fails them. A test that only greps for a call site can pass with the
+feature deleted.

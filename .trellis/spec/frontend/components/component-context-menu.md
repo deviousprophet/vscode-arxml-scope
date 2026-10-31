@@ -31,7 +31,8 @@ interface ContextMenuHost {
 }
 export function renderContextMenuHtml(): string;
 export function renderContextMenuStyleTag(nonce: string): string;
-export function contextMenuScript(): string; // defines mountContextMenu
+export function mountContextMenu(treeElement: Element, host: ContextMenuHost): void;
+export function hideRowMenu(restoreFocus: boolean): void;
 ```
 
 ## Rules

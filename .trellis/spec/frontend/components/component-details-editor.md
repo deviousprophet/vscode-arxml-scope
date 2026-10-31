@@ -39,13 +39,18 @@ interface DetailsEditorHost {
     commitEdit(message: { type: 'edit'; nodeId: string; value: string; field?: string }): void;
     focusAdjacentParameter(fromId: string, direction: string): string | undefined;
 }
+export function setDetailsEditorHost(host: DetailsEditorHost): void;
+export function resetDetailsEditorState(): void;
 export function detailsInputAllowed(type: string, data: string): boolean;
-export function detailsEditorScript(): string; // emits setDetailsEditorHost + field builders
+export function detailsValueInput(row: EcucRow, data: InspectorFields): HTMLElement;
+export function detailsContainerFields(row: EcucRow, data: InspectorFields): HTMLElement;
+export function beginDetailsEdit(rowId: string, field?: string): boolean;
+export function handleDetailsEditorMessage(message: EditorProviderToWebview): void;
 ```
 
 ## Rules
 
-- One edit entry per field; a re-scan (`message.type === 'model'`) clears every draft.
+- One edit entry per field; a re-scan (`message.type === 'document'`) clears every draft.
 - A refusal keeps the typed text, marks `aria-invalid` and writes `/* reason */` beside the field.
 - Enter commits, Escape restores the committed value, Tab moves to the sibling container field or
   commits and lets focus leave the panel.

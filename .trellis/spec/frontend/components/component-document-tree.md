@@ -4,9 +4,10 @@
 
 ## Scope / Trigger
 
-Owns `src/webview/components/documentTree/` (`documentTreeView.ts`, `documentRows.ts`,
-`documentTree.css`): the header, native scroller, spacers, virtual window and row markup for the
-Document tree. Hosts own the row model, height function, selection, search, details and diff status.
+Owns `src/webview/components/documentTree/` (`documentTreeView.ts`, `documentTreeState.ts`,
+`documentRows.ts`, `documentTree.css`): the header, native scroller, spacers, virtual window, shared
+tree-state helpers and row markup for the Document tree. Hosts own the row model, height function,
+selection, search, details and diff status.
 
 Boundary rule: one component, one root; no host globals, no `vscode`, no provider messages.
 
@@ -14,7 +15,8 @@ Boundary rule: one component, one root; no host globals, no `vscode`, no provide
 
 ```text
 src/webview/components/documentTree/
-    documentTreeView.ts    component class + stylesheet export
+    documentTreeView.ts    component class
+    documentTreeState.ts   collapse/selection/guide helpers
     documentRows.ts        node/brace/comment builders
     documentTree.css       component-owned styles
 src/webview/editorViewer.ts / diffViewer.ts   composition roots
@@ -39,12 +41,16 @@ class DocumentTreeView {
     constructor(rootSelector: string, pane: string, callbacks?: DocumentTreeViewCallbacks);
     mount(): void;
     setModel(model: DocumentTreeViewModel): void;
+    setContentWidth(width: number): void;
     render(force?: boolean): void;
+    getRowsScrollTop(): number;
+    setRowsScrollTop(offset: number): void;
     setScrollTop(top: number): void;
     getScrollTop(): number;
     setScrollLeft(left: number): void;
     getScrollLeft(): number;
-    scrollToIndex(index: number): void;
+    clientHeight(): number;
+    scrollToIndex(index: number, align?: 'auto' | 'start' | 'end'): void;
 }
 ```
 
