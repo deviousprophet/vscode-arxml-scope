@@ -225,8 +225,8 @@ suite('virtual page (design §4, §5, §8)', () => {
 				[{ level: 1, id: 'root' }],
 				[{ level: 1, id: 'root' }],
 				[{ level: 1, id: 'root' }, { level: 2, id: 'a' }],
-				[{ level: 1, id: 'root' }, { level: 2, id: 'a' }],
 				[{ level: 1, id: 'root' }],
+				[],
 			]
 		);
 		const inlineGuides = evaluateFunction<typeof guidesFor>(page(), 'guidesFor');

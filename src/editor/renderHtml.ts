@@ -145,11 +145,11 @@ export function guidesFor(
 	const open: GuideSegment[] = [];
 	for (const flat of displayRows) {
 		if (flat.type === 'brace-close') {
-			guides.push(open.slice());
 			const at = open.map((segment) => segment.level).lastIndexOf(flat.level);
 			if (at >= 0) {
 				open.splice(at, 1);
 			}
+			guides.push(open.slice());
 		} else if (flat.type === 'brace-open') {
 			guides.push(open.slice());
 			open.push({ level: flat.level, id: rows[flat.rowIndex].id });
