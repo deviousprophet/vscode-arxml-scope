@@ -4,10 +4,10 @@ Rule: every path, glob, command, script, workflow step, spec example and docs as
 Scope must be checked against ARXML Scope. If the target does not exist, either add the real ARXML
 asset or remove the copied reference. Never keep a copied path because it exists in Hex Scope.
 
-## Confirmed finding
+## Confirmed finding (resolved)
 
-- `.vscodeignore` contains `images/demo.gif`. ARXML Scope has no `images/demo.gif`; it only has
-  `images/icon.png` and `images/icon.svg`. Remove the line unless a real ARXML demo GIF is added.
+- `.vscodeignore` referenced `images/demo.gif`. ARXML Scope has no `images/demo.gif`; it only has
+  `images/icon.png` and `images/icon.svg`. The line was removed by the config/CI/benchmark child.
 
 ## Files to audit
 
@@ -32,11 +32,15 @@ asset or remove the copied reference. Never keep a copied path because it exists
 
 | Reference | Status |
 |---|---|
-| `images/demo.gif` in `.vscodeignore` | Missing — remove or add a real ARXML demo |
-| `scripts/` references | Removed with the scripts folder |
+| `.vscodeignore` | Audited line-by-line against Hex: dropped `.yarnrc`, `vsc-extension-quickstart.md`, `images/demo.gif` and the Hex re-includes; added `package-lock.json` and `.gitattributes`. `vsce ls` lists only the 11 runtime files |
+| `images/demo.gif` in `.vscodeignore` | Removed — the file does not exist in ARXML Scope |
+| Root `scripts/` references | Removed with the scripts folder. `.github/scripts/`, `.trellis/scripts/` and `.agents/skills/*/scripts/` are real, ARXML/Trellis-owned paths |
 | `docs/`, `examples/`, `schemas/`, `syntaxes/` | Not present; do not create empty copies |
 | Hex parser/memory/overlay/profile/scripting terms | No source references found |
-| `src/test/benchmarks/` | Not created yet; benchmark child must add ECUC benchmarks, not hex parsers |
+| `src/test/benchmarks/` | Added `runBenchmark.ts` + `ecucLargeFileBenchmark.ts` (ECUC scan/rows/diff); `.fallowrc.json` entry added |
+| `.trellis/spec/frontend/directory-structure.md:52` | Stale: references `scripts/copy-webview-css.cjs`, which does not exist. Docs/spec child must remove it and add `src/test/benchmarks/` to the layout |
+| `.trellis/spec/frontend/testing.md` "Samples and benchmarks are evidence" | Stale: says the benchmark was removed; `npm run benchmark` and the CT `Benchmarks` job now run `ecucLargeFileBenchmark.ts`. Docs/spec child must update it |
+| `package-lock.json` `esrecurse` entries | False positive: the dependency name contains the `srec` substring. ARXML-owned file, no action |
 
 ## Gate
 
