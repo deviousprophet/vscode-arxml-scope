@@ -38,7 +38,7 @@ for (const entryPath of toRun) {
 		console.log(`\n=== ${name} ===`);
 		execFileSync(process.execPath, ['--expose-gc', bundlePath], { stdio: 'inherit' });
 	} catch (e) {
-		console.error(`❌ ${name} failed: ${(e as Error).message}`);
+		console.error(`❌ ${name} failed: ${e instanceof Error ? e.message : String(e)}`);
 		exitCode = 1;
 		// Break instead of `process.exit` so the `finally` below still removes the
 		// temp bundle; `process.exit` would skip it and leak the directory.
