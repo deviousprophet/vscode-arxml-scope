@@ -13,8 +13,8 @@ body (column)
   #content (row)
     #main (flex: 1; overflow: hidden)  ← layout box only
       #tree.document-tree[role=tree]  ← one DocumentTreeView instance
-        .document-tree-header          schema/package (and optional file label)
         .document-tree-scroll          native vertical + horizontal scroller
+          .document-tree-header        schema/package (and optional file label)
           .document-tree-top           virtual spacer
           .document-tree-window        visible rows + overscan
           .document-tree-bottom        virtual spacer
@@ -26,8 +26,9 @@ body (column)
 ```
 
 - `DocumentTreeView` (`src/webview/components/documentTree/documentTreeView.ts`) is the single owner of
-  the header, the two-axis native scroller, the spacers and the rendered window. Both pages import the
-  same class; the editor mounts one instance and the diff mounts one per pane.
+  the header, the two-axis native scroller, the spacers and the rendered window. The header is the
+  scroller's first content element and scrolls with the rows. Both pages import the same class; the
+  editor mounts one instance and the diff mounts one per pane.
 - The host supplies `{ rowCount, heightFn, renderRow(index, pane) }`. The component calls
   `calcVisibleRange` with overscan 10, writes spacer heights as `--document-tree-top` /
   `--document-tree-bottom` CSSOM properties, and skips the DOM write when the slice key is
@@ -157,8 +158,9 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   fold control, so they cannot be mistaken for a parameter.
 - Each container draws bracket guides: one absolute `.guide` span per open ancestor per rendered row,
   with `data-level`/`data-container-id`. Guides run from opening to closing brace, fade at rest and
-  activate on hover. Selection uses `data-subtree` on descendants and a stronger parameter row; it
-  never moves the guides. The selected-branch marker is gone.
+  activate on hover. Selection uses `data-subtree` on descendant nodes, braces and annotation comment
+  rows, plus a stronger parameter row; it never moves the guides. Annotation rows stay `aria-hidden`
+  and non-focusable, and clicking one changes nothing. The selected-branch marker is gone.
 - The details inspector reads the selected **row from the row map**, not from a rendered element, so
   an offscreen selection still shows its values. It builds text nodes, never `innerHTML` from model
   text.
@@ -244,8 +246,8 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   `role="group"` wrappers. The accessibility tree exposes the rendered window, not every offscreen
   row; keyboard navigation renders the target before focusing it, and the inspector is a `region`,
   not a live region. Record the window limitation rather than claiming full-tree exposure.
-- Document node/brace rows use `--ecuc-lh` plus a module gap attribute; there are no Tree row heights.
-  The CSS and the page's `heightFn` must agree.
+- Document node/brace rows use `--ecuc-lh` plus a module gap attribute. The diff supplies no gap, so
+  every diff row is one base height; the CSS and each page's `heightFn` must agree.
 
 ## Manual previews
 

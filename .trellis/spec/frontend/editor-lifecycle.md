@@ -279,6 +279,11 @@ export function nextChangeIndex(rows: readonly DiffRow[], visible: readonly bool
 export function disambiguatedLabels(a: FileLabel, b: FileLabel): [string, string];
 export function compareTitle(left: FileLabel, right: FileLabel): string;
 
+// src/core/diff/wordDiff.ts
+export interface WordSegment { text: string; changed: boolean; }
+export interface WordPair { left: WordSegment[]; right: WordSegment[]; }
+export function diffWords(left: string, right: string): WordPair;
+
 // src/host/webviewShell.ts
 export function diffShell(assets: WebviewShellAssets): string;
 
@@ -335,10 +340,19 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
    `hostSide` maps the displayed side back to the host's original side for reveal. The compared
    documents are not rebuilt and the vertical position is not reset. Swap resets horizontal offsets to
    zero in both panes.
-9. **The page owns view state.** Show all / Show diff only, Prev diff / Next diff, selection, collapse,
-   search and scroll survive a refresh. Search is Enter-only, chunked and cancellable; it never removes a
-   row. `nextChangeIndex` wraps and skips unchanged or hidden rows.
-10. **Dispose everything.** `panel.onDidDispose` sets `disposed`, disposes the watchdog, clears the
+9. **The comparison chrome scrolls with its rows.** Each pane header lives inside that pane's
+   `.document-tree-scroll` above the top spacer, so it scrolls away with the content; the pane's
+   measured header height joins the row-offset math. The header is presentation-only. The diff adds no
+   inter-module blank row: every diff row is exactly one base row high.
+10. **The page owns view state.** Show all / Show diff only, Prev diff / Next diff, selection, collapse,
+    search and scroll survive a refresh. Search is Enter-only, chunked and cancellable; it never removes
+    a row. `nextChangeIndex` wraps and skips unchanged or hidden rows. A changed row may render inline
+    word runs for the fields it displays (label, value/target, condition, variant, context) on the
+    displayed sides; added/removed rows keep only the full-cell tint, and a search `<mark>` keeps its
+    background inside an outlined changed word. One `selectedKey` computes the merged subtree key set,
+    so node, brace and annotation rows highlight in both panes; an added/removed row highlights only
+    the pane that owns its cell.
+11. **Dispose everything.** `panel.onDidDispose` sets `disposed`, disposes the watchdog, clears the
     pending refresh timer and every subscription. In-flight async work checks `disposed` before posting.
 
 ### 4. Validation & Error Matrix
@@ -377,10 +391,14 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
   refusals and panel creation.
 - `src/test/core/diffModel.test.ts` — pairing (content, subtree, sort identity, base id), status,
   merged order, summary, visibility, flattening, next-change wrap, labels/title.
+- `src/test/core/wordDiff.test.ts` — tokenizer (whitespace, identifiers, one-character punctuation,
+  hex literal, path slashes), LCS, empty sides and adjacent-segment merging.
 - `src/test/webview/components/diffView.test.ts` — two `DocumentTreeView` instances, single vertical
-  driver, horizontal mirror, swap reset, optional status.
+  driver, horizontal mirror, swap reset, optional status, word-colour CSS and the absent module gap.
 - `src/test/webview/page/diffPage.test.ts` — toolbar both ways, search wiring, display projection,
-  reveal-side mapping, refresh state retention.
+  reveal-side mapping, refresh state retention, header-in-scroller order and non-searchability,
+  changed-word runs in both panes, swapped colours, search overlap, added/removed rows without word
+  spans, unchanged rows, module height and no `data-gap`.
 - `src/test/webview/page/search.test.ts` — Enter-only chunked search and count states.
 - Reveal is asserted through `reveal.test.ts` / `uxReveal.test.ts`; the source-level `beside` forcing
   is a regression guard, while the real panel behaviour is observed in the Extension Development Host.

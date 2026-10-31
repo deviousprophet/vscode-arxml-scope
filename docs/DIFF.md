@@ -31,10 +31,18 @@ compared, not just the bytes on disk.
 
 - One panel titled `<left> ↔ <right>`, with the two panes side by side.
 - Pane headers show the shortest distinguishing file label plus each side's schema/package lines.
-- Rows are aligned: a line that exists on only one side has a blank cell on the other side.
+  Each header is the first line of that pane's scroller, so it scrolls away with the rows; the shorter
+  header is padded so both panes start their rows at the same y. The header is not a tree row and is
+  not searched.
+- Rows are aligned: a line that exists on only one side has a blank cell on the other side. There is no
+  blank spacer row between modules; every row is one line high.
 - Annotations, braces and bracket guides follow each side of the comparison. Both panes use the same
   Document view as the editor, so headers, annotations, braces, guides, colours and typography match.
-- A **read-only** status tint marks added, removed and changed cells. Syntax tokens keep their colours.
+- A **read-only** status tint marks added, removed and changed cells; changed words are highlighted
+  inside changed rows. Syntax tokens keep their colours.
+- Selecting a container or module tints its whole subtree in both panes, including the annotation rows
+  of descendant containers. An added or removed row highlights only the pane that owns its cell; the
+  blank side stays blank.
 - Only the visible window is rendered in each pane. The left pane shows the vertical scrollbar while
   both panes have their own horizontal scrollbar; scrolling either pane or bar mirrors the other, and
   `Shift+wheel` over either pane scrolls both horizontally. `Swap sides` resets the horizontal offsets
@@ -64,6 +72,22 @@ still a container row; its subtree contains the changed rows.
 Duplicate-named siblings are paired by exact compared content first, then by their sort identity, then
 by id and an ordinal-free base key. This means a reordered duplicate keeps its parameters and
 references paired, and a changed duplicate lands on one changed row instead of an add + remove pair.
+
+## Inline word changes
+
+A **changed** row highlights the words that actually differ, in both panes, for the fields the row
+shows: the label, the value or reference target, the condition, the variant and the reference context.
+The text is split into words and punctuation (`0x1F` is one token; `/Pkg/Diff` is `/`, `Pkg`, `/`,
+`Diff`), the unchanged tokens are matched, and only the unmatched runs are marked. Unchanged words keep
+their normal rendering.
+
+- The displayed left pane uses the removed-text background and edge; the displayed right pane uses the
+  inserted-text background and edge. `Swap sides` mirrors the colours with the panes.
+- **Added** and **removed** rows keep their full-cell tint and show no word highlight.
+- A search match inside a changed word keeps the search background; the changed word keeps its 1px
+  outline.
+- Short-name and `DEFINITION-REF DEST` changes stay row-level only; the details markers are not part of
+  the inline word highlight.
 
 ## What is not a change
 

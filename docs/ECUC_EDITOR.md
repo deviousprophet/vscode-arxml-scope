@@ -29,8 +29,11 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
 - Modules, containers, parameters and references are emitted in display order.
 - A module label is the dotted definition path; a container shows its definition tail and short name;
   a parameter shows its name, `=`, value and quiet meta; a reference shows its name and target.
-- Schema and package information appears in the header above the rows.
-- Annotations appear as muted italic comment lines directly above their node.
+- Schema and package information appears in the header at the top of the scroller; it scrolls away with
+  the rows rather than staying pinned.
+- Annotations appear as muted italic comment lines directly above their node. Selecting a container
+  tints the annotation rows of its descendants; the annotation rows stay non-selectable and clicking
+  one changes nothing.
 - Containers draw `{` and `}` brace rows. An empty container shows `{ }`.
 - Collapsed containers show a ` { … }` hint and stay collapsible from the fixed 26px fold gutter.
 - Bracket guides follow the open ancestor containers. They fade at rest and activate on hover.

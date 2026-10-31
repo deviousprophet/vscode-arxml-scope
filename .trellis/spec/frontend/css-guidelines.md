@@ -10,8 +10,8 @@ These rules describe the stylesheets that ship in `dist/editorViewer.css` and `d
 |---|---|
 | `src/webview/styles/tokens.css` | Theme tokens and the fallback set for the Document surface and the diff. Imported first by both pages. |
 | `src/webview/styles/base.css` | Reset, `body` layout, `#content` / `#main` boxes, `#tree-measure` probe host, `.sr-only`, `.grow` and the narrow layout. |
-| `components/documentTree/documentTree.css` | `.document-tree*` shell, `.row`, `.label`, `.value`, `.row-meta`, `.twisty`, `.guide`, condition/annotation/mark styling, depth and high-contrast rules. |
-| `components/diffView/diffView.css` | Diff page tokens, the `#diff-body` column, the `#diff-list` / `.diff-pane` grid, `.diff-row` / `.diff-cell` status tints, the empty state and pane header parity. |
+| `components/documentTree/documentTree.css` | `.document-tree*` shell (header, scroller, window, spacers), `.row`, `.label`, `.value`, `.row-meta`, `.twisty`, `.guide`, condition/annotation/mark styling, depth and high-contrast rules. |
+| `components/diffView/diffView.css` | Diff page tokens, the `#diff-body` column, the `#diff-list` / `.diff-pane` grid, `.diff-row` / `.diff-cell` status tints, `.word-changed` removed/inserted runs, the empty state and pane header parity. |
 | `components/toolbar/toolbar.css` | `.toolbar`, `.toolbar-left` / `-center` / `-right`, `.tool`, `.icon-tool`. |
 | `components/searchBar/searchBar.css` | `.search-box`, `.search-field`, `.search-input`, `.search-clear`, `.search-nav`, `.search-count`, `.search-progress`. |
 | `components/sidebar/sidebar.css` | `#sidebar`, `#sidebar-resizer`, `#side-tabs`, `.stab`, `.sb-tab-panel`, `.sb-pane*`, `.sb-section-*` and the shared `.sb-btn*` / `.nav-btn` / `.act-btn` primitives. |
@@ -66,12 +66,13 @@ Rules:
 - **State is data.** Style from attributes the row builders already write:
   `[data-value-kind="numeric|textual|boolean"]`, `[data-selected="true"]`, `[data-subtree="true"]`,
   `[data-disabled="true"]`, `[data-search-current="true"]`, `[data-state="false"]`, `[data-empty="true"]`,
-  `[data-gap="true"]`, `[data-level]`, `[aria-expanded]`, `[aria-invalid="true"]`. Do not add a class
-  whose only purpose is to mirror state the DOM already carries.
+  `[data-gap="true"]`, `[data-word-side="left|right"]`, `[data-level]`, `[aria-expanded]`,
+  `[aria-invalid="true"]`. Do not add a class whose only purpose is to mirror state the DOM already
+  carries.
 - **Classes name structure.** `.row`, `.label`, `.value`, `.value-text`, `.row-meta`, `.twisty`,
-  `.guide`, `.condition`, `.annotation`, `.comment`, `.document-tree-scroll`, `.diff-row`, `.diff-cell`,
-  `.sb-section-head`, `.sb-body`. The row builders and the tests select these names; renaming one is a
-  contract change.
+  `.guide`, `.condition`, `.annotation`, `.comment`, `.document-tree-scroll`, `.document-tree-header`,
+  `.diff-row`, `.diff-cell`, `.word-changed`, `.sb-section-head`, `.sb-body`. The row builders and the
+  tests select these names; renaming one is a contract change.
 - **IDs are singletons owned by the shell.** `#tree`, `#sidebar`, `#side-tabs`, `#row-menu`,
   `#diff-list`, `#diff-pane-left` / `#diff-pane-right`. A component that must support two instances
   takes a root selector (`DocumentTreeView('#diff-pane-left', 'left')`) and never queries a global id
@@ -88,9 +89,11 @@ Rules:
 
 ### Virtual rows and the Document surface
 
-- `.document-tree` is the component root: header, then `.document-tree-scroll` (native two-axis
-  scroller), then `.document-tree-top`, `.document-tree-window` and `.document-tree-bottom`.
-  The scroller is the only scroll container for the rows.
+- `.document-tree` is the component root; inside it, `.document-tree-scroll` is the native two-axis
+  scroller and the only scroll container. Its content is `.document-tree-header`, `.document-tree-top`,
+  `.document-tree-window` and `.document-tree-bottom`, in that order. The header scrolls away with the
+  rows; it is not a pinned strip. Its own top padding is zero because the scroller's padding supplies
+  that gap.
 - The window is positioned by two spacer heights written as CSSOM custom properties on the scroller:
   `--document-tree-top` and `--document-tree-bottom`. The window's minimum width comes from
   `--document-tree-content-width`. Never set these as a `style` attribute in the markup.
@@ -106,6 +109,9 @@ Rules:
 - `.row-meta` is the inline meta line, not the schema/package header (`.document-tree-meta`). It uses
   `gap: 1ch` and `white-space: pre`. A condition chip is bounded: `max-width: 56ch`, ellipsis, and its
   full text lives in `title`. The annotation chip is a comment row above its node, not inline meta.
+  A selected subtree tints `.node[data-subtree="true"] > .row`, `.brace[data-subtree="true"] > .row`
+  and `.comment[data-subtree="true"] > .row`; the comment node itself stays `aria-hidden` and carries
+  no focus.
 - Empty containers show a muted `{ }` via `.node[data-kind="container"][data-empty="true"] > .row::after`;
   a collapsed container shows ` { … }`. These are CSS content, not markup.
 - Under `@media (max-width: 720px)` the document narrows `--doc-pad` to `2.5ch` and `--indent` to `3ch`;
@@ -131,9 +137,18 @@ Rules:
 
 - `#diff-body` is the flex column; `#diff-list` inside it is the two-pane grid, and `.diff-pane`
   instances are separated by the 3px divider. Each pane mounts its own `DocumentTreeView`, so each has
-  its own `.document-tree-scroll`.
+  its own `.document-tree-scroll` and its header inside it. Both panes pad the shorter header to the
+  same line count and share the row height, so synchronized scrolling starts rows at the same y.
 - Status is a tint on `.diff-row > .diff-cell[data-side="left|right"]`, driven by
   `[data-status="added|removed|changed"]`. The status tint never recolours syntax tokens.
+- There is no inter-module gap selector on this surface: every `.diff-row` is one `--ecuc-lh` high.
+  `[data-gap="true"]` and its `padding-top` belong to the Document view only.
+- A changed row's changed words are `.word-changed[data-word-side="left|right"]`. The left pane uses
+  `--vscode-diffEditor-removedTextBackground` (fallback `--diff-removed-bg`) with a 1px
+  `--diff-removed-edge` outline; the right pane uses `--vscode-diffEditor-insertedTextBackground`
+  (fallback `--diff-added-bg`) with a 1px `--diff-added-edge` outline. A search `<mark>` inside one
+  keeps `--match-bg` (or `--match-hi` when current); the word span's outline stays. Forced-colors and
+  high contrast replace both fills with a dotted outline.
 - Both panes receive the same content width and row height. Pane headers repeat the Document
   `.document-tree-header` geometry so the rows align.
 

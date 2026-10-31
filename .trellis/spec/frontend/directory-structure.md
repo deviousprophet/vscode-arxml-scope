@@ -21,6 +21,7 @@ src/
                       validate.ts  syscond.ts  nodeId.ts  renderRows.ts  haystack.ts
     text/             offsets.ts (line/offset index)
     diff/             diffModel.ts (matching/status/merged order, pure)
+                      wordDiff.ts (token-level comparison, pure)
   webview/            browser-only page code. NO `vscode` imports.
     editorViewer.ts         editor composition root: row model, selection, search, message bridge
     diffViewer.ts           diff composition root: diff document, view mode, search, message bridge
@@ -38,7 +39,7 @@ src/
                             dom.ts  pageError.ts
     styles/                 tokens.css  base.css
   test/
-    core/               pure suites (ecuc, text, diff model)
+    core/               pure suites (ecuc, text, diff model, word diff)
     webview/
       components/       <component-name>.test.ts (flat, one per component)
       page/             full-page jsdom suites (static shell + compiled page module)
