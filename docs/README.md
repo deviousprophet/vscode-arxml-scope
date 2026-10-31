@@ -14,6 +14,6 @@ Also useful:
 
 - [Root README](../README.md) — installation and quick start.
 - [Changelog](../CHANGELOG.md) — released changes.
-- [Frontend guidelines](../.trellis/spec/frontend/index.md) — the implementation contracts behind these guides.
+- [Frontend guidelines](https://github.com/deviousprophet/vscode-arxml-scope/blob/main/.trellis/spec/frontend/index.md) — the implementation contracts behind these guides.
 
 All sample content in this repository is synthetic. Do not commit a real customer ARXML file.

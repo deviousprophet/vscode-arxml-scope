@@ -31,8 +31,8 @@ opt-in: a plain open still uses the text editor.
 ## Good to know
 
 - Reference resolution is same-file for now; there is no workspace index yet.
-- Edits are limited to parameter `<VALUE>` text and container `<SHORT-NAME>` / `<DEFINITION-REF>` text;
-  references are not editable.
+- Edits are limited to parameter `<VALUE>` text, container `<SHORT-NAME>` / `<DEFINITION-REF>` text,
+  and container/parameter Duplicate or Delete; references are not editable.
 - A value backed by CDATA is shown but cannot be edited.
 - Condition values are stored per workspace, not written beside the ARXML.
 - Only ECUC-Values `.arxml` files are supported; other files stay in the text editor.

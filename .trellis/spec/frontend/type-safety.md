@@ -17,6 +17,7 @@ compiler cannot see: persisted webview state and `postMessage` payloads.
 | `src/host/ecucStructureEdit.ts` | Structural plans: `StructureAction`, `StructureEditRecord`, `StructurePlan`; `planDelete`, `planDuplicate`, `applyStructureEdit`. |
 | `src/core/ecuc/syscond.ts` | `ConditionValue` (`string \| number \| boolean`), `ConditionState` (`'true' \| 'false' \| 'unknown'`) and `ConditionResult`. |
 | `src/webview/vscodeApi.ts` | The webview API seam: `WebviewApi<State>`, `vscodeApi()`, `postToHost(message: unknown)` and `readPageState<T>()` / `writePageState<T>()`. |
+| `src/webview/css.d.ts` | The ambient stylesheet contract: `declare module '*.css'`. Browser bundles emit `dist/<entry>.css`; the test hook mirrors the same files into `out/`. |
 | Page-local modules | Only shapes one page needs: `InspectorFields` in `components/sidebar/detailsPanel/detailsPanel.ts`, `DiffViewCallbacks`, `SearchBarCallbacks`, `EditorToolbarCallbacks`, `DiffToolbarCallbacks`, `ContextMenuHost`, `DetailsEditorHost`. |
 
 Rules:
@@ -26,6 +27,10 @@ Rules:
 - Use `import type` for every type-only import across a layer (`webviewProtocol.ts` and
   `diffProtocol.ts` do this for `EcucDocumentModel`, `EcucRow`, `ConditionEntry` and `DiffDocument`).
   A value import of a type module is forbidden.
+- CSS imports are side-effect modules. `src/webview/css.d.ts` declares `*.css` once; never cast a CSS
+  import or add a second declaration. esbuild emits `dist/editorViewer.css` / `dist/diffViewer.css`
+  for the browser pages, stubs CSS in the extension-host bundle, and `cssImportHook.ts` mirrors the
+  source stylesheets into `out/` for the tests.
 - Do not re-declare a protocol message, row field or diff field locally. Import the owning type. A local
   copy drifts silently when the owner adds a discriminator or a field.
 
