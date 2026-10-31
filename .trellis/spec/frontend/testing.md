@@ -195,7 +195,9 @@ When you use a source assertion, say so in the task notes; do not present it as 
 `npm run benchmark` runs `src/test/benchmarks/runBenchmark.ts`. The runner discovers
 `src/test/benchmarks/*Benchmark.ts`, esbuild-bundles each to a temporary CJS file and executes it with
 `node --expose-gc`, then removes the temp directory. `--continue` keeps going after a failure; a bare
-argument filters by basename. A failed benchmark exits 1.
+argument filters by basename. A failed benchmark exits 1. The runner is a `.ts` file executed directly
+through Node's type stripping, so it needs Node 24 (the CT workflow pins `NODE_VERSION: '24'`); it is
+not compiled by `tsc`.
 
 `ecucLargeFileBenchmark.ts` generates a ~26 MiB synthetic ECUC ARXML in memory and measures scan, row
 build and a two-side diff: elapsed time plus retained heap after forced GC. It prints one JSON line per

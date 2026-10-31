@@ -145,7 +145,9 @@ that is not obvious from the code.
   lines. A benchmark must stay headless (no `vscode`, no DOM) and synthetic. A benchmark is evidence,
   not a performance promise.
 - **Packaging is verified from the VSIX, not the ignore file.** Before calling a config change done,
-  run `npx @vscode/vsce ls` and confirm only runtime files ship. `.vscodeignore` gotchas: `.*/**`
+  run `npx @vscode/vsce ls` and confirm the listing matches the intended package: runtime `dist/`
+  files, manifest, README/CHANGELOG/LICENSE, icons and the user `docs/`/`examples/`; no `src/`, `out/`,
+  tests, build configs or caches. `.vscodeignore` gotchas: `.*/**`
   does not exclude a dot-named directory that is a junction, so use `**/.vscode-test*`; root dot-files
   such as `.gitattributes` need their own line. Every kept line must name an existing path or
   generated output — never copy another repository's ignore list wholesale.
@@ -153,7 +155,8 @@ that is not obvious from the code.
 ## Before calling work done
 
 - `npm run check-types`, `npm run lint` and `npm test` are green.
-- `npm run package` is green and `npx @vscode/vsce ls` lists only runtime files.
+- `npm run package` is green and `npx @vscode/vsce ls` lists only the intended package files
+  (runtime, docs, manifest, icons).
 - Every new assertion fails when its feature is deleted (`testing.md`).
 - Anything that could not be verified in this environment is stated plainly as unverified — not
   implied to have passed.
