@@ -44,3 +44,30 @@ export function stripXmlPrefix(name: string): string {
 	const colon = name.lastIndexOf(':');
 	return colon < 0 ? name : name.slice(colon + 1);
 }
+
+/**
+ * The offset just past a `<!DOCTYPE …>` declaration, including an internal
+ * subset in brackets, or `-1` when the declaration is not complete yet.
+ * Shared by the whole-text scanner and the chunk-fed stream parser.
+ */
+export function markupDeclarationEnd(source: string, at: number): number {
+	let depth = 0;
+	let quote: string | undefined;
+	for (let j = at + 2; j < source.length; j++) {
+		const c = source[j];
+		if (quote !== undefined) {
+			if (c === quote) {
+				quote = undefined;
+			}
+		} else if (c === '"' || c === "'") {
+			quote = c;
+		} else if (c === '[') {
+			depth++;
+		} else if (c === ']') {
+			depth--;
+		} else if (c === '>' && depth <= 0) {
+			return j + 1;
+		}
+	}
+	return -1;
+}

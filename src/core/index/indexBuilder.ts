@@ -6,33 +6,19 @@
  * bounded by nesting depth plus the emitted records rather than by the file
  * size.
  */
-import { Range } from '../ecuc/model';
+import type { Range } from '../ecuc/model';
 import { decodeXml } from '../text/xmlText';
-import { FileIndex, IndexDefinition, IndexElement, IndexReference } from './indexModel';
-import { XmlStreamHandlers, XmlStreamParser } from './xmlStream';
+import type { FileIndex, IndexDefinition, IndexElement, IndexReference } from './indexModel';
+import { XmlStreamParser } from './xmlStream';
+import type { XmlStreamHandlers } from './xmlStream';
 
 const MODULE_VALUES = 'ECUC-MODULE-CONFIGURATION-VALUES';
 const CONTAINER_VALUE = 'ECUC-CONTAINER-VALUE';
 const PARAMETER_VALUES = new Set(['ECUC-NUMERICAL-PARAM-VALUE', 'ECUC-TEXTUAL-PARAM-VALUE']);
 const REFERENCE_VALUES = new Set(['ECUC-REFERENCE-VALUE', 'ECUC-INSTANCE-REFERENCE-VALUE']);
 const MODULE_DEF = 'ECUC-MODULE-DEF';
-const CONTAINER_DEF = 'ECUC-PARAM-CONF-CONTAINER-DEF';
 const ENUM_DEF = 'ECUC-ENUMERATION-PARAM-DEF';
 const ENUM_LITERAL_DEF = 'ECUC-ENUMERATION-LITERAL-DEF';
-const DEFINITION_KINDS = new Set([
-	MODULE_DEF,
-	CONTAINER_DEF,
-	'ECUC-INTEGER-PARAM-DEF',
-	'ECUC-FLOAT-PARAM-DEF',
-	'ECUC-BOOLEAN-PARAM-DEF',
-	'ECUC-STRING-PARAM-DEF',
-	ENUM_DEF,
-	'ECUC-FUNCTION-NAME-DEF',
-	'ECUC-LINKER-SYMBOL-DEF',
-	'ECUC-REFERENCE-DEF',
-	'ECUC-INSTANCE-REFERENCE-DEF',
-	'ECUC-ADD-INFO-PARAM-DEF',
-]);
 const TEXT_TAGS = new Set([
 	'SHORT-NAME',
 	'DEFINITION-REF',
@@ -109,7 +95,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 
 	open(name: string, attrs: ReadonlyMap<string, string>, offset: number): void {
 		const frame: Frame = { name, start: offset, text: '' };
-		if (name === 'DEFINITION-REF' || name === 'VALUE-REF' || name === 'TARGET-REF') {
+		if (name === 'DEFINITION-REF' || name === 'VALUE-REF' || name === 'TARGET-REF' || name === 'DESTINATION-REF') {
 			frame.attrs = attrs;
 		}
 		this.stack.push(frame);
@@ -167,7 +153,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 			}
 			return;
 		}
-		if (DEFINITION_KINDS.has(frame.name)) {
+		if (isDefinitionKind(frame.name)) {
 			this.pushDefinition(frame, range, ancestors);
 			return;
 		}
@@ -188,7 +174,11 @@ export class IndexBuilder implements XmlStreamHandlers {
 		}
 		if (REFERENCE_VALUES.has(frame.name)) {
 			const reference: IndexReference = {
+				kind: 'reference',
 				definitionRef: frame.definitionRef,
+				definitionDest: frame.definitionDest,
+				...(frame.shortName === undefined ? {} : { shortName: frame.shortName }),
+				...(frame.uuid === undefined ? {} : { uuid: frame.uuid }),
 				targetRawPath: frame.targetRawPath,
 				targetDest: frame.targetDest,
 				contextPaths: frame.contextPaths ?? [],
@@ -217,7 +207,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 			}
 			case 'DEFINITION-REF': {
 				const parent = ancestors[ancestors.length - 1];
-				if (!parent || !(knowsDefinition(parent.name) || DEFINITION_KINDS.has(parent.name))) {
+				if (!parent || !(knowsDefinition(parent.name) || isDefinitionKind(parent.name))) {
 					return;
 				}
 				parent.definitionRef = text;
@@ -229,7 +219,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 			}
 			case 'UUID': {
 				const parent = ancestors[ancestors.length - 1];
-				if (parent && (knowsDefinition(parent.name) || PARAMETER_VALUES.has(parent.name) || REFERENCE_VALUES.has(parent.name))) {
+				if (parent && (knowsDefinition(parent.name) || isDefinitionKind(parent.name))) {
 					parent.uuid = text;
 				}
 				return;
@@ -250,6 +240,30 @@ export class IndexBuilder implements XmlStreamHandlers {
 				}
 				return;
 			}
+			case 'DESTINATION-REF': {
+				const parent = nearest(ancestors, (f) => isDefinitionKind(f.name));
+				if (parent) {
+					setDefinitionField(parent, frame.name, text);
+					const dest = frame.attrs?.get('DEST');
+					if (dest !== undefined && dest !== '') {
+						(parent.definition ??= {}).destinationDest = dest;
+					}
+				}
+				return;
+			}
+			case 'L-2': {
+				// A literal's description belongs to the literal, not to the enclosing
+				// enumeration definition; a literal is not a definition record of its own,
+				// so its description is dropped rather than stolen.
+				const owner = nearest(ancestors, (f) => isDefinitionKind(f.name) || f.name === ENUM_LITERAL_DEF);
+				if (owner && !isDefinitionKind(owner.name)) {
+					return;
+				}
+				if (owner) {
+					setDefinitionField(owner, frame.name, text);
+				}
+				return;
+			}
 			case 'LOWER-LIMIT':
 			case 'UPPER-LIMIT':
 			case 'MIN':
@@ -257,11 +271,9 @@ export class IndexBuilder implements XmlStreamHandlers {
 			case 'MIN-LENGTH':
 			case 'MAX-LENGTH':
 			case 'DEFAULT-VALUE':
-			case 'DESTINATION-REF':
 			case 'LOWER-MULTIPLICITY':
-			case 'UPPER-MULTIPLICITY':
-			case 'L-2': {
-				const parent = nearest(ancestors, (f) => DEFINITION_KINDS.has(f.name));
+			case 'UPPER-MULTIPLICITY': {
+				const parent = nearest(ancestors, (f) => isDefinitionKind(f.name));
 				if (parent) {
 					setDefinitionField(parent, frame.name, text);
 				}
@@ -298,7 +310,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 
 	private pushDefinition(frame: Frame, range: Range, ancestors: Frame[]): void {
 		const path = this.definitionPath(frame, ancestors);
-		if (!path || frame.shortName === undefined) {
+		if (!path || !frame.shortName) {
 			return;
 		}
 		const definition: IndexDefinition = {
@@ -331,7 +343,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 	private definitionPath(frame: Frame, ancestors: Frame[]): string | undefined {
 		const packages = this.packageChain(ancestors);
 		const parents = ancestors
-			.filter((f) => f.name === MODULE_DEF || f.name === CONTAINER_DEF)
+			.filter((f) => f.name === MODULE_DEF || isContainerDef(f.name))
 			.map((f) => f.shortName)
 			.filter((name): name is string => name !== undefined && name !== '');
 		return joinPath([...packages, ...parents, frame.shortName]);
@@ -380,13 +392,32 @@ function knowsShortName(name: string): boolean {
 		name === 'AR-PACKAGE' ||
 		name === MODULE_VALUES ||
 		name === CONTAINER_VALUE ||
-		name === 'ECUC-ENUMERATION-LITERAL-DEF' ||
-		DEFINITION_KINDS.has(name)
+		name === ENUM_LITERAL_DEF ||
+		knowsDefinition(name) ||
+		isDefinitionKind(name)
 	);
 }
 
 function knowsDefinition(name: string): boolean {
 	return name === MODULE_VALUES || name === CONTAINER_VALUE || PARAMETER_VALUES.has(name) || REFERENCE_VALUES.has(name);
+}
+
+/** True for any ECUC definition element that can carry a SHORT-NAME and be referenced. */
+function isDefinitionKind(name: string): boolean {
+	if (name === MODULE_DEF || isContainerDef(name)) {
+		return true;
+	}
+	return (
+		/^ECUC-[A-Z0-9-]+-PARAM-DEF$/.test(name) ||
+		/-REFERENCE-DEF$/.test(name) ||
+		name === 'ECUC-FUNCTION-NAME-DEF' ||
+		name === 'ECUC-LINKER-SYMBOL-DEF'
+	);
+}
+
+/** A container definition nests further definitions and contributes a path segment. */
+function isContainerDef(name: string): boolean {
+	return name.endsWith('-CONTAINER-DEF');
 }
 
 function nearest(frames: readonly Frame[], predicate: (frame: Frame) => boolean): Frame | undefined {

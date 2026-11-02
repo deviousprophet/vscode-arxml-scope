@@ -33,7 +33,7 @@ import { watchBoot } from './bootWatchdog';
 import { editorShell } from './webviewShell';
 import { editorMessageType, documentHeader } from '../webviewProtocol';
 import type { EditorWebviewToProvider } from '../webviewProtocol';
-import type { DefinitionInfo, DefinitionLookup } from '../core/index/definitions';
+import type { DefinitionInfo } from '../core/index/definitions';
 
 export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
 
@@ -101,7 +101,6 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	private readonly extensionUri: vscode.Uri;
 	/** Definition lookup and change notifications; absent in unit tests. */
 	private readonly definitionSource?: DefinitionSource;
-	private readonly definitionLookup?: DefinitionLookup;
 
 	constructor(conditionStore?: ConditionValueStore, extensionUri?: vscode.Uri, definitionSource?: DefinitionSource) {
 		this.conditionStore = conditionStore;
@@ -111,8 +110,6 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			vscode.extensions.getExtension('deviousprophet.vscode-arxml-scope')?.extensionUri ??
 			vscode.Uri.file(path.join(__dirname, '..'));
 		this.definitionSource = definitionSource;
-		this.definitionLookup =
-			definitionSource === undefined ? undefined : (ref) => definitionSource.definition(ref);
 	}
 
 	/** The editor page's static shell plus its bundled script/style URIs. */
@@ -185,7 +182,9 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			const options: RowBuildOptions = {
 				...editorSettings(),
 				conditions: this.conditionValues(),
-				...(this.definitionLookup === undefined ? {} : { definitions: this.definitionLookup }),
+				...(this.definitionSource === undefined
+					? {}
+					: { definitions: (ref: string) => this.definitionSource!.definition(ref) }),
 			};
 			const rowDocument = buildRows(model, options);
 			// The page owns the row store; a re-scan replaces it without markup.

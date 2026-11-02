@@ -108,6 +108,20 @@ suite('workspace index (extension)', function () {
 		assert.strictEqual(extension.indexStats().definitions, 11, 'the other file survives the update');
 	});
 
+	test('disabling the index hides the status bar and enabling it rebuilds', async () => {
+		fs.writeFileSync(values, fixtureText('index/values.arxml'));
+		const extension = await api();
+		const config = vscode.workspace.getConfiguration('arxmlScope.index');
+		await config.update('enabled', false, vscode.ConfigurationTarget.Workspace);
+		await waitFor('the disabled index to clear', () => extension.indexStats().files === 0);
+		assert.strictEqual(extension.statusBarText(), '');
+
+		await config.update('enabled', true, vscode.ConfigurationTarget.Workspace);
+		await waitFor('the enabled index to rebuild', () => extension.indexStats().files === 1);
+		assert.ok(extension.statusBarText().includes('1 file indexed'), extension.statusBarText());
+		await config.update('enabled', undefined, vscode.ConfigurationTarget.Workspace);
+	});
+
 	test('the status bar hides when nothing is indexed', async () => {
 		const extension = await api();
 		await extension.reindex();

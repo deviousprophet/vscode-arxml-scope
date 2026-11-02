@@ -18,13 +18,11 @@ export function registerCommands(
 	context: vscode.ExtensionContext,
 	provider: EcucEditorProvider,
 	compare: CompareSelectionStore,
-	indexService?: IndexService
+	indexService: IndexService
 ): void {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('vscode-arxml-scope.openEcucEditor', (uri?: vscode.Uri) => openEcucEditor(uri)),
-		vscode.commands.registerCommand('vscode-arxml-scope.rebuildIndex', () =>
-			indexService === undefined ? undefined : indexService.rebuild()
-		),
+		vscode.commands.registerCommand('vscode-arxml-scope.rebuildIndex', () => indexService.rebuild()),
 		vscode.commands.registerCommand('vscode-arxml-scope.revealInSource', (uri?: vscode.Uri, nodeId?: string, follow?: boolean) =>
 			revealInSource(uri, nodeId, follow)
 		),

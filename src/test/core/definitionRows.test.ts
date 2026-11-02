@@ -45,7 +45,7 @@ suite('definition rows (core)', () => {
 		const { rows } = buildRows(model, { definitions: lookup });
 		const peer = row(rows, 'PeerRef');
 		assert.strictEqual(peer.definition?.type, 'Reference');
-		assert.strictEqual(peer.definition?.destination, '/Synthetic/Other');
+		assert.strictEqual(peer.definition?.destination, 'ECUC-REFERENCE-DEF');
 		assert.strictEqual(peer.definition?.multiplicity, '0..*');
 	});
 

@@ -8,7 +8,7 @@
  * Implemented against `research/legacy-artext-analysis.md` §2 and parent design §4–§8.
  */
 import { ContainerNode, EcucDocumentModel, ModuleNode, ParameterNode, Range, ReferenceNode, lastShortName } from './model';
-import { decodeXml, isXmlWhitespace, stripXmlPrefix } from '../text/xmlText';
+import { decodeXml, isXmlWhitespace, markupDeclarationEnd, stripXmlPrefix } from '../text/xmlText';
 
 type RecKind =
 	| 'autosar'
@@ -127,11 +127,11 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 			// `(\n <SYSC-REF/> \n ==0)` reads `(CANIPCORETYPE_SC==0)`. XML whitespace
 			// only, matching `isWs`, so a condition's own characters are never dropped.
 			let leading = 0;
-			while (leading < raw.length && isWs(raw[leading])) {
+			while (leading < raw.length && isXmlWhitespace(raw[leading])) {
 				leading++;
 			}
 			let trailing = 0;
-			while (trailing < raw.length - leading && isWs(raw[raw.length - 1 - trailing])) {
+			while (trailing < raw.length - leading && isXmlWhitespace(raw[raw.length - 1 - trailing])) {
 				trailing++;
 			}
 			chunk = raw.slice(leading, raw.length - trailing);
@@ -158,15 +158,15 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 			j++;
 		}
 		const nameStart = j;
-		while (j < len && !isWs(text[j]) && text[j] !== '>' && text[j] !== '/') {
+		while (j < len && !isXmlWhitespace(text[j]) && text[j] !== '>' && text[j] !== '/') {
 			j++;
 		}
-		const name = stripPrefix(text.slice(nameStart, j));
+		const name = stripXmlPrefix(text.slice(nameStart, j));
 		const attrs = new Map<string, string>();
 		let selfClosing = false;
 
 		while (j < len) {
-			while (j < len && isWs(text[j])) {
+			while (j < len && isXmlWhitespace(text[j])) {
 				j++;
 			}
 			const c = text[j];
@@ -186,11 +186,11 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				break;
 			}
 			const attrStart = j;
-			while (j < len && !isWs(text[j]) && text[j] !== '=' && text[j] !== '>' && text[j] !== '/') {
+			while (j < len && !isXmlWhitespace(text[j]) && text[j] !== '=' && text[j] !== '>' && text[j] !== '/') {
 				j++;
 			}
-			const attrName = stripPrefix(text.slice(attrStart, j));
-			while (j < len && isWs(text[j])) {
+			const attrName = stripXmlPrefix(text.slice(attrStart, j));
+			while (j < len && isXmlWhitespace(text[j])) {
 				j++;
 			}
 			if (text[j] !== '=') {
@@ -200,7 +200,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				continue;
 			}
 			j++;
-			while (j < len && isWs(text[j])) {
+			while (j < len && isXmlWhitespace(text[j])) {
 				j++;
 			}
 			const quote = text[j];
@@ -217,7 +217,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				}
 			} else {
 				const valueStart = j;
-				while (j < len && !isWs(text[j]) && text[j] !== '>') {
+				while (j < len && !isXmlWhitespace(text[j]) && text[j] !== '>') {
 					j++;
 				}
 				attrs.set(attrName, text.slice(valueStart, j));
@@ -799,36 +799,8 @@ function structify(path: string): string {
 
 /** Skips `<!DOCTYPE …>` including an internal subset in brackets. */
 function skipMarkupDeclaration(src: string, at: number): number {
-	let j = at + 2;
-	let depth = 0;
-	let quote: string | undefined;
-	while (j < src.length) {
-		const c = src[j];
-		if (quote !== undefined) {
-			if (c === quote) {
-				quote = undefined;
-			}
-		} else if (c === '"' || c === "'") {
-			quote = c;
-		} else if (c === '[') {
-			depth++;
-		} else if (c === ']') {
-			depth--;
-		} else if (c === '>' && depth <= 0) {
-			return j + 1;
-		}
-		j++;
-	}
-	return src.length;
-}
-
-/** Strips a namespace prefix before comparing a tag or attribute name. */
-function stripPrefix(name: string): string {
-	return stripXmlPrefix(name);
-}
-
-function isWs(c: string | undefined): boolean {
-	return isXmlWhitespace(c);
+	const end = markupDeclarationEnd(src, at);
+	return end < 0 ? src.length : end;
 }
 
 /** Drops `undefined`-valued own properties so the model is JSON-clean. */

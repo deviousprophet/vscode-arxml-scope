@@ -6,12 +6,12 @@
  * a file's text. Offsets are UTF-16 code units into that file, converted to
  * line/column only at the VS Code boundary.
  */
-import { Range } from '../ecuc/model';
+import type { Range } from '../ecuc/model';
 
 /** One ECUC value element found in a file. */
 export interface IndexElement {
-	kind: 'module' | 'container' | 'parameter' | 'reference';
-	/** AR path for a module or container; absent for a parameter/reference value. */
+	kind: 'module' | 'container' | 'parameter';
+	/** AR path for a module or container; absent for a parameter value. */
 	path?: string;
 	/** The element's own `DEFINITION-REF`. */
 	definitionRef?: string;
@@ -25,9 +25,14 @@ export interface IndexElement {
 
 /** One ECUC reference value, with the information needed for cross-file lookup. */
 export interface IndexReference {
+	kind: 'reference';
 	/** The AR path of the containing module/container, when one is known. */
 	sourcePath?: string;
 	definitionRef?: string;
+	/** The `DEST` of the reference value's `DEFINITION-REF`. */
+	definitionDest?: string;
+	shortName?: string;
+	uuid?: string;
 	/** Verbatim `VALUE-REF` / `TARGET-REF` text. */
 	targetRawPath?: string;
 	/** `DEST` of the `VALUE-REF` / `TARGET-REF`. */
@@ -58,7 +63,10 @@ export interface IndexDefinition {
 	maxLength?: string;
 	lowerMultiplicity?: string;
 	upperMultiplicity?: string;
+	/** The `DESTINATION-REF` text (the target AR path). */
 	destinationRef?: string;
+	/** The `DEST` attribute of `DESTINATION-REF` (the target type). */
+	destinationDest?: string;
 	literals?: string[];
 	file: string;
 	range: Range;
@@ -83,9 +91,4 @@ export interface IndexStats {
 	references: number;
 	definitions: number;
 	packages: number;
-}
-
-/** An empty file contribution, useful for a file with no ECUC content. */
-export function emptyFileIndex(uri: string): FileIndex {
-	return { uri, packages: [], elements: [], references: [], definitions: [] };
 }

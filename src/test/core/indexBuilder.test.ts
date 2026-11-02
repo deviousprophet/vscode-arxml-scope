@@ -55,9 +55,11 @@ suite('indexBuilder (core)', () => {
 		const file = buildFileIndex('file:///values.arxml', fixtureText('index/values.arxml'));
 		assert.strictEqual(file.references.length, 1);
 		const peer = reference(file.references, '/Synthetic/SampleModuleDef/Main/PeerRef');
+		assert.strictEqual(peer.kind, 'reference');
 		assert.strictEqual(peer.sourcePath, '/Synthetic/SampleModule/Main');
 		assert.strictEqual(peer.targetRawPath, '/Synthetic/SampleModule/Main/Sub');
 		assert.strictEqual(peer.targetDest, 'ECUC-CONTAINER-VALUE');
+		assert.strictEqual(peer.definitionDest, 'ECUC-REFERENCE-DEF');
 		assert.deepStrictEqual(peer.contextPaths, []);
 	});
 
@@ -91,6 +93,7 @@ suite('indexBuilder (core)', () => {
 		assert.ok(mode);
 		assert.deepStrictEqual(mode.literals, ['FAST', 'SLOW']);
 		assert.strictEqual(mode.defaultValue, 'FAST');
+		assert.strictEqual(mode.description, 'Operating mode.');
 
 		const peer = file.definitions.find((candidate) => candidate.path === '/Synthetic/SampleModuleDef/Main/PeerRef');
 		assert.ok(peer);
@@ -108,6 +111,20 @@ suite('indexBuilder (core)', () => {
 			}
 			assert.deepStrictEqual(buildFileIndexChunked('file:///module-def.arxml', chunks), whole, `chunk size ${size}`);
 		}
+	});
+
+	test('indexes definition kinds beyond the original closed list', () => {
+		const text = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-DEF><SHORT-NAME>Mod</SHORT-NAME><CONTAINERS><ECUC-CHOICE-CONTAINER-DEF><SHORT-NAME>Choice</SHORT-NAME><SUB-CONTAINERS><ECUC-PARAM-CONF-CONTAINER-DEF><SHORT-NAME>Nested</SHORT-NAME><PARAMETERS><ECUC-MULTILINE-STRING-PARAM-DEF><SHORT-NAME>Text</SHORT-NAME></ECUC-MULTILINE-STRING-PARAM-DEF></PARAMETERS></ECUC-PARAM-CONF-CONTAINER-DEF></SUB-CONTAINERS></ECUC-CHOICE-CONTAINER-DEF></CONTAINERS></ECUC-MODULE-DEF></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const file = buildFileIndex('file:///extra-defs.arxml', text);
+		assert.deepStrictEqual(
+			file.definitions.map((definition) => definition.path),
+			['/P/Mod/Choice/Nested/Text', '/P/Mod/Choice/Nested', '/P/Mod/Choice', '/P/Mod'],
+			'definitions close innermost first'
+		);
+		assert.strictEqual(
+			file.definitions.find((definition) => definition.shortName === 'Text')?.kind,
+			'ECUC-MULTILINE-STRING-PARAM-DEF'
+		);
 	});
 
 	test('a file without ECUC content still contributes its packages', () => {

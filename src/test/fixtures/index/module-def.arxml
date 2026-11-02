@@ -49,9 +49,15 @@
                 </ECUC-STRING-PARAM-DEF>
                 <ECUC-ENUMERATION-PARAM-DEF>
                   <SHORT-NAME>Mode</SHORT-NAME>
+                  <DESC>
+                    <L-2 L="EN">Operating mode.</L-2>
+                  </DESC>
                   <LITERALS>
                     <ECUC-ENUMERATION-LITERAL-DEF>
                       <SHORT-NAME>FAST</SHORT-NAME>
+                      <DESC>
+                        <L-2 L="EN">Fast mode.</L-2>
+                      </DESC>
                     </ECUC-ENUMERATION-LITERAL-DEF>
                     <ECUC-ENUMERATION-LITERAL-DEF>
                       <SHORT-NAME>SLOW</SHORT-NAME>

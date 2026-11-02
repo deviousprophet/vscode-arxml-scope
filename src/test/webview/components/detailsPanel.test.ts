@@ -11,8 +11,6 @@ const DEFINITION: DefinitionInfo = {
 	type: 'Integer',
 	range: '0 .. 65535',
 	defaultValue: '30',
-	lowerMultiplicity: 0,
-	upperMultiplicity: 1,
 	multiplicity: '0..1',
 	destination: '/P/Dest',
 	literals: ['FAST', 'SLOW'],

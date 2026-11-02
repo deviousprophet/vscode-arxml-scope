@@ -9,8 +9,8 @@ import { IndexService } from './host/indexService';
 import type { IndexStats } from './core/index/indexModel';
 
 /**
- * The small surface the extension exposes to integration tests and to a future
- * language-server client. It is intentionally read-only except for `reindex`.
+ * The small surface the extension exposes to integration tests and cross-file
+ * features. It is intentionally read-only except for `reindex`.
  */
 export interface ArxmlScopeApi {
 	indexStats(): IndexStats;

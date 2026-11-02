@@ -7,6 +7,7 @@ import {
 	definitionType,
 	multiplicityText,
 	multiplicityValue,
+	resolveDefinition,
 } from '../../core/index/definitions';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
 import { fixtureText } from './modelTestUtils';
@@ -47,6 +48,7 @@ suite('definitions (core)', () => {
 		assert.strictEqual(enumeration.type, 'Enumeration');
 		assert.deepStrictEqual(enumeration.literals, ['FAST', 'SLOW']);
 		assert.strictEqual(enumeration.defaultValue, 'FAST');
+		assert.strictEqual(enumeration.description, 'Operating mode.', 'a literal description must not overwrite the enum');
 
 		const functionName = definitionInfo(definition('/Synthetic/SampleModuleDef/Main/EntryPoint'));
 		assert.strictEqual(functionName.type, 'Function name');
@@ -68,11 +70,11 @@ suite('definitions (core)', () => {
 		const reference = definitionInfo(definition('/Synthetic/SampleModuleDef/Main/PeerRef'));
 		assert.strictEqual(reference.type, 'Reference');
 		assert.strictEqual(reference.multiplicity, '0..*');
-		assert.strictEqual(reference.destination, '/Synthetic/Other');
+		assert.strictEqual(reference.destination, 'ECUC-REFERENCE-DEF');
 
 		const instance = definitionInfo(definition('/Synthetic/SampleModuleDef/Main/PeerIref'));
 		assert.strictEqual(instance.type, 'Instance reference');
-		assert.strictEqual(instance.destination, '/Synthetic/SampleModule');
+		assert.strictEqual(instance.destination, 'ECUC-CONTAINER-VALUE');
 	});
 
 	test('multiplicity parsing and display', () => {
@@ -122,14 +124,14 @@ suite('definitions (core)', () => {
 	test('resolves definitions across files and refuses ambiguity', () => {
 		const index = new WorkspaceIndex();
 		index.upsert(MODULE_DEF);
-		const timeout = index.definitionEntry('/Synthetic/SampleModuleDef/Main/TimeoutSeconds');
+		const timeout = resolveDefinition(index, '/Synthetic/SampleModuleDef/Main/TimeoutSeconds');
 		assert.ok(timeout);
-		assert.strictEqual(definitionInfo(timeout).type, 'Integer');
-		assert.strictEqual(index.definitionEntry('/SampleModuleDef/Main/TimeoutSeconds')?.kind, 'ECUC-INTEGER-PARAM-DEF');
-		assert.strictEqual(index.definitionEntry('/Missing'), undefined);
+		assert.strictEqual(timeout.type, 'Integer');
+		assert.strictEqual(resolveDefinition(index, '/SampleModuleDef/Main/TimeoutSeconds')?.kind, 'ECUC-INTEGER-PARAM-DEF');
+		assert.strictEqual(resolveDefinition(index, '/Missing'), undefined);
 
 		// A second file with the same module definition path makes the exact path ambiguous.
 		index.upsert(buildFileIndex('file:///module-def-2.arxml', fixtureText('index/module-def.arxml')));
-		assert.strictEqual(index.definitionEntry('/Synthetic/SampleModuleDef/Main/TimeoutSeconds'), undefined);
+		assert.strictEqual(resolveDefinition(index, '/Synthetic/SampleModuleDef/Main/TimeoutSeconds'), undefined);
 	});
 });

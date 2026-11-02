@@ -13,7 +13,7 @@
  *
  * No DOM and no `vscode` import: the host supplies decoded text.
  */
-import { isXmlWhitespace, stripXmlPrefix } from '../text/xmlText';
+import { isXmlWhitespace, markupDeclarationEnd, stripXmlPrefix } from '../text/xmlText';
 
 export interface XmlStreamHandlers {
 	/** An opening tag. `offset` is the `<`. */
@@ -258,23 +258,9 @@ export class XmlStreamParser {
 
 	/** Skips `<!DOCTYPE …>` including an internal subset in brackets. */
 	private skipDeclaration(at: number, final: boolean): number {
-		let depth = 0;
-		let quote: string | undefined;
-		for (let j = at + 2; j < this.buffer.length; j++) {
-			const c = this.buffer[j];
-			if (quote !== undefined) {
-				if (c === quote) {
-					quote = undefined;
-				}
-			} else if (c === '"' || c === "'") {
-				quote = c;
-			} else if (c === '[') {
-				depth++;
-			} else if (c === ']') {
-				depth--;
-			} else if (c === '>' && depth <= 0) {
-				return j + 1;
-			}
+		const end = markupDeclarationEnd(this.buffer, at);
+		if (end >= 0) {
+			return end;
 		}
 		return final ? this.buffer.length : -1;
 	}

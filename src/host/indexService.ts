@@ -10,7 +10,7 @@ import { createReadStream, promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { IndexBuilder } from '../core/index/indexBuilder';
 import { FileIndex, IndexStats } from '../core/index/indexModel';
-import { DefinitionInfo, definitionInfo } from '../core/index/definitions';
+import { DefinitionInfo, resolveDefinition } from '../core/index/definitions';
 import { IndexSubscription, WorkspaceIndex } from '../core/index/workspaceIndex';
 
 const DEBOUNCE_MS = 250;
@@ -31,12 +31,17 @@ export function indexSettings(): IndexSettings {
 	return { enabled, maxBytes: safeMegabytes * 1024 * 1024 };
 }
 
+/** `N file` / `N files`; one owner for the status bar and its tooltip. */
+export function fileCountText(count: number): string {
+	return `${count} file${count === 1 ? '' : 's'}`;
+}
+
 /** The status bar label for one index state. */
 export function statusBarText(stats: IndexStats, building: boolean): string {
 	if (building) {
 		return '$(sync~spin) ARXML Scope: indexing…';
 	}
-	return `$(database) ARXML Scope: ${stats.files} file${stats.files === 1 ? '' : 's'} indexed`;
+	return `$(database) ARXML Scope: ${fileCountText(stats.files)} indexed`;
 }
 
 /** Reads one ARXML file and returns its index contribution. */
@@ -85,8 +90,16 @@ export class IndexService implements vscode.Disposable {
 			return;
 		}
 		this.started = true;
-		const settings = indexSettings();
-		if (settings.enabled) {
+		// The listener must exist even when the index starts disabled; otherwise
+		// enabling the setting could never revive it without a window reload.
+		this.disposables.push(
+			vscode.workspace.onDidChangeConfiguration((event) => {
+				if (event.affectsConfiguration('arxmlScope.index')) {
+					void this.onConfigurationChanged();
+				}
+			})
+		);
+		if (indexSettings().enabled) {
 			this.startWatcher();
 		}
 		void this.rebuild();
@@ -108,8 +121,7 @@ export class IndexService implements vscode.Disposable {
 
 	/** Resolves a `DEFINITION-REF` to the display shape, or nothing when absent/ambiguous. */
 	definition(definitionRef: string): DefinitionInfo | undefined {
-		const entry = this.index.definitionEntry(definitionRef);
-		return entry === undefined ? undefined : definitionInfo(entry);
+		return resolveDefinition(this.index, definitionRef);
 	}
 
 	/** Rebuilds every file. Concurrent calls share one build chain. */
@@ -146,8 +158,8 @@ export class IndexService implements vscode.Disposable {
 			}
 		} catch {
 			// A file deleted between the watcher event and the read is not an error;
-			// removing it keeps the index truthful.
-			this.skipped.delete(uri.toString());
+			// recording it as skipped and removing the old entry keeps the status truthful.
+			this.skipped.add(uri.toString());
 			this.index.remove(uri.toString());
 		}
 		this.lastIndexedAt = Date.now();
@@ -216,12 +228,7 @@ export class IndexService implements vscode.Disposable {
 			this.watcher,
 			this.watcher.onDidCreate((uri) => this.schedule(uri)),
 			this.watcher.onDidChange((uri) => this.schedule(uri)),
-			this.watcher.onDidDelete((uri) => this.remove(uri)),
-			vscode.workspace.onDidChangeConfiguration((event) => {
-				if (event.affectsConfiguration('arxmlScope.index')) {
-					void this.onConfigurationChanged();
-				}
-			})
+			this.watcher.onDidDelete((uri) => this.remove(uri))
 		);
 	}
 
@@ -247,8 +254,9 @@ export class IndexService implements vscode.Disposable {
 			clearTimeout(timer);
 			this.pending.delete(key);
 		}
-		this.skipped.delete(key);
-		if (this.index.remove(key)) {
+		const wasSkipped = this.skipped.delete(key);
+		const removed = this.index.remove(key);
+		if (removed || wasSkipped) {
 			this.lastIndexedAt = Date.now();
 			this.publish();
 		}
@@ -285,12 +293,15 @@ export class IndexService implements vscode.Disposable {
 		}
 		this.status.text = statusBarText(stats, this.building);
 		const lines = [
-			`${stats.files} file${stats.files === 1 ? '' : 's'} indexed`,
+			`${fileCountText(stats.files)} indexed`,
 			`${stats.elements} elements, ${stats.references} references, ${stats.definitions} definitions`,
 			`${stats.packages} packages`,
 		];
 		if (this.skipped.size > 0) {
-			lines.push(`${this.skipped.size} file${this.skipped.size === 1 ? '' : 's'} skipped (size limit or unreadable)`);
+			const names = [...this.skipped].map(fileNameOf);
+			const shown = names.slice(0, 5).join(', ');
+			const more = names.length > 5 ? ` and ${names.length - 5} more` : '';
+			lines.push(`Skipped: ${shown}${more} (size limit or unreadable)`);
 		}
 		if (this.lastIndexedAt !== undefined) {
 			lines.push(`Updated ${new Date(this.lastIndexedAt).toLocaleTimeString()}`);
@@ -298,5 +309,20 @@ export class IndexService implements vscode.Disposable {
 		lines.push('Click to rebuild the workspace index.');
 		this.status.tooltip = lines.join('\n');
 		this.status.show();
+	}
+}
+
+/** The last path segment of a URI, for the skipped-file tooltip. */
+function fileNameOf(uri: string): string {
+	const withoutQuery = uri.split(/[?#]/)[0];
+	const segments = withoutQuery.split('/');
+	const last = segments[segments.length - 1];
+	if (last === undefined || last === '') {
+		return uri;
+	}
+	try {
+		return decodeURIComponent(last);
+	} catch {
+		return last;
 	}
 }

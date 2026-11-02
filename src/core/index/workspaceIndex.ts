@@ -9,7 +9,7 @@
  *
  * No `vscode` import: the host supplies file URIs as strings.
  */
-import { FileIndex, IndexDefinition, IndexElement, IndexStats } from './indexModel';
+import type { FileIndex, IndexDefinition, IndexElement, IndexStats } from './indexModel';
 
 export interface IndexSubscription {
 	dispose(): void;
@@ -60,10 +60,6 @@ export class WorkspaceIndex {
 		return this.files.size;
 	}
 
-	filesIndex(): readonly FileIndex[] {
-		return [...this.files.values()];
-	}
-
 	file(uri: string): FileIndex | undefined {
 		return this.files.get(uri);
 	}
@@ -94,15 +90,6 @@ export class WorkspaceIndex {
 	definitionEntry(rawPath: string): IndexDefinition | undefined {
 		this.ensureLookups();
 		return resolve(this.definitions!, rawPath);
-	}
-
-	/** Every definition, in file insertion order. */
-	allDefinitions(): readonly IndexDefinition[] {
-		const out: IndexDefinition[] = [];
-		for (const file of this.files.values()) {
-			out.push(...file.definitions);
-		}
-		return out;
 	}
 
 	/** The files that contribute to each `AR-PACKAGE` path (split-package view). */
@@ -194,15 +181,8 @@ function resolve<T>(lookup: PathLookup<T>, rawPath: string): T | undefined {
 	for (let start = 0; start < segments.length; start++) {
 		const candidate = '/' + segments.slice(start).join('/');
 		if (lookup.exact.has(candidate)) {
-			const exact = lookup.exact.get(candidate);
-			if (exact !== undefined) {
-				return exact;
-			}
-			// Duplicate exact AR path across files: ambiguous.
-			if (lookup.exact.get(candidate) === undefined && lookup.suffix.has(candidate)) {
-				return undefined;
-			}
-			return undefined;
+			// A duplicate exact AR path across files is ambiguous: exact.get is undefined.
+			return lookup.exact.get(candidate);
 		}
 		if (lookup.suffix.has(candidate)) {
 			return lookup.suffix.get(candidate);

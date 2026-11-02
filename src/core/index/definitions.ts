@@ -5,7 +5,8 @@
  * module owns the display rules. A missing or ambiguous definition resolves to
  * `undefined` — the editor never invents a type or a range.
  */
-import { IndexDefinition } from './indexModel';
+import type { IndexDefinition } from './indexModel';
+import type { WorkspaceIndex } from './workspaceIndex';
 
 /** One resolved definition, in the shape the row/details model consumes. */
 export interface DefinitionInfo {
@@ -15,9 +16,8 @@ export interface DefinitionInfo {
 	type: string;
 	range?: string;
 	defaultValue?: string;
-	lowerMultiplicity?: number;
-	upperMultiplicity?: number;
 	multiplicity?: string;
+	/** The destination type (`DESTINATION-REF`'s `DEST`) when declared. */
 	destination?: string;
 	literals?: string[];
 	description?: string;
@@ -29,6 +29,12 @@ export interface DefinitionInfo {
 
 /** The row/details lookup over an index. Returns nothing on an absent/ambiguous ref. */
 export type DefinitionLookup = (definitionRef: string) => DefinitionInfo | undefined;
+
+/** Resolves a `DEFINITION-REF` against the workspace index and normalizes it. */
+export function resolveDefinition(index: WorkspaceIndex, definitionRef: string): DefinitionInfo | undefined {
+	const entry = index.definitionEntry(definitionRef);
+	return entry === undefined ? undefined : definitionInfo(entry);
+}
 
 /** Normalizes one raw index record into the display shape. */
 export function definitionInfo(definition: IndexDefinition): DefinitionInfo {
@@ -47,18 +53,13 @@ export function definitionInfo(definition: IndexDefinition): DefinitionInfo {
 	}
 	const lower = multiplicityValue(definition.lowerMultiplicity);
 	const upper = multiplicityValue(definition.upperMultiplicity);
-	if (lower !== undefined) {
-		info.lowerMultiplicity = lower;
-	}
-	if (upper !== undefined) {
-		info.upperMultiplicity = upper;
-	}
 	const multiplicity = multiplicityText(lower, upper);
 	if (multiplicity !== undefined) {
 		info.multiplicity = multiplicity;
 	}
-	if (definition.destinationRef !== undefined) {
-		info.destination = definition.destinationRef;
+	const destination = definition.destinationDest ?? definition.destinationRef;
+	if (destination !== undefined) {
+		info.destination = destination;
 	}
 	if (definition.literals !== undefined && definition.literals.length > 0) {
 		info.literals = definition.literals.slice();
@@ -145,6 +146,7 @@ export function multiplicityText(lower: number | undefined, upper: number | unde
 	if (lower === undefined && upper === undefined) {
 		return undefined;
 	}
+	// AUTOSAR's ECUC lower multiplicity defaults to 0 when the element omits it.
 	const low = lower === undefined ? 0 : lower;
 	if (upper === undefined) {
 		return `${low}..`;
