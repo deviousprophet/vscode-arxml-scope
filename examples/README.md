@@ -28,6 +28,18 @@ A plain double-click opens the text editor, because the custom editor is opt-in.
 | Annotation | Module and `Main` container annotations |
 | `SW-SYSCOND` | `Sub` variation point, `(SAMPLE_ENABLED == true)` |
 | Empty container | `Empty` (shows `{ }`) |
+| Definition resolution | [`synthetic-module-def.arxml`](synthetic-module-def.arxml) — type, range, default, multiplicity and description in **Details** |
+
+### Module definition
+
+[`synthetic-module-def.arxml`](synthetic-module-def.arxml) is the synthetic `ECUC-MODULE-DEF` for the
+sample. Keep both files in the same folder and the workspace index resolves every
+`DEFINITION-REF`: select `TimeoutSeconds` and **Details** adds the declared type, `0 .. 65535`,
+default `30`, and the description.
+
+The index lives in memory only. The status bar shows how many `.arxml` files it holds and updates
+when a file is saved or deleted; click it to rebuild. `arxmlScope.index.maxFileSizeMB` (default 50)
+skips files that are too large for the index.
 
 ### Try an edit and a diff
 

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Layering: core pure, host vscode effects, where new modules go."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Type ownership and boundary rules for index, row and protocol shapes."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Forbidden patterns: no vscode in core, no side files, no new dependency."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Fixture and assertion conventions."}

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>Synthetic</SHORT-NAME>
+      <ELEMENTS>
+        <ECUC-MODULE-DEF>
+          <SHORT-NAME>SampleModuleDef</SHORT-NAME>
+          <DESC>
+            <L-2 L="EN">Synthetic module used by the index tests.</L-2>
+          </DESC>
+          <LOWER-MULTIPLICITY>0</LOWER-MULTIPLICITY>
+          <UPPER-MULTIPLICITY>1</UPPER-MULTIPLICITY>
+          <CONTAINERS>
+            <ECUC-PARAM-CONF-CONTAINER-DEF>
+              <SHORT-NAME>Main</SHORT-NAME>
+              <DESC>
+                <L-2 L="EN">Main settings for the synthetic sample.</L-2>
+              </DESC>
+              <LOWER-MULTIPLICITY>1</LOWER-MULTIPLICITY>
+              <UPPER-MULTIPLICITY>1</UPPER-MULTIPLICITY>
+              <PARAMETERS>
+                <ECUC-INTEGER-PARAM-DEF>
+                  <SHORT-NAME>TimeoutSeconds</SHORT-NAME>
+                  <DESC>
+                    <L-2 L="EN">Timeout in seconds.</L-2>
+                  </DESC>
+                  <LOWER-LIMIT>0</LOWER-LIMIT>
+                  <UPPER-LIMIT>65535</UPPER-LIMIT>
+                  <DEFAULT-VALUE>30</DEFAULT-VALUE>
+                </ECUC-INTEGER-PARAM-DEF>
+                <ECUC-FLOAT-PARAM-DEF>
+                  <SHORT-NAME>SampleRate</SHORT-NAME>
+                  <MIN>0.5</MIN>
+                  <MAX>100</MAX>
+                  <DEFAULT-VALUE>1.5</DEFAULT-VALUE>
+                </ECUC-FLOAT-PARAM-DEF>
+                <ECUC-BOOLEAN-PARAM-DEF>
+                  <SHORT-NAME>Enabled</SHORT-NAME>
+                  <DEFAULT-VALUE>true</DEFAULT-VALUE>
+                </ECUC-BOOLEAN-PARAM-DEF>
+                <ECUC-STRING-PARAM-DEF>
+                  <SHORT-NAME>Greeting</SHORT-NAME>
+                  <MIN-LENGTH>1</MIN-LENGTH>
+                  <MAX-LENGTH>32</MAX-LENGTH>
+                  <DEFAULT-VALUE>hello</DEFAULT-VALUE>
+                </ECUC-STRING-PARAM-DEF>
+                <ECUC-ENUMERATION-PARAM-DEF>
+                  <SHORT-NAME>Mode</SHORT-NAME>
+                  <LITERALS>
+                    <ECUC-ENUMERATION-LITERAL-DEF>
+                      <SHORT-NAME>FAST</SHORT-NAME>
+                    </ECUC-ENUMERATION-LITERAL-DEF>
+                    <ECUC-ENUMERATION-LITERAL-DEF>
+                      <SHORT-NAME>SLOW</SHORT-NAME>
+                    </ECUC-ENUMERATION-LITERAL-DEF>
+                  </LITERALS>
+                  <DEFAULT-VALUE>FAST</DEFAULT-VALUE>
+                </ECUC-ENUMERATION-PARAM-DEF>
+                <ECUC-FUNCTION-NAME-DEF>
+                  <SHORT-NAME>EntryPoint</SHORT-NAME>
+                </ECUC-FUNCTION-NAME-DEF>
+                <ECUC-LINKER-SYMBOL-DEF>
+                  <SHORT-NAME>BufferSymbol</SHORT-NAME>
+                </ECUC-LINKER-SYMBOL-DEF>
+              </PARAMETERS>
+              <REFERENCES>
+                <ECUC-REFERENCE-DEF>
+                  <SHORT-NAME>PeerRef</SHORT-NAME>
+                  <DESTINATION-REF DEST="ECUC-REFERENCE-DEF">/Synthetic/Other</DESTINATION-REF>
+                  <LOWER-MULTIPLICITY>0</LOWER-MULTIPLICITY>
+                  <UPPER-MULTIPLICITY>*</UPPER-MULTIPLICITY>
+                </ECUC-REFERENCE-DEF>
+                <ECUC-INSTANCE-REFERENCE-DEF>
+                  <SHORT-NAME>PeerIref</SHORT-NAME>
+                  <DESTINATION-REF DEST="ECUC-CONTAINER-VALUE">/Synthetic/SampleModule</DESTINATION-REF>
+                </ECUC-INSTANCE-REFERENCE-DEF>
+              </REFERENCES>
+            </ECUC-PARAM-CONF-CONTAINER-DEF>
+          </CONTAINERS>
+        </ECUC-MODULE-DEF>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>

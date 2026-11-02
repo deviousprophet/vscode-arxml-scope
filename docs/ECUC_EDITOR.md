@@ -78,11 +78,29 @@ It shows the node kind, label, definition reference, short name, variant, AUTOSA
 reference target, contexts, conditions and annotations as applicable.
 
 - Integer values show Decimal, Hexadecimal and Binary formats; Float shows Decimal only.
+- When the workspace index resolves the row's `DEFINITION-REF`, Details adds **Definition type**,
+  **Range**, **Default**, **Multiplicity**, **Values** (enumeration literals), **Destination**,
+  **Definition description** and **Definition file**. Only declared fields appear.
 - References show **Jump to target** only when the target resolves to a row in the same file.
 - **Reveal in source** opens the text editor at the node's range.
 - The Details status line carries follow failures and a field refusal when the Details tab is hidden;
   field errors otherwise appear inline beside the control. There is no banner and no Source block or
   copy action.
+
+## Workspace index and definitions
+
+The extension keeps an in-memory index of every `.arxml` file in the workspace. It is built on
+activation, follows file creation, saves and deletion, and is thrown away when the window closes.
+Nothing is written beside your files.
+
+- The status bar shows **ARXML Scope: N files indexed** and hides when the workspace has no indexed
+  file. Hover it for element, reference, definition and package counts; click it, or run
+  **ARXML Scope: Rebuild Workspace Index**, to rebuild.
+- **Details** resolves a container or parameter `DEFINITION-REF` against `ECUC-MODULE-DEF` and
+  `ECUC-PARAM-CONF-CONTAINER-DEF` elements in any indexed file. Resolution is exact-path first, then a
+  unique path suffix; two matches are treated as ambiguous and add no rows.
+- `arxmlScope.index.enabled` turns the index off; `arxmlScope.index.maxFileSizeMB` (default 50) skips
+  files that are too large to read comfortably. Skipped files are reported in the status bar tooltip.
 
 The right edge also has a **Conditions** tab. Both tabs share the panel; only one is visible at a time.
 The sidebar width, active tab, section sizes and collapsed sections persist across a webview reload.
@@ -154,8 +172,9 @@ Reveal in source uses the panel's own column, so the source opens beside the ECU
 beside whatever tab happens to be active. The `arxmlScope.ecuc.editor.revealMode` setting controls what
 happens next.
 
-Reference resolution is same-file only. There is no workspace index, so a target in another file is not
-followable and gets no Jump action.
+Reference resolution for **Jump to target** is same-file only; a target in another file is not yet
+followable and gets no Jump action. Definition lookup is cross-file: it uses the workspace index and
+updates an open panel when a definition file changes.
 
 ## Settings
 
@@ -164,14 +183,21 @@ followable and gets no Jump action.
 | `arxmlScope.ecuc.editor.sort` | `all` / `declaration` | `all` | `all` sorts modules, containers, parameters and references by the display rules; `declaration` keeps the file's own order. |
 | `arxmlScope.ecuc.editor.sortExcept` | array of `DEFINITION-REF` tails | the 15-entry legacy list | Rows whose definition tail matches keep declaration order even under `sort: all`. |
 | `arxmlScope.ecuc.editor.revealMode` | `beside` / `focus` / `replace` | `beside` | `beside` opens the source next to the editor and keeps focus in the tree; `focus` also moves focus to the source; `replace` swaps the ECUC editor's tab for the text editor. |
+| `arxmlScope.index.enabled` | boolean | `true` | Build the in-memory workspace index used for definition details and the status bar. |
+| `arxmlScope.index.maxFileSizeMB` | number ≥ 1 | `50` | Largest `.arxml` file the index reads. Larger files are skipped and counted in the tooltip. |
 
-An open panel re-renders when `arxmlScope.ecuc.editor` changes; you do not need to reopen the file.
+An open panel re-renders when `arxmlScope.ecuc.editor` changes; you do not need to reopen the file. A
+definition saved anywhere in the workspace re-renders the open panel as well.
 
 ## Limitations
 
-- Only AUTOSAR ECUC-Values files are supported. Other `.arxml` files are shown in the text editor.
-- Reference resolution, type display and validation are same-file and syntax-shaped. There is no AUTOSAR
-  schema validation, no cross-file definition index and no language-server completion.
+- Only AUTOSAR ECUC-Values files are supported by the editor. Other `.arxml` files stay in the text
+  editor, but they still contribute packages, elements and definitions to the workspace index.
+- The index is in memory only and is rebuilt on activation. There is no persisted cache.
+- Jump to target, Find All References and validation are same-file or not implemented yet; v0.6 adds
+  cross-file navigation and diagnostics.
+- Definition resolution refuses an ambiguous suffix. Vendor-specific variant merging is not performed;
+  the first exact definition wins only when it is unique.
 - The Document is read-only by design; edits are limited to `<VALUE>`, container `<SHORT-NAME>` /
   `<DEFINITION-REF>`, and delete/duplicate of a container or parameter.
 - CDATA-backed values are displayed but cannot be edited.

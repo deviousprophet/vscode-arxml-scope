@@ -29,6 +29,7 @@ import { resolvePath } from './resolve';
 import { SORT_EXCEPTIONS, orderContainers, orderMembers, orderModules } from './order';
 import { haystack } from './haystack';
 import { NodeIndex, buildNodeIndex } from './nodeId';
+import type { DefinitionInfo, DefinitionLookup } from '../index/definitions';
 
 /** One quiet-source meta fragment (short name, variant, context, condition, annotation). */
 export interface MetaPart {
@@ -104,6 +105,8 @@ export interface EcucRow {
 	disabled?: boolean;
 	/** Why this row is disabled; absent when it is not. */
 	disabledBy?: 'self' | 'ancestor';
+	/** Definition-derived fields, present only when the workspace index resolves the ref. */
+	definition?: DefinitionInfo;
 	/** Lower-cased label + short name + value, the Search haystack. */
 	haystack: string;
 }
@@ -121,6 +124,8 @@ export interface RowBuildOptions {
 	sortExcept?: readonly string[];
 	/** SW system-constant values used to evaluate each node's own condition. */
 	conditions?: ReadonlyMap<string, ConditionValue>;
+	/** Resolves a `DEFINITION-REF`; absent when no workspace index is available. */
+	definitions?: DefinitionLookup;
 }
 
 interface BuildContext {
@@ -129,6 +134,7 @@ interface BuildContext {
 	except: readonly string[];
 	pathIndex: Map<string, Range>;
 	conditions: ReadonlyMap<string, ConditionValue>;
+	definitions?: DefinitionLookup;
 }
 
 /**
@@ -143,6 +149,7 @@ export function buildRows(model: EcucDocumentModel, options: RowBuildOptions = {
 		except: options.sortExcept ?? SORT_EXCEPTIONS,
 		pathIndex: model.pathIndex,
 		conditions: options.conditions ?? new Map<string, ConditionValue>(),
+		definitions: options.definitions,
 	};
 	const rows: EcucRow[] = [];
 	const modules = orderModules(model.modules, ctx.sort, ctx.except);
@@ -242,6 +249,14 @@ function integerValue(value: string): bigint | undefined {
 	return negative ? -parsed : parsed;
 }
 
+/** Resolves a definition only when a lookup was supplied; an absent ref never calls out. */
+function definitionFor(ctx: BuildContext, definitionRef: string): DefinitionInfo | undefined {
+	if (ctx.definitions === undefined || definitionRef === '') {
+		return undefined;
+	}
+	return ctx.definitions(definitionRef);
+}
+
 function moduleRow(
 	ctx: BuildContext,
 	rows: EcucRow[],
@@ -254,6 +269,7 @@ function moduleRow(
 ): void {
 	const index = rows.length;
 	const condition = ownCondition(module, ctx);
+	const definition = definitionFor(ctx, module.definitionRef);
 	const meta: MetaPart[] = [
 		shortPart(module.shortName),
 		...(module.variant ? [variantPart(module.variant)] : []),
@@ -275,6 +291,7 @@ function moduleRow(
 		meta,
 		comments: commentLines(meta),
 		haystack: haystack({ label: dotted(module.definitionRef), shortName: module.shortName, meta }),
+		...(definition === undefined ? {} : { definition }),
 	};
 	const disabled = applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
@@ -299,6 +316,7 @@ function containerRow(
 ): void {
 	const at = rows.length;
 	const condition = ownCondition(container, ctx);
+	const definition = definitionFor(ctx, container.definitionRef);
 	const meta: MetaPart[] = [shortPart(container.shortName), ...suffixParts(container, condition)];
 	const row: EcucRow = {
 		id: ctx.index.idOf(container) ?? '',
@@ -320,6 +338,7 @@ function containerRow(
 			shortName: container.shortName,
 			meta,
 		}),
+		...(definition === undefined ? {} : { definition }),
 	};
 	const disabled = applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
@@ -363,6 +382,7 @@ function parameterRow(
 	const valueKind = parameter.numeric ? (/^(true|false)$/i.test(value) ? 'boolean' : 'numeric') : 'textual';
 	const type = parameterType(parameter.definitionDest, valueKind);
 	const condition = ownCondition(parameter, ctx);
+	const definition = definitionFor(ctx, parameter.definitionRef);
 	const meta: MetaPart[] = suffixParts(parameter, condition);
 	const row: EcucRow = {
 		id: ctx.index.idOf(parameter) ?? '',
@@ -385,6 +405,7 @@ function parameterRow(
 		meta,
 		comments: commentLines(meta),
 		haystack: haystack({ label: parameter.name, value, meta }),
+		...(definition === undefined ? {} : { definition }),
 	};
 	applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
@@ -404,6 +425,7 @@ function referenceRow(
 	const rawTarget = reference.targetRawPath ?? target;
 	const followable = rawTarget !== '' && resolvePath(ctx.pathIndex, rawTarget) !== undefined;
 	const condition = ownCondition(reference, ctx);
+	const definition = definitionFor(ctx, reference.definitionRef);
 	const meta: MetaPart[] = [
 		...(reference.instance && reference.contextPaths.length > 0
 			? [contextPart(reference.contextPaths)]
@@ -432,6 +454,7 @@ function referenceRow(
 		meta,
 		comments: commentLines(meta),
 		haystack: haystack({ label: reference.name, value: target, meta }),
+		...(definition === undefined ? {} : { definition }),
 	};
 	applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);

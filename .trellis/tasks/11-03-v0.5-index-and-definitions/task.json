@@ -1,0 +1,29 @@
+{
+  "id": "v0.5-index-and-definitions",
+  "name": "v0.5-index-and-definitions",
+  "title": "v0.5: workspace index and ECUC definitions",
+  "description": "Parent for the v0.5 release work: a streaming in-memory workspace index, ECUC definition resolution with definition details, and the indexed-file status bar.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "deviousprophet",
+  "assignee": "deviousprophet",
+  "createdAt": "2026-11-03",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-03-v0.5-workspace-index",
+    "11-03-v0.5-definition-resolution"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
