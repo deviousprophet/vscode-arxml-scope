@@ -45,9 +45,8 @@ suite('ECUC validation (core)', () => {
 	});
 
 	test('duplicate SHORT-NAME across files', () => {
-		const duplicate = CLEAN.replace('<SHORT-NAME>Main</SHORT-NAME>', '<SHORT-NAME>Main</SHORT-NAME>');
 		const index = workspace(CLEAN);
-		index.upsert(buildFileIndex('file:///duplicate.arxml', duplicate));
+		index.upsert(buildFileIndex('file:///duplicate.arxml', CLEAN));
 		assert.ok(rules(index).includes('duplicateShortName'));
 	});
 
