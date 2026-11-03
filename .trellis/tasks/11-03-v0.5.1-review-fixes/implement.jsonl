@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No vscode in core, no side files, before-done gates."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Index and row type ownership."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Regression tests must fail on the old behavior."}
