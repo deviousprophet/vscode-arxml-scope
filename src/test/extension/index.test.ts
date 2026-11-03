@@ -40,22 +40,37 @@ async function waitFor(what: string, predicate: () => boolean, timeoutMs = 8000)
 suite('workspace index (extension)', function () {
 	this.timeout(20000);
 
-	const dir = path.join(workspaceDir(), 'index-test');
-	const values = path.join(dir, 'values.arxml');
-	const moduleDef = path.join(dir, 'module-def.arxml');
-	const extra = path.join(dir, 'extra.arxml');
+	// Keep the fixture files at the workspace root: the VS Code node.js watcher
+	// does not reliably follow a subdirectory created after the watcher starts on
+	// Linux, and the product's `**/*.arxml` watcher is what this suite exercises.
+	const root = workspaceDir();
+	let values = '';
+	let moduleDef = '';
+	let extra = '';
+	let run = 0;
+
+	function removeFixtures(): void {
+		for (const file of [values, moduleDef, extra]) {
+			if (file !== '') {
+				fs.rmSync(file, { force: true });
+			}
+		}
+	}
 
 	suiteSetup(async () => {
 		await api();
 	});
 
 	setup(() => {
-		fs.rmSync(dir, { recursive: true, force: true });
-		fs.mkdirSync(dir, { recursive: true });
+		removeFixtures();
+		run++;
+		values = path.join(root, `index-test-${run}-values.arxml`);
+		moduleDef = path.join(root, `index-test-${run}-module-def.arxml`);
+		extra = path.join(root, `index-test-${run}-extra.arxml`);
 	});
 
 	teardown(() => {
-		fs.rmSync(dir, { recursive: true, force: true });
+		removeFixtures();
 	});
 
 	test('indexes the workspace and shows the file count in the status bar', async () => {
