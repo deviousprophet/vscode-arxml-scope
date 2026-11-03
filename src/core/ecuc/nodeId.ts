@@ -32,6 +32,8 @@ export interface NodeEntry {
 	kind: EcucNodeKind;
 	/** The node's primary label, for notices. */
 	label: string;
+	/** The AR path for a module/container, when the model indexed one. */
+	path?: string;
 	range: Range;
 	node: EcucNode;
 }
@@ -49,9 +51,17 @@ export function buildNodeIndex(model: EcucDocumentModel): NodeIndex {
 	const byId = new Map<string, NodeEntry>();
 	const ids = new WeakMap<EcucNode, string>();
 	const ordinals = new Map<string, number>();
+	const pathByRange = new Map<string, string>();
+	for (const [path, range] of model.pathIndex) {
+		const key = `${range.start}:${range.end}`;
+		if (!pathByRange.has(key)) {
+			pathByRange.set(key, path);
+		}
+	}
 
 	const add = (node: EcucNode, id: string, label: string, range: Range): void => {
-		byId.set(id, { id, kind: node.kind, label, range, node });
+		const path = pathByRange.get(`${range.start}:${range.end}`);
+		byId.set(id, { id, kind: node.kind, label, ...(path === undefined ? {} : { path }), range, node });
 		ids.set(node, id);
 	};
 

@@ -19,7 +19,7 @@ export function fixtureText(name: string): string {
 export function expectedModel(name: string): unknown {
 	const raw = fs.readFileSync(path.join(repoRoot, 'src', 'test', 'expected', name), 'utf8');
 	return JSON.parse(raw, (key, value) =>
-		key === 'definitionDest' || key === 'hexValue' ? undefined : value
+		key === 'definitionDest' || key === 'targetDest' || key === 'hexValue' ? undefined : value
 	);
 }
 
@@ -44,7 +44,7 @@ export function plain(model: EcucDocumentModel): unknown {
 				modules: model.modules,
 				pathIndex: [...model.pathIndex],
 			},
-			(key, value) => (key === 'definitionDest' || key === 'hexValue' ? undefined : value)
+			(key, value) => (key === 'definitionDest' || key === 'targetDest' || key === 'hexValue' ? undefined : value)
 		)
 	);
 }

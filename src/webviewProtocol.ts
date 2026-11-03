@@ -43,6 +43,7 @@ export type EditorWebviewToProvider =
 	| { type: 'select'; nodeId: string }
 	| { type: 'reveal'; nodeId: string }
 	| { type: 'follow'; nodeId: string }
+	| { type: 'references'; nodeId: string }
 	| { type: 'edit'; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string }
 	| { type: 'delete'; nodeId: string }
 	| { type: 'duplicate'; nodeId: string }

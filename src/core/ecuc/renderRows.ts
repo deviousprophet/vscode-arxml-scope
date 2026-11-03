@@ -126,6 +126,8 @@ export interface RowBuildOptions {
 	conditions?: ReadonlyMap<string, ConditionValue>;
 	/** Resolves a `DEFINITION-REF`; absent when no workspace index is available. */
 	definitions?: DefinitionLookup;
+	/** True when a reference target resolves across the workspace index. */
+	referenceResolver?: (targetPath: string, targetDest?: string) => boolean;
 }
 
 interface BuildContext {
@@ -135,6 +137,7 @@ interface BuildContext {
 	pathIndex: Map<string, Range>;
 	conditions: ReadonlyMap<string, ConditionValue>;
 	definitions?: DefinitionLookup;
+	referenceResolver?: (targetPath: string, targetDest?: string) => boolean;
 }
 
 /**
@@ -150,6 +153,7 @@ export function buildRows(model: EcucDocumentModel, options: RowBuildOptions = {
 		pathIndex: model.pathIndex,
 		conditions: options.conditions ?? new Map<string, ConditionValue>(),
 		definitions: options.definitions,
+		referenceResolver: options.referenceResolver,
 	};
 	const rows: EcucRow[] = [];
 	const modules = orderModules(model.modules, ctx.sort, ctx.except);
@@ -429,7 +433,13 @@ function referenceRow(
 ): void {
 	const target = reference.targetPath ?? reference.targetRawPath ?? '';
 	const rawTarget = reference.targetRawPath ?? target;
-	const followable = rawTarget !== '' && resolvePath(ctx.pathIndex, rawTarget) !== undefined;
+	const sameFile = rawTarget !== '' && resolvePath(ctx.pathIndex, rawTarget) !== undefined;
+	const crossFile =
+		!sameFile &&
+		rawTarget !== '' &&
+		ctx.referenceResolver !== undefined &&
+		ctx.referenceResolver(rawTarget, reference.targetDest) === true;
+	const followable = sameFile || crossFile;
 	const condition = ownCondition(reference, ctx);
 	const definition = definitionFor(ctx, reference.definitionRef);
 	const meta: MetaPart[] = [

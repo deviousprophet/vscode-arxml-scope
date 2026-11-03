@@ -9,11 +9,28 @@
  *
  * No `vscode` import: the host supplies file URIs as strings.
  */
-import type { FileIndex, IndexDefinition, IndexElement, IndexStats } from './indexModel';
+import type { FileIndex, IndexDefinition, IndexElement, IndexReference, IndexStats } from './indexModel';
 
 export interface IndexSubscription {
 	dispose(): void;
 }
+
+/** One element lookup, with the refusal reason kept for the caller. */
+export type ElementResolution =
+	| { ok: true; element: IndexElement }
+	| { ok: false; reason: 'absent' | 'ambiguous'; path: string }
+	| { ok: false; reason: 'dest-mismatch'; path: string; element: IndexElement; actualKind: IndexElement['kind'] };
+
+/** One reference lookup, with the source reference kept for diagnostics. */
+export type ReferenceResolution =
+	| { ok: true; element: IndexElement; reference: IndexReference }
+	| {
+			ok: false;
+			reason: 'no-target' | 'absent' | 'ambiguous' | 'dest-mismatch';
+			reference: IndexReference;
+			target?: string;
+			actualKind?: IndexElement['kind'];
+	  };
 
 export class WorkspaceIndex {
 	private readonly files = new Map<string, FileIndex>();
@@ -64,6 +81,11 @@ export class WorkspaceIndex {
 		return this.files.get(uri);
 	}
 
+	/** The indexed files, for the validation and text-feature layers. */
+	fileList(): readonly FileIndex[] {
+		return [...this.files.values()];
+	}
+
 	stats(): IndexStats {
 		let elements = 0;
 		let references = 0;
@@ -84,6 +106,64 @@ export class WorkspaceIndex {
 	element(rawPath: string): IndexElement | undefined {
 		this.ensureLookups();
 		return resolve(this.elements!, rawPath);
+	}
+
+	/** Resolves a target path and checks the optional `DEST` kind. */
+	resolveTarget(rawPath: string, dest?: string): ElementResolution {
+		this.ensureLookups();
+		const resolved = resolveDetailed(this.elements!, rawPath);
+		if (resolved.status !== 'found') {
+			return { ok: false, reason: resolved.status, path: rawPath };
+		}
+		const expected = expectedKind(dest);
+		if (expected !== undefined && resolved.value.kind !== expected) {
+			return {
+				ok: false,
+				reason: 'dest-mismatch',
+				path: rawPath,
+				element: resolved.value,
+				actualKind: resolved.value.kind,
+			};
+		}
+		return { ok: true, element: resolved.value };
+	}
+
+	/** Resolves one indexed reference through the workspace index. */
+	resolveReference(reference: IndexReference): ReferenceResolution {
+		const raw = reference.targetRawPath ?? '';
+		if (raw === '') {
+			return { ok: false, reason: 'no-target', reference };
+		}
+		const resolution = this.resolveTarget(raw, reference.targetDest);
+		if (resolution.ok) {
+			return { ok: true, element: resolution.element, reference };
+		}
+		return {
+			ok: false,
+			reason: resolution.reason,
+			reference,
+			target: raw,
+			...(resolution.reason === 'dest-mismatch' ? { actualKind: resolution.actualKind } : {}),
+		};
+	}
+
+	/** Every reference that resolves to the same element. */
+	referencesFor(target: IndexElement): IndexReference[] {
+		const out: IndexReference[] = [];
+		for (const file of this.files.values()) {
+			for (const reference of file.references) {
+				const resolution = this.resolveReference(reference);
+				if (
+					resolution.ok &&
+					resolution.element.file === target.file &&
+					resolution.element.range.start === target.range.start &&
+					resolution.element.range.end === target.range.end
+				) {
+					out.push(reference);
+				}
+			}
+		}
+		return out;
 	}
 
 	/** The raw definition record for a `DEFINITION-REF`, or nothing when absent/ambiguous. */
@@ -195,18 +275,41 @@ function buildLookup<T>(items: readonly T[], pathOf: (item: T) => string | undef
 }
 
 function resolve<T>(lookup: PathLookup<T>, rawPath: string): T | undefined {
+	const resolved = resolveDetailed(lookup, rawPath);
+	return resolved.status === 'found' ? resolved.value : undefined;
+}
+
+type Resolved<T> = { status: 'found'; value: T } | { status: 'absent' } | { status: 'ambiguous' };
+
+function resolveDetailed<T>(lookup: PathLookup<T>, rawPath: string): Resolved<T> {
 	const segments = splitPath(rawPath);
 	for (let start = 0; start < segments.length; start++) {
 		const candidate = '/' + segments.slice(start).join('/');
 		if (lookup.exact.has(candidate)) {
-			// A duplicate exact AR path across files is ambiguous: exact.get is undefined.
-			return lookup.exact.get(candidate);
+			const value = lookup.exact.get(candidate);
+			return value === undefined ? { status: 'ambiguous' } : { status: 'found', value };
 		}
 		if (lookup.suffix.has(candidate)) {
-			return lookup.suffix.get(candidate);
+			const value = lookup.suffix.get(candidate);
+			return value === undefined ? { status: 'ambiguous' } : { status: 'found', value };
 		}
 	}
-	return undefined;
+	return { status: 'absent' };
+}
+
+/** The element kind a `DEST` names, or `undefined` when the DEST is not a value kind. */
+function expectedKind(dest: string | undefined): IndexElement['kind'] | undefined {
+	switch (dest) {
+		case 'ECUC-MODULE-CONFIGURATION-VALUES':
+			return 'module';
+		case 'ECUC-CONTAINER-VALUE':
+			return 'container';
+		case 'ECUC-NUMERICAL-PARAM-VALUE':
+		case 'ECUC-TEXTUAL-PARAM-VALUE':
+			return 'parameter';
+		default:
+			return undefined;
+	}
 }
 
 function splitPath(path: string): string[] {

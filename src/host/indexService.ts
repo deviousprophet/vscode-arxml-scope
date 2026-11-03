@@ -9,9 +9,9 @@
 import { createReadStream, promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { IndexBuilder } from '../core/index/indexBuilder';
-import { FileIndex, IndexStats } from '../core/index/indexModel';
+import { FileIndex, IndexElement, IndexReference, IndexStats } from '../core/index/indexModel';
 import { DefinitionInfo, resolveDefinition } from '../core/index/definitions';
-import { IndexSubscription, WorkspaceIndex } from '../core/index/workspaceIndex';
+import { ElementResolution, IndexSubscription, ReferenceResolution, WorkspaceIndex } from '../core/index/workspaceIndex';
 
 const DEBOUNCE_MS = 250;
 /** Read chunk; large enough to keep syscall overhead low, small enough to stay responsive. */
@@ -129,6 +129,21 @@ export class IndexService implements vscode.Disposable {
 	/** Resolves a `DEFINITION-REF` to the display shape, or nothing when absent/ambiguous. */
 	definition(definitionRef: string): DefinitionInfo | undefined {
 		return resolveDefinition(this.index, definitionRef);
+	}
+
+	/** Resolves a reference target across the workspace, with the reason kept. */
+	resolveTarget(targetPath: string, targetDest?: string): ElementResolution {
+		return this.index.resolveTarget(targetPath, targetDest);
+	}
+
+	/** Resolves one indexed reference; used by the provider's Jump action. */
+	resolveReference(reference: IndexReference): ReferenceResolution {
+		return this.index.resolveReference(reference);
+	}
+
+	/** References that resolve to the given element, across every indexed file. */
+	referencesFor(target: IndexElement): IndexReference[] {
+		return this.index.referencesFor(target);
 	}
 
 	/** Rebuilds every file. Concurrent calls share one build chain. */
