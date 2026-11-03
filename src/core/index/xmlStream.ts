@@ -18,7 +18,7 @@ import { isXmlWhitespace, markupDeclarationEnd, stripXmlPrefix } from '../text/x
 export interface XmlStreamHandlers {
 	/** An opening tag. `offset` is the `<`. */
 	open(name: string, attrs: ReadonlyMap<string, string>, offset: number): void;
-	/** A closing tag. `offset` is the `<` of `</…>`. */
+	/** A closing tag. `offset` is just past the `>` of `</…>`. */
 	close(name: string, offset: number): void;
 	/** Character data between tags. Offsets bound the raw text. */
 	text(text: string, start: number, end: number): void;
@@ -175,7 +175,7 @@ export class XmlStreamParser {
 		}
 		const offset = this.consumed + at;
 		if (closing) {
-			this.handlers.close(name, offset);
+			this.handlers.close(name, this.consumed + gt + 1);
 			return gt + 1;
 		}
 		const attrs = this.readAttributes(raw, cursor);

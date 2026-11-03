@@ -146,6 +146,11 @@ export class IndexService implements vscode.Disposable {
 		return this.index.referencesFor(target);
 	}
 
+	/** Elements/references whose own definition resolves to the given definition. */
+	definitionUsers(definitionPath: string): Array<IndexElement | IndexReference> {
+		return this.index.definitionUsers(definitionPath);
+	}
+
 	/** Rebuilds every file. Concurrent calls share one build chain. */
 	async rebuild(): Promise<void> {
 		if (this.rebuildPromise !== undefined) {

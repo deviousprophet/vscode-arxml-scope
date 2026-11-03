@@ -281,6 +281,9 @@ function valueProblem(definition: IndexDefinition, value: string): string | unde
 		return undefined;
 	}
 	if (definition.kind === 'ECUC-FLOAT-PARAM-DEF') {
+		if (value.trim() === '') {
+			return 'is not a valid float';
+		}
 		const parsed = Number(value.trim());
 		if (!Number.isFinite(parsed)) {
 			return 'is not a valid float';

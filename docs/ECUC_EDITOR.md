@@ -102,6 +102,24 @@ Nothing is written beside your files.
 - `arxmlScope.index.enabled` turns the index off; `arxmlScope.index.maxFileSizeMB` (default 50) skips
   files that are too large to read comfortably. Skipped files are reported in the status bar tooltip.
 
+## Plain text editor
+
+The same index backs the normal text editor, without opening the custom editor:
+
+- **Outline / breadcrumbs** list modules, containers, parameters and references; definition files
+  list their module, container, parameter and reference definitions.
+- **Go to Definition** on a `DEFINITION-REF` opens the definition; on a `VALUE-REF` / `TARGET-REF` it
+  opens the target element, across files.
+- **Find References** on a container/module short name or a definition lists every instance and
+  reference that resolves to it.
+- **Document links** make every resolving `*-REF` path clickable.
+- **Hover** shows the target path and kind, or the definition type, range, multiplicity and
+  description.
+- Diagnostics from the validation rules appear in the Problems panel and as text-editor markers.
+
+The text editor uses the document's current text, so unsaved edits participate. The custom editor's
+**Find references** button lists the same reverse references in a Quick Pick.
+
 The right edge also has a **Conditions** tab. Both tabs share the panel; only one is visible at a time.
 The sidebar width, active tab, section sizes and collapsed sections persist across a webview reload.
 
@@ -164,7 +182,8 @@ The **Conditions** tab edits the workspace values used to evaluate each node's o
 | Action | Behaviour |
 |---|---|
 | **Reveal in source** (Details, `Ctrl+Enter`/`Alt+Enter` on a row; `Enter` on a leaf, empty container or reference) | Opens the ARXML text editor at the node's range. |
-| **Jump to target** (Details, reference only) | Follows a same-file reference and selects the resolved row. |
+| **Jump to target** (Details, reference only) | Follows a reference across files; a same-file target selects the row, an ECUC-Values target opens that file at its row, and any other ARXML target opens the text editor at its range. |
+| **Find references** (Details, module/container) | Lists every indexed reference that resolves to the selected element; choosing one reveals it in the text editor. |
 | **ARXML Scope: Reveal in ARXML Source** | Command Palette entry for the same reveal path. |
 | **ARXML Scope: Reveal in ECUC Editor** | From the active text editor, maps the cursor offset to the innermost ECUC node and opens/selects it in the ECUC editor. |
 
@@ -172,9 +191,9 @@ Reveal in source uses the panel's own column, so the source opens beside the ECU
 beside whatever tab happens to be active. The `arxmlScope.ecuc.editor.revealMode` setting controls what
 happens next.
 
-Reference resolution for **Jump to target** is same-file only; a target in another file is not yet
-followable and gets no Jump action. Definition lookup is cross-file: it uses the workspace index and
-updates an open panel when a definition file changes.
+Reference resolution for **Jump to target** uses the workspace index: an absent or ambiguous target is
+reported instead of guessed. A target in a non-ECUC ARXML file opens the text editor. Definition
+lookup is also cross-file and updates an open panel when a definition file changes.
 
 ## Settings
 
@@ -185,17 +204,21 @@ updates an open panel when a definition file changes.
 | `arxmlScope.ecuc.editor.revealMode` | `beside` / `focus` / `replace` | `beside` | `beside` opens the source next to the editor and keeps focus in the tree; `focus` also moves focus to the source; `replace` swaps the ECUC editor's tab for the text editor. |
 | `arxmlScope.index.enabled` | boolean | `true` | Build the in-memory workspace index used for definition details and the status bar. |
 | `arxmlScope.index.maxFileSizeMB` | number ≥ 1 | `50` | Largest `.arxml` file the index reads. Larger files are skipped and counted in the tooltip. |
+| `arxmlScope.validation.enabled` | boolean | `true` | Publish ECUC validation diagnostics to the Problems panel and the text editor. |
+| `arxmlScope.validation.severities` | per-rule `error` / `warning` / `information` / `off` | see defaults | Choose the severity of each rule, or turn one off. |
 
 An open panel re-renders when `arxmlScope.ecuc.editor` changes; you do not need to reopen the file. A
-definition saved anywhere in the workspace re-renders the open panel as well.
+definition saved anywhere in the workspace re-renders the open panel as well, and the diagnostic
+collection is recomputed after every index change.
 
 ## Limitations
 
 - Only AUTOSAR ECUC-Values files are supported by the editor. Other `.arxml` files stay in the text
-  editor, but they still contribute packages, elements and definitions to the workspace index.
+  editor, but they still contribute packages, elements and definitions to the workspace index and get
+  definition symbols, links, hover and references.
 - The index is in memory only and is rebuilt on activation. There is no persisted cache.
-- Jump to target, Find All References and validation are same-file or not implemented yet; v0.6 adds
-  cross-file navigation and diagnostics.
+- Validation checks ECUC-Values instances against indexed definitions. A definition file is used as
+  data; its own schema is not validated.
 - Definition resolution refuses an ambiguous suffix. Vendor-specific variant merging is not performed;
   the first exact definition wins only when it is unique. If two definition files declare the same AR
   path, the row shows no definition block and no explanation; remove the duplicate or exclude that

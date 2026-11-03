@@ -166,6 +166,31 @@ export class WorkspaceIndex {
 		return out;
 	}
 
+	/** Every element/reference whose own `DEFINITION-REF` resolves to this definition. */
+	definitionUsers(definitionPath: string): Array<IndexElement | IndexReference> {
+		const target = this.definitionEntry(definitionPath);
+		if (target === undefined) {
+			return [];
+		}
+		const out: Array<IndexElement | IndexReference> = [];
+		for (const file of this.files.values()) {
+			for (const element of file.elements) {
+				if (element.definitionRef !== undefined && this.definitionEntry(element.definitionRef)?.path === target.path) {
+					out.push(element);
+				}
+			}
+			for (const reference of file.references) {
+				if (
+					reference.definitionRef !== undefined &&
+					this.definitionEntry(reference.definitionRef)?.path === target.path
+				) {
+					out.push(reference);
+				}
+			}
+		}
+		return out;
+	}
+
 	/** The raw definition record for a `DEFINITION-REF`, or nothing when absent/ambiguous. */
 	definitionEntry(rawPath: string): IndexDefinition | undefined {
 		this.ensureLookups();

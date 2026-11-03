@@ -102,6 +102,15 @@ suite('workspaceIndex (core)', () => {
 		assert.deepStrictEqual(sources.get('/Synthetic'), ['file:///values.arxml', 'file:///module-def.arxml']);
 	});
 
+	test('referencesFor finds a same-file reference by element identity', () => {
+		const file = buildFileIndex('file:///values.arxml', fixtureText('index/values.arxml'));
+		const index = new WorkspaceIndex();
+		index.upsert(file);
+		const sub = file.elements.find((element) => element.path === '/Synthetic/SampleModule/Main/Sub');
+		assert.ok(sub);
+		assert.strictEqual(index.referencesFor(sub!).length, 1);
+	});
+
 	test('resolves a cross-file reference and lists the reverse references', () => {
 		const values = buildFileIndex(
 			'file:///values.arxml',
