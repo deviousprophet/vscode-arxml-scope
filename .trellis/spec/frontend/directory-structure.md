@@ -13,13 +13,16 @@ src/
     diffPanel.ts            the WebviewPanel lifecycle, refresh and reveal
     compareSelection.ts     the session-only first-file stash
     conditionValues.ts      SW-SYSCOND entries and the workspaceState store
+    indexService.ts         workspace discovery, streamed reads, watcher, status bar
     navigation.ts           node <-> source range, reference following
     bootWatchdog.ts         the boot timeout
     webviewShell.ts         the static editor/diff HTML shells and CSP
   core/               pure logic. NO `vscode` imports and no DOM.
     ecuc/             detect.ts  scanner.ts  model.ts  conditionEntry.ts  order.ts  resolve.ts
                       validate.ts  syscond.ts  nodeId.ts  renderRows.ts  haystack.ts
-    text/             offsets.ts (line/offset index)
+    index/            xmlStream.ts (chunk-fed XML events)  indexBuilder.ts (FileIndex)
+                      indexModel.ts  workspaceIndex.ts (cross-file lookup)  definitions.ts
+    text/             offsets.ts (line/offset index)  xmlText.ts (entity decode)
     diff/             diffModel.ts (matching/status/merged order, pure)
                       wordDiff.ts (token-level comparison, pure)
   webview/            browser-only page code. NO `vscode` imports.
@@ -80,6 +83,8 @@ testable without a running editor.
 |---|---|
 | Parsing, ordering, validation, anything over text | `src/core/` |
 | A row/document model rule | `src/core/ecuc/` |
+| A workspace index, XML stream or definition rule | `src/core/index/` |
+| Workspace discovery, streamed reads, the file watcher or the status bar | `src/host/indexService.ts` |
 | A diff matching/status/order rule | `src/core/diff/diffModel.ts` |
 | A document, panel, command or setting effect | `src/host/` or `src/commands.ts` |
 | A reusable UI unit with markup, input behaviour and styles | `src/webview/components/<Name>/` |

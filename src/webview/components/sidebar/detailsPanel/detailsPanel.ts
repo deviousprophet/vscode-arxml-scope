@@ -5,6 +5,7 @@
  */
 import './detailsPanel.css';
 import type { EcucRow, MetaPart, ParameterFormat, RowCondition } from '../../../../core/ecuc/renderRows';
+import type { DefinitionInfo } from '../../../../core/index/definitions';
 
 /** The fields the details panel shows, read from a row (not from a DOM node). */
 export interface InspectorFields {
@@ -21,6 +22,7 @@ export interface InspectorFields {
 	conditions: string;
 	annotations: string;
 	condition?: RowCondition;
+	definition?: DefinitionInfo;
 }
 
 /**
@@ -57,6 +59,7 @@ export function inspectorFields(row: EcucRow): InspectorFields {
 			.join('\n'),
 		annotations: parts('annotation').join('\n'),
 		...(row.condition === undefined ? {} : { condition: row.condition }),
+		...(row.definition === undefined ? {} : { definition: row.definition }),
 	};
 }
 
@@ -67,6 +70,41 @@ export function inspectorFields(row: EcucRow): InspectorFields {
  */
 export function refusalShownInDetails(message: { inline?: boolean }, detailsHidden: boolean): boolean {
 	return message.inline === true && detailsHidden === false;
+}
+
+/** One label/value row the Details body paints. */
+export interface InspectorField {
+	label: string;
+	value: string;
+}
+
+/**
+ * The definition block, in the documented order. Only fields the definition
+ * provides appear; the file row is always last so provenance never reads as a
+ * declaration detail.
+ */
+export function definitionRows(definition: DefinitionInfo): InspectorField[] {
+	const rows: InspectorField[] = [{ label: 'Definition type', value: definition.type }];
+	if (definition.range !== undefined) {
+		rows.push({ label: 'Range', value: definition.range });
+	}
+	if (definition.defaultValue !== undefined) {
+		rows.push({ label: 'Default', value: definition.defaultValue });
+	}
+	if (definition.multiplicity !== undefined) {
+		rows.push({ label: 'Multiplicity', value: definition.multiplicity });
+	}
+	if (definition.literals !== undefined && definition.literals.length > 0) {
+		rows.push({ label: 'Values', value: definition.literals.join(', ') });
+	}
+	if (definition.destination !== undefined) {
+		rows.push({ label: 'Destination', value: definition.destination });
+	}
+	if (definition.description !== undefined) {
+		rows.push({ label: 'Definition description', value: definition.description });
+	}
+	rows.push({ label: 'Definition file', value: definition.fileName });
+	return rows;
 }
 
 /** The Details tab panel: one stable section header and body. */

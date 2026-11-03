@@ -10,6 +10,9 @@ compiler cannot see: persisted webview state and `postMessage` payloads.
 |---|---|
 | `src/core/ecuc/model.ts` | The scanned document model: `Range`, `Suffixes`, `ModuleNode`, `ContainerNode`, `ParameterNode`, `ReferenceNode`, `EcucDocumentModel`, `SortMode`, `lastShortName`. Offsets are UTF-16 code units into the source text. |
 | `src/core/ecuc/renderRows.ts` | The row document the page receives: `EcucRow`, `RowDocument`, `RowBuildOptions`, `MetaPart`, `RowCondition`, `ParameterFormat`, plus `buildRows`, `parameterType`, `parameterFormats`, `conditionTooltip`. |
+| `src/core/index/indexModel.ts` | The workspace index values: `IndexElement`, `IndexReference`, `IndexDefinition`, `FileIndex`, `IndexStats`, `emptyFileIndex`. |
+| `src/core/index/workspaceIndex.ts` | The per-URI store and lookup surface: `WorkspaceIndex`, `IndexSubscription`; exact/unique-suffix resolution lives here. |
+| `src/core/index/definitions.ts` | The display shape and normalization: `DefinitionInfo`, `DefinitionLookup`, `definitionInfo`, `definitionType`, `definitionRange`, `multiplicityValue`, `multiplicityText`. |
 | `src/core/diff/diffModel.ts` | The diff value model: `DiffCell`, `DiffStatus`, `DiffChange`, `DiffRow`, `DiffSummary`, `DiffDocument`, `DiffHeader`, `FileLabel`, `RangeLookup`, `FlatDiffRow`, `DiffDisplayRow`, plus `buildDiffDocument`, `diffRows`, `summarizeDiff`, `diffVisibility`, `flattenDiffRows`, `flattenDiffDocument`, `nextChangeIndex`, `baseId`, `disambiguatedLabels`, `compareTitle`. |
 | `src/core/diff/wordDiff.ts` | The token-level comparison: `WordSegment`, `WordPair` and `diffWords`. Pure; the diff page renders its segments. |
 | `src/webviewProtocol.ts` | The editor surface's two message unions (`EditorProviderToWebview`, `EditorWebviewToProvider`), `EditorDocumentHeader`, `EditorDocumentPayload`, `documentHeader`, `editorMessageType`, `isEditorProviderMessage`. |

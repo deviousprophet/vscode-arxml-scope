@@ -9,7 +9,9 @@ that is not obvious from the code.
 |---|---|
 | `import … from 'vscode'` under `src/core/**` | The core is a pure library over text; this is what keeps a future workspace index or language server possible. |
 | A new runtime dependency | The core is dependency-free by design and the extension bundles with esbuild. Reach for the standard library or the platform first. |
-| Writing a derived file, cache or index beside a user's file | The legacy tool did this and it is the main reason it is being replaced. Nothing but the text of the element the user edited (`<VALUE>`, `<SHORT-NAME>` or `<DEFINITION-REF>`) may be written. |
+| Writing a derived file, cache or index beside a user's file | The legacy tool did this and it is the main reason it is being replaced. Nothing but the text of the element the user edited (`<VALUE>`, `<SHORT-NAME>` or `<DEFINITION-REF>`) may be written. The workspace index lives in memory only. |
+| Persisting the workspace index or a parse cache | The v0.5 index is rebuilt on activation from the workspace. A cache file, a `.codegraph`-style side directory or an extension-storage blob is not the v0.5 design; add persistence only with an explicit schema and invalidation story. |
+| Resolving an ambiguous definition or element path | Exact path first, then a unique suffix. Two matches must resolve to nothing; a guessed definition would show a wrong type or range as fact. |
 | Reintroducing the ARTEXT text form: a grammar, `Open as ARTEXT`, a text diff | ARTEXT survives only as the name of the information model. Anything that exists only because an external process produced a text file is dropped. |
 | Generating an expected fixture from the code under test | A snapshot agrees with the code by construction. See `testing.md`. |
 | Editing a committed fixture from a test | It passes once, then fails forever and silently rewrites the repository. |
@@ -109,6 +111,14 @@ that is not obvious from the code.
 - **Types and formats live in details.** `ParameterNode.definitionDest` feeds the details Type row;
   integer values show Decimal/Hexadecimal/Binary (`0x0F`, `0b00001111`). Do not put `(= 0x…)` back
   into the Document meta; the Document shows the value once.
+- **Definition data is optional and additive.** `EcucRow.definition` is filled only when the workspace
+  index resolves the row's `DEFINITION-REF`; without a lookup no row carries the field. The Details
+  projection order is Definition type, Range, Default, Multiplicity, Values, Destination, Definition
+  description, Definition file. Do not warn about a missing definition or fall back to a guessed type.
+- **The workspace index is memory-only.** `IndexService` rebuilds it on activation and owns the
+  `**/*.arxml` watcher; the core `WorkspaceIndex` has no file or `vscode` access. A file is read through
+  a stream, upserted as one `FileIndex`, and never copied into another file's entry. The status bar is
+  hidden at zero files; do not show `0 files indexed`.
 - **Dark is the supported theme for now.** Do not re-add a light-only selection/token branch or a
   light preview/capture; high contrast is the accessibility variant. High-contrast/forced-colors
   subtree rows use a dotted outline, not the fill.

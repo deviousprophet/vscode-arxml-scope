@@ -5,6 +5,21 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-11-03
+
+### Added
+
+- An in-memory workspace index over every `.arxml` file, rebuilt on activation and kept current as files are created, saved or deleted
+- A status bar item showing how many files are indexed, with element, reference, definition and package counts in its tooltip and a click action that rebuilds the index
+- ECUC definition details in **Details** for modules, containers, parameters and references: declared type, range, default, multiplicity, enumeration values, destination type and description
+- Definition provenance in **Details**, naming the module-definition file that supplied the resolved data
+- `ARXML Scope: Rebuild Workspace Index` and the `arxmlScope.index.enabled` / `arxmlScope.index.maxFileSizeMB` settings
+
+### Changed
+
+- A saved module-definition file refreshes definition details in an already open ECUC editor
+- Module-definition files are indexed as data even though they still open in the text editor
+
 ## [0.4.0] - 2026-11-01
 
 ### Added

@@ -43,7 +43,7 @@ import {
 	showSidebarTab,
 	SidebarUiState,
 } from './components/sidebar/sidebar';
-import { inspectorFields, refusalShownInDetails } from './components/sidebar/detailsPanel/detailsPanel';
+import { inspectorFields, refusalShownInDetails, definitionRows } from './components/sidebar/detailsPanel/detailsPanel';
 import {
 	applyDisabledCount,
 	ensureDiscoveredConditionRows,
@@ -952,6 +952,11 @@ function updateInspector() {
 	}
 	if (data.annotations) {
 		detailsBody.appendChild(inspectorRow('Annotations', data.annotations));
+	}
+	if (data.definition) {
+		for (const field of definitionRows(data.definition)) {
+			detailsBody.appendChild(inspectorRow(field.label, field.value));
+		}
 	}
 	const actions = paneActions(detailsBody);
 	if (row.kind === 'reference' && row.followable === true) {

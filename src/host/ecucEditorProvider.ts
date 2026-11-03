@@ -33,8 +33,18 @@ import { watchBoot } from './bootWatchdog';
 import { editorShell } from './webviewShell';
 import { editorMessageType, documentHeader } from '../webviewProtocol';
 import type { EditorWebviewToProvider } from '../webviewProtocol';
+import type { DefinitionInfo } from '../core/index/definitions';
 
 export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
+
+/**
+ * The definition surface the provider needs. `IndexService` implements it; the
+ * provider stays independent of the host service's lifecycle.
+ */
+export interface DefinitionSource {
+	definition(definitionRef: string): DefinitionInfo | undefined;
+	subscribe(listener: () => void): { dispose(): void };
+}
 
 /** How long a panel may take to report `ready` before the host warns (R3). */
 const BOOT_TIMEOUT_MS = 10_000;
@@ -89,14 +99,17 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	private readonly conditionStore?: ConditionValueStore;
 	/** The extension root, for `asWebviewUri` on the bundled page assets. */
 	private readonly extensionUri: vscode.Uri;
+	/** Definition lookup and change notifications; absent in unit tests. */
+	private readonly definitionSource?: DefinitionSource;
 
-	constructor(conditionStore?: ConditionValueStore, extensionUri?: vscode.Uri) {
+	constructor(conditionStore?: ConditionValueStore, extensionUri?: vscode.Uri, definitionSource?: DefinitionSource) {
 		this.conditionStore = conditionStore;
 		this.conditionEntries = conditionStore?.load() ?? [];
 		this.extensionUri =
 			extensionUri ??
 			vscode.extensions.getExtension('deviousprophet.vscode-arxml-scope')?.extensionUri ??
 			vscode.Uri.file(path.join(__dirname, '..'));
+		this.definitionSource = definitionSource;
 	}
 
 	/** The editor page's static shell plus its bundled script/style URIs. */
@@ -169,6 +182,9 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			const options: RowBuildOptions = {
 				...editorSettings(),
 				conditions: this.conditionValues(),
+				...(this.definitionSource === undefined
+					? {}
+					: { definitions: (ref: string) => this.definitionSource!.definition(ref) }),
 			};
 			const rowDocument = buildRows(model, options);
 			// The page owns the row store; a re-scan replaces it without markup.
@@ -202,6 +218,12 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				}
 			})
 		);
+
+		// A definition file saved elsewhere changes the details of an already open
+		// panel; the subscription is owned by the panel, so closing it stops the push.
+		if (this.definitionSource !== undefined) {
+			disposables.push(this.definitionSource.subscribe(() => push()));
+		}
 
 		disposables.push(
 			panel.webview.onDidReceiveMessage((raw: unknown) => {

@@ -3,12 +3,12 @@
 [![Visual Studio Marketplace](https://img.shields.io/badge/Visual_Studio_Marketplace-blue)](https://marketplace.visualstudio.com/items?itemName=deviousprophet.vscode-arxml-scope)
 [![Open VSX Registry](https://img.shields.io/badge/Open_VSX_Registry-c160ef)](https://open-vsx.org/extension/deviousprophet/vscode-arxml-scope)
 [![GitHub Release](https://img.shields.io/github/v/release/deviousprophet/vscode-arxml-scope?label=Latest%20Release&color=brightgreen&logo=github)](https://github.com/deviousprophet/vscode-arxml-scope/releases)
-[![License](https://img.shields.io/github/license/deviousprophet/vscode-arxml-scope?color=yellow)](https://github.com/deviousprophet/vscode-arxml-scope/blob/master/LICENSE)
+[![License](https://img.shields.io/github/license/deviousprophet/vscode-arxml-scope?color=yellow)](https://github.com/deviousprophet/vscode-arxml-scope/blob/main/LICENSE)
 
 Browse and edit AUTOSAR ECUC-Values files without reading raw XML. The ECUC editor presents modules,
 containers, parameters and references as a keyboard-navigable document, with a tabbed sidebar for
-details and condition values, whole-tree search, and a read-only semantic diff. The custom editor is
-opt-in: a plain open still uses the text editor.
+details, conditions and definition-derived type/range/default data, whole-tree search, and a read-only
+semantic diff. The custom editor is opt-in: a plain open still uses the text editor.
 
 ## Quick start
 
@@ -30,12 +30,16 @@ opt-in: a plain open still uses the text editor.
 
 ## Good to know
 
-- Reference resolution is same-file for now; there is no workspace index yet.
+- An in-memory workspace index covers every `.arxml` file; the status bar reports how many files it
+  holds and **Details** resolves container and parameter definitions across files (type, range,
+  default, multiplicity and description). The index is rebuilt on activation and follows saves.
+- Jump to target and Find All References stay same-file for now; cross-file navigation arrives in v0.6.
 - Edits are limited to parameter `<VALUE>` text, container `<SHORT-NAME>` / `<DEFINITION-REF>` text,
   and container/parameter Duplicate or Delete; references are not editable.
 - A value backed by CDATA is shown but cannot be edited.
 - Condition values are stored per workspace, not written beside the ARXML.
-- Only ECUC-Values `.arxml` files are supported; other files stay in the text editor.
+- Only ECUC-Values `.arxml` files are supported by the editor; other `.arxml` files still contribute
+  packages and definitions to the index.
 
 ## Issues
 

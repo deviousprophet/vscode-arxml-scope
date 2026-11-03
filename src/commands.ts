@@ -12,14 +12,17 @@ import { buildNodeIndex } from './core/ecuc/nodeId';
 import { followReference, innermostNodeIdAt, revealRangeInTextEditor } from './host/navigation';
 import { CompareSelectionStore, fileName } from './host/compareSelection';
 import { DiffPanel } from './host/diffPanel';
+import { IndexService } from './host/indexService';
 
 export function registerCommands(
 	context: vscode.ExtensionContext,
 	provider: EcucEditorProvider,
-	compare: CompareSelectionStore
+	compare: CompareSelectionStore,
+	indexService: IndexService
 ): void {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('vscode-arxml-scope.openEcucEditor', (uri?: vscode.Uri) => openEcucEditor(uri)),
+		vscode.commands.registerCommand('vscode-arxml-scope.rebuildIndex', () => indexService.rebuild()),
 		vscode.commands.registerCommand('vscode-arxml-scope.revealInSource', (uri?: vscode.Uri, nodeId?: string, follow?: boolean) =>
 			revealInSource(uri, nodeId, follow)
 		),

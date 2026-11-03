@@ -2,7 +2,7 @@
   "name": "vscode-arxml-scope",
   "displayName": "ARXML Scope",
   "description": "Browse and edit AUTOSAR ECUC-Values ARXML files in VS Code.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "deviousprophet",
   "license": "MIT",
   "repository": {
@@ -48,6 +48,11 @@
       {
         "command": "vscode-arxml-scope.compareSelected",
         "title": "Compare Two ARXML Files…",
+        "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.rebuildIndex",
+        "title": "Rebuild Workspace Index",
         "category": "ARXML Scope"
       }
     ],
@@ -157,6 +162,17 @@
           ],
           "default": "beside",
           "description": "Where \"Reveal in ARXML Source\" shows the file. \"beside\" opens the source next to the ECUC editor and keeps focus in the tree; \"focus\" opens it beside and moves focus there; \"replace\" swaps the ECUC editor's tab for the text editor, as older versions did."
+        },
+        "arxmlScope.index.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Index the workspace's .arxml files in memory so ECUC definitions resolve across files. The index is rebuilt on activation and follows file changes; nothing is written to disk."
+        },
+        "arxmlScope.index.maxFileSizeMB": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "description": "Largest .arxml file, in megabytes, that the workspace index reads. Larger files are skipped and reported in the status bar tooltip."
         }
       }
     }

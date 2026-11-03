@@ -8,6 +8,7 @@
  * Implemented against `research/legacy-artext-analysis.md` §2 and parent design §4–§8.
  */
 import { ContainerNode, EcucDocumentModel, ModuleNode, ParameterNode, Range, ReferenceNode, lastShortName } from './model';
+import { decodeXml, isXmlWhitespace, markupDeclarationEnd, stripXmlPrefix } from '../text/xmlText';
 
 type RecKind =
 	| 'autosar'
@@ -126,11 +127,11 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 			// `(\n <SYSC-REF/> \n ==0)` reads `(CANIPCORETYPE_SC==0)`. XML whitespace
 			// only, matching `isWs`, so a condition's own characters are never dropped.
 			let leading = 0;
-			while (leading < raw.length && isWs(raw[leading])) {
+			while (leading < raw.length && isXmlWhitespace(raw[leading])) {
 				leading++;
 			}
 			let trailing = 0;
-			while (trailing < raw.length - leading && isWs(raw[raw.length - 1 - trailing])) {
+			while (trailing < raw.length - leading && isXmlWhitespace(raw[raw.length - 1 - trailing])) {
 				trailing++;
 			}
 			chunk = raw.slice(leading, raw.length - trailing);
@@ -157,15 +158,15 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 			j++;
 		}
 		const nameStart = j;
-		while (j < len && !isWs(text[j]) && text[j] !== '>' && text[j] !== '/') {
+		while (j < len && !isXmlWhitespace(text[j]) && text[j] !== '>' && text[j] !== '/') {
 			j++;
 		}
-		const name = stripPrefix(text.slice(nameStart, j));
+		const name = stripXmlPrefix(text.slice(nameStart, j));
 		const attrs = new Map<string, string>();
 		let selfClosing = false;
 
 		while (j < len) {
-			while (j < len && isWs(text[j])) {
+			while (j < len && isXmlWhitespace(text[j])) {
 				j++;
 			}
 			const c = text[j];
@@ -185,11 +186,11 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				break;
 			}
 			const attrStart = j;
-			while (j < len && !isWs(text[j]) && text[j] !== '=' && text[j] !== '>' && text[j] !== '/') {
+			while (j < len && !isXmlWhitespace(text[j]) && text[j] !== '=' && text[j] !== '>' && text[j] !== '/') {
 				j++;
 			}
-			const attrName = stripPrefix(text.slice(attrStart, j));
-			while (j < len && isWs(text[j])) {
+			const attrName = stripXmlPrefix(text.slice(attrStart, j));
+			while (j < len && isXmlWhitespace(text[j])) {
 				j++;
 			}
 			if (text[j] !== '=') {
@@ -199,7 +200,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				continue;
 			}
 			j++;
-			while (j < len && isWs(text[j])) {
+			while (j < len && isXmlWhitespace(text[j])) {
 				j++;
 			}
 			const quote = text[j];
@@ -216,7 +217,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				}
 			} else {
 				const valueStart = j;
-				while (j < len && !isWs(text[j]) && text[j] !== '>') {
+				while (j < len && !isXmlWhitespace(text[j]) && text[j] !== '>') {
 					j++;
 				}
 				attrs.set(attrName, text.slice(valueStart, j));
@@ -303,7 +304,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				if (rec.displayValue === undefined) {
 					// Only a `<VALUE>` child normally supplies the value; this covers a parameter
 					// written as bare text.
-					rec.displayValue = decode(entry.text).trim();
+					rec.displayValue = decodeXml(entry.text).trim();
 				}
 				attachChild(ancestors, rec);
 				return;
@@ -463,7 +464,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 			case 'SW-SYSCOND': {
 				const parent = nearest(ancestors, ...NODE_KINDS);
 				if (parent) {
-					parent.syscond = decode(raw).trim();
+					parent.syscond = decodeXml(raw).trim();
 					parent.syscondRange = range;
 				}
 				return;
@@ -480,7 +481,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				// first `L-4` in document order wins; later layers are ignored.
 				const parent = hasAncestor(ancestors, 'LABEL') ? nearest(ancestors, 'annotation') : undefined;
 				if (parent && parent.label === undefined) {
-					parent.label = decode(raw).trim();
+					parent.label = decodeXml(raw).trim();
 				}
 				return;
 			}
@@ -491,7 +492,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 						? nearest(ancestors, 'annotation')
 						: undefined;
 				if (parent && parent.text === undefined) {
-					parent.text = decode(raw).trim();
+					parent.text = decodeXml(raw).trim();
 				}
 				return;
 			}
@@ -528,7 +529,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 			const parent = nearest(ancestors, 'param');
 			if (parent) {
 				// Decoded for display only; `valueRange` still points at the raw text.
-				parent.displayValue = decode(entry.text).trim();
+				parent.displayValue = decodeXml(entry.text).trim();
 				// Text present -> the inner text span, so the tags and surrounding whitespace stay
 				// untouched. Empty or self-closing -> the whole element span, which is the only
 				// shape a write may replace structurally (parent design §8).
@@ -796,67 +797,10 @@ function structify(path: string): string {
 	return parts.slice(1).join('.');
 }
 
-/** Decodes XML entity references, for display values only. */
-function decode(raw: string): string {
-	return raw.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/g, (match, body: string) => {
-		if (body.startsWith('#x') || body.startsWith('#X')) {
-			const code = Number.parseInt(body.slice(2), 16);
-			return Number.isFinite(code) ? String.fromCodePoint(code) : match;
-		}
-		if (body.startsWith('#')) {
-			const code = Number.parseInt(body.slice(1), 10);
-			return Number.isFinite(code) ? String.fromCodePoint(code) : match;
-		}
-		switch (body) {
-			case 'amp':
-				return '&';
-			case 'lt':
-				return '<';
-			case 'gt':
-				return '>';
-			case 'quot':
-				return '"';
-			case 'apos':
-				return "'";
-			default:
-				return match;
-		}
-	});
-}
-
 /** Skips `<!DOCTYPE …>` including an internal subset in brackets. */
 function skipMarkupDeclaration(src: string, at: number): number {
-	let j = at + 2;
-	let depth = 0;
-	let quote: string | undefined;
-	while (j < src.length) {
-		const c = src[j];
-		if (quote !== undefined) {
-			if (c === quote) {
-				quote = undefined;
-			}
-		} else if (c === '"' || c === "'") {
-			quote = c;
-		} else if (c === '[') {
-			depth++;
-		} else if (c === ']') {
-			depth--;
-		} else if (c === '>' && depth <= 0) {
-			return j + 1;
-		}
-		j++;
-	}
-	return src.length;
-}
-
-/** Strips a namespace prefix before comparing a tag or attribute name. */
-function stripPrefix(name: string): string {
-	const colon = name.lastIndexOf(':');
-	return colon < 0 ? name : name.slice(colon + 1);
-}
-
-function isWs(c: string | undefined): boolean {
-	return c === ' ' || c === '\t' || c === '\n' || c === '\r';
+	const end = markupDeclarationEnd(src, at);
+	return end < 0 ? src.length : end;
 }
 
 /** Drops `undefined`-valued own properties so the model is JSON-clean. */
