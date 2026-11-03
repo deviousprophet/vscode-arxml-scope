@@ -29,6 +29,7 @@ import { resolvePath } from './resolve';
 import { SORT_EXCEPTIONS, orderContainers, orderMembers, orderModules } from './order';
 import { haystack } from './haystack';
 import { NodeIndex, buildNodeIndex } from './nodeId';
+import { ecucIntegerValue } from './numeric';
 import type { DefinitionInfo, DefinitionLookup } from '../index/definitions';
 
 /** One quiet-source meta fragment (short name, variant, context, condition, annotation). */
@@ -92,6 +93,8 @@ export interface EcucRow {
 	target?: string;
 	/** True when the reference target resolves inside this file. */
 	followable?: boolean;
+	/** Why a cross-file reference target cannot be followed; absent when it can. */
+	followReason?: string;
 	/** Raw instance-reference context paths, dotted like the target. */
 	contextPaths?: string[];
 	/** Hover text: the full `DEFINITION-REF` (design §2.7). */
@@ -127,7 +130,7 @@ export interface RowBuildOptions {
 	/** Resolves a `DEFINITION-REF`; absent when no workspace index is available. */
 	definitions?: DefinitionLookup;
 	/** True when a reference target resolves across the workspace index. */
-	referenceResolver?: (targetPath: string, targetDest?: string) => boolean;
+	referenceResolver?: (targetPath: string, targetDest?: string) => { followable: boolean; reason?: string };
 }
 
 interface BuildContext {
@@ -137,7 +140,7 @@ interface BuildContext {
 	pathIndex: Map<string, Range>;
 	conditions: ReadonlyMap<string, ConditionValue>;
 	definitions?: DefinitionLookup;
-	referenceResolver?: (targetPath: string, targetDest?: string) => boolean;
+	referenceResolver?: (targetPath: string, targetDest?: string) => { followable: boolean; reason?: string };
 }
 
 /**
@@ -216,7 +219,7 @@ export function parameterFormats(value: string, type: string): ParameterFormat[]
 	if (type === 'Float') {
 		return [{ label: 'Decimal', value: raw }];
 	}
-	const integer = integerValue(value);
+	const integer = ecucIntegerValue(value);
 	if (integer !== undefined) {
 		const sign = integer < 0n ? '-' : '';
 		const magnitude = integer < 0n ? -integer : integer;
@@ -233,25 +236,6 @@ export function parameterFormats(value: string, type: string): ParameterFormat[]
 }
 
 /** Parses decimal, `0x` or `0b` integer literals; non-integers return undefined. */
-function integerValue(value: string): bigint | undefined {
-	const raw = value.trim();
-	if (raw === '') {
-		return undefined;
-	}
-	const negative = raw.startsWith('-');
-	const body = negative ? raw.slice(1) : raw;
-	let parsed: bigint;
-	if (/^0[xX][0-9A-Fa-f]+$/.test(body)) {
-		parsed = BigInt(`0x${body.slice(2)}`);
-	} else if (/^0[bB][01]+$/.test(body)) {
-		parsed = BigInt(`0b${body.slice(2)}`);
-	} else if (/^\d+$/.test(body)) {
-		parsed = BigInt(body);
-	} else {
-		return undefined;
-	}
-	return negative ? -parsed : parsed;
-}
 
 /** Resolves a definition only when a lookup was supplied; failure degrades to no definition. */
 function definitionFor(ctx: BuildContext, definitionRef: string): DefinitionInfo | undefined {
@@ -435,11 +419,11 @@ function referenceRow(
 	const rawTarget = reference.targetRawPath ?? target;
 	const sameFile = rawTarget !== '' && resolvePath(ctx.pathIndex, rawTarget) !== undefined;
 	const crossFile =
-		!sameFile &&
-		rawTarget !== '' &&
-		ctx.referenceResolver !== undefined &&
-		ctx.referenceResolver(rawTarget, reference.targetDest) === true;
-	const followable = sameFile || crossFile;
+		!sameFile && rawTarget !== '' && ctx.referenceResolver !== undefined
+			? ctx.referenceResolver(rawTarget, reference.targetDest)
+			: undefined;
+	const followable = sameFile || crossFile?.followable === true;
+	const followReason = sameFile ? undefined : crossFile?.reason;
 	const condition = ownCondition(reference, ctx);
 	const definition = definitionFor(ctx, reference.definitionRef);
 	const meta: MetaPart[] = [
@@ -463,6 +447,7 @@ function referenceRow(
 		shownValue: target,
 		target: rawTarget,
 		followable,
+		...(followReason === undefined ? {} : { followReason }),
 		...(reference.instance && reference.contextPaths.length > 0
 			? { contextPaths: reference.contextPaths.slice() }
 			: {}),

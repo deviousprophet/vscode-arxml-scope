@@ -5,7 +5,8 @@
 import * as vscode from 'vscode';
 import type { IndexSubscription } from '../core/index/workspaceIndex';
 import { positionAt } from '../core/validation/position';
-import { DEFAULT_SEVERITIES, normalizeSeverities, SeveritySettings } from '../core/validation/types';
+import { DEFAULT_SEVERITIES, normalizeSeverities } from '../core/validation/types';
+import type { SeveritySettings } from '../core/validation/types';
 import { validateWorkspace } from '../core/validation/validate';
 import { IndexService } from './indexService';
 

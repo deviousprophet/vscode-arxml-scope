@@ -207,6 +207,24 @@ suite('editor bundled page', () => {
 		}
 	});
 
+	test('the Details find-references action posts the selected row id', () => {
+		const { dom } = mount();
+		try {
+			const row = clickRow(dom, 'ContA');
+			const buttons = Array.from(
+				dom.document.querySelectorAll('#sb-details-body .inspector-actions button')
+			) as HTMLButtonElement[];
+			const button = buttons.find((candidate) => candidate.textContent === 'Find references');
+			assert.ok(button, 'a container gets the Find references action');
+			button!.click();
+			const posted = messagesOf(dom.api, 'references');
+			assert.strictEqual(posted.length, 1);
+			assert.strictEqual(posted[0].nodeId, row.dataset.nodeId);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('selecting a container highlights the annotation row of a descendant sub-container', () => {
 		const { dom } = mount(annotationDocument());
 		try {

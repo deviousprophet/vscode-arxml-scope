@@ -5,20 +5,20 @@
  */
 import * as vscode from 'vscode';
 import { isEcucValues } from '../core/ecuc/detect';
-import { EcucDocumentModel, Range } from '../core/ecuc/model';
 import { buildNodeIndex } from '../core/ecuc/nodeId';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { definitionInfo } from '../core/index/definitions';
-import { FileIndex, IndexDefinition, IndexElement } from '../core/index/indexModel';
 import { buildFileIndex } from '../core/index/indexBuilder';
 import { positionAt } from '../core/validation/position';
-import { documentSymbols, refTokenAt, refTokens, RefToken, SymbolData } from '../core/text/arxmlFeatures';
-import { IndexService } from './indexService';
+import { documentSymbols, refTokenAt, refTokens } from '../core/text/arxmlFeatures';
+import { IndexService, indexSettings } from './indexService';
 import { innermostNodeIdAt } from './navigation';
+import type { EcucDocumentModel, Range } from '../core/ecuc/model';
+import type { FileIndex, IndexDefinition, IndexElement } from '../core/index/indexModel';
+import type { RefToken, SymbolData } from '../core/text/arxmlFeatures';
 
 interface CachedDocument {
 	version: number;
-	text: string;
 	model?: EcucDocumentModel;
 	file?: FileIndex;
 }
@@ -38,6 +38,9 @@ export class TextFeatures
 	constructor(private readonly index: IndexService) {}
 
 	provideDocumentSymbols(document: vscode.TextDocument): vscode.DocumentSymbol[] {
+		if (!indexSettings().enabled) {
+			return [];
+		}
 		const data = this.cached(document);
 		if (data.model !== undefined) {
 			return documentSymbols(data.model).map((symbol) => this.toSymbol(document, symbol));
@@ -56,6 +59,9 @@ export class TextFeatures
 	}
 
 	provideDefinition(document: vscode.TextDocument, position: vscode.Position): vscode.Location | undefined {
+		if (!indexSettings().enabled) {
+			return undefined;
+		}
 		const token = this.tokenAt(document, position);
 		if (token === undefined) {
 			return undefined;
@@ -66,7 +72,7 @@ export class TextFeatures
 				? undefined
 				: new vscode.Location(vscode.Uri.parse(definition.file), this.rangeFor(definition.file, definition.range));
 		}
-		const resolution = this.index.resolveTarget(token.rawPath);
+		const resolution = this.index.resolveTarget(token.rawPath, token.dest);
 		return resolution.ok
 			? new vscode.Location(vscode.Uri.parse(resolution.element.file), this.rangeFor(resolution.element.file, resolution.element.range))
 			: undefined;
@@ -76,17 +82,20 @@ export class TextFeatures
 		document: vscode.TextDocument,
 		position: vscode.Position
 	): vscode.Location[] {
+		if (!indexSettings().enabled) {
+			return [];
+		}
 		const data = this.cached(document);
 		const offset = document.offsetAt(position);
-		const token = data.model === undefined ? undefined : refTokenAt(data.model, offset);
 		if (data.model !== undefined) {
+			const token = refTokenAt(data.model, offset);
 			if (token?.kind === 'definition') {
 				return this.index
 					.definitionUsers(token.rawPath)
 					.map((user) => new vscode.Location(vscode.Uri.parse(user.file), this.rangeFor(user.file, user.range)));
 			}
 			if (token?.kind === 'target') {
-				const resolution = this.index.resolveTarget(token.rawPath);
+				const resolution = this.index.resolveTarget(token.rawPath, token.dest);
 				if (!resolution.ok) {
 					return [];
 				}
@@ -119,6 +128,9 @@ export class TextFeatures
 	}
 
 	provideDocumentLinks(document: vscode.TextDocument): vscode.DocumentLink[] {
+		if (!indexSettings().enabled) {
+			return [];
+		}
 		const data = this.cached(document);
 		if (data.model === undefined) {
 			return [];
@@ -138,6 +150,9 @@ export class TextFeatures
 	}
 
 	provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+		if (!indexSettings().enabled) {
+			return undefined;
+		}
 		const token = this.tokenAt(document, position);
 		if (token === undefined) {
 			return undefined;
@@ -174,7 +189,7 @@ export class TextFeatures
 			lines.push(`_${info.fileName}_`);
 			return lines.join('\n\n');
 		}
-		const resolution = this.index.resolveTarget(token.rawPath);
+		const resolution = this.index.resolveTarget(token.rawPath, token.dest);
 		if (!resolution.ok) {
 			return undefined;
 		}
@@ -183,6 +198,12 @@ export class TextFeatures
 		const lines = [`**Target** \`${element.path ?? token.rawPath}\``, `Kind: ${element.kind}`];
 		if (definition !== undefined) {
 			lines.push(`Type: ${definition.type}`);
+			if (definition.range !== undefined) {
+				lines.push(`Range: ${definition.range}`);
+			}
+			if (definition.multiplicity !== undefined) {
+				lines.push(`Multiplicity: ${definition.multiplicity}`);
+			}
 			if (definition.description !== undefined) {
 				lines.push(definition.description);
 			}
@@ -195,7 +216,7 @@ export class TextFeatures
 			const definition = this.index.workspaceIndex.definitionEntry(token.rawPath);
 			return definition === undefined ? undefined : { file: definition.file, range: definition.range };
 		}
-		const resolution = this.index.resolveTarget(token.rawPath);
+		const resolution = this.index.resolveTarget(token.rawPath, token.dest);
 		return resolution.ok ? { file: resolution.element.file, range: resolution.element.range } : undefined;
 	}
 
@@ -238,11 +259,15 @@ export class TextFeatures
 		const ecuc = isEcucValues(text, document.uri.fsPath);
 		const next: CachedDocument = {
 			version: document.version,
-			text,
 			...(ecuc ? { model: scanEcucValues(text) } : { file: buildFileIndex(key, text) }),
 		};
 		this.cache.set(key, next);
 		return next;
+	}
+
+	/** Drops a closed document from the scan cache. */
+	forget(uri: string): void {
+		this.cache.delete(uri);
 	}
 
 	private fileIndex(document: vscode.TextDocument): FileIndex {
@@ -293,6 +318,7 @@ function symbolKindFor(definitionKind: string): vscode.SymbolKind {
 export function registerTextFeatures(context: vscode.ExtensionContext, index: IndexService): void {
 	const features = new TextFeatures(index);
 	context.subscriptions.push(
+		vscode.workspace.onDidCloseTextDocument((document) => features.forget(document.uri.toString())),
 		vscode.languages.registerDocumentSymbolProvider(SELECTOR, features),
 		vscode.languages.registerDefinitionProvider(SELECTOR, features),
 		vscode.languages.registerReferenceProvider(SELECTOR, features),

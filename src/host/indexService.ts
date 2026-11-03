@@ -9,9 +9,11 @@
 import { createReadStream, promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { IndexBuilder } from '../core/index/indexBuilder';
-import { FileIndex, IndexElement, IndexReference, IndexStats } from '../core/index/indexModel';
-import { DefinitionInfo, resolveDefinition } from '../core/index/definitions';
-import { ElementResolution, IndexSubscription, ReferenceResolution, WorkspaceIndex } from '../core/index/workspaceIndex';
+import type { FileIndex, IndexElement, IndexReference, IndexStats } from '../core/index/indexModel';
+import { resolveDefinition } from '../core/index/definitions';
+import type { DefinitionInfo } from '../core/index/definitions';
+import { WorkspaceIndex } from '../core/index/workspaceIndex';
+import type { ElementResolution, IndexSubscription, ReferenceResolution } from '../core/index/workspaceIndex';
 
 const DEBOUNCE_MS = 250;
 /** Read chunk; large enough to keep syscall overhead low, small enough to stay responsive. */

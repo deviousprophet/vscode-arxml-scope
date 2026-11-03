@@ -173,17 +173,21 @@ export class WorkspaceIndex {
 			return [];
 		}
 		const out: Array<IndexElement | IndexReference> = [];
+		const canonical = new Map<string, string | undefined>();
+		const pathOf = (reference: string): string | undefined => {
+			if (!canonical.has(reference)) {
+				canonical.set(reference, this.definitionEntry(reference)?.path);
+			}
+			return canonical.get(reference);
+		};
 		for (const file of this.files.values()) {
 			for (const element of file.elements) {
-				if (element.definitionRef !== undefined && this.definitionEntry(element.definitionRef)?.path === target.path) {
+				if (element.definitionRef !== undefined && pathOf(element.definitionRef) === target.path) {
 					out.push(element);
 				}
 			}
 			for (const reference of file.references) {
-				if (
-					reference.definitionRef !== undefined &&
-					this.definitionEntry(reference.definitionRef)?.path === target.path
-				) {
+				if (reference.definitionRef !== undefined && pathOf(reference.definitionRef) === target.path) {
 					out.push(reference);
 				}
 			}

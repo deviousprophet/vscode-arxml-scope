@@ -192,8 +192,12 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				...(this.definitionSource?.resolveTarget === undefined
 					? {}
 					: {
-							referenceResolver: (targetPath: string, targetDest?: string) =>
-								this.definitionSource!.resolveTarget!(targetPath, targetDest).ok,
+							referenceResolver: (targetPath: string, targetDest?: string) => {
+								const resolution = this.definitionSource!.resolveTarget!(targetPath, targetDest);
+								return resolution.ok
+									? { followable: true }
+									: { followable: false, reason: refusalReason(resolution, targetPath) };
+							},
 						}),
 			};
 			const rowDocument = buildRows(model, options);
@@ -589,7 +593,8 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	 * second update path for one change, which `rescan.test.ts` counts against the
 	 * platform's own events.
 	 */
-	private async editField(		document: vscode.TextDocument,
+	private async editField(
+		document: vscode.TextDocument,
 		panel: vscode.WebviewPanel,
 		nodeId: string,
 		field: EditField,

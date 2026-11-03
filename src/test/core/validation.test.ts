@@ -2,7 +2,7 @@ import * as assert from 'assert';
 
 import { buildFileIndex } from '../../core/index/indexBuilder';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
-import { DEFAULT_SEVERITIES } from '../../core/validation/types';
+import { DEFAULT_SEVERITIES, normalizeSeverities } from '../../core/validation/types';
 import { validateWorkspace } from '../../core/validation/validate';
 import { fixtureText } from './modelTestUtils';
 
@@ -64,6 +64,20 @@ suite('ECUC validation (core)', () => {
 		assert.ok(rules(workspace(long)).includes('valueOutOfRange'));
 	});
 
+	test('boolean and enumeration values are checked against the definition', () => {
+		const boolean = CLEAN.replace(
+			'<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Synthetic/SampleModuleDef/Main/TimeoutSeconds</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE>',
+			'<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-BOOLEAN-PARAM-DEF">/Synthetic/SampleModuleDef/Main/Enabled</DEFINITION-REF><VALUE>maybe</VALUE></ECUC-NUMERICAL-PARAM-VALUE>'
+		);
+		assert.ok(rules(workspace(boolean)).includes('valueOutOfRange'));
+
+		const enumeration = CLEAN.replace(
+			'<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Synthetic/SampleModuleDef/Main/TimeoutSeconds</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE>',
+			'<ECUC-TEXTUAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-ENUMERATION-PARAM-DEF">/Synthetic/SampleModuleDef/Main/Mode</DEFINITION-REF><VALUE>TURBO</VALUE></ECUC-TEXTUAL-PARAM-VALUE>'
+		);
+		assert.ok(rules(workspace(enumeration)).includes('valueOutOfRange'));
+	});
+
 	test('multiplicity on a container', () => {
 		const two = CLEAN.replace(
 			'</CONTAINERS>',
@@ -80,6 +94,25 @@ suite('ECUC validation (core)', () => {
 	test('missing required container', () => {
 		const empty = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>Synthetic</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>SampleModule</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/Synthetic/SampleModuleDef</DEFINITION-REF></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
 		assert.ok(rules(workspace(empty)).includes('missingRequired'));
+	});
+
+	test('missing required parameter', () => {
+		const definitions = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-DEF><SHORT-NAME>MDef</SHORT-NAME><CONTAINERS><ECUC-PARAM-CONF-CONTAINER-DEF><SHORT-NAME>C</SHORT-NAME><LOWER-MULTIPLICITY>1</LOWER-MULTIPLICITY><PARAMETERS><ECUC-INTEGER-PARAM-DEF><SHORT-NAME>P1</SHORT-NAME><LOWER-MULTIPLICITY>1</LOWER-MULTIPLICITY></ECUC-INTEGER-PARAM-DEF></PARAMETERS></ECUC-PARAM-CONF-CONTAINER-DEF></CONTAINERS></ECUC-MODULE-DEF></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const values = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/MDef</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/MDef/C</DEFINITION-REF></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const diagnostics = validateWorkspace(workspace(values, definitions), DEFAULT_SEVERITIES);
+		assert.ok(
+			diagnostics.some(
+				(diagnostic) => diagnostic.rule === 'missingRequired' && diagnostic.message.includes('parameter "P1"')
+			)
+		);
+	});
+
+	test('severity settings normalize unknown rules and values', () => {
+		assert.deepStrictEqual(normalizeSeverities({ brokenReference: 'information', unknown: 'fatal' }), {
+			...DEFAULT_SEVERITIES,
+			brokenReference: 'information',
+		});
+		assert.deepStrictEqual(normalizeSeverities('not-an-object'), DEFAULT_SEVERITIES);
 	});
 
 	test('severity off removes only that rule', () => {

@@ -98,18 +98,17 @@ suite('text features (extension)', function () {
 		assert.ok(locations.some((location) => location.uri.toString() === valuesUri.toString()));
 	});
 
-	test('a non-ARXML document gets no symbols from this provider', async () => {
-		const file = path.join(root, 'text-features-note.txt');
-		fs.writeFileSync(file, 'not arxml');
-		const uri = vscode.Uri.file(file);
+	test('disabling the index removes provider results', async () => {
+		const config = vscode.workspace.getConfiguration('arxmlScope.index');
+		await config.update('enabled', false, vscode.ConfigurationTarget.Workspace);
 		try {
 			const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
 				'vscode.executeDocumentSymbolProvider',
-				uri
+				valuesUri
 			);
 			assert.ok(symbols === undefined || symbols.length === 0);
 		} finally {
-			fs.rmSync(file, { force: true });
+			await config.update('enabled', undefined, vscode.ConfigurationTarget.Workspace);
 		}
 	});
 });

@@ -23,14 +23,21 @@ suite('cross-file reference rows (core)', () => {
 		assert.strictEqual(without.followable, false, 'the same-file index has no target');
 
 		const withResolver = referenceRow(
-			buildRows(model, { referenceResolver: (path, dest) => path === '/P/Other/Remote' && dest === 'ECUC-CONTAINER-VALUE' }).rows
+			buildRows(model, {
+				referenceResolver: (path, dest) =>
+					path === '/P/Other/Remote' && dest === 'ECUC-CONTAINER-VALUE'
+						? { followable: true }
+						: { followable: false, reason: 'No target.' },
+			}).rows
 		);
 		assert.strictEqual(withResolver.followable, true);
+		assert.strictEqual(withResolver.followReason, undefined);
 	});
 
-	test('a refused target stays not followable', () => {
+	test('a refused target stays not followable and carries the reason', () => {
 		const model = scanEcucValues(TEXT);
-		const row = referenceRow(buildRows(model, { referenceResolver: () => false }).rows);
+		const row = referenceRow(buildRows(model, { referenceResolver: () => ({ followable: false, reason: 'No target.' }) }).rows);
 		assert.strictEqual(row.followable, false);
+		assert.strictEqual(row.followReason, 'No target.');
 	});
 });

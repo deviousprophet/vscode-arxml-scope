@@ -5,14 +5,11 @@
  * The host converts the returned offset ranges to editor positions.
  */
 import type { IndexDefinition, IndexElement, IndexReference } from '../index/indexModel';
+import { ecucIntegerValue } from '../ecuc/numeric';
 import { multiplicityValue } from '../index/definitions';
 import type { WorkspaceIndex } from '../index/workspaceIndex';
-import {
-	DEFAULT_SEVERITIES,
-	DiagnosticRule,
-	EcucDiagnostic,
-	SeveritySettings,
-} from './types';
+import { DEFAULT_SEVERITIES } from './types';
+import type { DiagnosticRule, EcucDiagnostic, SeveritySettings } from './types';
 
 export function validateWorkspace(index: WorkspaceIndex, severities: SeveritySettings = DEFAULT_SEVERITIES): EcucDiagnostic[] {
 	const out: EcucDiagnostic[] = [];
@@ -266,12 +263,12 @@ function parentPath(path: string): string | undefined {
 /** A displayable reason the value violates the definition, or undefined. */
 function valueProblem(definition: IndexDefinition, value: string): string | undefined {
 	if (definition.kind === 'ECUC-INTEGER-PARAM-DEF') {
-		const parsed = parseInteger(value);
+		const parsed = ecucIntegerValue(value);
 		if (parsed === undefined) {
 			return 'is not a valid integer';
 		}
-		const lower = definition.lowerLimit === undefined ? undefined : parseInteger(definition.lowerLimit);
-		const upper = definition.upperLimit === undefined ? undefined : parseInteger(definition.upperLimit);
+		const lower = definition.lowerLimit === undefined ? undefined : ecucIntegerValue(definition.lowerLimit);
+		const upper = definition.upperLimit === undefined ? undefined : ecucIntegerValue(definition.upperLimit);
 		if (lower !== undefined && parsed < lower) {
 			return `is below the lower limit ${definition.lowerLimit}`;
 		}
@@ -308,31 +305,20 @@ function valueProblem(definition: IndexDefinition, value: string): string | unde
 		if (upper !== undefined && length > upper) {
 			return `is longer than ${upper} characters`;
 		}
+		return undefined;
+	}
+	if (definition.kind === 'ECUC-BOOLEAN-PARAM-DEF') {
+		const text = value.trim().toLowerCase();
+		return text === 'true' || text === 'false' ? undefined : 'is not a boolean';
+	}
+	if (definition.kind === 'ECUC-ENUMERATION-PARAM-DEF') {
+		const text = value.trim();
+		if (definition.literals !== undefined && definition.literals.length > 0 && !definition.literals.includes(text)) {
+			return `is not one of ${definition.literals.join(', ')}`;
+		}
+		return undefined;
 	}
 	return undefined;
-}
-
-function parseInteger(text: string): bigint | undefined {
-	let raw = text.trim();
-	if (raw === '') {
-		return undefined;
-	}
-	let sign = 1n;
-	if (raw.startsWith('-') || raw.startsWith('+')) {
-		sign = raw.startsWith('-') ? -1n : 1n;
-		raw = raw.slice(1);
-	}
-	let value: bigint;
-	if (/^0[xX][0-9a-fA-F]+$/.test(raw)) {
-		value = BigInt(raw);
-	} else if (/^0[bB][01]+$/.test(raw)) {
-		value = BigInt(raw);
-	} else if (/^\d+$/.test(raw)) {
-		value = BigInt(raw);
-	} else {
-		return undefined;
-	}
-	return sign * value;
 }
 
 function numberValue(raw: string | undefined): number | undefined {

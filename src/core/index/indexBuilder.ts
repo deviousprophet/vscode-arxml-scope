@@ -7,6 +7,7 @@
  * size.
  */
 import type { Range } from '../ecuc/model';
+import { LineStartBuilder } from '../text/offsets';
 import { decodeXml } from '../text/xmlText';
 import type { FileIndex, IndexDefinition, IndexElement, IndexReference } from './indexModel';
 import { XmlStreamParser } from './xmlStream';
@@ -68,14 +69,13 @@ export class IndexBuilder implements XmlStreamHandlers {
 	private readonly parser: XmlStreamParser;
 	private readonly stack: Frame[] = [];
 	private readonly file: FileIndex;
+	private readonly lines = new LineStartBuilder();
 	private lastEnd = 0;
-	private offset = 0;
 
 	constructor(uri: string) {
 		this.file = {
 			uri,
 			packages: [],
-			lineStarts: [0],
 			elements: [],
 			references: [],
 			definitions: [],
@@ -85,12 +85,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 
 	/** Feeds one decoded text chunk. */
 	write(chunk: string): void {
-		for (let at = 0; at < chunk.length; at++) {
-			if (chunk[at] === '\n') {
-				this.file.lineStarts!.push(this.offset + at + 1);
-			}
-		}
-		this.offset += chunk.length;
+		this.lines.write(chunk);
 		this.parser.write(chunk);
 	}
 
@@ -102,6 +97,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 			const frame = this.stack.pop()!;
 			this.finishFrame(frame, end, this.stack);
 		}
+		this.file.lineStarts = this.lines.finish();
 		return this.file;
 	}
 

@@ -12,6 +12,8 @@ suite('ARXML text features (core)', () => {
 		assert.ok(tokens.every((token) => token.rawPath !== '' && token.range.end > token.range.start));
 		assert.ok(tokens.some((token) => token.kind === 'definition'));
 		assert.ok(tokens.some((token) => token.kind === 'target'));
+		const target = tokens.find((token) => token.kind === 'target');
+		assert.strictEqual(target?.dest, 'ECUC-CONTAINER-VALUE');
 	});
 
 	test('finds the token under an offset', () => {

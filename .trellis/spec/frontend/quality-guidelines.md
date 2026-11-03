@@ -125,10 +125,15 @@ that is not obvious from the code.
 - **The fold gutter is fixed.** The 26px gutter and 16px chevron are the VS Code geometry; do not
   put the twisty back into the label flow. Expanded chevrons are hover/focus-only and collapsed
   chevrons stay visible. The twisty hit area spans the row height.
-- **Reference follow is same-file only and details-only.** Only a target resolved through
-  `resolvePath(model.pathIndex)` gets `followable`; the details panel shows Jump to target and posts
-  the existing follow message. The Document value is plain text (no `data-follow`/link); unresolved
-  targets get no button.
+- **Reference follow is index-backed and details-only.** A reference is followable when the same-file
+  `resolvePath(model.pathIndex)` or the workspace `resolveTarget` accepts its target and `DEST`; the
+  details panel shows Jump to target and posts the existing follow message. A refused cross-file target
+  is not followable and carries a `Target note` reason; the Document value is plain text (no
+  `data-follow`/link). A same-file target selects the row; an ECUC-Values target opens that file in the
+  custom editor; any other target opens the text editor.
+- **Text-editor features reuse the same index.** Document symbols, definition, references, links and
+  hover are registered once for `.arxml` and return nothing when `arxmlScope.index.enabled` is false.
+  The text editor uses the live document text, not the indexed disk bytes.
 - **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels at
   normal widths; labels may hide only at <=720px. The fixed gutter keeps the row control at the far
   left instead of indenting it with the label.

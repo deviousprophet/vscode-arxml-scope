@@ -73,5 +73,9 @@ suite('validation (extension)', function () {
 		await waitFor('the cleared diagnostics', () => vscode.languages.getDiagnostics(valuesUri).length === 0);
 		await config.update('enabled', undefined, vscode.ConfigurationTarget.Workspace);
 		await extension.reindex();
+		await waitFor(
+			'the restored valueOutOfRange diagnostic',
+			() => vscode.languages.getDiagnostics(valuesUri).some((diagnostic) => diagnostic.code === 'valueOutOfRange')
+		);
 	});
 });

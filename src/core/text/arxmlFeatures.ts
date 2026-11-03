@@ -18,6 +18,8 @@ export type RefTokenKind = 'definition' | 'target';
 export interface RefToken {
 	kind: RefTokenKind;
 	rawPath: string;
+	/** The AUTOSAR `DEST` on the value element, when present. */
+	dest?: string;
 	range: Range;
 }
 
@@ -35,19 +37,19 @@ export interface SymbolData {
 /** Every `DEFINITION-REF` and reference target in declaration order. */
 export function refTokens(model: EcucDocumentModel): RefToken[] {
 	const out: RefToken[] = [];
-	const push = (kind: RefTokenKind, rawPath: string | undefined, range: Range | undefined): void => {
+	const push = (kind: RefTokenKind, rawPath: string | undefined, range: Range | undefined, dest?: string): void => {
 		if (rawPath !== undefined && rawPath !== '' && range !== undefined) {
-			out.push({ kind, rawPath, range });
+			out.push({ kind, rawPath, ...(dest === undefined ? {} : { dest }), range });
 		}
 	};
 	const container = (node: ContainerNode): void => {
 		push('definition', node.definitionRef, node.definitionRefRange);
 		for (const parameter of node.parameters) {
-			push('definition', parameter.definitionRef, parameter.definitionRefRange);
+			push('definition', parameter.definitionRef, parameter.definitionRefRange, parameter.definitionDest);
 		}
 		for (const reference of node.references) {
 			push('definition', reference.definitionRef, reference.definitionRefRange);
-			push('target', reference.targetRawPath, reference.targetRange);
+			push('target', reference.targetRawPath, reference.targetRange, reference.targetDest);
 		}
 		for (const child of node.containers) {
 			container(child);

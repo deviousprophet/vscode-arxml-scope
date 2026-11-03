@@ -935,6 +935,9 @@ function updateInspector() {
 	if (data.target) {
 		detailsBody.appendChild(inspectorRow('Target', data.target));
 	}
+	if (row.followReason !== undefined) {
+		detailsBody.appendChild(inspectorRow('Target note', row.followReason));
+	}
 	if (data.context) {
 		detailsBody.appendChild(inspectorRow('Context', data.context));
 	}
