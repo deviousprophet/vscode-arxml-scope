@@ -14,6 +14,8 @@ src/
     compareSelection.ts     the session-only first-file stash
     conditionValues.ts      SW-SYSCOND entries and the workspaceState store
     indexService.ts         workspace discovery, streamed reads, watcher, status bar
+    validationService.ts    validation -> DiagnosticCollection lifecycle
+    textFeatures.ts         symbols, definition, references, links, hover for the text editor
     navigation.ts           node <-> source range, reference following
     bootWatchdog.ts         the boot timeout
     webviewShell.ts         the static editor/diff HTML shells and CSP
@@ -22,7 +24,9 @@ src/
                       validate.ts  syscond.ts  nodeId.ts  renderRows.ts  haystack.ts
     index/            xmlStream.ts (chunk-fed XML events)  indexBuilder.ts (FileIndex)
                       indexModel.ts  workspaceIndex.ts (cross-file lookup)  definitions.ts
+    validation/       types.ts  position.ts  validate.ts (seven ECUC rules)
     text/             offsets.ts (line/offset index)  xmlText.ts (entity decode)
+                      arxmlFeatures.ts (ref tokens and document symbols)
     diff/             diffModel.ts (matching/status/merged order, pure)
                       wordDiff.ts (token-level comparison, pure)
   webview/            browser-only page code. NO `vscode` imports.
@@ -84,7 +88,10 @@ testable without a running editor.
 | Parsing, ordering, validation, anything over text | `src/core/` |
 | A row/document model rule | `src/core/ecuc/` |
 | A workspace index, XML stream or definition rule | `src/core/index/` |
+| A validation rule, severity or diagnostic position rule | `src/core/validation/` |
+| An ARXML ref token or document-symbol rule | `src/core/text/arxmlFeatures.ts` |
 | Workspace discovery, streamed reads, the file watcher or the status bar | `src/host/indexService.ts` |
+| A VS Code text-editor provider | `src/host/textFeatures.ts` |
 | A diff matching/status/order rule | `src/core/diff/diffModel.ts` |
 | A document, panel, command or setting effect | `src/host/` or `src/commands.ts` |
 | A reusable UI unit with markup, input behaviour and styles | `src/webview/components/<Name>/` |

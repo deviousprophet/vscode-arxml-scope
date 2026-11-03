@@ -34,6 +34,8 @@ interface Rec {
 	definitionRefRange?: Range;
 	/** `DEFINITION-REF DEST`, when present. */
 	definitionDest?: string;
+	/** `VALUE-REF` / `TARGET-REF` `DEST`, when present. */
+	targetDest?: string;
 	shortName?: string;
 	shortNameRange?: Range;
 	variant?: string;
@@ -230,7 +232,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		}
 
 		const entry: Entry = { name, start, text: '', textStart: -1, textEnd: -1 };
-		if (name === 'DEFINITION-REF') {
+		if (name === 'DEFINITION-REF' || name === 'VALUE-REF' || name === 'TARGET-REF') {
 			entry.attrs = attrs;
 		}
 		entry.rec = openRecord(name, attrs);
@@ -502,6 +504,10 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				if (parent) {
 					parent.targetRaw = raw.trim();
 					parent.targetRange = range;
+					const dest = entry.attrs?.get('DEST');
+					if (dest) {
+						parent.targetDest = dest.trim();
+					}
 				}
 				return;
 			}
@@ -563,6 +569,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 			definitionRefRange: rec.definitionRefRange,
 			name: lastShortName(definitionRef),
 			targetRawPath: rec.targetRaw,
+			targetDest: rec.targetDest,
 			targetPath: rec.targetPath,
 			contextPaths: rec.contextPaths ?? [],
 			targetRange: rec.targetRange,

@@ -7,6 +7,7 @@
  * size.
  */
 import type { Range } from '../ecuc/model';
+import { LineStartBuilder } from '../text/offsets';
 import { decodeXml } from '../text/xmlText';
 import type { FileIndex, IndexDefinition, IndexElement, IndexReference } from './indexModel';
 import { XmlStreamParser } from './xmlStream';
@@ -38,6 +39,7 @@ const TEXT_TAGS = new Set([
 	'UPPER-MULTIPLICITY',
 	'UPPER-MULTIPLICITY-INFINITE',
 	'L-2',
+	'VALUE',
 ]);
 
 interface Frame {
@@ -58,6 +60,8 @@ interface Frame {
 	targetRawPath?: string;
 	targetDest?: string;
 	contextPaths?: string[];
+	/** Parameter `<VALUE>` text. */
+	value?: string;
 }
 
 /** Builds one `FileIndex` from chunk writes or one complete string. */
@@ -65,6 +69,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 	private readonly parser: XmlStreamParser;
 	private readonly stack: Frame[] = [];
 	private readonly file: FileIndex;
+	private readonly lines = new LineStartBuilder();
 	private lastEnd = 0;
 
 	constructor(uri: string) {
@@ -80,6 +85,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 
 	/** Feeds one decoded text chunk. */
 	write(chunk: string): void {
+		this.lines.write(chunk);
 		this.parser.write(chunk);
 	}
 
@@ -91,6 +97,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 			const frame = this.stack.pop()!;
 			this.finishFrame(frame, end, this.stack);
 		}
+		this.file.lineStarts = this.lines.finish();
 		return this.file;
 	}
 
@@ -167,11 +174,14 @@ export class IndexBuilder implements XmlStreamHandlers {
 			return;
 		}
 		if (PARAMETER_VALUES.has(frame.name)) {
+			const sourcePath = this.containerPath(ancestors);
 			this.file.elements.push({
 				kind: 'parameter',
 				definitionRef: frame.definitionRef,
 				definitionDest: frame.definitionDest,
+				...(sourcePath === undefined ? {} : { sourcePath }),
 				...(frame.uuid === undefined ? {} : { uuid: frame.uuid }),
+				...(frame.value === undefined ? {} : { value: frame.value }),
 				file: this.file.uri,
 				range,
 			});
@@ -253,6 +263,13 @@ export class IndexBuilder implements XmlStreamHandlers {
 					if (dest !== undefined && dest !== '') {
 						(parent.definition ??= {}).destinationDest = dest;
 					}
+				}
+				return;
+			}
+			case 'VALUE': {
+				const parent = ancestors[ancestors.length - 1];
+				if (parent && PARAMETER_VALUES.has(parent.name)) {
+					parent.value = text;
 				}
 				return;
 			}

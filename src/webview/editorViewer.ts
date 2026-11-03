@@ -935,6 +935,9 @@ function updateInspector() {
 	if (data.target) {
 		detailsBody.appendChild(inspectorRow('Target', data.target));
 	}
+	if (row.followReason !== undefined) {
+		detailsBody.appendChild(inspectorRow('Target note', row.followReason));
+	}
 	if (data.context) {
 		detailsBody.appendChild(inspectorRow('Context', data.context));
 	}
@@ -964,6 +967,12 @@ function updateInspector() {
 		jump.type = 'button';
 		jump.addEventListener('click', function () { followItem(row.id); });
 		actions.appendChild(jump);
+	}
+	if (row.kind === 'module' || row.kind === 'container') {
+		const references = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Find references') as HTMLButtonElement;
+		references.type = 'button';
+		references.addEventListener('click', function () { postToHost({ type: 'references', nodeId: row.id }); });
+		actions.appendChild(references);
 	}
 	const reveal = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Reveal in source') as HTMLButtonElement;
 	reveal.type = 'button';

@@ -102,6 +102,62 @@ suite('workspaceIndex (core)', () => {
 		assert.deepStrictEqual(sources.get('/Synthetic'), ['file:///values.arxml', 'file:///module-def.arxml']);
 	});
 
+	test('referencesFor finds a same-file reference by element identity', () => {
+		const file = buildFileIndex('file:///values.arxml', fixtureText('index/values.arxml'));
+		const index = new WorkspaceIndex();
+		index.upsert(file);
+		const sub = file.elements.find((element) => element.path === '/Synthetic/SampleModule/Main/Sub');
+		assert.ok(sub);
+		assert.strictEqual(index.referencesFor(sub!).length, 1);
+	});
+
+	test('resolves a cross-file reference and lists the reverse references', () => {
+		const values = buildFileIndex(
+			'file:///values.arxml',
+			'<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
+		);
+		const refs = buildFileIndex(
+			'file:///refs.arxml',
+			'<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>R</SHORT-NAME><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>Holder</SHORT-NAME><REFERENCE-VALUES><ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/P/R/Def/Ref</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">/P/M/C</VALUE-REF></ECUC-REFERENCE-VALUE></REFERENCE-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
+		);
+		const index = new WorkspaceIndex();
+		index.upsert(values);
+		index.upsert(refs);
+
+		const resolution = index.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE');
+		assert.strictEqual(resolution.ok, true);
+		const target = resolution.ok ? resolution.element : undefined;
+		assert.ok(target);
+		assert.strictEqual(target!.file, 'file:///values.arxml');
+		assert.strictEqual(index.resolveReference(refs.references[0]).ok, true);
+		assert.strictEqual(index.referencesFor(target!).length, 1);
+		assert.strictEqual(index.referencesFor(target!)[0].file, 'file:///refs.arxml');
+
+		const mismatch = index.resolveTarget('/P/M/C', 'ECUC-NUMERICAL-PARAM-VALUE');
+		assert.strictEqual(mismatch.ok, false);
+		if (!mismatch.ok) {
+			assert.strictEqual(mismatch.reason, 'dest-mismatch');
+		}
+		const absent = index.resolveTarget('/P/M/Missing');
+		assert.strictEqual(absent.ok, false);
+		if (!absent.ok) {
+			assert.strictEqual(absent.reason, 'absent');
+		}
+
+		index.upsert(
+			buildFileIndex(
+				'file:///duplicate.arxml',
+				'<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
+			)
+		);
+		const ambiguous = index.resolveTarget('/P/M/C');
+		assert.strictEqual(ambiguous.ok, false);
+		if (!ambiguous.ok) {
+			assert.strictEqual(ambiguous.reason, 'ambiguous');
+		}
+		assert.deepStrictEqual(index.referencesFor(target!), []);
+	});
+
 	test('builds lookups for a 200k-element file without a spread crash', () => {
 		const elements: IndexElement[] = [
 			{ kind: 'container', path: '/P/M/C', file: 'file:///large.arxml', range: { start: 0, end: 10 } },

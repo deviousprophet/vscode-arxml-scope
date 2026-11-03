@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { LineIndex } from '../../core/text/offsets';
+import { LineIndex, LineStartBuilder } from '../../core/text/offsets';
 
 suite('offsets (core)', () => {
 	test('LF document: first line, boundaries, last line', () => {
@@ -55,5 +55,21 @@ suite('offsets (core)', () => {
 		const empty = new LineIndex('');
 		assert.strictEqual(empty.lineCount, 1);
 		assert.deepStrictEqual(empty.positionAt(0), { line: 0, character: 0 });
+	});
+
+	test('the stream builder matches LineIndex across CRLF, LF and lone CR', () => {
+		const text = 'a\r\nb\rc\nd';
+		const expected = new LineIndex(text).starts;
+		for (const chunks of [
+			[text],
+			['a\r', '\nb', '\rc', '\nd'],
+			['a', '\r', '\n', 'b\r', 'c\n', 'd'],
+		]) {
+			const builder = new LineStartBuilder();
+			for (const chunk of chunks) {
+				builder.write(chunk);
+			}
+			assert.deepStrictEqual(builder.finish(), expected, JSON.stringify(chunks));
+		}
 	});
 });

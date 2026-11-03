@@ -5,6 +5,21 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-03
+
+### Added
+
+- Cross-file **Jump to target** for references, with a **Find references** action that lists every indexed instance and reference and reveals the chosen hit
+- ECUC validation diagnostics for broken references, `DEST` mismatches, duplicate short names, out-of-range or wrong-typed values, multiplicity violations, missing definitions and missing required containers, parameters or references
+- Per-rule validation severity settings, including `off`, and an `arxmlScope.validation.enabled` switch
+- Plain-text editor support for ARXML: outline and breadcrumbs, **Go to Definition**, **Find References**, clickable `*-REF` links and hover with definition type, range, multiplicity and description
+- Validation diagnostics in the Problems panel and as text-editor markers
+
+### Changed
+
+- A reference that cannot be resolved across the workspace now shows the reason in **Details** instead of silently hiding the jump action
+- Definition details refresh when a definition file is saved, and validation is recomputed after every index change
+
 ## [0.5.0] - 2026-11-03
 
 ### Added

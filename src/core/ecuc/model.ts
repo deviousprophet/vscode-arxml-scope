@@ -73,6 +73,8 @@ export interface ReferenceNode extends Suffixes {
 	name: string;
 	/** Verbatim `VALUE-REF` / `TARGET-REF` text. */
 	targetRawPath?: string;
+	/** `DEST` of the `VALUE-REF` / `TARGET-REF`. */
+	targetDest?: string;
 	/** Dotted equivalent of `\structify`. */
 	targetPath?: string;
 	contextPaths: string[];

@@ -13,12 +13,16 @@ export interface IndexElement {
 	kind: 'module' | 'container' | 'parameter';
 	/** AR path for a module or container; absent for a parameter value. */
 	path?: string;
+	/** The enclosing module/container path for a parameter value. */
+	sourcePath?: string;
 	/** The element's own `DEFINITION-REF`. */
 	definitionRef?: string;
 	/** The `DEST` of the element's `DEFINITION-REF`. */
 	definitionDest?: string;
 	shortName?: string;
 	uuid?: string;
+	/** Decoded parameter `<VALUE>` text, when present. */
+	value?: string;
 	file: string;
 	range: Range;
 }
@@ -81,6 +85,8 @@ export interface FileIndex {
 	schemaRelease?: string;
 	/** Every `AR-PACKAGE` path this file contributes to. */
 	packages: string[];
+	/** UTF-16 offsets of every line start, for diagnostic positions. */
+	lineStarts?: number[];
 	elements: IndexElement[];
 	references: IndexReference[];
 	definitions: IndexDefinition[];

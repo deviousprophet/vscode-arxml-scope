@@ -44,9 +44,12 @@ skips files that are too large for the index.
 ### Try an edit and a diff
 
 1. In the ECUC editor, select `TimeoutSeconds`, change its value in **Details** and press `Enter`.
-2. Copy the file to `examples/synthetic-ecuc-edited.arxml` (or anywhere outside the repository) and
+2. Set it to `70000`: the Problems panel reports a value outside the definition's `0 .. 65535`.
+3. Open the file in the plain text editor and use **Go to Definition** on a `DEFINITION-REF`, or
+   **Find References** on `Sub`, to see the index-backed navigation.
+4. Copy the file to `examples/synthetic-ecuc-edited.arxml` (or anywhere outside the repository) and
    change one value, a short name or a condition.
-3. Right-click the original file and choose **ARXML Scope → Select as First File to Compare**, then
+5. Right-click the original file and choose **ARXML Scope → Select as First File to Compare**, then
    right-click the edited copy and choose **Compare with First File**.
 
 Remove any local copies when you are done; the repository only commits the original synthetic file.

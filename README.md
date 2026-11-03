@@ -31,9 +31,13 @@ semantic diff. The custom editor is opt-in: a plain open still uses the text edi
 ## Good to know
 
 - An in-memory workspace index covers every `.arxml` file; the status bar reports how many files it
-  holds and **Details** resolves container and parameter definitions across files (type, range,
-  default, multiplicity and description). The index is rebuilt on activation and follows saves.
-- Jump to target and Find All References stay same-file for now; cross-file navigation arrives in v0.6.
+  holds, **Details** resolves definitions across files (type, range, default, multiplicity and
+  description), and references jump to their target in another file.
+- The plain text editor gets an outline, Go to Definition, Find References, document links, hover and
+  the same ECUC diagnostics as the Problems panel.
+- ECUC validation reports broken references, `DEST` mismatches, duplicate short names, out-of-range
+  values, multiplicity violations and missing definitions or required children, with a severity per
+  rule.
 - Edits are limited to parameter `<VALUE>` text, container `<SHORT-NAME>` / `<DEFINITION-REF>` text,
   and container/parameter Duplicate or Delete; references are not editable.
 - A value backed by CDATA is shown but cannot be edited.

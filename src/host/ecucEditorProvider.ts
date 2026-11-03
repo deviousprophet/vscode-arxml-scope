@@ -34,16 +34,20 @@ import { editorShell } from './webviewShell';
 import { editorMessageType, documentHeader } from '../webviewProtocol';
 import type { EditorWebviewToProvider } from '../webviewProtocol';
 import type { DefinitionInfo } from '../core/index/definitions';
+import type { IndexElement, IndexReference } from '../core/index/indexModel';
+import type { ElementResolution } from '../core/index/workspaceIndex';
 
 export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
 
 /**
- * The definition surface the provider needs. `IndexService` implements it; the
+ * The index surface the provider needs. `IndexService` implements it; the
  * provider stays independent of the host service's lifecycle.
  */
 export interface DefinitionSource {
 	definition(definitionRef: string): DefinitionInfo | undefined;
 	subscribe(listener: () => void): { dispose(): void };
+	resolveTarget?(targetPath: string, targetDest?: string): ElementResolution;
+	referencesFor?(target: IndexElement): IndexReference[];
 }
 
 /** How long a panel may take to report `ready` before the host warns (R3). */
@@ -185,6 +189,16 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				...(this.definitionSource === undefined
 					? {}
 					: { definitions: (ref: string) => this.definitionSource!.definition(ref) }),
+				...(this.definitionSource?.resolveTarget === undefined
+					? {}
+					: {
+							referenceResolver: (targetPath: string, targetDest?: string) => {
+								const resolution = this.definitionSource!.resolveTarget!(targetPath, targetDest);
+								return resolution.ok
+									? { followable: true }
+									: { followable: false, reason: refusalReason(resolution, targetPath) };
+							},
+						}),
 			};
 			const rowDocument = buildRows(model, options);
 			// The page owns the row store; a re-scan replaces it without markup.
@@ -270,6 +284,8 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					void this.revealNode(document, model, nodeId, panel);
 				} else if (message.type === 'follow') {
 					void this.followReference(document, model, nodeId, panel);
+				} else if (message.type === 'references') {
+					void this.findReferences(document, model, nodeId, panel);
 				} else if (message.type === 'edit' && typeof message.value === 'string') {
 					const field: EditField = message.field ?? 'value';
 					// An unknown field is ignored rather than guessed at.
@@ -350,7 +366,29 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		if (!entry || entry.kind !== 'reference') {
 			return;
 		}
-		const result = followReference(model, entry.node as ReferenceNode);
+		const reference = entry.node as ReferenceNode;
+		const raw = reference.targetRawPath ?? '';
+		const workspace = this.definitionSource?.resolveTarget?.(raw, reference.targetDest);
+		if (workspace?.ok) {
+			if (workspace.element.file === document.uri.toString()) {
+				const targetId = nodeIdForRange(buildNodeIndex(model), workspace.element.range);
+				if (targetId) {
+					this.selections.set(document.uri.toString(), targetId);
+					panel.reveal();
+					await panel.webview.postMessage({ type: 'select', nodeId: targetId });
+					return;
+				}
+			} else {
+				await this.openElement(workspace.element, panel);
+				return;
+			}
+		}
+		if (workspace !== undefined && !workspace.ok) {
+			await this.postStructureNotice(panel, refusalReason(workspace, raw));
+			return;
+		}
+		// No workspace index: keep the v0.5 same-file behaviour.
+		const result = followReference(model, reference);
 		if (!result.ok) {
 			await panel.webview.postMessage({ type: 'notice', message: result.reason, kind: 'warn', scope: 'details' });
 			return;
@@ -369,6 +407,80 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		this.selections.set(document.uri.toString(), targetId);
 		panel.reveal();
 		await panel.webview.postMessage({ type: 'select', nodeId: targetId });
+	}
+
+	/**
+	 * Opens a resolved target. An ECUC-Values target opens in this custom editor
+	 * at the row; any other ARXML target opens in the text editor at its range.
+	 */
+	private async openElement(element: IndexElement, panel: vscode.WebviewPanel): Promise<void> {
+		const uri = vscode.Uri.parse(element.file);
+		const targetDocument = await vscode.workspace.openTextDocument(uri);
+		if (isEcucValues(targetDocument.getText(), uri.fsPath)) {
+			const targetModel = scanEcucValues(targetDocument.getText());
+			const targetId = nodeIdForRange(buildNodeIndex(targetModel), element.range);
+			if (targetId !== undefined) {
+				await this.selectNode(uri, targetId);
+				return;
+			}
+		}
+		await revealRangeInTextEditor(targetDocument, element.range, { viewColumn: panel.viewColumn });
+	}
+
+	/** Lists every indexed reference that resolves to the selected module/container. */
+	private async findReferences(
+		document: vscode.TextDocument,
+		model: ReturnType<typeof scanEcucValues>,
+		nodeId: string,
+		panel: vscode.WebviewPanel
+	): Promise<void> {
+		const entry = buildNodeIndex(model).byId.get(nodeId);
+		if (!entry || entry.path === undefined) {
+			await this.postStructureNotice(panel, 'Find references needs a module or container with an AR path.');
+			return;
+		}
+		const source = this.definitionSource;
+		if (source?.referencesFor === undefined) {
+			await this.postStructureNotice(panel, 'The workspace index is unavailable; no cross-file references to list.');
+			return;
+		}
+		const target: IndexElement = {
+			kind: entry.kind === 'module' ? 'module' : 'container',
+			path: entry.path,
+			file: document.uri.toString(),
+			range: entry.range,
+		};
+		const references = source.referencesFor(target);
+		if (references.length === 0) {
+			await this.postStructureNotice(panel, `No references found for "${entry.label}".`);
+			return;
+		}
+		const documents = new Map<string, vscode.TextDocument>();
+		const items: Array<vscode.QuickPickItem & { reference: IndexReference }> = [];
+		for (const reference of references) {
+			let targetDocument = documents.get(reference.file);
+			if (targetDocument === undefined) {
+				targetDocument = await vscode.workspace.openTextDocument(vscode.Uri.parse(reference.file));
+				documents.set(reference.file, targetDocument);
+			}
+			const line = targetDocument.positionAt(reference.range.start).line + 1;
+			items.push({
+				label: `${path.basename(targetDocument.uri.fsPath)}:${line}`,
+				description: reference.definitionRef ?? reference.targetRawPath ?? '',
+				detail: reference.sourcePath,
+				reference,
+			});
+		}
+		const picked = await vscode.window.showQuickPick(items, {
+			placeHolder: `References to "${entry.label}"`,
+			matchOnDescription: true,
+			matchOnDetail: true,
+		});
+		if (picked === undefined) {
+			return;
+		}
+		const targetDocument = documents.get(picked.reference.file)!;
+		await revealRangeInTextEditor(targetDocument, picked.reference.range, { viewColumn: panel.viewColumn });
 	}
 
 	/**
@@ -510,5 +622,17 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			}
 			await panel.webview.postMessage({ type: 'notice', message: applied.reason, kind: 'warn', inline: true, scope: 'details' });
 		}
+	}
+}
+
+/** A follow refusal in the user's terms; never exposes an internal enum. */
+function refusalReason(resolution: Extract<ElementResolution, { ok: false }>, rawPath: string): string {
+	switch (resolution.reason) {
+		case 'absent':
+			return `No workspace target for "${rawPath}".`;
+		case 'ambiguous':
+			return `Target "${rawPath}" is ambiguous; no file was opened.`;
+		case 'dest-mismatch':
+			return `Target "${rawPath}" is a ${resolution.actualKind}, not the type the reference expects.`;
 	}
 }
