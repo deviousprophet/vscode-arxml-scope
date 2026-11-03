@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Layering: core pure, host vscode effects."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Type ownership and protocol boundaries."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Forbidden patterns and editor rules."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Fixture and provider test conventions."}
