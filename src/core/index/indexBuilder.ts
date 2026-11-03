@@ -38,6 +38,7 @@ const TEXT_TAGS = new Set([
 	'UPPER-MULTIPLICITY',
 	'UPPER-MULTIPLICITY-INFINITE',
 	'L-2',
+	'VALUE',
 ]);
 
 interface Frame {
@@ -58,6 +59,8 @@ interface Frame {
 	targetRawPath?: string;
 	targetDest?: string;
 	contextPaths?: string[];
+	/** Parameter `<VALUE>` text. */
+	value?: string;
 }
 
 /** Builds one `FileIndex` from chunk writes or one complete string. */
@@ -66,11 +69,13 @@ export class IndexBuilder implements XmlStreamHandlers {
 	private readonly stack: Frame[] = [];
 	private readonly file: FileIndex;
 	private lastEnd = 0;
+	private offset = 0;
 
 	constructor(uri: string) {
 		this.file = {
 			uri,
 			packages: [],
+			lineStarts: [0],
 			elements: [],
 			references: [],
 			definitions: [],
@@ -80,6 +85,12 @@ export class IndexBuilder implements XmlStreamHandlers {
 
 	/** Feeds one decoded text chunk. */
 	write(chunk: string): void {
+		for (let at = 0; at < chunk.length; at++) {
+			if (chunk[at] === '\n') {
+				this.file.lineStarts!.push(this.offset + at + 1);
+			}
+		}
+		this.offset += chunk.length;
 		this.parser.write(chunk);
 	}
 
@@ -167,11 +178,14 @@ export class IndexBuilder implements XmlStreamHandlers {
 			return;
 		}
 		if (PARAMETER_VALUES.has(frame.name)) {
+			const sourcePath = this.containerPath(ancestors);
 			this.file.elements.push({
 				kind: 'parameter',
 				definitionRef: frame.definitionRef,
 				definitionDest: frame.definitionDest,
+				...(sourcePath === undefined ? {} : { sourcePath }),
 				...(frame.uuid === undefined ? {} : { uuid: frame.uuid }),
+				...(frame.value === undefined ? {} : { value: frame.value }),
 				file: this.file.uri,
 				range,
 			});
@@ -253,6 +267,13 @@ export class IndexBuilder implements XmlStreamHandlers {
 					if (dest !== undefined && dest !== '') {
 						(parent.definition ??= {}).destinationDest = dest;
 					}
+				}
+				return;
+			}
+			case 'VALUE': {
+				const parent = ancestors[ancestors.length - 1];
+				if (parent && PARAMETER_VALUES.has(parent.name)) {
+					parent.value = text;
 				}
 				return;
 			}

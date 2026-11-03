@@ -6,6 +6,7 @@ import { ConditionValueStore } from './host/conditionValues';
 import { EcucEditorProvider, VIEW_TYPE } from './host/ecucEditorProvider';
 import { CompareSelectionStore } from './host/compareSelection';
 import { IndexService } from './host/indexService';
+import { ValidationService } from './host/validationService';
 import type { IndexStats } from './core/index/indexModel';
 
 /**
@@ -26,6 +27,8 @@ export function activate(context: vscode.ExtensionContext): ArxmlScopeApi {
 	const indexService = new IndexService();
 	context.subscriptions.push(indexService);
 	indexService.start();
+	const validationService = new ValidationService(indexService);
+	context.subscriptions.push(validationService);
 	// The ECUC editor. `priority: "option"` in the manifest is what keeps a normally
 	// opened `.arxml` in the text editor (parent D14, AC3): the view is reachable only
 	// through the command, the menu entry, or *Open With…*.

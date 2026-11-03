@@ -173,6 +173,61 @@
           "default": 50,
           "minimum": 1,
           "description": "Largest .arxml file, in megabytes, that the workspace index reads. Larger files are skipped and reported in the status bar tooltip."
+        },
+        "arxmlScope.validation.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Publish ECUC validation diagnostics to the Problems panel and the text editor."
+        },
+        "arxmlScope.validation.severities": {
+          "type": "object",
+          "default": {
+            "brokenReference": "error",
+            "destMismatch": "warning",
+            "duplicateShortName": "error",
+            "valueOutOfRange": "warning",
+            "multiplicity": "warning",
+            "missingDefinition": "information",
+            "missingRequired": "warning"
+          },
+          "properties": {
+            "brokenReference": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "off"],
+              "description": "Reference target is missing or ambiguous."
+            },
+            "destMismatch": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "off"],
+              "description": "A reference target is a different element kind than its DEST."
+            },
+            "duplicateShortName": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "off"],
+              "description": "Two elements share one AR path."
+            },
+            "valueOutOfRange": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "off"],
+              "description": "A parameter value is outside its definition's range or length."
+            },
+            "multiplicity": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "off"],
+              "description": "A container, parameter or reference count is outside its definition's multiplicity."
+            },
+            "missingDefinition": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "off"],
+              "description": "A DEFINITION-REF has no indexed definition."
+            },
+            "missingRequired": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "off"],
+              "description": "A definition with a positive lower multiplicity has no instance."
+            }
+          },
+          "description": "Per-rule severity for ECUC validation. Set a rule to \"off\" to hide it."
         }
       }
     }
