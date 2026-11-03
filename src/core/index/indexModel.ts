@@ -63,6 +63,8 @@ export interface IndexDefinition {
 	maxLength?: string;
 	lowerMultiplicity?: string;
 	upperMultiplicity?: string;
+	/** AUTOSAR's `UPPER-MULTIPLICITY-INFINITE` flag, when present. */
+	upperMultiplicityInfinite?: boolean;
 	/** The `DESTINATION-REF` text (the target AR path). */
 	destinationRef?: string;
 	/** The `DEST` attribute of `DESTINATION-REF` (the target type). */

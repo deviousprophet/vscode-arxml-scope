@@ -197,7 +197,19 @@ definition saved anywhere in the workspace re-renders the open panel as well.
 - Jump to target, Find All References and validation are same-file or not implemented yet; v0.6 adds
   cross-file navigation and diagnostics.
 - Definition resolution refuses an ambiguous suffix. Vendor-specific variant merging is not performed;
-  the first exact definition wins only when it is unique.
+  the first exact definition wins only when it is unique. If two definition files declare the same AR
+  path, the row shows no definition block and no explanation; remove the duplicate or exclude that
+  folder from the workspace.
+- The index reads saved bytes from disk, not open editor buffers, so an unsaved edit in a
+  module-definition file is picked up only after it is saved. It also uses Node file-system paths, so
+  virtual workspaces are not indexed.
+- The index decodes UTF-8. An ARXML file that declares UTF-16 or a legacy encoding may be skipped or
+  indexed incorrectly.
+- Every index change rebuilds the shared lookup maps. This is fast for ordinary workspaces, but a very
+  large workspace can pause briefly after a save.
+- The single-file editor model (`core/ecuc/scanner.ts`) and the workspace index
+  (`core/index/xmlStream.ts`) are separate parsers. They share the XML text helpers; they converge only
+  when cross-file features need one model.
 - The Document is read-only by design; edits are limited to `<VALUE>`, container `<SHORT-NAME>` /
   `<DEFINITION-REF>`, and delete/duplicate of a container or parameter.
 - CDATA-backed values are displayed but cannot be edited.
@@ -206,4 +218,4 @@ definition saved anywhere in the workspace re-renders the open panel as well.
   theme find-match colours may be transparent; high contrast/forced-colours uses outlines instead of
   fills.
 - Large files are virtualized, but browser layout/paint cost is not eliminated. Use the benchmark suite
-  for scan/row/diff timing, not as a promise for every machine.
+  for scan/row/diff/index timing, not as a promise for every machine.

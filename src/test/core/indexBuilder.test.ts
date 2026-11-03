@@ -98,7 +98,8 @@ suite('indexBuilder (core)', () => {
 		const peer = file.definitions.find((candidate) => candidate.path === '/Synthetic/SampleModuleDef/Main/PeerRef');
 		assert.ok(peer);
 		assert.strictEqual(peer.destinationRef, '/Synthetic/Other');
-		assert.strictEqual(peer.upperMultiplicity, '*');
+		assert.strictEqual(peer.destinationDest, 'ECUC-REFERENCE-DEF');
+		assert.strictEqual(peer.upperMultiplicityInfinite, true);
 	});
 
 	test('chunked and whole parses build the same file index', () => {
@@ -125,6 +126,13 @@ suite('indexBuilder (core)', () => {
 			file.definitions.find((definition) => definition.shortName === 'Text')?.kind,
 			'ECUC-MULTILINE-STRING-PARAM-DEF'
 		);
+	});
+
+	test('captures UUID as an attribute and as an element', () => {
+		const text = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES UUID="attr-uuid"><SHORT-NAME>M</SHORT-NAME><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><UUID>element-uuid</UUID></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const file = buildFileIndex('file:///uuid.arxml', text);
+		assert.strictEqual(element(file.elements, '/P/M').uuid, 'attr-uuid');
+		assert.strictEqual(element(file.elements, '/P/M/C').uuid, 'element-uuid');
 	});
 
 	test('a file without ECUC content still contributes its packages', () => {

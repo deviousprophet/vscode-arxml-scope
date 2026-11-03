@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 
 import { buildFileIndex } from '../../core/index/indexBuilder';
+import type { FileIndex, IndexDefinition, IndexElement } from '../../core/index/indexModel';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
 import { fixtureText } from './modelTestUtils';
 
@@ -99,6 +100,39 @@ suite('workspaceIndex (core)', () => {
 		index.upsert(definitions('file:///module-def.arxml'));
 		const sources = index.packageSources();
 		assert.deepStrictEqual(sources.get('/Synthetic'), ['file:///values.arxml', 'file:///module-def.arxml']);
+	});
+
+	test('builds lookups for a 200k-element file without a spread crash', () => {
+		const elements: IndexElement[] = [
+			{ kind: 'container', path: '/P/M/C', file: 'file:///large.arxml', range: { start: 0, end: 10 } },
+		];
+		for (let at = 0; at < 200_000; at++) {
+			elements.push({
+				kind: 'parameter',
+				definitionRef: `/P/M/C/Parameter${at}`,
+				file: 'file:///large.arxml',
+				range: { start: at, end: at + 1 },
+			});
+		}
+		const definition: IndexDefinition = {
+			path: '/P/M/C/Parameter0',
+			kind: 'ECUC-INTEGER-PARAM-DEF',
+			shortName: 'Parameter0',
+			file: 'file:///module-def.arxml',
+			range: { start: 0, end: 10 },
+		};
+		const file: FileIndex = {
+			uri: 'file:///large.arxml',
+			packages: ['/P'],
+			elements,
+			references: [],
+			definitions: [definition],
+		};
+		const index = new WorkspaceIndex();
+		index.upsert(file);
+		assert.doesNotThrow(() => index.element('/P/M/C'));
+		assert.strictEqual(index.element('/P/M/C')?.kind, 'container');
+		assert.strictEqual(index.definitionEntry('/P/M/C/Parameter0')?.shortName, 'Parameter0');
 	});
 
 	test('notifies subscribers on every mutation and disposes them', () => {

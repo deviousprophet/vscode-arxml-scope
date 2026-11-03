@@ -65,6 +65,16 @@ suite('definition rows (core)', () => {
 		}
 	});
 
+	test('a throwing definition lookup never blocks the row document', () => {
+		const throwing: DefinitionLookup = () => {
+			throw new Error('index corrupt');
+		};
+		assert.doesNotThrow(() => buildRows(model, { definitions: throwing }));
+		const { rows } = buildRows(model, { definitions: throwing });
+		assert.ok(rows.length > 0);
+		assert.strictEqual(row(rows, 'TimeoutSeconds').definition, undefined);
+	});
+
 	test('the lookup is not called for rows without a definition ref', () => {
 		let calls = 0;
 		const counting: DefinitionLookup = () => {

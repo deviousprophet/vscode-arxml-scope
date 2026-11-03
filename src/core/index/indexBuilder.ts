@@ -36,6 +36,7 @@ const TEXT_TAGS = new Set([
 	'DESTINATION-REF',
 	'LOWER-MULTIPLICITY',
 	'UPPER-MULTIPLICITY',
+	'UPPER-MULTIPLICITY-INFINITE',
 	'L-2',
 ]);
 
@@ -97,6 +98,10 @@ export class IndexBuilder implements XmlStreamHandlers {
 		const frame: Frame = { name, start: offset, text: '' };
 		if (name === 'DEFINITION-REF' || name === 'VALUE-REF' || name === 'TARGET-REF' || name === 'DESTINATION-REF') {
 			frame.attrs = attrs;
+		}
+		const uuid = attrs.get('UUID');
+		if (uuid !== undefined && uuid !== '' && canOwnUuid(name)) {
+			frame.uuid = uuid;
 		}
 		this.stack.push(frame);
 		if (name === 'AUTOSAR') {
@@ -272,7 +277,8 @@ export class IndexBuilder implements XmlStreamHandlers {
 			case 'MAX-LENGTH':
 			case 'DEFAULT-VALUE':
 			case 'LOWER-MULTIPLICITY':
-			case 'UPPER-MULTIPLICITY': {
+			case 'UPPER-MULTIPLICITY':
+			case 'UPPER-MULTIPLICITY-INFINITE': {
 				const parent = nearest(ancestors, (f) => isDefinitionKind(f.name));
 				if (parent) {
 					setDefinitionField(parent, frame.name, text);
@@ -398,13 +404,17 @@ function knowsShortName(name: string): boolean {
 	);
 }
 
+/** Elements that can carry an AUTOSAR `UUID` attribute or child. */
+function canOwnUuid(name: string): boolean {
+	return name === 'AR-PACKAGE' || name === ENUM_LITERAL_DEF || knowsDefinition(name) || isDefinitionKind(name);
+}
+
 function knowsDefinition(name: string): boolean {
 	return name === MODULE_VALUES || name === CONTAINER_VALUE || PARAMETER_VALUES.has(name) || REFERENCE_VALUES.has(name);
 }
 
 /** True for any ECUC definition element that can carry a SHORT-NAME and be referenced. */
-function isDefinitionKind(name: string): boolean {
-	if (name === MODULE_DEF || isContainerDef(name)) {
+function isDefinitionKind(name: string): boolean {	if (name === MODULE_DEF || isContainerDef(name)) {
 		return true;
 	}
 	return (
@@ -461,6 +471,9 @@ function setDefinitionField(frame: Frame, tag: string, text: string): void {
 			return;
 		case 'UPPER-MULTIPLICITY':
 			definition.upperMultiplicity = text;
+			return;
+		case 'UPPER-MULTIPLICITY-INFINITE':
+			definition.upperMultiplicityInfinite = /^true$/i.test(text);
 			return;
 		case 'L-2':
 			if (definition.description === undefined) {

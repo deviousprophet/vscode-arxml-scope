@@ -66,6 +66,8 @@ export class IndexService implements vscode.Disposable {
 	private readonly status: vscode.StatusBarItem;
 	private readonly disposables: vscode.Disposable[] = [];
 	private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+	/** Files the watcher touched while a rebuild was reading; drained after `replaceAll`. */
+	private readonly dirtyDuringBuild = new Set<string>();
 	/** Files that were too large or unreadable; reported in the tooltip only. */
 	private readonly skipped = new Set<string>();
 	private watcher?: vscode.FileSystemWatcher;
@@ -102,7 +104,12 @@ export class IndexService implements vscode.Disposable {
 		if (indexSettings().enabled) {
 			this.startWatcher();
 		}
-		void this.rebuild();
+		void this.rebuild().catch(() => {
+			// `runRebuild` already keeps the previous index on a read failure; this
+			// catch only removes the unhandled-rejection tail from the fire-and-forget start.
+			this.building = false;
+			this.updateStatus();
+		});
 	}
 
 	/** The current index, for the editor provider and the extension API. */
@@ -141,8 +148,8 @@ export class IndexService implements vscode.Disposable {
 		return this.rebuildPromise;
 	}
 
-	/** Reindexes exactly one file; used by the watcher and the extension API. */
-	async reindexFile(uri: vscode.Uri): Promise<void> {
+	/** Reindexes exactly one file; used by the watcher and the rebuild drain. */
+	async reindexFile(uri: vscode.Uri, publish = true): Promise<void> {
 		const settings = indexSettings();
 		if (!settings.enabled) {
 			return;
@@ -156,14 +163,21 @@ export class IndexService implements vscode.Disposable {
 				this.skipped.delete(uri.toString());
 				this.index.upsert(file);
 			}
-		} catch {
-			// A file deleted between the watcher event and the read is not an error;
-			// recording it as skipped and removing the old entry keeps the status truthful.
-			this.skipped.add(uri.toString());
+		} catch (error) {
+			// A deleted file is not a skipped file: remove it and keep the status quiet.
+			// Any other read failure is reported as skipped.
+			const code = (error as NodeJS.ErrnoException).code;
+			if (code === 'ENOENT') {
+				this.skipped.delete(uri.toString());
+			} else {
+				this.skipped.add(uri.toString());
+			}
 			this.index.remove(uri.toString());
 		}
 		this.lastIndexedAt = Date.now();
-		this.publish();
+		if (publish) {
+			this.publish();
+		}
 	}
 
 	/** Subscribes to index changes without exposing the `vscode.EventEmitter`. */
@@ -193,30 +207,44 @@ export class IndexService implements vscode.Disposable {
 		}
 		this.building = true;
 		this.updateStatus();
-		const uris = await vscode.workspace.findFiles('**/*.arxml');
-		uris.sort((left, right) => left.toString().localeCompare(right.toString()));
-		const files: FileIndex[] = [];
-		const skipped = new Set<string>();
-		for (const uri of uris) {
-			try {
-				const file = await readFileIndex(uri, settings.maxBytes);
-				if (file === undefined) {
+		try {
+			const uris = await vscode.workspace.findFiles('**/*.arxml');
+			uris.sort((left, right) => left.toString().localeCompare(right.toString()));
+			const files: FileIndex[] = [];
+			const skipped = new Set<string>();
+			for (const uri of uris) {
+				try {
+					const file = await readFileIndex(uri, settings.maxBytes);
+					if (file === undefined) {
+						skipped.add(uri.toString());
+					} else {
+						files.push(file);
+					}
+				} catch {
 					skipped.add(uri.toString());
-				} else {
-					files.push(file);
 				}
-			} catch {
-				skipped.add(uri.toString());
 			}
+			this.index.replaceAll(files);
+			this.skipped.clear();
+			for (const uri of skipped) {
+				this.skipped.add(uri);
+			}
+			// A save that landed while the rebuild was reading must not be lost to the
+			// `replaceAll` above. Apply those files on top of the fresh snapshot.
+			const dirty = [...this.dirtyDuringBuild];
+			this.dirtyDuringBuild.clear();
+			for (const key of dirty) {
+				await this.reindexFile(vscode.Uri.parse(key), false);
+			}
+		} catch {
+			// Discovery or a surprising read failure keeps the previous index. The
+			// finally block still clears the busy state and publishes the status.
+		} finally {
+			this.dirtyDuringBuild.clear();
+			this.building = false;
+			this.lastIndexedAt = Date.now();
+			this.publish();
 		}
-		this.index.replaceAll(files);
-		this.skipped.clear();
-		for (const uri of skipped) {
-			this.skipped.add(uri);
-		}
-		this.building = false;
-		this.lastIndexedAt = Date.now();
-		this.publish();
 	}
 
 	private startWatcher(): void {
@@ -234,6 +262,9 @@ export class IndexService implements vscode.Disposable {
 
 	private schedule(uri: vscode.Uri): void {
 		const key = uri.toString();
+		if (this.building) {
+			this.dirtyDuringBuild.add(key);
+		}
 		const existing = this.pending.get(key);
 		if (existing !== undefined) {
 			clearTimeout(existing);
@@ -249,6 +280,9 @@ export class IndexService implements vscode.Disposable {
 
 	private remove(uri: vscode.Uri): void {
 		const key = uri.toString();
+		if (this.building) {
+			this.dirtyDuringBuild.add(key);
+		}
 		const timer = this.pending.get(key);
 		if (timer !== undefined) {
 			clearTimeout(timer);

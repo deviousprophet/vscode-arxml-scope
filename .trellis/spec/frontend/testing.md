@@ -208,6 +208,10 @@ stage, for example:
 {"_type":"large-file-summary","concurrentRetainedMiB":339,"documents":["left.arxml","right.arxml"]}
 ```
 
+`indexBenchmark.ts` builds a ~54 MiB synthetic ECUC file with 217k indexed elements, then resolves an
+element and a definition through `WorkspaceIndex`. It is the regression evidence for the array-spread
+lookup crash: the build and lookup stages must not exceed the shared retained-memory or time limits.
+
 The CT `Benchmarks` job runs `npm run benchmark -- --continue`, uploads the log and renders it through
 `.github/scripts/summarize-tests.mjs`; `Finalize` requires both the UT and benchmark jobs. To add a
 benchmark: name the file `*Benchmark.ts`, keep it headless (no `vscode`, no DOM), emit `_type` JSON

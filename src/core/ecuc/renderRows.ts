@@ -249,12 +249,18 @@ function integerValue(value: string): bigint | undefined {
 	return negative ? -parsed : parsed;
 }
 
-/** Resolves a definition only when a lookup was supplied; an absent ref never calls out. */
+/** Resolves a definition only when a lookup was supplied; failure degrades to no definition. */
 function definitionFor(ctx: BuildContext, definitionRef: string): DefinitionInfo | undefined {
 	if (ctx.definitions === undefined || definitionRef === '') {
 		return undefined;
 	}
-	return ctx.definitions(definitionRef);
+	try {
+		return ctx.definitions(definitionRef);
+	} catch {
+		// A definition is optional metadata. A broken index must never stop the
+		// row document from rendering.
+		return undefined;
+	}
 }
 
 function moduleRow(

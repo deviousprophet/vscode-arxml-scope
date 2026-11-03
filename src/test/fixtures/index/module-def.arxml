@@ -77,7 +77,7 @@
                   <SHORT-NAME>PeerRef</SHORT-NAME>
                   <DESTINATION-REF DEST="ECUC-REFERENCE-DEF">/Synthetic/Other</DESTINATION-REF>
                   <LOWER-MULTIPLICITY>0</LOWER-MULTIPLICITY>
-                  <UPPER-MULTIPLICITY>*</UPPER-MULTIPLICITY>
+                  <UPPER-MULTIPLICITY-INFINITE>true</UPPER-MULTIPLICITY-INFINITE>
                 </ECUC-REFERENCE-DEF>
                 <ECUC-INSTANCE-REFERENCE-DEF>
                   <SHORT-NAME>PeerIref</SHORT-NAME>

@@ -52,7 +52,7 @@ export function definitionInfo(definition: IndexDefinition): DefinitionInfo {
 		info.defaultValue = definition.defaultValue;
 	}
 	const lower = multiplicityValue(definition.lowerMultiplicity);
-	const upper = multiplicityValue(definition.upperMultiplicity);
+	const upper = definition.upperMultiplicityInfinite === true ? -1 : multiplicityValue(definition.upperMultiplicity);
 	const multiplicity = multiplicityText(lower, upper);
 	if (multiplicity !== undefined) {
 		info.multiplicity = multiplicity;

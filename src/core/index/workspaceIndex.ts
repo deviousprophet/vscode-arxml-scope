@@ -125,21 +125,39 @@ export class WorkspaceIndex {
 		if (this.lookupsAt === this.generation && this.elements !== undefined && this.definitions !== undefined) {
 			return;
 		}
-		const elements: IndexElement[] = [];
-		const definitions: IndexDefinition[] = [];
-		for (const file of this.files.values()) {
-			elements.push(...file.elements);
-			definitions.push(...file.definitions);
+		const generation = this.generation;
+		try {
+			const elements: IndexElement[] = [];
+			const definitions: IndexDefinition[] = [];
+			for (const file of this.files.values()) {
+				// Never use spread here: a large file can exceed the engine's argument
+				// limit and throw `RangeError` inside the editor's row build.
+				for (const element of file.elements) {
+					elements.push(element);
+				}
+				for (const definition of file.definitions) {
+					definitions.push(definition);
+				}
+			}
+			this.elements = buildLookup(elements, (element) => element.path);
+			this.definitions = buildLookup(definitions, (definition) => definition.path);
+		} catch {
+			// A lookup failure must not make every later call rethrow. Definitions are
+			// optional data; degrading to "no lookup" keeps the editor usable.
+			this.elements = emptyLookup();
+			this.definitions = emptyLookup();
 		}
-		this.elements = buildLookup(elements, (element) => element.path);
-		this.definitions = buildLookup(definitions, (definition) => definition.path);
-		this.lookupsAt = this.generation;
+		this.lookupsAt = generation;
 	}
 }
 
 interface PathLookup<T> {
 	exact: Map<string, T | undefined>;
 	suffix: Map<string, T | undefined>;
+}
+
+function emptyLookup<T>(): PathLookup<T> {
+	return { exact: new Map(), suffix: new Map() };
 }
 
 /**
