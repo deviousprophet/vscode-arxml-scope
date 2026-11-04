@@ -127,8 +127,14 @@ a re-scan; Search never changes the row store and only expands ancestors to reve
 The diff page uses the same search contract with row **keys** instead of indices because its
 candidate list changes with the view mode. `showChangesOnly` chooses the candidate set
 (`status !== 'unchanged'` or all rows); a view switch restarts the committed query and keeps the
-current key where possible. `swapped` is page-local and display-only. Neither the view mode nor the
-swap state is persisted, and a refresh preserves both.
+current key where possible. `swapped` is page-local and display-only. Neither the view mode, the swap
+state nor the per-panel match mode is persisted, and a refresh preserves all three.
+
+The host also keeps the prepared rows, ranges and headers for the two documents. A Semantic/Strict
+toggle reuses them and the `DiffSession` document cache; it does not re-scan. The prepared version is
+the `TextDocument.version` from the last refresh, so a toggle that races an edit falls back to
+`refreshNow` rather than showing stale rows. A semantic build with `renamed === 0` proves both modes
+are identical and reuses the current document.
 
 ## Page errors
 

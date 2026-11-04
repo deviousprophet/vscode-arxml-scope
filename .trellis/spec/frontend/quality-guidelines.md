@@ -155,6 +155,13 @@ that is not obvious from the code.
 - **Semantic diff is opt-in in core, on in the host.** `DiffOptions.semanticMatching` defaults off so
   core output is stable; the host reads `arxmlScope.diff.semanticMatching` (default on) and the toolbar
   posts `matchMode` for the current panel only. Strict must reproduce the pre-semantic output exactly.
+- **A match-mode toggle never re-scans.** The host keeps the prepared rows, ranges and headers from the
+  last refresh and a `DiffSession` caches the strict and semantic documents. A toggle reuses that cache,
+  falls back to a full refresh when either `TextDocument.version` changed, and reuses the current
+  document when a semantic build reports `renamed === 0` (the two modes are identical). The page flips
+  `aria-pressed` and the label immediately, shows `aria-busy` plus a live `Switching to …` status, and
+  the host answers a no-document switch with `matchModeState`. Do not call `refreshNow()` or
+  `rowsFor()` from the match-mode handler unless the prepared version is stale.
 - **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels at
   normal widths; labels may hide only at <=720px. The fixed gutter keeps the row control at the far
   left instead of indenting it with the label.

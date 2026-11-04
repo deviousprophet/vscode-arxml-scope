@@ -289,13 +289,22 @@ export function diffShell(assets: WebviewShellAssets): string;
 
 // src/diffProtocol.ts
 export type DiffProviderToWebview =
-  | { type: 'document'; document: DiffDocument }
+  | { type: 'document'; document: DiffDocument; semantic: boolean }
+  | { type: 'matchModeState'; semantic: boolean }
   | { type: 'error'; message: string };
 export type DiffWebviewToProvider =
   | { type: 'ready' }
+  | { type: 'matchMode'; semantic: boolean }
   | { type: 'reveal'; side: 'left' | 'right'; key: string };
 export function diffMessageType(message: unknown): string | undefined;
 export function isDiffProviderMessage(message: unknown): message is DiffProviderToWebview;
+
+// src/core/diff/diffSession.ts
+export class DiffSession {
+  constructor(left: FileLabel, right: FileLabel, leftSide: DiffPreparedSide, rightSide: DiffPreparedSide);
+  document(semantic: boolean): { document: DiffDocument; changed: boolean };
+  invalidate(): void;
+}
 
 // src/host/navigation.ts
 export async function revealRangeInTextEditor(
@@ -327,24 +336,31 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
    `enableScripts: true`, `retainContextWhenHidden: true` and `localResourceRoots: [extensionUri]`, sets
    `diffShell(...)`, arms the 10 s boot watchdog, and answers `ready` with the current `DiffDocument` on
    the `document` channel.
-6. **Refresh is a full re-scan after 150 ms.** A change to either URI schedules one `refreshNow`; a
-   generation token makes an older async refresh stale. A successful read rebuilds both sides and posts
-   a new `document`. If a side stops being ECUC, the last good document stays visible and `error`
-   explains why it stopped updating.
-7. **Reveal is host-side and side-aware.** The page posts `{ type: 'reveal', side, key }` with the
+6. **An edit is a full re-scan after 150 ms; a mode toggle is not.** A change to either URI schedules
+   one `refreshNow`; a generation token makes an older async refresh stale. A successful read rebuilds
+   both sides and posts a new `document`. A `matchMode` request reuses the prepared rows/ranges and the
+   `DiffSession` document cache; if either `TextDocument.version` changed it falls back to
+   `refreshNow` instead of showing stale rows. If a side stops being ECUC, the last good document stays
+   visible and `error` explains why it stopped updating.
+7. **The match-mode toggle acknowledges the click.** The page flips `aria-pressed`/the label, sets
+   `aria-busy` and writes a live `Switching to …` status before posting `matchMode`. When the host can
+   reuse the displayed document it answers with `matchModeState`; otherwise it posts the changed
+   `document`. Both clear the pending state. A failed switch restores the previous mode and posts
+   `error`.
+8. **Reveal is host-side and side-aware.** The page posts `{ type: 'reveal', side, key }` with the
    **host's original side**: `hostSide` maps the displayed pane through the current swap before posting,
    because the host has no swap state and indexes `row.left` / `row.right` directly. The host finds the
    row by key, takes that cell, maps its range through `revealRangeInTextEditor`, and forces
    `mode: 'beside'` so the diff tab survives `arxmlScope.ecuc.editor.revealMode: 'replace'`.
-8. **Swap is display-only.** `displayLeft` / `displayRight` / `displayStatus` re-project a row;
+9. **Swap is display-only.** `displayLeft` / `displayRight` / `displayStatus` re-project a row;
    `hostSide` maps the displayed side back to the host's original side for reveal. The compared
    documents are not rebuilt and the vertical position is not reset. Swap resets horizontal offsets to
    zero in both panes.
-9. **The comparison chrome scrolls with its rows.** Each pane header lives inside that pane's
+10. **The comparison chrome scrolls with its rows.** Each pane header lives inside that pane's
    `.document-tree-scroll` above the top spacer, so it scrolls away with the content; the pane's
    measured header height joins the row-offset math. The header is presentation-only. The diff adds no
    inter-module blank row: every diff row is exactly one base row high.
-10. **The page owns view state.** Show all / Show diff only, Prev diff / Next diff, selection, collapse,
+11. **The page owns view state.** Show all / Show diff only, Prev diff / Next diff, selection, collapse,
     search and scroll survive a refresh. Search is Enter-only, chunked and cancellable; it never removes
     a row. `nextChangeIndex` wraps and skips unchanged or hidden rows. A changed row may render inline
     word runs for the fields it displays (label, value/target, condition, variant, context) on the
@@ -352,7 +368,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
     background inside an outlined changed word. One `selectedKey` computes the merged subtree key set,
     so node, brace and annotation rows highlight in both panes; an added/removed row highlights only
     the pane that owns its cell.
-11. **Dispose everything.** `panel.onDidDispose` sets `disposed`, disposes the watchdog, clears the
+12. **Dispose everything.** `panel.onDidDispose` sets `disposed`, disposes the watchdog, clears the
     pending refresh timer and every subscription. In-flight async work checks `disposed` before posting.
 
 ### 4. Validation & Error Matrix

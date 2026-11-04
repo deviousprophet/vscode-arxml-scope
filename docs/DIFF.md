@@ -94,8 +94,15 @@ add + remove pair, and keeps its children aligned inside it.
 - Only containers are paired semantically. Parameters and references keep the strict pairing rules.
 
 The toolbar **Semantic** / **Strict** button switches the current panel only; it posts the new mode to
-the host, which rebuilds the comparison without changing the setting. Strict reproduces the output of
+the host, which rebuilds the comparison without changing the setting. The button flips immediately and
+shows a spinner plus `Switching to …` until the new rows arrive. Strict reproduces the output of
 v0.6.0 exactly.
+
+Switching reuses the rows and ranges already prepared for the open files. When semantic matching finds
+no renames, both modes are identical and the current document stays in place; toggling back after a
+document was built for each mode is a cache hit. A very large diff that does contain renames still
+needs one rebuild and one document transfer on the first switch, and the toolbar keeps the progress
+status visible for that time.
 
 ## Inline word changes
 
@@ -133,7 +140,7 @@ A file that is not ECUC-Values is refused before the panel opens.
 | **Prev diff** / **Next diff** | Move to the previous/next changed row, wrapping at the ends. |
 | `F7` / `Shift+F7` | Same as Next/Prev while focus is in the diff list. |
 | **Swap sides** | Mirror the displayed sides; display only, no re-comparison. |
-| **Semantic** / **Strict** | Toggle renamed-container pairing for this panel only. The label shows the active mode. |
+| **Semantic** / **Strict** | Toggle renamed-container pairing for this panel only. The label flips immediately and a spinner/status shows while the new view is prepared. |
 | **Summary** | `N changed (M renamed) · N added · N removed`, in the toolbar status slot. |
 | Row twisty / `Left` / `Right` | Collapse or expand a subtree. |
 | `Space` | Select the focused row. |
@@ -168,5 +175,8 @@ the same merged rows, so the search result set does not change.
   Collapse/Expand or bottom action strip.
 - Semantic pairing is a heuristic. A container rename that changes the `DEFINITION-REF`, the parent or
   most of the children stays an add + remove pair; use Strict to see that view explicitly.
+- Switching modes does not re-scan either file. A very large diff that contains renames can still
+  need one rebuild and one document transfer on the first switch; the toolbar shows a spinner and
+  `Switching to …` while that happens.
 - `Swap sides` is display-only. The left/right files keep their original comparison roles.
 - Very large files remain virtualized in both panes, but paint cost still depends on the machine.
