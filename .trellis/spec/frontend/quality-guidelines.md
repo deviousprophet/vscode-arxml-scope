@@ -162,6 +162,13 @@ that is not obvious from the code.
   `aria-pressed` and the label immediately, shows `aria-busy` plus a live `Switching to …` status, and
   the host answers a no-document switch with `matchModeState`. Do not call `refreshNow()` or
   `rowsFor()` from the match-mode handler unless the prepared version is stale.
+- **The diff toolbar has no count summary.** Show all / Show diff only and Semantic / Strict are
+  two-button view groups; Context is the only standalone toggle, default active at five lines and
+  disabled in Show all. Every main button uses an inline icon over a small label.
+- **Diff-only gaps are expandable split lines.** `diffVisibility(rows, true, 5)` keeps five context
+  rows; `flattenDiffDocument` turns the remaining hidden runs into `DiffGap` rows. A gap row is not a
+  tree node: it must stay out of `displayIndexByKey`, `navigationVisible`, `F7` and search. The
+  displayed left pane owns the toggle; the right pane draws the line only.
 - **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels at
   normal widths; labels may hide only at <=720px. The fixed gutter keeps the row control at the far
   left instead of indenting it with the label.

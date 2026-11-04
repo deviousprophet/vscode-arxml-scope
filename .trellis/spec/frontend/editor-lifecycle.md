@@ -271,9 +271,12 @@ export function buildDiffDocument(
   rightRows: readonly EcucRow[],
   leftRanges?: RangeLookup,
   rightRanges?: RangeLookup,
-  headers?: { left: DiffHeader; right: DiffHeader }
+  headers?: { left: DiffHeader; right: DiffHeader },
+  options?: { semanticMatching?: boolean }
 ): DiffDocument;
 export function diffRows(leftRows: readonly EcucRow[], rightRows: readonly EcucRow[], leftRanges?: RangeLookup, rightRanges?: RangeLookup): DiffRow[];
+export function diffVisibility(rows: readonly DiffRow[], changesOnly: boolean, contextLines?: number): boolean[];
+export function flattenDiffDocument(rows: readonly DiffRow[], options?: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[]; expandedGaps?: ReadonlySet<string> }): DiffDisplayRow[];
 export function summarizeDiff(rows: readonly DiffRow[]): DiffSummary;
 export function nextChangeIndex(rows: readonly DiffRow[], visible: readonly boolean[] | undefined, from: number, direction: 1 | -1): number;
 export function disambiguatedLabels(a: FileLabel, b: FileLabel): [string, string];
@@ -367,7 +370,9 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
     displayed sides; added/removed rows keep only the full-cell tint, and a search `<mark>` keeps its
     background inside an outlined changed word. One `selectedKey` computes the merged subtree key set,
     so node, brace and annotation rows highlight in both panes; an added/removed row highlights only
-    the pane that owns its cell.
+    the pane that owns its cell. `contextActive` defaults to true at five rows; `expandedGaps` is
+    page-local and resets when a new `document` is installed. Gap rows are not tree nodes and never
+    enter `displayIndexByKey` or search/F7 navigation.
 12. **Dispose everything.** `panel.onDidDispose` sets `disposed`, disposes the watchdog, clears the
     pending refresh timer and every subscription. In-flight async work checks `disposed` before posting.
 

@@ -318,14 +318,22 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   collapse, selection, search and scroll. A **Semantic/Strict** toggle does not re-scan: the host
   reuses the prepared rows/ranges and a `DiffSession` document cache, and a changed document version
   falls back to the full refresh.
-- The diff toolbar has three tracks: the left group is **Show all** / **Show diff only**,
-  **Prev diff**, **Next diff**, **Semantic/Strict**; **Swap sides** is centred; the right group holds
-  the changed/added/removed/renamed summary and Search. Search is always the last control and its
-  count/busy slots stay in the flow. There is no Filter, no changes checkbox and no global
-  Collapse/Expand. While a mode switch is pending, the toolbar shows `aria-busy`, a spinner and a
-  live `Switching to …` status instead of a silent wait. Search uses `RowSearchEngine`
-  (Enter-only, chunked, cancellable); its candidates are the changed/added/removed rows in diff-only
-  view, all rows otherwise. Search never hides rows.
+- The diff toolbar uses icon-over-label buttons: the left group is **Show all** / **Show diff only**
+  and **Semantic** / **Strict**; the centre group is **Prev diff**, **Next diff**, **Context** and
+  **Swap sides**; the right group is the live mode status and Search. There is no
+  changed/added/removed/renamed count summary. **Context** is the only standalone toggle: active by
+  default, fixed at 5 unchanged rows above and below each change, disabled in Show all. While a mode
+  switch is pending, the toolbar shows `aria-busy`, a spinner and a live `Switching to …` status
+  instead of a silent wait. Search uses `RowSearchEngine` (Enter-only, chunked, cancellable); its
+  candidates are the changed/added/removed rows in diff-only view, all rows otherwise. Search never
+  hides rows.
+- **Split lines are the diff-only gap control.** `diffVisibility(rows, true, 5)` keeps five context
+  rows around each change; the remaining hidden runs become `DiffGap` rows in
+  `flattenDiffDocument`. A gap row shows `N unchanged lines` and expands in place; the row stays
+  while expanded so it can collapse again. Gap rows are not tree nodes: selection, `F7` and search
+  skip them. The whole row is clickable; the inner `.diff-gap-toggle` is the keyboard focus target.
+  It is a row-local control and deliberately does not use the toolbar `.sb-btn`/`.nav-btn` shapes.
+  The control sits in the displayed left pane and follows Swap sides.
 - **Diff rows reuse Document geometry.** Each pane starts with the 26px fold gutter, an absolute 16px
   twisty at `left: 2px`, Document content padding and the `--indent` step per level. Labels use the
   Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no

@@ -128,7 +128,13 @@ The diff page uses the same search contract with row **keys** instead of indices
 candidate list changes with the view mode. `showChangesOnly` chooses the candidate set
 (`status !== 'unchanged'` or all rows); a view switch restarts the committed query and keeps the
 current key where possible. `swapped` is page-local and display-only. Neither the view mode, the swap
-state nor the per-panel match mode is persisted, and a refresh preserves all three.
+state, the per-panel match mode, the Context toggle nor the expanded split lines are persisted, and a
+refresh preserves them where the rows still exist.
+
+`contextActive` defaults to true with a fixed five-line window. `expandedGaps` is a page-local
+`Set<string>` keyed by the first hidden row; it survives view switches within one document and resets
+when `setDocument` installs a new comparison, including a background refresh. Gap rows are not in
+`displayIndexByKey` or `navigationVisible`, so selection, `F7` and search cannot land on them.
 
 The host also keeps the prepared rows, ranges and headers for the two documents. A Semantic/Strict
 toggle reuses them and the `DiffSession` document cache; it does not re-scan. The prepared version is

@@ -13,20 +13,28 @@ body[data-page="diff"] {
 body[data-page="diff"] .toolbar {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: stretch;
+	min-height: 52px;
+	height: auto;
+	padding: 3px 8px;
+}
+body[data-page="diff"] .toolbar-left,
+body[data-page="diff"] .toolbar-center,
+body[data-page="diff"] .toolbar-right {
 	align-items: center;
+}
+body[data-page="diff"] .toolbar .view-switch {
+	gap: 2px;
 }
 .view-switch {
 	display: flex;
 	flex: none;
 	gap: 2px;
 }
-.view-tool[aria-pressed="true"],
-.icon-tool[aria-pressed="true"] {
+.icon-tool[aria-pressed="true"],
+.diff-tool[aria-pressed="true"] {
 	color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
 	background: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
-}
-body[data-page="diff"] .tool {
-	height: 22px;
 }
 body[data-page="diff"] .search-input {
 	height: 22px;
@@ -160,7 +168,7 @@ body[data-page="diff"] .nav-btn:disabled {
 	box-shadow: inset -3px 0 0 var(--diff-changed-edge);
 }
 .diff-row[data-status="added"] > .diff-cell[data-side="right"] {
-	box-shadow: inset -3px 0 0 var(--diff-added-edge);
+	box-shadow: inset 3px 0 0 var(--diff-added-edge);
 }
 .diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
 	box-shadow: inset 3px 0 0 var(--diff-removed-edge);
@@ -177,26 +185,57 @@ body[data-page="diff"] .nav-btn:disabled {
 	background-color: var(--vscode-diffEditor-insertedTextBackground, var(--diff-added-bg));
 	outline: 1px solid var(--diff-added-edge);
 }
-.diff-row[data-rename-implied="true"] .word-changed {
-	text-decoration: underline dashed;
-	text-underline-offset: 2px;
-}
-.diff-match-badge {
-	margin-left: 6px;
-	padding: 0 4px;
-	border: 1px solid var(--vscode-descriptionForeground, var(--tok-dim));
-	border-radius: 3px;
-	color: var(--vscode-descriptionForeground, var(--tok-dim));
-	font-size: 10px;
-	line-height: 16px;
-	vertical-align: top;
-}
 .diff-row:focus-visible > .diff-cell {
 	outline: 2px solid var(--rail);
 	outline-offset: -2px;
 }
 .diff-cell[data-empty="true"] {
 	background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--vscode-editorGroup-border, transparent) 6px 7px);
+}
+/* Expandable split line between hidden unchanged runs. */
+.diff-gap-row {
+	position: relative;
+	cursor: pointer;
+}
+.diff-gap {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: var(--ecuc-lh);
+	padding: 0 8px;
+	box-sizing: border-box;
+}
+.diff-gap-line {
+	flex: 1 1 auto;
+	min-width: 12px;
+	border-top: 1px dashed var(--vscode-editorGroup-border, var(--vscode-panel-border, var(--tok-dim)));
+}
+.diff-gap-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex: none;
+	height: 16px;
+	padding: 0 4px;
+	color: var(--tok-dim);
+	background: transparent;
+	border: 0;
+	border-radius: 2px;
+	font: inherit;
+	font-size: 11px;
+	cursor: pointer;
+}
+.diff-gap-toggle:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground, transparent));
+}
+.diff-gap-toggle:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
+	outline-offset: 1px;
+}
+.diff-gap-chevron {
+	width: 1ch;
+	text-align: center;
 }
 .diff-row[data-search-current="true"] .diff-cell mark {
 	background: var(--match-hi);

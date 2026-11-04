@@ -9,7 +9,7 @@ import * as assert from 'assert';
 
 import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { DiffCell, DiffRow, buildDiffDocument, compareTitle, diffChanges, diffVisibility, disambiguatedLabels, flattenDiffRows, nextChangeIndex } from '../../core/diff/diffModel';
+import { DiffCell, DiffRow, buildDiffDocument, compareTitle, diffChanges, diffVisibility, disambiguatedLabels, flattenDiffDocument, flattenDiffRows, nextChangeIndex } from '../../core/diff/diffModel';
 import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { EcucRow, buildRows } from '../../core/ecuc/renderRows';
 import { fixtureText } from '../core/modelTestUtils';
@@ -645,6 +645,75 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const goneIndex = rows.findIndex((row) => (row.left ?? row.right)?.label === 'Gone');
 		assert.strictEqual(changesOnly[keepIndex], false, 'an unchanged row is hidden');
 		assert.ok(changesOnly[goneIndex], 'a removed container is visible');
+	});
+
+	test('context 5 keeps five rows above and below a change, and hides the sixth', () => {
+		const parameters = Array.from({ length: 14 }, (_, index) => `P${String(index).padStart(2, '0')}`);
+		const left = arxml(
+			module('M1', container('C1', { parameters: parameters.map((name) => parameter(name, '0')) }))
+		);
+		const right = arxml(
+			module(
+				'M1',
+				container(
+					'C1',
+					{ parameters: parameters.map((name) => parameter(name, name === 'P06' ? '1' : '0')) }
+				)
+			)
+		);
+		const { document } = diffOf(left, right);
+		const rows = document.rows;
+		const changed = rows.findIndex(
+			(row) => (row.left ?? row.right)?.label === 'P06' && row.status === 'changed'
+		);
+		assert.ok(changed >= 0);
+		const none = diffVisibility(rows, true, 0);
+		assert.strictEqual(none[changed - 1], false, 'no context hides the previous row');
+		const context = diffVisibility(rows, true, 5);
+		for (let offset = -5; offset <= 5; offset++) {
+			assert.ok(context[changed + offset], `row ${offset} is inside the context`);
+		}
+		assert.strictEqual(context[changed - 6], false, 'the sixth row above is hidden');
+		assert.strictEqual(context[changed + 6], false, 'the sixth row below is hidden');
+	});
+
+	test('hidden runs become one expandable gap row', () => {
+		const left = arxml(
+			module(
+				'M1',
+				container('AChanged', { parameters: [parameter('Value', '0')] }) +
+					container('Gap', { parameters: [parameter('Value', '0')] }) +
+					container('ZChanged', { parameters: [parameter('Value', '0')] })
+			)
+		);
+		const right = arxml(
+			module(
+				'M1',
+				container('AChanged', { parameters: [parameter('Value', '1')] }) +
+					container('Gap', { parameters: [parameter('Value', '0')] }) +
+					container('ZChanged', { parameters: [parameter('Value', '1')] })
+			)
+		);
+		const { document } = diffOf(left, right);
+		const rows = document.rows;
+		const visible = diffVisibility(rows, true, 0);
+		const collapsed = flattenDiffDocument(rows, { visible });
+		const gaps = collapsed.filter((row) => row.gap);
+		assert.strictEqual(gaps.length, 1, 'one split line for the one hidden run');
+		const gap = gaps[0].gap!;
+		assert.strictEqual(gap.count, 2, 'the unchanged container and its child are one run');
+		assert.strictEqual(gap.expanded, false);
+		assert.strictEqual(collapsed.some((row) => row.rowIndex === gap.from && row.left === 'node'), false);
+
+		const expanded = flattenDiffDocument(rows, { visible, expandedGaps: new Set([gap.key]) });
+		const expandedGap = expanded.find((row) => row.gap)?.gap;
+		assert.ok(expandedGap);
+		assert.strictEqual(expandedGap!.expanded, true);
+		assert.strictEqual(expandedGap!.key, gap.key);
+		assert.ok(
+			expanded.some((row) => row.rowIndex === gap.from && row.left === 'node'),
+			'the hidden container row is shown when expanded'
+		);
 	});
 
 	test('design §3.3: flatten skips collapsed subtrees in every view', () => {

@@ -30,6 +30,9 @@ compared, not just the bytes on disk.
 ## What the panel shows
 
 - One panel titled `<left> ↔ <right>`, with the two panes side by side.
+- The toolbar is icon-over-label: **Show all** / **Show diff only**, **Semantic** / **Strict**,
+  **Prev diff** / **Next diff**, **Context** and **Swap sides**, with Search on the right. There is
+  no changed/added/removed/renamed count in the page.
 - Pane headers show the shortest distinguishing file label plus each side's schema/package lines.
   Each header is the first line of that pane's scroller, so it scrolls away with the rows; the shorter
   header is padded so both panes start their rows at the same y. The header is not a tree row and is
@@ -89,14 +92,14 @@ add + remove pair, and keeps its children aligned inside it.
   substitution. Substitutions are learned per comparison and never persisted.
 - Children of a semantic pair are compared by their final id segment, so a changed owner name does not
   turn every child into an add + remove pair.
-- A pair is shown with a small `renamed` badge; its title reports the score and each reason. A changed
-  field fully explained by a learned substitution is drawn with a dashed underline.
+- A renamed container renders exactly like any other **changed** row; there is no badge, no dashed
+  underline and no visible count. The pairing still keeps the row and its children aligned.
 - Only containers are paired semantically. Parameters and references keep the strict pairing rules.
 
-The toolbar **Semantic** / **Strict** button switches the current panel only; it posts the new mode to
-the host, which rebuilds the comparison without changing the setting. The button flips immediately and
-shows a spinner plus `Switching to …` until the new rows arrive. Strict reproduces the output of
-v0.6.0 exactly.
+The toolbar has a **Semantic** / **Strict** view group; selecting one switches the current panel only
+and posts the new mode to the host, which rebuilds the comparison without changing the setting. The
+group flips immediately and shows a spinner plus `Switching to …` until the new rows arrive. Strict
+reproduces the output of v0.6.0 exactly.
 
 Switching reuses the rows and ranges already prepared for the open files. When semantic matching finds
 no renames, both modes are identical and the current document stays in place; toggling back after a
@@ -131,17 +134,33 @@ their normal rendering.
 
 A file that is not ECUC-Values is refused before the panel opens.
 
+## Context and split lines
+
+The diff toolbar has a **Context** toggle, active by default. In **Show diff only** it keeps five
+unchanged rows above and below each changed row. It has one fixed value, no menu, and is disabled while
+**Show all** is active.
+
+The remaining unchanged runs are replaced by one split line per run: a horizontal rule with
+`N unchanged lines` and a chevron. Clicking anywhere on the split row expands the hidden rows; the
+row stays as a collapse control, with its accessible label switching between Show and Hide. The
+toggle sits in the displayed left pane and follows **Swap sides**; the whole row is clickable in both
+panes. Split lines are not selectable and are skipped by `F7` and search.
+
+With **Context** off, only the changed rows and their ancestors remain visible; every hidden run is a
+split line. The split line is a display control only; it never changes the comparison result.
+
 ## Navigating the diff
 
 | Control / key | Action |
 |---|---|
 | **Show all** | Show every row, including unchanged rows. |
-| **Show diff only** | Keep changed/added/removed rows and the ancestors needed to reach them. |
+| **Show diff only** | Keep changed/added/removed rows, five context rows above and below each change, and split lines for the hidden runs. |
 | **Prev diff** / **Next diff** | Move to the previous/next changed row, wrapping at the ends. |
 | `F7` / `Shift+F7` | Same as Next/Prev while focus is in the diff list. |
 | **Swap sides** | Mirror the displayed sides; display only, no re-comparison. |
-| **Semantic** / **Strict** | Toggle renamed-container pairing for this panel only. The label flips immediately and a spinner/status shows while the new view is prepared. |
-| **Summary** | `N changed (M renamed) · N added · N removed`, in the toolbar status slot. |
+| **Semantic** / **Strict** | Two-button view group for renamed-container pairing. The group flips immediately and a spinner/status shows while the new view is prepared. |
+| **Context** | Active by default; keeps five unchanged rows above and below each change in Show diff only. Only the toggle changes. |
+| Split line | Expand or collapse the unchanged rows hidden under an `N unchanged lines` rule. |
 | Row twisty / `Left` / `Right` | Collapse or expand a subtree. |
 | `Space` | Select the focused row. |
 | `Enter` | Reveal the selected row in its source file. The revealed side follows the displayed pane after a swap. |

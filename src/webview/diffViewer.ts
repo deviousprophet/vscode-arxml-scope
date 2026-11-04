@@ -8,7 +8,7 @@
  */
 import './styles/tokens.css';
 import './styles/base.css';
-import type { DiffCell, DiffDocument, DiffMatch, DiffRow } from '../core/diff/diffModel';
+import type { DiffCell, DiffDocument, DiffRow } from '../core/diff/diffModel';
 import {
 	diffVisibility,
 	flattenDiffDocument,
@@ -123,6 +123,10 @@ let diffDocument: DiffDocument = {
 };
 let rows: DiffRow[] = [];
 let semanticMatching = true;
+/** Unchanged rows kept above and below each change in Show diff only. */
+const CONTEXT_LINES = 5;
+let contextActive = true;
+let expandedGaps = new Set<string>();
 let rowByKey = new Map<string, DiffRow>();
 let rowIndexByKey = new Map<string, number>();
 let collapsed = new Set<string>();
@@ -141,11 +145,8 @@ let heightFn: (index: number) => number = function () { return heights.row; };
 let diffContent = 0;
 let headerLineCount = 0;
 let views: DiffView | undefined;
-function summaryOf(next: any): any {
-	return next && next.summary ? next.summary : { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
-}
 function hasChanges() {
-	const summary = summaryOf(diffDocument);
+	const summary = diffDocument.summary ?? { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
 	return summary.changed + summary.added + summary.removed > 0;
 }
 function headerOf(header: any): any {
@@ -165,7 +166,7 @@ function indexRows() {
 	}
 }
 function refreshVisibility() {
-	visibility = diffVisibility(rows, showChangesOnly);
+	visibility = diffVisibility(rows, showChangesOnly, contextActive ? CONTEXT_LINES : 0);
 }
 function buildHeightFn() {
 	const base = heights.row;
@@ -178,7 +179,8 @@ function buildHeightFn() {
 function rebuildDisplay() {
 	displayRows = flattenDiffDocument(rows, {
 		collapsed: collapsed,
-		visible: visibility
+		visible: visibility,
+		expandedGaps: expandedGaps
 	});
 	displayIndexByKey = new Map();
 	navigationVisible = new Array(rows.length).fill(false);
@@ -239,10 +241,8 @@ function setDocument(next: any): void {
 	}
 	diffDocument = next;
 	rows = next.rows;
+	expandedGaps = new Set();
 	rowsRevision++;
-	if (toolbar) {
-		toolbar.setSummary(summaryOf(next));
-	}
 	subtreeCache = undefined;
 	indexRows();
 	const present = new Set(rows.map(function (row) { return row.key; }));
@@ -402,13 +402,8 @@ function metaPartTexts(cell: DiffCell | undefined, cls: MetaPart['cls']): string
  * Added and removed rows return nothing: their full-cell tint already says the
  * whole line is new or gone, and an unchanged row renders as before.
  */
-function matchTooltip(match: DiffMatch): string {
-	const reasons = match.reasons;
-	const used = match.substitutions && match.substitutions.length > 0 ? ` — ${match.substitutions.join(', ')}` : '';
-	return `Renamed (score ${match.score.toFixed(2)}) — children ${reasons.children.toFixed(2)}, name ${reasons.name.toFixed(2)}, position ${reasons.position.toFixed(2)}, substitution ${reasons.substitution.toFixed(2)}${used}`;
-}
-
-function wordDiffForRow(row: DiffRow): DocumentWordDiff | undefined {	if (displayStatus(row) !== 'changed') {
+function wordDiffForRow(row: DiffRow): DocumentWordDiff | undefined {
+	if (displayStatus(row) !== 'changed') {
 		return undefined;
 	}
 	const left = displayLeft(row);
@@ -441,18 +436,49 @@ function renderRow(index: number, pane: string): any {
 	if (!flat) {
 		return element;
 	}
-	const row = rows[flat.rowIndex];
 	const side = pane === 'left' ? 'left' : 'right';
+	const cell = document.createElement('div');
+	cell.className = 'diff-cell';
+	cell.dataset.side = side;
+	element.dataset.side = side;
+	const gapInfo = flat.gap;
+	if (gapInfo) {
+		element.classList.add('diff-gap-row');
+		element.dataset.gapKey = gapInfo.key;
+		const gap = document.createElement('div');
+		gap.className = 'diff-gap';
+		if (side === 'left') {
+			const button = document.createElement('button');
+			button.className = 'diff-gap-toggle';
+			button.type = 'button';
+			button.dataset.gapKey = gapInfo.key;
+			button.setAttribute('aria-expanded', gapInfo.expanded ? 'true' : 'false');
+			const label = `${gapInfo.count} unchanged line${gapInfo.count === 1 ? '' : 's'}`;
+			button.setAttribute('aria-label', `${gapInfo.expanded ? 'Hide' : 'Show'} ${label}`);
+			const chevron = document.createElement('span');
+			chevron.className = 'diff-gap-chevron';
+			chevron.setAttribute('aria-hidden', 'true');
+			chevron.textContent = gapInfo.expanded ? '▾' : '▸';
+			button.appendChild(chevron);
+			button.appendChild(document.createTextNode(label));
+			gap.appendChild(button);
+		} else {
+			element.setAttribute('aria-hidden', 'true');
+		}
+		const line = document.createElement('span');
+		line.className = 'diff-gap-line';
+		gap.appendChild(line);
+		cell.appendChild(gap);
+		element.appendChild(cell);
+		return element;
+	}
+	const row = rows[flat.rowIndex];
 	// The display list is in comparison-side order. A swap changes which kind
 	// belongs to the displayed pane, including braces/comments, so read the
 	// displayed side rather than always the comparison left.
 	const kind = side === 'left' ? (swapped ? flat.right : flat.left) : swapped ? flat.left : flat.right;
 	const leftKind = swapped ? flat.right : flat.left;
 	const rightKind = swapped ? flat.left : flat.right;
-	const cell = document.createElement('div');
-	cell.className = 'diff-cell';
-	cell.dataset.side = side;
-	element.dataset.side = side;
 	const nodeRow = leftKind === 'node' || rightKind === 'node';
 	const structural = !nodeRow;
 	if (structural) {
@@ -465,9 +491,6 @@ function renderRow(index: number, pane: string): any {
 		element.dataset.key = row.key;
 		if (row.key === selectedKey) {
 			element.dataset.selected = 'true';
-		}
-		if (row.changes.some((change) => change.renameImplied)) {
-			element.dataset.renameImplied = 'true';
 		}
 		if (searchQuery.trim() !== '' && row.key === currentMatchKey()) {
 			element.dataset.searchCurrent = 'true';
@@ -513,13 +536,6 @@ function renderRow(index: number, pane: string): any {
 			);
 			element.title = cellRow.definitionRef;
 			cell.appendChild(node);
-			if (row.match?.kind === 'semantic') {
-				const badge = document.createElement('span');
-				badge.className = 'diff-match-badge';
-				badge.textContent = 'renamed';
-				badge.title = matchTooltip(row.match);
-				cell.appendChild(badge);
-			}
 		}
 	} else if (kind === 'comment') {
 		cell.appendChild(
@@ -532,7 +548,7 @@ function renderRow(index: number, pane: string): any {
 				options
 			)
 		);
-	} else {
+	} else if (kind === 'brace-open' || kind === 'brace-close') {
 		cell.appendChild(buildDocumentBraceRow(kind, flat.level, row.key, options));
 	}
 	element.appendChild(cell);
@@ -635,7 +651,10 @@ function captureAnchor() {
 	const top = views.left.getRowsScrollTop();
 	const state = anchorState(top);
 	const range = calcVisibleRange(state);
-	const index = range[0];
+	let index = range[0];
+	while (index < displayRows.length && displayRows[index].gap) {
+		index++;
+	}
 	const flat = displayRows[index];
 	if (!flat) {
 		return null;
@@ -691,7 +710,7 @@ function updateViewButtons() {
 		toolbar.setViewMode(showChangesOnly);
 		toolbar.setSwapped(swapped);
 		toolbar.setMatchMode(semanticMatching);
-		toolbar.setSummary(summaryOf(diffDocument));
+		toolbar.setContext(contextActive);
 	}
 }
 function updateEmptyState() {
@@ -899,6 +918,15 @@ function setView(changesOnly: boolean): void {
 	updateViewButtons();
 	applyView();
 }
+function setContext(active: boolean): void {
+	if (contextActive === active) {
+		toolbar.setContext(active);
+		return;
+	}
+	contextActive = active;
+	toolbar.setContext(active);
+	applyView();
+}
 function setSwapped(next: boolean): void {
 	swapped = next === true;
 	if (views) {
@@ -997,6 +1025,30 @@ function toggleCollapsed(key: string): void {
 	renderWindow(true);
 	updateSelection();
 	refocus(focused);
+}
+function toggleGap(key: string): void {
+	const scrollTop = views ? views.left.getScrollTop() : 0;
+	const next = new Set(expandedGaps);
+	if (next.has(key)) {
+		next.delete(key);
+	} else {
+		next.add(key);
+	}
+	expandedGaps = next;
+	rebuildDisplay();
+	applyModels();
+	if (views) {
+		views.left.setScrollTop(scrollTop);
+		views.right.setScrollTop(views.left.getScrollTop());
+	}
+	renderWindow(true);
+	updateSelection();
+	const button = Array.from(document.querySelectorAll('#diff-pane-left .diff-gap-toggle')).find(
+		(candidate) => (candidate as HTMLElement).dataset.gapKey === key
+	) as HTMLElement | undefined;
+	if (button) {
+		button.focus({ preventScroll: true });
+	}
 }
 function nextNodeIndex(from: number, direction: number): number {
 	let at = from + direction;
@@ -1122,6 +1174,10 @@ function onPaneRowClick(index: number, event: any): void {
 	if (!flat) {
 		return;
 	}
+	if (flat.gap) {
+		toggleGap(flat.gap.key);
+		return;
+	}
 	const row = rows[flat.rowIndex];
 	if (!row) {
 		return;
@@ -1229,6 +1285,9 @@ toolbar = new DiffToolbar({
 		// matchModeState message clears the pending state.
 		toolbar.setMatchMode(semantic, true);
 		postToHost({ type: 'matchMode', semantic });
+	},
+	onContext: function (active: boolean) {
+		setContext(active);
 	}
 });
 toolbar.mount();
@@ -1296,6 +1355,8 @@ function resetDiffState(): void {
 	searchFirstJumpDone = false;
 	showChangesOnly = false;
 	swapped = false;
+	contextActive = true;
+	expandedGaps = new Set();
 	resetVsCodeApi();
 	setHighlightQuery('');
 }

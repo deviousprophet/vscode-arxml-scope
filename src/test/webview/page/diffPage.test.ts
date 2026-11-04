@@ -146,6 +146,58 @@ function wordDocument(rows: DiffRow[]): DiffDocument {
 	};
 }
 
+/** A 14-parameter container with one changed row, enough for a 5-line context window. */
+function contextRows(): DiffRow[] {
+	const moduleCell = (): NonNullable<DiffRow['left']> =>
+		wordCell({ kind: 'module', label: 'M1', definitionRef: '/P/M1', shownValue: undefined, value: undefined, valueKind: undefined });
+	const rows: DiffRow[] = [
+		wordRow({
+			key: 'm',
+			kind: 'module',
+			level: 1,
+			hasChildren: true,
+			subtreeSize: 15,
+			status: 'unchanged',
+			left: moduleCell(),
+			right: moduleCell(),
+		}),
+		wordRow({
+			key: 'c',
+			parentKey: 'm',
+			kind: 'container',
+			level: 2,
+			hasChildren: true,
+			subtreeSize: 14,
+			status: 'unchanged',
+			left: containerCell('C1'),
+			right: containerCell('C1'),
+		}),
+	];
+	for (let index = 0; index < 14; index++) {
+		const name = `P${String(index).padStart(2, '0')}`;
+		const changed = index === 6;
+		const value = changed ? '1' : '0';
+		const cell = (): NonNullable<DiffRow['left']> =>
+			wordCell({ label: name, definitionRef: `/P/${name}`, shownValue: value, value, valueKind: 'numeric' });
+		rows.push(
+			wordRow({
+				key: `p${index}`,
+				parentKey: 'c',
+				level: 3,
+				posinset: index + 1,
+				setsize: 14,
+				kind: 'parameter',
+				status: changed ? 'changed' : 'unchanged',
+				left: cell(),
+				right: cell(),
+				changes: changed ? [{ field: 'value', left: '0', right: '1' }] : [],
+				haystack: name.toLowerCase(),
+			})
+		);
+	}
+	return rows;
+}
+
 function wordTexts(row: Element | null, side: 'left' | 'right'): string[] {
 	if (!row) {
 		return [];
@@ -588,7 +640,7 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('a semantic pair shows the renamed badge and summary and the toolbar posts the strict toggle', () => {
+	test('a semantic pair renders like a changed row and the mode group posts the target', () => {
 		const row = wordRow({
 			key: 'renamed',
 			kind: 'container',
@@ -603,48 +655,96 @@ suite('semantic diff page', () => {
 			},
 		});
 		const document = wordDocument([row]);
-		document.summary.renamed = 1;
 		const { dom } = mount();
 		try {
 			dom.post({ type: 'document', semantic: true, document });
-			const badge = dom.document.querySelector('#diff-pane-left .diff-match-badge');
-			assert.ok(badge);
-			assert.strictEqual(badge!.textContent, 'renamed');
-			assert.ok((badge as HTMLElement).title.includes('score 0.83'));
-			assert.ok(dom.document.getElementById('diff-summary')!.textContent!.includes('1 changed (1 renamed)'));
-			const toggle = dom.document.getElementById('diff-match-mode') as HTMLElement;
-			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
-			toggle.click();
-			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false', 'the click flips the label immediately');
-			assert.strictEqual(toggle.textContent!.trim(), 'Strict');
-			assert.strictEqual(toggle.getAttribute('aria-busy'), 'true', 'the button is pending');
-			assert.strictEqual(
-				dom.document.getElementById('diff-match-status')!.textContent,
-				'Switching to Strict…',
-				'the status names the pending target'
-			);
+			const rendered = dom.document.querySelector('#diff-pane-left .diff-row[data-key="renamed"]');
+			assert.ok(rendered);
+			assert.strictEqual(rendered!.getAttribute('data-status'), 'changed');
+			assert.strictEqual(rendered!.hasAttribute('data-rename-implied'), false);
+			assert.strictEqual(dom.document.querySelector('.diff-match-badge'), null);
+			assert.strictEqual(dom.document.getElementById('diff-summary'), null);
+
+			const semantic = dom.document.getElementById('diff-mode-semantic') as HTMLElement;
+			const strict = dom.document.getElementById('diff-mode-strict') as HTMLElement;
+			assert.strictEqual(semantic.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(strict.getAttribute('aria-pressed'), 'false');
+
+			strict.click();
+			assert.strictEqual(semantic.getAttribute('aria-pressed'), 'false', 'the view group flips immediately');
+			assert.strictEqual(strict.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(strict.getAttribute('aria-busy'), 'true');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, 'Switching to Strict…');
 			assert.strictEqual(messagesOf(dom.api, 'matchMode')[0].semantic, false);
 			dom.post({ type: 'matchModeState', semantic: false });
-			assert.strictEqual(toggle.getAttribute('aria-busy'), 'false', 'the ack clears the pending state');
-			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(strict.getAttribute('aria-busy'), 'false');
 			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
-			assert.ok(dom.document.getElementById('diff-summary')!.textContent!.includes('1 changed (1 renamed)'));
 
-			toggle.click();
-			assert.strictEqual(toggle.getAttribute('aria-busy'), 'true');
+			semantic.click();
+			assert.strictEqual(semantic.getAttribute('aria-busy'), 'true');
 			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, 'Switching to Semantic…');
 			dom.post({ type: 'document', semantic: true, document });
-			assert.strictEqual(toggle.getAttribute('aria-busy'), 'false', 'the document also clears pending');
-			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
-			assert.strictEqual(toggle.textContent!.trim(), 'Semantic');
+			assert.strictEqual(semantic.getAttribute('aria-busy'), 'false');
+			assert.strictEqual(semantic.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(strict.getAttribute('aria-pressed'), 'false');
 			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
 
-			toggle.click();
-			assert.strictEqual(toggle.getAttribute('aria-busy'), 'true');
+			strict.click();
+			assert.strictEqual(strict.getAttribute('aria-busy'), 'true');
 			dom.post({ type: 'error', message: 'switch failed' });
-			assert.strictEqual(toggle.getAttribute('aria-busy'), 'false', 'an error also clears pending');
+			assert.strictEqual(strict.getAttribute('aria-busy'), 'false', 'an error also clears pending');
 			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
 			assert.ok(dom.document.getElementById('diff-notice')!.textContent!.includes('switch failed'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Context defaults to five lines and widens the hidden runs when toggled off', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', semantic: true, document: wordDocument(contextRows()) });
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			const context = dom.document.getElementById('diff-context') as HTMLElement;
+			assert.strictEqual(context.hasAttribute('disabled'), false);
+			assert.strictEqual(context.getAttribute('aria-pressed'), 'true');
+			const firstGap = dom.document.querySelector('#diff-pane-left .diff-gap-toggle');
+			assert.ok(firstGap);
+			assert.ok(firstGap!.textContent!.includes('1 unchanged line'), firstGap!.textContent!);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p0"]'), null);
+
+			context.click();
+			assert.strictEqual(context.getAttribute('aria-pressed'), 'false');
+			const widerGap = dom.document.querySelector('#diff-pane-left .diff-gap-toggle');
+			assert.ok(widerGap);
+			assert.ok(widerGap!.textContent!.includes('6 unchanged lines'), widerGap!.textContent!);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a split line expands and collapses the hidden unchanged rows', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', semantic: true, document: wordDocument(contextRows()) });
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			(dom.document.getElementById('diff-context') as HTMLElement).click();
+			const gap = dom.document.querySelector('#diff-pane-left .diff-gap-toggle') as HTMLElement;
+			assert.ok(gap);
+			assert.strictEqual(gap.getAttribute('aria-expanded'), 'false');
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p0"]'), null);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-right .diff-gap-toggle'), null);
+			const line = dom.document.querySelector('#diff-pane-right .diff-gap-line') as HTMLElement;
+			assert.ok(line);
+			line.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			const expanded = dom.document.querySelector('#diff-pane-left .diff-gap-toggle') as HTMLElement;
+			assert.strictEqual(expanded.getAttribute('aria-expanded'), 'true');
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p0"]'));
+
+			expanded.click();
+			const collapsed = dom.document.querySelector('#diff-pane-left .diff-gap-toggle') as HTMLElement;
+			assert.strictEqual(collapsed.getAttribute('aria-expanded'), 'false');
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p0"]'), null);
 		} finally {
 			dom.restore();
 		}
@@ -732,6 +832,20 @@ suite('semantic diff page', () => {
 		const tree = webviewCss('components', 'documentTree', 'documentTree.css');
 		assert.ok(tree.includes('.node[data-kind="module"][data-selected="true"] > .row'));
 		assert.ok(tree.includes('.node[aria-expanded="false"] > .row::after'));
+	});
+
+	test('added rows use a leading edge and split lines own their styles', () => {
+		const diff = webviewCss('components', 'diffView', 'diffView.css');
+		assert.ok(diff.includes('.diff-row[data-status="added"] > .diff-cell[data-side="right"]'));
+		assert.ok(diff.includes('inset 3px 0 0 var(--diff-added-edge)'));
+		assert.ok(!diff.includes('inset -3px 0 0 var(--diff-added-edge)'), 'the trailing added edge is gone');
+		assert.ok(diff.includes('.diff-gap-toggle'));
+		assert.ok(diff.includes('.diff-gap-line'));
+		assert.ok(!diff.includes('.diff-match-badge'), 'the renamed badge is gone');
+		assert.ok(!diff.includes('data-rename-implied'), 'the dashed rename marker is gone');
+		const toolbar = webviewCss('components', 'toolbar', 'toolbar.css');
+		assert.ok(toolbar.includes('.diff-tool'));
+		assert.ok(toolbar.includes('flex-direction: column'));
 	});
 
 	test('selecting a container highlights the same subtree and annotation rows in both panes', () => {

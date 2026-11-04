@@ -44,7 +44,9 @@ semantic diff. The custom editor is opt-in: a plain open still uses the text edi
   values, multiplicity violations and missing definitions or required children, with a severity per
   rule. Large result sets are capped with a per-file hidden-count summary.
 - The semantic diff pairs renamed containers as one changed row when `arxmlScope.diff.semanticMatching`
-  is on; the toolbar **Semantic** / **Strict** toggle changes one panel without touching the setting.
+  is on; the toolbar **Semantic** / **Strict** view group changes one panel without touching the setting.
+  A **Context** toggle keeps five unchanged lines above and below each change, and expandable split
+  lines reveal the hidden runs; the page has no diff count summary.
 - Edits are limited to parameter `<VALUE>` text, container `<SHORT-NAME>` / `<DEFINITION-REF>` text,
   and container/parameter Duplicate or Delete; references are not editable.
 - A value backed by CDATA is shown but cannot be edited.

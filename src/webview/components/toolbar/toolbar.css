@@ -100,14 +100,35 @@
 .icon-tool .lbl {
 	white-space: nowrap;
 }
-.diff-summary {
-	flex: 0 1 auto;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
+.diff-tool {
+	flex-direction: column;
+	height: 46px;
+	min-width: 52px;
+	padding: 3px 6px;
+	gap: 1px;
+}
+.diff-tool svg {
+	width: 18px;
+	height: 18px;
+	flex: none;
+}
+.diff-tool .lbl {
+	font-size: 10px;
+	line-height: 11px;
+	text-align: center;
 	white-space: nowrap;
-	color: var(--tok-dim);
-	font-variant-numeric: tabular-nums;
+}
+.diff-tool:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+@media (max-width: 720px) {
+	.diff-tool .lbl {
+		display: none;
+	}
+	.diff-tool {
+		min-width: 36px;
+	}
 }
 @media (max-width: 720px) {
 	.toolbar {

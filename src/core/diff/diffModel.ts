@@ -1028,7 +1028,11 @@ export function buildDiffDocument(
  * changed/added/removed rows and marks their ancestors. Search is a jump control,
  * so it never removes a row from this list.
  */
-export function diffVisibility(rows: readonly DiffRow[], changesOnly: boolean): boolean[] {
+export function diffVisibility(
+	rows: readonly DiffRow[],
+	changesOnly: boolean,
+	contextLines = 0
+): boolean[] {
 	const count = rows.length;
 	const visible = new Array<boolean>(count).fill(false);
 	if (!changesOnly) {
@@ -1046,6 +1050,14 @@ export function diffVisibility(rows: readonly DiffRow[], changesOnly: boolean): 
 			parentIndex[i] = byKey.get(parentKey) ?? -1;
 		}
 	}
+	const markVisibleWithAncestors = (index: number): void => {
+		visible[index] = true;
+		let parent = parentIndex[index];
+		while (parent >= 0 && !visible[parent]) {
+			visible[parent] = true;
+			parent = parentIndex[parent];
+		}
+	};
 
 	const below = new Array<boolean>(count).fill(false);
 	for (let i = count - 1; i >= 0; i--) {
@@ -1054,6 +1066,19 @@ export function diffVisibility(rows: readonly DiffRow[], changesOnly: boolean): 
 		visible[i] = show;
 		if (show && parentIndex[i] >= 0) {
 			below[parentIndex[i]] = true;
+		}
+	}
+	const context = Math.max(0, Math.floor(contextLines));
+	if (context > 0) {
+		for (let i = 0; i < count; i++) {
+			if (rows[i].status === 'unchanged') {
+				continue;
+			}
+			const start = Math.max(0, i - context);
+			const end = Math.min(count, i + context + 1);
+			for (let at = start; at < end; at++) {
+				markVisibleWithAncestors(at);
+			}
 		}
 	}
 	return visible;
@@ -1066,15 +1091,28 @@ export interface FlatDiffRow {
 	expanded: boolean;
 }
 
+/** One hidden run of unchanged rows, rendered as an expandable split line. */
+export interface DiffGap {
+	/** Stable within one document; based on the first hidden row's key. */
+	key: string;
+	from: number;
+	/** Exclusive. */
+	to: number;
+	count: number;
+	expanded: boolean;
+}
+
 /** One display line shared by both panes; a side without that line is blank. */
 export interface DiffDisplayRow {
 	rowIndex: number;
 	level: number;
-	left: 'node' | 'brace-open' | 'brace-close' | 'comment' | 'blank';
-	right: 'node' | 'brace-open' | 'brace-close' | 'comment' | 'blank';
+	left: 'node' | 'brace-open' | 'brace-close' | 'comment' | 'blank' | 'gap';
+	right: 'node' | 'brace-open' | 'brace-close' | 'comment' | 'blank' | 'gap';
 	commentLeft?: string;
 	commentRight?: string;
 	expanded: boolean;
+	/** Present only on a split-line row. */
+	gap?: DiffGap;
 	guidesLeft: { level: number; id: string }[];
 	guidesRight: { level: number; id: string }[];
 }
@@ -1083,19 +1121,63 @@ export interface DiffDisplayRow {
  * The structural display list: annotations, node rows and brace rows for both
  * sides, aligned into one list so the panes share row positions and the
  * virtual window. A side that lacks a structural row gets a blank cell.
+ *
+ * When a visibility map hides a run, the run becomes one expandable gap row.
+ * An expanded gap keeps its header and walks the hidden rows, so the same row
+ * can collapse them again.
  */
 export function flattenDiffDocument(
 	rows: readonly DiffRow[],
-	options: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[] } = {}
+	options: {
+		collapsed?: ReadonlySet<string>;
+		visible?: readonly boolean[];
+		expandedGaps?: ReadonlySet<string>;
+	} = {}
 ): DiffDisplayRow[] {
 	const count = rows.length;
 	const collapsed = options.collapsed;
 	const visible = options.visible;
-	let visiblePrefix: Int32Array | undefined;
+	const expandedGaps = options.expandedGaps;
+	let effectiveVisible = visible;
+	let gapByStart: Map<number, DiffGap> | undefined;
 	if (visible) {
+		const gaps: DiffGap[] = [];
+		for (let i = 0; i < count; ) {
+			if (visible[i]) {
+				i++;
+				continue;
+			}
+			const from = i;
+			while (i < count && !visible[i]) {
+				i++;
+			}
+			const key = `gap:${rows[from].key}`;
+			gaps.push({
+				key,
+				from,
+				to: i,
+				count: i - from,
+				expanded: expandedGaps?.has(key) === true,
+			});
+		}
+		if (gaps.length > 0) {
+			gapByStart = new Map(gaps.map((gap) => [gap.from, gap]));
+			const next = visible.slice();
+			for (const gap of gaps) {
+				if (gap.expanded) {
+					for (let at = gap.from; at < gap.to; at++) {
+						next[at] = true;
+					}
+				}
+			}
+			effectiveVisible = next;
+		}
+	}
+	let visiblePrefix: Int32Array | undefined;
+	if (effectiveVisible) {
 		visiblePrefix = new Int32Array(count + 1);
 		for (let i = 0; i < count; i++) {
-			visiblePrefix[i + 1] = visiblePrefix[i] + (visible[i] ? 1 : 0);
+			visiblePrefix[i + 1] = visiblePrefix[i] + (effectiveVisible[i] ? 1 : 0);
 		}
 	}
 	const subtreeEnd = (index: number): number => Math.min(count, index + Math.max(0, rows[index].subtreeSize) + 1);
@@ -1119,7 +1201,24 @@ export function flattenDiffDocument(
 	): number => {
 		let index = start;
 		while (index < end) {
-			if (visible && !visible[index]) {
+			const gap = gapByStart?.get(index);
+			if (gap) {
+				out.push({
+					rowIndex: index,
+					level: rows[index].level,
+					left: 'gap',
+					right: 'gap',
+					expanded: gap.expanded,
+					gap,
+					guidesLeft: leftOpen.slice(),
+					guidesRight: rightOpen.slice()
+				});
+				if (!gap.expanded) {
+					index = Math.min(end, gap.to);
+					continue;
+				}
+			}
+			if (effectiveVisible && !effectiveVisible[index]) {
 				index = Math.min(end, subtreeEnd(index));
 				continue;
 			}
