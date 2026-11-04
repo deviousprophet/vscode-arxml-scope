@@ -1,8 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Index of this repository's coding guidelines and where the index/validation rules live."}
-{"file":".trellis/spec/frontend/directory-structure.md","reason":"Layering rule: core is pure and must not import vscode; validation and index modules belong in core."}
-{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Forbidden patterns and the resolution rule that this task amends (ambiguous paths, memory-only index, no side files)."}
-{"file":".trellis/spec/frontend/testing.md","reason":"Fixture, assertion and mutation-check conventions for the new core and extension tests."}
-{"file":".trellis/spec/frontend/type-safety.md","reason":"Boundary and numeric-value typing rules for the new lookup/result types and settings input."}
-{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse the existing lookup/validation helpers instead of adding parallel logic."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The change touches core index, core validation, host services and the manifest; use the cross-layer checklist."}
-{"file":".trellis/tasks/11-04-validation-false-positives/research/validation-false-positives.md","reason":"Measured false-positive breakdown and the reference-project numbers the implementation must reproduce."}
