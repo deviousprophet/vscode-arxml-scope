@@ -356,9 +356,11 @@ function documentRowForCell(cell: any, row: any): any {
 	};
 }
 function stripDocumentNode(node: any): any {
-	for (const name of ['role', 'aria-level', 'aria-posinset', 'aria-setsize', 'aria-selected', 'aria-expanded']) {
+	for (const name of ['role', 'aria-level', 'aria-posinset', 'aria-setsize', 'aria-selected']) {
 		node.removeAttribute(name);
 	}
+	// Keep aria-expanded: the shared document CSS uses it for the live chevron
+	// and the collapsed { ... } marker in both panes.
 	node.tabIndex = -1;
 	return node;
 }

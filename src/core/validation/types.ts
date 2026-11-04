@@ -18,6 +18,13 @@ export type DiagnosticRule =
 
 export type DiagnosticSeverity = 'error' | 'warning' | 'information' | 'off';
 export type DiagnosticLevel = Exclude<DiagnosticSeverity, 'off'>;
+export type CrossFileMode = 'auto' | 'always' | 'never';
+
+export interface DiagnosticRelated {
+	file: string;
+	range: Range;
+	message: string;
+}
 
 export interface EcucDiagnostic {
 	rule: DiagnosticRule;
@@ -25,6 +32,7 @@ export interface EcucDiagnostic {
 	message: string;
 	file: string;
 	range: Range;
+	related?: DiagnosticRelated[];
 }
 
 export type SeveritySettings = Record<DiagnosticRule, DiagnosticSeverity>;

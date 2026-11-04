@@ -165,11 +165,8 @@ body[data-page="diff"] .nav-btn:disabled {
 .diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
 	box-shadow: inset 3px 0 0 var(--diff-removed-edge);
 }
-.diff-row[data-selected="true"] > .diff-cell {
-	background-color: var(--sel-bg);
-	outline: 1px solid var(--rail);
-	outline-offset: -1px;
-}
+/* Selection is painted by the shared document-tree rule on the inner .node,
+ * so the diff and the document page use one container/parameter treatment. */
 /* Changed-word runs on a changed row. The pane's displayed side decides the
  * colour, so a swap mirrors removed/inserted without touching the model. */
 .diff-row .word-changed[data-word-side="left"] {
@@ -223,11 +220,6 @@ body[data-page="diff"] .nav-btn:disabled {
 		outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
 		outline-offset: -1px;
 	}
-	.diff-row[data-selected="true"] > .diff-cell {
-		background: transparent;
-		outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
-		outline-offset: -1px;
-	}
 	.diff-row:hover > .diff-cell {
 		background: transparent;
 		outline: 1px dashed var(--vscode-contrastBorder, var(--vscode-focusBorder));
@@ -243,11 +235,6 @@ body.vscode-high-contrast .diff-row[data-status="added"] > .diff-cell[data-side=
 body.vscode-high-contrast .diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
 	background: transparent;
 	outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
-	outline-offset: -1px;
-}
-body.vscode-high-contrast .diff-row[data-selected="true"] > .diff-cell {
-	background: transparent;
-	outline: 1px solid var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, var(--vscode-focusBorder)));
 	outline-offset: -1px;
 }
 body.vscode-high-contrast .diff-row:hover > .diff-cell {

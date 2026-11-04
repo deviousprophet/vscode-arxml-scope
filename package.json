@@ -54,6 +54,11 @@
         "command": "vscode-arxml-scope.rebuildIndex",
         "title": "Rebuild Workspace Index",
         "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.cycleCrossFileRules",
+        "title": "Cycle Cross-File Checks",
+        "category": "ARXML Scope"
       }
     ],
     "customEditors": [
@@ -174,6 +179,14 @@
           "minimum": 1,
           "description": "Largest .arxml file, in megabytes, that the workspace index reads. Larger files are skipped and reported in the status bar tooltip."
         },
+        "arxmlScope.index.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Workspace-relative globs that are never indexed, validated or used by navigation. Example: **/_fwd/**, **/_out/**, **/_gen/**."
+        },
         "arxmlScope.validation.enabled": {
           "type": "boolean",
           "default": true,
@@ -263,6 +276,24 @@
             }
           },
           "description": "Per-rule severity for ECUC validation. Set a rule to \"off\" to hide it."
+        },
+        "arxmlScope.validation.maxDiagnosticsPerFile": {
+          "type": "number",
+          "default": 500,
+          "minimum": 0,
+          "description": "Maximum diagnostics published per file. Zero means unlimited; a summary diagnostic reports hidden problems."
+        },
+        "arxmlScope.validation.maxDiagnostics": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 0,
+          "description": "Maximum diagnostics published for the workspace. Zero means unlimited; a summary diagnostic reports hidden problems."
+        },
+        "arxmlScope.validation.crossFileRules": {
+          "type": "string",
+          "enum": ["auto", "always", "never"],
+          "default": "auto",
+          "description": "When cross-file rules run. auto runs them only when the index has at least one ECUC definition; always reproduces the unconditional behaviour; never disables broken references, DEST mismatches and cross-file duplicate checks."
         }
       }
     }

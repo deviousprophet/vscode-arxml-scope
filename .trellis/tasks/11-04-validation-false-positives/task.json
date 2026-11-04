@@ -3,7 +3,7 @@
   "name": "validation-false-positives",
   "title": "Fix ECUC validation false positives on duplicate and generated ARXML workspaces",
   "description": "Make the seven v0.6 ECUC validation rules correct on real projects that contain generated/aggregate ARXML copies and non-ECUC reference targets, cutting false positives by ~95% without losing true positives.",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": "validation",
   "package": null,

@@ -45,8 +45,9 @@ export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
  */
 export interface DefinitionSource {
 	definition(definitionRef: string): DefinitionInfo | undefined;
+	definitionCandidateCount?(definitionRef: string): number;
 	subscribe(listener: () => void): { dispose(): void };
-	resolveTarget?(targetPath: string, targetDest?: string): ElementResolution;
+	resolveTarget?(targetPath: string, targetDest?: string, sourceFile?: string): ElementResolution;
 	referencesFor?(target: IndexElement): IndexReference[];
 }
 
@@ -189,11 +190,14 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				...(this.definitionSource === undefined
 					? {}
 					: { definitions: (ref: string) => this.definitionSource!.definition(ref) }),
+				...(this.definitionSource?.definitionCandidateCount === undefined
+					? {}
+					: { ambiguousDefinitions: (ref: string) => this.definitionSource!.definitionCandidateCount!(ref) }),
 				...(this.definitionSource?.resolveTarget === undefined
 					? {}
 					: {
 							referenceResolver: (targetPath: string, targetDest?: string) => {
-								const resolution = this.definitionSource!.resolveTarget!(targetPath, targetDest);
+								const resolution = this.definitionSource!.resolveTarget!(targetPath, targetDest, key);
 								return resolution.ok
 									? { followable: true }
 									: { followable: false, reason: refusalReason(resolution, targetPath) };
@@ -368,10 +372,29 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 		const reference = entry.node as ReferenceNode;
 		const raw = reference.targetRawPath ?? '';
-		const workspace = this.definitionSource?.resolveTarget?.(raw, reference.targetDest);
+		const workspace = this.definitionSource?.resolveTarget?.(raw, reference.targetDest, document.uri.toString());
 		if (workspace?.ok) {
-			if (workspace.element.file === document.uri.toString()) {
-				const targetId = nodeIdForRange(buildNodeIndex(model), workspace.element.range);
+			let target = workspace.element;
+			if (workspace.copies.length > 1) {
+				const items: Array<vscode.QuickPickItem & { copy: IndexElement }> = [];
+				for (const copy of workspace.copies) {
+					const uri = vscode.Uri.parse(copy.file);
+					const copyDocument = await vscode.workspace.openTextDocument(uri);
+					items.push({
+						label: `${path.basename(uri.fsPath)}:${copyDocument.positionAt(copy.range.start).line + 1}`,
+						copy,
+					});
+				}
+				const picked = await vscode.window.showQuickPick(items, {
+					placeHolder: `Copies of "${raw}"`,
+				});
+				if (picked === undefined) {
+					return;
+				}
+				target = picked.copy;
+			}
+			if (target.file === document.uri.toString()) {
+				const targetId = nodeIdForRange(buildNodeIndex(model), target.range);
 				if (targetId) {
 					this.selections.set(document.uri.toString(), targetId);
 					panel.reveal();
@@ -379,7 +402,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				}
 			} else {
-				await this.openElement(workspace.element, panel);
+				await this.openElement(target, panel);
 				return;
 			}
 		}

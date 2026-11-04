@@ -25,6 +25,7 @@ import {
 } from '../../../webview/diffViewer';
 import { diffShell } from '../../../host/webviewShell';
 import { fixtureText } from '../../core/modelTestUtils';
+import { webviewCss } from '../cssTestUtils';
 import { expectReady, installDom, loadModule, messagesOf, settleSearch, treeRows } from '../pageTestUtils';
 
 function side(name: string) {
@@ -585,6 +586,90 @@ suite('semantic diff page', () => {
 		} finally {
 			dom.restore();
 		}
+	});
+
+	test('a container carries the live expanded state in both panes', () => {
+		const parent = wordRow({
+			key: 'parent',
+			kind: 'container',
+			hasChildren: true,
+			subtreeSize: 1,
+			left: containerCell('Parent'),
+			right: containerCell('Parent'),
+		});
+		const child = wordRow({
+			key: 'child',
+			parentKey: 'parent',
+			level: 2,
+			subtreeSize: 0,
+			left: wordCell({ label: 'Child' }),
+			right: wordCell({ label: 'Child' }),
+		});
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', document: wordDocument([parent, child]) });
+			for (const pane of ['left', 'right']) {
+				assert.strictEqual(
+					dom.document.querySelector(`#diff-pane-${pane} .diff-row[data-key="parent"] .node`)?.getAttribute('aria-expanded'),
+					'true',
+					`${pane}: expanded`
+				);
+			}
+			const twisty = dom.document.querySelector('#diff-pane-left .diff-row[data-key="parent"] .twisty');
+			assert.ok(twisty);
+			twisty!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			for (const pane of ['left', 'right']) {
+				assert.strictEqual(
+					dom.document.querySelector(`#diff-pane-${pane} .diff-row[data-key="parent"] .node`)?.getAttribute('aria-expanded'),
+					'false',
+					`${pane}: collapsed`
+				);
+			}
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('clicking either pane selects the row in both panes', () => {
+		const parent = wordRow({
+			key: 'parent',
+			kind: 'container',
+			hasChildren: true,
+			subtreeSize: 1,
+			left: containerCell('Parent'),
+			right: containerCell('Parent'),
+		});
+		const child = wordRow({
+			key: 'child',
+			parentKey: 'parent',
+			level: 2,
+			left: wordCell({ label: 'Child' }),
+			right: wordCell({ label: 'Child' }),
+		});
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', document: wordDocument([parent, child]) });
+			const row = dom.document.querySelector('#diff-pane-right .diff-row[data-key="parent"] .row');
+			assert.ok(row);
+			row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			for (const pane of ['left', 'right']) {
+				assert.strictEqual(
+					dom.document.querySelector(`#diff-pane-${pane} .diff-row[data-key="parent"]`)?.getAttribute('data-selected'),
+					'true',
+					`${pane}: selected`
+				);
+			}
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the diff uses the shared document selection rule', () => {
+		const diff = webviewCss('components', 'diffView', 'diffView.css');
+		assert.ok(!diff.includes('.diff-row[data-selected="true"]'), 'the diff-only selection rule is gone');
+		const tree = webviewCss('components', 'documentTree', 'documentTree.css');
+		assert.ok(tree.includes('.node[data-kind="module"][data-selected="true"] > .row'));
+		assert.ok(tree.includes('.node[aria-expanded="false"] > .row::after'));
 	});
 
 	test('selecting a container highlights the same subtree and annotation rows in both panes', () => {

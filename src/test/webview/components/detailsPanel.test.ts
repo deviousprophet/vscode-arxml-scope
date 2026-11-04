@@ -72,4 +72,30 @@ suite('details definition projection', () => {
 		assert.strictEqual(fields.type, 'Integer');
 		assert.strictEqual(fields.value, '42');
 	});
+
+	test('an ambiguous definition count is projected for Details', () => {
+		const fields = inspectorFields({
+			id: 'p1',
+			kind: 'parameter',
+			level: 3,
+			parentId: 'c1',
+			subtreeSize: 0,
+			posinset: 1,
+			setsize: 1,
+			hasChildren: false,
+			label: 'TimeoutSeconds',
+			definitionRef: '/P/M/TimeoutSeconds',
+			parameterType: 'Integer',
+			formats: [],
+			value: '42',
+			valueKind: 'numeric',
+			shownValue: '42',
+			title: '/P/M/TimeoutSeconds',
+			meta: [],
+			haystack: 'timeoutseconds 42',
+			definitionCount: 2,
+		});
+		assert.strictEqual(fields.definition, undefined);
+		assert.strictEqual(fields.definitionCount, 2);
+	});
 });

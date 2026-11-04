@@ -960,6 +960,8 @@ function updateInspector() {
 		for (const field of definitionRows(data.definition)) {
 			detailsBody.appendChild(inspectorRow(field.label, field.value));
 		}
+	} else if (data.definitionCount !== undefined && data.definitionCount >= 2) {
+		detailsBody.appendChild(inspectorRow('Definition type', `${data.definitionCount} definitions found`));
 	}
 	const actions = paneActions(detailsBody);
 	if (row.kind === 'reference' && row.followable === true) {

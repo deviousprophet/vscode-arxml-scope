@@ -65,6 +65,16 @@ suite('definition rows (core)', () => {
 		}
 	});
 
+	test('an ambiguous definition exposes its count without picking one', () => {
+		const { rows } = buildRows(model, {
+			definitions: () => undefined,
+			ambiguousDefinitions: () => 2,
+		});
+		const timeout = row(rows, 'TimeoutSeconds');
+		assert.strictEqual(timeout.definition, undefined);
+		assert.strictEqual(timeout.definitionCount, 2);
+	});
+
 	test('a throwing definition lookup never blocks the row document', () => {
 		const throwing: DefinitionLookup = () => {
 			throw new Error('index corrupt');

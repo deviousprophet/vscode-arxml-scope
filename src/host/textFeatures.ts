@@ -11,7 +11,7 @@ import { definitionInfo } from '../core/index/definitions';
 import { buildFileIndex } from '../core/index/indexBuilder';
 import { positionAt } from '../core/validation/position';
 import { documentSymbols, refTokenAt, refTokens } from '../core/text/arxmlFeatures';
-import { IndexService, indexSettings } from './indexService';
+import { IndexService, indexSettings, isIndexableUri } from './indexService';
 import { innermostNodeIdAt } from './navigation';
 import type { EcucDocumentModel, Range } from '../core/ecuc/model';
 import type { FileIndex, IndexDefinition, IndexElement } from '../core/index/indexModel';
@@ -21,6 +21,7 @@ interface CachedDocument {
 	version: number;
 	model?: EcucDocumentModel;
 	file?: FileIndex;
+	oversized?: boolean;
 }
 
 const SELECTOR: vscode.DocumentSelector = [{ pattern: '**/*.arxml' }];
@@ -38,10 +39,13 @@ export class TextFeatures
 	constructor(private readonly index: IndexService) {}
 
 	provideDocumentSymbols(document: vscode.TextDocument): vscode.DocumentSymbol[] {
-		if (!indexSettings().enabled) {
+		if (!this.indexable(document)) {
 			return [];
 		}
 		const data = this.cached(document);
+		if (data.oversized === true) {
+			return [];
+		}
 		if (data.model !== undefined) {
 			return documentSymbols(data.model).map((symbol) => this.toSymbol(document, symbol));
 		}
@@ -58,8 +62,8 @@ export class TextFeatures
 		});
 	}
 
-	provideDefinition(document: vscode.TextDocument, position: vscode.Position): vscode.Location | undefined {
-		if (!indexSettings().enabled) {
+	provideDefinition(document: vscode.TextDocument, position: vscode.Position): vscode.Location | vscode.Location[] | undefined {
+		if (!this.indexable(document)) {
 			return undefined;
 		}
 		const token = this.tokenAt(document, position);
@@ -72,20 +76,27 @@ export class TextFeatures
 				? undefined
 				: new vscode.Location(vscode.Uri.parse(definition.file), this.rangeFor(definition.file, definition.range));
 		}
-		const resolution = this.index.resolveTarget(token.rawPath, token.dest);
-		return resolution.ok
-			? new vscode.Location(vscode.Uri.parse(resolution.element.file), this.rangeFor(resolution.element.file, resolution.element.range))
-			: undefined;
+		const resolution = this.index.resolveTarget(token.rawPath, token.dest, document.uri.toString());
+		if (!resolution.ok || resolution.copies.length === 0) {
+			return undefined;
+		}
+		const locations = resolution.copies.map(
+			(copy) => new vscode.Location(vscode.Uri.parse(copy.file), this.rangeFor(copy.file, copy.range))
+		);
+		return locations.length === 1 ? locations[0] : locations;
 	}
 
 	provideReferences(
 		document: vscode.TextDocument,
 		position: vscode.Position
 	): vscode.Location[] {
-		if (!indexSettings().enabled) {
+		if (!this.indexable(document)) {
 			return [];
 		}
 		const data = this.cached(document);
+		if (data.oversized === true) {
+			return [];
+		}
 		const offset = document.offsetAt(position);
 		if (data.model !== undefined) {
 			const token = refTokenAt(data.model, offset);
@@ -95,13 +106,15 @@ export class TextFeatures
 					.map((user) => new vscode.Location(vscode.Uri.parse(user.file), this.rangeFor(user.file, user.range)));
 			}
 			if (token?.kind === 'target') {
-				const resolution = this.index.resolveTarget(token.rawPath, token.dest);
+				const resolution = this.index.resolveTarget(token.rawPath, token.dest, document.uri.toString());
 				if (!resolution.ok) {
 					return [];
 				}
-				return this.index
-					.referencesFor(resolution.element)
-					.map((reference) => new vscode.Location(vscode.Uri.parse(reference.file), this.rangeFor(reference.file, reference.range)));
+				return resolution.copies.flatMap((copy) =>
+					this.index
+						.referencesFor(copy)
+						.map((reference) => new vscode.Location(vscode.Uri.parse(reference.file), this.rangeFor(reference.file, reference.range)))
+				);
 			}
 			const nodeIndex = buildNodeIndex(data.model);
 			const entryId = innermostNodeIdAt(nodeIndex, offset);
@@ -128,7 +141,7 @@ export class TextFeatures
 	}
 
 	provideDocumentLinks(document: vscode.TextDocument): vscode.DocumentLink[] {
-		if (!indexSettings().enabled) {
+		if (!this.indexable(document)) {
 			return [];
 		}
 		const data = this.cached(document);
@@ -137,7 +150,7 @@ export class TextFeatures
 		}
 		const links: vscode.DocumentLink[] = [];
 		for (const token of refTokens(data.model)) {
-			const target = this.targetFor(token);
+			const target = this.targetFor(token, document.uri.toString());
 			if (target === undefined) {
 				continue;
 			}
@@ -150,14 +163,14 @@ export class TextFeatures
 	}
 
 	provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
-		if (!indexSettings().enabled) {
+		if (!this.indexable(document)) {
 			return undefined;
 		}
 		const token = this.tokenAt(document, position);
 		if (token === undefined) {
 			return undefined;
 		}
-		const target = this.tokenDescription(token);
+		const target = this.tokenDescription(token, document.uri.toString());
 		if (target === undefined) {
 			return new vscode.Hover(new vscode.MarkdownString(`No indexed target for \`${token.rawPath}\`.`), this.range(document, token.range));
 		}
@@ -169,7 +182,7 @@ export class TextFeatures
 		return data.model === undefined ? undefined : refTokenAt(data.model, document.offsetAt(position));
 	}
 
-	private tokenDescription(token: RefToken): string | undefined {
+	private tokenDescription(token: RefToken, sourceFile: string): string | undefined {
 		if (token.kind === 'definition') {
 			const definition = this.index.workspaceIndex.definitionEntry(token.rawPath);
 			if (definition === undefined) {
@@ -189,13 +202,16 @@ export class TextFeatures
 			lines.push(`_${info.fileName}_`);
 			return lines.join('\n\n');
 		}
-		const resolution = this.index.resolveTarget(token.rawPath, token.dest);
+		const resolution = this.index.resolveTarget(token.rawPath, token.dest, sourceFile);
 		if (!resolution.ok) {
 			return undefined;
 		}
 		const element = resolution.element;
 		const definition = element.definitionRef === undefined ? undefined : this.index.definition(element.definitionRef);
 		const lines = [`**Target** \`${element.path ?? token.rawPath}\``, `Kind: ${element.kind}`];
+		if (resolution.copies.length > 1) {
+			lines.push(`Copies: ${resolution.copies.map((copy) => copy.file.split('/').pop()).join(', ')}`);
+		}
 		if (definition !== undefined) {
 			lines.push(`Type: ${definition.type}`);
 			if (definition.range !== undefined) {
@@ -211,13 +227,18 @@ export class TextFeatures
 		return lines.join('\n\n');
 	}
 
-	private targetFor(token: RefToken): { file: string; range: Range } | undefined {
+	private targetFor(token: RefToken, sourceFile: string): { file: string; range: Range } | undefined {
 		if (token.kind === 'definition') {
+			if (this.index.workspaceIndex.definitionCandidateCount(token.rawPath) > 1) {
+				return undefined;
+			}
 			const definition = this.index.workspaceIndex.definitionEntry(token.rawPath);
 			return definition === undefined ? undefined : { file: definition.file, range: definition.range };
 		}
-		const resolution = this.index.resolveTarget(token.rawPath, token.dest);
-		return resolution.ok ? { file: resolution.element.file, range: resolution.element.range } : undefined;
+		const resolution = this.index.resolveTarget(token.rawPath, token.dest, sourceFile);
+		return resolution.ok && resolution.copies.length === 1
+			? { file: resolution.element.file, range: resolution.element.range }
+			: undefined;
 	}
 
 	private toSymbol(document: vscode.TextDocument, symbol: SymbolData): vscode.DocumentSymbol {
@@ -249,19 +270,40 @@ export class TextFeatures
 		return vscode.Uri.parse(file).with({ fragment: `L${position.line + 1}` });
 	}
 
+	private indexable(document: vscode.TextDocument): boolean {
+		return indexSettings().enabled && isIndexableUri(document.uri);
+	}
+
 	private cached(document: vscode.TextDocument): CachedDocument {
 		const key = document.uri.toString();
 		const existing = this.cache.get(key);
 		if (existing !== undefined && existing.version === document.version) {
+			// Keep recently used documents at the end of the LRU order.
+			this.cache.delete(key);
+			this.cache.set(key, existing);
 			return existing;
 		}
 		const text = document.getText();
-		const ecuc = isEcucValues(text, document.uri.fsPath);
-		const next: CachedDocument = {
-			version: document.version,
-			...(ecuc ? { model: scanEcucValues(text) } : { file: buildFileIndex(key, text) }),
-		};
+		const settings = indexSettings();
+		let next: CachedDocument;
+		if (text.length > settings.maxBytes) {
+			next = { version: document.version, oversized: true };
+		} else {
+			const ecuc = isEcucValues(text, document.uri.fsPath);
+			next = {
+				version: document.version,
+				...(ecuc ? { model: scanEcucValues(text) } : { file: buildFileIndex(key, text) }),
+			};
+		}
+		this.cache.delete(key);
 		this.cache.set(key, next);
+		while (this.cache.size > 8) {
+			const oldest = this.cache.keys().next().value;
+			if (oldest === undefined) {
+				break;
+			}
+			this.cache.delete(oldest);
+		}
 		return next;
 	}
 

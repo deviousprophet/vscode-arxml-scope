@@ -111,4 +111,21 @@ suite('text features (extension)', function () {
 			await config.update('enabled', undefined, vscode.ConfigurationTarget.Workspace);
 		}
 	});
+
+	test('an excluded document returns no index-backed features', async () => {
+		const excluded = path.join(root, 'text-features-excluded.arxml');
+		fs.writeFileSync(excluded, fixtureText('index/values.arxml'));
+		const config = vscode.workspace.getConfiguration('arxmlScope.index');
+		await config.update('exclude', ['**/text-features-excluded.arxml'], vscode.ConfigurationTarget.Workspace);
+		try {
+			const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+				'vscode.executeDocumentSymbolProvider',
+				vscode.Uri.file(excluded)
+			);
+			assert.ok(symbols === undefined || symbols.length === 0);
+		} finally {
+			await config.update('exclude', undefined, vscode.ConfigurationTarget.Workspace);
+			fs.rmSync(excluded, { force: true });
+		}
+	});
 });

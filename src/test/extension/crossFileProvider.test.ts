@@ -75,13 +75,17 @@ suite('cross-file provider follow (extension)', () => {
 			const sourceIndex: DefinitionSource = {
 				definition: (_ref: string): DefinitionInfo | undefined => undefined,
 				subscribe: () => ({ dispose: () => undefined }),
-				resolveTarget: (targetPath: string): ElementResolution =>
-					targetPath === '/P/T/Target'
-						? {
-								ok: true,
-								element: { kind: 'container', path: '/P/T/Target', file: targetUri.toString(), range: { start: 0, end: 1 } },
-							}
-						: { ok: false, reason: 'absent', path: targetPath },
+				resolveTarget: (targetPath: string): ElementResolution => {
+					const targetElement = {
+						kind: 'container' as const,
+						path: '/P/T/Target',
+						file: targetUri.toString(),
+						range: { start: 0, end: 1 },
+					};
+					return targetPath === '/P/T/Target'
+						? { ok: true, element: targetElement, copies: [targetElement] }
+						: { ok: false, reason: 'absent', path: targetPath };
+				},
 			};
 			const provider: EcucEditorProvider = new Provider(undefined, undefined, sourceIndex);
 			const document = await vscode.workspace.openTextDocument(sourceUri);
