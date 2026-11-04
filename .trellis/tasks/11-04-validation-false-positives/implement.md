@@ -138,7 +138,8 @@ Run once for both tasks; Track B references this section.
         ADD-INFO and default-value required parameters, value semantics, ancestor missing definitions),
         validation performance guards.
       - Added: `arxmlScope.index.exclude`, `arxmlScope.validation.maxDiagnostics*`,
-        `arxmlScope.diff.semanticMatching`, rename matching in the diff.
+        `arxmlScope.validation.crossFileRules`, `arxmlScope.diff.semanticMatching`,
+        rename matching in the diff, and the fragment-workspace quiet mode.
 - [ ] `README.md`: exclusion setting, caps, semantic diff setting.
 - [ ] `docs/ECUC_EDITOR.md`: revised rule semantics and the new settings.
 - [ ] `.trellis/spec/frontend/quality-guidelines.md`: replace "two matches must resolve to nothing"

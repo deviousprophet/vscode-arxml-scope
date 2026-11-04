@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Index of the repository's coding guidelines for the validation and host layers."}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"core/validation stays pure (mode is a parameter); host owns settings, diagnostics and the status bar."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Forbidden patterns and the before-done commands; no modal UI, no persisted state, no new dependency."}
+{"file":".trellis/spec/frontend/testing.md","reason":"Unit-test and host-test conventions, fixture rules and the mutation-check requirement."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Enum setting parsing and the normalized mode type across the settings boundary."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse hasDefinitions, the existing severity plumbing and statusBarText instead of a parallel mode path."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The change spans core validation, the host service, the manifest and the status bar."}
+{"file":".trellis/tasks/11-04-index-degraded-single-folder/research/fragment-workspace-evidence.md","reason":"Which rules fire on a definition-free index, the hasDefinitions flag and the existing escape hatches."}
