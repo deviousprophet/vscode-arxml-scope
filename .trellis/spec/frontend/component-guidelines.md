@@ -318,15 +318,15 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   collapse, selection, search and scroll. A **Semantic/Strict** toggle does not re-scan: the host
   reuses the prepared rows/ranges and a `DiffSession` document cache, and a changed document version
   falls back to the full refresh.
-- The diff toolbar uses icon-over-label buttons: the left group is **Show all** / **Show diff only**
-  and **Semantic** / **Strict**; the centre group is **Prev diff**, **Next diff**, **Context** and
-  **Swap sides**; the right group is the live mode status and Search. There is no
-  changed/added/removed/renamed count summary. **Context** is the only standalone toggle: active by
-  default, fixed at 5 unchanged rows above and below each change, disabled in Show all. While a mode
-  switch is pending, the toolbar shows `aria-busy`, a spinner and a live `Switching to …` status
-  instead of a silent wait. Search uses `RowSearchEngine` (Enter-only, chunked, cancellable); its
-  candidates are the changed/added/removed rows in diff-only view, all rows otherwise. Search never
-  hides rows.
+- The diff toolbar uses icon-over-label buttons. The left group is **Show all** / **Show diff**, a
+  divider, **Context**, a divider, **Semantic** / **Strict**, a divider, then **Prev diff** /
+  **Next diff**. **Swap sides** is the centered control over the pane divider; the right group is the
+  live mode status and Search. There is no changed/added/removed/renamed count summary. **Context** is
+  the only standalone toggle: active by default, fixed at 5 unchanged rows above and below each
+  change, disabled in Show all. While a mode switch is pending, the toolbar shows `aria-busy`, a
+  spinner and a live `Switching to …` status instead of a silent wait. Search uses `RowSearchEngine`
+  (Enter-only, chunked, cancellable); its candidates are the changed/added/removed rows in diff-only
+  view, all rows otherwise. Search never hides rows.
 - **Split lines are the diff-only gap control.** `diffVisibility(rows, true, 5)` keeps five context
   rows around each change; the remaining hidden runs become `DiffGap` rows in
   `flattenDiffDocument`. A gap row shows `N unchanged lines` and expands in place; the row stays

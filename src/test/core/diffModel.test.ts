@@ -612,7 +612,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		);
 	});
 
-	test('design §3.3: Show all shows every row and Show diff only keeps changes and ancestors', () => {
+	test('design §3.3: Show all shows every row and Show diff keeps changes and ancestors', () => {
 		const left = arxml(
 			module(
 				'M1',
@@ -744,7 +744,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 			collapsed,
 			visible: visibility,
 		});
-		assert.deepStrictEqual(diffOnly.map((flat) => flat.rowIndex), [0], 'Show diff only respects the collapse');
+		assert.deepStrictEqual(diffOnly.map((flat) => flat.rowIndex), [0], 'Show diff respects the collapse');
 		assert.deepStrictEqual(Array.from(collapsed), [moduleRow.key], 'the collapsed set was not written');
 
 		const reopened = flattenDiffRows(rows, { visible: visibility });

@@ -1,9 +1,9 @@
 /**
  * The reusable Document tree surface.
  *
- * One `DocumentTreeView` owns the schema/package header, the native vertical and
- * horizontal scroller, the virtual spacers and the rendered window. The header
- * is the scroller's first content element, so it scrolls away with the rows.
+ * One `DocumentTreeView` owns the schema/package header strip, the native vertical
+ * and horizontal scroller, the virtual spacers and the rendered window. The
+ * header is a fixed strip above the scroller; the rows scroll beneath it.
  * The host owns the row model, selection and search: `renderRow(index, pane)`
  * builds one row and the component only decides which rows are on screen and
  * where the scroll is.
@@ -140,13 +140,13 @@ export class DocumentTreeView {
 		this.windowEl.className = 'document-tree-window';
 		this.windowEl.setAttribute('role', 'presentation');
 		this.bottomSpacer = this.spacer('document-tree-bottom');
-		// The header is content, not a pinned strip: it scrolls away with the
-		// rows, so it lives inside the scroller before the top spacer.
-		this.scroll.appendChild(this.header);
+		// The header is a fixed strip above the scroller, not content: it must not
+		// consume the first wheel or drag pixels before the rows start moving.
 		this.scroll.appendChild(this.topSpacer);
 		this.scroll.appendChild(this.windowEl);
 		this.scroll.appendChild(this.bottomSpacer);
 
+		this.root.appendChild(this.header);
 		this.root.appendChild(this.scroll);
 
 		this.scroll.addEventListener('scroll', () => this.onScroll());
@@ -338,11 +338,10 @@ export class DocumentTreeView {
 	}
 
 	/**
-	 * The header's measured height. The header is inside the scroller, so every
-	 * row offset is shifted by it; `0` means the header is absent or not
-	 * measurable yet (jsdom has no layout). The measurement is cached until
-	 * `setHeader` invalidates it or the scroller's client width changes, since a
-	 * resize can reflow the title/meta lines; plain renders reuse it.
+	 * The header's measured height. The header is now a fixed strip above the
+	 * scroller, so it no longer shifts the row offsets; the measurement remains
+	 * available for layout checks and is cached until `setHeader` invalidates it
+	 * or the scroller's client width changes.
 	 */
 	headerHeight(): number {
 		const width = this.scroll ? this.scroll.clientWidth : 0;
@@ -364,14 +363,14 @@ export class DocumentTreeView {
 	/** The visible rows' top edge, in the same coordinates as the virtual math. */
 	getRowsScrollTop(): number {
 		return this.scroll
-			? Math.max(0, this.scroll.scrollTop - this.padTopHeight() - this.headerHeight())
+			? Math.max(0, this.scroll.scrollTop - this.padTopHeight())
 			: 0;
 	}
 
-	/** Move the rows region to a logical offset (the header and top padding are added back). */
+	/** Move the rows region to a logical offset (the top padding is added back). */
 	setRowsScrollTop(offset: number): void {
 		this.setScrollTop(
-			(Number.isFinite(offset) ? Math.max(0, offset) : 0) + this.padTopHeight() + this.headerHeight()
+			(Number.isFinite(offset) ? Math.max(0, offset) : 0) + this.padTopHeight()
 		);
 	}
 

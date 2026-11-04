@@ -27,18 +27,23 @@ suite('Toolbar component', () => {
 		assert.ok(!/style="/.test(html), 'no inline styles');
 	});
 
-	test('the diff strip is left view/mode, centre navigation, right status + Search', () => {
+	test('the diff strip groups view, context, matching and navigation with dividers', () => {
 		const html = renderDiffToolbarHtml('<div class="search-box"></div>');
 		assert.ok(html.indexOf('class="toolbar-left"') < html.indexOf('class="toolbar-center"'));
 		assert.ok(html.indexOf('class="toolbar-center"') < html.indexOf('class="toolbar-right"'));
 		const left = html.slice(html.indexOf('class="toolbar-left"'), html.indexOf('class="toolbar-center"'));
 		assert.ok(left.indexOf('id="diff-view-all"') < left.indexOf('id="diff-view-diff"'));
-		assert.ok(left.indexOf('id="diff-view-diff"') < left.indexOf('id="diff-mode-semantic"'));
+		assert.ok(left.indexOf('id="diff-view-diff"') < left.indexOf('id="diff-context"'));
+		assert.ok(left.indexOf('id="diff-context"') < left.indexOf('id="diff-mode-semantic"'));
 		assert.ok(left.indexOf('id="diff-mode-semantic"') < left.indexOf('id="diff-mode-strict"'));
+		assert.ok(left.indexOf('id="diff-mode-strict"') < left.indexOf('id="diff-prev"'));
+		assert.ok(left.indexOf('id="diff-prev"') < left.indexOf('id="diff-next"'));
+		assert.strictEqual(left.split('toolbar-divider').length - 1, 3, 'three group dividers');
+		assert.ok(left.includes('>Show diff<'), 'the label is Show diff');
 		const centre = html.slice(html.indexOf('class="toolbar-center"'), html.indexOf('class="toolbar-right"'));
-		assert.ok(centre.indexOf('id="diff-prev"') < centre.indexOf('id="diff-next"'));
-		assert.ok(centre.indexOf('id="diff-next"') < centre.indexOf('id="diff-context"'));
-		assert.ok(centre.indexOf('id="diff-context"') < centre.indexOf('id="diff-swap"'));
+		assert.ok(centre.includes('id="diff-swap"'));
+		assert.ok(!centre.includes('id="diff-prev"'));
+		assert.ok(!centre.includes('id="diff-context"'));
 		const right = html.slice(html.indexOf('class="toolbar-right"'));
 		assert.ok(right.indexOf('id="diff-match-status"') < right.indexOf('class="search-box"'));
 		assert.ok(/id="diff-swap"[^>]*aria-label="Swap sides"/.test(html));

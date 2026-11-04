@@ -180,23 +180,16 @@ mark {
 }
 .document-tree-header {
 	flex: none;
-	/* The header now lives inside `.document-tree-scroll`, whose top padding
-	 * supplies the gap above the title; own top padding would double it. The
-	 * bottom padding is part of the measured header, so the row offset math
-	 * accounts for the space between the meta lines and the first row. */
+	/* The header is a fixed strip above the scroller; its bottom padding is the
+	 * gap to the rows and never consumes scroll distance. */
 	padding: 0 0 calc(var(--ecuc-lh) * 0.5);
 	margin: 0;
+	overflow: hidden;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	line-height: var(--ecuc-lh);
 	white-space: pre;
 	color: var(--vscode-editor-foreground);
-}
-/* Preserve the editor's pre-scroll header-to-row gap (1 line): the scroller
- * supplies 0.5 above, so the document header adds 1 below. Diff panes keep the
- * base 0.5 gap and their measured header height. */
-body[data-view="document"]:not([data-page="diff"]) .document-tree-header {
-	padding-bottom: var(--ecuc-lh);
 }
 .document-tree-title {
 	padding: 0 10px;
@@ -236,7 +229,7 @@ body[data-view="document"]:not([data-page="diff"]) .document-tree-header {
 	/* The window swaps spacer heights; browser scroll anchoring would fight the
 	 * virtual range and snap the viewport back to the top. */
 	overflow-anchor: none;
-	padding: calc(var(--ecuc-lh) * 0.5) 2ch calc(var(--ecuc-lh) * 3) 0;
+	padding: 0 2ch calc(var(--ecuc-lh) * 3) 0;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	font-weight: var(--vscode-editor-font-weight, normal);

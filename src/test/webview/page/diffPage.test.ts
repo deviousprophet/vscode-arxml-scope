@@ -241,15 +241,18 @@ suite('semantic diff page', () => {
 			);
 			assert.ok(dom.document.querySelector('#diff-pane-left .document-tree-header'), 'each pane owns its header');
 			const scroller = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
-			assert.strictEqual(
-				scroller.firstElementChild!.className,
-				'document-tree-header',
-				'the header is the first scrolled element'
+			assert.ok(
+				scroller.firstElementChild!.className.includes('document-tree-top'),
+				'the scroller starts with the top spacer'
+			);
+			assert.ok(
+				dom.document.querySelector('#diff-pane-left > .document-tree-header'),
+				'the header is pinned outside the scroller'
 			);
 			assert.strictEqual(
-				dom.document.querySelector('#diff-pane-left > .document-tree-header'),
+				scroller.querySelector('.document-tree-header'),
 				null,
-				'the header is not pinned outside the scroller'
+				'the header is not part of the scrolled content'
 			);
 			assert.ok(
 				dom.document.querySelector('#diff-pane-left .document-tree-title')!.textContent === 'left.arxml'
@@ -283,7 +286,7 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('Show diff only filters unchanged rows and Swap resets only horizontal offsets', () => {
+	test('Show diff filters unchanged rows and Swap resets only horizontal offsets', () => {
 		const { dom } = mount();
 		try {
 			const before = treeRows(dom.document, '#diff-pane-left').length;
@@ -841,15 +844,21 @@ suite('semantic diff page', () => {
 		assert.ok(!diff.includes('inset -3px 0 0 var(--diff-added-edge)'), 'the trailing added edge is gone');
 		assert.ok(diff.includes('.diff-gap-toggle'));
 		assert.ok(diff.includes('.diff-gap-line'));
+		assert.ok(diff.includes('.toolbar-center'));
+		assert.ok(/\.toolbar-center\s*\{[^}]*position:\s*absolute/.test(diff));
+		assert.ok(/left:\s*50%/.test(diff));
+		assert.ok(/transform:\s*translate\(-50%,\s*-50%\)/.test(diff));
 		assert.ok(!diff.includes('.diff-match-badge'), 'the renamed badge is gone');
 		assert.ok(!diff.includes('data-rename-implied'), 'the dashed rename marker is gone');
 		const toolbar = webviewCss('components', 'toolbar', 'toolbar.css');
 		assert.ok(toolbar.includes('.diff-tool'));
+		assert.ok(toolbar.includes('.toolbar-divider'));
 		assert.ok(toolbar.includes('flex-direction: column'));
 		assert.ok(toolbar.includes('width: 60px'), 'one fixed width for every diff button');
 		assert.ok(toolbar.includes('height: 48px'), 'one fixed height for every diff button');
 		assert.ok(toolbar.includes('white-space: normal'), 'long labels wrap inside the fixed box');
-		assert.ok(toolbar.includes('max-width: 820px'), 'labels hide before the row can overlap');
+		assert.ok(toolbar.includes('max-width: 1040px'), 'labels hide before the row can overlap');
+		assert.ok(toolbar.includes('max-width: 720px'), 'compact icon buttons at very narrow widths');
 	});
 
 	test('selecting a container highlights the same subtree and annotation rows in both panes', () => {
@@ -1070,7 +1079,7 @@ suite('semantic diff page', () => {
 			dom.post({ type: 'document', semantic: false, document });
 			assert.strictEqual(scroller.scrollTop, 0, 'a refresh at the top keeps the header visible');
 			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
-			assert.strictEqual(scroller.scrollTop, 0, 'Show diff only at the top keeps the header visible');
+			assert.strictEqual(scroller.scrollTop, 0, 'Show diff at the top keeps the header visible');
 			(dom.document.getElementById('diff-view-all') as HTMLElement).click();
 			assert.strictEqual(scroller.scrollTop, 0, 'Show all at the top keeps the header visible');
 		} finally {

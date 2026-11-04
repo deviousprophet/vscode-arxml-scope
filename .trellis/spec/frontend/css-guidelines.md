@@ -91,9 +91,9 @@ Rules:
 
 - `.document-tree` is the component root; inside it, `.document-tree-scroll` is the native two-axis
   scroller and the only scroll container. Its content is `.document-tree-header`, `.document-tree-top`,
-  `.document-tree-window` and `.document-tree-bottom`, in that order. The header scrolls away with the
-  rows; it is not a pinned strip. Its own top padding is zero because the scroller's padding supplies
-  that gap.
+  `.document-tree-window` and `.document-tree-bottom`, in that order. The header is a fixed flex row
+  above the scroller and stays pinned; it is not scrolled content. Its own bottom padding supplies the
+  header-to-row gap, and the scroller has no top padding.
 - The window is positioned by two spacer heights written as CSSOM custom properties on the scroller:
   `--document-tree-top` and `--document-tree-bottom`. The window's minimum width comes from
   `--document-tree-content-width`. Never set these as a `style` attribute in the markup.

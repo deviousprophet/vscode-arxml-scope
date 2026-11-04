@@ -14,11 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `arxmlScope.validation.crossFileRules` (`auto` / `always` / `never`) so a workspace without ECUC definitions stays quiet; the status bar shows the mode and cycles it
 - `arxmlScope.validation.maxDiagnosticsPerFile` and `maxDiagnostics` caps, with one summary diagnostic per file that reports hidden problems
 - `arxmlScope.diff.semanticMatching` for renamed-container pairing; the **Semantic** / **Strict** view group switches immediately between the cached views and renamed containers stay one changed row without a special marker
-- A default-on **Context** toggle that keeps five unchanged lines above and below each change, plus expandable split lines that reveal the hidden runs in Show diff only
+- A default-on **Context** toggle that keeps five unchanged lines above and below each change, plus expandable split lines that reveal the hidden runs in Show diff
 
 ### Changed
 
-- The diff toolbar is now an icon-over-label control strip with **Show all** / **Show diff only** and **Semantic** / **Strict** view groups, a **Context** toggle, navigation and Search
+- The diff toolbar is now a grouped icon-over-label strip: **Show all** / **Show diff**, **Context**, **Semantic** / **Strict** and **Prev diff** / **Next diff**, with **Swap sides** centered over the pane divider and Search on the right
 
 ### Fixed
 
@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Details** reports `N definitions found` when several definition bodies share a path instead of silently dropping the definition block
 - Added diff rows use the same bold leading edge as removed rows
 - The diff pane chevron and collapsed `{ ... }` marker follow the live `aria-expanded` state, and selection uses the same document-tree treatment in both panes
+- Diff pane file headers stay pinned above the rows, and wheel or scrollbar movement maps linearly to rows from the top instead of first consuming a header-sized dead zone
 
 ## [0.6.0] - 2026-11-03
 

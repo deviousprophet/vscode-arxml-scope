@@ -123,7 +123,7 @@ let diffDocument: DiffDocument = {
 };
 let rows: DiffRow[] = [];
 let semanticMatching = true;
-/** Unchanged rows kept above and below each change in Show diff only. */
+/** Unchanged rows kept above and below each change in Show diff. */
 const CONTEXT_LINES = 5;
 let contextActive = true;
 let expandedGaps = new Set<string>();
@@ -663,12 +663,11 @@ function captureAnchor() {
 	return {
 		key: rows[flat.rowIndex].key,
 		delta: top - calcRowOffset(index, state),
-		// While any part of the header is on screen the row offset is clamped to
-		// zero, so the row anchor alone cannot restore the native position. Keep
-		// it verbatim: a refresh or a view switch at the top must not scroll the
-		// header out of view.
+		// The header is a fixed strip above the scroller, so only the scroll
+		// padding can sit above the first row. Keep the native offset while that
+		// padding is visible; a refresh at the top must not move the rows.
 		native,
-		inHeader: native < views.left.padTopHeight() + views.left.headerHeight(),
+		inHeader: native < views.left.padTopHeight(),
 	};
 }
 function restoreAnchor(anchor: any): void {

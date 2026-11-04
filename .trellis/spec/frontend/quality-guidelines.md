@@ -162,9 +162,13 @@ that is not obvious from the code.
   `aria-pressed` and the label immediately, shows `aria-busy` plus a live `Switching to …` status, and
   the host answers a no-document switch with `matchModeState`. Do not call `refreshNow()` or
   `rowsFor()` from the match-mode handler unless the prepared version is stale.
-- **The diff toolbar has no count summary.** Show all / Show diff only and Semantic / Strict are
-  two-button view groups; Context is the only standalone toggle, default active at five lines and
-  disabled in Show all. Every main button uses an inline icon over a small label.
+- **The diff toolbar has no count summary.** The left order is Show all / Show diff, divider,
+  Context, divider, Semantic / Strict, divider, Prev/Next; Swap is centered over the pane divider;
+  status and Search are on the right. Context is the only standalone toggle, default active at five
+  lines and disabled in Show all. Every main button uses an inline icon over a small label.
+- **Pane headers are fixed strips.** `DocumentTreeView` mounts `root > header + scroll`; the header
+  stays pinned and row offsets exclude it. Do not put the header back inside the scroller: it creates
+  a header-sized dead zone at the top of wheel and scrollbar movement.
 - **Diff-only gaps are expandable split lines.** `diffVisibility(rows, true, 5)` keeps five context
   rows; `flattenDiffDocument` turns the remaining hidden runs into `DiffGap` rows. A gap row is not a
   tree node: it must stay out of `displayIndexByKey`, `navigationVisible`, `F7` and search. The

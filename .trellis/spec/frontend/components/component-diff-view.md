@@ -47,8 +47,8 @@ class DiffView {
 - Vertical is single-visible: the right pane follows the left driver; either pane wheel mirrors.
 - Horizontal: each pane has its own bar; moving either mirrors both.
 - Swap resets horizontal offsets only; vertical position is preserved.
-- Pane headers include file label plus schema/package lines, live inside each pane's scroller and
-  scroll away with the rows. `header.lines` pads the shorter one so both measure equal height.
+- Pane headers include file label plus schema/package lines, sit above each pane's scroller and stay
+  pinned while the rows scroll. `header.lines` pads the shorter one so both measure equal height.
 - Every diff row is the base row height: the Document-only module gap and its `data-gap` marker are
   not part of this surface.
 - Split line is 3px and diff-specific; the editor's resizer and pane sashes are 6px.
@@ -85,7 +85,7 @@ class DiffView {
 
 `src/test/webview/components/diffView.test.ts`: two scrollers, single vertical driver, horizontal
 mirror, swap reset, header parity, status optional, word-colour CSS, no module-gap CSS.
-`src/test/webview/page/diffPage.test.ts`: header inside the scroller and not searchable, changed-word
+`src/test/webview/page/diffPage.test.ts`: header pinned above the scroller and not searchable, changed-word
 runs in both panes, swapped colours, search overlap, no word spans on added/removed, unchanged rows,
 module height and no `data-gap`; selecting a container highlights the same subtree and annotation rows
 in both panes, a new selection drops the old subtree, and an added/removed row highlights only its

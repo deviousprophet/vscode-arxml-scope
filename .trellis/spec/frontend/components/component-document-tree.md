@@ -59,11 +59,11 @@ class DocumentTreeView {
 
 ## Rules
 
-- Owns `root > scroll > header + spacers + window`; the header is the scroller's first content element and scrolls away with the rows. Native two-axis scrollbars.
-- `headerHeight()` is the measured `header.offsetHeight`, cached and invalidated by `setHeader`/`mount` and by a scroller width change (a resize can reflow the lines); plain scroll renders reuse it. `0` while unmeasurable (jsdom has no layout).
-- Row math subtracts `padTopHeight() + headerHeight()` in `getRowsScrollTop()` and adds both back in `setRowsScrollTop()`. `getScrollTop()`/`setScrollTop()` stay the native values so two panes can synchronize them.
+- Owns `root > header + scroll > spacers + window`; the header is a fixed strip above the scroller and stays visible while the rows scroll. Native two-axis scrollbars.
+- `headerHeight()` is the measured `header.offsetHeight`, cached and invalidated by `setHeader`/`mount` and by a scroller width change (a resize can reflow the lines); plain scroll renders reuse it. `0` while unmeasurable (jsdom has no layout). It no longer shifts row offsets.
+- Row math subtracts only `padTopHeight()` in `getRowsScrollTop()` and adds it back in `setRowsScrollTop()`. `getScrollTop()`/`setScrollTop()` stay the native values so two panes can synchronize them.
 - `scrollToIndex`, `virtualState` and `getVisibleRange` inherit the corrected offset; no other scroll math changes.
-- A refresh or view switch while any part of the header is on screen restores the native scroll offset, so the header does not jump out of view.
+- A refresh or view switch at the top keeps the native scroll offset, so the pinned header and first row do not jump.
 - The header is presentation-only: not a tree item, not a tab stop, and not part of any row haystack. `header.lines` pads the shorter pane so both headers measure equal.
 - Renders only the visible window plus overscan; incremental edge updates on scroll.
 - Render-key skip when range, total height, viewport and revision are unchanged.
@@ -87,15 +87,15 @@ class DocumentTreeView {
 | Empty model | Empty state, zero spacers |
 | Large model | Rendered DOM bounded by viewport + overscan |
 | Programmatic scroll | Expected offset suppresses feedback notifications |
-| Header present | Rows start below the measured header; the header scrolls out of view |
+| Header present | Rows start below the pinned header strip; the header stays visible while the rows scroll |
 | Two instances | Independent scrollers, no shared DOM ids |
 
 ## Tests Required
 
 `src/test/webview/components/documentTree.test.ts`: window bounds, spacer heights, render-key skip,
-incremental update, scroll setters, Shift+wheel, root scoping, DOM order `scroll > header`, header-height
+incremental update, scroll setters, Shift+wheel, root scoping, DOM order `header > scroll`, pinned-header
 offset arithmetic with a stubbed `offsetHeight`, cached across scroll renders, and `scrollToIndex`
-landing rows after the header.
+landing rows at the row offset.
 
 `src/test/webview/page/render.test.ts`: selecting a container highlights a descendant sub-container's
 annotation row, clicking an annotation does not change the selection, and node/brace/comment rows carry

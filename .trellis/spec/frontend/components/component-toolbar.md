@@ -54,8 +54,8 @@ export class DiffToolbar {
 
 - One row; no wrapping. Diff buttons use `.tool.diff-tool` with a large icon over a small label.
 - Editor order: flexible slot, Collapse, Expand, Search.
-- Diff order: left `Show all / Show diff only` and `Semantic / Strict`; centre Prev, Next, Context,
-  Swap; right status + Search.
+- Diff order: left `Show all / Show diff`, divider, Context, divider, `Semantic / Strict`, divider,
+  Prev, Next; centre Swap; right status + Search.
 - The Context toggle is disabled while Show all is active.
 - Buttons use the shared `.tool`/`.sb-btn`/`.nav-btn` primitives; no one-off styles.
 - Host wires actions through callbacks; the component never mutates host state.
@@ -65,11 +65,12 @@ export class DiffToolbar {
 - Editor strip: `#collapse-all`, `#expand-all`, then the Search slot. The search field is always the
   last control.
 - Diff strip: `#diff-view-all` / `#diff-view-diff` and `#diff-mode-semantic` / `#diff-mode-strict`
-  are two-button view groups; `#diff-prev`, `#diff-next`, `#diff-context` and `#diff-swap` sit in the
-  centred group; `#diff-match-status` and Search are on the right. `aria-pressed` reflects the active
-  view, match mode, swap and context state; the buttons do not own the state.
+  are two-button view groups. The left order is view group, divider, `#diff-context`, divider, mode
+  group, divider, `#diff-prev`, `#diff-next`. `#diff-swap` is the centered control over the pane
+  divider; `#diff-match-status` and Search are on the right. `aria-pressed` reflects the active view,
+  match mode, swap and context state; the buttons do not own the state.
 - Every main diff button has an 18px inline SVG, an `aria-label`, and a `.lbl` underneath. Labels hide
-  at <=720px while the accessible name remains.
+  at <=1040px while the accessible name remains; at <=720px the icon buttons compact further.
 - `setMatchMode(semantic, pending)` paints both mode buttons, sets `aria-busy` on the target and writes
   `Switching to Semantic/Strict…` into `#diff-match-status` while pending. The pending state is
   cleared by the page when the document or a `matchModeState` acknowledgement arrives.

@@ -11,9 +11,10 @@ body[data-page="diff"] {
 	--diff-changed-edge: var(--vscode-gitDecoration-modifiedResourceForeground, var(--vscode-editorWarning-foreground, currentColor));
 }
 body[data-page="diff"] .toolbar {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-	align-items: stretch;
+	position: relative;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
 	min-height: 54px;
 	height: auto;
 	padding: 3px 8px;
@@ -22,6 +23,19 @@ body[data-page="diff"] .toolbar-left,
 body[data-page="diff"] .toolbar-center,
 body[data-page="diff"] .toolbar-right {
 	align-items: center;
+}
+body[data-page="diff"] .toolbar-left {
+	flex: 0 1 auto;
+}
+body[data-page="diff"] .toolbar-center {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 1;
+}
+body[data-page="diff"] .toolbar-right {
+	margin-left: auto;
 }
 body[data-page="diff"] .toolbar .view-switch {
 	gap: 2px;

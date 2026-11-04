@@ -174,20 +174,20 @@ function harness(rowCount = 1000): Harness {
 }
 
 suite('DocumentTreeView component', () => {
-	test('the component owns root > scroll > header + spacers + window', () => {
+	test('the component owns root > header + scroll > spacers + window', () => {
 		const h = harness();
 		try {
-			assert.strictEqual(h.root.children.length, 1, 'the scroller is the only root child');
-			const scroll = h.root.children[0];
-			assert.strictEqual(scroll.className, 'document-tree-scroll');
-			assert.strictEqual(scroll.children.length, 4, 'header, top spacer, window, bottom spacer');
-			const header = scroll.children[0];
+			assert.strictEqual(h.root.children.length, 2, 'header strip and scroller');
+			const header = h.root.children[0];
+			const scroll = h.root.children[1];
 			assert.strictEqual(header.className, 'document-tree-header');
 			assert.strictEqual(header.children.length, 2, 'title and meta slots');
-			assert.ok(scroll.children[1].className.includes('document-tree-top'));
-			assert.strictEqual(scroll.children[2].className, 'document-tree-window');
-			assert.ok(scroll.children[3].className.includes('document-tree-bottom'));
-			assert.strictEqual((h.view as any).header, header, 'the header scrolls with the content');
+			assert.strictEqual(scroll.className, 'document-tree-scroll');
+			assert.strictEqual(scroll.children.length, 3, 'top spacer, window, bottom spacer');
+			assert.ok(scroll.children[0].className.includes('document-tree-top'));
+			assert.strictEqual(scroll.children[1].className, 'document-tree-window');
+			assert.ok(scroll.children[2].className.includes('document-tree-bottom'));
+			assert.strictEqual((h.view as any).header, header, 'the header is pinned above the scroller');
 		} finally {
 			h.restore();
 		}
@@ -210,7 +210,7 @@ suite('DocumentTreeView component', () => {
 		}
 	});
 
-	test('the header height shifts the rows offset in both directions', () => {
+	test('the header height does not shift the rows offset', () => {
 		const h = harness();
 		try {
 			const header = (h.view as any).header as FakeElement;
@@ -220,21 +220,21 @@ suite('DocumentTreeView component', () => {
 			scroll.scrollTop = 0;
 			assert.strictEqual(h.view.getRowsScrollTop(), 0, 'the header is not a row offset');
 			h.view.setRowsScrollTop(200);
-			assert.strictEqual(scroll.scrollTop, 234, 'the header height is added back');
+			assert.strictEqual(scroll.scrollTop, 200, 'only the scroll padding is added back');
 			assert.strictEqual(h.view.getRowsScrollTop(), 200, 'and subtracted again');
 		} finally {
 			h.restore();
 		}
 	});
 
-	test('scrollToIndex lands the row after the header height', () => {
+	test('scrollToIndex lands the row without a header offset', () => {
 		const h = harness();
 		try {
 			const header = (h.view as any).header as FakeElement;
 			header.offsetHeight = 34;
 			h.view.render(true);
 			h.view.scrollToIndex(500, 'start');
-			assert.strictEqual(h.view.getScrollTop(), 500 * 20 + 34, 'the header stays above the row');
+			assert.strictEqual(h.view.getScrollTop(), 500 * 20, 'the rows start at the row offset');
 			assert.strictEqual(h.view.getRowsScrollTop(), 500 * 20);
 		} finally {
 			h.restore();
@@ -254,10 +254,12 @@ suite('DocumentTreeView component', () => {
 				}
 			});
 			h.view.render(true);
-			assert.strictEqual(reads, 1, 'the first render measures the header once');
+			assert.strictEqual(h.view.headerHeight(), 34);
+			assert.strictEqual(reads, 1, 'the first measurement reads the header once');
 			h.view.setScrollTop(40);
 			h.view.setScrollTop(80);
 			h.view.render(false);
+			assert.strictEqual(h.view.headerHeight(), 34);
 			assert.strictEqual(reads, 1, 'scroll renders reuse the cached header height');
 			const scroll = h.view.scroll as FakeElement;
 			scroll.clientWidth = 260;

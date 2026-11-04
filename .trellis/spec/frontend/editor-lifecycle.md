@@ -359,11 +359,12 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
    `hostSide` maps the displayed side back to the host's original side for reveal. The compared
    documents are not rebuilt and the vertical position is not reset. Swap resets horizontal offsets to
    zero in both panes.
-10. **The comparison chrome scrolls with its rows.** Each pane header lives inside that pane's
-   `.document-tree-scroll` above the top spacer, so it scrolls away with the content; the pane's
-   measured header height joins the row-offset math. The header is presentation-only. The diff adds no
-   inter-module blank row: every diff row is exactly one base row high.
-11. **The page owns view state.** Show all / Show diff only, Prev diff / Next diff, selection, collapse,
+10. **The comparison chrome stays pinned.** Each pane header is a fixed strip above that pane's
+    `.document-tree-scroll`; the rows scroll below it and the header never leaves the top. The header
+    height is measured for parity but is not part of the row-offset math. The header is
+    presentation-only. The diff adds no inter-module blank row: every diff row is exactly one base row
+    high.
+11. **The page owns view state.** Show all / Show diff, Prev diff / Next diff, selection, collapse,
     search and scroll survive a refresh. Search is Enter-only, chunked and cancellable; it never removes
     a row. `nextChangeIndex` wraps and skips unchanged or hidden rows. A changed row may render inline
     word runs for the fields it displays (label, value/target, condition, variant, context) on the
@@ -397,7 +398,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
 - **Good:** `selectAsFirst` on `a.arxml`, then `compareToStaged` on `b.arxml` opens one panel and clears
   the stash. A value change in `b.arxml` saves and triggers one debounced refresh; the changed row keeps
   its selection and scroll position.
-- **Base:** two identical files produce zero changed rows; Show diff only shows the roots required to
+- **Base:** two identical files produce zero changed rows; Show diff shows the roots required to
   reach any change (none), and the empty/summary state remains honest.
 - **Good:** duplicated container names are paired by content/subtree identity first, so a reordered
   declaration is not reported as add + remove, and a changed duplicate lands on one changed row.
@@ -417,7 +418,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
 - `src/test/webview/components/diffView.test.ts` — two `DocumentTreeView` instances, single vertical
   driver, horizontal mirror, swap reset, optional status, word-colour CSS and the absent module gap.
 - `src/test/webview/page/diffPage.test.ts` — toolbar both ways, search wiring, display projection,
-  reveal-side mapping, refresh state retention, header-in-scroller order and non-searchability,
+  reveal-side mapping, refresh state retention, pinned-header order and non-searchability,
   changed-word runs in both panes, swapped colours, search overlap, added/removed rows without word
   spans, unchanged rows, module height and no `data-gap`.
 - `src/test/webview/page/search.test.ts` — Enter-only chunked search and count states.

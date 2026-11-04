@@ -93,17 +93,20 @@ export function renderDiffToolbarHtml(searchHtml: string): string {
 <div class="toolbar-left">
 <div class="view-switch" role="group" aria-label="Diff view">
 <button id="diff-view-all" class="tool diff-tool" type="button" aria-pressed="true" aria-label="Show every row" title="Show every row">${ICON_SHOW_ALL}<span class="lbl">Show all</span></button>
-<button id="diff-view-diff" class="tool diff-tool" type="button" aria-pressed="false" aria-label="Show differences only" title="Show only differences and their context">${ICON_SHOW_DIFF}<span class="lbl">Show diff only</span></button>
+<button id="diff-view-diff" class="tool diff-tool" type="button" aria-pressed="false" aria-label="Show differences only" title="Show only differences and their context">${ICON_SHOW_DIFF}<span class="lbl">Show diff</span></button>
 </div>
+<span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
+<button id="diff-context" class="tool diff-tool" type="button" aria-pressed="true" aria-label="Show 5 lines of context" title="Show 5 unchanged lines above and below each difference">${ICON_CONTEXT}<span class="lbl">Context</span></button>
+<span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
 <div class="view-switch" role="group" aria-label="Diff matching">
 <button id="diff-mode-semantic" class="tool diff-tool" type="button" aria-pressed="true" aria-label="Semantic matching" title="Semantic matching pairs renamed containers">${ICON_SEMANTIC}<span class="lbl">Semantic</span></button>
 <button id="diff-mode-strict" class="tool diff-tool" type="button" aria-pressed="false" aria-label="Strict matching" title="Strict matching reproduces the previous diff">${ICON_STRICT}<span class="lbl">Strict</span></button>
 </div>
-</div>
-<div class="toolbar-center">
+<span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
 <button id="diff-prev" class="tool diff-tool" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference">${ICON_PREV}<span class="lbl">Prev diff</span></button>
 <button id="diff-next" class="tool diff-tool" type="button" title="Next difference (F7)" aria-label="Next difference">${ICON_NEXT}<span class="lbl">Next diff</span></button>
-<button id="diff-context" class="tool diff-tool" type="button" aria-pressed="true" aria-label="Show 5 lines of context" title="Show 5 unchanged lines above and below each difference">${ICON_CONTEXT}<span class="lbl">Context</span></button>
+</div>
+<div class="toolbar-center">
 <button id="diff-swap" class="tool diff-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false">${ICON_SWAP}<span class="lbl">Swap sides</span></button>
 </div>
 <div class="toolbar-right">
@@ -164,8 +167,8 @@ export class DiffToolbar {
 			}
 			context.title = changesOnly
 				? 'Show 5 unchanged lines above and below each difference'
-				: 'Context applies to Show diff only';
-			context.setAttribute('aria-label', changesOnly ? 'Show 5 lines of context' : 'Context applies to Show diff only');
+				: 'Context applies to Show diff';
+			context.setAttribute('aria-label', changesOnly ? 'Show 5 lines of context' : 'Context applies to Show diff');
 		}
 	}
 

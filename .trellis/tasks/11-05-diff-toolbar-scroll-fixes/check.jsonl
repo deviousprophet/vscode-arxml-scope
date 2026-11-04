@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Check the header is outside the scroller and the toolbar groups match."}
+{"file":".trellis/spec/frontend/components/component-toolbar.md","reason":"Check the divider/order/center-Swap contract."}
+{"file":".trellis/spec/frontend/testing.md","reason":"Check the header/offset and toolbar order assertions fail when reverted."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check shared DocumentTree changes do not break the editor page."}
+{"file":".trellis/tasks/11-05-diff-toolbar-scroll-fixes/design.md","reason":"Compare the final scroll/toolbar behavior with the agreed design."}

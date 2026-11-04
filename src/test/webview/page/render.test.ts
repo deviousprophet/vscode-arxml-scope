@@ -150,12 +150,15 @@ suite('editor bundled page', () => {
 			);
 			const scroller = dom.document.querySelector('#tree > .document-tree-scroll') as HTMLElement;
 			assert.ok(scroller, 'the rows scroller is the tree root child');
-			assert.strictEqual(
-				scroller.firstElementChild!.className,
-				'document-tree-header',
-				'the Document header scrolls with the rows'
+			assert.ok(
+				scroller.firstElementChild!.className.includes('document-tree-top'),
+				'the Document scroller starts with the top spacer'
 			);
-			assert.strictEqual(dom.document.querySelector('#tree > .document-tree-header'), null);
+			assert.ok(
+				dom.document.querySelector('#tree > .document-tree-header'),
+				'the Document header is pinned above the scroller'
+			);
+			assert.strictEqual(scroller.querySelector('.document-tree-header'), null);
 			assert.strictEqual(dom.document.querySelector('#tree').getAttribute('aria-label'), 'ECUC values');
 		} finally {
 			dom.restore();

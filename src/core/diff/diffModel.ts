@@ -1024,7 +1024,7 @@ export function buildDiffDocument(
 /** The pure page helpers below are imported by the bundled diff entrypoint. */
 
 /**
- * Changes-only visibility. Every row is visible in Show all; Show diff only keeps
+ * Changes-only visibility. Every row is visible in Show all; Show diff keeps
  * changed/added/removed rows and marks their ancestors. Search is a jump control,
  * so it never removes a row from this list.
  */

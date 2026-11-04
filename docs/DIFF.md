@@ -30,11 +30,11 @@ compared, not just the bytes on disk.
 ## What the panel shows
 
 - One panel titled `<left> ↔ <right>`, with the two panes side by side.
-- The toolbar is icon-over-label: **Show all** / **Show diff only**, **Semantic** / **Strict**,
-  **Prev diff** / **Next diff**, **Context** and **Swap sides**, with Search on the right. There is
-  no changed/added/removed/renamed count in the page.
+- The toolbar is icon-over-label: **Show all** / **Show diff** ÷ **Context** ÷ **Semantic** /
+  **Strict** ÷ **Prev diff** / **Next diff**, with **Swap sides** centered over the pane divider and
+  Search on the right. There is no changed/added/removed/renamed count in the page.
 - Pane headers show the shortest distinguishing file label plus each side's schema/package lines.
-  Each header is the first line of that pane's scroller, so it scrolls away with the rows; the shorter
+  Each header is a pinned strip above its rows, so it stays visible while the rows scroll; the shorter
   header is padded so both panes start their rows at the same y. The header is not a tree row and is
   not searched.
 - Rows are aligned: a line that exists on only one side has a blank cell on the other side. There is no
@@ -136,7 +136,7 @@ A file that is not ECUC-Values is refused before the panel opens.
 
 ## Context and split lines
 
-The diff toolbar has a **Context** toggle, active by default. In **Show diff only** it keeps five
+The diff toolbar has a **Context** toggle, active by default. In **Show diff** it keeps five
 unchanged rows above and below each changed row. It has one fixed value, no menu, and is disabled while
 **Show all** is active.
 
@@ -154,12 +154,12 @@ split line. The split line is a display control only; it never changes the compa
 | Control / key | Action |
 |---|---|
 | **Show all** | Show every row, including unchanged rows. |
-| **Show diff only** | Keep changed/added/removed rows, five context rows above and below each change, and split lines for the hidden runs. |
+| **Show diff** | Keep changed/added/removed rows, five context rows above and below each change, and split lines for the hidden runs. |
 | **Prev diff** / **Next diff** | Move to the previous/next changed row, wrapping at the ends. |
 | `F7` / `Shift+F7` | Same as Next/Prev while focus is in the diff list. |
 | **Swap sides** | Mirror the displayed sides; display only, no re-comparison. |
 | **Semantic** / **Strict** | Two-button view group for renamed-container pairing. The group flips immediately and a spinner/status shows while the new view is prepared. |
-| **Context** | Active by default; keeps five unchanged rows above and below each change in Show diff only. Only the toggle changes. |
+| **Context** | Active by default; keeps five unchanged rows above and below each change in Show diff. Only the toggle changes. |
 | Split line | Expand or collapse the unchanged rows hidden under an `N unchanged lines` rule. |
 | Row twisty / `Left` / `Right` | Collapse or expand a subtree. |
 | `Space` | Select the focused row. |
@@ -167,7 +167,7 @@ split line. The split line is a display control only; it never changes the compa
 | **Search** | Type a query and press `Enter`; `Shift+Enter` goes backwards. `Ctrl+F` / `Cmd+F` focuses the field. |
 | **Search count** | `1 / N` or `0 / 0`; the busy slot shows a running chunked search. |
 
-Search jumps and marks; it never hides rows. In **Show diff only** the search candidates are the
+Search jumps and marks; it never hides rows. In **Show diff** the search candidates are the
 changed/added/removed rows; in **Show all** they are all rows. Switching the view restarts the committed query
 against the new candidate set and preserves the current key where possible. Swapping sides re-projects
 the same merged rows, so the search result set does not change.

@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend conventions for the shared DocumentTree and diff toolbar."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"DocumentTree geometry, diff toolbar and pane contracts."}
+{"file":".trellis/spec/frontend/components/component-toolbar.md","reason":"Diff toolbar order, callbacks and fixed-size controls."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Scroll synchronization and page state across refreshes."}
+{"file":".trellis/spec/frontend/editor-lifecycle.md","reason":"Diff panel scroll/reveal lifecycle and header contract."}
+{"file":".trellis/spec/frontend/testing.md","reason":"DocumentTree/toolbar/page test and mutation conventions."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The toolbar and shared DocumentTree changes span components and pages."}
+{"file":".trellis/tasks/11-05-diff-toolbar-scroll-fixes/design.md","reason":"Final toolbar grouping and pinned-header design."}
