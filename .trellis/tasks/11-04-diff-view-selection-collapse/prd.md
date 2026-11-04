@@ -37,26 +37,29 @@ Verified in source (v0.6.0, `fix/validation-false-positives`):
 - **S1 — Live chevron.** A container row in either pane shows a rotated chevron while it is expanded
   and the right-pointing chevron while it is collapsed. The state updates on twisty click, `Space`,
   `ArrowLeft`/`ArrowRight`, and Collapse/Expand All.
-- **S2 — Same signal in both panes.** The expanded state reaches the DOM on both panes, not only the
+- **S2 — Collapsed marker parity.** A collapsed container also shows the document view's `{ … }`
+  suffix in both panes, so the collapsed state is readable while the twisty is hidden. Expanded and
+  empty containers keep their current text (`{ }` for an empty container).
+- **S3 — Same signal in both panes.** The expanded state reaches the DOM on both panes, not only the
   left one. Use the existing document-row signal where possible instead of a second source of truth.
-- **S3 — Click selects in either pane.** Clicking a node row in the left or the right pane selects that
+- **S4 — Click selects in either pane.** Clicking a node row in the left or the right pane selects that
   row (same key), keeps both panes in sync, and does not move focus in a way that breaks keyboard
   continuation.
-- **S4 — Document-view parity.** A selected container shows the same container background, rail,
+- **S5 — Document-view parity.** A selected container shows the same container background, rail,
   `--sel-outline` and descendant subtree/brace/comment tint in both panes as the document page does.
   Reuse the existing document tokens and rules; do not introduce a new colour token or a second
   selection style.
-- **S5 — No regressions.** Arrow/Home/End navigation, `F7`/`Shift+F7`, Enter/reveal, search-current
+- **S6 — No regressions.** Arrow/Home/End navigation, `F7`/`Shift+F7`, Enter/reveal, search-current
   highlight, swap, added/removed side tinting, virtual scrolling and collapsing remain unchanged.
   Structural (brace/comment-only) rows stay non-selectable.
-- **S6 — Tests.** Each new behaviour gets a jsdom page test that fails when its branch is removed:
-  expanded chevron in both panes, click-in-right-pane selection, and the container highlight class
-  in both panes. CSS assertions read the built/source stylesheet the existing page tests read.
-- **S7 — Scope.** No model changes, no protocol change, no new setting, no read/write behaviour change.
+- **S7 — Tests.** Each new behaviour gets a jsdom page test that fails when its branch is removed:
+  expanded chevron in both panes, collapsed `{ … }` marker in both panes, click-in-right-pane
+  selection, and the container highlight class in both panes. CSS assertions read the built/source
+  stylesheet the existing page tests read.
+- **S8 — Scope.** No model changes, no protocol change, no new setting, no read/write behaviour change.
 
 ## Non-goals
 
-- Adding the document view's `{ … }` collapsed marker to the diff (unreported; separate call).
 - Redesigning diff status colours or the badge/summary work planned in
   `11-04-diff-semantic-rename-matching`.
 - Making the right pane a second ARIA tree; it stays the decorative mirror.
@@ -65,6 +68,8 @@ Verified in source (v0.6.0, `fix/validation-false-positives`):
 
 - [ ] A container that is expanded shows a rotated chevron in **both** panes; collapsing it restores
       the right-pointing chevron in both panes; Collapse All / Expand All update every row.
+- [ ] A collapsed container shows `{ … }` in both panes and loses it when expanded; an empty container
+      keeps `{ }`; no marker appears for a parameter or reference row.
 - [ ] Clicking a container in the right pane selects it: both panes mark the row `data-selected="true"`,
       the node gets the document-view container background + rail, and its descendants get the subtree
       tint.
@@ -78,8 +83,10 @@ Verified in source (v0.6.0, `fix/validation-false-positives`):
 ## Notes
 
 - Origin: user report on the diff panel after v0.6.0.
-- S4 prefers deleting the diff-only selection rule in favour of the shared document rule when the
+- S5 prefers deleting the diff-only selection rule in favour of the shared document rule when the
   attribute reaches the same element; the alternative (align the diff rule to the container tokens) is
   acceptable if the shared rule cannot be reused without leaking into structural rows. Decide at
   implementation and record which one was taken.
+- S2 reuses the document view's existing `{ … }` rule (`documentTree.css:370-373`) and must not add a
+  second marker implementation; the marker is text, not an ARIA announcement.
 - Repository rule: the diff is read-only; nothing in this task touches `WorkspaceEdit` or file writes.

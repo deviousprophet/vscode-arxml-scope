@@ -28,7 +28,7 @@
     "src/webview/components/documentTree/documentTree.css",
     "src/test/webview/page/diffPage.test.ts"
   ],
-  "notes": "Diff-panel UI bugs after v0.6.0. S1 chevron: rotation CSS only reads .node[aria-expanded], which stripDocumentNode removes, and the diff-row copy is left-pane only. S3 selection: DiffView wires onRowClick to the left DocumentTreeView only, so right-pane clicks are ignored; the diff's own selected style (--sel-bg + 1px outline) also diverges from the document view (--sel-container-bg + 2px rail + subtree tint). Plan: one expanded-state signal for both panes, click wiring for both panes, and selection parity with the document view. Tests: jsdom page tests in diffPage.test.ts, each must fail when its branch is removed. Planning only - no src changes in this phase.",
+  "notes": "Diff-panel UI bugs after v0.6.0. S1 chevron: rotation CSS only reads .node[aria-expanded], which stripDocumentNode removes, and the diff-row copy is left-pane only. S2 collapsed marker: the same stripped attribute also hides the document view's '{ ... }' suffix. S4 selection: DiffView wires onRowClick to the left DocumentTreeView only, so right-pane clicks are ignored; the diff's own selected style (--sel-bg + 1px outline) also diverges from the document view (--sel-container-bg + 2px rail + subtree tint). Plan: one expanded-state signal for both panes (restores chevron and marker), click wiring for both panes, and selection parity with the document view. Tests: jsdom page tests in diffPage.test.ts, each must fail when its branch is removed. Planning only - no src changes in this phase.",
 
   "meta": {}
 }

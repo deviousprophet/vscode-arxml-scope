@@ -61,8 +61,14 @@ test asserts the chevron rotation attribute.
   token source), diff stays read-only.
 - Existing page tests read the CSS as text for a few rules, so a selector rename must update them.
 
+## Collapsed marker
+
+`documentTree.css:370-373` appends `{ … }` to a collapsed container through
+`.node[aria-expanded="false"] > .row::after`, and `documentTree.css:374-377` appends `{ }` to an empty
+container. `stripDocumentNode` removes the same `aria-expanded` attribute, so the diff never shows
+`{ … }`. Restoring the signal for both panes fixes the marker and the chevron together; the empty
+container marker is unaffected because it keys on `data-empty`, which is preserved.
+
 ## Open question
 
-Whether the diff should also print the document view's `{ … }` marker on a collapsed container
-(`documentTree.css:370-373`). It is stripped today by the same `aria-expanded` removal but was not
-reported; treated as a non-goal.
+None. The collapsed marker is part of the task (S2) and must reuse the existing CSS rule.
