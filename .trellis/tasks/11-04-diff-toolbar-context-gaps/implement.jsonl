@@ -1,9 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Index of the frontend conventions for the core/host/webview split."}
-{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Diff view, shared row primitives, status tint and toolbar contracts."}
-{"file":".trellis/spec/frontend/components/component-toolbar.md","reason":"Toolbar markup, callbacks and diff control order."}
-{"file":".trellis/spec/frontend/state-management.md","reason":"Diff page view state, search and re-scan survival."}
-{"file":".trellis/spec/frontend/editor-lifecycle.md","reason":"Diff panel protocol, flattening and reveal behavior."}
-{"file":".trellis/spec/frontend/testing.md","reason":"Core/page test and mutation-check conventions."}
-{"file":".trellis/spec/frontend/css-guidelines.md","reason":"Theme tokens, data-* selectors and diff component CSS placement."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Core diff model, page state and toolbar layout cross layers."}
-{"file":".trellis/tasks/11-04-diff-toolbar-context-gaps/design.md","reason":"Final gap/context and toolbar design."}

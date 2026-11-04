@@ -1,6 +1,0 @@
-{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Check read-only behavior, no new dependency and the before-done commands."}
-{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Check diff rows, toolbar, selection and status tint against the contracts."}
-{"file":".trellis/spec/frontend/components/component-toolbar.md","reason":"Check the two view groups, Context toggle and icon-over-label behavior."}
-{"file":".trellis/spec/frontend/testing.md","reason":"Check each context/gap branch fails when removed and the manual pair is covered."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check core visibility, page flattening and toolbar state agree."}
-{"file":".trellis/tasks/11-04-diff-toolbar-context-gaps/design.md","reason":"Compare the implementation with the agreed gap/context design."}
