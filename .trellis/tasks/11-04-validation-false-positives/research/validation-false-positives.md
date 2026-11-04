@@ -108,3 +108,21 @@ valueOutOfRange        76
 Without the exclusion setting the counts stay higher because the workspace really does contain copies;
 the structural false positives (non-ECUC refs, summed multiplicity, ADD-INFO, empty values) disappear in
 both cases.
+
+## Synthetic probes (no customer data)
+
+These reproduce the same classes in small fixtures and are the basis for the acceptance tests:
+
+| Probe | v0.6.0 result | Cause |
+|---|---|---|
+| Two folders with identical AR paths and the same module definition | error `duplicateShortName`, `brokenReference` ambiguous, `multiplicity` warning | path-only identity, summed counts across files, no DEST filter |
+| Boolean parameter `<VALUE>1</VALUE>` | `valueOutOfRange: is not a boolean` | boolean accepts only `true`/`false` |
+| Float parameter `<VALUE>INF</VALUE>` | `valueOutOfRange: is not a valid float` | `Number.isFinite` rejects AUTOSAR `INF` |
+| Empty integer `<VALUE></VALUE>` | `valueOutOfRange: is not a valid integer` | empty treated as a value, not "default" |
+| Required parameter with `DEFAULT-VALUE` absent from the instance | `missingRequired` | default value ignored |
+| Two definitions at the same path | Details shows nothing | `definitionEntry` returns `undefined` without a count |
+
+## Measured cost of the validation pass
+
+v0.6.0 `validateWorkspace` on a 42 MB synthetic index: ~1.1 s, synchronous, after every index change.
+The v0.6.1 benchmark records the same shape at ~40 MiB with explicit time and heap budgets.
