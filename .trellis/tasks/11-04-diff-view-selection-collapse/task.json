@@ -1,0 +1,34 @@
+{
+  "id": "diff-view-selection-collapse",
+  "name": "diff-view-selection-collapse",
+  "title": "Fix diff view collapse chevrons and container selection highlight",
+  "description": "Make the diff tree show the live expanded/collapsed chevron and the same container selection highlight as the ECUC editor page.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": "diff",
+  "package": null,
+  "priority": "P2",
+  "creator": "deviousprophet",
+  "assignee": "deviousprophet",
+  "createdAt": "2026-11-04",
+  "completedAt": null,
+  "branch": "fix/validation-false-positives",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/webview/diffViewer.ts",
+    "src/webview/components/diffView/diffView.ts",
+    "src/webview/components/diffView/diffView.css",
+    "src/webview/components/documentTree/documentRows.ts",
+    "src/webview/components/documentTree/documentTree.css",
+    "src/test/webview/page/diffPage.test.ts"
+  ],
+  "notes": "Diff-panel UI bugs after v0.6.0. S1 chevron: rotation CSS only reads .node[aria-expanded], which stripDocumentNode removes, and the diff-row copy is left-pane only. S3 selection: DiffView wires onRowClick to the left DocumentTreeView only, so right-pane clicks are ignored; the diff's own selected style (--sel-bg + 1px outline) also diverges from the document view (--sel-container-bg + 2px rail + subtree tint). Plan: one expanded-state signal for both panes, click wiring for both panes, and selection parity with the document view. Tests: jsdom page tests in diffPage.test.ts, each must fail when its branch is removed. Planning only - no src changes in this phase.",
+
+  "meta": {}
+}

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/testing.md","reason":"Check each new test fails when its branch is removed and that CSS assertions match the shipped stylesheet."}
+{"file":".trellis/spec/frontend/css-guidelines.md","reason":"Check the selection reuses document tokens and no second colour is introduced."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Check the read-only diff, no new dependency/setting, and the before-done commands."}
+{"file":".trellis/tasks/11-04-diff-view-selection-collapse/research/diff-view-evidence.md","reason":"Compare the implemented DOM attributes and styles with the recorded evidence."}

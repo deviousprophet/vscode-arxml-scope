@@ -1,0 +1,9 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Index of the repository's coding guidelines for the webview and CSS changes."}
+{"file":".trellis/spec/frontend/components/index.md","reason":"Component folder contracts for the shared document tree and the diff view surface."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Webview event ownership and DOM contracts for row click wiring and ARIA ownership."}
+{"file":".trellis/spec/frontend/css-guidelines.md","reason":"data-* selectors, token use and file placement for the chevron and selection styles."}
+{"file":".trellis/spec/frontend/testing.md","reason":"jsdom page-test conventions, CSS assertions and the mutation-check rule."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Forbidden patterns and the before-done command list; no new token, dependency or write path."}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"Webview component boundaries; the diff page owns composition, DocumentTreeView owns row rendering."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The fix touches a shared row builder, the diff composition root and two stylesheets."}
+{"file":".trellis/tasks/11-04-diff-view-selection-collapse/research/diff-view-evidence.md","reason":"Verified render path, attribute stripping, click wiring and style gap to fix."}
