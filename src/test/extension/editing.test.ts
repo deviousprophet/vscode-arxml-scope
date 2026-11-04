@@ -1,10 +1,9 @@
 /**
- * Value editing in the custom editor (child design §2.1–§2.3, §2.5; prd AC1–AC9).
+ * Value editing in the custom editor.
  *
  * Every test that edits works on a **copy in a temporary directory**. Editing a committed
  * fixture in place would rewrite the repository on the second run, which is a correctness
- * problem rather than a style one. The bytes are compared, not the values: AC1, AC2 and
- * AC4 are about nothing else in the file moving.
+ * problem rather than a style one. The bytes are compared, not the values: nothing else in the file may move.
  *
  * The provider is driven through its own entry point with a stub panel that captures the
  * message listener, because `@vscode/test-electron` exposes no webview DOM. The write it
@@ -670,7 +669,7 @@ suite('editor value editing (AC1–AC9)', () => {
 	test('§2.2: a `>` inside an attribute does not truncate the element being wrapped', () => {
 		// `>` is legal unescaped in an attribute value, so the first `>` of the slice is not
 		// necessarily the end of the open tag. The scanner's lexer is quote-aware for that
-		// reason (parent design §5); a wrapper that is not rewrites the element without its
+		// reason; a wrapper that is not rewrites the element without its
 		// closing quote and the attributes after it, which is not well-formed XML. The
 		// element's own tags are kept verbatim, so the attribute survives the write.
 		const text = fixtureText('editing/self-closing.arxml').replace('<VALUE/>', '<VALUE DEST="a>b"/>');
@@ -716,7 +715,7 @@ suite('editor value editing (AC1–AC9)', () => {
 /**
  * A module whose containers have no `SHORT-NAME` text to replace: absent, empty, or
  * CDATA-backed, plus one with no `DEFINITION-REF` at all. Hand-written for the refusal
- * cases; adding or creating an element is out of scope (`prd.md`, non-goals).
+ * cases; adding or creating an element is out of scope.
  */
 const sparseContainers = `<?xml version="1.0" encoding="UTF-8"?>
 <AUTOSAR xmlns="http://autosar.org/schema/r4.0">
@@ -747,7 +746,7 @@ const sparseContainers = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 /**
- * Container short name and definition ref editing (prd R1–R5).
+ * Container short name and definition ref editing.
  *
  * The byte expectations are hand-derived: the expected files differ from
  * `editing/container.arxml` in exactly one contiguous span, so a writer that rewrites the

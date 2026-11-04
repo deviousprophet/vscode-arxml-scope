@@ -1,5 +1,5 @@
 /**
- * AC2, AC3 and AC9 — the activation gate, the "never claim the default" rule, and the
+ * The activation gate, the "never claim the default" rule, and the
  * guarantee that a full activation-and-navigation flow writes no file.
  */
 import * as assert from 'assert';

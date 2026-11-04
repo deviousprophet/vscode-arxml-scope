@@ -1,5 +1,5 @@
 /**
- * Pure virtual-scroll math for the windowed ECUC views (task design §5).
+ * Pure virtual-scroll math for the windowed ECUC views.
  *
  * The page keeps a flat display-row list, a deterministic row-height function
  * and the scroll container's viewport height; this module answers three

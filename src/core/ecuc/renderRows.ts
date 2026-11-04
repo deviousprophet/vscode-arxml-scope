@@ -1,5 +1,5 @@
 /**
- * Row data for the virtualised ECUC views (task design §2).
+ * Row data for the virtualised ECUC views.
  *
  * This is the host half of the virtual renderer: it walks the model in display
  * order and emits one plain object per entity — no HTML string, no DOM, no
@@ -97,7 +97,7 @@ export interface EcucRow {
 	followReason?: string;
 	/** Raw instance-reference context paths, dotted like the target. */
 	contextPaths?: string[];
-	/** Hover text: the full `DEFINITION-REF` (design §2.7). */
+	/** Hover text: the full `DEFINITION-REF`. */
 	title: string;
 	meta: MetaPart[];
 	/** Annotation comment lines shown above this row, in source order. */

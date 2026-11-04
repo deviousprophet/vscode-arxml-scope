@@ -1,5 +1,5 @@
 /**
- * Offset -> line/character conversion (child design §2.6).
+ * Offset -> line/character conversion.
  *
  * One pass collects line-start offsets; `positionAt` is a binary search into
  * that array. No per-call re-slicing of the text, unlike the reference's

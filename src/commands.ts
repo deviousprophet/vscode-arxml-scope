@@ -1,5 +1,5 @@
 /**
- * The contributed commands (child design §2.1, §10; parent design §11; diff design §4.2).
+ * The contributed commands.
  *
  * They share the provider's gate and the navigation helpers, so a command and a
  * webview action cannot diverge. Nothing here writes a file; the diff is read-only.
@@ -67,7 +67,7 @@ async function cycleCrossFileRules(): Promise<void> {
 }
 
 /**
- * Editor → source (design §2.3; UX child design §3). `follow` resolves a reference's
+ * Editor → source. `follow` resolves a reference's
  * target instead of revealing the reference itself; it is the webview's `follow`
  * message. Both go through `revealRangeInTextEditor`, which opens the source beside the
  * tree (or swaps the tab in `replace` mode) instead of replacing the custom editor.
@@ -97,7 +97,7 @@ async function revealInSource(uri?: vscode.Uri, nodeId?: string, follow = false)
 }
 
 /**
- * Source → editor (design §2.4). The cursor offset is mapped to the innermost node and
+ * Source → editor. The cursor offset is mapped to the innermost node and
  * the custom editor is opened at it. Returns the node id, so the mapping is observable.
  */
 async function revealInEcucEditor(provider: EcucEditorProvider, uri?: vscode.Uri): Promise<string | undefined> {

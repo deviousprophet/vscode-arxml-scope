@@ -1,5 +1,5 @@
 /**
- * AC8 — the mounted tree exposes real tree semantics, and focus is drawn with a
+ * The mounted tree exposes real tree semantics, and focus is drawn with a
  * theme colour. The row builder is exercised through the bundled page.
  */
 import * as assert from 'assert';

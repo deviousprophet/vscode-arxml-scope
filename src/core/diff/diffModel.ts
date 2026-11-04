@@ -1,5 +1,5 @@
 /**
- * The semantic diff model (task design §2).
+ * The semantic diff model.
  *
  * Both sides are ordinary `EcucRow` lists built by `buildRows` with a fixed
  * `sort: 'all'` order, so declaration order, formatting and comments cannot
@@ -89,7 +89,7 @@ export interface DiffSummary {
 }
 
 export interface DiffOptions {
-	/** Enable the semantic container-rename pass; default false preserves v0.6 output. */
+	/** Enable the semantic container-rename pass; default false preserves strict output. */
 	semanticMatching?: boolean;
 }
 
@@ -214,7 +214,7 @@ function contextText(cell: DiffCell): string {
  * Every compared field whose text differs, in the design's order. `label` is a
  * derivative and gets no separate entry. `shownValue` normally follows `value`, so it
  * is only reported when the raw values match but the display (quoted/bare) does not.
- * `definitionDest` is a separate attribute, so it is compared (PRD R6). Annotation
+ * `definitionDest` is a separate attribute, so it is compared. Annotation
  * meta is deliberately ignored, so a comment-only change is not a configuration
  * change.
  */
@@ -234,7 +234,7 @@ export function diffChanges(left: DiffCell, right: DiffCell): DiffChange[] {
 		['definition ref', left.definitionRef, right.definitionRef],
 		// `DEST` is a separate attribute, not part of the ref text: an integer parameter
 		// retyped as boolean would otherwise compare as unchanged while the editor's
-		// Type and format rows differ (PRD R6).
+		// Type and format rows differ.
 		['definition dest', left.definitionDest ?? '', right.definitionDest ?? ''],
 		['variant', metaText(left, 'variant'), metaText(right, 'variant')],
 		['condition', metaText(left, 'condition'), metaText(right, 'condition')],

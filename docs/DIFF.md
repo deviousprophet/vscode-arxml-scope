@@ -99,7 +99,7 @@ add + remove pair, and keeps its children aligned inside it.
 The toolbar has a **Semantic** / **Strict** view group; selecting one switches the current panel only
 and posts the new mode to the host, which rebuilds the comparison without changing the setting. The
 group flips immediately and shows a spinner plus `Switching to …` until the new rows arrive. Strict
-reproduces the output of v0.6.0 exactly.
+reproduces the strict output exactly.
 
 Switching reuses the rows and ranges already prepared for the open files. When semantic matching finds
 no renames, both modes are identical and the current document stays in place; toggling back after a

@@ -1,7 +1,7 @@
 /**
  * Large-index benchmark: stream-parse a synthetic ECUC file and build the
  * workspace lookups. The 200k+ element file is the size class that exposed the
- * array-spread crash before v0.5.0.
+ * array-spread crash on a large file.
  *
  * Headless and synthetic: no `vscode`, no DOM, no customer data.
  */

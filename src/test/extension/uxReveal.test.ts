@@ -1,11 +1,11 @@
 /**
- * AC1 (host half) and AC2 — selecting is in-place, and a deliberate reveal shows the
+ * Selecting is in-place, and a deliberate reveal shows the
  * source without closing the custom editor.
  *
  * The webview cannot be clicked from here, so the `select` message the click posts is
  * sent through the provider's own listener, and "opens no text editor" is asserted
  * against `vscode.window.visibleTextEditors` — which a reveal really would change. The
- * AC2 test opens the real custom editor through the real command, so the tab behaviour
+ * The test opens the real custom editor through the real command, so the tab behaviour
  * is the platform's, not a stub's.
  */
 import * as assert from 'assert';

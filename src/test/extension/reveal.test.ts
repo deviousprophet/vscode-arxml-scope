@@ -1,5 +1,5 @@
 /**
- * AC4 and AC5 — both reveal directions, including an offset inside a value selecting
+ * Both reveal directions, including an offset inside a value selecting
  * its parameter and an offset on a tag selecting that element.
  *
  * The mapping is asserted through the real commands, so the live editor and the
@@ -50,7 +50,7 @@ suite('editor reveal (AC4, AC5)', () => {
 			const id = index.idOf(node)!;
 			const range = await vscode.commands.executeCommand<vscode.Range>('vscode-arxml-scope.revealInSource', uri, id);
 			assert.ok(range, id);
-			// UX child design §3: reveal opens the source *beside* the tree and preserves
+			// Reveal opens the source *beside* the tree and preserves
 			// focus, so the editor is visible but is not necessarily the focused one. The
 			// old `activeTextEditor` assertion was the behaviour that defect described.
 			const editor = vscode.window.visibleTextEditors.find(

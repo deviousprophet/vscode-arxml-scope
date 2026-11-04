@@ -1,6 +1,5 @@
 /**
- * The compare commands and the diff panel entry point (task design §4.2;
- * prd AC1, AC11, AC13, AC15).
+ * The compare commands and the diff panel entry point.
  *
  * The panel is opened through the real command so the test covers registration,
  * selection pairing, the gate and the webview tab. The webview content is

@@ -1,5 +1,5 @@
 /**
- * Same-file reference resolution (parent design §7, child design §2.3).
+ * Same-file reference resolution.
  *
  * The caller passes the verbatim `/A/B/C` text (`targetRawPath`). The dotted
  * `targetPath` is display text only and is never used for lookup: converting it

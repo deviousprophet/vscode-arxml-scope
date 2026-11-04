@@ -1,5 +1,5 @@
 /**
- * AC6 — following a same-file reference selects the target; an absent path and an
+ * Following a same-file reference selects the target; an absent path and an
  * ambiguous suffix each produce a message and no navigation, with no exception thrown.
  */
 import * as assert from 'assert';
@@ -62,7 +62,7 @@ suite('editor references (AC6)', () => {
 			true
 		);
 		assert.ok(target, 'the target range');
-		// UX child design §3: the source opens beside the tree, so the editor is visible
+		// The source opens beside the tree, so the editor is visible
 		// without having to be the focused one.
 		const editor = vscode.window.visibleTextEditors.find(
 			(candidate) => candidate.document.uri.toString() === uri.toString()

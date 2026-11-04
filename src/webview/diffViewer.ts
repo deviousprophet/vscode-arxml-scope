@@ -195,7 +195,7 @@ function rebuildDisplay() {
 	}
 	if (!hasChanges()) {
 		// Two files with no semantic differences show the empty state, not a
-		// full tree of unchanged rows (AC2).
+		// full tree of unchanged rows.
 		displayRows = [];
 		displayIndexByKey = new Map();
 		navigationVisible = new Array(rows.length).fill(false);

@@ -1,5 +1,5 @@
 /**
- * AC1–AC5 — the ARXML Scope submenu is contributed once, holds both editor
+ * The ARXML Scope submenu is contributed once, holds both editor
  * actions, and keeps "Reveal in ECUC Editor" out of the Explorer and out of the
  * extension's own custom editor.
  */

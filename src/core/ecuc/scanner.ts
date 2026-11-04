@@ -1,11 +1,10 @@
 /**
- * Single-pass, iterative ECUC-Values scanner (parent design §5, child design §1–§2).
+ * Single-pass, iterative ECUC-Values scanner.
  *
  * Hand-written lexer plus an element stack. No DOM, no recursion: nesting depth
  * cannot overflow the call stack. The returned model holds only strings, numbers
  * and ranges, so it retains no reference to the input string.
  *
- * Implemented against `research/legacy-artext-analysis.md` §2 and parent design §4–§8.
  */
 import { ContainerNode, EcucDocumentModel, ModuleNode, ParameterNode, Range, ReferenceNode, lastShortName } from './model';
 import { decodeXml, isXmlWhitespace, markupDeclarationEnd, stripXmlPrefix } from '../text/xmlText';
@@ -82,7 +81,7 @@ interface Entry {
 	rec?: Rec;
 	/** Attributes retained for `DEFINITION-REF` (its `DEST` type). */
 	attrs?: Map<string, string>;
-	/** Set on `<VALUE>`: which enclosing element decides its meaning (child design §2.1). */
+	/** Set on `<VALUE>`: which enclosing element decides its meaning. */
 	valueRole?: 'param' | 'pb';
 }
 
@@ -406,7 +405,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		}
 
 		// Container: package chain, then the module short-name, then enclosing container
-		// short-names. Settled in child design §2.2 — see containerPath below.
+		// short-names. See containerPath below.
 		const moduleRec = nearest(ancestors, 'module');
 		const containerChain = ancestorShortNames(ancestors, 'container');
 		rec.containerPath = [...pkgChain, moduleRec?.shortName ?? '', ...containerChain];
@@ -538,7 +537,7 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 				parent.displayValue = decodeXml(entry.text).trim();
 				// Text present -> the inner text span, so the tags and surrounding whitespace stay
 				// untouched. Empty or self-closing -> the whole element span, which is the only
-				// shape a write may replace structurally (parent design §8).
+				// shape a write may replace structurally.
 				parent.valueRange = textRange(entry) ?? entry.rec?.range;
 			}
 		}
@@ -773,7 +772,7 @@ function immediate(ancestors: Entry[], ...kinds: RecKind[]): Rec | undefined {
 	return rec && kinds.includes(rec.kind) ? rec : undefined;
 }
 
-/** Which enclosing element decides a `<VALUE>` (child design §2.1). */
+/** Which enclosing element decides a `<VALUE>`. */
 function valueRole(stack: Entry[]): 'param' | 'pb' | undefined {
 	const parent = stack[stack.length - 1]?.name;
 	if (parent === 'ECUC-NUMERICAL-PARAM-VALUE' || parent === 'ECUC-TEXTUAL-PARAM-VALUE') {

@@ -1,5 +1,5 @@
 /**
- * The semantic diff model (task design §2, §3.3; prd AC2–AC6).
+ * The semantic diff model.
  *
  * The fixtures are built through `scanEcucValues` and the production row builder,
  * so a test exercises the same ids and display order the panel will see. The page

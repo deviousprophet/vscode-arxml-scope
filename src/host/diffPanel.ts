@@ -1,5 +1,5 @@
 /**
- * The semantic diff panel (task design §4).
+ * The semantic diff panel.
  *
  * Both files are read through `workspace.openTextDocument`, so unsaved buffers are
  * compared. The page is read-only: nothing here uses `WorkspaceEdit`, writes a
@@ -27,7 +27,7 @@ import { buildRows } from '../core/ecuc/renderRows';
 import { diffMessageType } from '../diffProtocol';
 import type { DiffWebviewToProvider } from '../diffProtocol';
 
-/** Re-scan debounce: one edit produces one refresh (design §4.1). */
+/** Re-scan debounce: one edit produces one refresh. */
 const REFRESH_DEBOUNCE_MS = 150;
 
 /** How long the page may take to report `ready` before the host warns. */
@@ -253,7 +253,7 @@ export class DiffPanel {
 					return;
 				}
 				// `beside` is forced: the diff tab must survive even when the user's
-				// revealMode is `replace` (R15/AC9).
+				// revealMode is `replace`.
 				await revealRangeInTextEditor(document, cell.range, {
 					viewColumn: panel.viewColumn,
 					mode: 'beside',

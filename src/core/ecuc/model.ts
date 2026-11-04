@@ -1,7 +1,7 @@
 /**
  * ARTEXT information model for a single ECUC-Values arxml file.
  *
- * Contract: parent design §4. Every node carries the source range needed for
+ * Contract: Every node carries the source range needed for
  * navigation and editing. Offsets are UTF-16 code units into the caller's text,
  * matching VS Code `Position`. No `vscode` import may appear in this module.
  */

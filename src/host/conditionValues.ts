@@ -1,5 +1,5 @@
 /**
- * Condition-value entries and their workspace persistence (task design §3).
+ * Condition-value entries and their workspace persistence.
  *
  * The values are entered by hand in the ECUC editor's Conditions panel and
  * belong to the workspace, not to the ARXML file: they are stored through
@@ -39,7 +39,7 @@ const VALUE_LIMIT = 200;
  * the host can post one warning instead of storing a constant it can never
  * match.
  *
- * A name may start with `/` so a full `SYSC-REF` path can be pasted (PRD R3).
+ * A name may start with `/` so a full `SYSC-REF` path can be pasted.
  * An empty value keeps the entry in `entries` so the panel can show the discovered
  * constant, but it is absent from `values`: the evaluator treats it as missing
  * (unknown) rather than as the known empty string.
