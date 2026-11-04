@@ -1,0 +1,12 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Index of the repository's coding guidelines for the core/host/webview split."}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"core/ must stay pure; the new diff session belongs in core and the host keeps vscode effects."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Forbidden patterns, the memory-only rule, the diff selection rule and the before-done commands."}
+{"file":".trellis/spec/frontend/testing.md","reason":"Unit, page and benchmark conventions for cache behavior and toolbar state."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Protocol unions and optional result fields for DiffSession and matchModeState."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Host/webview state split and re-scan survival; the cache must not outlive a document version."}
+{"file":".trellis/spec/frontend/editor-lifecycle.md","reason":"Diff panel lifecycle, debounce, generation tokens and last-good-document behavior."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Toolbar event ownership and the aria-pressed/aria-busy DOM contract."}
+{"file":".trellis/spec/frontend/css-guidelines.md","reason":"Toolbar pending styling uses tokens and component CSS."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse buildDiffDocument/rowsFor rather than adding a parallel diff builder."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The fix spans core, protocol, host and webview; use the cross-layer checklist."}
+{"file":".trellis/tasks/11-04-diff-match-mode-latency/research/toggle-latency-evidence.md","reason":"Measured cost of the current toggle and the no-rename equivalence case."}
