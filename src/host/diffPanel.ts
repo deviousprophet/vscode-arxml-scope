@@ -83,6 +83,9 @@ export class DiffPanel {
 		const rightLabel = label(rightUri);
 		const leftRows = rowsFor(left);
 		const rightRows = rowsFor(right);
+		let semantic = vscode.workspace
+			.getConfiguration('arxmlScope.diff')
+			.get<boolean>('semanticMatching', true);
 		let current = buildDiffDocument(
 			leftLabel,
 			rightLabel,
@@ -90,7 +93,8 @@ export class DiffPanel {
 			rightRows.rows,
 			leftRows.rangeOf,
 			rightRows.rangeOf,
-			{ left: leftRows.header, right: rightRows.header }
+			{ left: leftRows.header, right: rightRows.header },
+			{ semanticMatching: semantic }
 		);
 		const panel = vscode.window.createWebviewPanel(
 			DiffPanel.viewType,
@@ -163,13 +167,14 @@ export class DiffPanel {
 					nextRightRows.rows,
 					nextLeftRows.rangeOf,
 					nextRightRows.rangeOf,
-					{ left: nextLeftRows.header, right: nextRightRows.header }
+					{ left: nextLeftRows.header, right: nextRightRows.header },
+					{ semanticMatching: semantic }
 				);
 				if (disposed || generation !== refreshGeneration) {
 					return;
 				}
 				current = next;
-				await panel.webview.postMessage({ type: 'document', document: next });
+				await panel.webview.postMessage({ type: 'document', document: next, semantic });
 			} catch (error) {
 				if (disposed || generation !== refreshGeneration) {
 					return;
@@ -232,7 +237,14 @@ export class DiffPanel {
 				const message = raw as DiffWebviewToProvider;
 				if (message.type === 'ready') {
 					boot.settle();
-					void panel.webview.postMessage({ type: 'document', document: current });
+					void panel.webview.postMessage({ type: 'document', document: current, semantic });
+					return;
+				}
+				if (message.type === 'matchMode') {
+					if (typeof message.semantic === 'boolean') {
+						semantic = message.semantic;
+						void refreshNow();
+					}
 					return;
 				}
 				if (message.type === 'reveal') {

@@ -56,7 +56,7 @@ function mount(document = documentOf()): { dom: ReturnType<typeof installDom>; p
 	const dom = installDom('diff');
 	const module = loadModule<typeof import('../../../webview/diffViewer')>('../../webview/diffViewer');
 	module.mountDiff();
-	dom.post({ type: 'document', document });
+	dom.post({ type: 'document', semantic: false, document });
 	return { dom, page: module, document };
 }
 
@@ -131,7 +131,7 @@ function wordRow(overrides: Partial<DiffRow> = {}): DiffRow {
 }
 
 function wordDocument(rows: DiffRow[]): DiffDocument {
-	const summary = { changed: 0, added: 0, removed: 0, unchanged: 0 };
+	const summary = { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
 	for (const row of rows) {
 		summary[row.status]++;
 	}
@@ -279,7 +279,7 @@ suite('semantic diff page', () => {
 			left: row.left ? { ...row.left } : undefined,
 			right: row.left ? { ...row.left } : undefined,
 		}));
-		quiet.summary = { changed: 0, added: 0, removed: 0, unchanged: quiet.rows.length };
+		quiet.summary = { changed: 0, added: 0, removed: 0, unchanged: quiet.rows.length, renamed: 0 };
 		const { dom } = mount(quiet);
 		try {
 			assert.strictEqual(dom.document.getElementById('diff-list')!.hidden, true);
@@ -325,7 +325,7 @@ suite('semantic diff page', () => {
 			leftHeader: { packages: [] },
 			rightHeader: { packages: [] },
 			rows,
-			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0 },
+			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0, renamed: 0 },
 		});
 		try {
 			const rendered = treeRows(dom.document, '#diff-pane-left').length;
@@ -588,6 +588,42 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('a semantic pair shows the renamed badge and summary and the toolbar posts the strict toggle', () => {
+		const row = wordRow({
+			key: 'renamed',
+			kind: 'container',
+			hasChildren: false,
+			left: containerCell('OldName'),
+			right: containerCell('NewName'),
+			match: {
+				kind: 'semantic',
+				score: 0.83,
+				reasons: { children: 1, name: 0.8, position: 1, substitution: 0.5 },
+				substitutions: ['Old→New'],
+			},
+		});
+		const document = wordDocument([row]);
+		document.summary.renamed = 1;
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', semantic: true, document });
+			const badge = dom.document.querySelector('#diff-pane-left .diff-match-badge');
+			assert.ok(badge);
+			assert.strictEqual(badge!.textContent, 'renamed');
+			assert.ok((badge as HTMLElement).title.includes('score 0.83'));
+			assert.ok(dom.document.getElementById('diff-summary')!.textContent!.includes('1 changed (1 renamed)'));
+			const toggle = dom.document.getElementById('diff-match-mode') as HTMLElement;
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
+			toggle.click();
+			assert.strictEqual(messagesOf(dom.api, 'matchMode')[0].semantic, false);
+			dom.post({ type: 'document', semantic: false, document });
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(toggle.textContent!.trim(), 'Strict');
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('a container carries the live expanded state in both panes', () => {
 		const parent = wordRow({
 			key: 'parent',
@@ -607,7 +643,7 @@ suite('semantic diff page', () => {
 		});
 		const { dom } = mount();
 		try {
-			dom.post({ type: 'document', document: wordDocument([parent, child]) });
+			dom.post({ type: 'document', semantic: false, document: wordDocument([parent, child]) });
 			for (const pane of ['left', 'right']) {
 				assert.strictEqual(
 					dom.document.querySelector(`#diff-pane-${pane} .diff-row[data-key="parent"] .node`)?.getAttribute('aria-expanded'),
@@ -648,7 +684,7 @@ suite('semantic diff page', () => {
 		});
 		const { dom } = mount();
 		try {
-			dom.post({ type: 'document', document: wordDocument([parent, child]) });
+			dom.post({ type: 'document', semantic: false, document: wordDocument([parent, child]) });
 			const row = dom.document.querySelector('#diff-pane-right .diff-row[data-key="parent"] .row');
 			assert.ok(row);
 			row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -887,7 +923,7 @@ suite('semantic diff page', () => {
 			}
 			dom.window.dispatchEvent(new dom.window.Event('resize'));
 			assert.strictEqual(scroller.scrollTop, 0, 'the header is fully visible');
-			dom.post({ type: 'document', document });
+			dom.post({ type: 'document', semantic: false, document });
 			assert.strictEqual(scroller.scrollTop, 0, 'a refresh at the top keeps the header visible');
 			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
 			assert.strictEqual(scroller.scrollTop, 0, 'Show diff only at the top keeps the header visible');

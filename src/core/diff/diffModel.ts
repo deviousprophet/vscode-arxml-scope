@@ -43,6 +43,17 @@ export interface DiffChange {
 	field: string;
 	left: string;
 	right: string;
+	/** True when the difference is fully explained by the learned rename substitution. */
+	renameImplied?: boolean;
+}
+
+/** Why a semantic pair was accepted. */
+export interface DiffMatch {
+	kind: 'identity' | 'semantic';
+	score: number;
+	reasons: { children: number; name: number; position: number; substitution: number };
+	/** Learned token changes used by this pair, e.g. `NMH→NM`. */
+	substitutions?: string[];
 }
 
 export interface DiffRow {
@@ -62,6 +73,8 @@ export interface DiffRow {
 	left?: DiffCell;
 	right?: DiffCell;
 	changes: DiffChange[];
+	/** Present only on a row paired by the semantic pass. */
+	match?: DiffMatch;
 	/** Lower-cased label + short name + shown value from both sides. */
 	haystack: string;
 }
@@ -71,6 +84,13 @@ export interface DiffSummary {
 	added: number;
 	removed: number;
 	unchanged: number;
+	/** Subset of `changed` rows produced by the semantic pass. */
+	renamed: number;
+}
+
+export interface DiffOptions {
+	/** Enable the semantic container-rename pass; default false preserves v0.6 output. */
+	semanticMatching?: boolean;
 }
 
 /** A file label plus its path, the pair the title disambiguation needs. */
@@ -116,6 +136,7 @@ interface MergedNode {
 	left?: DiffCell;
 	right?: DiffCell;
 	changes: DiffChange[];
+	match?: DiffMatch;
 	children: MergedNode[];
 }
 
@@ -130,6 +151,18 @@ interface MergedNode {
  */
 export function baseId(id: string): string {
 	return id.replace(/#\d+(?=\/|$)/g, '');
+}
+
+/** The final child segment of an id, used inside a renamed parent. */
+function relativeId(id: string): string {
+	const at = id.lastIndexOf('/');
+	return at < 0 ? id : id.slice(at + 1);
+}
+
+interface PairContext {
+	relative: boolean;
+	semantic: boolean;
+	substitutions: Map<string, string>;
 }
 
 /** A row id to its source range; the row itself deliberately carries no position. */
@@ -282,10 +315,11 @@ function sortIdentity(row: EcucRow): string {
 		.join(',')}`;
 }
 
-function groupByBase(children: readonly TreeRow[]): Map<string, TreeRow[]> {
+function groupByBase(children: readonly TreeRow[], context: PairContext): Map<string, TreeRow[]> {
 	const groups = new Map<string, TreeRow[]>();
 	for (const child of children) {
-		const base = baseId(child.row.id);
+		const id = context.relative ? relativeId(child.row.id) : child.row.id;
+		const base = baseId(id);
 		const list = groups.get(base);
 		if (list) {
 			list.push(child);
@@ -294,6 +328,11 @@ function groupByBase(children: readonly TreeRow[]): Map<string, TreeRow[]> {
 		}
 	}
 	return groups;
+}
+
+interface PairResult {
+	matchOfRight: Map<TreeRow, TreeRow>;
+	matches: Map<TreeRow, DiffMatch>;
 }
 
 /**
@@ -306,22 +345,27 @@ function groupByBase(children: readonly TreeRow[]): Map<string, TreeRow[]> {
  * a condition or DEST; the looser sort identity then pairs a duplicate whose value
  * changed so the change lands on one row. The remaining rows pair by exact id, then
  * by the ordinal-free base id when exactly one candidate remains on each side (the
- * design's fallback, widened to embedded parent ordinals). Returns right -> left.
+ * design's fallback, widened to embedded parent ordinals). The optional semantic
+ * pass then pairs leftover containers by parent, kind, DEFINITION-REF and score.
  */
-function pairLevel(leftChildren: readonly TreeRow[], rightChildren: readonly TreeRow[]): Map<TreeRow, TreeRow> {
+function pairLevel(leftChildren: readonly TreeRow[], rightChildren: readonly TreeRow[], context: PairContext): PairResult {
 	const matchOfRight = new Map<TreeRow, TreeRow>();
+	const matches = new Map<TreeRow, DiffMatch>();
 	const matchedLeft = new Set<TreeRow>();
-	const tryPair = (right: TreeRow, left: TreeRow): boolean => {
+	const tryPair = (right: TreeRow, left: TreeRow, match?: DiffMatch): boolean => {
 		if (matchOfRight.has(right) || matchedLeft.has(left)) {
 			return false;
 		}
 		matchOfRight.set(right, left);
 		matchedLeft.add(left);
+		if (match) {
+			matches.set(left, match);
+		}
 		return true;
 	};
 
-	const leftByBase = groupByBase(leftChildren);
-	const rightByBase = groupByBase(rightChildren);
+	const leftByBase = groupByBase(leftChildren, context);
+	const rightByBase = groupByBase(rightChildren, context);
 	for (const [base, lefts] of leftByBase) {
 		const rights = rightByBase.get(base);
 		if (!rights || (lefts.length === 1 && rights.length === 1)) {
@@ -364,15 +408,16 @@ function pairLevel(leftChildren: readonly TreeRow[], rightChildren: readonly Tre
 		pairIdentity(lefts, rights, (node) => sortIdentity(node.row));
 	}
 
+	const idOf = (row: TreeRow): string => (context.relative ? relativeId(row.row.id) : row.row.id);
 	const rightById = new Map<string, TreeRow>();
 	for (const right of rightChildren) {
-		rightById.set(right.row.id, right);
+		rightById.set(idOf(right), right);
 	}
 	for (const left of leftChildren) {
 		if (matchedLeft.has(left)) {
 			continue;
 		}
-		const right = rightById.get(left.row.id);
+		const right = rightById.get(idOf(left));
 		if (right) {
 			tryPair(right, left);
 		}
@@ -383,7 +428,7 @@ function pairLevel(leftChildren: readonly TreeRow[], rightChildren: readonly Tre
 		if (matchedLeft.has(left)) {
 			continue;
 		}
-		const base = baseId(left.row.id);
+		const base = baseId(idOf(left));
 		const list = leftRestByBase.get(base);
 		if (list) {
 			list.push(left);
@@ -396,7 +441,7 @@ function pairLevel(leftChildren: readonly TreeRow[], rightChildren: readonly Tre
 		if (matchOfRight.has(right)) {
 			continue;
 		}
-		const base = baseId(right.row.id);
+		const base = baseId(idOf(right));
 		const list = rightRestByBase.get(base);
 		if (list) {
 			list.push(right);
@@ -410,7 +455,360 @@ function pairLevel(leftChildren: readonly TreeRow[], rightChildren: readonly Tre
 			tryPair(rights[0], lefts[0]);
 		}
 	}
-	return matchOfRight;
+
+	if (context.semantic) {
+		semanticPass(leftChildren, rightChildren, context, tryPair, matchedLeft, matchOfRight);
+	}
+	return { matchOfRight, matches };
+}
+
+interface SemanticScore {
+	score: number;
+	reasons: DiffMatch['reasons'];
+}
+
+interface SemanticPair extends SemanticScore {
+	left: TreeRow;
+	right: TreeRow;
+}
+
+/** Pairs leftover containers with the same parent, kind and definition ref. */
+function semanticPass(
+	leftChildren: readonly TreeRow[],
+	rightChildren: readonly TreeRow[],
+	context: PairContext,
+	tryPair: (right: TreeRow, left: TreeRow, match?: DiffMatch) => boolean,
+	matchedLeft: ReadonlySet<TreeRow>,
+	matchOfRight: ReadonlyMap<TreeRow, TreeRow>
+): void {
+	const lefts = leftChildren.filter((node) => !matchedLeft.has(node) && node.row.kind === 'container');
+	const rights = rightChildren.filter((node) => !matchOfRight.has(node) && node.row.kind === 'container');
+	if (lefts.length === 0 || rights.length === 0) {
+		return;
+	}
+	const buckets = new Map<string, { lefts: TreeRow[]; rights: TreeRow[] }>();
+	for (const left of lefts) {
+		const key = left.row.definitionRef;
+		const bucket = buckets.get(key) ?? { lefts: [], rights: [] };
+		bucket.lefts.push(left);
+		buckets.set(key, bucket);
+	}
+	for (const right of rights) {
+		const key = right.row.definitionRef;
+		const bucket = buckets.get(key) ?? { lefts: [], rights: [] };
+		bucket.rights.push(right);
+		buckets.set(key, bucket);
+	}
+	for (const bucket of buckets.values()) {
+		if (bucket.lefts.length === 0 || bucket.rights.length === 0) {
+			continue;
+		}
+		if (bucket.lefts.length * bucket.rights.length > 250_000) {
+			continue;
+		}
+		const seeds = assignSemantic(bucket.lefts, bucket.rights, context);
+		learnSubstitutions(seeds, context.substitutions);
+		const final = assignSemantic(bucket.lefts, bucket.rights, context);
+		for (const pair of final) {
+			const used = substitutionsUsed(pair.left, pair.right, context.substitutions);
+			tryPair(pair.right, pair.left, {
+				kind: 'semantic',
+				score: pair.score,
+				reasons: pair.reasons,
+				...(used.length === 0 ? {} : { substitutions: used }),
+			});
+		}
+	}
+}
+
+/** Scores and greedily assigns one bucket. Near-ties stay unpaired. */
+function assignSemantic(lefts: readonly TreeRow[], rights: readonly TreeRow[], context: PairContext): SemanticPair[] {
+	const leftIndex = new Map(lefts.map((node, index) => [node, index]));
+	const rightIndex = new Map(rights.map((node, index) => [node, index]));
+	const candidates: SemanticPair[] = [];
+	for (const left of lefts) {
+		for (const right of rights) {
+			const scored = scoreSemantic(left, right, leftIndex, rightIndex, context.substitutions);
+			candidates.push({ left, right, ...scored });
+		}
+	}
+	if (candidates.length === 0) {
+		return [];
+	}
+	const bestLeft = new Map<TreeRow, number>();
+	const secondLeft = new Map<TreeRow, number>();
+	const bestRight = new Map<TreeRow, number>();
+	const secondRight = new Map<TreeRow, number>();
+	const record = (best: Map<TreeRow, number>, second: Map<TreeRow, number>, node: TreeRow, score: number): void => {
+		const current = best.get(node);
+		if (current === undefined || score > current) {
+			second.set(node, current ?? 0);
+			best.set(node, score);
+		} else if (score > (second.get(node) ?? 0)) {
+			second.set(node, score);
+		}
+	};
+	for (const candidate of candidates) {
+		record(bestLeft, secondLeft, candidate.left, candidate.score);
+		record(bestRight, secondRight, candidate.right, candidate.score);
+	}
+	const accepted = candidates.filter((candidate) => {
+		if (candidate.score < 0.62) {
+			return false;
+		}
+		const leftMargin = (bestLeft.get(candidate.left) ?? 0) - (secondLeft.get(candidate.left) ?? 0);
+		const rightMargin = (bestRight.get(candidate.right) ?? 0) - (secondRight.get(candidate.right) ?? 0);
+		return leftMargin >= 0.08 && rightMargin >= 0.08;
+	});
+	accepted.sort(
+		(a, b) =>
+			b.score - a.score ||
+			relativeId(a.left.row.id).localeCompare(relativeId(b.left.row.id)) ||
+			relativeId(a.right.row.id).localeCompare(relativeId(b.right.row.id))
+	);
+	const usedLeft = new Set<TreeRow>();
+	const usedRight = new Set<TreeRow>();
+	const out: SemanticPair[] = [];
+	for (const candidate of accepted) {
+		if (usedLeft.has(candidate.left) || usedRight.has(candidate.right)) {
+			continue;
+		}
+		usedLeft.add(candidate.left);
+		usedRight.add(candidate.right);
+		out.push(candidate);
+	}
+	return out;
+}
+
+function scoreSemantic(
+	left: TreeRow,
+	right: TreeRow,
+	leftIndex: ReadonlyMap<TreeRow, number>,
+	rightIndex: ReadonlyMap<TreeRow, number>,
+	substitutions: ReadonlyMap<string, string>
+): SemanticScore {
+	const children = childrenScore(left, right, substitutions);
+	if (children === 0) {
+		return { score: 0, reasons: { children: 0, name: 0, position: 0, substitution: 0 } };
+	}
+	const name = nameScore(left, right, substitutions);
+	const position = positionScore(left, right, leftIndex, rightIndex);
+	const substitution = substitutionScore(left, right, substitutions);
+	const score = 0.55 * children + 0.3 * name + 0.1 * position + 0.05 * substitution;
+	return {
+		score,
+		reasons: {
+			children: round(children),
+			name: round(name),
+			position: round(position),
+			substitution: round(substitution),
+		},
+	};
+}
+
+function childrenScore(left: TreeRow, right: TreeRow, substitutions: ReadonlyMap<string, string>): number {
+	if (left.children.length === 0 && right.children.length === 0) {
+		return 1;
+	}
+	if (left.children.length === 0 || right.children.length === 0) {
+		return 0;
+	}
+	const leftKeys = multiset(left.children.map((child) => childKey(child, substitutions)));
+	const rightKeys = multiset(right.children.map((child) => childKey(child, substitutions)));
+	let intersection = 0;
+	let union = 0;
+	for (const key of new Set([...leftKeys.keys(), ...rightKeys.keys()])) {
+		const leftCount = leftKeys.get(key) ?? 0;
+		const rightCount = rightKeys.get(key) ?? 0;
+		intersection += Math.min(leftCount, rightCount);
+		union += Math.max(leftCount, rightCount);
+	}
+	return union === 0 ? 1 : intersection / union;
+}
+
+function childKey(node: TreeRow, substitutions: ReadonlyMap<string, string>): string {
+	return `${node.row.kind}|${node.row.definitionRef}|${applySubstitutions(sortIdentity(node.row), substitutions)}`;
+}
+
+function nameScore(left: TreeRow, right: TreeRow, substitutions: ReadonlyMap<string, string>): number {
+	const leftName = applySubstitutions(nameOf(left), substitutions).toLowerCase();
+	const rightName = applySubstitutions(nameOf(right), substitutions).toLowerCase();
+	if (leftName === '' || rightName === '') {
+		return 0;
+	}
+	const tokensLeft = new Set(tokensOf(leftName));
+	const tokensRight = new Set(tokensOf(rightName));
+	const union = new Set([...tokensLeft, ...tokensRight]);
+	let intersection = 0;
+	for (const token of tokensLeft) {
+		if (tokensRight.has(token)) {
+			intersection++;
+		}
+	}
+	const jaccard = union.size === 0 ? 0 : intersection / union.size;
+	const distance = levenshtein(leftName, rightName);
+	const similarity = 1 - distance / Math.max(leftName.length, rightName.length, 1);
+	return 0.5 * jaccard + 0.5 * similarity;
+}
+
+function positionScore(
+	left: TreeRow,
+	right: TreeRow,
+	leftIndex: ReadonlyMap<TreeRow, number>,
+	rightIndex: ReadonlyMap<TreeRow, number>
+): number {
+	const i = leftIndex.get(left) ?? 0;
+	const j = rightIndex.get(right) ?? 0;
+	return Math.max(0, Math.min(1, 1 - Math.abs(i - j) / Math.max(1, leftIndex.size, rightIndex.size)));
+}
+
+function substitutionScore(left: TreeRow, right: TreeRow, substitutions: ReadonlyMap<string, string>): number {
+	if (substitutions.size === 0) {
+		return 0;
+	}
+	const leftName = nameOf(left);
+	const rightName = nameOf(right);
+	if (applySubstitutions(leftName, substitutions) === rightName || applySubstitutions(rightName, substitutions) === leftName) {
+		return 1;
+	}
+	const blob = `${leftName} ${rightName} ${childBlob(left)} ${childBlob(right)}`;
+	for (const old of substitutions.keys()) {
+		if (blob.includes(old)) {
+			return 0.5;
+		}
+	}
+	return 0;
+}
+
+function childBlob(node: TreeRow): string {
+	return node.children.map((child) => `${nameOf(child)} ${sortIdentity(child.row)}`).join(' ');
+}
+
+function substitutionsUsed(left: TreeRow, right: TreeRow, substitutions: ReadonlyMap<string, string>): string[] {
+	const blob = `${nameOf(left)} ${nameOf(right)} ${childBlob(left)} ${childBlob(right)}`;
+	return [...substitutions.entries()]
+		.filter(([old]) => blob.includes(old))
+		.map(([old, next]) => `${old}→${next}`);
+}
+
+/** Learns `old→new` token changes from high-confidence seed pairs. */
+function learnSubstitutions(seeds: readonly SemanticPair[], substitutions: Map<string, string>): void {
+	if (substitutions.size > 0) {
+		return;
+	}
+	const counts = new Map<string, Map<string, number>>();
+	const totals = new Map<string, number>();
+	for (const seed of seeds) {
+		if (seed.score < 0.8 || nameOf(seed.left) === nameOf(seed.right)) {
+			continue;
+		}
+		for (const [old, next] of tokenChanges(nameOf(seed.left), nameOf(seed.right))) {
+			if (old.length < 2 || next.length < 2 || /^\d+$/.test(old) || /^\d+$/.test(next)) {
+				continue;
+			}
+			totals.set(old, (totals.get(old) ?? 0) + 1);
+			const byNext = counts.get(old) ?? new Map<string, number>();
+			byNext.set(next, (byNext.get(next) ?? 0) + 1);
+			counts.set(old, byNext);
+		}
+	}
+	const candidates: Array<{ old: string; next: string; count: number }> = [];
+	for (const [old, byNext] of counts) {
+		let bestNext = '';
+		let bestCount = 0;
+		for (const [next, count] of byNext) {
+			if (count > bestCount || (count === bestCount && next < bestNext)) {
+				bestNext = next;
+				bestCount = count;
+			}
+		}
+		if (bestCount >= 2 && bestCount / Math.max(1, totals.get(old) ?? 0) >= 0.6) {
+			candidates.push({ old, next: bestNext, count: bestCount });
+		}
+	}
+	candidates.sort((a, b) => b.count - a.count || a.old.localeCompare(b.old));
+	for (const candidate of candidates) {
+		if (!substitutions.has(candidate.old)) {
+			substitutions.set(candidate.old, candidate.next);
+		}
+	}
+}
+
+function tokenChanges(left: string, right: string): Array<[string, string]> {
+	const a = tokensOf(left);
+	const b = tokensOf(right);
+	const out: Array<[string, string]> = [];
+	let i = 0;
+	let j = 0;
+	while (i < a.length && j < b.length) {
+		if (a[i] === b[j]) {
+			i++;
+			j++;
+			continue;
+		}
+		out.push([a[i], b[j]]);
+		i++;
+		j++;
+	}
+	return out;
+}
+
+/** Replaces whole identifier tokens; display text is never rewritten by the model. */
+export function applySubstitutions(text: string, substitutions: ReadonlyMap<string, string>): string {
+	if (substitutions.size === 0) {
+		return text;
+	}
+	const ordered = [...substitutions.entries()].sort((a, b) => b[0].length - a[0].length);
+	return text.replace(/[A-Za-z0-9]+/g, (token) => {
+		for (const [old, next] of ordered) {
+			if (token === old) {
+				return next;
+			}
+		}
+		return token;
+	});
+}
+
+function tokensOf(text: string): string[] {
+	return text.match(/[A-Za-z0-9]+/g) ?? [];
+}
+
+function nameOf(node: TreeRow): string {
+	return node.row.shortName || node.row.label;
+}
+
+function multiset(values: readonly string[]): Map<string, number> {
+	const counts = new Map<string, number>();
+	for (const value of values) {
+		counts.set(value, (counts.get(value) ?? 0) + 1);
+	}
+	return counts;
+}
+
+function levenshtein(left: string, right: string): number {
+	const previous = new Array<number>(right.length + 1);
+	const current = new Array<number>(right.length + 1);
+	for (let j = 0; j <= right.length; j++) {
+		previous[j] = j;
+	}
+	for (let i = 1; i <= left.length; i++) {
+		current[0] = i;
+		for (let j = 1; j <= right.length; j++) {
+			current[j] = Math.min(
+				previous[j] + 1,
+				current[j - 1] + 1,
+				previous[j - 1] + (left[i - 1] === right[j - 1] ? 0 : 1)
+			);
+		}
+		for (let j = 0; j <= right.length; j++) {
+			previous[j] = current[j];
+		}
+	}
+	return previous[right.length];
+}
+
+function round(value: number): number {
+	return Math.round(value * 1000) / 1000;
 }
 
 function haystackOf(cell: DiffCell | undefined): string {
@@ -434,10 +832,19 @@ function rowHaystack(left: DiffCell | undefined, right: DiffCell | undefined): s
 /** Added rows live in their own key namespace (see `sideNode`). */
 const ADDED_KEY_PREFIX = 'right:';
 
-function pairedNode(left: TreeRow, right: TreeRow, leftRanges: RangeLookup, rightRanges: RangeLookup): MergedNode {
+function pairedNode(
+	left: TreeRow,
+	right: TreeRow,
+	leftRanges: RangeLookup,
+	rightRanges: RangeLookup,
+	context: PairContext,
+	match?: DiffMatch
+): MergedNode {
 	const leftCell = toDiffCell(left.row, rangeOf(leftRanges, left.row.id));
 	const rightCell = toDiffCell(right.row, rangeOf(rightRanges, right.row.id));
 	const changes = diffChanges(leftCell, rightCell);
+	markRenameImplied(changes, context.substitutions);
+	const childContext = match?.kind === 'semantic' ? { ...context, relative: true } : context;
 	return {
 		// The left id is the key. A right-only sibling can carry the same id when a
 		// duplicate-name group was paired by content across ordinals, so added rows
@@ -448,11 +855,24 @@ function pairedNode(left: TreeRow, right: TreeRow, leftRanges: RangeLookup, righ
 		left: leftCell,
 		right: rightCell,
 		changes,
-		children: mergeChildren(left.children, right.children, leftRanges, rightRanges),
+		...(match === undefined ? {} : { match }),
+		children: mergeChildren(left.children, right.children, leftRanges, rightRanges, childContext),
 	};
 }
 
-function sideNode(tree: TreeRow, status: 'added' | 'removed', ranges: RangeLookup): MergedNode {
+/** Marks a changed field that differs only by the learned substitution. */
+function markRenameImplied(changes: DiffChange[], substitutions: ReadonlyMap<string, string>): void {
+	if (substitutions.size === 0) {
+		return;
+	}
+	for (const change of changes) {
+		if (applySubstitutions(change.left, substitutions) === change.right) {
+			change.renameImplied = true;
+		}
+	}
+}
+
+function sideNode(tree: TreeRow, status: 'added' | 'removed', ranges: RangeLookup, context: PairContext): MergedNode {
 	const cell = toDiffCell(tree.row, rangeOf(ranges, tree.row.id));
 	return {
 		// Paired and removed rows use left ids; an added row can be the right twin of
@@ -464,7 +884,7 @@ function sideNode(tree: TreeRow, status: 'added' | 'removed', ranges: RangeLooku
 		left: status === 'removed' ? cell : undefined,
 		right: status === 'added' ? cell : undefined,
 		changes: [],
-		children: tree.children.map((child) => sideNode(child, status, ranges)),
+		children: tree.children.map((child) => sideNode(child, status, ranges, context)),
 	};
 }
 
@@ -473,9 +893,10 @@ function mergeChildren(
 	leftChildren: readonly TreeRow[],
 	rightChildren: readonly TreeRow[],
 	leftRanges: RangeLookup,
-	rightRanges: RangeLookup
+	rightRanges: RangeLookup,
+	context: PairContext
 ): MergedNode[] {
-	const matchOfRight = pairLevel(leftChildren, rightChildren);
+	const { matchOfRight, matches } = pairLevel(leftChildren, rightChildren, context);
 	const matchOfLeft = new Map<TreeRow, TreeRow>();
 	for (const [right, left] of matchOfRight) {
 		matchOfLeft.set(left, right);
@@ -501,17 +922,17 @@ function mergeChildren(
 
 	const out: MergedNode[] = [];
 	for (const right of rightOnlyByPrevious.get(null) ?? []) {
-		out.push(sideNode(right, 'added', rightRanges));
+		out.push(sideNode(right, 'added', rightRanges, context));
 	}
 	for (const left of leftChildren) {
 		const right = matchOfLeft.get(left);
 		if (right) {
-			out.push(pairedNode(left, right, leftRanges, rightRanges));
+			out.push(pairedNode(left, right, leftRanges, rightRanges, context, matches.get(left)));
 		} else {
-			out.push(sideNode(left, 'removed', leftRanges));
+			out.push(sideNode(left, 'removed', leftRanges, context));
 		}
 		for (const addition of rightOnlyByPrevious.get(left.row.id) ?? []) {
-			out.push(sideNode(addition, 'added', rightRanges));
+			out.push(sideNode(addition, 'added', rightRanges, context));
 		}
 	}
 	return out;
@@ -535,6 +956,7 @@ function flattenMerged(nodes: readonly MergedNode[], parentKey: string | null, l
 			left: node.left,
 			right: node.right,
 			changes: node.changes,
+			...(node.match === undefined ? {} : { match: node.match }),
 			haystack: rowHaystack(node.left, node.right),
 		};
 		out.push(row);
@@ -548,11 +970,17 @@ export function diffRows(
 	leftRows: readonly EcucRow[],
 	rightRows: readonly EcucRow[],
 	leftRanges?: RangeLookup,
-	rightRanges?: RangeLookup
+	rightRanges?: RangeLookup,
+	options: DiffOptions = {}
 ): DiffRow[] {
 	const leftLookup: RangeLookup = leftRanges ?? (() => undefined);
 	const rightLookup: RangeLookup = rightRanges ?? (() => undefined);
-	const merged = mergeChildren(treeOf(leftRows), treeOf(rightRows), leftLookup, rightLookup);
+	const context: PairContext = {
+		relative: false,
+		semantic: options.semanticMatching === true,
+		substitutions: new Map(),
+	};
+	const merged = mergeChildren(treeOf(leftRows), treeOf(rightRows), leftLookup, rightLookup, context);
 	const out: DiffRow[] = [];
 	flattenMerged(merged, null, 1, out);
 	return out;
@@ -560,9 +988,12 @@ export function diffRows(
 
 /** Counts every row with a status, descendants included. */
 export function summarizeDiff(rows: readonly DiffRow[]): DiffSummary {
-	const summary: DiffSummary = { changed: 0, added: 0, removed: 0, unchanged: 0 };
+	const summary: DiffSummary = { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
 	for (const row of rows) {
 		summary[row.status]++;
+		if (row.match?.kind === 'semantic') {
+			summary.renamed++;
+		}
 	}
 	return summary;
 }
@@ -575,9 +1006,10 @@ export function buildDiffDocument(
 	rightRows: readonly EcucRow[],
 	leftRanges?: RangeLookup,
 	rightRanges?: RangeLookup,
-	headers?: { left: DiffHeader; right: DiffHeader }
+	headers?: { left: DiffHeader; right: DiffHeader },
+	options: DiffOptions = {}
 ): DiffDocument {
-	const rows = diffRows(leftRows, rightRows, leftRanges, rightRanges);
+	const rows = diffRows(leftRows, rightRows, leftRanges, rightRanges, options);
 	return {
 		left,
 		right,

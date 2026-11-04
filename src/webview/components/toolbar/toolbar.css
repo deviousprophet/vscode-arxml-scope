@@ -68,6 +68,15 @@
 .icon-tool .lbl {
 	white-space: nowrap;
 }
+.diff-summary {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--tok-dim);
+	font-variant-numeric: tabular-nums;
+}
 @media (max-width: 720px) {
 	.toolbar {
 		padding: 0 4px;

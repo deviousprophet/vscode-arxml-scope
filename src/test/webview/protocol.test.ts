@@ -51,6 +51,7 @@ suite('webview protocol', () => {
 		const host: DiffProviderToWebview[] = [
 			{
 				type: 'document',
+				semantic: true,
 				document: {
 					left: { name: 'a', path: '/a' },
 					right: { name: 'b', path: '/b' },
@@ -58,7 +59,7 @@ suite('webview protocol', () => {
 					leftHeader: { packages: [] },
 					rightHeader: { packages: [] },
 					rows: [],
-					summary: { changed: 0, added: 0, removed: 0, unchanged: 0 },
+					summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 },
 				},
 			},
 			{ type: 'error', message: 'refresh failed' },

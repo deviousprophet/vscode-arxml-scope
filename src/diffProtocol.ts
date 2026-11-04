@@ -12,7 +12,7 @@ export type { DiffDocument } from './core/diff/diffModel';
 /** Host → diff page. */
 export type DiffProviderToWebview =
 	/** Install (or replace) the compared document. */
-	| { type: 'document'; document: DiffDocument }
+	| { type: 'document'; document: DiffDocument; semantic: boolean }
 	/** The refresh failed; keep the last good document and show the banner. */
 	| { type: 'error'; message: string };
 
@@ -20,6 +20,8 @@ export type DiffProviderToWebview =
 export type DiffWebviewToProvider =
 	/** The page mounted and is listening; the host answers with `document`. */
 	| { type: 'ready' }
+	/** Toggle semantic matching for this panel only. */
+	| { type: 'matchMode'; semantic: boolean }
 	/** Reveal one row in its source file; `side` is the host row side (the page maps the displayed pane through `hostSide`). */
 	| { type: 'reveal'; side: 'left' | 'right'; key: string };
 

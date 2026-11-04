@@ -26,7 +26,7 @@ function side(text: string): Side {
 	return { rows, rangeOf: (id) => index.byId.get(id)?.range };
 }
 
-function diffOf(leftText: string, rightText: string) {
+function diffOf(leftText: string, rightText: string, semanticMatching = false) {
 	const left = side(leftText);
 	const right = side(rightText);
 	const document = buildDiffDocument(
@@ -35,7 +35,9 @@ function diffOf(leftText: string, rightText: string) {
 		left.rows,
 		right.rows,
 		left.rangeOf,
-		right.rangeOf
+		right.rangeOf,
+		undefined,
+		{ semanticMatching }
 	);
 	return { document, left, right };
 }
@@ -140,7 +142,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 			)
 		);
 		const { document } = diffOf(text, text);
-		assert.deepStrictEqual(document.summary, { changed: 0, added: 0, removed: 0, unchanged: document.rows.length });
+		assert.deepStrictEqual(document.summary, { changed: 0, added: 0, removed: 0, unchanged: document.rows.length, renamed: 0 });
 		assert.ok(document.rows.length >= 4, 'the file has rows to compare');
 		assert.ok(document.rows.every((row) => row.status === 'unchanged'));
 	});
@@ -266,7 +268,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const { document } = diffOf(forward, reversed);
 		assert.deepStrictEqual(
 			document.summary,
-			{ changed: 0, added: 0, removed: 0, unchanged: document.rows.length },
+			{ changed: 0, added: 0, removed: 0, unchanged: document.rows.length, renamed: 0 },
 			'declaration order is not a difference'
 		);
 	});
@@ -323,7 +325,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const { document } = diffOf(left, right);
 		assert.deepStrictEqual(
 			document.summary,
-			{ changed: 0, added: 0, removed: 0, unchanged: document.rows.length },
+			{ changed: 0, added: 0, removed: 0, unchanged: document.rows.length, renamed: 0 },
 			'a duplicate container reorder is not a change at any depth'
 		);
 	});
@@ -354,7 +356,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const { document } = diffOf(left, right);
 		assert.deepStrictEqual(
 			document.summary,
-			{ changed: 0, added: 0, removed: 0, unchanged: document.rows.length },
+			{ changed: 0, added: 0, removed: 0, unchanged: document.rows.length, renamed: 0 },
 			'exact content pairs the two declared conditions'
 		);
 	});
@@ -385,7 +387,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const { document } = diffOf(left, right);
 		assert.deepStrictEqual(
 			document.summary,
-			{ changed: 0, added: 0, removed: 0, unchanged: document.rows.length },
+			{ changed: 0, added: 0, removed: 0, unchanged: document.rows.length, renamed: 0 },
 			'subtree content pairs the two instances, not their positions'
 		);
 	});
@@ -716,7 +718,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 
 	test('the committed left/right fixtures cover changed, added, removed, moved and duplicate rows', () => {
 		const { document } = diffOf(fixtureText('diff/left.arxml'), fixtureText('diff/right.arxml'));
-		assert.deepStrictEqual(document.summary, { changed: 2, added: 6, removed: 6, unchanged: 10 });
+		assert.deepStrictEqual(document.summary, { changed: 2, added: 6, removed: 6, unchanged: 10, renamed: 0 });
 
 		assert.deepStrictEqual(
 			document.rows.filter((row) => row.status === 'changed').map((row) => (row.left ?? row.right)!.label).sort(),
@@ -739,5 +741,48 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		};
 		assert.strictEqual(moduleByShortName('ModAlpha').status, 'unchanged');
 		assert.strictEqual(moduleByShortName('ModBeta').status, 'unchanged');
+	});
+
+	test('semantic matching pairs renamed containers and aligns their children', () => {
+		const left = arxml(
+			module(
+				'M1',
+				container('NMH_MO_01_MAIN_BUS', { definitionRef: '/D/MainBus', parameters: [parameter('A', '1')] }) +
+					container('NMH_MO_02_MAIN_BUS', { definitionRef: '/D/MainBus', parameters: [parameter('A', '2')] })
+			)
+		);
+		const right = arxml(
+			module(
+				'M1',
+				container('NM_MO_01_MAIN_BUS', { definitionRef: '/D/MainBus', parameters: [parameter('A', '1')] }) +
+					container('NM_MO_02_MAIN_BUS', { definitionRef: '/D/MainBus', parameters: [parameter('A', '2')] })
+			)
+		);
+		const { document } = diffOf(left, right, true);
+		const renamed = document.rows.filter((row) => row.match?.kind === 'semantic');
+		assert.strictEqual(renamed.length, 2);
+		assert.ok(renamed.every((row) => row.status === 'changed'));
+		assert.ok(!document.rows.some((row) => row.status === 'removed' || row.status === 'added'));
+		assert.strictEqual(document.summary.renamed, 2);
+		const shortName = renamed[0].changes.find((change) => change.field === 'short name');
+		assert.ok(shortName?.renameImplied, 'the name change is explained by the learned NMH→NM substitution');
+	});
+
+	test('strict matching keeps the pre-change removed/added output', () => {
+		const left = arxml(module('M1', container('NMH_X', { definitionRef: '/D/X' })));
+		const right = arxml(module('M1', container('NM_X', { definitionRef: '/D/X' })));
+		const strict = diffOf(left, right, false);
+		assert.strictEqual(strict.document.summary.renamed, 0);
+		assert.ok(strict.document.rows.some((row) => row.status === 'removed'));
+		assert.ok(strict.document.rows.some((row) => row.status === 'added'));
+	});
+
+	test('a different DEFINITION-REF never pairs semantically', () => {
+		const left = arxml(module('M1', container('NMH_X', { definitionRef: '/D/X' })));
+		const right = arxml(module('M1', container('NM_X', { definitionRef: '/D/Y' })));
+		const { document } = diffOf(left, right, true);
+		assert.strictEqual(document.summary.renamed, 0);
+		assert.ok(document.rows.some((row) => row.status === 'removed'));
+		assert.ok(document.rows.some((row) => row.status === 'added'));
 	});
 });

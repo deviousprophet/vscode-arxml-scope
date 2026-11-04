@@ -8,7 +8,7 @@
  */
 import './styles/tokens.css';
 import './styles/base.css';
-import type { DiffCell, DiffDocument, DiffRow } from '../core/diff/diffModel';
+import type { DiffCell, DiffDocument, DiffMatch, DiffRow } from '../core/diff/diffModel';
 import {
 	diffVisibility,
 	flattenDiffDocument,
@@ -119,9 +119,10 @@ let diffDocument: DiffDocument = {
 	leftHeader: { packages: [] },
 	rightHeader: { packages: [] },
 	rows: [],
-	summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
+	summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 }
 };
 let rows: DiffRow[] = [];
+let semanticMatching = true;
 let rowByKey = new Map<string, DiffRow>();
 let rowIndexByKey = new Map<string, number>();
 let collapsed = new Set<string>();
@@ -141,7 +142,7 @@ let diffContent = 0;
 let headerLineCount = 0;
 let views: DiffView | undefined;
 function summaryOf(next: any): any {
-	return next && next.summary ? next.summary : { changed: 0, added: 0, removed: 0, unchanged: 0 };
+	return next && next.summary ? next.summary : { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
 }
 function hasChanges() {
 	const summary = summaryOf(diffDocument);
@@ -239,6 +240,9 @@ function setDocument(next: any): void {
 	diffDocument = next;
 	rows = next.rows;
 	rowsRevision++;
+	if (toolbar) {
+		toolbar.setSummary(summaryOf(next));
+	}
 	subtreeCache = undefined;
 	indexRows();
 	const present = new Set(rows.map(function (row) { return row.key; }));
@@ -398,8 +402,13 @@ function metaPartTexts(cell: DiffCell | undefined, cls: MetaPart['cls']): string
  * Added and removed rows return nothing: their full-cell tint already says the
  * whole line is new or gone, and an unchanged row renders as before.
  */
-function wordDiffForRow(row: DiffRow): DocumentWordDiff | undefined {
-	if (displayStatus(row) !== 'changed') {
+function matchTooltip(match: DiffMatch): string {
+	const reasons = match.reasons;
+	const used = match.substitutions && match.substitutions.length > 0 ? ` — ${match.substitutions.join(', ')}` : '';
+	return `Renamed (score ${match.score.toFixed(2)}) — children ${reasons.children.toFixed(2)}, name ${reasons.name.toFixed(2)}, position ${reasons.position.toFixed(2)}, substitution ${reasons.substitution.toFixed(2)}${used}`;
+}
+
+function wordDiffForRow(row: DiffRow): DocumentWordDiff | undefined {	if (displayStatus(row) !== 'changed') {
 		return undefined;
 	}
 	const left = displayLeft(row);
@@ -457,6 +466,9 @@ function renderRow(index: number, pane: string): any {
 		if (row.key === selectedKey) {
 			element.dataset.selected = 'true';
 		}
+		if (row.changes.some((change) => change.renameImplied)) {
+			element.dataset.renameImplied = 'true';
+		}
 		if (searchQuery.trim() !== '' && row.key === currentMatchKey()) {
 			element.dataset.searchCurrent = 'true';
 		}
@@ -501,6 +513,13 @@ function renderRow(index: number, pane: string): any {
 			);
 			element.title = cellRow.definitionRef;
 			cell.appendChild(node);
+			if (row.match?.kind === 'semantic') {
+				const badge = document.createElement('span');
+				badge.className = 'diff-match-badge';
+				badge.textContent = 'renamed';
+				badge.title = matchTooltip(row.match);
+				cell.appendChild(badge);
+			}
 		}
 	} else if (kind === 'comment') {
 		cell.appendChild(
@@ -671,6 +690,8 @@ function updateViewButtons() {
 	if (toolbar) {
 		toolbar.setViewMode(showChangesOnly);
 		toolbar.setSwapped(swapped);
+		toolbar.setMatchMode(semanticMatching);
+		toolbar.setSummary(summaryOf(diffDocument));
 	}
 }
 function updateEmptyState() {
@@ -1142,6 +1163,7 @@ export function handleDiffMessage(message: DiffProviderToWebview): void {
 	if (message.type === 'document') {
 		notice.textContent = '';
 		delete notice.dataset.kind;
+		semanticMatching = message.semantic !== false;
 		const anchor = captureAnchor();
 		const scrollTop = views ? views.left.getScrollTop() : 0;
 		setDocument(message.document);
@@ -1195,7 +1217,11 @@ toolbar = new DiffToolbar({
 	onViewDiff: function () { setView(true); },
 	onPrev: function () { gotoChange(-1); },
 	onNext: function () { gotoChange(1); },
-	onSwap: function () { setSwapped(!swapped); }
+	onSwap: function () { setSwapped(!swapped); },
+	onMatchMode: function (semantic: boolean) {
+		semanticMatching = semantic;
+		postToHost({ type: 'matchMode', semantic });
+	}
 });
 toolbar.mount();
 searchBar = new SearchBar('diff-', {
@@ -1233,7 +1259,7 @@ function resetDiffState(): void {
 		leftHeader: { packages: [] },
 		rightHeader: { packages: [] },
 		rows: [],
-		summary: { changed: 0, added: 0, removed: 0, unchanged: 0 }
+		summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 }
 	};
 	rows = [];
 	rowByKey = new Map();

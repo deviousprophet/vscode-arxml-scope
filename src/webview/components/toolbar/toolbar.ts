@@ -61,6 +61,7 @@ export interface DiffToolbarCallbacks {
 	onPrev?(): void;
 	onNext?(): void;
 	onSwap?(): void;
+	onMatchMode?(semantic: boolean): void;
 }
 
 /** Diff strip: left view/nav group, centred Swap, right Search slot. */
@@ -73,11 +74,13 @@ export function renderDiffToolbarHtml(searchHtml: string): string {
 </div>
 <button id="diff-prev" class="tool icon-tool" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg><span class="lbl">Prev diff</span></button>
 <button id="diff-next" class="tool icon-tool" type="button" title="Next difference (F7)" aria-label="Next difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg><span class="lbl">Next diff</span></button>
+<button id="diff-match-mode" class="tool view-tool" type="button" aria-pressed="true" title="Semantic matching pairs renamed containers; Strict reproduces the old diff"><span class="lbl">Semantic</span></button>
 </div>
 <div class="toolbar-center">
 <button id="diff-swap" class="tool icon-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h9m0 0-2.5-2.5M12 5 9.5 7.5M13 11H4m0 0 2.5-2.5M4 11l2.5 2.5"/></svg><span class="lbl">Swap sides</span></button>
 </div>
 <div class="toolbar-right">
+<span id="diff-summary" class="diff-summary" role="status" aria-live="polite"></span>
 ${searchHtml}
 </div>
 </div>`;
@@ -102,6 +105,13 @@ export class DiffToolbar {
 		this.bind('diff-prev', () => this.callbacks.onPrev && this.callbacks.onPrev());
 		this.bind('diff-next', () => this.callbacks.onNext && this.callbacks.onNext());
 		this.bind('diff-swap', () => this.callbacks.onSwap && this.callbacks.onSwap());
+		this.bind('diff-match-mode', () => {
+			if (this.callbacks.onMatchMode) {
+				const button = document.getElementById('diff-match-mode');
+				const next = button?.getAttribute('aria-pressed') !== 'true';
+				this.callbacks.onMatchMode(next);
+			}
+		});
 	}
 
 	setViewMode(changesOnly: boolean): void {
@@ -120,6 +130,37 @@ export class DiffToolbar {
 		if (swap) {
 			swap.setAttribute('aria-pressed', swapped ? 'true' : 'false');
 		}
+	}
+
+	setMatchMode(semantic: boolean): void {
+		const button = document.getElementById('diff-match-mode');
+		if (!button) {
+			return;
+		}
+		button.setAttribute('aria-pressed', semantic ? 'true' : 'false');
+		const label = button.querySelector('.lbl');
+		if (label) {
+			label.textContent = semantic ? 'Semantic' : 'Strict';
+		}
+	}
+
+	setSummary(summary: { changed: number; added: number; removed: number; renamed?: number }): void {
+		const slot = document.getElementById('diff-summary');
+		if (!slot) {
+			return;
+		}
+		const parts: string[] = [];
+		if (summary.changed > 0) {
+			const renamed = summary.renamed ? ` (${summary.renamed} renamed)` : '';
+			parts.push(`${summary.changed} changed${renamed}`);
+		}
+		if (summary.added > 0) {
+			parts.push(`${summary.added} added`);
+		}
+		if (summary.removed > 0) {
+			parts.push(`${summary.removed} removed`);
+		}
+		slot.textContent = parts.join(' · ');
 	}
 
 	private bind(id: string, action: () => void): void {
