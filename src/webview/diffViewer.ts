@@ -1177,8 +1177,13 @@ export function handleDiffMessage(message: DiffProviderToWebview): void {
 		renderWindow(true);
 		updateSelection();
 		updateEmptyState();
+	} else if (message.type === 'matchModeState') {
+		semanticMatching = message.semantic !== false;
+		updateViewButtons();
 	} else if (message.type === 'error') {
 		showDiffError(message.message || 'The comparison could not be refreshed.');
+		// A failed switch or fallback refresh must not leave the toolbar pending.
+		updateViewButtons();
 	}
 }
 
@@ -1220,6 +1225,9 @@ toolbar = new DiffToolbar({
 	onSwap: function () { setSwapped(!swapped); },
 	onMatchMode: function (semantic: boolean) {
 		semanticMatching = semantic;
+		// Confirm the click before the host has rebuilt anything; the document or
+		// matchModeState message clears the pending state.
+		toolbar.setMatchMode(semantic, true);
 		postToHost({ type: 'matchMode', semantic });
 	}
 });

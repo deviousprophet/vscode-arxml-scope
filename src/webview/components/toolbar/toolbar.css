@@ -58,6 +58,38 @@
 	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
 	outline-offset: 1px;
 }
+.tool[aria-busy="true"] {
+	opacity: 0.6;
+	cursor: progress;
+}
+.tool[aria-busy="true"]::after {
+	content: "";
+	width: 10px;
+	height: 10px;
+	border: 1px solid currentColor;
+	border-right-color: transparent;
+	border-radius: 50%;
+	animation: tool-spin 0.8s linear infinite;
+}
+.match-status {
+	color: var(--tok-dim);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+@keyframes tool-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.tool[aria-busy="true"]::after {
+		animation: none;
+		border-right-color: currentColor;
+		opacity: 0.5;
+	}
+}
 .tool svg {
 	flex: none;
 }

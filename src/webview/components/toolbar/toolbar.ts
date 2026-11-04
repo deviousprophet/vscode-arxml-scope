@@ -75,6 +75,7 @@ export function renderDiffToolbarHtml(searchHtml: string): string {
 <button id="diff-prev" class="tool icon-tool" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg><span class="lbl">Prev diff</span></button>
 <button id="diff-next" class="tool icon-tool" type="button" title="Next difference (F7)" aria-label="Next difference"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg><span class="lbl">Next diff</span></button>
 <button id="diff-match-mode" class="tool view-tool" type="button" aria-pressed="true" title="Semantic matching pairs renamed containers; Strict reproduces the old diff"><span class="lbl">Semantic</span></button>
+<span id="diff-match-status" class="match-status" role="status" aria-live="polite"></span>
 </div>
 <div class="toolbar-center">
 <button id="diff-swap" class="tool icon-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h9m0 0-2.5-2.5M12 5 9.5 7.5M13 11H4m0 0 2.5-2.5M4 11l2.5 2.5"/></svg><span class="lbl">Swap sides</span></button>
@@ -132,15 +133,20 @@ export class DiffToolbar {
 		}
 	}
 
-	setMatchMode(semantic: boolean): void {
+	setMatchMode(semantic: boolean, pending = false): void {
 		const button = document.getElementById('diff-match-mode');
 		if (!button) {
 			return;
 		}
 		button.setAttribute('aria-pressed', semantic ? 'true' : 'false');
+		button.setAttribute('aria-busy', pending ? 'true' : 'false');
 		const label = button.querySelector('.lbl');
 		if (label) {
 			label.textContent = semantic ? 'Semantic' : 'Strict';
+		}
+		const status = document.getElementById('diff-match-status');
+		if (status) {
+			status.textContent = pending ? `Switching to ${semantic ? 'Semantic' : 'Strict'}…` : '';
 		}
 	}
 

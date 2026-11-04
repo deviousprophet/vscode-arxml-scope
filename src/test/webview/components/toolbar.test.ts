@@ -79,6 +79,20 @@ suite('Toolbar component', () => {
 			assert.strictEqual(dom.document.getElementById('diff-view-diff').getAttribute('aria-pressed'), 'true');
 			toolbar.setSwapped(true);
 			assert.strictEqual(dom.document.getElementById('diff-swap').getAttribute('aria-pressed'), 'true');
+			toolbar.setMatchMode(false, true);
+			const match = dom.document.getElementById('diff-match-mode')!;
+			assert.strictEqual(match.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(match.getAttribute('aria-busy'), 'true');
+			assert.strictEqual(match.textContent!.trim(), 'Strict');
+			assert.strictEqual(
+				dom.document.getElementById('diff-match-status')!.textContent,
+				'Switching to Strict…'
+			);
+			toolbar.setMatchMode(true, false);
+			assert.strictEqual(match.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(match.getAttribute('aria-busy'), 'false');
+			assert.strictEqual(match.textContent!.trim(), 'Semantic');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
 		} finally {
 			dom.restore();
 		}

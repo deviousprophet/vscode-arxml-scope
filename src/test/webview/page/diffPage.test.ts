@@ -615,10 +615,36 @@ suite('semantic diff page', () => {
 			const toggle = dom.document.getElementById('diff-match-mode') as HTMLElement;
 			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
 			toggle.click();
-			assert.strictEqual(messagesOf(dom.api, 'matchMode')[0].semantic, false);
-			dom.post({ type: 'document', semantic: false, document });
-			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false', 'the click flips the label immediately');
 			assert.strictEqual(toggle.textContent!.trim(), 'Strict');
+			assert.strictEqual(toggle.getAttribute('aria-busy'), 'true', 'the button is pending');
+			assert.strictEqual(
+				dom.document.getElementById('diff-match-status')!.textContent,
+				'Switching to Strict…',
+				'the status names the pending target'
+			);
+			assert.strictEqual(messagesOf(dom.api, 'matchMode')[0].semantic, false);
+			dom.post({ type: 'matchModeState', semantic: false });
+			assert.strictEqual(toggle.getAttribute('aria-busy'), 'false', 'the ack clears the pending state');
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
+			assert.ok(dom.document.getElementById('diff-summary')!.textContent!.includes('1 changed (1 renamed)'));
+
+			toggle.click();
+			assert.strictEqual(toggle.getAttribute('aria-busy'), 'true');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, 'Switching to Semantic…');
+			dom.post({ type: 'document', semantic: true, document });
+			assert.strictEqual(toggle.getAttribute('aria-busy'), 'false', 'the document also clears pending');
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(toggle.textContent!.trim(), 'Semantic');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
+
+			toggle.click();
+			assert.strictEqual(toggle.getAttribute('aria-busy'), 'true');
+			dom.post({ type: 'error', message: 'switch failed' });
+			assert.strictEqual(toggle.getAttribute('aria-busy'), 'false', 'an error also clears pending');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
+			assert.ok(dom.document.getElementById('diff-notice')!.textContent!.includes('switch failed'));
 		} finally {
 			dom.restore();
 		}

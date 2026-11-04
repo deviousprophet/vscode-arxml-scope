@@ -14,7 +14,9 @@ import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
-import { DiffDocument, FileLabel, RangeLookup, buildDiffDocument, compareTitle } from '../core/diff/diffModel';
+import { FileLabel, RangeLookup, compareTitle } from '../core/diff/diffModel';
+import { DiffSession } from '../core/diff/diffSession';
+import type { DiffPreparedSide } from '../core/diff/diffSession';
 import { diffShell } from './webviewShell';
 import { fileName } from './compareSelection';
 import { gateReason } from './ecucEditorProvider';
@@ -52,6 +54,16 @@ function rowsFor(document: vscode.TextDocument) {
 	return { rows, rangeOf, header };
 }
 
+/** One prepared side; the version makes a toggle safely reuse it or refresh. */
+interface PreparedSide extends DiffPreparedSide {
+	document: vscode.TextDocument;
+	version: number;
+}
+
+function prepareSide(document: vscode.TextDocument): PreparedSide {
+	return { document, version: document.version, ...rowsFor(document) };
+}
+
 export class DiffPanel {
 	public static readonly viewType = 'vscode-arxml-scope.diff';
 
@@ -81,21 +93,13 @@ export class DiffPanel {
 
 		const leftLabel = label(leftUri);
 		const rightLabel = label(rightUri);
-		const leftRows = rowsFor(left);
-		const rightRows = rowsFor(right);
+		let preparedLeft = prepareSide(left);
+		let preparedRight = prepareSide(right);
 		let semantic = vscode.workspace
 			.getConfiguration('arxmlScope.diff')
 			.get<boolean>('semanticMatching', true);
-		let current = buildDiffDocument(
-			leftLabel,
-			rightLabel,
-			leftRows.rows,
-			rightRows.rows,
-			leftRows.rangeOf,
-			rightRows.rangeOf,
-			{ left: leftRows.header, right: rightRows.header },
-			{ semanticMatching: semantic }
-		);
+		let session = new DiffSession(leftLabel, rightLabel, preparedLeft, preparedRight);
+		let current = session.document(semantic).document;
 		const panel = vscode.window.createWebviewPanel(
 			DiffPanel.viewType,
 			compareTitle(leftLabel, rightLabel),
@@ -109,7 +113,7 @@ export class DiffPanel {
 		const disposables: vscode.Disposable[] = [];
 		let disposed = false;
 		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-		let refreshGeneration = 0;
+		let documentGeneration = 0;
 
 		panel.webview.html = diffShell({
 			cspSource: panel.webview.cspSource || 'https://webview.test',
@@ -142,11 +146,11 @@ export class DiffPanel {
 		};
 
 		const refreshNow = async (): Promise<void> => {
-			const generation = ++refreshGeneration;
+			const generation = ++documentGeneration;
 			try {
 				const nextLeft = await vscode.workspace.openTextDocument(leftUri);
 				const nextRight = await vscode.workspace.openTextDocument(rightUri);
-				if (disposed || generation !== refreshGeneration) {
+				if (disposed || generation !== documentGeneration) {
 					return;
 				}
 				const why =
@@ -158,29 +162,70 @@ export class DiffPanel {
 					await postError(why);
 					return;
 				}
-				const nextLeftRows = rowsFor(nextLeft);
-				const nextRightRows = rowsFor(nextRight);
-				const next: DiffDocument = buildDiffDocument(
-					leftLabel,
-					rightLabel,
-					nextLeftRows.rows,
-					nextRightRows.rows,
-					nextLeftRows.rangeOf,
-					nextRightRows.rangeOf,
-					{ left: nextLeftRows.header, right: nextRightRows.header },
-					{ semanticMatching: semantic }
-				);
-				if (disposed || generation !== refreshGeneration) {
+				preparedLeft = prepareSide(nextLeft);
+				preparedRight = prepareSide(nextRight);
+				session = new DiffSession(leftLabel, rightLabel, preparedLeft, preparedRight);
+				current = session.document(semantic).document;
+				if (disposed || generation !== documentGeneration) {
 					return;
 				}
-				current = next;
-				await panel.webview.postMessage({ type: 'document', document: next, semantic });
+				await panel.webview.postMessage({ type: 'document', document: current, semantic });
 			} catch (error) {
-				if (disposed || generation !== refreshGeneration) {
+				if (disposed || generation !== documentGeneration) {
 					return;
 				}
 				await postError(
 					`The comparison could not be refreshed: ${error instanceof Error ? error.message : String(error)}`
+				);
+			}
+		};
+
+		/**
+		 * Switches the matching mode without re-scanning. The prepared sides are
+		 * reused only while both documents still have the version they were built
+		 * from; an edit that beats the debounce falls back to a full refresh.
+		 */
+		const applyMatchMode = async (next: boolean): Promise<void> => {
+			if (disposed) {
+				return;
+			}
+			if (semantic === next) {
+				// A duplicate request still clears the page's pending state.
+				await panel.webview.postMessage({ type: 'matchModeState', semantic });
+				return;
+			}
+			const previous = semantic;
+			semantic = next;
+			const generation = ++documentGeneration;
+			try {
+				const liveLeft = await vscode.workspace.openTextDocument(leftUri);
+				const liveRight = await vscode.workspace.openTextDocument(rightUri);
+				if (disposed || generation !== documentGeneration) {
+					return;
+				}
+				if (liveLeft.version !== preparedLeft.version || liveRight.version !== preparedRight.version) {
+					if (refreshTimer !== undefined) {
+						clearTimeout(refreshTimer);
+						refreshTimer = undefined;
+					}
+					await refreshNow();
+					return;
+				}
+				const result = session.document(next);
+				current = result.document;
+				if (result.changed) {
+					await panel.webview.postMessage({ type: 'document', document: current, semantic });
+				} else {
+					await panel.webview.postMessage({ type: 'matchModeState', semantic });
+				}
+			} catch (error) {
+				if (disposed || generation !== documentGeneration) {
+					return;
+				}
+				semantic = previous;
+				await panel.webview.postMessage({ type: 'matchModeState', semantic: previous });
+				await postError(
+					`The comparison mode could not be switched: ${error instanceof Error ? error.message : String(error)}`
 				);
 			}
 		};
@@ -242,8 +287,7 @@ export class DiffPanel {
 				}
 				if (message.type === 'matchMode') {
 					if (typeof message.semantic === 'boolean') {
-						semantic = message.semantic;
-						void refreshNow();
+						void applyMatchMode(message.semantic);
 					}
 					return;
 				}

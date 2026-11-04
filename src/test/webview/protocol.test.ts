@@ -63,6 +63,7 @@ suite('webview protocol', () => {
 				},
 			},
 			{ type: 'error', message: 'refresh failed' },
+			{ type: 'matchModeState', semantic: true },
 		];
 		for (const message of host) {
 			assert.strictEqual(diffMessageType(message), message.type);
@@ -71,9 +72,10 @@ suite('webview protocol', () => {
 		assert.strictEqual(isDiffProviderMessage({ type: 'select' }), false);
 		const intents: DiffWebviewToProvider[] = [
 			{ type: 'ready' },
+			{ type: 'matchMode', semantic: false },
 			{ type: 'reveal', side: 'right', key: 'row-1' },
 		];
-		assert.deepStrictEqual(intents.map((intent) => intent.type), ['ready', 'reveal']);
+		assert.deepStrictEqual(intents.map((intent) => intent.type), ['ready', 'matchMode', 'reveal']);
 	});
 
 	test('the document header comes from the model, not from page markup', () => {
