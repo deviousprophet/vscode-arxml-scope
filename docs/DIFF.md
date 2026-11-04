@@ -73,6 +73,30 @@ Duplicate-named siblings are paired by exact compared content first, then by the
 by id and an ordinal-free base key. This means a reordered duplicate keeps its parameters and
 references paired, and a changed duplicate lands on one changed row instead of an add + remove pair.
 
+## Renamed containers
+
+`arxmlScope.diff.semanticMatching` (default `true`) adds one more pairing pass for containers that the
+strict rules left unpaired. It lets a renamed container stay one changed row instead of becoming an
+add + remove pair, and keeps its children aligned inside it.
+
+- Pairing is attempted only between containers with the same `DEFINITION-REF` and the same parent.
+- A score combines the similarity of the children (0.55), the short name (0.30), the relative position
+  (0.10) and learned token substitutions (0.05). A pair is accepted at 0.62 or higher.
+- A near-tie stays unpaired: the best candidate must beat the second best by 0.08 on both sides, so two
+  equally plausible containers are not guessed.
+- Consistent token changes across several high-confidence pairs become substitutions (for example
+  `NMH→NM`). A later pair can then be accepted because its remaining difference is exactly that
+  substitution. Substitutions are learned per comparison and never persisted.
+- Children of a semantic pair are compared by their final id segment, so a changed owner name does not
+  turn every child into an add + remove pair.
+- A pair is shown with a small `renamed` badge; its title reports the score and each reason. A changed
+  field fully explained by a learned substitution is drawn with a dashed underline.
+- Only containers are paired semantically. Parameters and references keep the strict pairing rules.
+
+The toolbar **Semantic** / **Strict** button switches the current panel only; it posts the new mode to
+the host, which rebuilds the comparison without changing the setting. Strict reproduces the output of
+v0.6.0 exactly.
+
 ## Inline word changes
 
 A **changed** row highlights the words that actually differ, in both panes, for the fields the row
@@ -109,6 +133,8 @@ A file that is not ECUC-Values is refused before the panel opens.
 | **Prev diff** / **Next diff** | Move to the previous/next changed row, wrapping at the ends. |
 | `F7` / `Shift+F7` | Same as Next/Prev while focus is in the diff list. |
 | **Swap sides** | Mirror the displayed sides; display only, no re-comparison. |
+| **Semantic** / **Strict** | Toggle renamed-container pairing for this panel only. The label shows the active mode. |
+| **Summary** | `N changed (M renamed) · N added · N removed`, in the toolbar status slot. |
 | Row twisty / `Left` / `Right` | Collapse or expand a subtree. |
 | `Space` | Select the focused row. |
 | `Enter` | Reveal the selected row in its source file. The revealed side follows the displayed pane after a swap. |
@@ -123,8 +149,8 @@ the same merged rows, so the search result set does not change.
 ## Refresh behaviour
 
 - Editing either file schedules one full re-scan after a 150 ms debounce.
-- A successful refresh replaces the document but keeps the view mode, swap state, collapse set,
-  selection, search and scroll position where the rows still exist.
+- A successful refresh replaces the document but keeps the view mode, swap state, match mode, collapse
+  set, selection, search and scroll position where the rows still exist.
 - If a side stops being ECUC-Values while the panel is open, the last good comparison stays visible and
   a warning explains why it stopped updating.
 - If a refresh throws, the same last-good document stays and the error is shown in the notice strip.
@@ -138,7 +164,9 @@ the same merged rows, so the search result set does not change.
   attributes the scanner does not model.
 - Reference following is a single-file feature; the diff reveals source ranges, it does not build a
   cross-file target index.
-- Search and navigation are over the merged display list; there is no changed-count summary, filter
-  control, global Collapse/Expand or bottom action strip.
+- Search and navigation are over the merged display list; there is no filter control, global
+  Collapse/Expand or bottom action strip.
+- Semantic pairing is a heuristic. A container rename that changes the `DEFINITION-REF`, the parent or
+  most of the children stays an add + remove pair; use Strict to see that view explicitly.
 - `Swap sides` is display-only. The left/right files keep their original comparison roles.
 - Very large files remain virtualized in both panes, but paint cost still depends on the machine.

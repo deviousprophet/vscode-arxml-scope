@@ -2,7 +2,7 @@
   "name": "vscode-arxml-scope",
   "displayName": "ARXML Scope",
   "description": "Browse and edit AUTOSAR ECUC-Values ARXML files in VS Code.",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "deviousprophet",
   "license": "MIT",
   "repository": {
@@ -294,6 +294,11 @@
           "enum": ["auto", "always", "never"],
           "default": "auto",
           "description": "When cross-file rules run. auto runs them only when the index has at least one ECUC definition; always reproduces the unconditional behaviour; never disables broken references, DEST mismatches and cross-file duplicate checks."
+        },
+        "arxmlScope.diff.semanticMatching": {
+          "type": "boolean",
+          "default": true,
+          "description": "Pair renamed containers in the semantic diff. The diff toolbar can switch the current panel to Strict matching without changing this setting."
         }
       }
     }

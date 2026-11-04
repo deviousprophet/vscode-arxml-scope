@@ -33,11 +33,18 @@ semantic diff. The custom editor is opt-in: a plain open still uses the text edi
 - An in-memory workspace index covers every `.arxml` file; the status bar reports how many files it
   holds, **Details** resolves definitions across files (type, range, default, multiplicity and
   description), and references jump to their target in another file.
+- `arxmlScope.index.exclude` keeps generated copies (`**/_fwd/**`, `**/_out/**`, `**/_gen/**`) out of
+  the index, validation, navigation and text-editor features.
+- `arxmlScope.validation.crossFileRules` (`auto` by default) keeps a folder that has no ECUC
+  definitions quiet instead of painting every reference red; the status bar shows the mode and cycles
+  it on click.
 - The plain text editor gets an outline, Go to Definition, Find References, document links, hover and
   the same ECUC diagnostics as the Problems panel.
 - ECUC validation reports broken references, `DEST` mismatches, duplicate short names, out-of-range
   values, multiplicity violations and missing definitions or required children, with a severity per
-  rule.
+  rule. Large result sets are capped with a per-file hidden-count summary.
+- The semantic diff pairs renamed containers as one changed row when `arxmlScope.diff.semanticMatching`
+  is on; the toolbar **Semantic** / **Strict** toggle changes one panel without touching the setting.
 - Edits are limited to parameter `<VALUE>` text, container `<SHORT-NAME>` / `<DEFINITION-REF>` text,
   and container/parameter Duplicate or Delete; references are not editable.
 - A value backed by CDATA is shown but cannot be edited.

@@ -5,6 +5,31 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-11-04
+
+### Added
+
+- Copy-aware reference resolution: a path declared in several files resolves to the copy in the referencing file, and **Go to Definition** / **Find References** expose every copy instead of guessing
+- `arxmlScope.index.exclude` for workspace-relative globs (`**/_fwd/**`, `**/_out/**`, `**/_gen/**`) that keeps generated copies out of the index, validation and text-editor features
+- `arxmlScope.validation.crossFileRules` (`auto` / `always` / `never`) so a fragment workspace without ECUC definitions stays quiet; the status bar shows the mode and cycles it on click
+- `arxmlScope.validation.maxDiagnosticsPerFile` and `maxDiagnostics` caps, with one summary diagnostic per file that reports hidden problems
+- `arxmlScope.diff.semanticMatching` and a per-panel **Semantic** / **Strict** toolbar toggle: renamed containers stay one changed row, with a `renamed` badge, changed-count summary and learned token substitutions
+- A `renamed` count in the diff summary and a `validation` benchmark next to the existing large-file and index budgets
+
+### Fixed
+
+- Validation no longer reports parameter-value or non-ECUC `DEST`s as broken references, and a duplicate AR path across generated copies is one `information` diagnostic with related locations instead of thousands of errors
+- Multiplicity is counted inside one file and one owning parent, so cross-file copies are not summed
+- Empty values and AUTOSAR boolean/float literals (`0`/`1`, `INF`, `-INF`, `NaN`) are accepted; required `ECUC-ADD-INFO-PARAM-DEF` children and required children with a `DEFAULT-VALUE` are no longer missing
+- Missing definitions are grouped at the highest missing ancestor (or the missing module definition) with an instance count
+- **Details** shows `N definitions found` when several definition bodies share a path instead of silently dropping the definition block
+- The diff pane chevron and collapsed `{ ... }` marker follow the live `aria-expanded` state, and selection uses the same document-tree treatment in both panes
+
+### Changed
+
+- Definition files with the same AR path no longer hide the block without explanation; ambiguous definitions are reported as such
+- The diff toolbar gains a summary slot; **Swap sides** remains display-only
+
 ## [0.6.0] - 2026-11-03
 
 ### Added
