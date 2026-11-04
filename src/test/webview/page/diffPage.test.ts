@@ -846,6 +846,10 @@ suite('semantic diff page', () => {
 		const toolbar = webviewCss('components', 'toolbar', 'toolbar.css');
 		assert.ok(toolbar.includes('.diff-tool'));
 		assert.ok(toolbar.includes('flex-direction: column'));
+		assert.ok(toolbar.includes('width: 60px'), 'one fixed width for every diff button');
+		assert.ok(toolbar.includes('height: 48px'), 'one fixed height for every diff button');
+		assert.ok(toolbar.includes('white-space: normal'), 'long labels wrap inside the fixed box');
+		assert.ok(toolbar.includes('max-width: 820px'), 'labels hide before the row can overlap');
 	});
 
 	test('selecting a container highlights the same subtree and annotation rows in both panes', () => {

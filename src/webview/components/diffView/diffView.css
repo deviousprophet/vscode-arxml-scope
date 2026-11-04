@@ -14,7 +14,7 @@ body[data-page="diff"] .toolbar {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 	align-items: stretch;
-	min-height: 52px;
+	min-height: 54px;
 	height: auto;
 	padding: 3px 8px;
 }
