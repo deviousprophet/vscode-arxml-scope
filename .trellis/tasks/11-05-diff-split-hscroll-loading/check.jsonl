@@ -1,5 +1,0 @@
-{"file":".trellis/spec/frontend/components/component-virtual-scroll.md","reason":"Check per-pane bars and independent offsets."}
-{"file":".trellis/spec/frontend/components/component-diff-view.md","reason":"Check title divider alignment and two-pane wiring."}
-{"file":".trellis/spec/frontend/editor-lifecycle.md","reason":"Check the loading state and first-document transition."}
-{"file":".trellis/spec/frontend/testing.md","reason":"Check tests fail when each branch is removed."}
-{"file":".trellis/tasks/11-05-diff-split-hscroll-loading/design.md","reason":"Compare the result with the agreed design."}
