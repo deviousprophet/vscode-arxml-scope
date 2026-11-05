@@ -663,11 +663,11 @@ function captureAnchor() {
 	return {
 		key: rows[flat.rowIndex].key,
 		delta: top - calcRowOffset(index, state),
-		// The header is a fixed strip above the scroller, so only the scroll
-		// padding can sit above the first row. Keep the native offset while that
-		// padding is visible; a refresh at the top must not move the rows.
+		// The pinned title is outside the scroller, but the schema/package meta is
+		// content. Keep the native offset while that meta is visible; a refresh at
+		// the top must not move the rows.
 		native,
-		inHeader: native < views.left.padTopHeight(),
+		inHeader: native < views.left.padTopHeight() + views.left.headerHeight(),
 	};
 }
 function restoreAnchor(anchor: any): void {

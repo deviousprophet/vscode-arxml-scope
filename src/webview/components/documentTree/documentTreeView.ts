@@ -1,9 +1,10 @@
 /**
  * The reusable Document tree surface.
  *
- * One `DocumentTreeView` owns the schema/package header strip, the native vertical
- * and horizontal scroller, the virtual spacers and the rendered window. The
- * header is a fixed strip above the scroller; the rows scroll beneath it.
+ * One `DocumentTreeView` owns the optional file-name strip, the schema/package
+ * meta, the native vertical and horizontal scroller, the virtual spacers and the
+ * rendered window. Only the file-name strip is pinned; the meta block is the
+ * scroller's first content and scrolls with the rows.
  * The host owns the row model, selection and search: `renderRow(index, pane)`
  * builds one row and the component only decides which rows are on screen and
  * where the scroll is.
@@ -63,6 +64,7 @@ export class DocumentTreeView {
 	callbacks: DocumentTreeViewCallbacks;
 	model: DocumentTreeViewModel | undefined;
 	header: any;
+	titleBar: any;
 	title: any;
 	meta: any;
 	scroll: any;
@@ -90,6 +92,7 @@ export class DocumentTreeView {
 		this.callbacks = callbacks || {};
 		this.model = undefined;
 		this.header = undefined;
+		this.titleBar = undefined;
 		this.title = undefined;
 		this.meta = undefined;
 		this.scroll = undefined;
@@ -112,7 +115,7 @@ export class DocumentTreeView {
 		this.pendingNotify = false;
 	}
 
-	/** Create `root > scroll > header + top/window/bottom`. Idempotent. */
+	/** Create `root > titleBar? + scroll > meta + top/window/bottom`. Idempotent. */
 	mount(): void {
 		if (!this.root) {
 			return;
@@ -121,15 +124,20 @@ export class DocumentTreeView {
 		if (this.root.classList) {
 			this.root.classList.add('document-tree');
 		}
-		this.header = document.createElement('div');
-		this.header.className = 'document-tree-header';
-		this.header.setAttribute('role', 'presentation');
+		this.titleBar = document.createElement('div');
+		this.titleBar.className = 'document-tree-title-bar';
+		this.titleBar.setAttribute('role', 'presentation');
+		this.titleBar.hidden = true;
 		this.title = document.createElement('div');
 		this.title.className = 'document-tree-title';
 		this.title.hidden = true;
+		this.titleBar.appendChild(this.title);
+
+		this.header = document.createElement('div');
+		this.header.className = 'document-tree-header';
+		this.header.setAttribute('role', 'presentation');
 		this.meta = document.createElement('div');
 		this.meta.className = 'document-tree-meta';
-		this.header.appendChild(this.title);
 		this.header.appendChild(this.meta);
 
 		this.scroll = document.createElement('div');
@@ -140,13 +148,14 @@ export class DocumentTreeView {
 		this.windowEl.className = 'document-tree-window';
 		this.windowEl.setAttribute('role', 'presentation');
 		this.bottomSpacer = this.spacer('document-tree-bottom');
-		// The header is a fixed strip above the scroller, not content: it must not
-		// consume the first wheel or drag pixels before the rows start moving.
+		// The schema/package block is content: it scrolls with the rows. Only the
+		// optional file-name strip is pinned above the scroller.
+		this.scroll.appendChild(this.header);
 		this.scroll.appendChild(this.topSpacer);
 		this.scroll.appendChild(this.windowEl);
 		this.scroll.appendChild(this.bottomSpacer);
 
-		this.root.appendChild(this.header);
+		this.root.appendChild(this.titleBar);
 		this.root.appendChild(this.scroll);
 
 		this.scroll.addEventListener('scroll', () => this.onScroll());
@@ -170,6 +179,9 @@ export class DocumentTreeView {
 		this.title.textContent = title;
 		this.title.title = header && header.titleTitle ? header.titleTitle : title;
 		this.title.hidden = title === '';
+		if (this.titleBar) {
+			this.titleBar.hidden = title === '';
+		}
 		if (!header) {
 			return;
 		}
@@ -338,10 +350,9 @@ export class DocumentTreeView {
 	}
 
 	/**
-	 * The header's measured height. The header is now a fixed strip above the
-	 * scroller, so it no longer shifts the row offsets; the measurement remains
-	 * available for layout checks and is cached until `setHeader` invalidates it
-	 * or the scroller's client width changes.
+	 * The scrolling meta block's measured height. The schema/package block is
+	 * content inside the scroller, so its height shifts the row offsets; it is
+	 * cached until `setHeader` invalidates it or the scroller width changes.
 	 */
 	headerHeight(): number {
 		const width = this.scroll ? this.scroll.clientWidth : 0;
@@ -363,25 +374,29 @@ export class DocumentTreeView {
 	/** The visible rows' top edge, in the same coordinates as the virtual math. */
 	getRowsScrollTop(): number {
 		return this.scroll
-			? Math.max(0, this.scroll.scrollTop - this.padTopHeight())
+			? Math.max(0, this.scroll.scrollTop - this.padTopHeight() - this.headerHeight())
 			: 0;
 	}
 
-	/** Move the rows region to a logical offset (the top padding is added back). */
+	/** Move the rows region to a logical offset (the scrolling meta and top padding are added back). */
 	setRowsScrollTop(offset: number): void {
 		this.setScrollTop(
-			(Number.isFinite(offset) ? Math.max(0, offset) : 0) + this.padTopHeight()
+			(Number.isFinite(offset) ? Math.max(0, offset) : 0) + this.padTopHeight() + this.headerHeight()
 		);
 	}
 
-	setScrollTop(top: number): void {
+	setScrollTop(top: number, defer = false): void {
 		if (!this.scroll) {
 			return;
 		}
 		const next = Number.isFinite(top) ? Math.max(0, top) : 0;
 		this.expectedTop = next;
 		this.scroll.scrollTop = next;
-		this.render(false);
+		if (defer) {
+			this.schedule(false);
+		} else {
+			this.render(false);
+		}
 	}
 
 	getScrollTop(): number {

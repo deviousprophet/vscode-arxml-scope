@@ -359,11 +359,11 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
    `hostSide` maps the displayed side back to the host's original side for reveal. The compared
    documents are not rebuilt and the vertical position is not reset. Swap resets horizontal offsets to
    zero in both panes.
-10. **The comparison chrome stays pinned.** Each pane header is a fixed strip above that pane's
-    `.document-tree-scroll`; the rows scroll below it and the header never leaves the top. The header
-    height is measured for parity but is not part of the row-offset math. The header is
-    presentation-only. The diff adds no inter-module blank row: every diff row is exactly one base row
-    high.
+10. **The comparison chrome is split.** Only each diff pane's file name is pinned above that pane's
+    `.document-tree-scroll`; the schema/package block is the scroller's first content and scrolls away
+    with the rows. The meta height is measured for parity and participates in the row-offset math. Both
+    strips are presentation-only. The editor has no file-name strip; its meta block scrolls as ordinary
+    content. The diff adds no inter-module blank row: every diff row is exactly one base row high.
 11. **The page owns view state.** Show all / Show diff, Prev diff / Next diff, selection, collapse,
     search and scroll survive a refresh. Search is Enter-only, chunked and cancellable; it never removes
     a row. `nextChangeIndex` wraps and skips unchanged or hidden rows. A changed row may render inline
@@ -415,12 +415,13 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
   merged order, summary, visibility, flattening, next-change wrap, labels/title.
 - `src/test/core/wordDiff.test.ts` — tokenizer (whitespace, identifiers, one-character punctuation,
   hex literal, path slashes), LCS, empty sides and adjacent-segment merging.
-- `src/test/webview/components/diffView.test.ts` — two `DocumentTreeView` instances, single vertical
-  driver, horizontal mirror, swap reset, optional status, word-colour CSS and the absent module gap.
+- `src/test/webview/components/diffView.test.ts` — two `DocumentTreeView` instances, single visible
+  vertical bar, native vertical driver with deferred follower render, horizontal mirror, swap reset,
+  optional status, word-colour CSS and the absent module gap.
 - `src/test/webview/page/diffPage.test.ts` — toolbar both ways, search wiring, display projection,
-  reveal-side mapping, refresh state retention, pinned-header order and non-searchability,
-  changed-word runs in both panes, swapped colours, search overlap, added/removed rows without word
-  spans, unchanged rows, module height and no `data-gap`.
+  reveal-side mapping, refresh state retention, pinned file name with scrolling meta and
+  non-searchability, changed-word runs in both panes, swapped colours, search overlap, added/removed
+  rows without word spans, unchanged rows, module height and no `data-gap`.
 - `src/test/webview/page/search.test.ts` — Enter-only chunked search and count states.
 - Reveal is asserted through `reveal.test.ts` / `uxReveal.test.ts`; the source-level `beside` forcing
   is a regression guard, while the real panel behaviour is observed in the Extension Development Host.

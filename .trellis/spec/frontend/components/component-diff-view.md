@@ -44,11 +44,12 @@ class DiffView {
 ## Rules
 
 - Each pane owns a `DocumentTreeView`; no shared row DOM.
-- Vertical is single-visible: the right pane follows the left driver; either pane wheel mirrors.
+- Vertical is synchronized: both panes scroll natively; the pane that scrolled is the driver and the follower copies the offset on the next animation frame. Only the left vertical scrollbar is visible; the right pane hides it without reserving a gutter.
 - Horizontal: each pane has its own bar; moving either mirrors both.
 - Swap resets horizontal offsets only; vertical position is preserved.
-- Pane headers include file label plus schema/package lines, sit above each pane's scroller and stay
-  pinned while the rows scroll. `header.lines` pads the shorter one so both measure equal height.
+- Pane headers split in two: only the file label is pinned above the scroller; schema/package lines are
+  the scroller's first content and scroll away with the rows. `header.lines` pads the shorter meta block
+  so both panes start their rows at the same height.
 - Every diff row is the base row height: the Document-only module gap and its `data-gap` marker are
   not part of this surface.
 - Split line is 3px and diff-specific; the editor's resizer and pane sashes are 6px.
@@ -83,13 +84,14 @@ class DiffView {
 
 ## Tests Required
 
-`src/test/webview/components/diffView.test.ts`: two scrollers, single vertical driver, horizontal
-mirror, swap reset, header parity, status optional, word-colour CSS, no module-gap CSS.
-`src/test/webview/page/diffPage.test.ts`: header pinned above the scroller and not searchable, changed-word
-runs in both panes, swapped colours, search overlap, no word spans on added/removed, unchanged rows,
-module height and no `data-gap`; selecting a container highlights the same subtree and annotation rows
-in both panes, a new selection drops the old subtree, and an added/removed row highlights only its
-owning pane.
+`src/test/webview/components/diffView.test.ts`: two scrollers, single visible vertical bar, native
+vertical driver with deferred follower render, horizontal mirror, swap reset, header parity, status
+optional, word-colour CSS, no module-gap CSS.
+`src/test/webview/page/diffPage.test.ts`: only the file name is pinned and not searchable, the
+schema/package meta is the scroller's first content, changed-word runs in both panes, swapped colours,
+search overlap, no word spans on added/removed, unchanged rows, module height and no `data-gap`;
+selecting a container highlights the same subtree and annotation rows in both panes, a new selection
+drops the old subtree, and an added/removed row highlights only its owning pane.
 `src/test/core/wordDiff.test.ts`: tokenizer, LCS, empty sides and segment merging.
 
 ## Anti-patterns

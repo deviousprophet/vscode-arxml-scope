@@ -128,10 +128,11 @@ body[data-page="diff"] .nav-btn:disabled {
 	box-shadow: none;
 }
 #diff-pane-right .document-tree-scroll {
-	overflow-y: hidden;
+	overflow-y: auto;
+	scrollbar-gutter: auto;
 }
-.diff-pane .document-tree-header {
-	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+#diff-pane-right .document-tree-scroll::-webkit-scrollbar:vertical {
+	width: 0;
 }
 #diff-measure {
 	position: absolute;

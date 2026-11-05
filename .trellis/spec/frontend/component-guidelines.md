@@ -13,8 +13,9 @@ body (column)
   #content (row)
     #main (flex: 1; overflow: hidden)  ← layout box only
       #tree.document-tree[role=tree]  ← one DocumentTreeView instance
+        .document-tree-title-bar      file name (diff only; hidden in the editor)
         .document-tree-scroll          native vertical + horizontal scroller
-          .document-tree-header        schema/package (and optional file label)
+          .document-tree-header        schema/package meta (scrolling content)
           .document-tree-top           virtual spacer
           .document-tree-window        visible rows + overscan
           .document-tree-bottom        virtual spacer
@@ -26,9 +27,10 @@ body (column)
 ```
 
 - `DocumentTreeView` (`src/webview/components/documentTree/documentTreeView.ts`) is the single owner of
-  the header, the two-axis native scroller, the spacers and the rendered window. The header is the
-  scroller's first content element and scrolls with the rows. Both pages import the same class; the
-  editor mounts one instance and the diff mounts one per pane.
+  the optional title bar, the two-axis native scroller, the spacers and the rendered window. Only the
+  diff file name is pinned; the schema/package meta is the scroller's first content element and scrolls
+  with the rows. Both pages import the same class; the editor mounts one instance and the diff mounts
+  one per pane.
 - The host supplies `{ rowCount, heightFn, renderRow(index, pane) }`. The component calls
   `calcVisibleRange` with overscan 10, writes spacer heights as `--document-tree-top` /
   `--document-tree-bottom` CSSOM properties, and skips the DOM write when the slice key is
@@ -337,27 +339,29 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 - **Diff rows reuse Document geometry.** Each pane starts with the 26px fold gutter, an absolute 16px
   twisty at `left: 2px`, Document content padding and the `--indent` step per level. Labels use the
   Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
-  horizontal padding; the scroller is the clip boundary. Keep the pane headers and the diff status
+  horizontal padding; the scroller is the clip boundary. Keep the pinned file label and the diff status
   tints.
 - **Both panes are `DocumentTreeView` instances.** The diff mounts one component per pane, shares the
   aligned `DiffDisplayRow` list and `heightFn`, and imports the same `documentTree.css` plus the
-  `documentRows.ts` builders for nodes, annotations, braces and guides. Each component owns its header,
-  native scroller, spacers and virtual window. Schema/package lines sit under each pane's file label;
-  annotations and `{` / `}` rows follow each side; colours, font, gutter, indentation and meta
-  typography match Document. Only the status tint and edge marker are diff-specific, and they sit on
-  the cell without recolouring tokens. Status is an optional render input; the editor never sets it.
+  `documentRows.ts` builders for nodes, annotations, braces and guides. Each component owns its title
+  bar, native scroller, spacers and virtual window. Only the file label is pinned; schema/package lines
+  are the scroller's first content and scroll away with the rows. Annotations and `{` / `}` rows follow
+  each side; colours, font, gutter, indentation and meta typography match Document. Only the status tint
+  and edge marker are diff-specific, and they sit on the cell without recolouring tokens. Status is an
+  optional render input; the editor never sets it.
 - **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the window
   title and pane headers show the same shortest distinguishing suffix.
-- **Both axes are synchronized across two native scrollers.** Each pane has its own horizontal
-  scrollbar; only the left pane shows the vertical bar (the right scroller sets `overflow-y: hidden`).
-  The pane that scrolled is the driver and the host copies its offsets to the follower, guarded by
-  value comparison and the component's expected-offset suppression. Shift+wheel over either pane
-  writes the same horizontal offset to both; plain wheel stays vertical. Content
-  width is the longest rendered line across both panes plus the Document gutter and slack, with no
-  cap, and both components receive it so neither clamps early. Swap resets both horizontal offsets to
-  zero and leaves the vertical position untouched.
+- **Both axes are synchronized across two native scrollers.** Both panes scroll natively on both
+  axes; each pane has its own horizontal scrollbar, only the left pane shows the vertical bar, and the
+  right one hides it without reserving a gutter (`scrollbar-gutter: auto`, zero-width vertical bar).
+  The pane that scrolled is the driver and the host copies its offsets to the follower on the next
+  animation frame, guarded by value comparison and the component's expected-offset suppression.
+  Shift+wheel over either pane writes the same horizontal offset to both; plain wheel stays vertical.
+  Content width is the longest rendered line across both panes plus the Document gutter and slack, with
+  no cap, and both components receive it so neither clamps early. Swap resets both horizontal offsets
+  to zero and leaves the vertical position untouched.
 - **Swap sides is display-only.** `displayLeft`/`displayRight`/`displayStatus` re-project the row,
   and `Enter` maps a displayed side back to the host's original side. The comparison documents are
   not recomputed and neither pane's vertical scroll is reset.

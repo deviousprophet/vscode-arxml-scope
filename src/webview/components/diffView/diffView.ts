@@ -1,10 +1,10 @@
 /**
  * DiffView component: the two-pane comparison surface.
  *
- * Owns the pane grid, two DocumentTree instances, the single visible vertical
- * driver, horizontal mirroring and swap state that only resets the horizontal
- * offsets. The composition root owns the diff model, rows, selection, search and
- * status; it supplies rows through the DocumentTree models.
+ * Owns the pane grid, two DocumentTree instances, one visible vertical bar,
+ * horizontal mirroring and swap state that only resets the horizontal offsets.
+ * The composition root owns the diff model, rows, selection, search and status;
+ * it supplies rows through the DocumentTree models.
  */
 import './diffView.css';
 import { DocumentTreeView } from '../documentTree/documentTreeView';
@@ -58,26 +58,14 @@ export class DiffView {
 		});
 		this.left.mount();
 		this.right.mount();
-		const rightScroller = this.right.root ? this.right.root.querySelector('.document-tree-scroll') : null;
-		if (rightScroller) {
-			rightScroller.addEventListener(
-				'wheel',
-				(event: any) => {
-					if (event.shiftKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
-						return;
-					}
-					event.preventDefault();
-					this.left.setScrollTop(this.left.getScrollTop() + event.deltaY);
-				},
-				{ passive: false }
-			);
-		}
 	}
 
 	/**
-	 * One vertical driver: either pane's scroll copies to the other. Horizontal
-	 * is mirrored the same way; the component's expected-offset suppression stops
-	 * the follower's scroll event from bouncing back.
+	 * Either pane's native scroll copies to the other. The follower's render is
+	 * deferred to the next animation frame so the driver's scroll event does not
+	 * do two synchronous renders. Horizontal is mirrored the same way; the
+	 * component's expected-offset suppression stops the follower's scroll event
+	 * from bouncing back.
 	 */
 	syncPanes(pane: 'left' | 'right', top: number, left: number): void {
 		if (!this.left || !this.right) {
@@ -86,7 +74,7 @@ export class DiffView {
 		const driver = pane === 'left' ? this.left : this.right;
 		const follower = pane === 'left' ? this.right : this.left;
 		if (Math.abs(follower.getScrollTop() - top) >= 1) {
-			follower.setScrollTop(top);
+			follower.setScrollTop(top, true);
 		}
 		if (Math.abs(follower.getScrollLeft() - left) >= 1) {
 			follower.setScrollLeft(left);

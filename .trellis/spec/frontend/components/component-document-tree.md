@@ -48,7 +48,7 @@ class DocumentTreeView {
     headerHeight(): number;
     getRowsScrollTop(): number;
     setRowsScrollTop(offset: number): void;
-    setScrollTop(top: number): void;
+    setScrollTop(top: number, defer?: boolean): void;
     getScrollTop(): number;
     setScrollLeft(left: number): void;
     getScrollLeft(): number;
@@ -59,12 +59,12 @@ class DocumentTreeView {
 
 ## Rules
 
-- Owns `root > header + scroll > spacers + window`; the header is a fixed strip above the scroller and stays visible while the rows scroll. Native two-axis scrollbars.
-- `headerHeight()` is the measured `header.offsetHeight`, cached and invalidated by `setHeader`/`mount` and by a scroller width change (a resize can reflow the lines); plain scroll renders reuse it. `0` while unmeasurable (jsdom has no layout). It no longer shifts row offsets.
-- Row math subtracts only `padTopHeight()` in `getRowsScrollTop()` and adds it back in `setRowsScrollTop()`. `getScrollTop()`/`setScrollTop()` stay the native values so two panes can synchronize them.
+- Owns `root > titleBar? + scroll > meta + spacers + window`. The optional `.document-tree-title-bar` is the only pinned strip and is hidden when `header.title` is empty (the editor). The `.document-tree-header` meta block is the scroller's first content element and scrolls on both axes.
+- `headerHeight()` is the measured meta `offsetHeight`, cached and invalidated by `setHeader`/`mount` and by a scroller width change (a resize can reflow the lines); plain scroll renders reuse it. `0` while unmeasurable (jsdom has no layout). The meta height shifts row offsets.
+- Row math subtracts `padTopHeight() + headerHeight()` in `getRowsScrollTop()` and adds both back in `setRowsScrollTop()`. `getScrollTop()`/`setScrollTop()` stay the native values so two panes can synchronize them. `setScrollTop(top, true)` schedules the render on the next animation frame instead of rendering synchronously.
 - `scrollToIndex`, `virtualState` and `getVisibleRange` inherit the corrected offset; no other scroll math changes.
-- A refresh or view switch at the top keeps the native scroll offset, so the pinned header and first row do not jump.
-- The header is presentation-only: not a tree item, not a tab stop, and not part of any row haystack. `header.lines` pads the shorter pane so both headers measure equal.
+- A refresh or view switch at the top keeps the native scroll offset, so the meta block and first row do not jump.
+- The title bar and meta block are presentation-only: not tree items, not tab stops, and not part of any row haystack. `header.lines` pads the shorter pane so both meta blocks measure equal.
 - Renders only the visible window plus overscan; incremental edge updates on scroll.
 - Render-key skip when range, total height, viewport and revision are unchanged.
 - Shift+wheel maps to horizontal; plain wheel stays vertical.
@@ -87,15 +87,15 @@ class DocumentTreeView {
 | Empty model | Empty state, zero spacers |
 | Large model | Rendered DOM bounded by viewport + overscan |
 | Programmatic scroll | Expected offset suppresses feedback notifications |
-| Header present | Rows start below the pinned header strip; the header stays visible while the rows scroll |
+| Header present | The file-name strip is hidden in the editor; the diff pins it. The meta block is content and scrolls with the rows |
 | Two instances | Independent scrollers, no shared DOM ids |
 
 ## Tests Required
 
 `src/test/webview/components/documentTree.test.ts`: window bounds, spacer heights, render-key skip,
-incremental update, scroll setters, Shift+wheel, root scoping, DOM order `header > scroll`, pinned-header
-offset arithmetic with a stubbed `offsetHeight`, cached across scroll renders, and `scrollToIndex`
-landing rows at the row offset.
+incremental update, scroll setters, Shift+wheel, root scoping, DOM order `titleBar > scroll > meta`,
+the hidden editor title bar, meta-height offset arithmetic with a stubbed `offsetHeight`, cached
+across scroll renders, and `scrollToIndex` landing rows after the meta height.
 
 `src/test/webview/page/render.test.ts`: selecting a container highlights a descendant sub-container's
 annotation row, clicking an annotation does not change the selection, and node/brace/comment rows carry

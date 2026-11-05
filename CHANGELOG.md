@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Details** reports `N definitions found` when several definition bodies share a path instead of silently dropping the definition block
 - Added diff rows use the same bold leading edge as removed rows
 - The diff pane chevron and collapsed `{ ... }` marker follow the live `aria-expanded` state, and selection uses the same document-tree treatment in both panes
-- Diff pane file headers stay pinned above the rows, and wheel or scrollbar movement maps linearly to rows from the top instead of first consuming a header-sized dead zone
+- Only the diff file name stays pinned above the rows; schema and package lines are part of the scrolling content. Both diff panes scroll natively, the right pane hides its vertical scrollbar without reserving a gutter, and the follower pane renders on the next animation frame so the wheel step matches the editor
 
 ## [0.6.0] - 2026-11-03
 

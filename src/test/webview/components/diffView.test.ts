@@ -42,6 +42,19 @@ suite('DiffView component', () => {
 			'a changed word keeps its added edge'
 		);
 		assert.ok(!/\.diff-row\[data-gap/.test(css), 'the diff has no module gap row');
+		assert.ok(
+			/#diff-pane-right \.document-tree-scroll\s*\{[^}]*overflow-y:\s*auto/.test(css),
+			'the right pane scrolls natively'
+		);
+		assert.ok(
+			/#diff-pane-right \.document-tree-scroll\s*\{[^}]*scrollbar-gutter:\s*auto/.test(css),
+			'the right pane does not reserve a scrollbar gutter'
+		);
+		assert.ok(
+			/#diff-pane-right \.document-tree-scroll::-webkit-scrollbar:vertical\s*\{[^}]*width:\s*0/.test(css),
+			'the right vertical scrollbar stays hidden'
+		);
+		assert.ok(!/#diff-pane-right \.document-tree-scroll\s*\{[^}]*overflow-y:\s*hidden/.test(css));
 	});
 
 	test('mount creates one component per pane and mirrors the follower', () => {

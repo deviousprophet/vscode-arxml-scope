@@ -151,14 +151,19 @@ suite('editor bundled page', () => {
 			const scroller = dom.document.querySelector('#tree > .document-tree-scroll') as HTMLElement;
 			assert.ok(scroller, 'the rows scroller is the tree root child');
 			assert.ok(
-				scroller.firstElementChild!.className.includes('document-tree-top'),
-				'the Document scroller starts with the top spacer'
+				scroller.firstElementChild!.className.includes('document-tree-header'),
+				'the Document scroller starts with the scrolling meta'
 			);
 			assert.ok(
-				dom.document.querySelector('#tree > .document-tree-header'),
-				'the Document header is pinned above the scroller'
+				dom.document.querySelector('#tree > .document-tree-title-bar'),
+				'the title strip exists'
 			);
-			assert.strictEqual(scroller.querySelector('.document-tree-header'), null);
+			assert.strictEqual(
+				(dom.document.querySelector('#tree > .document-tree-title-bar') as HTMLElement).hidden,
+				true,
+				'the editor does not pin a file name'
+			);
+			assert.strictEqual(dom.document.querySelector('#tree > .document-tree-header'), null);
 			assert.strictEqual(dom.document.querySelector('#tree').getAttribute('aria-label'), 'ECUC values');
 		} finally {
 			dom.restore();
