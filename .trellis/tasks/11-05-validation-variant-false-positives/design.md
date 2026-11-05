@@ -226,16 +226,19 @@ for (const item of [...group.elements, ...group.references]) {
 	const guard = item.syscond ?? '';
 	perGuard.set(guard, (perGuard.get(guard) ?? 0) + 1);
 }
-const exceedsUpper =
-	upper !== undefined && upper >= 0 && [...perGuard.values()].some((value) => value > upper);
-const offender = exceedsUpper ? Math.max(...perGuard.values()) : count;
+const unguarded = perGuard.get('') ?? 0;
+const guarded = Math.max(0, ...[...perGuard].filter(([guard]) => guard !== '').map(([, value]) => value));
+const worst = unguarded + guarded;
+const exceedsUpper = upper !== undefined && upper >= 0 && worst > upper;
+const offender = exceedsUpper ? Math.max(worst, ...perGuard.values()) : count;
 if (count < lower || exceedsUpper) {
 	// message uses `offender` instead of `count`
 }
 ```
 
 - Lower bound uses the **total**, because alternatives collectively satisfy a minimum.
-- Upper bound uses the **per-guard maximum**, because alternatives are mutually exclusive.
+- Upper bound uses the **worst guard bucket**, because alternatives are mutually exclusive.
+- An unguarded occurrence is present under every condition, so it is counted in every guarded bucket.
 - Unguarded values share the `''` guard, so ordinary repetition still violates the upper bound.
 
 No group key change means cross-file copies are still not summed.

@@ -234,9 +234,11 @@ Replace the count/condition block with:
 			const guard = item.syscond ?? '';
 			perGuard.set(guard, (perGuard.get(guard) ?? 0) + 1);
 		}
-		const exceedsUpper =
-			upper !== undefined && upper >= 0 && [...perGuard.values()].some((value) => value > upper);
-		const offender = exceedsUpper ? Math.max(...perGuard.values()) : count;
+		const unguarded = perGuard.get('') ?? 0;
+		const guarded = Math.max(0, ...[...perGuard].filter(([guard]) => guard !== '').map(([, value]) => value));
+		const worst = unguarded + guarded;
+		const exceedsUpper = upper !== undefined && upper >= 0 && worst > upper;
+		const offender = exceedsUpper ? Math.max(worst, ...perGuard.values()) : count;
 		if (count < lower || exceedsUpper) {
 			const first = group.elements[0] ?? group.references[0];
 			const expected =
