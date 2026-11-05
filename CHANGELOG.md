@@ -5,6 +5,36 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-05
+
+### Added
+
+- Copy-aware reference resolution: a target declared in several files resolves to the copy in the referencing file, and **Go to Definition** / **Find References** expose every copy instead of guessing
+- `arxmlScope.index.exclude` for workspace-relative globs (`**/_fwd/**`, `**/_out/**`, `**/_gen/**`) that keeps generated or duplicate trees out of the index, validation, navigation and text-editor features
+- `arxmlScope.validation.crossFileRules` (`auto` / `always` / `never`) so a workspace without ECUC definitions stays quiet; the status bar shows the mode and cycles it
+- `arxmlScope.validation.maxDiagnosticsPerFile` and `maxDiagnostics` caps, with one summary diagnostic per file that reports hidden problems
+- `arxmlScope.diff.semanticMatching` for renamed-container pairing; the **Semantic** / **Strict** view group switches immediately between the cached views and renamed containers stay one changed row without a special marker
+- A default-on **Context** toggle that keeps five unchanged lines above and below each change, plus expandable split lines that reveal the hidden runs in Show diff
+
+### Changed
+
+- The diff toolbar is now a grouped icon-over-label strip: **Show all** / **Show diff**, **Context**, **Semantic** / **Strict** and **Prev diff** / **Next diff**, with **Swap sides** centered over the pane divider and Search on the right
+- Schema and package lines are document content in both the docs and diff views: they scroll, search and receive focus like document rows instead of staying pinned
+- The diff uses one shared virtual-scroll surface with one vertical bar and one synchronized horizontal bar per pane; the file name stays fixed above it, the scrollbar thumb and drag match the rendered lines, and the title divider stays aligned with the pane split
+- The diff shows `Loading comparison…` until the first comparison arrives instead of flashing `No differences`
+
+### Fixed
+
+- Validation no longer reports parameter-value or non-ECUC `DEST`s as broken references, and a duplicate AR path across generated copies is one `information` diagnostic with related locations instead of thousands of errors
+- Multiplicity is counted inside one file and one owning parent, so cross-file copies are not summed
+- Empty values and AUTOSAR boolean/float literals (`0`/`1`, `INF`, `-INF`, `NaN`) are accepted; required `ECUC-ADD-INFO-PARAM-DEF` children and required children with a `DEFAULT-VALUE` are no longer missing
+- Missing definitions are grouped at the highest missing ancestor (or the missing module definition) with an instance count
+- **Details** reports `N definitions found` when several definition bodies share a path instead of silently dropping the definition block
+- Added diff rows use the same bold leading edge as removed rows
+- The diff pane chevron and collapsed `{ ... }` marker follow the live `aria-expanded` state, and selection uses the same document-tree treatment in both panes
+- Validation no longer reports AUTOSAR split-file container copies as duplicate names or variant alternatives (`VARIATION-POINT`/`SW-SYSCOND`) as multiplicity violations
+- `WITH-AUTO` required children are no longer reported missing, and same-definition local merge copies resolve instead of appearing ambiguous
+
 ## [0.6.0] - 2026-11-03
 
 ### Added

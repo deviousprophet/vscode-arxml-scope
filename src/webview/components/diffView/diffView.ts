@@ -1,32 +1,39 @@
 /**
- * DiffView component: the two-pane comparison surface.
+ * DiffView: fixed file-name chrome plus one shared virtual scroll surface.
  *
- * Owns the pane grid, two DocumentTree instances, the single visible vertical
- * driver, horizontal mirroring and swap state that only resets the horizontal
- * offsets. The composition root owns the diff model, rows, selection, search and
- * status; it supplies rows through the DocumentTree models.
+ * The two DocumentTreeViews are pure window renderers inside one VirtualScroll.
+ * They share one offsets table, one vertical scrollbar and one horizontal
+ * offset; the pane split stays fixed.
  */
 import './diffView.css';
 import { DocumentTreeView } from '../documentTree/documentTreeView';
-import type { DocumentTreeHeader, DocumentTreeViewModel } from '../documentTree/documentTreeView';
+import type { DocumentTreeHeader, DocumentTreeViewModel, DocumentTreeViewport } from '../documentTree/documentTreeView';
+import { VirtualScroll } from '../virtualScroll/virtualScroll';
+import type { VirtualScrollContent } from '../virtualScroll/virtualScroll';
 export { renderDiffViewHtml } from './diffViewRender';
 
 export interface DiffViewCallbacks {
-	onVisibleWindowChange?(pane: 'left' | 'right', top: number, left: number): void;
 	onRowClick?(pane: 'left' | 'right', index: number, event: MouseEvent): void;
 	onRender?(pane: string): void;
+	onViewportChange?(viewport: DocumentTreeViewport): void;
 }
 
 export class DiffView {
 	callbacks: DiffViewCallbacks;
 	left: any;
 	right: any;
+	scroll: VirtualScroll | undefined;
+	titleLeft: any;
+	titleRight: any;
 	mounted: boolean;
 
 	constructor(callbacks: DiffViewCallbacks = {}) {
 		this.callbacks = callbacks;
 		this.left = undefined;
 		this.right = undefined;
+		this.scroll = undefined;
+		this.titleLeft = undefined;
+		this.titleRight = undefined;
 		this.mounted = false;
 	}
 
@@ -35,8 +42,34 @@ export class DiffView {
 			return;
 		}
 		this.mounted = true;
-		this.left = new DocumentTreeView('#diff-pane-left', 'left', {
-			onVisibleWindowChange: (top: number, left: number) => this.syncPanes('left', top, left),
+		this.titleLeft = document.getElementById('diff-title-left');
+		this.titleRight = document.getElementById('diff-title-right');
+		this.scroll = new VirtualScroll(
+			'#diff-list',
+			[
+				{
+					id: 'diff-pane-left',
+					className: 'document-tree-pane document-tree diff-pane',
+					role: 'tree',
+					label: 'Semantic ECUC diff, left side',
+					side: 'left'
+				},
+				{
+					id: 'diff-pane-right',
+					className: 'document-tree-pane document-tree diff-pane',
+					role: 'group',
+					label: 'Semantic ECUC diff, right side',
+					side: 'right'
+				}
+			],
+			{
+				onViewportChange: (viewport) => this.render(viewport, false),
+				syncHorizontal: true
+			}
+		);
+		this.scroll.mount();
+		this.syncScrollbarWidth();
+		this.left = new DocumentTreeView(this.scroll.getPane(0), 'left', {
 			onRender: () => {
 				if (this.callbacks.onRender) {
 					this.callbacks.onRender('left');
@@ -48,8 +81,7 @@ export class DiffView {
 				}
 			}
 		});
-		this.right = new DocumentTreeView('#diff-pane-right', 'right', {
-			onVisibleWindowChange: (top: number, left: number) => this.syncPanes('right', top, left),
+		this.right = new DocumentTreeView(this.scroll.getPane(1), 'right', {
 			onRowClick: (index: number, event: any) => {
 				if (this.callbacks.onRowClick) {
 					this.callbacks.onRowClick('right', index, event);
@@ -58,55 +90,17 @@ export class DiffView {
 		});
 		this.left.mount();
 		this.right.mount();
-		const rightScroller = this.right.root ? this.right.root.querySelector('.document-tree-scroll') : null;
-		if (rightScroller) {
-			rightScroller.addEventListener(
-				'wheel',
-				(event: any) => {
-					if (event.shiftKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
-						return;
-					}
-					event.preventDefault();
-					this.left.setScrollTop(this.left.getScrollTop() + event.deltaY);
-				},
-				{ passive: false }
-			);
-		}
-	}
-
-	/**
-	 * One vertical driver: either pane's scroll copies to the other. Horizontal
-	 * is mirrored the same way; the component's expected-offset suppression stops
-	 * the follower's scroll event from bouncing back.
-	 */
-	syncPanes(pane: 'left' | 'right', top: number, left: number): void {
-		if (!this.left || !this.right) {
-			return;
-		}
-		const driver = pane === 'left' ? this.left : this.right;
-		const follower = pane === 'left' ? this.right : this.left;
-		if (Math.abs(follower.getScrollTop() - top) >= 1) {
-			follower.setScrollTop(top);
-		}
-		if (Math.abs(follower.getScrollLeft() - left) >= 1) {
-			follower.setScrollLeft(left);
-		}
-		if (Math.abs(driver.getScrollLeft() - left) >= 1) {
-			driver.setScrollLeft(left);
-		}
-		if (this.callbacks.onVisibleWindowChange) {
-			this.callbacks.onVisibleWindowChange(pane, top, left);
-		}
-	}
-
-	render(force: boolean): void {
-		this.left.render(force === true);
-		this.right.render(force === true);
 	}
 
 	setModel(model: DocumentTreeViewModel): void {
 		this.left.setModel(model);
 		this.right.setModel(model);
+	}
+
+	setContent(content: VirtualScrollContent): void {
+		if (this.scroll) {
+			this.scroll.setContent(content);
+		}
 	}
 
 	setContentWidth(width: number): void {
@@ -115,53 +109,80 @@ export class DiffView {
 	}
 
 	setHeader(header: { left: DocumentTreeHeader; right: DocumentTreeHeader }): void {
-		this.left.setHeader(header.left);
-		this.right.setHeader(header.right);
+		this.setTitle(this.titleLeft, header.left);
+		this.setTitle(this.titleRight, header.right);
 	}
 
-	setScrollTop(top: number): void {
-		this.left.setScrollTop(top);
-		this.right.setScrollTop(this.left.getScrollTop());
+	render(viewport: DocumentTreeViewport, force: boolean): void {
+		const lefts = viewport.lefts && viewport.lefts.length > 0 ? viewport.lefts : [viewport.left, viewport.left];
+		this.left.render({ ...viewport, left: lefts[0] ?? 0 }, force);
+		this.right.render({ ...viewport, left: lefts[1] ?? lefts[0] ?? 0 }, force);
+		if (this.callbacks.onViewportChange) {
+			this.callbacks.onViewportChange(viewport);
+		}
 	}
 
-	setScrollLeft(left: number): void {
-		this.left.setScrollLeft(left);
-		this.right.setScrollLeft(left);
+	setScrollTop(top: number, defer = false): void {
+		this.scroll?.setScrollTop(top, defer);
 	}
 
 	getScrollTop(): number {
-		return this.left.getScrollTop();
+		return this.scroll ? this.scroll.getScrollTop() : 0;
 	}
 
-	getScrollLeft(): number {
-		return this.left.getScrollLeft();
+	setScrollLeft(left: number, defer = false): void {
+		this.scroll?.setScrollLeft(left, defer);
 	}
 
-	getRowsScrollTop(): number {
-		return this.left.getRowsScrollTop();
-	}
-
-	setRowsScrollTop(top: number): void {
-		this.left.setRowsScrollTop(top);
-		this.right.setScrollTop(this.left.getScrollTop());
-	}
-
-	clientHeight(): number {
-		return this.left.clientHeight();
+	getScrollLeft(index = 0): number {
+		return this.scroll ? this.scroll.getScrollLeft(index) : 0;
 	}
 
 	getVisibleRange(): [number, number] {
-		return this.left.getVisibleRange();
+		return this.scroll ? this.scroll.getVisibleRange() : [0, 0];
+	}
+
+	clientHeight(): number {
+		return this.scroll ? this.scroll.clientHeight() : 0;
+	}
+
+	clientWidth(): number {
+		return this.scroll ? this.scroll.clientWidth() : 0;
 	}
 
 	scrollToIndex(index: number, align?: 'auto' | 'start' | 'end'): void {
-		this.left.scrollToIndex(index, align);
-		this.right.setScrollTop(this.left.getScrollTop());
+		this.scroll?.scrollToIndex(index, align);
+	}
+
+	getWindowElement(): any {
+		return this.left ? this.left.getWindowElement() : undefined;
+	}
+
+	/** Match the fixed title strip's width to the vertical scrollbar's gutter. */
+	syncScrollbarWidth(): void {
+		const body = typeof document === 'undefined' ? undefined : document.getElementById('diff-body');
+		if (!body || !body.style) {
+			return;
+		}
+		const width = this.scroll ? this.scroll.verticalScrollbarWidth() : 0;
+		body.style.setProperty('--diff-scrollbar-width', width + 'px');
 	}
 
 	/** Swap resets horizontal only; the vertical position is preserved. */
 	resetHorizontal(): void {
-		this.left.setScrollLeft(0);
-		this.right.setScrollLeft(0);
+		if (this.scroll) {
+			this.scroll.setPaneScrollLeft(0, 0);
+			this.scroll.setPaneScrollLeft(1, 0);
+		}
+	}
+
+	private setTitle(element: any, header: DocumentTreeHeader): void {
+		if (!element) {
+			return;
+		}
+		const text = header && header.title ? header.title : '';
+		element.textContent = text;
+		element.title = header && header.titleTitle ? header.titleTitle : text;
+		element.hidden = text === '';
 	}
 }

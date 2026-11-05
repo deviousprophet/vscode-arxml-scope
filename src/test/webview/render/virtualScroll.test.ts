@@ -1,5 +1,5 @@
 /**
- * Task design §5 — the windowed renderer's maths are pure and deterministic:
+ * The windowed renderer's maths are pure and deterministic:
  * cumulative heights, a clamped visible range with overscan, row offsets and
  * the total scroll height. Fixed and two-height rows are both covered because
  * the Document and Tree views use different height functions.

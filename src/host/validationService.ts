@@ -6,9 +6,9 @@ import * as vscode from 'vscode';
 import type { IndexSubscription } from '../core/index/workspaceIndex';
 import { positionAt } from '../core/validation/position';
 import { DEFAULT_SEVERITIES, normalizeSeverities } from '../core/validation/types';
-import type { SeveritySettings } from '../core/validation/types';
+import type { CrossFileMode, SeveritySettings } from '../core/validation/types';
 import { validateWorkspace } from '../core/validation/validate';
-import { IndexService } from './indexService';
+import { crossFileRulesSetting, IndexService } from './indexService';
 
 const DEBOUNCE_MS = 400;
 
@@ -19,6 +19,21 @@ export function validationEnabled(): boolean {
 export function validationSeverities(): SeveritySettings {
 	const raw = vscode.workspace.getConfiguration('arxmlScope.validation').get<unknown>('severities', DEFAULT_SEVERITIES);
 	return normalizeSeverities(raw);
+}
+
+export function validationCaps(): { perFile: number; total: number } {
+	const config = vscode.workspace.getConfiguration('arxmlScope.validation');
+	const perFile = config.get<number>('maxDiagnosticsPerFile', 500);
+	const total = config.get<number>('maxDiagnostics', 5000);
+	return {
+		perFile: Number.isFinite(perFile) && perFile >= 0 ? Math.floor(perFile) : 500,
+		total: Number.isFinite(total) && total >= 0 ? Math.floor(total) : 5000,
+	};
+}
+
+/** The cross-file rule mode; `auto` needs at least one indexed definition. */
+export function crossFileRules(): CrossFileMode {
+	return crossFileRulesSetting();
 }
 
 function toSeverity(level: string): vscode.DiagnosticSeverity {
@@ -54,10 +69,20 @@ export class ValidationService implements vscode.Disposable {
 			this.collection.clear();
 			return;
 		}
-		const diagnostics = validateWorkspace(this.index.workspaceIndex, validationSeverities());
+		const diagnostics = validateWorkspace(this.index.workspaceIndex, validationSeverities(), crossFileRules());
+		const caps = validationCaps();
 		const byFile = new Map<string, vscode.Diagnostic[]>();
+		const hidden = new Map<string, number>();
+		let total = 0;
 		for (const diagnostic of diagnostics) {
 			const file = this.index.workspaceIndex.file(diagnostic.file);
+			const actualCount = (byFile.get(diagnostic.file)?.length ?? 0) + (hidden.get(diagnostic.file) ?? 0);
+			const overFile = caps.perFile > 0 && actualCount >= caps.perFile;
+			const overTotal = caps.total > 0 && total >= caps.total;
+			if (overFile || overTotal) {
+				hidden.set(diagnostic.file, (hidden.get(diagnostic.file) ?? 0) + 1);
+				continue;
+			}
 			const start = positionAt(file?.lineStarts, diagnostic.range.start);
 			const end = positionAt(file?.lineStarts, diagnostic.range.end);
 			const item = new vscode.Diagnostic(
@@ -67,12 +92,41 @@ export class ValidationService implements vscode.Disposable {
 			);
 			item.code = diagnostic.rule;
 			item.source = 'ARXML Scope';
+			if (diagnostic.related !== undefined && diagnostic.related.length > 0) {
+				item.relatedInformation = diagnostic.related.map((related) => {
+					const relatedFile = this.index.workspaceIndex.file(related.file);
+					const relatedStart = positionAt(relatedFile?.lineStarts, related.range.start);
+					const relatedEnd = positionAt(relatedFile?.lineStarts, related.range.end);
+					return new vscode.DiagnosticRelatedInformation(
+						new vscode.Location(
+							vscode.Uri.parse(related.file),
+							new vscode.Range(relatedStart.line, relatedStart.character, relatedEnd.line, relatedEnd.character)
+						),
+						related.message
+					);
+				});
+			}
 			const list = byFile.get(diagnostic.file);
 			if (list === undefined) {
 				byFile.set(diagnostic.file, [item]);
 			} else {
 				list.push(item);
 			}
+			total++;
+		}
+		for (const [file, count] of hidden) {
+			const entry = this.index.workspaceIndex.file(file);
+			const point = positionAt(entry?.lineStarts, 0);
+			const summary = new vscode.Diagnostic(
+				new vscode.Range(point.line, point.character, point.line, point.character),
+				`${count} additional problem${count === 1 ? '' : 's'} in this file were hidden by the diagnostic limit.`,
+				vscode.DiagnosticSeverity.Information
+			);
+			summary.code = 'diagnosticCap';
+			summary.source = 'ARXML Scope';
+			const list = byFile.get(file) ?? [];
+			list.push(summary);
+			byFile.set(file, list);
 		}
 		this.collection.clear();
 		for (const [uri, list] of byFile) {

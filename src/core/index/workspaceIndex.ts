@@ -15,15 +15,15 @@ export interface IndexSubscription {
 	dispose(): void;
 }
 
-/** One element lookup, with the refusal reason kept for the caller. */
+/** One element lookup, with the refusal reason and copy list kept for the caller. */
 export type ElementResolution =
-	| { ok: true; element: IndexElement }
+	| { ok: true; element: IndexElement; copies: readonly IndexElement[] }
 	| { ok: false; reason: 'absent' | 'ambiguous'; path: string }
 	| { ok: false; reason: 'dest-mismatch'; path: string; element: IndexElement; actualKind: IndexElement['kind'] };
 
 /** One reference lookup, with the source reference kept for diagnostics. */
 export type ReferenceResolution =
-	| { ok: true; element: IndexElement; reference: IndexReference }
+	| { ok: true; element: IndexElement; copies: readonly IndexElement[]; reference: IndexReference }
 	| {
 			ok: false;
 			reason: 'no-target' | 'absent' | 'ambiguous' | 'dest-mismatch';
@@ -109,23 +109,30 @@ export class WorkspaceIndex {
 	}
 
 	/** Resolves a target path and checks the optional `DEST` kind. */
-	resolveTarget(rawPath: string, dest?: string): ElementResolution {
+	resolveTarget(rawPath: string, dest?: string, sourceFile?: string): ElementResolution {
 		this.ensureLookups();
 		const resolved = resolveDetailed(this.elements!, rawPath);
 		if (resolved.status !== 'found') {
 			return { ok: false, reason: resolved.status, path: rawPath };
 		}
 		const expected = expectedKind(dest);
-		if (expected !== undefined && resolved.value.kind !== expected) {
+		const candidates =
+			expected === undefined ? resolved.candidates : resolved.candidates.filter((candidate) => candidate.kind === expected);
+		if (candidates.length === 0) {
+			const first = resolved.candidates[0];
 			return {
 				ok: false,
 				reason: 'dest-mismatch',
 				path: rawPath,
-				element: resolved.value,
-				actualKind: resolved.value.kind,
+				element: first,
+				actualKind: first.kind,
 			};
 		}
-		return { ok: true, element: resolved.value };
+		const copies = copiesFor(candidates, sourceFile);
+		if (copies === undefined) {
+			return { ok: false, reason: 'ambiguous', path: rawPath };
+		}
+		return { ok: true, element: copies[0], copies };
 	}
 
 	/** Resolves one indexed reference through the workspace index. */
@@ -134,9 +141,9 @@ export class WorkspaceIndex {
 		if (raw === '') {
 			return { ok: false, reason: 'no-target', reference };
 		}
-		const resolution = this.resolveTarget(raw, reference.targetDest);
+		const resolution = this.resolveTarget(raw, reference.targetDest, reference.file);
 		if (resolution.ok) {
-			return { ok: true, element: resolution.element, reference };
+			return { ok: true, element: resolution.element, copies: resolution.copies, reference };
 		}
 		return {
 			ok: false,
@@ -193,6 +200,13 @@ export class WorkspaceIndex {
 			}
 		}
 		return out;
+	}
+
+	/** How many definition bodies share this path (0, 1 or N); navigation never picks one. */
+	definitionCandidateCount(rawPath: string): number {
+		this.ensureLookups();
+		const resolved = resolveDetailed(this.definitions!, rawPath);
+		return resolved.status === 'found' ? resolved.candidates.length : 0;
 	}
 
 	/** The raw definition record for a `DEFINITION-REF`, or nothing when absent/ambiguous. */
@@ -261,8 +275,8 @@ export class WorkspaceIndex {
 }
 
 interface PathLookup<T> {
-	exact: Map<string, T | undefined>;
-	suffix: Map<string, T | undefined>;
+	exact: Map<string, T[]>;
+	suffix: Map<string, T[]>;
 }
 
 function emptyLookup<T>(): PathLookup<T> {
@@ -270,12 +284,12 @@ function emptyLookup<T>(): PathLookup<T> {
 }
 
 /**
- * Builds the two lookup maps. `exact` keeps a full path unique, while `suffix`
- * holds every suffix with `undefined` marking an ambiguity.
+ * Builds the two candidate maps. Exact keys keep the full path; suffix keys keep
+ * every suffix. A unique path has a one-element array; only repeated paths grow.
  */
 function buildLookup<T>(items: readonly T[], pathOf: (item: T) => string | undefined): PathLookup<T> {
-	const exact = new Map<string, T | undefined>();
-	const suffix = new Map<string, T | undefined>();
+	const exact = new Map<string, T[]>();
+	const suffix = new Map<string, T[]>();
 	for (const item of items) {
 		const path = pathOf(item);
 		if (path === undefined) {
@@ -286,17 +300,19 @@ function buildLookup<T>(items: readonly T[], pathOf: (item: T) => string | undef
 			continue;
 		}
 		const full = '/' + segments.join('/');
-		if (!exact.has(full)) {
-			exact.set(full, item);
-		} else if (exact.get(full) !== item) {
-			exact.set(full, undefined);
+		const exactList = exact.get(full);
+		if (exactList === undefined) {
+			exact.set(full, [item]);
+		} else {
+			exactList.push(item);
 		}
 		for (let start = 0; start < segments.length; start++) {
 			const key = '/' + segments.slice(start).join('/');
-			if (!suffix.has(key)) {
-				suffix.set(key, item);
-			} else if (suffix.get(key) !== item) {
-				suffix.set(key, undefined);
+			const list = suffix.get(key);
+			if (list === undefined) {
+				suffix.set(key, [item]);
+			} else {
+				list.push(item);
 			}
 		}
 	}
@@ -305,37 +321,66 @@ function buildLookup<T>(items: readonly T[], pathOf: (item: T) => string | undef
 
 function resolve<T>(lookup: PathLookup<T>, rawPath: string): T | undefined {
 	const resolved = resolveDetailed(lookup, rawPath);
-	return resolved.status === 'found' ? resolved.value : undefined;
+	return resolved.status === 'found' && resolved.candidates.length === 1 ? resolved.candidates[0] : undefined;
 }
 
-type Resolved<T> = { status: 'found'; value: T } | { status: 'absent' } | { status: 'ambiguous' };
+type Resolved<T> = { status: 'found'; candidates: T[] } | { status: 'absent' };
 
 function resolveDetailed<T>(lookup: PathLookup<T>, rawPath: string): Resolved<T> {
 	const segments = splitPath(rawPath);
 	for (let start = 0; start < segments.length; start++) {
 		const candidate = '/' + segments.slice(start).join('/');
-		if (lookup.exact.has(candidate)) {
-			const value = lookup.exact.get(candidate);
-			return value === undefined ? { status: 'ambiguous' } : { status: 'found', value };
+		const exact = lookup.exact.get(candidate);
+		if (exact !== undefined) {
+			return { status: 'found', candidates: exact };
 		}
-		if (lookup.suffix.has(candidate)) {
-			const value = lookup.suffix.get(candidate);
-			return value === undefined ? { status: 'ambiguous' } : { status: 'found', value };
+		const suffix = lookup.suffix.get(candidate);
+		if (suffix !== undefined) {
+			return { status: 'found', candidates: suffix };
 		}
 	}
 	return { status: 'absent' };
 }
 
-/** The element kind a `DEST` names, or `undefined` when the DEST is not a value kind. */
+/** The candidate list for navigation, or `undefined` when the copies do not agree. */
+function copiesFor(candidates: readonly IndexElement[], sourceFile: string | undefined): IndexElement[] | undefined {
+	if (candidates.length === 1) {
+		return [candidates[0]];
+	}
+	if (!copiesOfOneIdentity(candidates)) {
+		return undefined;
+	}
+	const local = candidates.filter((candidate) => candidate.file === sourceFile);
+	if (local.length > 1) {
+		return [...sortCopies(local), ...sortCopies(candidates.filter((candidate) => candidate.file !== sourceFile))];
+	}
+	if (local.length === 1) {
+		return [local[0], ...sortCopies(candidates.filter((candidate) => candidate !== local[0]))];
+	}
+	return sortCopies(candidates);
+}
+
+function copiesOfOneIdentity(candidates: readonly IndexElement[]): boolean {
+	const first = candidates[0];
+	return candidates.every(
+		(candidate) => candidate.kind === first.kind && candidate.definitionRef === first.definitionRef
+	);
+}
+
+function sortCopies(candidates: readonly IndexElement[]): IndexElement[] {
+	return [...candidates].sort(
+		(left, right) =>
+			left.file.localeCompare(right.file) || left.range.start - right.range.start || left.range.end - right.range.end
+	);
+}
+
+/** The element kind a path-bearing `DEST` names, or `undefined` when it is not checked. */
 function expectedKind(dest: string | undefined): IndexElement['kind'] | undefined {
 	switch (dest) {
 		case 'ECUC-MODULE-CONFIGURATION-VALUES':
 			return 'module';
 		case 'ECUC-CONTAINER-VALUE':
 			return 'container';
-		case 'ECUC-NUMERICAL-PARAM-VALUE':
-		case 'ECUC-TEXTUAL-PARAM-VALUE':
-			return 'parameter';
 		default:
 			return undefined;
 	}

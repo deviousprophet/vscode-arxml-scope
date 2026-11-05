@@ -1,5 +1,5 @@
 /**
- * The write path (child design §2.1–§2.3).
+ * The write path.
  *
  * An edit record names a **region**, never an offset. A value's length changes when it
  * is edited, so every offset after it shifts and a range stored at edit time would be
@@ -30,7 +30,7 @@ export type EditRegion = 'value' | 'element' | 'shortName' | 'definitionRef';
 /** The two fields the details panel edits on a container. */
 export type EditableField = 'shortName' | 'definitionRef';
 
-/** The exact strings that occupied and will occupy the region (design §2.1). */
+/** The exact strings that occupied and will occupy the region. */
 export interface EcucEditRecord {
 	nodeId: string;
 	region: EditRegion;
@@ -158,7 +158,7 @@ function touchesCdata(text: string, range: Range): boolean {
  *
  * For an empty or self-closing value the scanner already points at the element, so the
  * outward expansion is only needed once such a value has been given text — the case
- * design §2.2 describes. The closing tag's `>` is found from the `</` that follows the
+ * described here. The closing tag's `>` is found from the `</` that follows the
  * text, never from the text's last character: a raw `>` is legal unescaped in XML text,
  * so a value ending in one (`<VALUE>a></VALUE>`) would otherwise have its own `>`
  * mistaken for the closing tag's and the span would stop short of `</VALUE>`.
@@ -206,7 +206,7 @@ function tagEnd(text: string, start: number): number {
 /**
  * The exact string that will occupy an `element` region: `<VALUE>` + escaped + `</VALUE>`.
  * The element's own open and close tags are kept verbatim, so a namespace prefix, an
- * attribute or a space before the slash survives (parent design §8, shape 2).
+ * attribute or a space before the slash survives.
  */
 export function wrapElement(slice: string, escaped: string): string {
 	const gt = tagEnd(slice, 0);
@@ -221,9 +221,9 @@ function tagName(open: string): string {
 }
 
 /**
- * Validates `value` and describes the byte-level replacement, or refuses (design §2.3,
- * §2.5). Nothing is mutated here, so a refusal costs no partial write: the whole
- * replacement is either applied or not. Validation runs before `applyEdit`, always.
+ * Validates `value` and describes the byte-level replacement, or refuses. Nothing is
+ * mutated here, so a refusal costs no partial write: the whole replacement is either
+ * applied or not. Validation runs before `applyEdit`, always.
  */
 export function buildEdit(
 	model: EcucDocumentModel,
@@ -332,7 +332,7 @@ function predictNodeId(text: string, range: Range, newText: string): string | un
 
 /**
  * Applies `record` as exactly one `WorkspaceEdit`, after recomputing the region from a
- * fresh scan (design §2.2, §2.7). Nothing else is written, so the document is never
+ * fresh scan. Nothing else is written, so the document is never
  * reformatted and no derived file exists to write.
  */
 export async function applyEdit(

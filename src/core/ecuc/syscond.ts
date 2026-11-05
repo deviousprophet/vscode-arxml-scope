@@ -1,5 +1,5 @@
 /**
- * SW-SYSCOND expression evaluator (task design §2).
+ * SW-SYSCOND expression evaluator.
  *
  * The scanner stores a condition as the joined text of its `SW-SYSCOND`
  * element, with inline `SYSC-REF` elements replaced by their path tail. This
@@ -12,7 +12,7 @@
  * a pure library over text — no `vscode`, no Node APIs — so it runs in the core
  * suite without an editor.
  *
- * Grammar (design §2.1):
+ * Grammar:
  *
  * ```
  * expr       := or
@@ -25,7 +25,7 @@
  * ```
  *
  * An identifier is `[A-Za-z_][A-Za-z0-9_.\-/]*`, optionally prefixed with `/`
- * so a pasted `SYSC-REF` path is one token (PRD R9).
+ * so a pasted `SYSC-REF` path is one token.
  */
 
 export type ConditionValue = string | number | boolean;
@@ -452,7 +452,7 @@ function recordMissing(state: EvalState, name: string): void {
 }
 
 /**
- * Exact key first, then the last `/` segment (design §2.3). A value entered as
+ * Exact key first, then the last `/` segment. A value entered as
  * `CANIPCORETYPE_SC` therefore matches a condition that uses a pasted full
  * `SYSC-REF` path, and a pasted full path matches a tail-shaped key. Only an
  * unambiguous tail match is used; two constants with the same tail stay
@@ -646,7 +646,7 @@ function unescapeBody(body: string): string {
 }
 
 /**
- * Classifies one raw value the user typed (design §2.4): boolean, number
+ * Classifies one raw value the user typed: boolean, number
  * (decimal or `0x` hexadecimal), quoted string, or the trimmed string itself.
  * The raw text is what gets persisted, so this never mutates the entry.
  */

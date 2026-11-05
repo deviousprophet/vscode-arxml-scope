@@ -34,6 +34,7 @@ src/
     diffViewer.ts           diff composition root: diff document, view mode, search, message bridge
     components/
       documentTree/         documentTreeView.ts  documentTreeState.ts  documentRows.ts  documentTree.css
+      virtualScroll/        virtualScroll.ts  virtualScroll.css
       diffView/             diffView.ts  diffViewRender.ts  diffView.css
       toolbar/              toolbar.ts  toolbar.css
       searchBar/            searchBar.ts  searchBar.css

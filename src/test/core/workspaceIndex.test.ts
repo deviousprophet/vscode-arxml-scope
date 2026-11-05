@@ -133,7 +133,7 @@ suite('workspaceIndex (core)', () => {
 		assert.strictEqual(index.referencesFor(target!).length, 1);
 		assert.strictEqual(index.referencesFor(target!)[0].file, 'file:///refs.arxml');
 
-		const mismatch = index.resolveTarget('/P/M/C', 'ECUC-NUMERICAL-PARAM-VALUE');
+		const mismatch = index.resolveTarget('/P/M/C', 'ECUC-MODULE-CONFIGURATION-VALUES');
 		assert.strictEqual(mismatch.ok, false);
 		if (!mismatch.ok) {
 			assert.strictEqual(mismatch.reason, 'dest-mismatch');
@@ -150,12 +150,48 @@ suite('workspaceIndex (core)', () => {
 				'<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
 			)
 		);
-		const ambiguous = index.resolveTarget('/P/M/C');
-		assert.strictEqual(ambiguous.ok, false);
-		if (!ambiguous.ok) {
-			assert.strictEqual(ambiguous.reason, 'ambiguous');
-		}
+		const duplicated = index.resolveTarget('/P/M/C');
+		assert.strictEqual(duplicated.ok, true);
+		assert.strictEqual(duplicated.ok && duplicated.copies.length, 2);
 		assert.deepStrictEqual(index.referencesFor(target!), []);
+	});
+
+	test('a local copy wins; same-identity local copies merge; different identities stay ambiguous', () => {
+		const module = (uri: string, defRef: string, copies = 1): ReturnType<typeof buildFileIndex> => {
+			const containers = Array.from({ length: copies }, () =>
+				`<ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">${defRef}/C</DEFINITION-REF></ECUC-CONTAINER-VALUE>`
+			).join('');
+			return buildFileIndex(
+				uri,
+				`<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">${defRef}</DEFINITION-REF><CONTAINERS>${containers}</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`
+			);
+		};
+		const index = new WorkspaceIndex();
+		index.upsert(module('file:///a.arxml', '/D/M'));
+		index.upsert(module('file:///b.arxml', '/D/M'));
+
+		const local = index.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE', 'file:///b.arxml');
+		assert.strictEqual(local.ok, true);
+		assert.strictEqual(local.ok && local.element.file, 'file:///b.arxml');
+		assert.strictEqual(local.ok && local.copies.length, 2);
+
+		const noLocal = index.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE', 'file:///c.arxml');
+		assert.strictEqual(noLocal.ok, true);
+		assert.strictEqual(noLocal.ok && noLocal.copies.length, 2);
+
+		const sameFile = new WorkspaceIndex();
+		sameFile.upsert(module('file:///a.arxml', '/D/M', 2));
+		const merged = sameFile.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE', 'file:///a.arxml');
+		assert.strictEqual(merged.ok, true);
+		assert.strictEqual(merged.ok && merged.copies.length, 2);
+		assert.strictEqual(merged.ok && merged.element, merged.ok ? merged.copies[0] : undefined);
+		assert.strictEqual(merged.ok && merged.element.file, 'file:///a.arxml');
+
+		const different = new WorkspaceIndex();
+		different.upsert(module('file:///a.arxml', '/D/M'));
+		different.upsert(module('file:///b.arxml', '/D/Other'));
+		const mismatch = different.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE', 'file:///c.arxml');
+		assert.strictEqual(mismatch.ok, false);
 	});
 
 	test('builds lookups for a 200k-element file without a spread crash', () => {

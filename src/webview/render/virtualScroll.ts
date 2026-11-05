@@ -1,5 +1,5 @@
 /**
- * Pure virtual-scroll math for the windowed ECUC views (task design §5).
+ * Pure virtual-scroll math for the windowed ECUC views.
  *
  * The page keeps a flat display-row list, a deterministic row-height function
  * and the scroll container's viewport height; this module answers three
@@ -18,6 +18,79 @@
 
 /** A deterministic row height in CSS pixels. */
 export type RowHeight = (index: number) => number;
+
+/** A cumulative row-offset table: `offsets[i]` is the top of row `i`. */
+export type RowOffsets = readonly number[];
+
+/** Builds the cumulative offsets for `rowCount` rows. */
+export function buildOffsets(rowCount: number, rowHeight: RowHeight): number[] {
+	const count = Number.isFinite(rowCount) && rowCount > 0 ? Math.floor(rowCount) : 0;
+	const offsets = new Array<number>(count + 1);
+	offsets[0] = 0;
+	for (let at = 0; at < count; at++) {
+		const height = rowHeight(at);
+		const safe = Number.isFinite(height) && height > 0 ? height : 0;
+		offsets[at + 1] = offsets[at] + safe;
+	}
+	return offsets;
+}
+
+/** The total pixel height in an offsets table. */
+export function totalHeightOf(offsets: RowOffsets): number {
+	return offsets.length === 0 ? 0 : offsets[offsets.length - 1];
+}
+
+/** The first row whose `[offset, offset + height)` range contains `offset`. */
+export function rowAtOffsetFromOffsets(offsets: RowOffsets, offset: number): number {
+	const rowCount = Math.max(0, offsets.length - 1);
+	if (rowCount === 0) {
+		return 0;
+	}
+	const target = Number.isFinite(offset) && offset > 0 ? offset : 0;
+	let lo = 0;
+	let hi = rowCount - 1;
+	while (lo < hi) {
+		const mid = (lo + hi) >> 1;
+		if (offsets[mid + 1] > target) {
+			hi = mid;
+		} else {
+			lo = mid + 1;
+		}
+	}
+	return lo;
+}
+
+/**
+ * The render range for a precomputed offsets table. The viewport and buffer
+ * rules match `calcVisibleRange`; no height function is walked here.
+ */
+export function visibleRangeFromOffsets(
+	offsets: RowOffsets,
+	scrollTop: number,
+	containerHeight: number,
+	bufferSize: number
+): [number, number] {
+	const rowCount = Math.max(0, offsets.length - 1);
+	if (rowCount === 0) {
+		return [0, 0];
+	}
+	const total = totalHeightOf(offsets);
+	const viewport = Number.isFinite(containerHeight) && containerHeight > 0 ? containerHeight : 0;
+	const buffer = Number.isFinite(bufferSize) && bufferSize > 0 ? Math.floor(bufferSize) : 0;
+	if (total <= 0) {
+		return [0, Math.min(rowCount, 1 + buffer)];
+	}
+	const top = Math.min(
+		Number.isFinite(scrollTop) && scrollTop > 0 ? scrollTop : 0,
+		Math.max(0, total - 1)
+	);
+	const bottom = Math.min(top + viewport, total);
+	const firstVisible = rowAtOffsetFromOffsets(offsets, top);
+	const lastVisible = Math.max(firstVisible, rowAtOffsetFromOffsets(offsets, Math.max(0, bottom - 1)));
+	const start = Math.max(0, firstVisible - buffer);
+	const end = Math.min(rowCount, Math.max(firstVisible + 1, lastVisible + 1 + buffer));
+	return [start, end];
+}
 
 export interface VirtualState {
 	rowCount: number;

@@ -1,5 +1,5 @@
 /**
- * AC3 — the host-side boot watchdog, driven directly so the timeout path has a
+ * The host-side boot watchdog, driven directly so the timeout path has a
  * test of its own: a page that never reports `ready` is warned about once, and a
  * page that reports in (or a panel that closes) is not.
  */

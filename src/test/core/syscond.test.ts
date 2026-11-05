@@ -1,5 +1,5 @@
 /**
- * The SW-SYSCOND evaluator (task design §2). Pure core: no editor, no DOM.
+ * The SW-SYSCOND evaluator. Pure core: no editor, no DOM.
  *
  * These assertions drive the evaluator directly; the row propagation that uses
  * them is covered by `editor/conditions.test.ts`.

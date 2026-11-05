@@ -1,5 +1,5 @@
 /**
- * Condition entry normalization and the workspace store (task design §3).
+ * Condition entry normalization and the workspace store.
  * The fake memento records exactly what the store writes, so the persistence
  * key and the no-file rule are visible here without an Extension Host.
  */

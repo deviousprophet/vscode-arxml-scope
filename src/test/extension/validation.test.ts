@@ -66,6 +66,56 @@ suite('validation (extension)', function () {
 		assert.strictEqual(diagnostic!.source, 'ARXML Scope');
 	});
 
+	test('diagnostic caps publish a summary with the hidden count', async () => {
+		const two = VALUES.replace(
+			'</PARAMETER-VALUES>',
+			'<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Synthetic/SampleModuleDef/Main/TimeoutSeconds</DEFINITION-REF><VALUE>80000</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES>'
+		);
+		fs.writeFileSync(values, two);
+		const extension = await api();
+		const config = vscode.workspace.getConfiguration('arxmlScope.validation');
+		await config.update('maxDiagnosticsPerFile', 1, vscode.ConfigurationTarget.Workspace);
+		await config.update('maxDiagnostics', 1, vscode.ConfigurationTarget.Workspace);
+		try {
+			await extension.reindex();
+			await waitFor(
+				'the cap summary',
+				() => vscode.languages.getDiagnostics(valuesUri).some((diagnostic) => diagnostic.code === 'diagnosticCap')
+			);
+			const diagnostics = vscode.languages.getDiagnostics(valuesUri);
+			assert.strictEqual(diagnostics.filter((diagnostic) => diagnostic.code === 'valueOutOfRange').length, 1);
+			assert.ok(diagnostics.some((diagnostic) => diagnostic.code === 'diagnosticCap' && diagnostic.message.includes('1 additional problem')));
+		} finally {
+			await config.update('maxDiagnosticsPerFile', undefined, vscode.ConfigurationTarget.Workspace);
+			await config.update('maxDiagnostics', undefined, vscode.ConfigurationTarget.Workspace);
+		}
+	});
+
+	test('fragment mode suppresses cross-file diagnostics and always restores them', async () => {
+		fs.rmSync(definitions, { force: true });
+		const fragment = VALUES.replace(
+			'</PARAMETER-VALUES>',
+			'</PARAMETER-VALUES><REFERENCE-VALUES><ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/Synthetic/SampleModuleDef/Main/PeerRef</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">/Missing/Target</VALUE-REF></ECUC-REFERENCE-VALUE></REFERENCE-VALUES>'
+		);
+		fs.writeFileSync(values, fragment);
+		const extension = await api();
+		const config = vscode.workspace.getConfiguration('arxmlScope.validation');
+		try {
+			await extension.reindex();
+			assert.ok(extension.statusBarText().includes('cross-file checks off (no project)'));
+			assert.ok(!vscode.languages.getDiagnostics(valuesUri).some((diagnostic) => diagnostic.code === 'brokenReference'));
+
+			await config.update('crossFileRules', 'always', vscode.ConfigurationTarget.Workspace);
+			await waitFor(
+				'the forced cross-file diagnostic',
+				() => vscode.languages.getDiagnostics(valuesUri).some((diagnostic) => diagnostic.code === 'brokenReference')
+			);
+			assert.ok(extension.statusBarText().includes('cross-file checks always'));
+		} finally {
+			await config.update('crossFileRules', undefined, vscode.ConfigurationTarget.Workspace);
+		}
+	});
+
 	test('disabling validation clears the collection', async () => {
 		const extension = await api();
 		const config = vscode.workspace.getConfiguration('arxmlScope.validation');

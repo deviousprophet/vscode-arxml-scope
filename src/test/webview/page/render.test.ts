@@ -148,15 +148,32 @@ suite('editor bundled page', () => {
 				dom.document.querySelector('#tree .node')!.getAttribute('role') === 'treeitem',
 				'the row builder owns tree semantics'
 			);
-			const scroller = dom.document.querySelector('#tree > .document-tree-scroll') as HTMLElement;
-			assert.ok(scroller, 'the rows scroller is the tree root child');
-			assert.strictEqual(
-				scroller.firstElementChild!.className,
-				'document-tree-header',
-				'the Document header scrolls with the rows'
+			const scroller = dom.document.querySelector('#tree > .virtual-scroll-vscroll') as HTMLElement;
+			assert.ok(scroller, 'the shared scroll surface is the tree root child');
+			const windowEl = dom.document.querySelector('#tree-pane .document-tree-window') as HTMLElement;
+			assert.ok(windowEl, 'the docs view window is inside the pane layer');
+			assert.ok(
+				dom.document.querySelector('#tree-pane .document-tree-header-row'),
+				'the schema/package lines are content rows'
 			);
-			assert.strictEqual(dom.document.querySelector('#tree > .document-tree-header'), null);
+			assert.strictEqual(dom.document.querySelector('.document-tree-title-bar'), null);
+			assert.strictEqual(dom.document.querySelector('.document-tree-header'), null);
 			assert.strictEqual(dom.document.querySelector('#tree').getAttribute('aria-label'), 'ECUC values');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the docs view has one horizontal bar that scrolls the window', async () => {
+		const { dom } = mount();
+		try {
+			const bar = dom.document.querySelector('#tree .virtual-scroll-hscroll') as HTMLElement;
+			assert.ok(bar, 'the docs view owns one horizontal bar');
+			bar.scrollLeft = 40;
+			bar.dispatchEvent(new dom.window.Event('scroll'));
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			const windowEl = dom.document.querySelector('#tree-pane .document-tree-window') as HTMLElement;
+			assert.strictEqual(windowEl.style.transform, 'translateX(-40px)');
 		} finally {
 			dom.restore();
 		}

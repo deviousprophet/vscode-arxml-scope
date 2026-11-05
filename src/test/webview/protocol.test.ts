@@ -51,6 +51,7 @@ suite('webview protocol', () => {
 		const host: DiffProviderToWebview[] = [
 			{
 				type: 'document',
+				semantic: true,
 				document: {
 					left: { name: 'a', path: '/a' },
 					right: { name: 'b', path: '/b' },
@@ -58,10 +59,11 @@ suite('webview protocol', () => {
 					leftHeader: { packages: [] },
 					rightHeader: { packages: [] },
 					rows: [],
-					summary: { changed: 0, added: 0, removed: 0, unchanged: 0 },
+					summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 },
 				},
 			},
 			{ type: 'error', message: 'refresh failed' },
+			{ type: 'matchModeState', semantic: true },
 		];
 		for (const message of host) {
 			assert.strictEqual(diffMessageType(message), message.type);
@@ -70,9 +72,10 @@ suite('webview protocol', () => {
 		assert.strictEqual(isDiffProviderMessage({ type: 'select' }), false);
 		const intents: DiffWebviewToProvider[] = [
 			{ type: 'ready' },
+			{ type: 'matchMode', semantic: false },
 			{ type: 'reveal', side: 'right', key: 'row-1' },
 		];
-		assert.deepStrictEqual(intents.map((intent) => intent.type), ['ready', 'reveal']);
+		assert.deepStrictEqual(intents.map((intent) => intent.type), ['ready', 'matchMode', 'reveal']);
 	});
 
 	test('the document header comes from the model, not from page markup', () => {

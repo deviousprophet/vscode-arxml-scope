@@ -28,53 +28,39 @@ src/test/webview/components/documentTree.test.ts
 ```typescript
 interface DocumentTreeViewModel {
     rowCount: number;
-    heightFn(index: number): number;
+    offsets: readonly number[];   // length rowCount + 1
     renderRow(index: number, pane: string): HTMLElement;
     contentWidth?: number;
 }
 interface DocumentTreeViewCallbacks {
-    onVisibleWindowChange?(top: number, left: number): void;
     onRender?(range: [number, number]): void;
     onRowClick?(index: number, event: MouseEvent): void;
 }
 class DocumentTreeView {
-    constructor(rootSelector: string, pane: string, callbacks?: DocumentTreeViewCallbacks);
+    constructor(root: Element | string, pane: string, callbacks?: DocumentTreeViewCallbacks);
     mount(): void;
     setModel(model: DocumentTreeViewModel): void;
-    setHeader(header?: DocumentTreeHeader): void;
     setContentWidth(width: number): void;
-    render(force?: boolean): void;
-    padTopHeight(): number;
-    headerHeight(): number;
-    getRowsScrollTop(): number;
-    setRowsScrollTop(offset: number): void;
-    setScrollTop(top: number): void;
-    getScrollTop(): number;
-    setScrollLeft(left: number): void;
-    getScrollLeft(): number;
-    clientHeight(): number;
-    scrollToIndex(index: number, align?: 'auto' | 'start' | 'end'): void;
+    render(viewport: DocumentTreeViewport, force?: boolean): void;
+    getVisibleRange(): [number, number];
+    getWindowElement(): HTMLElement;
+    elementAt(index: number): HTMLElement | undefined;
 }
 ```
 
 ## Rules
 
-- Owns `root > scroll > header + spacers + window`; the header is the scroller's first content element and scrolls away with the rows. Native two-axis scrollbars.
-- `headerHeight()` is the measured `header.offsetHeight`, cached and invalidated by `setHeader`/`mount` and by a scroller width change (a resize can reflow the lines); plain scroll renders reuse it. `0` while unmeasurable (jsdom has no layout).
-- Row math subtracts `padTopHeight() + headerHeight()` in `getRowsScrollTop()` and adds both back in `setRowsScrollTop()`. `getScrollTop()`/`setScrollTop()` stay the native values so two panes can synchronize them.
-- `scrollToIndex`, `virtualState` and `getVisibleRange` inherit the corrected offset; no other scroll math changes.
-- A refresh or view switch while any part of the header is on screen restores the native scroll offset, so the header does not jump out of view.
-- The header is presentation-only: not a tree item, not a tab stop, and not part of any row haystack. `header.lines` pads the shorter pane so both headers measure equal.
-- Renders only the visible window plus overscan; incremental edge updates on scroll.
-- Render-key skip when range, total height, viewport and revision are unchanged.
-- Shift+wheel maps to horizontal; plain wheel stays vertical.
-- Host supplies rows and status; the editor never supplies a diff status.
-- Root-scoped; two instances must coexist without id collisions.
-- No size math in TS beyond virtual spacer offsets.
+- Owns an absolutely positioned `.document-tree-window` inside a pane layer. The window is placed at `offsets[start]`, sized to the rendered slice and translated by the shared horizontal offset. It never creates a scroller, a pinned header, a spacer or a title bar.
+- `VirtualScroll` owns the scroll surface and the precomputed offsets; this component receives only the viewport and renders the visible slice plus overscan.
+- Header rows are ordinary indices in the model. The host decides their markup, search haystack and interaction; the component only calls `renderRow`.
+- A render whose range, total height, viewport and revision are unchanged does no DOM work. Incremental edge updates keep the rendered window bounded.
+- Host supplies rows and status; the editor never supplies a diff status. Root-scoped; two instances coexist without id collisions.
+- No scroll or size math in this component beyond choosing the visible slice from the supplied offsets.
 
 ## Behaviour
 
-- Annotation, node and brace rows in display order; the Document host sets the module gap on the first row. The diff host sets no gap.
+- Annotation, node, brace and header rows in display order; the Document host sets the module gap on the first row. The diff host sets no gap.
+- Header rows use the document row shell: same height, content padding, hover/focus and token styling, no twisty and no ECUC selection.
 - Guides nested by ancestor level; closing brace rows carry ancestors only.
 - Status tint is a diff-only render input applied by the host callback.
 - Node, brace and comment rows inside a selected subtree carry `data-subtree`; the selected row itself uses selection state.
@@ -84,22 +70,22 @@ class DocumentTreeView {
 
 | Condition | Behaviour |
 |---|---|
-| Empty model | Empty state, zero spacers |
+| Empty model | The window clears and reports `[0, 0]` |
 | Large model | Rendered DOM bounded by viewport + overscan |
-| Programmatic scroll | Expected offset suppresses feedback notifications |
-| Header present | Rows start below the measured header; the header scrolls out of view |
-| Two instances | Independent scrollers, no shared DOM ids |
+| Header present | Header rows are content and scroll; they never pin and never change ECUC selection |
+| Two instances | Independent windows, one shared VirtualScroll in the diff |
 
 ## Tests Required
 
-`src/test/webview/components/documentTree.test.ts`: window bounds, spacer heights, render-key skip,
-incremental update, scroll setters, Shift+wheel, root scoping, DOM order `scroll > header`, header-height
-offset arithmetic with a stubbed `offsetHeight`, cached across scroll renders, and `scrollToIndex`
-landing rows after the header.
+`src/test/webview/components/documentTree.test.ts`: window position at the first offset, rendered slice,
+horizontal translation, render-key skip, click index, empty model and the absolute-window stylesheet.
+
+`src/test/webview/components/virtualScroll.test.ts`: content height, visible range, vertical/horizontal
+setters, row scroll-to and one coalesced frame.
 
 `src/test/webview/page/render.test.ts`: selecting a container highlights a descendant sub-container's
 annotation row, clicking an annotation does not change the selection, and node/brace/comment rows carry
-`data-subtree` only inside the selected subtree.
+`data-subtree` only inside the selected subtree; header rows are content.
 
 ## Anti-patterns
 

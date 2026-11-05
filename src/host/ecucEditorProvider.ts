@@ -1,5 +1,5 @@
 /**
- * The ECUC custom text editor (child design §1, §2).
+ * The ECUC custom text editor.
  *
  * `resolveCustomTextEditor` runs once per panel. Order matters: the gate completes
  * before any HTML is set, so a refused file never flashes an empty tree.
@@ -8,7 +8,6 @@
  * `onDidChangeCustomDocument` and no save/revert hooks — undo, redo, dirty state and
  * save belong to the real `TextDocument`. The one write this provider performs goes
  * through `WorkspaceEdit` onto that document, so it participates in that history
- * (child design §2.4, §2.7).
  */
 import { randomBytes } from 'crypto';
 import * as path from 'path';
@@ -45,12 +44,13 @@ export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
  */
 export interface DefinitionSource {
 	definition(definitionRef: string): DefinitionInfo | undefined;
+	definitionCandidateCount?(definitionRef: string): number;
 	subscribe(listener: () => void): { dispose(): void };
-	resolveTarget?(targetPath: string, targetDest?: string): ElementResolution;
+	resolveTarget?(targetPath: string, targetDest?: string, sourceFile?: string): ElementResolution;
 	referencesFor?(target: IndexElement): IndexReference[];
 }
 
-/** How long a panel may take to report `ready` before the host warns (R3). */
+/** How long a panel may take to report `ready` before the host warns. */
 const BOOT_TIMEOUT_MS = 10_000;
 
 /** The field a `type: 'edit'` message targets; absent means the parameter `<VALUE>`. */
@@ -59,7 +59,7 @@ type EditField = 'value' | 'shortName' | 'definitionRef';
 const EDIT_FIELDS: readonly EditField[] = ['value', 'shortName', 'definitionRef'];
 
 /**
- * Why a document cannot be rendered, or `undefined` when it can (AC2, parent R2).
+ * Why a document cannot be rendered, or `undefined` when it can.
  * Shared by the provider and the open command so both refuse for the same reason.
  */
 export function gateReason(text: string, filePath: string): string | undefined {
@@ -90,7 +90,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	/**
 	 * The node each open panel is currently focused on. The re-scan payload carries it,
 	 * so a change to the document cannot silently move the selection back to whatever
-	 * node the editor happened to be opened at (design §2.2, §2.4).
+	 * node the editor happened to be opened at.
 	 */
 	private readonly selections = new Map<string, string>();
 	/**
@@ -170,7 +170,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 
 		// A page whose script never runs cannot say so. If the boot message does not
 		// arrive, say it here — otherwise a dead page is just a header and an empty
-		// tree with no explanation (see the task's PRD).
+		// tree with no explanation.
 		const boot = watchBoot(() => {
 			void vscode.window.showWarningMessage(
 				`"${path.basename(document.uri.fsPath)}" opened, but the ECUC editor page did not start. Run "Developer: Open Webview Developer Tools" to see the error.`
@@ -180,7 +180,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		// The single refresh path: any change to this document — an undo, an external
 		// edit, or the sibling child's write — re-scans and pushes row data, so no range
 		// on screen can outlive the text it points at. The same push serves a settings
-		// change, which re-renders the model that is already scanned (parent AC3).
+		// change, which re-renders the model that is already scanned.
 		const push = (): void => {
 			const current = this.selections.get(key);
 			const options: RowBuildOptions = {
@@ -189,11 +189,14 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				...(this.definitionSource === undefined
 					? {}
 					: { definitions: (ref: string) => this.definitionSource!.definition(ref) }),
+				...(this.definitionSource?.definitionCandidateCount === undefined
+					? {}
+					: { ambiguousDefinitions: (ref: string) => this.definitionSource!.definitionCandidateCount!(ref) }),
 				...(this.definitionSource?.resolveTarget === undefined
 					? {}
 					: {
 							referenceResolver: (targetPath: string, targetDest?: string) => {
-								const resolution = this.definitionSource!.resolveTarget!(targetPath, targetDest);
+								const resolution = this.definitionSource!.resolveTarget!(targetPath, targetDest, key);
 								return resolution.ok
 									? { followable: true }
 									: { followable: false, reason: refusalReason(resolution, targetPath) };
@@ -299,7 +302,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 				} else if (message.type === 'select') {
 					// A click in the tree is view state the host must know too: the re-scan
 					// payload carries the selection, so without this a document change would
-					// move the selection back (UX child design §4.1, AC4).
+					// move the selection back.
 					this.selections.set(key, nodeId);
 				}
 			})
@@ -323,7 +326,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 
 	/**
 	 * Opens the custom editor for `uri` with `nodeId` selected, or moves the selection
-	 * of the panel that is already showing it (design §2.4, source → editor).
+	 * of the panel that is already showing it.
 	 */
 	public async selectNode(uri: vscode.Uri, nodeId: string): Promise<void> {
 		const key = uri.toString();
@@ -339,8 +342,8 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	}
 
 	/**
-	 * Reveals a node's range in the source without destroying the custom editor's tab
-	 * (UX child design §3). The panel's own column is passed through so the source opens
+	 * Reveals a node's range in the source without destroying the custom editor's tab.
+	 * The panel's own column is passed through so the source opens
 	 * beside the tree rather than beside whatever happens to be "active".
 	 */
 	private async revealNode(
@@ -368,10 +371,29 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 		const reference = entry.node as ReferenceNode;
 		const raw = reference.targetRawPath ?? '';
-		const workspace = this.definitionSource?.resolveTarget?.(raw, reference.targetDest);
+		const workspace = this.definitionSource?.resolveTarget?.(raw, reference.targetDest, document.uri.toString());
 		if (workspace?.ok) {
-			if (workspace.element.file === document.uri.toString()) {
-				const targetId = nodeIdForRange(buildNodeIndex(model), workspace.element.range);
+			let target = workspace.element;
+			if (workspace.copies.length > 1) {
+				const items: Array<vscode.QuickPickItem & { copy: IndexElement }> = [];
+				for (const copy of workspace.copies) {
+					const uri = vscode.Uri.parse(copy.file);
+					const copyDocument = await vscode.workspace.openTextDocument(uri);
+					items.push({
+						label: `${path.basename(uri.fsPath)}:${copyDocument.positionAt(copy.range.start).line + 1}`,
+						copy,
+					});
+				}
+				const picked = await vscode.window.showQuickPick(items, {
+					placeHolder: `Copies of "${raw}"`,
+				});
+				if (picked === undefined) {
+					return;
+				}
+				target = picked.copy;
+			}
+			if (target.file === document.uri.toString()) {
+				const targetId = nodeIdForRange(buildNodeIndex(model), target.range);
 				if (targetId) {
 					this.selections.set(document.uri.toString(), targetId);
 					panel.reveal();
@@ -379,7 +401,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				}
 			} else {
-				await this.openElement(workspace.element, panel);
+				await this.openElement(target, panel);
 				return;
 			}
 		}
@@ -387,7 +409,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			await this.postStructureNotice(panel, refusalReason(workspace, raw));
 			return;
 		}
-		// No workspace index: keep the v0.5 same-file behaviour.
+		// No workspace index: keep the same-file behaviour.
 		const result = followReference(model, reference);
 		if (!result.ok) {
 			await panel.webview.postMessage({ type: 'notice', message: result.reason, kind: 'warn', scope: 'details' });
@@ -578,7 +600,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	}
 
 	/**
-	 * The write path (child design §2.3, §2.5): validate against a fresh scan, refuse
+	 * The write path: validate against a fresh scan, refuse
 	 * with a `notice` and no mutation, or apply exactly one `WorkspaceEdit`. A refusal
 	 * carries `inline: true`: the details panel shows it beside the field, and the page
 	 * keeps it out of the toolbar notice unless that panel is hidden.

@@ -9,6 +9,7 @@
 import { createReadStream, promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { IndexBuilder } from '../core/index/indexBuilder';
+import { compileExcludes } from '../core/index/glob';
 import type { FileIndex, IndexElement, IndexReference, IndexStats } from '../core/index/indexModel';
 import { resolveDefinition } from '../core/index/definitions';
 import type { DefinitionInfo } from '../core/index/definitions';
@@ -22,6 +23,7 @@ const CHUNK_BYTES = 64 * 1024;
 export interface IndexSettings {
 	enabled: boolean;
 	maxBytes: number;
+	exclude: string[];
 }
 
 /** Reads the index settings with the documented defaults. */
@@ -30,7 +32,18 @@ export function indexSettings(): IndexSettings {
 	const enabled = config.get<boolean>('enabled', true);
 	const megabytes = config.get<number>('maxFileSizeMB', 50);
 	const safeMegabytes = typeof megabytes === 'number' && Number.isFinite(megabytes) ? Math.max(1, megabytes) : 50;
-	return { enabled, maxBytes: safeMegabytes * 1024 * 1024 };
+	const rawExclude = config.get<unknown>('exclude', []);
+	const exclude = Array.isArray(rawExclude) ? rawExclude.filter((entry): entry is string => typeof entry === 'string') : [];
+	return { enabled, maxBytes: safeMegabytes * 1024 * 1024, exclude };
+}
+
+/** True when this document belongs to a workspace folder and is not excluded. */
+export function isIndexableUri(uri: vscode.Uri): boolean {
+	if (vscode.workspace.getWorkspaceFolder(uri) === undefined) {
+		return false;
+	}
+	const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+	return !compileExcludes(indexSettings().exclude)(relative);
 }
 
 /** `N file` / `N files`; one owner for the status bar and its tooltip. */
@@ -38,12 +51,19 @@ export function fileCountText(count: number): string {
 	return `${count} file${count === 1 ? '' : 's'}`;
 }
 
+/** The cross-file rule mode; `auto` needs at least one indexed definition. */
+export function crossFileRulesSetting(): 'auto' | 'always' | 'never' {
+	const value = vscode.workspace.getConfiguration('arxmlScope.validation').get<string>('crossFileRules', 'auto');
+	return value === 'always' || value === 'never' ? value : 'auto';
+}
+
 /** The status bar label for one index state. */
-export function statusBarText(stats: IndexStats, building: boolean): string {
+export function statusBarText(stats: IndexStats, building: boolean, modeLabel?: string): string {
 	if (building) {
 		return '$(sync~spin) ARXML Scope: indexing…';
 	}
-	return `$(database) ARXML Scope: ${fileCountText(stats.files)} indexed`;
+	const suffix = modeLabel === undefined ? '' : ` · ${modeLabel}`;
+	return `$(database) ARXML Scope: ${fileCountText(stats.files)} indexed${suffix}`;
 }
 
 /** Reads one ARXML file and returns its index contribution. */
@@ -72,6 +92,8 @@ export class IndexService implements vscode.Disposable {
 	private readonly dirtyDuringBuild = new Set<string>();
 	/** Files that were too large or unreadable; reported in the tooltip only. */
 	private readonly skipped = new Set<string>();
+	/** Files dropped by `arxmlScope.index.exclude` during the last rebuild. */
+	private excludedCount = 0;
 	private watcher?: vscode.FileSystemWatcher;
 	private building = false;
 	private started = false;
@@ -84,7 +106,7 @@ export class IndexService implements vscode.Disposable {
 
 	constructor() {
 		this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-		this.status.command = 'vscode-arxml-scope.rebuildIndex';
+		this.status.command = 'vscode-arxml-scope.cycleCrossFileRules';
 		this.disposables.push(this.status, this.emitter);
 	}
 
@@ -100,6 +122,8 @@ export class IndexService implements vscode.Disposable {
 			vscode.workspace.onDidChangeConfiguration((event) => {
 				if (event.affectsConfiguration('arxmlScope.index')) {
 					void this.onConfigurationChanged();
+				} else if (event.affectsConfiguration('arxmlScope.validation')) {
+					this.updateStatus();
 				}
 			})
 		);
@@ -133,9 +157,14 @@ export class IndexService implements vscode.Disposable {
 		return resolveDefinition(this.index, definitionRef);
 	}
 
+	/** How many definition bodies share this path (0, 1 or N). */
+	definitionCandidateCount(definitionRef: string): number {
+		return this.index.definitionCandidateCount(definitionRef);
+	}
+
 	/** Resolves a reference target across the workspace, with the reason kept. */
-	resolveTarget(targetPath: string, targetDest?: string): ElementResolution {
-		return this.index.resolveTarget(targetPath, targetDest);
+	resolveTarget(targetPath: string, targetDest?: string, sourceFile?: string): ElementResolution {
+		return this.index.resolveTarget(targetPath, targetDest, sourceFile);
 	}
 
 	/** Resolves one indexed reference; used by the provider's Jump action. */
@@ -173,7 +202,10 @@ export class IndexService implements vscode.Disposable {
 	/** Reindexes exactly one file; used by the watcher and the rebuild drain. */
 	async reindexFile(uri: vscode.Uri, publish = true): Promise<void> {
 		const settings = indexSettings();
-		if (!settings.enabled) {
+		if (!settings.enabled || !isIndexableUri(uri)) {
+			if (this.index.remove(uri.toString()) && publish) {
+				this.publish();
+			}
 			return;
 		}
 		try {
@@ -223,6 +255,7 @@ export class IndexService implements vscode.Disposable {
 		if (!settings.enabled) {
 			this.index.clear();
 			this.skipped.clear();
+			this.excludedCount = 0;
 			this.building = false;
 			this.publish();
 			return;
@@ -234,7 +267,19 @@ export class IndexService implements vscode.Disposable {
 			uris.sort((left, right) => left.toString().localeCompare(right.toString()));
 			const files: FileIndex[] = [];
 			const skipped = new Set<string>();
+			const exclude = compileExcludes(settings.exclude);
+			let excluded = 0;
 			for (const uri of uris) {
+				const folder = vscode.workspace.getWorkspaceFolder(uri);
+				if (folder === undefined) {
+					excluded++;
+					continue;
+				}
+				const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+				if (exclude(relative)) {
+					excluded++;
+					continue;
+				}
 				try {
 					const file = await readFileIndex(uri, settings.maxBytes);
 					if (file === undefined) {
@@ -246,6 +291,7 @@ export class IndexService implements vscode.Disposable {
 					skipped.add(uri.toString());
 				}
 			}
+			this.excludedCount = excluded;
 			this.index.replaceAll(files);
 			this.skipped.clear();
 			for (const uri of skipped) {
@@ -283,6 +329,9 @@ export class IndexService implements vscode.Disposable {
 	}
 
 	private schedule(uri: vscode.Uri): void {
+		if (!isIndexableUri(uri)) {
+			return;
+		}
 		const key = uri.toString();
 		if (this.building) {
 			this.dirtyDuringBuild.add(key);
@@ -342,16 +391,27 @@ export class IndexService implements vscode.Disposable {
 	private updateStatus(): void {
 		const settings = indexSettings();
 		const stats = this.index.stats();
-		if (!settings.enabled || (!this.building && stats.files === 0)) {
+		const noWorkspace = (vscode.workspace.workspaceFolders?.length ?? 0) === 0;
+		if (!settings.enabled || (!this.building && stats.files === 0 && !noWorkspace)) {
 			this.status.hide();
 			this.status.text = '';
 			return;
 		}
-		this.status.text = statusBarText(stats, this.building);
+		const mode = crossFileRulesSetting();
+		const modeLabel =
+			mode === 'always'
+				? 'cross-file checks always'
+				: mode === 'never'
+					? 'cross-file checks off'
+					: stats.definitions === 0
+						? 'cross-file checks off (no project)'
+						: undefined;
+		this.status.text = statusBarText(stats, this.building, modeLabel);
 		const lines = [
 			`${fileCountText(stats.files)} indexed`,
 			`${stats.elements} elements, ${stats.references} references, ${stats.definitions} definitions`,
 			`${stats.packages} packages`,
+			`Cross-file checks: ${mode === 'always' ? 'always' : mode === 'never' ? 'never' : stats.definitions === 0 ? 'off (no project)' : 'auto'}`,
 		];
 		if (this.skipped.size > 0) {
 			const names = [...this.skipped].map(fileNameOf);
@@ -359,10 +419,13 @@ export class IndexService implements vscode.Disposable {
 			const more = names.length > 5 ? ` and ${names.length - 5} more` : '';
 			lines.push(`Skipped: ${shown}${more} (size limit or unreadable)`);
 		}
+		if (this.excludedCount > 0) {
+			lines.push(`${this.excludedCount} file${this.excludedCount === 1 ? '' : 's'} excluded by arxmlScope.index.exclude`);
+		}
 		if (this.lastIndexedAt !== undefined) {
 			lines.push(`Updated ${new Date(this.lastIndexedAt).toLocaleTimeString()}`);
 		}
-		lines.push('Click to rebuild the workspace index.');
+		lines.push('Click to cycle cross-file checks; run ARXML Scope: Rebuild Workspace Index to rebuild.');
 		this.status.tooltip = lines.join('\n');
 		this.status.show();
 	}

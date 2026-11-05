@@ -12,12 +12,12 @@ body (column)
   .toolbar                          survives a re-scan
   #content (row)
     #main (flex: 1; overflow: hidden)  ← layout box only
-      #tree.document-tree[role=tree]  ← one DocumentTreeView instance
-        .document-tree-scroll          native vertical + horizontal scroller
-          .document-tree-header        schema/package (and optional file label)
-          .document-tree-top           virtual spacer
-          .document-tree-window        visible rows + overscan
-          .document-tree-bottom        virtual spacer
+      #tree.document-tree[role=tree]  ← VirtualScroll root
+        .virtual-scroll-vscroll       native vertical scroller
+          .virtual-scroll-content     height = precomputed content length
+            .virtual-scroll-pane      one pane layer
+              .document-tree-window   visible rows + overscan
+        .virtual-scroll-hbars       one horizontal bar per pane
     #sidebar-resizer (6px)            survives a re-scan
     #sidebar                          Details / Conditions tab panels
       #sbp-details > #inspector > section.sb-section#sb-details (one body)
@@ -25,15 +25,15 @@ body (column)
     #side-tabs (28px)                 right-edge vertical tabs
 ```
 
-- `DocumentTreeView` (`src/webview/components/documentTree/documentTreeView.ts`) is the single owner of
-  the header, the two-axis native scroller, the spacers and the rendered window. The header is the
-  scroller's first content element and scrolls with the rows. Both pages import the same class; the
-  editor mounts one instance and the diff mounts one per pane.
-- The host supplies `{ rowCount, heightFn, renderRow(index, pane) }`. The component calls
-  `calcVisibleRange` with overscan 10, writes spacer heights as `--document-tree-top` /
-  `--document-tree-bottom` CSSOM properties, and skips the DOM write when the slice key is
-  unchanged. `overflow-anchor: none` on the scroller stops browser scroll anchoring from fighting
-  the spacer swap.
+- `VirtualScroll` (`src/webview/components/virtualScroll/virtualScroll.ts`) owns the scroll surface,
+  both bars and the precomputed offsets. `DocumentTreeView` is the window renderer inside a pane layer:
+  it receives `{ rowCount, offsets, renderRow(index, pane) }`, renders the visible slice at
+  `offsets[start]`, and never creates a scroller or a pinned header. Both pages import the same classes;
+  the editor mounts one window and the diff mounts one per pane inside one shared VirtualScroll.
+- The host supplies `{ rowCount, offsets, renderRow(index, pane) }`. `offsets` is the cumulative row
+  table (length `rowCount + 1`), including header rows and module gaps. VirtualScroll binary-searches
+  it for the visible range; scroll frames do no height math. `overflow-anchor: none` on the scroller
+  stops browser scroll anchoring from fighting the window swap.
 - The shell carries no model data. After the page posts `ready`, the host sends the first payload and
   every re-scan as `{ type: 'document', document: { rows, selectedId, header } }`, not tree markup and
   no `digits`. The header carries the schema/packages.
@@ -149,7 +149,7 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   reserve the gutter but have no twisty child. Expanded chevrons are hover/focus-only; collapsed
   chevrons stay visible. Brace rows use the same indentation as labels (no extra fold offset).
 - Secondary fields live in `.row-meta`, inline after the value in Document. It is not
-  `.document-tree-meta`, which is the schema/package container above the rows. Search highlights
+  `.document-tree-header-row`, which is a schema/package content row. Search highlights
   `.row-meta .short`, `.label` and `.value .value-text`.
 - The row builder writes the inspector's primary identity as data: `data-node-id`, `data-kind`,
   `data-definition-ref`, `data-short-name`, `data-value` (parameters), `data-target` (references).
@@ -314,38 +314,47 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   embedded parent container ordinal, so reordered duplicate containers keep their parameters and
   references paired at every depth.
 - The diff is read-only: no `WorkspaceEdit`, `writeFile`, `applyEdit`, repair or derived file.
-  Refresh is a full re-scan after a 150 ms debounce; the page keeps the view mode, swap state,
-  collapse, selection, search and scroll.
-- The diff toolbar has three tracks: the left group is **Show all** / **Show diff only**,
-  **Prev diff**, **Next diff**; **Swap sides** is centred; the right group is Search. Search is always
-  the last control and its count/busy slots stay in the flow. There is no Filter, no changes checkbox,
-  no changed/added/removed summary and no global Collapse/Expand. Search uses `RowSearchEngine`
+  An edit triggers a full re-scan after a 150 ms debounce; the page keeps the view mode, swap state,
+  collapse, selection, search and scroll. A **Semantic/Strict** toggle does not re-scan: the host
+  reuses the prepared rows/ranges and a `DiffSession` document cache, and a changed document version
+  falls back to the full refresh.
+- The diff toolbar uses icon-over-label buttons. The left group is **Show all** / **Show diff**, a
+  divider, **Context**, a divider, **Semantic** / **Strict**, a divider, then **Prev diff** /
+  **Next diff**. **Swap sides** is the centered control over the pane divider; the right group is the
+  live mode status and Search. There is no changed/added/removed/renamed count summary. **Context** is
+  the only standalone toggle: active by default, fixed at 5 unchanged rows above and below each
+  change, disabled in Show all. While a mode switch is pending, the toolbar shows `aria-busy`, a
+  spinner and a live `Switching to …` status instead of a silent wait. Search uses `RowSearchEngine`
   (Enter-only, chunked, cancellable); its candidates are the changed/added/removed rows in diff-only
   view, all rows otherwise. Search never hides rows.
+- **Split lines are the diff-only gap control.** `diffVisibility(rows, true, 5)` keeps five context
+  rows around each change; the remaining hidden runs become `DiffGap` rows in
+  `flattenDiffDocument`. A gap row shows `N unchanged lines` and expands in place; the row stays
+  while expanded so it can collapse again. Gap rows are not tree nodes: selection, `F7` and search
+  skip them. The whole row is clickable; the inner `.diff-gap-toggle` is the keyboard focus target.
+  It is a row-local control and deliberately does not use the toolbar `.sb-btn`/`.nav-btn` shapes.
+  The control sits in the displayed left pane and follows Swap sides.
 - **Diff rows reuse Document geometry.** Each pane starts with the 26px fold gutter, an absolute 16px
   twisty at `left: 2px`, Document content padding and the `--indent` step per level. Labels use the
   Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
-  horizontal padding; the scroller is the clip boundary. Keep the pane headers and the diff status
-  tints.
-- **Both panes are `DocumentTreeView` instances.** The diff mounts one component per pane, shares the
-  aligned `DiffDisplayRow` list and `heightFn`, and imports the same `documentTree.css` plus the
-  `documentRows.ts` builders for nodes, annotations, braces and guides. Each component owns its header,
-  native scroller, spacers and virtual window. Schema/package lines sit under each pane's file label;
-  annotations and `{` / `}` rows follow each side; colours, font, gutter, indentation and meta
-  typography match Document. Only the status tint and edge marker are diff-specific, and they sit on
-  the cell without recolouring tokens. Status is an optional render input; the editor never sets it.
+  horizontal padding; the pane layer is the clip boundary. Keep the fixed file-name strip and the diff
+  status tints.
+- **Both panes are `DocumentTreeView` windows.** The diff mounts one shared `VirtualScroll` and one
+  window renderer per pane. Header rows are the first virtual rows; they are padded to the longer side
+  and are content, not pinned chrome. Annotations and `{` / `}` rows follow each side; colours, font,
+  gutter, indentation and meta typography match Document. Only the status tint and edge marker are
+  diff-specific, and they sit on the cell without recolouring tokens. Status is an optional render
+  input; the editor never sets it.
 - **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
   selected-row table or reveal buttons.
-- **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the window
-  title and pane headers show the same shortest distinguishing suffix.
-- **Both axes are synchronized across two native scrollers.** Each pane has its own horizontal
-  scrollbar; only the left pane shows the vertical bar (the right scroller sets `overflow-y: hidden`).
-  The pane that scrolled is the driver and the host copies its offsets to the follower, guarded by
-  value comparison and the component's expected-offset suppression. Shift+wheel over either pane
-  writes the same horizontal offset to both; plain wheel stays vertical. Content
-  width is the longest rendered line across both panes plus the Document gutter and slack, with no
-  cap, and both components receive it so neither clamps early. Swap resets both horizontal offsets to
-  zero and leaves the vertical position untouched.
+- **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the fixed
+  file-name strip shows the same shortest distinguishing suffix.
+- **One VirtualScroll owns the vertical surface; each pane owns its horizontal bar.** The diff has one
+  vertical bar and one horizontal bar per pane. Both panes share the same offsets and vertical position;
+  each horizontal bar moves only its pane and the pane split stays fixed. Wheel/scrollbar movement is
+  native, and header rows and content rows move together. Content width is the longest rendered line
+  per pane plus the Document gutter and slack, with no cap. Swap resets both horizontal offsets to zero
+  and leaves the vertical position untouched.
 - **Swap sides is display-only.** `displayLeft`/`displayRight`/`displayStatus` re-project the row,
   and `Enter` maps a displayed side back to the host's original side. The comparison documents are
   not recomputed and neither pane's vertical scroll is reset.

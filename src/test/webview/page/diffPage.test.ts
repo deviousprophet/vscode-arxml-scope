@@ -25,6 +25,7 @@ import {
 } from '../../../webview/diffViewer';
 import { diffShell } from '../../../host/webviewShell';
 import { fixtureText } from '../../core/modelTestUtils';
+import { webviewCss } from '../cssTestUtils';
 import { expectReady, installDom, loadModule, messagesOf, settleSearch, treeRows } from '../pageTestUtils';
 
 function side(name: string) {
@@ -55,7 +56,7 @@ function mount(document = documentOf()): { dom: ReturnType<typeof installDom>; p
 	const dom = installDom('diff');
 	const module = loadModule<typeof import('../../../webview/diffViewer')>('../../webview/diffViewer');
 	module.mountDiff();
-	dom.post({ type: 'document', document });
+	dom.post({ type: 'document', semantic: false, document });
 	return { dom, page: module, document };
 }
 
@@ -130,7 +131,7 @@ function wordRow(overrides: Partial<DiffRow> = {}): DiffRow {
 }
 
 function wordDocument(rows: DiffRow[]): DiffDocument {
-	const summary = { changed: 0, added: 0, removed: 0, unchanged: 0 };
+	const summary = { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
 	for (const row of rows) {
 		summary[row.status]++;
 	}
@@ -143,6 +144,58 @@ function wordDocument(rows: DiffRow[]): DiffDocument {
 		rows,
 		summary,
 	};
+}
+
+/** A 14-parameter container with one changed row, enough for a 5-line context window. */
+function contextRows(): DiffRow[] {
+	const moduleCell = (): NonNullable<DiffRow['left']> =>
+		wordCell({ kind: 'module', label: 'M1', definitionRef: '/P/M1', shownValue: undefined, value: undefined, valueKind: undefined });
+	const rows: DiffRow[] = [
+		wordRow({
+			key: 'm',
+			kind: 'module',
+			level: 1,
+			hasChildren: true,
+			subtreeSize: 15,
+			status: 'unchanged',
+			left: moduleCell(),
+			right: moduleCell(),
+		}),
+		wordRow({
+			key: 'c',
+			parentKey: 'm',
+			kind: 'container',
+			level: 2,
+			hasChildren: true,
+			subtreeSize: 14,
+			status: 'unchanged',
+			left: containerCell('C1'),
+			right: containerCell('C1'),
+		}),
+	];
+	for (let index = 0; index < 14; index++) {
+		const name = `P${String(index).padStart(2, '0')}`;
+		const changed = index === 6;
+		const value = changed ? '1' : '0';
+		const cell = (): NonNullable<DiffRow['left']> =>
+			wordCell({ label: name, definitionRef: `/P/${name}`, shownValue: value, value, valueKind: 'numeric' });
+		rows.push(
+			wordRow({
+				key: `p${index}`,
+				parentKey: 'c',
+				level: 3,
+				posinset: index + 1,
+				setsize: 14,
+				kind: 'parameter',
+				status: changed ? 'changed' : 'unchanged',
+				left: cell(),
+				right: cell(),
+				changes: changed ? [{ field: 'value', left: '0', right: '1' }] : [],
+				haystack: name.toLowerCase(),
+			})
+		);
+	}
+	return rows;
 }
 
 function wordTexts(row: Element | null, side: 'left' | 'right'): string[] {
@@ -173,8 +226,28 @@ suite('semantic diff page', () => {
 		assert.ok(!/<script(?![^>]*src=)/.test(html), 'no inline script');
 		assert.ok(!html.includes('type="application/json"'), 'no embedded document');
 		assert.strictEqual((html.match(/id="diff-list"/g) || []).length, 1);
-		assert.ok(html.includes('id="diff-pane-left"') && html.includes('id="diff-pane-right"'));
+		assert.ok(html.includes('id="diff-title-strip"'));
+		assert.ok(html.includes('id="diff-title-left"') && html.includes('id="diff-title-right"'));
 		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'));
+	});
+
+	test('shows an in-progress state until the first document arrives', () => {
+		const dom = installDom('diff');
+		try {
+			const module = loadModule<typeof import('../../../webview/diffViewer')>('../../webview/diffViewer');
+			module.mountDiff();
+			const empty = dom.document.getElementById('diff-empty') as HTMLElement;
+			assert.strictEqual(empty.hidden, false);
+			assert.strictEqual(empty.getAttribute('aria-busy'), 'true');
+			assert.strictEqual(dom.document.getElementById('diff-empty-text')!.textContent, 'Loading comparison…');
+			assert.ok(!(empty.textContent || '').includes('No differences'));
+			dom.post({ type: 'document', semantic: false, document: documentOf() });
+			assert.strictEqual(empty.hidden, true);
+			assert.strictEqual(empty.getAttribute('aria-busy'), null);
+			assert.strictEqual(empty.dataset.busy, undefined);
+		} finally {
+			dom.restore();
+		}
 	});
 
 	test('boots from the static shell, announces ready and renders both panes', () => {
@@ -186,24 +259,34 @@ suite('semantic diff page', () => {
 				dom.document.querySelectorAll('#diff-pane-right .diff-row').length > 0,
 				'the right pane has rows'
 			);
-			assert.ok(dom.document.querySelector('#diff-pane-left .document-tree-header'), 'each pane owns its header');
-			const scroller = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
-			assert.strictEqual(
-				scroller.firstElementChild!.className,
-				'document-tree-header',
-				'the header is the first scrolled element'
-			);
-			assert.strictEqual(
-				dom.document.querySelector('#diff-pane-left > .document-tree-header'),
-				null,
-				'the header is not pinned outside the scroller'
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-header-row'), 'each pane owns its header rows');
+			const scroller = dom.document.querySelector('#diff-list > .virtual-scroll-vscroll') as HTMLElement;
+			assert.ok(scroller, 'one shared vertical scroller');
+			assert.ok(
+				dom.document.querySelector('#diff-pane-left .document-tree-window'),
+				'the left docs view window is inside the shared scroll surface'
 			);
 			assert.ok(
-				dom.document.querySelector('#diff-pane-left .document-tree-title')!.textContent === 'left.arxml'
+				dom.document.querySelector('#diff-pane-right .document-tree-window'),
+				'the right docs view window is inside the shared scroll surface'
+			);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .document-tree-header'), null);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .document-tree-title-bar'), null);
+			assert.strictEqual(
+				dom.document.getElementById('diff-title-left')!.textContent,
+				'left.arxml',
+				'the fixed file name is outside the scroll surface'
+			);
+			assert.strictEqual(
+				dom.document.getElementById('diff-title-right')!.textContent,
+				'right.arxml',
+				'the fixed file name is outside the scroll surface'
 			);
 			assert.ok(
-				dom.document.querySelector('#diff-pane-right .document-tree-title')!.textContent === 'right.arxml'
+				dom.document.getElementById('diff-title-left')!.title.endsWith('left.arxml'),
+				'the full path stays in the tooltip'
 			);
+			assert.ok(!dom.document.querySelector('#diff-list [role="presentation"] .document-tree-header'));
 			const headers = diffPaneHeaders(document, false);
 			assert.deepStrictEqual(headers.left.packages, ['PkgA']);
 			assert.deepStrictEqual(headers.right.packages, ['PkgB', 'PkgC']);
@@ -230,7 +313,7 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('Show diff only filters unchanged rows and Swap resets only horizontal offsets', () => {
+	test('Show diff filters unchanged rows and Swap resets only horizontal offsets', () => {
 		const { dom } = mount();
 		try {
 			const before = treeRows(dom.document, '#diff-pane-left').length;
@@ -243,7 +326,7 @@ suite('semantic diff page', () => {
 			(dom.document.getElementById('diff-swap') as HTMLElement).click();
 			assert.strictEqual(dom.document.getElementById('diff-swap')!.getAttribute('aria-pressed'), 'true');
 			assert.strictEqual(
-				dom.document.querySelector('#diff-pane-left .document-tree-title')!.textContent,
+				dom.document.getElementById('diff-title-left')!.textContent,
 				'right.arxml',
 				'the displayed side follows the swap'
 			);
@@ -278,7 +361,7 @@ suite('semantic diff page', () => {
 			left: row.left ? { ...row.left } : undefined,
 			right: row.left ? { ...row.left } : undefined,
 		}));
-		quiet.summary = { changed: 0, added: 0, removed: 0, unchanged: quiet.rows.length };
+		quiet.summary = { changed: 0, added: 0, removed: 0, unchanged: quiet.rows.length, renamed: 0 };
 		const { dom } = mount(quiet);
 		try {
 			assert.strictEqual(dom.document.getElementById('diff-list')!.hidden, true);
@@ -324,7 +407,7 @@ suite('semantic diff page', () => {
 			leftHeader: { packages: [] },
 			rightHeader: { packages: [] },
 			rows,
-			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0 },
+			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0, renamed: 0 },
 		});
 		try {
 			const rendered = treeRows(dom.document, '#diff-pane-left').length;
@@ -587,6 +670,224 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('a semantic pair renders like a changed row and the mode group posts the target', () => {
+		const row = wordRow({
+			key: 'renamed',
+			kind: 'container',
+			hasChildren: false,
+			left: containerCell('OldName'),
+			right: containerCell('NewName'),
+			match: {
+				kind: 'semantic',
+				score: 0.83,
+				reasons: { children: 1, name: 0.8, position: 1, substitution: 0.5 },
+				substitutions: ['Old→New'],
+			},
+		});
+		const document = wordDocument([row]);
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', semantic: true, document });
+			const rendered = dom.document.querySelector('#diff-pane-left .diff-row[data-key="renamed"]');
+			assert.ok(rendered);
+			assert.strictEqual(rendered!.getAttribute('data-status'), 'changed');
+			assert.strictEqual(rendered!.hasAttribute('data-rename-implied'), false);
+			assert.strictEqual(dom.document.querySelector('.diff-match-badge'), null);
+			assert.strictEqual(dom.document.getElementById('diff-summary'), null);
+
+			const semantic = dom.document.getElementById('diff-mode-semantic') as HTMLElement;
+			const strict = dom.document.getElementById('diff-mode-strict') as HTMLElement;
+			assert.strictEqual(semantic.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(strict.getAttribute('aria-pressed'), 'false');
+
+			strict.click();
+			assert.strictEqual(semantic.getAttribute('aria-pressed'), 'false', 'the view group flips immediately');
+			assert.strictEqual(strict.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(strict.getAttribute('aria-busy'), 'true');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, 'Switching to Strict…');
+			assert.strictEqual(messagesOf(dom.api, 'matchMode')[0].semantic, false);
+			dom.post({ type: 'matchModeState', semantic: false });
+			assert.strictEqual(strict.getAttribute('aria-busy'), 'false');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
+
+			semantic.click();
+			assert.strictEqual(semantic.getAttribute('aria-busy'), 'true');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, 'Switching to Semantic…');
+			dom.post({ type: 'document', semantic: true, document });
+			assert.strictEqual(semantic.getAttribute('aria-busy'), 'false');
+			assert.strictEqual(semantic.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(strict.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
+
+			strict.click();
+			assert.strictEqual(strict.getAttribute('aria-busy'), 'true');
+			dom.post({ type: 'error', message: 'switch failed' });
+			assert.strictEqual(strict.getAttribute('aria-busy'), 'false', 'an error also clears pending');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, '');
+			assert.ok(dom.document.getElementById('diff-notice')!.textContent!.includes('switch failed'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Context defaults to five lines and widens the hidden runs when toggled off', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', semantic: true, document: wordDocument(contextRows()) });
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			const context = dom.document.getElementById('diff-context') as HTMLElement;
+			assert.strictEqual(context.hasAttribute('disabled'), false);
+			assert.strictEqual(context.getAttribute('aria-pressed'), 'true');
+			const firstGap = dom.document.querySelector('#diff-pane-left .diff-gap-toggle');
+			assert.ok(firstGap);
+			assert.ok(firstGap!.textContent!.includes('1 unchanged line'), firstGap!.textContent!);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p0"]'), null);
+
+			context.click();
+			assert.strictEqual(context.getAttribute('aria-pressed'), 'false');
+			const widerGap = dom.document.querySelector('#diff-pane-left .diff-gap-toggle');
+			assert.ok(widerGap);
+			assert.ok(widerGap!.textContent!.includes('6 unchanged lines'), widerGap!.textContent!);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a split line expands and collapses the hidden unchanged rows', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', semantic: true, document: wordDocument(contextRows()) });
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			(dom.document.getElementById('diff-context') as HTMLElement).click();
+			const gap = dom.document.querySelector('#diff-pane-left .diff-gap-toggle') as HTMLElement;
+			assert.ok(gap);
+			assert.strictEqual(gap.getAttribute('aria-expanded'), 'false');
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p0"]'), null);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-right .diff-gap-toggle'), null);
+			const line = dom.document.querySelector('#diff-pane-right .diff-gap-line') as HTMLElement;
+			assert.ok(line);
+			line.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			const expanded = dom.document.querySelector('#diff-pane-left .diff-gap-toggle') as HTMLElement;
+			assert.strictEqual(expanded.getAttribute('aria-expanded'), 'true');
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p0"]'));
+
+			expanded.click();
+			const collapsed = dom.document.querySelector('#diff-pane-left .diff-gap-toggle') as HTMLElement;
+			assert.strictEqual(collapsed.getAttribute('aria-expanded'), 'false');
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p0"]'), null);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a container carries the live expanded state in both panes', () => {
+		const parent = wordRow({
+			key: 'parent',
+			kind: 'container',
+			hasChildren: true,
+			subtreeSize: 1,
+			left: containerCell('Parent'),
+			right: containerCell('Parent'),
+		});
+		const child = wordRow({
+			key: 'child',
+			parentKey: 'parent',
+			level: 2,
+			subtreeSize: 0,
+			left: wordCell({ label: 'Child' }),
+			right: wordCell({ label: 'Child' }),
+		});
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', semantic: false, document: wordDocument([parent, child]) });
+			for (const pane of ['left', 'right']) {
+				assert.strictEqual(
+					dom.document.querySelector(`#diff-pane-${pane} .diff-row[data-key="parent"] .node`)?.getAttribute('aria-expanded'),
+					'true',
+					`${pane}: expanded`
+				);
+			}
+			const twisty = dom.document.querySelector('#diff-pane-left .diff-row[data-key="parent"] .twisty');
+			assert.ok(twisty);
+			twisty!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			for (const pane of ['left', 'right']) {
+				assert.strictEqual(
+					dom.document.querySelector(`#diff-pane-${pane} .diff-row[data-key="parent"] .node`)?.getAttribute('aria-expanded'),
+					'false',
+					`${pane}: collapsed`
+				);
+			}
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('clicking either pane selects the row in both panes', () => {
+		const parent = wordRow({
+			key: 'parent',
+			kind: 'container',
+			hasChildren: true,
+			subtreeSize: 1,
+			left: containerCell('Parent'),
+			right: containerCell('Parent'),
+		});
+		const child = wordRow({
+			key: 'child',
+			parentKey: 'parent',
+			level: 2,
+			left: wordCell({ label: 'Child' }),
+			right: wordCell({ label: 'Child' }),
+		});
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', semantic: false, document: wordDocument([parent, child]) });
+			const row = dom.document.querySelector('#diff-pane-right .diff-row[data-key="parent"] .row');
+			assert.ok(row);
+			row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			for (const pane of ['left', 'right']) {
+				assert.strictEqual(
+					dom.document.querySelector(`#diff-pane-${pane} .diff-row[data-key="parent"]`)?.getAttribute('data-selected'),
+					'true',
+					`${pane}: selected`
+				);
+			}
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the diff uses the shared document selection rule', () => {
+		const diff = webviewCss('components', 'diffView', 'diffView.css');
+		assert.ok(!diff.includes('.diff-row[data-selected="true"]'), 'the diff-only selection rule is gone');
+		const tree = webviewCss('components', 'documentTree', 'documentTree.css');
+		assert.ok(tree.includes('.node[data-kind="module"][data-selected="true"] > .row'));
+		assert.ok(tree.includes('.node[aria-expanded="false"] > .row::after'));
+	});
+
+	test('added rows use a leading edge and split lines own their styles', () => {
+		const diff = webviewCss('components', 'diffView', 'diffView.css');
+		assert.ok(diff.includes('.diff-row[data-status="added"] > .diff-cell[data-side="right"]'));
+		assert.ok(diff.includes('inset 3px 0 0 var(--diff-added-edge)'));
+		assert.ok(!diff.includes('inset -3px 0 0 var(--diff-added-edge)'), 'the trailing added edge is gone');
+		assert.ok(diff.includes('.diff-gap-toggle'));
+		assert.ok(diff.includes('.diff-gap-line'));
+		assert.ok(diff.includes('.toolbar-center'));
+		assert.ok(/\.toolbar-center\s*\{[^}]*position:\s*absolute/.test(diff));
+		assert.ok(/left:\s*50%/.test(diff));
+		assert.ok(/transform:\s*translate\(-50%,\s*-50%\)/.test(diff));
+		assert.ok(!diff.includes('.diff-match-badge'), 'the renamed badge is gone');
+		assert.ok(!diff.includes('data-rename-implied'), 'the dashed rename marker is gone');
+		const toolbar = webviewCss('components', 'toolbar', 'toolbar.css');
+		assert.ok(toolbar.includes('.diff-tool'));
+		assert.ok(toolbar.includes('.toolbar-divider'));
+		assert.ok(toolbar.includes('flex-direction: column'));
+		assert.ok(toolbar.includes('width: 60px'), 'one fixed width for every diff button');
+		assert.ok(toolbar.includes('height: 48px'), 'one fixed height for every diff button');
+		assert.ok(toolbar.includes('white-space: normal'), 'long labels wrap inside the fixed box');
+		assert.ok(toolbar.includes('max-width: 1040px'), 'labels hide before the row can overlap');
+		assert.ok(toolbar.includes('max-width: 720px'), 'compact icon buttons at very narrow widths');
+	});
+
 	test('selecting a container highlights the same subtree and annotation rows in both panes', () => {
 		const parent = wordRow({
 			key: 'parent',
@@ -755,27 +1056,37 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('the pane header is not part of the search haystack', async () => {
+	test('the header rows are searchable and one paired line is one match', async () => {
 		const changed = wordRow({ left: wordCell(), right: wordCell({ shownValue: '200', value: '200' }) });
 		const document = wordDocument([changed]);
 		document.leftHeader = { schema: '00048', packages: ['NoSuchPkg'] };
 		document.rightHeader = { schema: '00048', packages: ['NoSuchPkg'] };
 		const { dom } = mount(document);
 		try {
-			assert.ok((dom.document.querySelector('#diff-pane-left .document-tree-header')!.textContent || '').includes('NoSuchPkg'));
+			const headerRows = Array.from(
+				dom.document.querySelectorAll('#diff-pane-left .diff-header-row')
+			) as HTMLElement[];
+			assert.ok(
+				headerRows.some((row) => (row.textContent || '').includes('NoSuchPkg')),
+				`header rows: ${headerRows.map((row) => row.textContent).join(' | ')}`
+			);
 			const input = dom.document.getElementById('diff-search-input') as HTMLInputElement;
 			input.value = 'NoSuchPkg';
 			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
 			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
 			await settleSearch();
-			assert.strictEqual(dom.document.getElementById('diff-search-count')!.textContent, '0 / 0');
-			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-left mark').length, 0);
+			assert.strictEqual(dom.document.getElementById('diff-search-count')!.textContent, '1 / 1');
+			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-left .diff-header-row mark').length, 1);
+			assert.ok(
+				dom.document.querySelector('#diff-pane-left .diff-header-row[data-search-current="true"]'),
+				'the header row is the current match'
+			);
 		} finally {
 			dom.restore();
 		}
 	});
 
-	test('a refresh or a view switch at the top keeps the header in view', () => {
+	test('a refresh or a view switch at the top keeps the header rows at the top', () => {
 		const rows = Array.from({ length: 200 }, (_, at) =>
 			wordRow({
 				key: `row-${at}`,
@@ -786,28 +1097,83 @@ suite('semantic diff page', () => {
 			})
 		);
 		const document = wordDocument(rows);
+		document.leftHeader = { schema: '00048', packages: ['PkgA'] };
+		document.rightHeader = { schema: '00048', packages: ['PkgA'] };
 		const { dom } = mount(document);
 		try {
-			// jsdom has no layout; a real header would be measured once it is on
-			// screen. Stub the height, then change the scroller width and fire the
-			// resize path: the width change is what makes the component re-measure
-			// the cached header height, exactly as a real window resize does.
-			const scroller = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
-			const rightScroller = dom.document.querySelector('#diff-pane-right .document-tree-scroll') as HTMLElement;
-			for (const header of Array.from(dom.document.querySelectorAll('#diff-list .document-tree-header'))) {
-				Object.defineProperty(header, 'offsetHeight', { value: 40, configurable: true });
-			}
-			for (const pane of [scroller, rightScroller]) {
-				Object.defineProperty(pane, 'clientWidth', { value: 880, configurable: true });
-			}
-			dom.window.dispatchEvent(new dom.window.Event('resize'));
-			assert.strictEqual(scroller.scrollTop, 0, 'the header is fully visible');
-			dom.post({ type: 'document', document });
-			assert.strictEqual(scroller.scrollTop, 0, 'a refresh at the top keeps the header visible');
+			const scroller = dom.document.querySelector('#diff-list > .virtual-scroll-vscroll') as HTMLElement;
+			assert.strictEqual(scroller.scrollTop, 0, 'the header rows are at the top');
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-header-row'));
+			dom.post({ type: 'document', semantic: false, document });
+			assert.strictEqual(scroller.scrollTop, 0, 'a refresh at the top keeps the header rows');
 			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
-			assert.strictEqual(scroller.scrollTop, 0, 'Show diff only at the top keeps the header visible');
+			assert.strictEqual(scroller.scrollTop, 0, 'Show diff at the top keeps the header rows');
 			(dom.document.getElementById('diff-view-all') as HTMLElement).click();
-			assert.strictEqual(scroller.scrollTop, 0, 'Show all at the top keeps the header visible');
+			assert.strictEqual(scroller.scrollTop, 0, 'Show all at the top keeps the header rows');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the shorter header is padded so the first compared row aligns', () => {
+		const document = wordDocument([
+			wordRow({ left: wordCell(), right: wordCell({ shownValue: '200', value: '200' }) })
+		]);
+		document.leftHeader = { schema: '00048', packages: ['PkgA'] };
+		document.rightHeader = { schema: '00048', packages: ['PkgB', 'PkgC'] };
+		const { dom } = mount(document);
+		try {
+			const leftRows = Array.from(dom.document.querySelectorAll('#diff-pane-left .diff-header-row')) as HTMLElement[];
+			const rightRows = Array.from(dom.document.querySelectorAll('#diff-pane-right .diff-header-row')) as HTMLElement[];
+			assert.strictEqual(leftRows.length, 3);
+			assert.strictEqual(rightRows.length, 3);
+			assert.ok(leftRows[0].textContent!.includes('00048'));
+			assert.ok(rightRows[0].textContent!.includes('00048'));
+			assert.ok(leftRows[2].querySelector('.diff-header-cell[data-header-empty="true"]'), 'the left pad row is blank');
+			assert.ok(rightRows[2].textContent!.includes('PkgC'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('each pane owns an independent horizontal scrollbar', async () => {
+		const { dom } = mount();
+		try {
+			const leftBar = dom.document.querySelector(
+				'#diff-list .virtual-scroll-hscroll[data-pane="0"]'
+			) as HTMLElement;
+			const rightBar = dom.document.querySelector(
+				'#diff-list .virtual-scroll-hscroll[data-pane="1"]'
+			) as HTMLElement;
+			assert.ok(leftBar && rightBar, 'one bar per pane');
+			const leftSpacer = leftBar.querySelector('.virtual-scroll-hspacer') as HTMLElement;
+			assert.ok(Number.parseFloat(leftSpacer.style.width) > 40, 'the left bar has a scrollable extent');
+			let leftOffset = 0;
+			Object.defineProperty(leftBar, 'scrollLeft', {
+				configurable: true,
+				get: () => leftOffset,
+				set: (value: number) => {
+					leftOffset = value;
+				}
+			});
+			let rightOffset = 0;
+			Object.defineProperty(rightBar, 'scrollLeft', {
+				configurable: true,
+				get: () => rightOffset,
+				set: (value: number) => {
+					rightOffset = value;
+				}
+			});
+			Object.defineProperty(leftBar, 'scrollWidth', { value: 500, configurable: true });
+			Object.defineProperty(leftBar, 'clientWidth', { value: 200, configurable: true });
+			leftBar.scrollLeft = 40;
+			leftBar.dispatchEvent(new dom.window.Event('scroll'));
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			const leftWindow = dom.document.querySelector('#diff-pane-left .document-tree-window') as HTMLElement;
+			const rightWindow = dom.document.querySelector('#diff-pane-right .document-tree-window') as HTMLElement;
+			assert.strictEqual(leftWindow.style.transform, 'translateX(-40px)');
+			assert.strictEqual(rightWindow.style.transform, 'translateX(-40px)');
+			assert.strictEqual(rightBar.scrollLeft, 40, 'the other pane bar follows');
 		} finally {
 			dom.restore();
 		}
@@ -838,7 +1204,7 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('module rows use the base row height in the virtual spacers', () => {
+	test('module rows use the base row height in the virtual content', () => {
 		const rows = Array.from({ length: 100 }, (_, at) =>
 			wordRow({
 				key: `m${at}`,
@@ -857,15 +1223,11 @@ suite('semantic diff page', () => {
 		);
 		const { dom } = mount(wordDocument(rows));
 		try {
-			const scroll = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
+			const scroll = dom.document.querySelector('#diff-list > .virtual-scroll-vscroll') as HTMLElement;
+			const content = scroll.querySelector('.virtual-scroll-content') as HTMLElement;
 			const rendered = treeRows(dom.document, '#diff-pane-left').length;
 			assert.ok(rendered > 0 && rendered < 100, 'only the window is rendered');
-			assert.strictEqual(scroll.style.getPropertyValue('--document-tree-top'), '0px');
-			assert.strictEqual(
-				scroll.style.getPropertyValue('--document-tree-bottom'),
-				(100 - rendered) * 20 + 'px',
-				'no per-module gap term in the height function'
-			);
+			assert.strictEqual(content.style.height, '2000px', '100 rows at one base row height');
 		} finally {
 			dom.restore();
 		}

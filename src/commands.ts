@@ -1,5 +1,5 @@
 /**
- * The contributed commands (child design §2.1, §10; parent design §11; diff design §4.2).
+ * The contributed commands.
  *
  * They share the provider's gate and the navigation helpers, so a command and a
  * webview action cannot diverge. Nothing here writes a file; the diff is read-only.
@@ -23,6 +23,7 @@ export function registerCommands(
 	context.subscriptions.push(
 		vscode.commands.registerCommand('vscode-arxml-scope.openEcucEditor', (uri?: vscode.Uri) => openEcucEditor(uri)),
 		vscode.commands.registerCommand('vscode-arxml-scope.rebuildIndex', () => indexService.rebuild()),
+		vscode.commands.registerCommand('vscode-arxml-scope.cycleCrossFileRules', () => cycleCrossFileRules()),
 		vscode.commands.registerCommand('vscode-arxml-scope.revealInSource', (uri?: vscode.Uri, nodeId?: string, follow?: boolean) =>
 			revealInSource(uri, nodeId, follow)
 		),
@@ -42,8 +43,15 @@ export function registerCommands(
 	);
 }
 
-/** Explicit activation (parent D14): gated, then opened with the custom editor. */
-async function openEcucEditor(uri?: vscode.Uri): Promise<void> {
+/** Cycles the per-workspace cross-file rule mode. No dialog or notification. */
+async function cycleCrossFileRules(): Promise<void> {
+	const config = vscode.workspace.getConfiguration('arxmlScope.validation');
+	const current = config.get<string>('crossFileRules', 'auto');
+	const next = current === 'auto' ? 'always' : current === 'always' ? 'never' : 'auto';
+	await config.update('crossFileRules', next, vscode.ConfigurationTarget.Workspace);
+}
+
+/** Explicit activation (parent D14): gated, then opened with the custom editor. */async function openEcucEditor(uri?: vscode.Uri): Promise<void> {
 	const target = uri ?? vscode.window.activeTextEditor?.document.uri;
 	if (!target) {
 		void vscode.window.showInformationMessage('Open an .arxml file first.');
@@ -59,7 +67,7 @@ async function openEcucEditor(uri?: vscode.Uri): Promise<void> {
 }
 
 /**
- * Editor → source (design §2.3; UX child design §3). `follow` resolves a reference's
+ * Editor → source. `follow` resolves a reference's
  * target instead of revealing the reference itself; it is the webview's `follow`
  * message. Both go through `revealRangeInTextEditor`, which opens the source beside the
  * tree (or swaps the tab in `replace` mode) instead of replacing the custom editor.
@@ -89,7 +97,7 @@ async function revealInSource(uri?: vscode.Uri, nodeId?: string, follow = false)
 }
 
 /**
- * Source → editor (design §2.4). The cursor offset is mapped to the innermost node and
+ * Source → editor. The cursor offset is mapped to the innermost node and
  * the custom editor is opened at it. Returns the node id, so the mapping is observable.
  */
 async function revealInEcucEditor(provider: EcucEditorProvider, uri?: vscode.Uri): Promise<string | undefined> {

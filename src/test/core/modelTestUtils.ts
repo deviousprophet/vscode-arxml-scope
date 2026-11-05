@@ -63,7 +63,7 @@ function isRange(value: unknown): boolean {
 	);
 }
 
-/** Recursively removes every range, for layout-independence comparisons (AC4). */
+/** Recursively removes every range, for layout-independence comparisons. */
 export function stripRanges(value: unknown): unknown {
 	if (Array.isArray(value)) {
 		// A `[key, range]` pathIndex pair loses its range, so only keys are compared.

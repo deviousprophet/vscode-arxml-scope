@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext): ArxmlScopeApi {
 	context.subscriptions.push(validationService);
 	registerTextFeatures(context, indexService);
 	// The ECUC editor. `priority: "option"` in the manifest is what keeps a normally
-	// opened `.arxml` in the text editor (parent D14, AC3): the view is reachable only
+	// opened `.arxml` in the text editor: the view is reachable only
 	// through the command, the menu entry, or *Open With…*.
 	// Condition values are per-workspace state, never a file beside the ARXML.
 	const ecucProvider = new EcucEditorProvider(

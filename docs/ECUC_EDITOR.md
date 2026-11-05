@@ -29,8 +29,9 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
 - Modules, containers, parameters and references are emitted in display order.
 - A module label is the dotted definition path; a container shows its definition tail and short name;
   a parameter shows its name, `=`, value and quiet meta; a reference shows its name and target.
-- Schema and package information appears in the header at the top of the scroller; it scrolls away with
-  the rows rather than staying pinned.
+- Schema and package information is the first content in the document. These lines scroll with the
+  rows, use the same row shell and are searchable and focusable, but they are not ECUC nodes: clicking
+  one never changes the selection or Details. The editor has no file-name strip.
 - Annotations appear as muted italic comment lines directly above their node. Selecting a container
   tints the annotation rows of its descendants; the annotation rows stay non-selectable and clicking
   one changes nothing.
@@ -40,8 +41,10 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
 - Selecting a container tints its visible subtree; syntax tokens keep their colours.
 - Long labels, values and metadata stay on one line and scroll horizontally.
 
-Only the visible window is rendered. Scrolling swaps two spacer heights and renders a small overscan
-window, so a large file stays responsive. The scrollbars are native, and both axes work.
+Only the visible window is rendered. The page precomputes the row offsets, including the header rows
+and module gaps, so the scrollbar thumb and drag match the content; a scroll frame only renders the
+visible window. One virtual-scroll surface owns the vertical scroll and the row offsets; the docs view
+has one horizontal bar, and the scrollbars are native.
 
 ### Keyboard
 
@@ -93,14 +96,33 @@ The extension keeps an in-memory index of every `.arxml` file in the workspace. 
 activation, follows file creation, saves and deletion, and is thrown away when the window closes.
 Nothing is written beside your files.
 
-- The status bar shows **ARXML Scope: N files indexed** and hides when the workspace has no indexed
-  file. Hover it for element, reference, definition and package counts; click it, or run
-  **ARXML Scope: Rebuild Workspace Index**, to rebuild.
+- The status bar shows **ARXML Scope: N files indexed** and the cross-file check mode. Hover it for
+  element, reference, definition and package counts; click it to cycle `auto` / `always` / `never`, or
+  run **ARXML Scope: Rebuild Workspace Index** to rebuild.
 - **Details** resolves a container or parameter `DEFINITION-REF` against `ECUC-MODULE-DEF` and
-  `ECUC-PARAM-CONF-CONTAINER-DEF` elements in any indexed file. Resolution is exact-path first, then a
-  unique path suffix; two matches are treated as ambiguous and add no rows.
+  `ECUC-PARAM-CONF-CONTAINER-DEF` elements in any indexed file. A unique suffix resolves; copies of one
+  identity resolve to the copy in the referencing file, or to every copy for navigation. A definition
+  path shared by several bodies shows `N definitions found` instead of silently picking one.
 - `arxmlScope.index.enabled` turns the index off; `arxmlScope.index.maxFileSizeMB` (default 50) skips
-  files that are too large to read comfortably. Skipped files are reported in the status bar tooltip.
+  files that are too large to read comfortably, and `arxmlScope.index.exclude` drops generated or
+  duplicate trees before discovery. Skipped and excluded files are reported in the status bar tooltip.
+
+## Validation
+
+Validation runs after each index change and publishes to the Problems panel and the text editor.
+
+- Broken references are reported only for `DEST`s the index models with a path
+  (`ECUC-MODULE-CONFIGURATION-VALUES`, `ECUC-CONTAINER-VALUE`); parameter-value and non-ECUC `DEST`s
+  are not judged.
+- A duplicate AR path produces one diagnostic with related locations. Cross-file duplicates are
+  `information` by default; same-file duplicates use the configured severity.
+- Multiplicity counts within one file and one owning parent, never across generated copies.
+- `ECUC-ADD-INFO-PARAM-DEF` children and required children with a `DEFAULT-VALUE` are not missing.
+- An empty `<VALUE>` means “use the default”; Boolean `0`/`1` and float `INF`/`-INF`/`NaN` are valid.
+- Missing definitions are grouped at the highest missing ancestor (or the missing module definition)
+  with an instance count.
+- `arxmlScope.validation.maxDiagnosticsPerFile` (500) and `maxDiagnostics` (5000) cap the panel; one
+  summary diagnostic per file states how many problems were hidden. `0` disables a cap.
 
 ## Plain text editor
 
@@ -204,8 +226,13 @@ lookup is also cross-file and updates an open panel when a definition file chang
 | `arxmlScope.ecuc.editor.revealMode` | `beside` / `focus` / `replace` | `beside` | `beside` opens the source next to the editor and keeps focus in the tree; `focus` also moves focus to the source; `replace` swaps the ECUC editor's tab for the text editor. |
 | `arxmlScope.index.enabled` | boolean | `true` | Build the in-memory workspace index used for definition details and the status bar. |
 | `arxmlScope.index.maxFileSizeMB` | number ≥ 1 | `50` | Largest `.arxml` file the index reads. Larger files are skipped and counted in the tooltip. |
+| `arxmlScope.index.exclude` | array of workspace-relative globs | `[]` | Files never indexed, validated or used by navigation or text-editor features. Example: `**/_fwd/**`, `**/_out/**`, `**/_gen/**`. |
 | `arxmlScope.validation.enabled` | boolean | `true` | Publish ECUC validation diagnostics to the Problems panel and the text editor. |
 | `arxmlScope.validation.severities` | per-rule `error` / `warning` / `information` / `off` | see defaults | Choose the severity of each rule, or turn one off. |
+| `arxmlScope.validation.maxDiagnosticsPerFile` | number ≥ 0 | `500` | Maximum diagnostics per file; `0` is unlimited. A summary reports hidden problems. |
+| `arxmlScope.validation.maxDiagnostics` | number ≥ 0 | `5000` | Maximum diagnostics for the workspace; `0` is unlimited. |
+| `arxmlScope.validation.crossFileRules` | `auto` / `always` / `never` | `auto` | `auto` runs cross-file checks only when the index contains an ECUC definition; `always` reproduces the unconditional behaviour; `never` disables them. The status bar cycles this setting. |
+| `arxmlScope.diff.semanticMatching` | boolean | `true` | Pair renamed containers as one changed row. The diff toolbar toggle changes only the current panel. |
 
 An open panel re-renders when `arxmlScope.ecuc.editor` changes; you do not need to reopen the file. A
 definition saved anywhere in the workspace re-renders the open panel as well, and the diagnostic
@@ -220,14 +247,18 @@ collection is recomputed after every index change.
 - Validation checks ECUC-Values instances against indexed definitions. A definition file is used as
   data; its own schema is not validated.
 - Definition resolution refuses an ambiguous suffix. Vendor-specific variant merging is not performed;
-  the first exact definition wins only when it is unique. If two definition files declare the same AR
-  path, the row shows no definition block and no explanation; remove the duplicate or exclude that
-  folder from the workspace.
+  copies of one identity resolve to the referencing file's copy or to every copy for navigation. When
+  several definition bodies share one path, Details shows `N definitions found` and does not pick one.
+- Validation is a full workspace pass after the debounce; the benchmark bounds it, but a very large
+  workspace can still take a moment before the Problems panel updates. The diagnostic caps keep the
+  panel bounded.
 - The index reads saved bytes from disk, not open editor buffers, so an unsaved edit in a
   module-definition file is picked up only after it is saved. It also uses Node file-system paths, so
   virtual workspaces are not indexed.
 - The index decodes UTF-8. An ARXML file that declares UTF-16 or a legacy encoding may be skipped or
   indexed incorrectly.
+- A file matching `arxmlScope.index.exclude` stays editable as text but gets no outline, definition,
+  references, links, hover or diagnostics from the extension.
 - Every index change rebuilds the shared lookup maps. This is fast for ordinary workspaces, but a very
   large workspace can pause briefly after a save.
 - The single-file editor model (`core/ecuc/scanner.ts`) and the workspace index

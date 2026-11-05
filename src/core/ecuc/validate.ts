@@ -1,5 +1,5 @@
 /**
- * Value validation and XML escaping (parent design §8, child design §2.5).
+ * Value validation and XML escaping.
  *
  * Refusals return a reason and mutate nothing. An unchanged value is refused so
  * that idling cannot dirty the document. Container short names and definition

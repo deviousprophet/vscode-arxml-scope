@@ -142,4 +142,22 @@ suite('indexBuilder (core)', () => {
 		assert.deepStrictEqual(file.elements, []);
 		assert.deepStrictEqual(file.definitions, []);
 	});
+
+	test('contentHash ignores whitespace and UUID but tracks content', () => {
+		const document = (uuid: string, value: string, spaced: boolean) => {
+			const gap = spaced ? '\n    ' : '';
+			return `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/MDef</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE UUID="${uuid}"><SHORT-NAME>C</SHORT-NAME>${gap}<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/MDef/C</DEFINITION-REF>${gap}<PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/MDef/C/P</DEFINITION-REF>${gap}<VALUE>${value}</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		};
+		const hash = (uuid: string, value: string, spaced: boolean): number =>
+			element(buildFileIndex('file:///v.arxml', document(uuid, value, spaced)).elements, '/P/M/C').contentHash!;
+		assert.strictEqual(hash('u1', '1', false), hash('u2', '1', true));
+		assert.notStrictEqual(hash('u1', '1', false), hash('u1', '2', false));
+	});
+
+	test('records the own SW-SYSCOND guard and the WITH-AUTO marker', () => {
+		const text = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-DEF><SHORT-NAME>MDef</SHORT-NAME><CONTAINERS><ECUC-PARAM-CONF-CONTAINER-DEF><SHORT-NAME>C</SHORT-NAME><PARAMETERS><ECUC-INTEGER-PARAM-DEF><SHORT-NAME>P1</SHORT-NAME><WITH-AUTO>true</WITH-AUTO></ECUC-INTEGER-PARAM-DEF></PARAMETERS></ECUC-PARAM-CONF-CONTAINER-DEF></CONTAINERS></ECUC-MODULE-DEF></ELEMENTS></AR-PACKAGE></AR-PACKAGES><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>Q</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/MDef</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/MDef/C</DEFINITION-REF><VARIATION-POINT><SW-SYSCOND>(A==1)</SW-SYSCOND><SW-SYSCOND>(B==2)</SW-SYSCOND></VARIATION-POINT></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const file = buildFileIndex('file:///guard.arxml', text);
+		assert.strictEqual(element(file.elements, '/Q/M/C').syscond, '(A==1) && (B==2)');
+		assert.strictEqual(file.definitions.find((definition) => definition.path === '/P/MDef/C/P1')?.withAuto, true);
+	});
 });

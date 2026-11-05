@@ -1,0 +1,82 @@
+.virtual-scroll {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+}
+.virtual-scroll-vscroll {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	scrollbar-gutter: stable;
+	overflow-anchor: none;
+}
+.virtual-scroll-content {
+	position: relative;
+	min-width: 100%;
+}
+.virtual-scroll-pane {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	overflow: hidden;
+	box-sizing: border-box;
+}
+.virtual-scroll-pane.document-tree {
+	position: absolute;
+}
+.virtual-scroll-pane-single {
+	left: 0;
+	right: 0;
+}
+.virtual-scroll-pane-left {
+	left: 0;
+	right: 50%;
+}
+.virtual-scroll-pane-right {
+	left: 50%;
+	right: 0;
+	border-left: 3px solid var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
+}
+.virtual-scroll-hbars {
+	position: relative;
+	flex: none;
+	width: calc(100% - var(--diff-scrollbar-width, 0px));
+	height: 12px;
+	min-height: 12px;
+}
+.virtual-scroll-hbars[hidden] {
+	display: none;
+}
+.virtual-scroll-hscroll {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scrollbar-gutter: stable;
+}
+.virtual-scroll-hscroll[hidden] {
+	display: none;
+}
+.virtual-scroll-hscroll-single {
+	left: 0;
+	right: 0;
+}
+.virtual-scroll-hscroll-left {
+	left: 0;
+	right: 50%;
+}
+.virtual-scroll-hscroll-right {
+	left: calc(50% + 3px);
+	right: 0;
+}
+.virtual-scroll-hspacer {
+	height: 1px;
+	min-height: 1px;
+}

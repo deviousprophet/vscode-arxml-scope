@@ -1,5 +1,5 @@
 /**
- * Row data for the virtualised ECUC views (task design §2).
+ * Row data for the virtualised ECUC views.
  *
  * This is the host half of the virtual renderer: it walks the model in display
  * order and emits one plain object per entity — no HTML string, no DOM, no
@@ -97,7 +97,7 @@ export interface EcucRow {
 	followReason?: string;
 	/** Raw instance-reference context paths, dotted like the target. */
 	contextPaths?: string[];
-	/** Hover text: the full `DEFINITION-REF` (design §2.7). */
+	/** Hover text: the full `DEFINITION-REF`. */
 	title: string;
 	meta: MetaPart[];
 	/** Annotation comment lines shown above this row, in source order. */
@@ -110,6 +110,8 @@ export interface EcucRow {
 	disabledBy?: 'self' | 'ancestor';
 	/** Definition-derived fields, present only when the workspace index resolves the ref. */
 	definition?: DefinitionInfo;
+	/** Number of definition bodies sharing the path when no single definition resolves. */
+	definitionCount?: number;
 	/** Lower-cased label + short name + value, the Search haystack. */
 	haystack: string;
 }
@@ -129,6 +131,8 @@ export interface RowBuildOptions {
 	conditions?: ReadonlyMap<string, ConditionValue>;
 	/** Resolves a `DEFINITION-REF`; absent when no workspace index is available. */
 	definitions?: DefinitionLookup;
+	/** Counts definition bodies for a ref that does not resolve to exactly one. */
+	ambiguousDefinitions?: (definitionRef: string) => number;
 	/** True when a reference target resolves across the workspace index. */
 	referenceResolver?: (targetPath: string, targetDest?: string) => { followable: boolean; reason?: string };
 }
@@ -140,6 +144,7 @@ interface BuildContext {
 	pathIndex: Map<string, Range>;
 	conditions: ReadonlyMap<string, ConditionValue>;
 	definitions?: DefinitionLookup;
+	ambiguousDefinitions?: (definitionRef: string) => number;
 	referenceResolver?: (targetPath: string, targetDest?: string) => { followable: boolean; reason?: string };
 }
 
@@ -156,6 +161,7 @@ export function buildRows(model: EcucDocumentModel, options: RowBuildOptions = {
 		pathIndex: model.pathIndex,
 		conditions: options.conditions ?? new Map<string, ConditionValue>(),
 		definitions: options.definitions,
+		ambiguousDefinitions: options.ambiguousDefinitions,
 		referenceResolver: options.referenceResolver,
 	};
 	const rows: EcucRow[] = [];
@@ -251,6 +257,19 @@ function definitionFor(ctx: BuildContext, definitionRef: string): DefinitionInfo
 	}
 }
 
+/** The ambiguous-definition count, only when no single definition resolved. */
+function definitionCountFor(
+	ctx: BuildContext,
+	definitionRef: string,
+	definition: DefinitionInfo | undefined
+): number | undefined {
+	if (definition !== undefined || definitionRef === '' || ctx.ambiguousDefinitions === undefined) {
+		return undefined;
+	}
+	const count = ctx.ambiguousDefinitions(definitionRef);
+	return count >= 2 ? count : undefined;
+}
+
 function moduleRow(
 	ctx: BuildContext,
 	rows: EcucRow[],
@@ -264,6 +283,7 @@ function moduleRow(
 	const index = rows.length;
 	const condition = ownCondition(module, ctx);
 	const definition = definitionFor(ctx, module.definitionRef);
+	const definitionCount = definitionCountFor(ctx, module.definitionRef, definition);
 	const meta: MetaPart[] = [
 		shortPart(module.shortName),
 		...(module.variant ? [variantPart(module.variant)] : []),
@@ -286,6 +306,7 @@ function moduleRow(
 		comments: commentLines(meta),
 		haystack: haystack({ label: dotted(module.definitionRef), shortName: module.shortName, meta }),
 		...(definition === undefined ? {} : { definition }),
+		...(definitionCount === undefined ? {} : { definitionCount }),
 	};
 	const disabled = applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
@@ -311,6 +332,7 @@ function containerRow(
 	const at = rows.length;
 	const condition = ownCondition(container, ctx);
 	const definition = definitionFor(ctx, container.definitionRef);
+	const definitionCount = definitionCountFor(ctx, container.definitionRef, definition);
 	const meta: MetaPart[] = [shortPart(container.shortName), ...suffixParts(container, condition)];
 	const row: EcucRow = {
 		id: ctx.index.idOf(container) ?? '',
@@ -333,6 +355,7 @@ function containerRow(
 			meta,
 		}),
 		...(definition === undefined ? {} : { definition }),
+		...(definitionCount === undefined ? {} : { definitionCount }),
 	};
 	const disabled = applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
@@ -377,6 +400,7 @@ function parameterRow(
 	const type = parameterType(parameter.definitionDest, valueKind);
 	const condition = ownCondition(parameter, ctx);
 	const definition = definitionFor(ctx, parameter.definitionRef);
+	const definitionCount = definitionCountFor(ctx, parameter.definitionRef, definition);
 	const meta: MetaPart[] = suffixParts(parameter, condition);
 	const row: EcucRow = {
 		id: ctx.index.idOf(parameter) ?? '',
@@ -400,6 +424,7 @@ function parameterRow(
 		comments: commentLines(meta),
 		haystack: haystack({ label: parameter.name, value, meta }),
 		...(definition === undefined ? {} : { definition }),
+		...(definitionCount === undefined ? {} : { definitionCount }),
 	};
 	applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);
@@ -426,6 +451,7 @@ function referenceRow(
 	const followReason = sameFile ? undefined : crossFile?.reason;
 	const condition = ownCondition(reference, ctx);
 	const definition = definitionFor(ctx, reference.definitionRef);
+	const definitionCount = definitionCountFor(ctx, reference.definitionRef, definition);
 	const meta: MetaPart[] = [
 		...(reference.instance && reference.contextPaths.length > 0
 			? [contextPart(reference.contextPaths)]
@@ -456,6 +482,7 @@ function referenceRow(
 		comments: commentLines(meta),
 		haystack: haystack({ label: reference.name, value: target, meta }),
 		...(definition === undefined ? {} : { definition }),
+		...(definitionCount === undefined ? {} : { definitionCount }),
 	};
 	applyCondition(row, condition, disabledByAncestor);
 	rows.push(row);

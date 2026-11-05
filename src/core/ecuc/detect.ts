@@ -1,5 +1,5 @@
 /**
- * ECUC-Values detection (parent design §5, R2).
+ * ECUC-Values detection.
  *
  * The `.arxml` path check runs first: a file that is not `.arxml` is rejected
  * before its content is consulted. The content test is namespace-tolerant and

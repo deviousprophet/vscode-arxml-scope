@@ -1,5 +1,5 @@
 /**
- * The session-only first-file stash for the compare commands (task design §4.2).
+ * The session-only first-file stash for the compare commands.
  *
  * The stash is deliberately not persisted: it belongs to one window session, and
  * the manifest's `arxmlScope.hasCompareSelection` context key is derived from it.

@@ -1,12 +1,12 @@
 /**
- * Reveal mechanics (parent design §10, child design §2.3–§2.4; UX child design §3).
+ * Reveal mechanics.
  *
  * Reveal is two commands: editor → source opens the file in the text editor at the node's
  * range, source → editor maps the cursor offset to the innermost node and opens the
  * custom editor there. Do not add a second-pane mechanism on the strength of an
  * assumption.
  *
- * `revealRangeInTextEditor` is deliberately **non-destructive** (UX child design §3):
+ * `revealRangeInTextEditor` is deliberately **non-destructive**:
  * it reuses a visible text editor for the file, or opens one beside the tree with
  * `preserveFocus`, so the custom editor's tab survives and focus stays in the tree.
  * `openWith('default')` — which swapped the tab and stole focus — survives only as the
@@ -29,7 +29,7 @@ function toVscodeRange(lineIndex: LineIndex, range: Range): vscode.Range {
 }
 
 /**
- * The innermost node containing `offset` (design §2.4).
+ * The innermost node containing `offset`.
  *
  * Nodes nest, so several ranges can contain one offset — a parameter inside a
  * container inside a module. The smallest containing range wins. The binary search
@@ -89,7 +89,7 @@ export function nodeIdForRange(index: NodeIndex, range: Range): string | undefin
 }
 
 /**
- * Same-file reference following (parent design §7, R10). Resolution reads the verbatim
+ * Same-file reference following. Resolution reads the verbatim
  * `targetRawPath`, never the dotted display form. An absent path and an ambiguous
  * suffix both resolve to nothing; the reason covers both, because the resolver
  * deliberately refuses to guess between them.
@@ -107,7 +107,7 @@ export function followReference(model: EcucDocumentModel, reference: ReferenceNo
 }
 
 /**
- * Where a reveal puts the source, and whether it takes focus (UX child design §3, §10).
+ * Where a reveal puts the source, and whether it takes focus.
  * `beside` opens the source next to the tree and leaves focus in the tree; `focus`
  * opens it beside and moves focus there; `replace` is the old behaviour — swap this
  * tab for the text editor.
@@ -136,7 +136,7 @@ function besideColumn(column: vscode.ViewColumn): vscode.ViewColumn {
 
 /**
  * Shows `range` in the text editor for `document` without destroying the custom
- * editor's tab (UX child design §3). Reuses a text editor already showing the file, so
+ * editor's tab. Reuses a text editor already showing the file, so
  * repeated reveals do not accumulate tabs; otherwise opens one beside `viewColumn`
  * (or beside the active group) as a preview with focus preserved.
  */

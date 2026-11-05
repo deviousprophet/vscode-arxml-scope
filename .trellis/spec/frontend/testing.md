@@ -121,11 +121,13 @@ undo, stale bytes refused); `contextMenu.test.ts` asserts the page shell, the co
 filter, the posted message shape and the close paths. Modal confirmation lives in the provider and
 is not simulated by the page test; the host write is covered by the apply test.
 
-Diff tests assert the toolbar both ways: Search/Show all/Show diff only/Prev diff/Next diff/Swap
-sides are present, and Filter/changes checkbox/summary/Collapse/Expand are absent. `diffModel` tests
-cover query-free `diffVisibility` and collapse-aware flattening; page tests assert the search wiring, the
-`displayLeft`/`displayRight`/`displayStatus` projection, reveal-side mapping and the two
-`DocumentTreeView` scrollers.
+Diff tests assert the toolbar both ways: Search, Show all/Show diff, Context, Semantic/Strict,
+Prev/Next and Swap are present in the documented left/divider/center order, and Filter/changes
+checkbox/count summary/Collapse/Expand are absent.
+`diffModel` tests cover query-free `diffVisibility`, the five-line context window, gap rows and
+expand/collapse, and collapse-aware flattening; page tests assert the gap toggle, Context state, the
+search wiring, the `displayLeft`/`displayRight`/`displayStatus` projection, reveal-side mapping,
+pinned pane headers and the two `DocumentTreeView` scrollers.
 The headless diff probe drives typing (no marks), Enter (count/current), Shift+Enter, a view switch
 and a swap.
 

@@ -2,8 +2,9 @@
  * The semantic-diff webview seam.
  *
  * One static shell, one bundled page, one typed message union: the host posts
- * the complete `DiffDocument` on load and after every refresh; the page posts
- * only `ready` and a reveal intent.
+ * the complete `DiffDocument` on load and after every refresh, plus the mode
+ * state when a toggle needs no new document; the page posts `ready`, a match
+ * mode request and a reveal intent.
  */
 import type { DiffDocument } from './core/diff/diffModel';
 
@@ -12,7 +13,9 @@ export type { DiffDocument } from './core/diff/diffModel';
 /** Host → diff page. */
 export type DiffProviderToWebview =
 	/** Install (or replace) the compared document. */
-	| { type: 'document'; document: DiffDocument }
+	| { type: 'document'; document: DiffDocument; semantic: boolean }
+	/** The mode changed but the same document is still displayed. */
+	| { type: 'matchModeState'; semantic: boolean }
 	/** The refresh failed; keep the last good document and show the banner. */
 	| { type: 'error'; message: string };
 
@@ -20,6 +23,8 @@ export type DiffProviderToWebview =
 export type DiffWebviewToProvider =
 	/** The page mounted and is listening; the host answers with `document`. */
 	| { type: 'ready' }
+	/** Toggle semantic matching for this panel only. */
+	| { type: 'matchMode'; semantic: boolean }
 	/** Reveal one row in its source file; `side` is the host row side (the page maps the displayed pane through `hostSide`). */
 	| { type: 'reveal'; side: 'left' | 'right'; key: string };
 
@@ -32,5 +37,5 @@ export function diffMessageType(message: unknown): string | undefined {
 /** A host message with the diff protocol's shape; the page ignores anything else. */
 export function isDiffProviderMessage(message: unknown): message is DiffProviderToWebview {
 	const type = diffMessageType(message);
-	return type === 'document' || type === 'error';
+	return type === 'document' || type === 'matchModeState' || type === 'error';
 }

@@ -1,5 +1,5 @@
 /**
- * AC13 — two sibling containers that share a `SHORT-NAME` must not share an identifier,
+ * Two sibling containers that share a `SHORT-NAME` must not share an identifier,
  * or a reveal or an edit can land on the wrong one.
  *
  * The fixture is synthetic (`src/test/fixtures/editor/sibling-collision.arxml`): two

@@ -38,20 +38,54 @@ const TEXT_TAGS = new Set([
 	'LOWER-MULTIPLICITY',
 	'UPPER-MULTIPLICITY',
 	'UPPER-MULTIPLICITY-INFINITE',
+	'WITH-AUTO',
+	'SW-SYSCOND',
 	'L-2',
 	'VALUE',
 ]);
+
+const FNV_OFFSET = 0x811c9dc5;
+const FNV_PRIME = 0x01000193;
+
+/** 32-bit FNV-1a, allocation-free. */
+function hashText(hash: number, text: string): number {
+	let value = hash >>> 0;
+	for (let at = 0; at < text.length; at++) {
+		value = Math.imul(value ^ text.charCodeAt(at), FNV_PRIME) >>> 0;
+	}
+	return value;
+}
+
+/** Sorted attributes, `UUID` excluded: split copies differ only by UUID. */
+function attributeSignature(attrs: ReadonlyMap<string, string>): string {
+	const parts: string[] = [];
+	for (const key of [...attrs.keys()].sort()) {
+		if (key === 'UUID') {
+			continue;
+		}
+		parts.push(key + '=' + attrs.get(key));
+	}
+	return parts.join('\u0001');
+}
+
+function normalizeSpace(text: string): string {
+	return text.replace(/\s+/g, ' ');
+}
 
 interface Frame {
 	name: string;
 	start: number;
 	text: string;
+	/** Structural hash of everything seen inside this frame so far. */
+	hash: number;
 	/** Attributes of the element that opened the frame, when the index needs them. */
 	attrs?: ReadonlyMap<string, string>;
 	shortName?: string;
 	definitionRef?: string;
 	definitionDest?: string;
 	uuid?: string;
+	/** Normalized own `VARIATION-POINT/SW-SYSCOND` text, when present. */
+	syscond?: string;
 	/** Raw definition metadata, harvested as the definition's children close. */
 	definition?: Partial<IndexDefinition>;
 	/** Enumeration literals collected from `ECUC-ENUMERATION-LITERAL-DEF`. */
@@ -102,7 +136,12 @@ export class IndexBuilder implements XmlStreamHandlers {
 	}
 
 	open(name: string, attrs: ReadonlyMap<string, string>, offset: number): void {
-		const frame: Frame = { name, start: offset, text: '' };
+		const frame: Frame = {
+			name,
+			start: offset,
+			text: '',
+			hash: hashText(hashText(FNV_OFFSET, '<' + name), attributeSignature(attrs)),
+		};
 		if (name === 'DEFINITION-REF' || name === 'VALUE-REF' || name === 'TARGET-REF' || name === 'DESTINATION-REF') {
 			frame.attrs = attrs;
 		}
@@ -147,7 +186,12 @@ export class IndexBuilder implements XmlStreamHandlers {
 
 	private finishFrame(frame: Frame, end: number, ancestors: Frame[]): void {
 		if (TEXT_TAGS.has(frame.name)) {
-			this.attachText(frame, ancestors);
+			const text = decodeXml(frame.text).trim();
+			const parent = ancestors[ancestors.length - 1];
+			if (parent !== undefined && frame.name !== 'UUID') {
+				parent.hash = hashText(parent.hash, '\u0001' + frame.name + '=' + normalizeSpace(text));
+			}
+			this.attachText(frame, text, ancestors);
 			return;
 		}
 		const range: Range = { start: frame.start, end };
@@ -156,24 +200,16 @@ export class IndexBuilder implements XmlStreamHandlers {
 			if (path && !this.file.packages.includes(path)) {
 				this.file.packages.push(path);
 			}
-			return;
-		}
-		if (frame.name === ENUM_LITERAL_DEF) {
+		} else if (frame.name === ENUM_LITERAL_DEF) {
 			const parent = nearest(ancestors, (f) => f.name === ENUM_DEF);
 			if (parent && frame.shortName) {
 				(parent.literals ??= []).push(frame.shortName);
 			}
-			return;
-		}
-		if (isDefinitionKind(frame.name)) {
+		} else if (isDefinitionKind(frame.name)) {
 			this.pushDefinition(frame, range, ancestors);
-			return;
-		}
-		if (frame.name === MODULE_VALUES || frame.name === CONTAINER_VALUE) {
+		} else if (frame.name === MODULE_VALUES || frame.name === CONTAINER_VALUE) {
 			this.pushElement(frame, range, ancestors);
-			return;
-		}
-		if (PARAMETER_VALUES.has(frame.name)) {
+		} else if (PARAMETER_VALUES.has(frame.name)) {
 			const sourcePath = this.containerPath(ancestors);
 			this.file.elements.push({
 				kind: 'parameter',
@@ -182,12 +218,11 @@ export class IndexBuilder implements XmlStreamHandlers {
 				...(sourcePath === undefined ? {} : { sourcePath }),
 				...(frame.uuid === undefined ? {} : { uuid: frame.uuid }),
 				...(frame.value === undefined ? {} : { value: frame.value }),
+				...(frame.syscond === undefined ? {} : { syscond: frame.syscond }),
 				file: this.file.uri,
 				range,
 			});
-			return;
-		}
-		if (REFERENCE_VALUES.has(frame.name)) {
+		} else if (REFERENCE_VALUES.has(frame.name)) {
 			const reference: IndexReference = {
 				kind: 'reference',
 				definitionRef: frame.definitionRef,
@@ -197,6 +232,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 				targetRawPath: frame.targetRawPath,
 				targetDest: frame.targetDest,
 				contextPaths: frame.contextPaths ?? [],
+				...(frame.syscond === undefined ? {} : { syscond: frame.syscond }),
 				file: this.file.uri,
 				range,
 			};
@@ -205,13 +241,14 @@ export class IndexBuilder implements XmlStreamHandlers {
 				reference.sourcePath = sourcePath;
 			}
 			this.file.references.push(reference);
-			return;
+		}
+		const parent = ancestors[ancestors.length - 1];
+		if (parent !== undefined) {
+			parent.hash = hashText(parent.hash, '\u0002' + frame.hash.toString(36));
 		}
 	}
 
-	private attachText(frame: Frame, ancestors: Frame[]): void {
-		const raw = frame.text;
-		const text = decodeXml(raw).trim();
+	private attachText(frame: Frame, text: string, ancestors: Frame[]): void {
 		switch (frame.name) {
 			case 'SHORT-NAME': {
 				const parent = ancestors[ancestors.length - 1];
@@ -243,7 +280,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 			case 'TARGET-REF': {
 				const parent = nearest(ancestors, (f) => REFERENCE_VALUES.has(f.name));
 				if (parent) {
-					parent.targetRawPath = raw.trim();
+					parent.targetRawPath = text;
 					parent.targetDest = frame.attrs?.get('DEST');
 				}
 				return;
@@ -251,7 +288,7 @@ export class IndexBuilder implements XmlStreamHandlers {
 			case 'CONTEXT-ELEMENT-REF': {
 				const parent = nearest(ancestors, (f) => REFERENCE_VALUES.has(f.name));
 				if (parent) {
-					(parent.contextPaths ??= []).push(raw.trim());
+					(parent.contextPaths ??= []).push(text);
 				}
 				return;
 			}
@@ -270,6 +307,29 @@ export class IndexBuilder implements XmlStreamHandlers {
 				const parent = ancestors[ancestors.length - 1];
 				if (parent && PARAMETER_VALUES.has(parent.name)) {
 					parent.value = text;
+				}
+				return;
+			}
+			case 'SW-SYSCOND': {
+				// The guard belongs to the nearest value element, not to VARIATION-POINT.
+				const owner = nearest(
+					ancestors,
+					(candidate) =>
+						candidate.name === MODULE_VALUES ||
+						candidate.name === CONTAINER_VALUE ||
+						PARAMETER_VALUES.has(candidate.name) ||
+						REFERENCE_VALUES.has(candidate.name)
+				);
+				if (owner !== undefined) {
+					const guard = normalizeSpace(text);
+					owner.syscond = owner.syscond === undefined ? guard : owner.syscond + ' && ' + guard;
+				}
+				return;
+			}
+			case 'WITH-AUTO': {
+				const parent = ancestors[ancestors.length - 1];
+				if (parent !== undefined && isDefinitionKind(parent.name)) {
+					(parent.definition ??= {}).withAuto = /^true$/i.test(text);
 				}
 				return;
 			}
@@ -327,6 +387,12 @@ export class IndexBuilder implements XmlStreamHandlers {
 		}
 		if (frame.uuid !== undefined) {
 			element.uuid = frame.uuid;
+		}
+		if (element.kind === 'module' || element.kind === 'container') {
+			element.contentHash = frame.hash;
+		}
+		if (frame.syscond !== undefined) {
+			element.syscond = frame.syscond;
 		}
 		this.file.elements.push(element);
 	}

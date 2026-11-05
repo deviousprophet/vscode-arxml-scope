@@ -1,5 +1,5 @@
 /**
- * Task design §2 — the host row model is the single source of the display
+ * The host row model is the single source of the display
  * order, meta/value/target fields and search haystacks.
  *
  * The assertions are on values, not markup: a row must not carry HTML, the

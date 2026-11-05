@@ -1,5 +1,5 @@
 /**
- * Row integration of the evaluated SW-SYSCOND (task design §4, AC1–AC5/AC7/AC11).
+ * Row integration of the evaluated SW-SYSCOND.
  *
  * `buildRows` is the only place a condition is evaluated. The assertions below
  * are on the row values, not on markup: the page just renders `condition`,
@@ -206,7 +206,7 @@ suite('condition rows (design §4)', () => {
 		assert.strictEqual(withZero.condition?.state, 'true');
 		assert.strictEqual(withZero.disabled, false);
 
-		// The exact condition text the fixture stores is the one the PRD names.
+		// The exact condition text the fixture stores is the one the evaluator uses.
 		const source = fixtureText(FIXTURE);
 		assert.ok(source.includes('<SW-SYSCOND>(CANIPCORETYPE_SC==0)</SW-SYSCOND>'));
 		assert.deepStrictEqual(evaluateSyscond('(CANIPCORETYPE_SC==0)', new Map([['CANIPCORETYPE_SC', 1]])).state, 'false');

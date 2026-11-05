@@ -1,6 +1,5 @@
 /**
- * The re-scan subscription (child design §1.4–§1.5) and node-id stability
- * (child design §2.2).
+ * The re-scan subscription and node-id stability
  *
  * These are the two mechanisms the sibling editing child depends on and that no other
  * test reaches: the subscription is what keeps a range on screen from outliving the

@@ -55,6 +55,9 @@ suite('workspace index (extension)', function () {
 				fs.rmSync(file, { force: true });
 			}
 		}
+		for (let index = 0; index <= run; index++) {
+			fs.rmSync(path.join(root, `index-test-${index}-excluded`), { recursive: true, force: true });
+		}
 	}
 
 	suiteSetup(async () => {
@@ -84,6 +87,24 @@ suite('workspace index (extension)', function () {
 		assert.strictEqual(stats.elements, 6);
 		assert.strictEqual(stats.definitions, 11);
 		assert.ok(extension.statusBarText().includes('2 files indexed'), extension.statusBarText());
+	});
+
+	test('arxmlScope.index.exclude removes matching files', async () => {
+		fs.writeFileSync(values, fixtureText('index/values.arxml'));
+		const dir = path.join(root, `index-test-${run}-excluded`);
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(path.join(dir, 'generated.arxml'), fixtureText('index/module-def.arxml'));
+		const extension = await api();
+		const config = vscode.workspace.getConfiguration('arxmlScope.index');
+		await config.update('exclude', [`**/index-test-${run}-excluded/**`], vscode.ConfigurationTarget.Workspace);
+		try {
+			await extension.reindex();
+			assert.strictEqual(extension.indexStats().files, 1, 'the excluded copy is not indexed');
+		} finally {
+			await config.update('exclude', undefined, vscode.ConfigurationTarget.Workspace);
+		}
+		await extension.reindex();
+		assert.strictEqual(extension.indexStats().files, 2);
 	});
 
 	test('a created file is picked up by the watcher and a deleted one is dropped', async () => {

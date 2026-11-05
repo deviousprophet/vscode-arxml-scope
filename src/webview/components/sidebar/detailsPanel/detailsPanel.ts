@@ -23,6 +23,7 @@ export interface InspectorFields {
 	annotations: string;
 	condition?: RowCondition;
 	definition?: DefinitionInfo;
+	definitionCount?: number;
 }
 
 /**
@@ -60,6 +61,7 @@ export function inspectorFields(row: EcucRow): InspectorFields {
 		annotations: parts('annotation').join('\n'),
 		...(row.condition === undefined ? {} : { condition: row.condition }),
 		...(row.definition === undefined ? {} : { definition: row.definition }),
+		...(row.definitionCount === undefined ? {} : { definitionCount: row.definitionCount }),
 	};
 }
 

@@ -55,7 +55,7 @@ ${head(assets, 'ARXML Scope')}
 ${renderEditorToolbarHtml(searchHtml)}
 <div id="content">
 <div id="main">
-<div id="tree-measure" aria-hidden="true"><div class="probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
+<div id="tree-measure" aria-hidden="true"><span id="tree-ch-probe" class="ch-probe">${'0'.repeat(100)}</span><div class="probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
 <div id="tree" class="document-tree" role="tree" aria-label="ECUC values"></div>
 </div>
 ${renderSidebarHtml()}

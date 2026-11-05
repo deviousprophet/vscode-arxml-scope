@@ -118,7 +118,9 @@ that is not obvious from the code.
 - **The workspace index is memory-only.** `IndexService` rebuilds it on activation and owns the
   `**/*.arxml` watcher; the core `WorkspaceIndex` has no file or `vscode` access. A file is read through
   a stream, upserted as one `FileIndex`, and never copied into another file's entry. The status bar is
-  hidden at zero files; do not show `0 files indexed`.
+  hidden at zero files when the window has a workspace folder; a folder that exists but has no indexed
+  `.arxml` still shows the mode so `cross-file checks off (no project)` is visible. Do not show
+  `0 files indexed`.
 - **Dark is the supported theme for now.** Do not re-add a light-only selection/token branch or a
   light preview/capture; high contrast is the accessibility variant. High-contrast/forced-colors
   subtree rows use a dotted outline, not the fill.
@@ -132,8 +134,53 @@ that is not obvious from the code.
   `data-follow`/link). A same-file target selects the row; an ECUC-Values target opens that file in the
   custom editor; any other target opens the text editor.
 - **Text-editor features reuse the same index.** Document symbols, definition, references, links and
-  hover are registered once for `.arxml` and return nothing when `arxmlScope.index.enabled` is false.
-  The text editor uses the live document text, not the indexed disk bytes.
+  hover are registered once for `.arxml` and return nothing when `arxmlScope.index.enabled` is false or
+  the document matches `arxmlScope.index.exclude`. The text editor uses the live document text, not the
+  indexed disk bytes.
+- **Copies of one path resolve together, never by guessing.** `WorkspaceIndex` keeps every candidate.
+  Candidates that share kind and `DEFINITION-REF` are copies: resolution prefers the copy in the
+  referencing file, otherwise returns all copies sorted; multiple local copies with one identity are
+  all returned with the earliest local copy first. Differing identities stay ambiguous.
+  `definitionCandidateCount` is how the UI says `N definitions found` without choosing one.
+- **Split copies and variants are not duplicates.** `duplicateShortName` suppresses cross-file
+  same-identity copies whose normalized content hashes differ (AUTOSAR split files) and copies whose
+  distinct non-empty `SW-SYSCOND` guards make them alternatives. Byte-identical copies, same-file
+  groups and differing identities stay reported. `multiplicity` counts the lower bound against the
+  total but the upper bound per guard, with an unguarded occurrence counted in every guarded bucket.
+  `missingRequired` skips a child whose definition carries `withAuto === true`.
+- **Cross-file rules have one mode owner.** `arxmlScope.validation.crossFileRules` is `auto` by
+  default; `auto` runs a rule only when the index has at least one definition, `always` reproduces the
+  unconditional behaviour and `never` disables it. A fragment workspace (values without definitions)
+  stays quiet. The status bar shows the effective mode and the cycle command is the only writer.
+- **Validation output is capped at the host seam.** Per-file and workspace caps (`0` = unlimited) drop
+  diagnostics before they reach the collection and add one `diagnosticCap` summary per file. Caps are
+  settings read in `validationService`, not options baked into the pure engine.
+- **Diff panes keep the live document state.** The inner diff node keeps `aria-expanded` so the shared
+  document CSS draws the chevron and the collapsed `{ ... }` marker in both panes. Selection uses the
+  shared document-tree rule; do not add a diff-only selected-cell rule.
+- **Semantic diff is opt-in in core, on in the host.** `DiffOptions.semanticMatching` defaults off so
+  core output is stable; the host reads `arxmlScope.diff.semanticMatching` (default on) and the toolbar
+  posts `matchMode` for the current panel only. Strict must reproduce the pre-semantic output exactly.
+- **A match-mode toggle never re-scans.** The host keeps the prepared rows, ranges and headers from the
+  last refresh and a `DiffSession` caches the strict and semantic documents. A toggle reuses that cache,
+  falls back to a full refresh when either `TextDocument.version` changed, and reuses the current
+  document when a semantic build reports `renamed === 0` (the two modes are identical). The page flips
+  `aria-pressed` and the label immediately, shows `aria-busy` plus a live `Switching to …` status, and
+  the host answers a no-document switch with `matchModeState`. Do not call `refreshNow()` or
+  `rowsFor()` from the match-mode handler unless the prepared version is stale.
+- **The diff toolbar has no count summary.** The left order is Show all / Show diff, divider,
+  Context, divider, Semantic / Strict, divider, Prev/Next; Swap is centered over the pane divider;
+  status and Search are on the right. Context is the only standalone toggle, default active at five
+  lines and disabled in Show all. Every main button uses an inline icon over a small label.
+- **One virtual scroll owns the document.** `VirtualScroll` owns the vertical bar, the per-pane
+  horizontal bars and the precomputed offsets; `DocumentTreeView` renders only the visible window.
+  Header rows are ordinary content rows and must not be pinned again. The diff keeps the file-name
+  strip outside the scroll surface; one shared offsets table drives both panes, and the pane split
+  stays fixed horizontally.
+- **Diff-only gaps are expandable split lines.** `diffVisibility(rows, true, 5)` keeps five context
+  rows; `flattenDiffDocument` turns the remaining hidden runs into `DiffGap` rows. A gap row is not a
+  tree node: it must stay out of `displayIndexByKey`, `navigationVisible`, `F7` and search. The
+  displayed left pane owns the toggle; the right pane draws the line only.
 - **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels at
   normal widths; labels may hide only at <=720px. The fixed gutter keeps the row control at the far
   left instead of indenting it with the label.
@@ -143,8 +190,9 @@ that is not obvious from the code.
 - **Search runs on Enter through the chunked engine, never a synchronous full scan.** Typing only
   updates the field and the clear X; a changed query cancels the old run until Enter. `RowSearchEngine`
   scans 512 rows between clock checks with a 24 ms budget, a 120 ms debounce, a 150 ms progress
-  throttle and a generation token. The haystack is the label, value and every visible meta fragment,
-  so annotation, variant, condition and context text is searchable. The first streamed match is
+  throttle and a generation token. The haystack is the label, value, every visible meta fragment and
+  the schema/package header rows, so annotation, variant, condition, context and header text is
+  searchable. The first streamed match is
   jumped to; completion preserves the current row by id; later navigation only moves an index. Only
   rendered rows get `<mark>` elements. All matches use the fixed `--match-bg` tier; the current
   match's row adds `data-search-current` for `--match-hi`. Do not restore a synchronous `searchRows`
@@ -158,7 +206,8 @@ that is not obvious from the code.
 - **Benchmarks are committed and CI-run.** `npm run benchmark` discovers
   `src/test/benchmarks/*Benchmark.ts`; the CT `Benchmarks` job and its summary read the JSON `_type`
   lines. A benchmark must stay headless (no `vscode`, no DOM) and synthetic. A benchmark is evidence,
-  not a performance promise.
+  not a performance promise: set hard limits well above observed shared-runner variance, because a
+  limit within that variance is a flaky gate rather than a regression guard.
 - **Packaging is verified from the VSIX, not the ignore file.** Before calling a config change done,
   run `npx @vscode/vsce ls` and confirm the listing matches the intended package: runtime `dist/`
   files, manifest, README/CHANGELOG/LICENSE, icons and the user `docs/`/`examples/`; no `src/`, `out/`,

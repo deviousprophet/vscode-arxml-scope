@@ -1,5 +1,5 @@
 /**
- * ECUC ordering: `sort all` plus the exception list (parent design §6, child design §2.4).
+ * ECUC ordering: `sort all` plus the exception list.
  *
  * The legacy key is `DEFINITION-REF + '"' + identity + '"'`, or `DEFINITION-REF`
  * alone for exception entries. Implemented as the tuple `(definitionRef, identity)`

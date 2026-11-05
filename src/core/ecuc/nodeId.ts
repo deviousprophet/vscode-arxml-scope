@@ -1,5 +1,5 @@
 /**
- * Path-based node ids (child design §2.2).
+ * Path-based node ids.
  *
  * An id is derived from the node's own path — the container short-name chain, the
  * `DEFINITION-REF`, the `DEFINITION-REF` tail — and never from an array index, so it
@@ -10,7 +10,7 @@
  *
  * Every kind carries that ordinal. Containers and modules used to be identified by
  * their path alone, so two sibling containers sharing a `SHORT-NAME` shared one id and
- * a reveal could land on the wrong one (UX child design §13, R-UX13); parameters and
+ * a reveal could land on the wrong one; parameters and
  * references already had the ordinal. The ordinal is a counter over the raw model's
  * document order — the same source the rest of the id uses — and is never taken from
  * the display order.
@@ -74,7 +74,7 @@ export function buildNodeIndex(model: EcucDocumentModel): NodeIndex {
 
 	const visitContainer = (container: ContainerNode): void => {
 		// The owner is the container's path — identical for siblings — so the ordinal
-		// separates two siblings that share a short-name (UX child design §13).
+		// separates two siblings that share a short-name.
 		const owner = container.containerPath.join('/');
 		const id = `container:${owner}/${container.shortName}#${ordinal(owner, 'container', container.shortName)}`;
 		add(container, id, container.shortName, container.range);

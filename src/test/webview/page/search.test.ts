@@ -40,6 +40,10 @@ async function runSearch(dom: ReturnType<typeof installDom>, query: string, key 
 	await settleSearch();
 }
 
+async function settleFrame(): Promise<void> {
+	await new Promise((resolve) => setTimeout(resolve, 10));
+}
+
 suite('search helpers', () => {
 	test('a blank query matches nothing; a query matches haystacks case-insensitively', () => {
 		assert.deepStrictEqual(searchRows(ROWS, ''), []);
@@ -154,6 +158,60 @@ suite('search page', () => {
 				new dom.window.KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true })
 			);
 			assert.strictEqual(dom.document.activeElement, dom.document.getElementById('search-input'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('schema/package rows are searchable, focusable and never select', async () => {
+		const dom = mountEditor();
+		try {
+			const model = scanEcucValues(fixtureText('editor/render.arxml'));
+			dom.post({
+				type: 'document',
+				document: {
+					rows: buildRows(model, { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows,
+					header: { schema: '00048', packages: ['HeaderPkg'] }
+				}
+			});
+			await runSearch(dom, 'HeaderPkg');
+			assert.strictEqual(dom.document.getElementById('search-count')!.textContent, '1 / 1');
+			const headerRow = dom.document.querySelector(
+				'#tree .document-tree-header-row[data-header-id="header:package:0"]'
+			) as HTMLElement;
+			assert.ok(headerRow, 'the package line is a header row');
+			assert.ok(headerRow.querySelector('mark'), 'the match is highlighted in the header');
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'search does not select an ECUC row');
+			headerRow.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'clicking a header row does not select');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the schema/package rows scroll out of the rendered window', async () => {
+		const dom = mountEditor();
+		try {
+			const model = scanEcucValues(fixtureText('editor/render.arxml'));
+			dom.post({
+				type: 'document',
+				document: {
+					rows: buildRows(model, { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows,
+					header: { schema: '00048', packages: ['PkgA', 'PkgB'] }
+				}
+			});
+			const scroller = dom.document.querySelector('#tree .virtual-scroll-vscroll') as HTMLElement;
+			const windowEl = dom.document.querySelector('#tree-pane .document-tree-window') as HTMLElement;
+			assert.strictEqual(windowEl.style.top, '0px', 'the header rows start at the top');
+			scroller.scrollTop = 400;
+			scroller.dispatchEvent(new dom.window.Event('scroll'));
+			await settleFrame();
+			assert.notStrictEqual(windowEl.style.top, '0px', 'the window follows the scrolled content');
+			assert.strictEqual(
+				dom.document.querySelectorAll('#tree .document-tree-header-row').length,
+				0,
+				'the header rows scroll out with the document'
+			);
 		} finally {
 			dom.restore();
 		}

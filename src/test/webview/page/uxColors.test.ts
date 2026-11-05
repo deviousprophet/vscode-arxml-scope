@@ -1,5 +1,5 @@
 /**
- * AC14 — semantic element colours. The stylesheet maps value kinds to theme
+ * Semantic element colours. The stylesheet maps value kinds to theme
  * variables without changing the `.value` contract; the row model owns the kind.
  */
 import * as assert from 'assert';
