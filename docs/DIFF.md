@@ -49,9 +49,10 @@ compared, not just the bytes on disk.
   of descendant containers. An added or removed row highlights only the pane that owns its cell; the
   blank side stays blank.
 - One shared virtual-scroll surface owns the vertical scrollbar and the row offsets. Each pane has its
-  own horizontal scrollbar, and each bar moves only its pane while the pane split stays fixed. The
-  content height is precomputed, so the thumb and drag match the rendered lines, and only the visible
-  window is rendered. `Swap sides` resets both horizontal offsets but keeps the vertical position.
+  own horizontal scrollbar; moving either bar scrolls both panes in sync, and the pane split stays
+  fixed. The content height is precomputed, so the thumb and drag match the rendered lines, and only the
+  visible window is rendered. `Swap sides` resets both horizontal offsets but keeps the vertical
+  position.
 - Until the first comparison arrives, the panel shows `Loading comparison…` instead of flashing
   `No differences`.
 

@@ -43,6 +43,8 @@ export interface VirtualScrollViewport {
 
 export interface VirtualScrollCallbacks {
 	onViewportChange?(viewport: VirtualScrollViewport): void;
+	/** Mirror every horizontal bar to the bar that moved (diff mode). */
+	syncHorizontal?: boolean;
 }
 
 export class VirtualScroll {
@@ -118,7 +120,7 @@ export class VirtualScroll {
 			const spacer = document.createElement('div');
 			spacer.className = 'virtual-scroll-hspacer';
 			bar.appendChild(spacer);
-			bar.addEventListener('scroll', () => this.schedule());
+			bar.addEventListener('scroll', () => this.onHorizontalBarScroll(at));
 			this.hbars.appendChild(bar);
 			this.hscrolls.push(bar);
 			this.hspacers.push(spacer);
@@ -296,6 +298,16 @@ export class VirtualScroll {
 		return this.scroll ? this.scroll.clientWidth : 0;
 	}
 
+	/** The width the vertical scrollbar reserves inside the surface. */
+	verticalScrollbarWidth(): number {
+		if (!this.scroll) {
+			return 0;
+		}
+		const full = Number.isFinite(this.scroll.offsetWidth) ? this.scroll.offsetWidth : 0;
+		const client = Number.isFinite(this.scroll.clientWidth) ? this.scroll.clientWidth : 0;
+		return Math.max(0, full - client);
+	}
+
 	scrollToIndex(index: number, align?: 'auto' | 'start' | 'end'): void {
 		if (this.rowCount <= 0) {
 			return;
@@ -322,6 +334,18 @@ export class VirtualScroll {
 		}
 		this.frame = 0;
 		this.mounted = false;
+	}
+
+	private onHorizontalBarScroll(index: number): void {
+		if (this.callbacks.syncHorizontal) {
+			const left = this.getScrollLeft(index);
+			for (let at = 0; at < this.hscrolls.length; at++) {
+				if (at !== index && Math.abs(this.hscrolls[at].scrollLeft - left) >= 1) {
+					this.hscrolls[at].scrollLeft = left;
+				}
+			}
+		}
+		this.schedule();
 	}
 
 	private applyContent(): void {

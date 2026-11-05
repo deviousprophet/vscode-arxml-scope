@@ -48,7 +48,7 @@ class DiffView {
 - The fixed file-name strip sits above the shared `VirtualScroll` and never scrolls. It is one row split into two columns at the pane divider; each column shows the shortest distinguishing label with the full path in its tooltip. `Swap sides` swaps the columns.
 - One `VirtualScroll` owns the vertical surface and the offsets. It creates the two pane layers and
   the two `DocumentTreeView` windows; there is one vertical bar and one horizontal bar per pane. The
-  pane split stays fixed while each pane's content pans on its own bar.
+  pane split stays fixed and moving either horizontal bar pans both panes in sync.
 - Both panes render the same virtual row index from one shared offsets table. Header rows are the first virtual rows; they are padded to the longer side with blank rows so the first compared row starts at the same y.
 - Vertical and horizontal position belong to `VirtualScroll`. `Swap sides` resets horizontal only; vertical position is preserved.
 - Header rows are content: they scroll with the rows, use the document row shell and are searchable. One aligned header row is one search candidate with the combined left/right haystack.

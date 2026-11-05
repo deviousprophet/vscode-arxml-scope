@@ -63,10 +63,12 @@ export class DiffView {
 				}
 			],
 			{
-				onViewportChange: (viewport) => this.render(viewport, false)
+				onViewportChange: (viewport) => this.render(viewport, false),
+				syncHorizontal: true
 			}
 		);
 		this.scroll.mount();
+		this.syncScrollbarWidth();
 		this.left = new DocumentTreeView(this.scroll.getPane(0), 'left', {
 			onRender: () => {
 				if (this.callbacks.onRender) {
@@ -154,6 +156,16 @@ export class DiffView {
 
 	getWindowElement(): any {
 		return this.left ? this.left.getWindowElement() : undefined;
+	}
+
+	/** Match the fixed title strip's width to the vertical scrollbar's gutter. */
+	syncScrollbarWidth(): void {
+		const body = typeof document === 'undefined' ? undefined : document.getElementById('diff-body');
+		if (!body || !body.style) {
+			return;
+		}
+		const width = this.scroll ? this.scroll.verticalScrollbarWidth() : 0;
+		body.style.setProperty('--diff-scrollbar-width', width + 'px');
 	}
 
 	/** Swap resets horizontal only; the vertical position is preserved. */

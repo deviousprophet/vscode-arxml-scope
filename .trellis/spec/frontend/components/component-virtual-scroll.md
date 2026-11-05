@@ -38,6 +38,7 @@ interface VirtualScrollViewport {
 }
 interface VirtualScrollCallbacks {
     onViewportChange?(viewport: VirtualScrollViewport): void;
+    syncHorizontal?: boolean; // mirror every horizontal bar to the one that moved
 }
 class VirtualScroll {
     constructor(rootSelector: string, panes: readonly VirtualScrollPane[], callbacks?: VirtualScrollCallbacks);
@@ -81,8 +82,8 @@ class VirtualScroll {
 
 ## Behaviour
 
-- One vertical bar for the surface and one horizontal bar per pane; each horizontal bar moves only its
-  pane.
+- One vertical bar for the surface and one horizontal bar per pane. With `syncHorizontal`, the bars
+  mirror each other and both pane contents pan together; the docs view has a single bar.
 - Header rows and content rows share the same offsets; scrolling them out is ordinary content movement.
 - Dragging the vertical thumb maps linearly to the offsets, including variable-height rows.
 - A resize or content change recomputes the range; the current scroll offset is preserved unless the

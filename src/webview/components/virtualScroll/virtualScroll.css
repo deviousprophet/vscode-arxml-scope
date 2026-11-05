@@ -46,6 +46,7 @@
 .virtual-scroll-hbars {
 	position: relative;
 	flex: none;
+	width: calc(100% - var(--diff-scrollbar-width, 0px));
 	height: 12px;
 	min-height: 12px;
 }

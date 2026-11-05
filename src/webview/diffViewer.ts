@@ -299,6 +299,9 @@ function setDocument(next: any): void {
 	measureDiffWidth();
 	applyModels();
 	renderHeaders();
+	if (views) {
+		views.syncScrollbarWidth();
+	}
 	updateViewButtons();
 	if (searchQuery.trim() !== '') {
 		startSearch(searchQuery, currentMatchKey(), true);
@@ -1326,6 +1329,9 @@ document.addEventListener('keydown', onKeyDown);
 window.addEventListener('resize', function () {
 	measureHeights();
 	measureDiffWidth();
+	if (views) {
+		views.syncScrollbarWidth();
+	}
 	applyModels();
 	renderWindow(true);
 });

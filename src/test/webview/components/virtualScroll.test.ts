@@ -196,6 +196,39 @@ suite('VirtualScroll component', () => {
 		}
 	});
 
+	test('each pane has its own horizontal bar and offsets sync in diff mode', () => {
+		const h = harness();
+		try {
+			h.scroll.callbacks.syncHorizontal = true;
+			h.scroll.setContent({
+				rowCount: 2,
+				offsets: [0, 20, 40],
+				totalHeight: 40,
+				contentWidth: 500,
+				contentWidths: [500, 600]
+			});
+			assert.strictEqual(h.scroll.hspacer.style.values['width'], '500px');
+			assert.strictEqual(h.scroll.hspacers[1].style.values['width'], '600px');
+			h.scroll.getHorizontalBar(0).scrollLeft = 40;
+			h.scroll.getHorizontalBar(0).listeners['scroll']();
+			assert.strictEqual(h.scroll.getScrollLeft(0), 40);
+			assert.strictEqual(h.scroll.getScrollLeft(1), 40);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('verticalScrollbarWidth reports the reserved gutter', () => {
+		const h = harness();
+		try {
+			h.scroll.scroll.offsetWidth = 900;
+			h.scroll.scroll.clientWidth = 885;
+			assert.strictEqual(h.scroll.verticalScrollbarWidth(), 15);
+		} finally {
+			h.restore();
+		}
+	});
+
 	test('setContentWidth grows the horizontal spacer without rebuilding rows', () => {
 		const h = harness();
 		try {

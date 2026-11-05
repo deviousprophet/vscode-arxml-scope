@@ -24,6 +24,7 @@ suite('DiffView component', () => {
 			webviewCss('components', 'documentTree', 'documentTree.css') +
 			webviewCss('components', 'virtualScroll', 'virtualScroll.css');
 		assert.ok(/\.diff-title-strip\s*\{[^}]*display:\s*grid/.test(css));
+		assert.ok(/\.diff-title-strip\s*\{[^}]*width:\s*calc\(100% - var\(--diff-scrollbar-width/.test(css));
 		assert.ok(/\.diff-title-strip::after\s*\{[^}]*left:\s*50%/.test(css));
 		assert.ok(/\.diff-title-strip::after\s*\{[^}]*width:\s*3px/.test(css));
 		assert.ok(/\.virtual-scroll-pane-right\s*\{[^}]*border-left:\s*3px/.test(css));
@@ -78,6 +79,13 @@ suite('DiffView component', () => {
 			view.resetHorizontal();
 			assert.strictEqual(view.getScrollLeft(0), 0);
 			assert.strictEqual(view.getScrollLeft(1), 0);
+			Object.defineProperty(view.scroll.scroll, 'offsetWidth', { value: 900, configurable: true });
+			Object.defineProperty(view.scroll.scroll, 'clientWidth', { value: 885, configurable: true });
+			view.syncScrollbarWidth();
+			assert.strictEqual(
+				(dom.document.getElementById('diff-body') as HTMLElement).style.getPropertyValue('--diff-scrollbar-width'),
+				'15px'
+			);
 		} finally {
 			dom.restore();
 		}

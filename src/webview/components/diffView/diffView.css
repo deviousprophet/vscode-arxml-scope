@@ -114,6 +114,7 @@ body[data-page="diff"] .nav-btn:disabled {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 	flex: none;
+	width: calc(100% - var(--diff-scrollbar-width, 0px));
 	min-width: 0;
 	background: var(--vscode-editor-background);
 	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));

@@ -1156,6 +1156,14 @@ suite('semantic diff page', () => {
 					leftOffset = value;
 				}
 			});
+			let rightOffset = 0;
+			Object.defineProperty(rightBar, 'scrollLeft', {
+				configurable: true,
+				get: () => rightOffset,
+				set: (value: number) => {
+					rightOffset = value;
+				}
+			});
 			Object.defineProperty(leftBar, 'scrollWidth', { value: 500, configurable: true });
 			Object.defineProperty(leftBar, 'clientWidth', { value: 200, configurable: true });
 			leftBar.scrollLeft = 40;
@@ -1164,8 +1172,8 @@ suite('semantic diff page', () => {
 			const leftWindow = dom.document.querySelector('#diff-pane-left .document-tree-window') as HTMLElement;
 			const rightWindow = dom.document.querySelector('#diff-pane-right .document-tree-window') as HTMLElement;
 			assert.strictEqual(leftWindow.style.transform, 'translateX(-40px)');
-			assert.strictEqual(rightWindow.style.transform, 'translateX(0px)');
-			assert.strictEqual(rightBar.scrollLeft, 0);
+			assert.strictEqual(rightWindow.style.transform, 'translateX(-40px)');
+			assert.strictEqual(rightBar.scrollLeft, 40, 'the other pane bar follows');
 		} finally {
 			dom.restore();
 		}
