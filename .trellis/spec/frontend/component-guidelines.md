@@ -14,11 +14,11 @@ body (column)
     #main (flex: 1; overflow: hidden)  ← layout box only
       #tree.document-tree[role=tree]  ← one DocumentTreeView instance
         .document-tree-title-bar      file name (diff only; hidden in the editor)
-        .document-tree-scroll          native vertical + horizontal scroller
-          .document-tree-header        schema/package meta (scrolling content)
-          .document-tree-top           virtual spacer
-          .document-tree-window        visible rows + overscan
-          .document-tree-bottom        virtual spacer
+        .document-tree-header         schema/package meta (pinned)
+        .document-tree-scroll         native vertical + horizontal scroller
+          .document-tree-top          virtual spacer
+          .document-tree-window       visible rows + overscan
+          .document-tree-bottom       virtual spacer
     #sidebar-resizer (6px)            survives a re-scan
     #sidebar                          Details / Conditions tab panels
       #sbp-details > #inspector > section.sb-section#sb-details (one body)
@@ -27,10 +27,9 @@ body (column)
 ```
 
 - `DocumentTreeView` (`src/webview/components/documentTree/documentTreeView.ts`) is the single owner of
-  the optional title bar, the two-axis native scroller, the spacers and the rendered window. Only the
-  diff file name is pinned; the schema/package meta is the scroller's first content element and scrolls
-  with the rows. Both pages import the same class; the editor mounts one instance and the diff mounts
-  one per pane.
+  the optional title bar, the pinned meta strip, the two-axis native scroller, the spacers and the
+  rendered window. Both header strips stay above the scroller; only the rows scroll. Both pages import
+  the same class; the editor mounts one instance and the diff mounts one per pane.
 - The host supplies `{ rowCount, heightFn, renderRow(index, pane) }`. The component calls
   `calcVisibleRange` with overscan 10, writes spacer heights as `--document-tree-top` /
   `--document-tree-bottom` CSSOM properties, and skips the DOM write when the slice key is
@@ -344,11 +343,11 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 - **Both panes are `DocumentTreeView` instances.** The diff mounts one component per pane, shares the
   aligned `DiffDisplayRow` list and `heightFn`, and imports the same `documentTree.css` plus the
   `documentRows.ts` builders for nodes, annotations, braces and guides. Each component owns its title
-  bar, native scroller, spacers and virtual window. Only the file label is pinned; schema/package lines
-  are the scroller's first content and scroll away with the rows. Annotations and `{` / `}` rows follow
-  each side; colours, font, gutter, indentation and meta typography match Document. Only the status tint
-  and edge marker are diff-specific, and they sit on the cell without recolouring tokens. Status is an
-  optional render input; the editor never sets it.
+  bar, pinned meta, native scroller, spacers and virtual window. Both header strips stay above the
+  scroller; only the rows scroll. Annotations and `{` / `}` rows follow each side; colours, font, gutter,
+  indentation and meta typography match Document. Only the status tint and edge marker are diff-specific,
+  and they sit on the cell without recolouring tokens. Status is an optional render input; the editor
+  never sets it.
 - **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the window

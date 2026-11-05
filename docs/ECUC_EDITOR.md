@@ -29,8 +29,8 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
 - Modules, containers, parameters and references are emitted in display order.
 - A module label is the dotted definition path; a container shows its definition tail and short name;
   a parameter shows its name, `=`, value and quiet meta; a reference shows its name and target.
-- Schema and package information is the first content inside the rows scroller; it scrolls with the
-  document on both axes. The editor has no pinned file-name strip.
+- Schema and package information is a pinned strip above the rows; it stays visible while the
+  document scrolls. The editor has no pinned file-name strip.
 - Annotations appear as muted italic comment lines directly above their node. Selecting a container
   tints the annotation rows of its descendants; the annotation rows stay non-selectable and clicking
   one changes nothing.

@@ -33,10 +33,10 @@ compared, not just the bytes on disk.
 - The toolbar is icon-over-label: **Show all** / **Show diff** ÷ **Context** ÷ **Semantic** /
   **Strict** ÷ **Prev diff** / **Next diff**, with **Swap sides** centered over the pane divider and
   Search on the right. There is no changed/added/removed/renamed count in the page.
-- Each pane pins only its file name: the shortest distinguishing label, with the full path in its
-  tooltip. Schema and package lines are the first content inside each pane's scroller, so they scroll
-  away with the rows. The shorter pane's lines are padded so both panes start their rows at the same y,
-  and neither the pinned label nor the meta block is searched.
+- Each pane pins its file name and its schema/package block above the rows. Only the rows scroll,
+  so the first wheel notch or scrollbar pixel moves the row content immediately. The shorter pane's
+  meta lines are padded so both panes start their rows at the same y, and neither the pinned title nor
+  the meta block is searched.
 - Rows are aligned: a line that exists on only one side has a blank cell on the other side. There is no
   blank spacer row between modules; every row is one line high.
 - Annotations, braces and bracket guides follow each side of the comparison. Both panes use the same

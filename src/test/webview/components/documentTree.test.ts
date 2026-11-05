@@ -174,22 +174,24 @@ function harness(rowCount = 1000): Harness {
 }
 
 suite('DocumentTreeView component', () => {
-	test('the component owns root > titleBar + scroll > meta + spacers + window', () => {
+	test('the component owns root > titleBar + header + scroll > spacers + window', () => {
 		const h = harness();
 		try {
-			assert.strictEqual(h.root.children.length, 2, 'title strip and scroller');
+			assert.strictEqual(h.root.children.length, 3, 'title strip, meta strip and scroller');
 			const titleBar = h.root.children[0];
-			const scroll = h.root.children[1];
+			const header = h.root.children[1];
+			const scroll = h.root.children[2];
 			assert.strictEqual(titleBar.className, 'document-tree-title-bar');
 			assert.strictEqual(titleBar.children.length, 1, 'title slot');
 			assert.strictEqual(titleBar.hidden, true, 'the editor has no file-name strip');
+			assert.strictEqual(header.className, 'document-tree-header');
+			assert.strictEqual(header.children.length, 1, 'meta slot');
 			assert.strictEqual(scroll.className, 'document-tree-scroll');
-			assert.strictEqual(scroll.children.length, 4, 'meta, top spacer, window, bottom spacer');
-			assert.strictEqual(scroll.children[0].className, 'document-tree-header');
-			assert.ok(scroll.children[1].className.includes('document-tree-top'));
-			assert.strictEqual(scroll.children[2].className, 'document-tree-window');
-			assert.ok(scroll.children[3].className.includes('document-tree-bottom'));
-			assert.strictEqual((h.view as any).header, scroll.children[0], 'the meta block is scrolling content');
+			assert.strictEqual(scroll.children.length, 3, 'top spacer, window, bottom spacer');
+			assert.ok(scroll.children[0].className.includes('document-tree-top'));
+			assert.strictEqual(scroll.children[1].className, 'document-tree-window');
+			assert.ok(scroll.children[2].className.includes('document-tree-bottom'));
+			assert.strictEqual((h.view as any).header, header, 'the meta strip is pinned above the scroller');
 			assert.strictEqual((h.view as any).titleBar, titleBar);
 		} finally {
 			h.restore();
@@ -209,7 +211,7 @@ suite('DocumentTreeView component', () => {
 			const scroll = h.view.scroll as FakeElement;
 			assert.ok(!header.className.includes('treeitem'), 'the header is not a tree item');
 			assert.strictEqual(scroll.dataset.empty, 'false');
-			assert.strictEqual(scroll.children[0], header, 'the meta block is inside the scroller');
+			assert.strictEqual(scroll.children.length, 3, 'the scroller contains only spacers and the window');
 			// The render window only ever receives row elements, never the header.
 			assert.ok(!(h.view.getWindowElement() as FakeElement).children.includes(header));
 		} finally {
@@ -217,7 +219,7 @@ suite('DocumentTreeView component', () => {
 		}
 	});
 
-	test('the scrolling meta height shifts the rows offset in both directions', () => {
+	test('the pinned meta height does not shift the rows offset in either direction', () => {
 		const h = harness();
 		try {
 			const header = (h.view as any).header as FakeElement;
@@ -227,21 +229,35 @@ suite('DocumentTreeView component', () => {
 			scroll.scrollTop = 0;
 			assert.strictEqual(h.view.getRowsScrollTop(), 0, 'the meta is not a row offset');
 			h.view.setRowsScrollTop(200);
-			assert.strictEqual(scroll.scrollTop, 234, 'the meta height is added back');
+			assert.strictEqual(scroll.scrollTop, 200, 'only the scroll padding is added back');
 			assert.strictEqual(h.view.getRowsScrollTop(), 200, 'and subtracted again');
 		} finally {
 			h.restore();
 		}
 	});
 
-	test('scrollToIndex lands the row after the scrolling meta height', () => {
+	test('the first wheel pixels move the row offset without a meta dead zone', () => {
+		const h = harness();
+		try {
+			const header = (h.view as any).header as FakeElement;
+			header.offsetHeight = 34;
+			h.view.render(true);
+			const scroll = h.view.scroll as FakeElement;
+			scroll.scrollTop = 10;
+			assert.strictEqual(h.view.getRowsScrollTop(), 10, 'the pinned meta consumes no scroll distance');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('scrollToIndex lands the row at the native row offset', () => {
 		const h = harness();
 		try {
 			const header = (h.view as any).header as FakeElement;
 			header.offsetHeight = 34;
 			h.view.render(true);
 			h.view.scrollToIndex(500, 'start');
-			assert.strictEqual(h.view.getScrollTop(), 500 * 20 + 34, 'the meta stays above the row');
+			assert.strictEqual(h.view.getScrollTop(), 500 * 20, 'the pinned meta adds no offset');
 			assert.strictEqual(h.view.getRowsScrollTop(), 500 * 20);
 		} finally {
 			h.restore();

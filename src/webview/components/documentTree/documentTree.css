@@ -189,10 +189,12 @@ mark {
 	display: none;
 }
 .document-tree-header {
-	/* Schema/package meta is content inside the scroller; its bottom padding is
-	 * the gap to the first row and scrolls away with it. */
+	flex: none;
+	/* The schema/package meta is a pinned strip above the scroller; its bottom
+	 * padding is the gap to the rows and never consumes scroll distance. */
 	padding: 0 0 calc(var(--ecuc-lh) * 0.5);
 	margin: 0;
+	overflow: hidden;
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	line-height: var(--ecuc-lh);

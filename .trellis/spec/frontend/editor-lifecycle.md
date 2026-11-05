@@ -359,11 +359,11 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
    `hostSide` maps the displayed side back to the host's original side for reveal. The compared
    documents are not rebuilt and the vertical position is not reset. Swap resets horizontal offsets to
    zero in both panes.
-10. **The comparison chrome is split.** Only each diff pane's file name is pinned above that pane's
-    `.document-tree-scroll`; the schema/package block is the scroller's first content and scrolls away
-    with the rows. The meta height is measured for parity and participates in the row-offset math. Both
-    strips are presentation-only. The editor has no file-name strip; its meta block scrolls as ordinary
-    content. The diff adds no inter-module blank row: every diff row is exactly one base row high.
+10. **The comparison chrome is pinned.** Each diff pane pins its file name and its schema/package
+    block above that pane's `.document-tree-scroll`; only the rows scroll. The meta height is measured
+    for parity but is not part of the row-offset math, so the first wheel or drag pixel moves the rows.
+    Both strips are presentation-only. The editor pins the meta block but has no file-name strip. The
+    diff adds no inter-module blank row: every diff row is exactly one base row high.
 11. **The page owns view state.** Show all / Show diff, Prev diff / Next diff, selection, collapse,
     search and scroll survive a refresh. Search is Enter-only, chunked and cancellable; it never removes
     a row. `nextChangeIndex` wraps and skips unchanged or hidden rows. A changed row may render inline
@@ -419,9 +419,9 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
   vertical bar, native vertical driver with deferred follower render, horizontal mirror, swap reset,
   optional status, word-colour CSS and the absent module gap.
 - `src/test/webview/page/diffPage.test.ts` — toolbar both ways, search wiring, display projection,
-  reveal-side mapping, refresh state retention, pinned file name with scrolling meta and
-  non-searchability, changed-word runs in both panes, swapped colours, search overlap, added/removed
-  rows without word spans, unchanged rows, module height and no `data-gap`.
+  reveal-side mapping, refresh state retention, pinned file name and meta with non-searchability,
+  changed-word runs in both panes, swapped colours, search overlap, added/removed rows without word
+  spans, unchanged rows, module height and no `data-gap`.
 - `src/test/webview/page/search.test.ts` — Enter-only chunked search and count states.
 - Reveal is asserted through `reveal.test.ts` / `uxReveal.test.ts`; the source-level `beside` forcing
   is a regression guard, while the real panel behaviour is observed in the Extension Development Host.

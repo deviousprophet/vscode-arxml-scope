@@ -242,13 +242,21 @@ suite('semantic diff page', () => {
 			assert.ok(dom.document.querySelector('#diff-pane-left .document-tree-header'), 'each pane owns its meta');
 			const scroller = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
 			assert.ok(
-				scroller.firstElementChild!.className.includes('document-tree-header'),
-				'the scroller starts with the schema/package meta'
+				scroller.firstElementChild!.className.includes('document-tree-top'),
+				'the scroller starts with the top spacer'
 			);
 			const titleBar = dom.document.querySelector('#diff-pane-left > .document-tree-title-bar') as HTMLElement;
 			assert.ok(titleBar, 'the file name is pinned outside the scroller');
 			assert.strictEqual(titleBar.hidden, false, 'the diff pins the file name');
-			assert.strictEqual(dom.document.querySelector('#diff-pane-left > .document-tree-header'), null);
+			assert.ok(
+				dom.document.querySelector('#diff-pane-left > .document-tree-header'),
+				'the schema/package meta is pinned above the scroller'
+			);
+			assert.strictEqual(
+				scroller.querySelector('.document-tree-header'),
+				null,
+				'the meta is not part of the scrolled content'
+			);
 			assert.ok(
 				dom.document.querySelector('#diff-pane-left .document-tree-title')!.textContent === 'left.arxml'
 			);
