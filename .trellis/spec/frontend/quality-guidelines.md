@@ -197,7 +197,8 @@ that is not obvious from the code.
 - **Benchmarks are committed and CI-run.** `npm run benchmark` discovers
   `src/test/benchmarks/*Benchmark.ts`; the CT `Benchmarks` job and its summary read the JSON `_type`
   lines. A benchmark must stay headless (no `vscode`, no DOM) and synthetic. A benchmark is evidence,
-  not a performance promise.
+  not a performance promise: set hard limits well above observed shared-runner variance, because a
+  limit within that variance is a flaky gate rather than a regression guard.
 - **Packaging is verified from the VSIX, not the ignore file.** Before calling a config change done,
   run `npx @vscode/vsce ls` and confirm the listing matches the intended package: runtime `dist/`
   files, manifest, README/CHANGELOG/LICENSE, icons and the user `docs/`/`examples/`; no `src/`, `out/`,

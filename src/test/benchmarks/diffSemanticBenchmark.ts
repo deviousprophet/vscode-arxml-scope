@@ -1,12 +1,15 @@
 /**
  * Semantic-rename diff benchmark: many leftover containers with consistent
- * token renames. Guards the bucket-product cutoff and the 1.5 s budget.
+ * token renames. Guards the bucket-product cutoff and a 3 s budget.
  */
 import { performance } from 'node:perf_hooks';
 import type { EcucRow } from '../../core/ecuc/renderRows';
 import { buildDiffDocument } from '../../core/diff/diffModel';
 
-const MAX_STEP_MS = 1_500;
+// Shared CI runners measured 1.4-1.9 s for this corpus, so a 1.5 s line was
+// flaky. The real guard is the 250k bucket cut-off: without it this run takes
+// many seconds.
+const MAX_STEP_MS = 3_000;
 const MAX_RETAINED_BYTES = 512 * 1024 * 1024;
 
 function containerRow(id: string, parentId: string | null, shortName: string, definitionRef: string, children: number): EcucRow {
