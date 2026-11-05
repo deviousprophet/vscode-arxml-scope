@@ -1,2 +1,0 @@
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Red-check each new branch and run the offline core suites."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Forbidden-pattern audit before commit."}

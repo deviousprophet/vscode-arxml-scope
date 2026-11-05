@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Adding a field to three index records; reuse existing helpers instead of new modules."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Index record fields flow to the pure validation rules; keep the boundary clean."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No new dependency, no vscode import in core, no persisted cache."}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Every new assertion must fail when its branch is removed; synthetic fixtures only."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Optional index fields and numeric hash boundaries."}
