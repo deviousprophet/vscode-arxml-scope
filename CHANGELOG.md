@@ -5,17 +5,6 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Changed
-
-- Schema/package lines are document content in both the docs view and the diff: they scroll, search and receive focus like document rows, and are no longer a pinned strip
-- The diff uses one shared virtual-scroll surface with one vertical bar and one horizontal bar per pane; the bars scroll both panes in sync, the file name stays fixed above it, both panes render from the same precomputed offsets, and the pane split stays fixed. The first load shows an in-progress state instead of flashing `No differences`.
-
-### Fixed
-
-- ECUC validation no longer reports AUTOSAR split-file container copies as duplicate names, variant alternatives (`VARIATION-POINT`/`SW-SYSCOND`) as multiplicity violations, `WITH-AUTO` parameters as missing, or same-definition local merge copies as ambiguous references
-
 ## [0.7.0] - 2026-11-05
 
 ### Added
@@ -30,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The diff toolbar is now a grouped icon-over-label strip: **Show all** / **Show diff**, **Context**, **Semantic** / **Strict** and **Prev diff** / **Next diff**, with **Swap sides** centered over the pane divider and Search on the right
+- Schema and package lines are document content in both the docs and diff views: they scroll, search and receive focus like document rows instead of staying pinned
+- The diff uses one shared virtual-scroll surface with one vertical bar and one synchronized horizontal bar per pane; the file name stays fixed above it, the scrollbar thumb and drag match the rendered lines, and the title divider stays aligned with the pane split
+- The diff shows `Loading comparison…` until the first comparison arrives instead of flashing `No differences`
 
 ### Fixed
 
@@ -40,7 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Details** reports `N definitions found` when several definition bodies share a path instead of silently dropping the definition block
 - Added diff rows use the same bold leading edge as removed rows
 - The diff pane chevron and collapsed `{ ... }` marker follow the live `aria-expanded` state, and selection uses the same document-tree treatment in both panes
-- The diff file name and the schema/package block stay pinned above the rows; only the rows scroll vertically. Both diff panes scroll natively, the right pane hides its vertical scrollbar without reserving a gutter, and the follower pane renders on the next animation frame so the wheel step matches the editor
+- Validation no longer reports AUTOSAR split-file container copies as duplicate names or variant alternatives (`VARIATION-POINT`/`SW-SYSCOND`) as multiplicity violations
+- `WITH-AUTO` required children are no longer reported missing, and same-definition local merge copies resolve instead of appearing ambiguous
 
 ## [0.6.0] - 2026-11-03
 
