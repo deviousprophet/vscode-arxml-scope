@@ -110,15 +110,26 @@ body[data-page="diff"] .nav-btn:disabled {
 	min-height: 0;
 }
 .diff-title-strip {
-	display: flex;
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 	flex: none;
 	min-width: 0;
 	background: var(--vscode-editor-background);
 	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
+.diff-title-strip::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 50%;
+	width: 3px;
+	background: var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
+	pointer-events: none;
+}
 .diff-title-cell {
-	flex: 1 1 0;
 	min-width: 0;
 	padding: 0 10px;
 	overflow: hidden;
@@ -129,9 +140,6 @@ body[data-page="diff"] .nav-btn:disabled {
 	font-weight: 600;
 	line-height: 18px;
 	color: var(--vscode-editor-foreground);
-}
-.diff-title-cell + .diff-title-cell {
-	border-left: 3px solid var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
 }
 #diff-list {
 	flex: 1 1 auto;
@@ -295,6 +303,26 @@ body[data-page="diff"] .nav-btn:disabled {
 }
 .empty[hidden] {
 	display: none;
+}
+.empty[data-busy="true"] {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-style: normal;
+}
+.empty[data-busy="true"]::before {
+	content: '';
+	width: 10px;
+	height: 10px;
+	border: 1px solid var(--tok-dim);
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: diff-spin 0.8s linear infinite;
+}
+@keyframes diff-spin {
+	to {
+		transform: rotate(360deg);
+	}
 }
 .empty p {
 	margin: 0;

@@ -164,6 +164,21 @@ suite('editor bundled page', () => {
 		}
 	});
 
+	test('the docs view has one horizontal bar that scrolls the window', async () => {
+		const { dom } = mount();
+		try {
+			const bar = dom.document.querySelector('#tree .virtual-scroll-hscroll') as HTMLElement;
+			assert.ok(bar, 'the docs view owns one horizontal bar');
+			bar.scrollLeft = 40;
+			bar.dispatchEvent(new dom.window.Event('scroll'));
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			const windowEl = dom.document.querySelector('#tree-pane .document-tree-window') as HTMLElement;
+			assert.strictEqual(windowEl.style.transform, 'translateX(-40px)');
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('the row primitives carry the data the details panel needs, without model markup', () => {
 		const { dom } = mount();
 		try {

@@ -17,7 +17,7 @@ body (column)
           .virtual-scroll-content     height = precomputed content length
             .virtual-scroll-pane      one pane layer
               .document-tree-window   visible rows + overscan
-        .virtual-scroll-hscroll       one horizontal scrollbar
+        .virtual-scroll-hbars       one horizontal bar per pane
     #sidebar-resizer (6px)            survives a re-scan
     #sidebar                          Details / Conditions tab panels
       #sbp-details > #inspector > section.sb-section#sb-details (one body)
@@ -349,11 +349,12 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the fixed
   file-name strip shows the same shortest distinguishing suffix.
-- **One VirtualScroll owns both axes.** The diff has one vertical and one horizontal bar. Both panes
-  share the same offsets and horizontal offset; the pane split stays fixed. Wheel/scrollbar movement is
+- **One VirtualScroll owns the vertical surface; each pane owns its horizontal bar.** The diff has one
+  vertical bar and one horizontal bar per pane. Both panes share the same offsets and vertical position;
+  each horizontal bar moves only its pane and the pane split stays fixed. Wheel/scrollbar movement is
   native, and header rows and content rows move together. Content width is the longest rendered line
-  across both panes plus the Document gutter and slack, with no cap. Swap resets the horizontal offset
-  to zero and leaves the vertical position untouched.
+  per pane plus the Document gutter and slack, with no cap. Swap resets both horizontal offsets to zero
+  and leaves the vertical position untouched.
 - **Swap sides is display-only.** `displayLeft`/`displayRight`/`displayStatus` re-project the row,
   and `Enter` maps a displayed side back to the host's original side. The comparison documents are
   not recomputed and neither pane's vertical scroll is reset.

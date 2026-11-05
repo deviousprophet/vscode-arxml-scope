@@ -43,16 +43,37 @@
 	right: 0;
 	border-left: 3px solid var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
 }
-.virtual-scroll-hscroll {
+.virtual-scroll-hbars {
+	position: relative;
 	flex: none;
-	overflow-x: auto;
-	overflow-y: hidden;
 	height: 12px;
 	min-height: 12px;
+}
+.virtual-scroll-hbars[hidden] {
+	display: none;
+}
+.virtual-scroll-hscroll {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
 	scrollbar-gutter: stable;
 }
 .virtual-scroll-hscroll[hidden] {
 	display: none;
+}
+.virtual-scroll-hscroll-single {
+	left: 0;
+	right: 0;
+}
+.virtual-scroll-hscroll-left {
+	left: 0;
+	right: 50%;
+}
+.virtual-scroll-hscroll-right {
+	left: calc(50% + 3px);
+	right: 0;
 }
 .virtual-scroll-hspacer {
 	height: 1px;

@@ -49,6 +49,15 @@ body {
 	visibility: hidden;
 	pointer-events: none;
 }
+#tree-ch-probe {
+	position: absolute;
+	left: 0;
+	top: 0;
+	white-space: pre;
+	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+	font-size: var(--ecuc-fs);
+	font-weight: var(--vscode-editor-font-weight, normal);
+}
 @media (max-width: 720px) {
 	.grow {
 		display: none;

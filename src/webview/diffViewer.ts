@@ -152,6 +152,7 @@ let diffContent = 0;
 let headerRowCount = 0;
 let headerRows: Array<{ left?: { keyword: string; text: string }; right?: { keyword: string; text: string } }> = [];
 let views: DiffView | undefined;
+let loaded = false;
 function hasChanges() {
 	const summary = diffDocument.summary ?? { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
 	return summary.changed + summary.added + summary.removed > 0;
@@ -256,7 +257,8 @@ function applyModels() {
 		rowCount: headerRowCount + displayRows.length,
 		offsets: offsets,
 		totalHeight: totalHeightOf(offsets),
-		contentWidth: diffContent
+		contentWidth: diffContent,
+		contentWidths: [diffContent, diffContent]
 	});
 }
 function setDocument(next: any): void {
@@ -274,6 +276,7 @@ function setDocument(next: any): void {
 	}
 	diffDocument = next;
 	rows = next.rows;
+	loaded = true;
 	expandedGaps = new Set();
 	rowsRevision++;
 	subtreeCache = undefined;
@@ -791,8 +794,18 @@ function updateEmptyState() {
 	list.hidden = none;
 	empty.hidden = !none;
 	if (!none) {
+		delete empty.dataset.busy;
+		empty.removeAttribute('aria-busy');
 		return;
 	}
+	if (!loaded) {
+		empty.dataset.busy = 'true';
+		empty.setAttribute('aria-busy', 'true');
+		emptyText.textContent = 'Loading comparison…';
+		return;
+	}
+	delete empty.dataset.busy;
+	empty.removeAttribute('aria-busy');
 	emptyText.textContent = hasChanges() ? 'No rows.' : 'No differences';
 }
 function applyView() {
@@ -1466,6 +1479,7 @@ function resetDiffState(): void {
 	headerRowCount = 0;
 	headerRows = [];
 	views = undefined;
+	loaded = false;
 	searchQuery = '';
 	searchMatches = [];
 	searchIndex = -1;

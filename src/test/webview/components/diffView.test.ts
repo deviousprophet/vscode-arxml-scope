@@ -23,11 +23,13 @@ suite('DiffView component', () => {
 			webviewCss('components', 'diffView', 'diffView.css') +
 			webviewCss('components', 'documentTree', 'documentTree.css') +
 			webviewCss('components', 'virtualScroll', 'virtualScroll.css');
-		assert.ok(/\.diff-title-strip\s*\{[^}]*display:\s*flex/.test(css));
-		assert.ok(/\.diff-title-cell \+ \.diff-title-cell\s*\{[^}]*border-left:\s*3px/.test(css));
+		assert.ok(/\.diff-title-strip\s*\{[^}]*display:\s*grid/.test(css));
+		assert.ok(/\.diff-title-strip::after\s*\{[^}]*left:\s*50%/.test(css));
+		assert.ok(/\.diff-title-strip::after\s*\{[^}]*width:\s*3px/.test(css));
 		assert.ok(/\.virtual-scroll-pane-right\s*\{[^}]*border-left:\s*3px/.test(css));
 		assert.ok(/\.virtual-scroll-vscroll\s*\{[^}]*overflow-y:\s*auto/.test(css));
-		assert.ok(/\.virtual-scroll-hscroll\s*\{[^}]*overflow-x:\s*auto/.test(css));
+		assert.ok(/\.virtual-scroll-hbars\s*\{/.test(css));
+		assert.ok(/\.virtual-scroll-hscroll-right\s*\{[^}]*left:\s*calc\(50% \+ 3px\)/.test(css));
 		assert.ok(/\.diff-cell\s*\{[^}]*padding:\s*0;/.test(css));
 		assert.ok(/\.diff-row\[data-status="changed"\] > \.diff-cell/.test(css));
 		assert.ok(
@@ -68,9 +70,14 @@ suite('DiffView component', () => {
 			view.setScrollTop(20);
 			assert.strictEqual(view.getScrollTop(), 20);
 			view.setScrollLeft(30);
-			assert.strictEqual(view.getScrollLeft(), 30);
+			assert.strictEqual(view.getScrollLeft(0), 30);
+			assert.strictEqual(view.getScrollLeft(1), 0);
+			view.scroll?.setPaneScrollLeft(1, 15);
+			assert.strictEqual(view.getScrollLeft(0), 30);
+			assert.strictEqual(view.getScrollLeft(1), 15);
 			view.resetHorizontal();
-			assert.strictEqual(view.getScrollLeft(), 0);
+			assert.strictEqual(view.getScrollLeft(0), 0);
+			assert.strictEqual(view.getScrollLeft(1), 0);
 		} finally {
 			dom.restore();
 		}

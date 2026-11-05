@@ -363,7 +363,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
     the shared `VirtualScroll` and never scrolls. Each pane's schema/package lines are the first virtual
     rows: they scroll with the document, are searchable/focusable, and never change the ECUC selection.
     The shorter header is padded with blank rows so the first compared row aligns. One `VirtualScroll`
-    owns both axes and the offsets; there is one vertical and one horizontal bar, and the pane split
+    owns the vertical surface and the offsets; each pane has its own horizontal bar, and the pane split
     stays fixed. The diff adds no inter-module blank row: every diff row is exactly one base row high.
 11. **The page owns view state.** Show all / Show diff, Prev diff / Next diff, selection, collapse,
     search and scroll survive a refresh. Search is Enter-only, chunked and cancellable; it never removes
@@ -416,14 +416,14 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
   merged order, summary, visibility, flattening, next-change wrap, labels/title.
 - `src/test/core/wordDiff.test.ts` — tokenizer (whitespace, identifiers, one-character punctuation,
   hex literal, path slashes), LCS, empty sides and adjacent-segment merging.
-- `src/test/webview/components/diffView.test.ts` — fixed title strip, one VirtualScroll, two window
-  panes, shared content geometry, swap reset, header update, optional status, word-colour CSS and the
-  absent module gap.
-- `src/test/webview/page/diffPage.test.ts` — toolbar both ways, search wiring, display projection,
-  reveal-side mapping, refresh state retention, fixed file names outside the scroll surface, header
-  rows as content and search candidates, header padding, changed-word runs in both panes, swapped
-  colours, search overlap, added/removed rows without word spans, unchanged rows, module height and no
-  `data-gap`.
+- `src/test/webview/components/diffView.test.ts` — fixed title strip with an aligned divider, one
+  VirtualScroll, two window panes with per-pane horizontal bars, shared content geometry, swap reset,
+  header update, optional status, word-colour CSS and the absent module gap.
+- `src/test/webview/page/diffPage.test.ts` — loading state before the first document, toolbar both
+  ways, search wiring, display projection, reveal-side mapping, refresh state retention, fixed file
+  names outside the scroll surface, header rows as content and search candidates, header padding,
+  independent horizontal bars, changed-word runs in both panes, swapped colours, search overlap,
+  added/removed rows without word spans, unchanged rows, module height and no `data-gap`.
 - `src/test/webview/page/search.test.ts` — Enter-only chunked search and count states.
 - Reveal is asserted through `reveal.test.ts` / `uxReveal.test.ts`; the source-level `beside` forcing
   is a regression guard, while the real panel behaviour is observed in the Extension Development Host.

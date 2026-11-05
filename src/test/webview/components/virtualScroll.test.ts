@@ -129,7 +129,11 @@ suite('VirtualScroll component', () => {
 			assert.strictEqual(h.scroll.getPane(0).id, 'left');
 			assert.strictEqual(h.scroll.getPane(1).id, 'right');
 			assert.ok(h.root.children.some((child) => child.className === 'virtual-scroll-vscroll'));
-			assert.ok(h.root.children.some((child) => child.className === 'virtual-scroll-hscroll'));
+			assert.ok(h.root.children.some((child) => child.className === 'virtual-scroll-hbars'));
+			assert.ok(h.scroll.getHorizontalBar(0), 'left bar');
+			assert.ok(h.scroll.getHorizontalBar(1), 'right bar');
+			assert.strictEqual(h.scroll.getHorizontalBar(0).dataset.pane, '0');
+			assert.strictEqual(h.scroll.getHorizontalBar(1).dataset.pane, '1');
 		} finally {
 			h.restore();
 		}
@@ -142,6 +146,7 @@ suite('VirtualScroll component', () => {
 			h.scroll.setContent({ rowCount: 3, offsets: [0, 20, 40, 60], totalHeight: 60, contentWidth: 500 });
 			assert.strictEqual(h.scroll.getContentElement().style.values['height'], '60px');
 			assert.strictEqual(h.scroll.hspacer.style.values['width'], '500px');
+			assert.strictEqual(h.scroll.hspacers[1].style.values['width'], '500px');
 			h.scroll.setScrollTop(20);
 			assert.deepStrictEqual(h.scroll.getVisibleRange(), [0, 3]);
 		} finally {
@@ -157,8 +162,14 @@ suite('VirtualScroll component', () => {
 			h.scroll.setScrollTop(20);
 			assert.strictEqual(h.viewports[h.viewports.length - 1].top, 20);
 			h.scroll.setScrollLeft(30);
-			assert.strictEqual(h.scroll.getScrollLeft(), 30);
+			assert.strictEqual(h.scroll.getScrollLeft(0), 30);
+			assert.strictEqual(h.scroll.getScrollLeft(1), 0);
 			assert.strictEqual(h.viewports[h.viewports.length - 1].left, 30);
+			assert.deepStrictEqual(h.viewports[h.viewports.length - 1].lefts, [30, 0]);
+			h.scroll.setPaneScrollLeft(1, 15);
+			assert.strictEqual(h.scroll.getScrollLeft(0), 30);
+			assert.strictEqual(h.scroll.getScrollLeft(1), 15);
+			assert.deepStrictEqual(h.viewports[h.viewports.length - 1].lefts, [30, 15]);
 			h.scroll.scrollToIndex(2, 'start');
 			assert.strictEqual(h.scroll.getScrollTop(), 40);
 		} finally {
@@ -191,6 +202,7 @@ suite('VirtualScroll component', () => {
 			h.scroll.setContent({ rowCount: 1, offsets: [0, 20], totalHeight: 20, contentWidth: 100 });
 			h.scroll.setContentWidth(240);
 			assert.strictEqual(h.scroll.hspacer.style.values['width'], '240px');
+			assert.strictEqual(h.scroll.hspacers[1].style.values['width'], '240px');
 			assert.strictEqual(h.scroll.offsets.length, 2);
 		} finally {
 			h.restore();

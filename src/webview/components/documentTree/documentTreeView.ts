@@ -37,6 +37,8 @@ export interface DocumentTreeViewModel {
 export interface DocumentTreeViewport {
 	top: number;
 	left: number;
+	/** Per-pane horizontal offsets; `left` mirrors the first pane. */
+	lefts?: readonly number[];
 	height: number;
 	width: number;
 }
@@ -153,6 +155,10 @@ export class DocumentTreeView {
 			end +
 			':' +
 			total +
+			':' +
+			viewport.top +
+			':' +
+			viewport.left +
 			':' +
 			viewport.height +
 			':' +

@@ -43,7 +43,8 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
 
 Only the visible window is rendered. The page precomputes the row offsets, including the header rows
 and module gaps, so the scrollbar thumb and drag match the content; a scroll frame only renders the
-visible window. One virtual-scroll surface owns both axes, and the scrollbars are native.
+visible window. One virtual-scroll surface owns the vertical scroll and the row offsets; the docs view
+has one horizontal bar, and the scrollbars are native.
 
 ### Keyboard
 

@@ -231,6 +231,25 @@ suite('semantic diff page', () => {
 		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'));
 	});
 
+	test('shows an in-progress state until the first document arrives', () => {
+		const dom = installDom('diff');
+		try {
+			const module = loadModule<typeof import('../../../webview/diffViewer')>('../../webview/diffViewer');
+			module.mountDiff();
+			const empty = dom.document.getElementById('diff-empty') as HTMLElement;
+			assert.strictEqual(empty.hidden, false);
+			assert.strictEqual(empty.getAttribute('aria-busy'), 'true');
+			assert.strictEqual(dom.document.getElementById('diff-empty-text')!.textContent, 'Loading comparison…');
+			assert.ok(!(empty.textContent || '').includes('No differences'));
+			dom.post({ type: 'document', semantic: false, document: documentOf() });
+			assert.strictEqual(empty.hidden, true);
+			assert.strictEqual(empty.getAttribute('aria-busy'), null);
+			assert.strictEqual(empty.dataset.busy, undefined);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('boots from the static shell, announces ready and renders both panes', () => {
 		const { dom, document } = mount();
 		try {
@@ -1112,6 +1131,41 @@ suite('semantic diff page', () => {
 			assert.ok(rightRows[0].textContent!.includes('00048'));
 			assert.ok(leftRows[2].querySelector('.diff-header-cell[data-header-empty="true"]'), 'the left pad row is blank');
 			assert.ok(rightRows[2].textContent!.includes('PkgC'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('each pane owns an independent horizontal scrollbar', async () => {
+		const { dom } = mount();
+		try {
+			const leftBar = dom.document.querySelector(
+				'#diff-list .virtual-scroll-hscroll[data-pane="0"]'
+			) as HTMLElement;
+			const rightBar = dom.document.querySelector(
+				'#diff-list .virtual-scroll-hscroll[data-pane="1"]'
+			) as HTMLElement;
+			assert.ok(leftBar && rightBar, 'one bar per pane');
+			const leftSpacer = leftBar.querySelector('.virtual-scroll-hspacer') as HTMLElement;
+			assert.ok(Number.parseFloat(leftSpacer.style.width) > 40, 'the left bar has a scrollable extent');
+			let leftOffset = 0;
+			Object.defineProperty(leftBar, 'scrollLeft', {
+				configurable: true,
+				get: () => leftOffset,
+				set: (value: number) => {
+					leftOffset = value;
+				}
+			});
+			Object.defineProperty(leftBar, 'scrollWidth', { value: 500, configurable: true });
+			Object.defineProperty(leftBar, 'clientWidth', { value: 200, configurable: true });
+			leftBar.scrollLeft = 40;
+			leftBar.dispatchEvent(new dom.window.Event('scroll'));
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			const leftWindow = dom.document.querySelector('#diff-pane-left .document-tree-window') as HTMLElement;
+			const rightWindow = dom.document.querySelector('#diff-pane-right .document-tree-window') as HTMLElement;
+			assert.strictEqual(leftWindow.style.transform, 'translateX(-40px)');
+			assert.strictEqual(rightWindow.style.transform, 'translateX(0px)');
+			assert.strictEqual(rightBar.scrollLeft, 0);
 		} finally {
 			dom.restore();
 		}

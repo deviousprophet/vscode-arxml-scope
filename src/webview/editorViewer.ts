@@ -129,6 +129,7 @@ let searchFirstJumpDone = false;
 let windowRange: [number, number] = [0, 0];
 let renderedById = new Map<string, HTMLElement>();
 let heights = { document: 20 };
+let chWidth = 0;
 let heightFn: (index: number) => number = function () { return heights.document; };
 let typeAhead = { text: '', at: 0 };
 // VirtualScroll owns the scroll surface; this page owns the row model and state.
@@ -155,7 +156,30 @@ function buildHeightFn() {
 		return base + (carriesGroupGap(rows, displayRows, index - headerRowCount) ? base : 0);
 	};
 	offsets = buildOffsets(headerRowCount + displayRows.length, heightFn);
+	contentWidth = Math.max(contentWidth, estimateContentWidth());
 	syncTreeModel();
+}
+
+/** A deterministic lower bound for the horizontal content width. */
+function estimateContentWidth(): number {
+	if (chWidth <= 0) {
+		return 0;
+	}
+	let maxChars = 0;
+	for (const row of rows) {
+		let chars = row.label.length;
+		if (row.kind === 'parameter') {
+			chars += 3 + (row.shownValue === undefined ? 0 : row.shownValue.length);
+		}
+		for (const part of row.meta) {
+			chars += part.text.length + 1;
+		}
+		chars += Math.max(0, row.level - 1) * 4;
+		if (chars > maxChars) {
+			maxChars = chars;
+		}
+	}
+	return 26 + 8 + Math.ceil(maxChars * chWidth);
 }
 
 function setHeaderRows(header: DocumentTreeHeader | undefined): void {
@@ -207,6 +231,9 @@ function measureHeights() {
 	const element = measure.querySelector('.probe-doc > .row');
 	const measured = element ? element.getBoundingClientRect().height : 0;
 	heights = { document: measured > 0 ? measured : 20 };
+	const probe = measure.querySelector('#tree-ch-probe');
+	const probeWidth = probe ? probe.getBoundingClientRect().width : 0;
+	chWidth = probeWidth > 0 ? probeWidth / 100 : chWidth;
 	buildHeightFn();
 }
 
@@ -260,6 +287,7 @@ function setRows(nextRows: any, nextSelectedId?: string, nextHeader?: DocumentTr
 	if (nextHeader !== undefined) {
 		setHeaderRows(nextHeader);
 	}
+	contentWidth = 0;
 	rebuildDisplay();
 	measureHeights();
 	// A re-scan keeps the search and, when the row survived, the current match; the
@@ -1371,6 +1399,7 @@ function resetEditorState(): void {
 	windowRange = [0, 0];
 	renderedById = new Map();
 	heights = { document: 20 };
+	chWidth = 0;
 	heightFn = function () { return heights.document; };
 	typeAhead = { text: '', at: 0 };
 	virtualScroll = undefined;

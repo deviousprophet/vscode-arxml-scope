@@ -112,8 +112,9 @@ export class DiffView {
 	}
 
 	render(viewport: DocumentTreeViewport, force: boolean): void {
-		this.left.render(viewport, force);
-		this.right.render(viewport, force);
+		const lefts = viewport.lefts && viewport.lefts.length > 0 ? viewport.lefts : [viewport.left, viewport.left];
+		this.left.render({ ...viewport, left: lefts[0] ?? 0 }, force);
+		this.right.render({ ...viewport, left: lefts[1] ?? lefts[0] ?? 0 }, force);
 		if (this.callbacks.onViewportChange) {
 			this.callbacks.onViewportChange(viewport);
 		}
@@ -131,8 +132,8 @@ export class DiffView {
 		this.scroll?.setScrollLeft(left, defer);
 	}
 
-	getScrollLeft(): number {
-		return this.scroll ? this.scroll.getScrollLeft() : 0;
+	getScrollLeft(index = 0): number {
+		return this.scroll ? this.scroll.getScrollLeft(index) : 0;
 	}
 
 	getVisibleRange(): [number, number] {
@@ -157,7 +158,10 @@ export class DiffView {
 
 	/** Swap resets horizontal only; the vertical position is preserved. */
 	resetHorizontal(): void {
-		this.setScrollLeft(0);
+		if (this.scroll) {
+			this.scroll.setPaneScrollLeft(0, 0);
+			this.scroll.setPaneScrollLeft(1, 0);
+		}
 	}
 
 	private setTitle(element: any, header: DocumentTreeHeader): void {

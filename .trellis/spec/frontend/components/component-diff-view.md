@@ -38,6 +38,7 @@ class DiffView {
     setContentWidth(width: number): void;
     setScrollTop(top: number, defer?: boolean): void;
     setScrollLeft(left: number, defer?: boolean): void;
+    getScrollLeft(index?: number): number;
     resetHorizontal(): void;
 }
 ```
@@ -45,7 +46,9 @@ class DiffView {
 ## Rules
 
 - The fixed file-name strip sits above the shared `VirtualScroll` and never scrolls. It is one row split into two columns at the pane divider; each column shows the shortest distinguishing label with the full path in its tooltip. `Swap sides` swaps the columns.
-- One `VirtualScroll` owns both axes and the offsets. It creates the two pane layers and the two `DocumentTreeView` windows; there is one vertical and one horizontal bar. The pane split stays fixed while both pane contents pan together.
+- One `VirtualScroll` owns the vertical surface and the offsets. It creates the two pane layers and
+  the two `DocumentTreeView` windows; there is one vertical bar and one horizontal bar per pane. The
+  pane split stays fixed while each pane's content pans on its own bar.
 - Both panes render the same virtual row index from one shared offsets table. Header rows are the first virtual rows; they are padded to the longer side with blank rows so the first compared row starts at the same y.
 - Vertical and horizontal position belong to `VirtualScroll`. `Swap sides` resets horizontal only; vertical position is preserved.
 - Header rows are content: they scroll with the rows, use the document row shell and are searchable. One aligned header row is one search candidate with the combined left/right haystack.
@@ -83,13 +86,15 @@ class DiffView {
 
 ## Tests Required
 
-`src/test/webview/components/diffView.test.ts`: fixed title strip, one VirtualScroll, two window panes,
-shared content geometry, swap reset and header update, no host model access.
-`src/test/webview/page/diffPage.test.ts`: fixed file names outside the scroll surface, header rows as
-content and search candidates, header padding, changed-word runs in both panes, swapped colours, search
-overlap, no word spans on added/removed, unchanged rows, module height and no `data-gap`; selecting a
-container highlights the same subtree and annotation rows in both panes, a new selection drops the old
-subtree, and an added/removed row highlights only its owning pane.
+`src/test/webview/components/diffView.test.ts`: fixed title strip with an aligned divider, one
+VirtualScroll, two window panes with per-pane horizontal bars, shared content geometry, swap reset and
+header update, no host model access.
+`src/test/webview/page/diffPage.test.ts`: loading state before the first document, fixed file names
+outside the scroll surface, header rows as content and search candidates, header padding, independent
+horizontal bars, changed-word runs in both panes, swapped colours, search overlap, no word spans on
+added/removed, unchanged rows, module height and no `data-gap`; selecting a container highlights the
+same subtree and annotation rows in both panes, a new selection drops the old subtree, and an
+added/removed row highlights only its owning pane.
 `src/test/core/wordDiff.test.ts`: tokenizer, LCS, empty sides and segment merging.
 
 ## Anti-patterns

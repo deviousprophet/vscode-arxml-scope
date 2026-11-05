@@ -172,10 +172,11 @@ that is not obvious from the code.
   Context, divider, Semantic / Strict, divider, Prev/Next; Swap is centered over the pane divider;
   status and Search are on the right. Context is the only standalone toggle, default active at five
   lines and disabled in Show all. Every main button uses an inline icon over a small label.
-- **One virtual scroll owns the document.** `VirtualScroll` owns the vertical/horizontal bars and the
-  precomputed offsets; `DocumentTreeView` renders only the visible window. Header rows are ordinary
-  content rows and must not be pinned again. The diff keeps the file-name strip outside the scroll
-  surface; one shared offsets table drives both panes, and the pane split stays fixed horizontally.
+- **One virtual scroll owns the document.** `VirtualScroll` owns the vertical bar, the per-pane
+  horizontal bars and the precomputed offsets; `DocumentTreeView` renders only the visible window.
+  Header rows are ordinary content rows and must not be pinned again. The diff keeps the file-name
+  strip outside the scroll surface; one shared offsets table drives both panes, and the pane split
+  stays fixed horizontally.
 - **Diff-only gaps are expandable split lines.** `diffVisibility(rows, true, 5)` keeps five context
   rows; `flattenDiffDocument` turns the remaining hidden runs into `DiffGap` rows. A gap row is not a
   tree node: it must stay out of `displayIndexByKey`, `navigationVisible`, `F7` and search. The

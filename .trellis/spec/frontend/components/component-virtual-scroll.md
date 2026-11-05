@@ -14,7 +14,7 @@ viewport through one callback.
 ```text
 src/webview/components/virtualScroll/
     virtualScroll.ts       scroll surface + offsets + callbacks
-    virtualScroll.css      surface, pane layers and horizontal bar
+    virtualScroll.css      surface, pane layers and per-pane horizontal bars
 src/webview/editorViewer.ts / diffViewer.ts   composition roots
 src/test/webview/components/virtualScroll.test.ts
 ```
@@ -27,10 +27,12 @@ interface VirtualScrollContent {
     offsets: readonly number[];   // length rowCount + 1
     totalHeight: number;
     contentWidth: number;
+    contentWidths?: readonly number[]; // one per pane
 }
 interface VirtualScrollViewport {
     top: number;
-    left: number;
+    left: number;                 // mirrors pane 0
+    lefts?: readonly number[];    // per-pane horizontal offsets
     height: number;
     width: number;
 }
@@ -42,14 +44,18 @@ class VirtualScroll {
     mount(): void;
     setContent(content: VirtualScrollContent): void;
     setContentWidth(width: number): void;
+    setPaneContentWidth(index: number, width: number): void;
     getContentElement(): HTMLElement;
     getPane(index: number): HTMLElement | undefined;
+    getHorizontalBar(index: number): HTMLElement | undefined;
     getViewport(): VirtualScrollViewport;
+    getViewportFor(index: number): VirtualScrollViewport;
     getVisibleRange(): [number, number];
     setScrollTop(top: number, defer?: boolean): void;
     setScrollLeft(left: number, defer?: boolean): void;
+    setPaneScrollLeft(index: number, left: number, defer?: boolean): void;
     getScrollTop(): number;
-    getScrollLeft(): number;
+    getScrollLeft(index?: number): number;
     clientHeight(): number;
     clientWidth(): number;
     scrollToIndex(index: number, align?: 'auto' | 'start' | 'end'): void;
@@ -60,9 +66,9 @@ class VirtualScroll {
 
 ## Rules
 
-- Owns one vertical native scroller with a tall content element, one horizontal scrollbar and one pane
-  layer per pane. In the diff, the pane split stays fixed and both pane contents use the shared
-  horizontal offset.
+- Owns one vertical native scroller with a tall content element, one horizontal scrollbar per pane and
+  one pane layer per pane. In the diff, the pane split stays fixed and each pane has its own horizontal
+  offset; the vertical position and row offsets are shared.
 - `offsets` is the single geometry source, including header rows and variable heights. The visible
   range is a binary search; a scroll frame never walks row heights.
 - `setContent` updates `totalHeight`/`contentWidth`; the content element's height and the horizontal
@@ -75,7 +81,8 @@ class VirtualScroll {
 
 ## Behaviour
 
-- One vertical bar and one horizontal bar for the whole surface.
+- One vertical bar for the surface and one horizontal bar per pane; each horizontal bar moves only its
+  pane.
 - Header rows and content rows share the same offsets; scrolling them out is ordinary content movement.
 - Dragging the vertical thumb maps linearly to the offsets, including variable-height rows.
 - A resize or content change recomputes the range; the current scroll offset is preserved unless the
@@ -95,10 +102,12 @@ class VirtualScroll {
 ## Tests Required
 
 `src/test/webview/components/virtualScroll.test.ts`: mount, content height, visible range, scroll
-setters, row scroll-to, one coalesced frame, content-width growth.
-`src/test/webview/components/diffView.test.ts`: one surface, two panes, fixed title outside.
+setters, per-pane horizontal bars and independent offsets, row scroll-to, one coalesced frame,
+content-width growth.
+`src/test/webview/components/diffView.test.ts`: one surface, two panes, fixed title outside, aligned
+divider and per-pane bars.
 `src/test/webview/page/render.test.ts` / `diffPage.test.ts`: the docs/diff content windows follow the
-shared viewport.
+shared viewport; the diff shows the loading state until the first document.
 
 ## Anti-patterns
 

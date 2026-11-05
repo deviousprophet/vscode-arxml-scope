@@ -93,8 +93,8 @@ Rules:
 - `.virtual-scroll` is the component root; inside it, `.virtual-scroll-vscroll` is the native vertical
   scroller and the only vertical scroll container. Its content is `.virtual-scroll-content`, whose
   height is the precomputed content length; one `.virtual-scroll-pane` per view holds the absolutely
-  positioned `.document-tree-window`. The horizontal bar is `.virtual-scroll-hscroll` with a
-  `.virtual-scroll-hspacer` of the shared content width.
+  positioned `.document-tree-window`. The horizontal bars are `.virtual-scroll-hbars` with one
+  `.virtual-scroll-hscroll` per pane and a `.virtual-scroll-hspacer` of that pane's content width.
 - `.document-tree-window` is positioned at `offsets[start]`, sized to the rendered slice and translated
   by the shared horizontal offset. Its minimum width comes from `--document-tree-content-width`. Never
   set these as a `style` attribute in the markup.
@@ -139,7 +139,8 @@ Rules:
 
 - `#diff-body` is the flex column; the fixed `.diff-title-strip` sits above `#diff-list`, which mounts
   one `VirtualScroll` with two pane layers. Each pane mounts a `DocumentTreeView` window renderer, so
-  there is one vertical and one horizontal bar, and the pane split stays fixed. Header rows are the
+  there is one vertical bar and one horizontal bar per pane, and the pane split stays fixed. Header rows
+  are the
   first virtual rows; both panes pad the shorter header to the same line count and share one offsets
   table, so the first compared row starts at the same y.
 - Status is a tint on `.diff-row > .diff-cell[data-side="left|right"]`, driven by

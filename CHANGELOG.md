@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Schema/package lines are document content in both the docs view and the diff: they scroll, search and receive focus like document rows, and are no longer a pinned strip
-- The diff uses one shared virtual-scroll surface with one vertical and one horizontal bar; the file name stays fixed above it, both panes render from the same precomputed offsets, and the pane split stays fixed
+- The diff uses one shared virtual-scroll surface with one vertical bar and one horizontal bar per pane; the file name stays fixed above it, both panes render from the same precomputed offsets, and the pane split stays fixed. The first load shows an in-progress state instead of flashing `No differences`.
 
 ### Fixed
 
