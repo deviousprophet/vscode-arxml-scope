@@ -23,6 +23,8 @@ import {
 	buildDocumentNodeRow,
 } from './components/documentTree/documentRows';
 import { DocumentTreeView, DocumentTreeHeader } from './components/documentTree/documentTreeView';
+import { VirtualScroll } from './components/virtualScroll/virtualScroll';
+import { buildOffsets, totalHeightOf } from './render/virtualScroll';
 import {
 	GuideSegment,
 	collapsedIdsFor,
@@ -66,7 +68,7 @@ import {
 import { EditorToolbar } from './components/toolbar/toolbar';
 import { SearchBar } from './components/searchBar/searchBar';
 import { hideRowMenu, mountContextMenu } from './components/contextMenu/contextMenu';
-import { appendConditionTokens, setHighlightQuery } from './render/rowView';
+import { appendConditionTokens, appendHighlighted, setHighlightQuery } from './render/rowView';
 import { installConsoleErrors } from './render/pageError';
 import { postToHost, readPageState, resetVsCodeApi, writePageState } from './vscodeApi';
 import type { EditorDocumentHeader, EditorProviderToWebview } from '../webviewProtocol';
@@ -93,6 +95,25 @@ let subtreeIds = new Set<string>();
 let guideLevels: GuideSegment[][] = [];
 let hoveredGuideId: string | undefined;
 let focusId: string | undefined;
+
+interface EditorHeaderRow {
+	id: string;
+	keyword: 'schema' | 'package';
+	text: string;
+	haystack: string;
+}
+
+interface EditorSearchCandidate {
+	id: string;
+	haystack: string;
+	headerIndex?: number;
+}
+
+let headerRows: EditorHeaderRow[] = [];
+let headerRowCount = 0;
+let offsets: number[] = [0];
+let contentWidth = 0;
+let searchCandidates: EditorSearchCandidate[] = [];
 // Search is a jump control, not a visibility control: the whole row store is the
 // candidate set, and the collapsed set never removes a candidate. The query is
 // mirrored into the row primitives for the mark text.
@@ -110,8 +131,8 @@ let renderedById = new Map<string, HTMLElement>();
 let heights = { document: 20 };
 let heightFn: (index: number) => number = function () { return heights.document; };
 let typeAhead = { text: '', at: 0 };
-// The one Document surface. It owns the header, the native scroller, the
-// spacers and the rendered window; this page owns the row model and state.
+// VirtualScroll owns the scroll surface; this page owns the row model and state.
+let virtualScroll: VirtualScroll | undefined;
 let treeView: DocumentTreeView | undefined;
 let searchBar: SearchBar;
 let reportError: (text: string) => void = function () {};
@@ -128,9 +149,53 @@ function indexRows() {
 function buildHeightFn() {
 	const base = heights.document;
 	heightFn = function (index) {
-		return base + (carriesGroupGap(rows, displayRows, index) ? base : 0);
+		if (index < headerRowCount) {
+			return base;
+		}
+		return base + (carriesGroupGap(rows, displayRows, index - headerRowCount) ? base : 0);
 	};
+	offsets = buildOffsets(headerRowCount + displayRows.length, heightFn);
 	syncTreeModel();
+}
+
+function setHeaderRows(header: DocumentTreeHeader | undefined): void {
+	headerRows = [];
+	if (!header) {
+		headerRowCount = 0;
+		return;
+	}
+	if (header.schema) {
+		headerRows.push({
+			id: 'header:schema',
+			keyword: 'schema',
+			text: header.schema,
+			haystack: 'schema ' + header.schema
+		});
+	}
+	const packages = Array.isArray(header.packages) ? header.packages : [];
+	for (let at = 0; at < packages.length; at++) {
+		headerRows.push({
+			id: 'header:package:' + at,
+			keyword: 'package',
+			text: packages[at],
+			haystack: 'package ' + packages[at]
+		});
+	}
+	headerRowCount = headerRows.length;
+}
+
+function buildSearchCandidates(): void {
+	searchCandidates = [];
+	for (let at = 0; at < headerRows.length; at++) {
+		searchCandidates.push({
+			id: headerRows[at].id,
+			haystack: headerRows[at].haystack.toLowerCase(),
+			headerIndex: at
+		});
+	}
+	for (const row of rows) {
+		searchCandidates.push({ id: row.id, haystack: row.haystack });
+	}
 }
 
 function measureHeights() {
@@ -158,7 +223,7 @@ function rebuildDisplay() {
 		const flat = displayRows[at];
 		if (flat.type === 'node') {
 			const row = rows[flat.rowIndex];
-			displayIndexById.set(row.id, at);
+			displayIndexById.set(row.id, headerRowCount + at);
 			visibleNodeIds.push(row.id);
 			// Expansion is the display list's decision, carried on the row; the page
 			// must not re-derive it from neighbouring rows (see treeQuery.ts).
@@ -167,6 +232,7 @@ function rebuildDisplay() {
 			}
 		}
 	}
+	buildSearchCandidates();
 	buildHeightFn();
 }
 
@@ -191,11 +257,11 @@ function setRows(nextRows: any, nextSelectedId?: string, nextHeader?: DocumentTr
 		focusId = selectedId;
 	}
 	subtreeIds = new Set(subtreeRowIds(selectedId, rows));
+	if (nextHeader !== undefined) {
+		setHeaderRows(nextHeader);
+	}
 	rebuildDisplay();
 	measureHeights();
-	if (nextHeader !== undefined) {
-		applyHeader(nextHeader);
-	}
 	// A re-scan keeps the search and, when the row survived, the current match; the
 	// matches themselves are recomputed against the new row indices.
 	if (searchQuery.trim() !== '') {
@@ -207,16 +273,6 @@ function setRows(nextRows: any, nextSelectedId?: string, nextHeader?: DocumentTr
 		setSearchBusy(false);
 		renderSearchUi();
 	}
-}
-
-function applyHeader(header: DocumentTreeHeader | undefined): void {
-	if (!treeView) {
-		return;
-	}
-	treeView.setHeader({
-		schema: header && header.schema ? header.schema : undefined,
-		packages: header && Array.isArray(header.packages) ? header.packages : []
-	});
 }
 
 /** The host half of the component: the rows for one display index. */
@@ -235,8 +291,8 @@ function documentRowOptions(displayIndex: number): any {
 
 function treeModel() {
 	return {
-		rowCount: displayRows.length,
-		heightFn: heightFn,
+		rowCount: headerRowCount + displayRows.length,
+		offsets: offsets,
 		renderRow: renderRow
 	};
 }
@@ -244,6 +300,14 @@ function treeModel() {
 function syncTreeModel() {
 	if (treeView) {
 		treeView.setModel(treeModel());
+	}
+	if (virtualScroll) {
+		virtualScroll.setContent({
+			rowCount: headerRowCount + displayRows.length,
+			offsets: offsets,
+			totalHeight: totalHeightOf(offsets),
+			contentWidth: contentWidth
+		});
 	}
 }
 
@@ -268,12 +332,39 @@ function buildDisplayRow(flat: any, displayIndex: number): any {
 		: buildBraceRow(flat, displayIndex);
 }
 
+function buildHeaderRow(header: EditorHeaderRow, virtualIndex: number): any {
+	const row = document.createElement('div');
+	row.className = 'row document-tree-header-row';
+	row.setAttribute('role', 'presentation');
+	row.setAttribute('data-header-id', header.id);
+	row.tabIndex = -1;
+	const key = document.createElement('span');
+	key.className = 'keyword';
+	key.textContent = header.keyword;
+	row.appendChild(key);
+	row.appendChild(document.createTextNode(' '));
+	const value = document.createElement('span');
+	value.className = header.keyword === 'schema' ? 'number' : 'package';
+	appendHighlighted(value, header.text, searchQuery);
+	row.appendChild(value);
+	row.setAttribute('data-document-index', String(virtualIndex));
+	return row;
+}
+
 function renderRow(index: number): any {
-	const flat = displayRows[index];
-	return flat ? buildDisplayRow(flat, index) : document.createElement('div');
+	if (index < headerRowCount) {
+		const header = headerRows[index];
+		return header ? buildHeaderRow(header, index) : document.createElement('div');
+	}
+	const displayIndex = index - headerRowCount;
+	const flat = displayRows[displayIndex];
+	return flat ? buildDisplayRow(flat, displayIndex) : document.createElement('div');
 }
 
 function focusedNodeId() {
+	if (typeof document === 'undefined') {
+		return undefined;
+	}
 	const active = document.activeElement;
 	if (active && active.closest) {
 		const item = active.closest('#tree [role="treeitem"]') as HTMLElement | null;
@@ -317,13 +408,16 @@ function collectRendered() {
 }
 
 function renderWindow(force?: boolean): void {
-	hideRowMenu(false);
-	if (!treeView) {
+	if (typeof document === 'undefined' || !treeView || !virtualScroll) {
 		return;
 	}
+	hideRowMenu(false);
 	const previousFocus = focusedNodeId();
-	treeView.render(force === true);
-	windowRange = treeView.getVisibleRange();
+	treeView.render(virtualScroll.getViewport(), force === true);
+	windowRange = virtualScroll.getVisibleRange();
+	if (force === true) {
+		syncContentWidth();
+	}
 	const rovingId = resolveFocusId(
 		previousFocus,
 		Array.from(renderedById.keys()),
@@ -350,8 +444,22 @@ function expandAncestors(id: string): boolean {
 }
 
 function ensureVisible(displayIndex: number): void {
-	if (treeView) {
-		treeView.scrollToIndex(displayIndex);
+	if (virtualScroll) {
+		virtualScroll.scrollToIndex(displayIndex);
+	}
+}
+
+function syncContentWidth(): void {
+	const win = treeView ? treeView.getWindowElement() : undefined;
+	const measured = win && Number.isFinite(win.scrollWidth) ? win.scrollWidth : 0;
+	if (measured > contentWidth) {
+		contentWidth = measured;
+		if (treeView) {
+			treeView.setContentWidth(measured);
+		}
+		if (virtualScroll) {
+			virtualScroll.setContentWidth(measured);
+		}
 	}
 }
 
@@ -491,6 +599,12 @@ function onRowClick(event: any): void {
 	}
 	const item = event.target.closest('#tree [role="treeitem"]');
 	if (!item) {
+		// Header rows are text lines: focus them, but never select or open Details.
+		const header = event.target.closest('.document-tree-header-row');
+		if (header && typeof header.focus === 'function') {
+			header.tabIndex = 0;
+			header.focus({ preventScroll: true });
+		}
 		// Annotation rows are aria-hidden decoration: clicking one changes nothing.
 		return;
 	}
@@ -620,9 +734,8 @@ function renderedItemFor(id: string): HTMLElement | undefined {
 
 /** The row id at the current search position, or undefined when nothing is current. */
 function currentMatchId() {
-	const rowIndex = searchMatches[searchIndex];
-	const row = rowIndex === undefined ? undefined : rows[rowIndex];
-	return row ? row.id : undefined;
+	const candidate = searchCandidates[searchMatches[searchIndex]];
+	return candidate ? candidate.id : undefined;
 }
 
 /** The index of a row id in the current match list, or -1. */
@@ -630,8 +743,10 @@ function searchIndexOfId(id: string | undefined): number {
 	if (id === undefined) {
 		return -1;
 	}
-	const rowIndex = rowIndexById.get(id);
-	return rowIndex === undefined ? -1 : searchMatches.indexOf(rowIndex);
+	const candidateIndex = searchCandidates.findIndex(function (candidate) {
+		return candidate.id === id;
+	});
+	return candidateIndex < 0 ? -1 : searchMatches.indexOf(candidateIndex);
 }
 
 function setSearchBusy(busy: boolean): void {
@@ -659,7 +774,7 @@ function startSearch(query: string, previousId?: string, immediate?: boolean): v
 	renderSearchUi();
 	renderWindow(true);
 	searchEngine.search(
-		rows,
+		searchCandidates,
 		text,
 		{
 			onProgressUpdate: function (matches) {
@@ -729,11 +844,23 @@ function renderSearchUi() {
 
 /** Move to one match: expand ancestors, rebuild, scroll, select, keep focus in Search. */
 function jumpToSearchMatch(index: number): void {
-	const rowIndex = searchMatches[index];
-	if (rowIndex === undefined) {
+	const candidate = searchCandidates[searchMatches[index]];
+	if (!candidate) {
 		return;
 	}
-	const id = rows[rowIndex].id;
+	if (candidate.headerIndex !== undefined) {
+		ensureVisible(candidate.headerIndex);
+		renderWindow(true);
+		const element = treeView ? treeView.elementAt(candidate.headerIndex) : undefined;
+		if (element) {
+			element.tabIndex = 0;
+			element.focus({ preventScroll: true });
+		}
+		renderSearchUi();
+		searchBar.focus();
+		return;
+	}
+	const id = candidate.id;
 	if (expandAncestors(id)) {
 		rebuildDisplay();
 	}
@@ -816,11 +943,13 @@ function syncSearchToSelection(id: string): void {
 	if (searchQuery.trim() === '') {
 		return;
 	}
-	const rowIndex = rowIndexById.get(id);
-	if (rowIndex === undefined) {
+	const candidateIndex = searchCandidates.findIndex(function (candidate) {
+		return candidate.id === id;
+	});
+	if (candidateIndex < 0) {
 		return;
 	}
-	const at = searchMatches.indexOf(rowIndex);
+	const at = searchMatches.indexOf(candidateIndex);
 	if (at >= 0) {
 		searchIndex = at;
 		renderSearchUi();
@@ -1083,12 +1212,12 @@ export function handleEditorMessage(message: EditorProviderToWebview): void {
 	}
 	if (message.type === 'document') {
 		clearDetailsStatus();
-		const scrollTop = treeView ? treeView.getScrollTop() : 0;
+		const scrollTop = virtualScroll ? virtualScroll.getScrollTop() : 0;
 		const previousFocus = focusedNodeId() || focusId;
 		setRows(message.document.rows, message.document.selectedId, message.document.header);
 		renderWindow(true);
-		if (treeView) {
-			treeView.setScrollTop(scrollTop);
+		if (virtualScroll) {
+			virtualScroll.setScrollTop(scrollTop, true);
 		}
 		if (selectedId !== undefined && displayIndexById.has(selectedId)) {
 			focusId = selectedId;
@@ -1189,7 +1318,18 @@ searchBar = new SearchBar('', {
 	}
 });
 searchBar.mount();
-treeView = new DocumentTreeView('#tree', 'document', {
+virtualScroll = new VirtualScroll(
+	'#tree',
+	[{ id: 'tree-pane', className: 'document-tree-pane document-tree', role: 'presentation' }],
+	{
+		onViewportChange: function () {
+			renderWindow(false);
+		}
+	}
+);
+virtualScroll.mount();
+const treePane = virtualScroll.getPane(0);
+treeView = new DocumentTreeView(treePane, 'document', {
 	onRender: collectRendered
 });
 treeView.mount();
@@ -1218,6 +1358,11 @@ function resetEditorState(): void {
 	guideLevels = [];
 	hoveredGuideId = undefined;
 	focusId = undefined;
+	headerRows = [];
+	headerRowCount = 0;
+	offsets = [0];
+	contentWidth = 0;
+	searchCandidates = [];
 	searchQuery = '';
 	searchMatches = [];
 	searchIndex = -1;
@@ -1228,6 +1373,7 @@ function resetEditorState(): void {
 	heights = { document: 20 };
 	heightFn = function () { return heights.document; };
 	typeAhead = { text: '', at: 0 };
+	virtualScroll = undefined;
 	treeView = undefined;
 	resetVsCodeApi();
 	resetDetailsEditorState();

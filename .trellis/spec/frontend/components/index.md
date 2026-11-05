@@ -8,6 +8,7 @@ Component tests are flat under `src/test/webview/components/`.
 | Component | Source | Spec |
 |---|---|---|
 | DocumentTreeView | `src/webview/components/documentTree/` | [component-document-tree.md](./component-document-tree.md) |
+| VirtualScroll | `src/webview/components/virtualScroll/` | [component-virtual-scroll.md](./component-virtual-scroll.md) |
 | DiffView | `src/webview/components/diffView/` | [component-diff-view.md](./component-diff-view.md) |
 | Toolbar | `src/webview/components/toolbar/` | [component-toolbar.md](./component-toolbar.md) |
 | SearchBar | `src/webview/components/searchBar/` | [component-search-bar.md](./component-search-bar.md) |

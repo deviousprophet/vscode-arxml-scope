@@ -88,7 +88,11 @@ export function installMarkup(html: string): InstalledDom {
 	Object.defineProperty(window.HTMLElement.prototype, 'clientHeight', {
 		configurable: true,
 		get(this: any) {
-			if (this.id === 'tree' || this.classList?.contains('document-tree-scroll')) {
+			if (
+				this.id === 'tree' ||
+				this.classList?.contains('document-tree-scroll') ||
+				this.classList?.contains('virtual-scroll-vscroll')
+			) {
 				return VIEW_PORT_HEIGHT;
 			}
 			return Number(this.dataset?.testClientHeight ?? 0);
@@ -97,7 +101,11 @@ export function installMarkup(html: string): InstalledDom {
 	Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', {
 		configurable: true,
 		get(this: any) {
-			if (this.id === 'tree' || this.classList?.contains('document-tree-scroll')) {
+			if (
+				this.id === 'tree' ||
+				this.classList?.contains('document-tree-scroll') ||
+				this.classList?.contains('virtual-scroll-vscroll')
+			) {
 				return VIEW_PORT_WIDTH;
 			}
 			return Number(this.dataset?.testClientWidth ?? 0);

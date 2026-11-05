@@ -29,8 +29,9 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
 - Modules, containers, parameters and references are emitted in display order.
 - A module label is the dotted definition path; a container shows its definition tail and short name;
   a parameter shows its name, `=`, value and quiet meta; a reference shows its name and target.
-- Schema and package information is a pinned strip above the rows; it stays visible while the
-  document scrolls. The editor has no pinned file-name strip.
+- Schema and package information is the first content in the document. These lines scroll with the
+  rows, use the same row shell and are searchable and focusable, but they are not ECUC nodes: clicking
+  one never changes the selection or Details. The editor has no file-name strip.
 - Annotations appear as muted italic comment lines directly above their node. Selecting a container
   tints the annotation rows of its descendants; the annotation rows stay non-selectable and clicking
   one changes nothing.
@@ -40,8 +41,9 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
 - Selecting a container tints its visible subtree; syntax tokens keep their colours.
 - Long labels, values and metadata stay on one line and scroll horizontally.
 
-Only the visible window is rendered. Scrolling swaps two spacer heights and renders a small overscan
-window, so a large file stays responsive. The scrollbars are native, and both axes work.
+Only the visible window is rendered. The page precomputes the row offsets, including the header rows
+and module gaps, so the scrollbar thumb and drag match the content; a scroll frame only renders the
+visible window. One virtual-scroll surface owns both axes, and the scrollbars are native.
 
 ### Keyboard
 

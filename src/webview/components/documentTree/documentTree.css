@@ -167,79 +167,14 @@ mark {
 	background: var(--match-hi);
 }
 
-/* Document view: quiet source. One editor surface, a fixed fold gutter and
- * hover/focus affordances. The component root/scroll own the layout so the
- * editor and each diff pane share one geometry. */
+/* Document view: quiet source. The VirtualScroll surface owns the scroller;
+ * this component supplies the absolutely positioned row window. */
 .document-tree {
 	position: relative;
-	display: flex;
-	flex-direction: column;
-	flex: 1 1 auto;
 	min-width: 0;
 	min-height: 0;
 }
-.document-tree-title-bar {
-	flex: none;
-	overflow: hidden;
-	padding: 0 0 calc(var(--ecuc-lh) * 0.5);
-	background: var(--vscode-editor-background);
-	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
-}
-.document-tree-title-bar[hidden] {
-	display: none;
-}
-.document-tree-header {
-	flex: none;
-	/* The schema/package meta is a pinned strip above the scroller; its bottom
-	 * padding is the gap to the rows and never consumes scroll distance. */
-	padding: 0 0 calc(var(--ecuc-lh) * 0.5);
-	margin: 0;
-	overflow: hidden;
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--ecuc-fs);
-	line-height: var(--ecuc-lh);
-	white-space: pre;
-	color: var(--vscode-editor-foreground);
-}
-.document-tree-title {
-	padding: 0 10px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
-	font-size: 12px;
-	font-weight: 600;
-	line-height: 18px;
-	white-space: nowrap;
-}
-.document-tree-title[hidden] {
-	display: none;
-}
-.document-tree-meta {
-	padding-left: var(--content-pad);
-}
-.document-tree-meta .keyword {
-	color: var(--tok-keyword);
-}
-.document-tree-meta .number {
-	color: var(--tok-number);
-}
-.document-tree-meta .schema,
-.document-tree-meta .package {
-	font-family: inherit;
-	line-height: var(--ecuc-lh);
-}
-.document-tree-scroll {
-	position: relative;
-	flex: 1 1 auto;
-	min-width: 0;
-	min-height: 0;
-	overflow: auto;
-	box-sizing: border-box;
-	scrollbar-gutter: stable;
-	/* The window swaps spacer heights; browser scroll anchoring would fight the
-	 * virtual range and snap the viewport back to the top. */
-	overflow-anchor: none;
-	padding: 0 2ch calc(var(--ecuc-lh) * 3) 0;
+.document-tree-pane {
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	font-weight: var(--vscode-editor-font-weight, normal);
@@ -247,40 +182,28 @@ mark {
 	font-variant-ligatures: none;
 	tab-size: 4;
 	white-space: pre;
-}
-.document-tree-scroll[data-empty="true"] {
-	padding-top: 0;
-	padding-bottom: 0;
-}
-.document-tree-window {
-	display: flow-root;
-	min-width: var(--document-tree-content-width, 0px);
-}
-.document-tree-top {
-	height: var(--document-tree-top, 0px);
-}
-.document-tree-bottom {
-	height: var(--document-tree-bottom, 0px);
-}
-.v-spacer {
-	pointer-events: none;
-}
-body[data-view="document"] .document-tree-meta {
-	padding: 0 0 0 var(--content-pad);
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: var(--ecuc-fs);
-	line-height: var(--ecuc-lh);
 	color: var(--vscode-editor-foreground);
 }
-body[data-view="document"] .document-tree-meta .schema,
-body[data-view="document"] .document-tree-meta .package {
-	font-family: inherit;
+.document-tree-window {
+	position: absolute;
+	left: 0;
+	display: flow-root;
+	min-width: var(--document-tree-content-width, 0px);
+	white-space: pre;
 }
-body[data-view="document"] .document-tree-meta .keyword {
+.document-tree-header-row {
+	color: var(--vscode-editor-foreground);
+}
+.document-tree-header-row .keyword {
 	color: var(--tok-keyword);
 }
-body[data-view="document"] .document-tree-meta .number {
+.document-tree-header-row .number {
 	color: var(--tok-number);
+}
+.document-tree-header-row .schema,
+.document-tree-header-row .package {
+	font-family: inherit;
+	line-height: var(--ecuc-lh);
 }
 body[data-view="document"] .row {
 	background-color: transparent;
@@ -510,10 +433,6 @@ body[data-view="document"] .document-tree:focus-within .node[data-kind="paramete
 }
 body[data-view="document"] .node:focus-visible > .row {
 	box-shadow: inset 2px 0 0 var(--rail);
-}
-body[data-view="document"] .document-tree-scroll[data-empty="true"] {
-	padding-top: 0;
-	padding-bottom: 0;
 }
 
 @media (forced-colors: active) {

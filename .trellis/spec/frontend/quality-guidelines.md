@@ -172,9 +172,10 @@ that is not obvious from the code.
   Context, divider, Semantic / Strict, divider, Prev/Next; Swap is centered over the pane divider;
   status and Search are on the right. Context is the only standalone toggle, default active at five
   lines and disabled in Show all. Every main button uses an inline icon over a small label.
-- **Pane headers are fixed strips.** `DocumentTreeView` mounts `root > header + scroll`; the header
-  stays pinned and row offsets exclude it. Do not put the header back inside the scroller: it creates
-  a header-sized dead zone at the top of wheel and scrollbar movement.
+- **One virtual scroll owns the document.** `VirtualScroll` owns the vertical/horizontal bars and the
+  precomputed offsets; `DocumentTreeView` renders only the visible window. Header rows are ordinary
+  content rows and must not be pinned again. The diff keeps the file-name strip outside the scroll
+  surface; one shared offsets table drives both panes, and the pane split stays fixed horizontally.
 - **Diff-only gaps are expandable split lines.** `diffVisibility(rows, true, 5)` keeps five context
   rows; `flattenDiffDocument` turns the remaining hidden runs into `DiffGap` rows. A gap row is not a
   tree node: it must stay out of `displayIndexByKey`, `navigationVisible`, `F7` and search. The
@@ -188,8 +189,9 @@ that is not obvious from the code.
 - **Search runs on Enter through the chunked engine, never a synchronous full scan.** Typing only
   updates the field and the clear X; a changed query cancels the old run until Enter. `RowSearchEngine`
   scans 512 rows between clock checks with a 24 ms budget, a 120 ms debounce, a 150 ms progress
-  throttle and a generation token. The haystack is the label, value and every visible meta fragment,
-  so annotation, variant, condition and context text is searchable. The first streamed match is
+  throttle and a generation token. The haystack is the label, value, every visible meta fragment and
+  the schema/package header rows, so annotation, variant, condition, context and header text is
+  searchable. The first streamed match is
   jumped to; completion preserves the current row by id; later navigation only moves an index. Only
   rendered rows get `<mark>` elements. All matches use the fixed `--match-bg` tier; the current
   match's row adds `data-search-current` for `--match-hi`. Do not restore a synchronous `searchRows`

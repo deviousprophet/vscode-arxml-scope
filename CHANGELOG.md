@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Schema/package lines are document content in both the docs view and the diff: they scroll, search and receive focus like document rows, and are no longer a pinned strip
+- The diff uses one shared virtual-scroll surface with one vertical and one horizontal bar; the file name stays fixed above it, both panes render from the same precomputed offsets, and the pane split stays fixed
+
 ### Fixed
 
 - ECUC validation no longer reports AUTOSAR split-file container copies as duplicate names, variant alternatives (`VARIATION-POINT`/`SW-SYSCOND`) as multiplicity violations, `WITH-AUTO` parameters as missing, or same-definition local merge copies as ambiguous references

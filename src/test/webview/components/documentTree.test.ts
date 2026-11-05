@@ -1,17 +1,14 @@
 /**
- * The shared DocumentTreeView component.
+ * The shared Document window renderer.
  *
- * The test host has no webview DOM, so this suite drives the class with a tiny
- * fake element tree and the real virtual-scroll math. It pins the contract the
- * editor and the diff both depend on: one owner for the header/scroller/spacers,
- * a bounded window, a render key that skips unchanged slices, native scroll
- * setters and Shift+wheel.
+ * VirtualScroll owns the scroller and the offsets; this suite pins the window
+ * contract: position, slice, horizontal translation and row callbacks.
  */
 import * as assert from 'assert';
 
 import { DocumentTreeView } from '../../../webview/components/documentTree/documentTreeView';
+import { buildOffsets } from '../../../webview/render/virtualScroll';
 import { webviewCss } from '../cssTestUtils';
-import { calcRowOffset, calcTotalHeight, calcVisibleRange } from '../../../webview/render/virtualScroll';
 
 interface FakeElement {
 	name: string;
@@ -21,24 +18,22 @@ interface FakeElement {
 	tabIndex: number;
 	title: string;
 	dataset: Record<string, string>;
-	style: { values: Record<string, string>; setProperty(name: string, value: string): void };
+	style: { values: Record<string, string>; setProperty(name: string, value: string): void; [key: string]: any };
 	attributes: Record<string, string>;
 	listeners: Record<string, (event: unknown) => void>;
 	children: FakeElement[];
+	firstChild: FakeElement | undefined;
+	lastChild: FakeElement | undefined;
 	clientHeight: number;
 	clientWidth: number;
-	offsetHeight: number;
-	scrollHeight: number;
 	scrollWidth: number;
-	scrollTop: number;
-	scrollLeft: number;
 	classList: { add(): void; toggle(): void };
 	appendChild(child: FakeElement): FakeElement;
+	insertBefore(child: FakeElement, before: FakeElement): FakeElement;
+	removeChild(child: FakeElement): FakeElement;
 	setAttribute(name: string, value: string): void;
-	removeAttribute(name: string): void;
 	addEventListener(type: string, listener: (event: unknown) => void): void;
 	querySelector(): undefined;
-	querySelectorAll(): never[];
 	contains(): boolean;
 }
 
@@ -60,23 +55,46 @@ function element(name = 'div'): FakeElement {
 		attributes: {},
 		listeners: {},
 		children: [],
+		firstChild: undefined,
+		lastChild: undefined,
 		clientHeight: 0,
 		clientWidth: 0,
-		offsetHeight: 0,
-		scrollHeight: 0,
 		scrollWidth: 0,
-		scrollTop: 0,
-		scrollLeft: 0,
 		classList: { add() {}, toggle() {} },
 		appendChild(child: FakeElement) {
-			this.children.push(child);
+			if (child.name === 'fragment') {
+				for (const nested of child.children) {
+					this.children.push(nested);
+				}
+			} else {
+				this.children.push(child);
+			}
+			this.firstChild = this.children[0];
+			this.lastChild = this.children[this.children.length - 1];
+			return child;
+		},
+		insertBefore(child: FakeElement, before: FakeElement) {
+			const at = this.children.indexOf(before);
+			if (at < 0) {
+				this.children.push(child);
+			} else {
+				this.children.splice(at, 0, child);
+			}
+			this.firstChild = this.children[0];
+			this.lastChild = this.children[this.children.length - 1];
+			return child;
+		},
+		removeChild(child: FakeElement) {
+			const at = this.children.indexOf(child);
+			if (at >= 0) {
+				this.children.splice(at, 1);
+			}
+			this.firstChild = this.children[0];
+			this.lastChild = this.children[this.children.length - 1];
 			return child;
 		},
 		setAttribute(property: string, value: string) {
 			this.attributes[property] = value;
-		},
-		removeAttribute(property: string) {
-			delete this.attributes[property];
 		},
 		addEventListener(type: string, listener: (event: unknown) => void) {
 			this.listeners[type] = listener;
@@ -84,11 +102,8 @@ function element(name = 'div'): FakeElement {
 		querySelector() {
 			return undefined;
 		},
-		querySelectorAll() {
-			return [];
-		},
 		contains() {
-			return false;
+			return true;
 		}
 	};
 	return node;
@@ -97,23 +112,16 @@ function element(name = 'div'): FakeElement {
 interface Harness {
 	root: FakeElement;
 	view: DocumentTreeView;
-	created: number;
-	notified: Array<[number, number]>;
-	rendered: number;
+	rendered: number[];
+	ranges: Array<[number, number]>;
+	clicked: number[];
 	restore(): void;
 }
 
 function harness(rowCount = 1000): Harness {
 	const root = element();
 	const globals = globalThis as unknown as Record<string, unknown>;
-	const saved = {
-		document: globals.document,
-		requestAnimationFrame: globals.requestAnimationFrame,
-		getComputedStyle: globals.getComputedStyle,
-		calcVisibleRange: globals.calcVisibleRange,
-		calcTotalHeight: globals.calcTotalHeight,
-		calcRowOffset: globals.calcRowOffset
-	};
+	const saved = { document: globals.document };
 	globals.document = {
 		querySelector: () => root,
 		createElement: () => element(),
@@ -125,275 +133,119 @@ function harness(rowCount = 1000): Harness {
 		createDocumentFragment: () => element('fragment'),
 		activeElement: undefined
 	};
-	globals.requestAnimationFrame = (run: () => void) => {
-		run();
-		return 1;
-	};
-	globals.getComputedStyle = () => ({ paddingTop: '0px' });
-	globals.calcVisibleRange = calcVisibleRange;
-	globals.calcTotalHeight = calcTotalHeight;
-	globals.calcRowOffset = calcRowOffset;
-
-	const notified: Array<[number, number]> = [];
-	const view = new DocumentTreeView('#tree', 'document', {
-		onVisibleWindowChange(top: number, left: number) {
-			notified.push([top, left]);
+	const rendered: number[] = [];
+	const ranges: Array<[number, number]> = [];
+	const clicked: number[] = [];
+	const view = new DocumentTreeView(root, 'document', {
+		onRender(range) {
+			ranges.push(range);
+		},
+		onRowClick(index) {
+			clicked.push(index);
 		}
 	});
 	view.mount();
-	const scroll = view.scroll as FakeElement;
-	scroll.clientHeight = 100;
-	scroll.clientWidth = 200;
-	let rendered = 0;
 	view.setModel({
 		rowCount,
-		heightFn: () => 20,
-		renderRow() {
-			rendered++;
+		offsets: buildOffsets(rowCount, () => 20),
+		renderRow(index) {
+			rendered.push(index);
 			return element();
-		}
+		},
+		contentWidth: 500
 	});
 	const restore = () => {
 		globals.document = saved.document;
-		globals.requestAnimationFrame = saved.requestAnimationFrame;
-		globals.getComputedStyle = saved.getComputedStyle;
-		globals.calcVisibleRange = saved.calcVisibleRange;
-		globals.calcTotalHeight = saved.calcTotalHeight;
-		globals.calcRowOffset = saved.calcRowOffset;
 	};
-	return {
-		root,
-		view,
-		created: 0,
-		notified,
-		restore,
-		get rendered() {
-			return rendered;
-		}
-	};
+	return { root, view, rendered, ranges, clicked, restore };
 }
 
 suite('DocumentTreeView component', () => {
-	test('the component owns root > titleBar + header + scroll > spacers + window', () => {
+	test('mount creates the window inside the pane layer', () => {
 		const h = harness();
 		try {
-			assert.strictEqual(h.root.children.length, 3, 'title strip, meta strip and scroller');
-			const titleBar = h.root.children[0];
-			const header = h.root.children[1];
-			const scroll = h.root.children[2];
-			assert.strictEqual(titleBar.className, 'document-tree-title-bar');
-			assert.strictEqual(titleBar.children.length, 1, 'title slot');
-			assert.strictEqual(titleBar.hidden, true, 'the editor has no file-name strip');
-			assert.strictEqual(header.className, 'document-tree-header');
-			assert.strictEqual(header.children.length, 1, 'meta slot');
-			assert.strictEqual(scroll.className, 'document-tree-scroll');
-			assert.strictEqual(scroll.children.length, 3, 'top spacer, window, bottom spacer');
-			assert.ok(scroll.children[0].className.includes('document-tree-top'));
-			assert.strictEqual(scroll.children[1].className, 'document-tree-window');
-			assert.ok(scroll.children[2].className.includes('document-tree-bottom'));
-			assert.strictEqual((h.view as any).header, header, 'the meta strip is pinned above the scroller');
-			assert.strictEqual((h.view as any).titleBar, titleBar);
-		} finally {
-			h.restore();
-		}
-	});
-
-	test('the header is presentation-only: no row, no focus target, no search text', () => {
-		const h = harness();
-		try {
-			h.view.setHeader({ title: 'left.arxml', schema: '00048', packages: ['PkgA'], lines: 2 });
-			const header = (h.view as any).header as FakeElement;
-			const titleBar = (h.view as any).titleBar as FakeElement;
-			assert.strictEqual(header.attributes['role'], 'presentation');
-			assert.strictEqual(header.attributes['tabindex'], undefined, 'the header is not a tab stop');
-			assert.strictEqual(titleBar.hidden, false);
-			assert.strictEqual(titleBar.children[0].textContent, 'left.arxml');
-			const scroll = h.view.scroll as FakeElement;
-			assert.ok(!header.className.includes('treeitem'), 'the header is not a tree item');
-			assert.strictEqual(scroll.dataset.empty, 'false');
-			assert.strictEqual(scroll.children.length, 3, 'the scroller contains only spacers and the window');
-			// The render window only ever receives row elements, never the header.
-			assert.ok(!(h.view.getWindowElement() as FakeElement).children.includes(header));
-		} finally {
-			h.restore();
-		}
-	});
-
-	test('the pinned meta height does not shift the rows offset in either direction', () => {
-		const h = harness();
-		try {
-			const header = (h.view as any).header as FakeElement;
-			header.offsetHeight = 34;
-			h.view.render(true);
-			const scroll = h.view.scroll as FakeElement;
-			scroll.scrollTop = 0;
-			assert.strictEqual(h.view.getRowsScrollTop(), 0, 'the meta is not a row offset');
-			h.view.setRowsScrollTop(200);
-			assert.strictEqual(scroll.scrollTop, 200, 'only the scroll padding is added back');
-			assert.strictEqual(h.view.getRowsScrollTop(), 200, 'and subtracted again');
-		} finally {
-			h.restore();
-		}
-	});
-
-	test('the first wheel pixels move the row offset without a meta dead zone', () => {
-		const h = harness();
-		try {
-			const header = (h.view as any).header as FakeElement;
-			header.offsetHeight = 34;
-			h.view.render(true);
-			const scroll = h.view.scroll as FakeElement;
-			scroll.scrollTop = 10;
-			assert.strictEqual(h.view.getRowsScrollTop(), 10, 'the pinned meta consumes no scroll distance');
-		} finally {
-			h.restore();
-		}
-	});
-
-	test('scrollToIndex lands the row at the native row offset', () => {
-		const h = harness();
-		try {
-			const header = (h.view as any).header as FakeElement;
-			header.offsetHeight = 34;
-			h.view.render(true);
-			h.view.scrollToIndex(500, 'start');
-			assert.strictEqual(h.view.getScrollTop(), 500 * 20, 'the pinned meta adds no offset');
-			assert.strictEqual(h.view.getRowsScrollTop(), 500 * 20);
-		} finally {
-			h.restore();
-		}
-	});
-
-	test('a scroll render reuses the measured header height', () => {
-		const h = harness();
-		try {
-			const header = (h.view as any).header as FakeElement;
-			let reads = 0;
-			Object.defineProperty(header, 'offsetHeight', {
-				configurable: true,
-				get() {
-					reads++;
-					return 34;
-				}
-			});
-			h.view.render(true);
-			assert.strictEqual(h.view.headerHeight(), 34);
-			assert.strictEqual(reads, 1, 'the first measurement reads the header once');
-			h.view.setScrollTop(40);
-			h.view.setScrollTop(80);
-			h.view.render(false);
-			assert.strictEqual(h.view.headerHeight(), 34);
-			assert.strictEqual(reads, 1, 'scroll renders reuse the cached header height');
-			const scroll = h.view.scroll as FakeElement;
-			scroll.clientWidth = 260;
-			assert.strictEqual(h.view.headerHeight(), 34);
-			assert.strictEqual(reads, 2, 'a width change re-measures the header');
-			h.view.setHeader({ schema: '00048', packages: ['PkgA'] });
-			assert.strictEqual(h.view.headerHeight(), 34);
-			assert.strictEqual(reads, 3, 'setHeader invalidates the cache');
-		} finally {
-			h.restore();
-		}
-	});
-
-	test('the render key skips an unchanged slice and invalidate forces a rebuild', () => {
-		const h = harness();
-		try {
-			h.view.render(true);
-			const first = h.rendered;
-			assert.ok(first > 0 && first < 50, `only the viewport window is built (${first})`);
-			h.view.render(false);
-			assert.strictEqual(h.rendered, first, 'an unchanged slice does no DOM work');
-			h.view.invalidate();
-			h.view.render(false);
-			assert.strictEqual(h.rendered, first * 2, 'invalidate rebuilds the same slice once');
-		} finally {
-			h.restore();
-		}
-	});
-
-	test('the spacers preserve the full scroll height for a large row list', () => {
-		const h = harness(10000);
-		try {
-			h.view.render(true);
-			const scroll = h.view.scroll as FakeElement;
-			const state = {
-				rowCount: 10000,
-				rowHeight: () => 20,
-				containerHeight: 100,
-				scrollTop: 0,
-				bufferSize: 10,
-				heightVersion: 0
-			};
-			const [start, end] = calcVisibleRange(state);
-			assert.strictEqual(scroll.style.values['--document-tree-top'], Math.max(0, calcRowOffset(start, state)) + 'px');
+			assert.strictEqual(h.root.children.length, 1);
+			assert.strictEqual(h.root.children[0].className, 'document-tree-window');
+			assert.ok(h.root.listeners['click'], 'the pane owns the click listener');
 			assert.strictEqual(
-				scroll.style.values['--document-tree-bottom'],
-				Math.max(0, calcRowOffset(10000, state) - calcRowOffset(end, state)) + 'px'
+				h.view.getWindowElement().style.values['--document-tree-content-width'],
+				'500px'
 			);
-			assert.ok(h.rendered < 50, 'a 10k-row document renders only the visible window');
 		} finally {
 			h.restore();
 		}
 	});
 
-	test('scroll setters use the native offsets and report the visible window', () => {
+	test('render positions the window at the first row offset and renders the slice', () => {
 		const h = harness();
 		try {
-			h.view.setScrollTop(300);
-			assert.strictEqual(h.view.getScrollTop(), 300);
-			h.view.setScrollLeft(40);
-			assert.strictEqual(h.view.getScrollLeft(), 40);
-			h.view.scrollToIndex(500, 'start');
-			assert.strictEqual(h.view.getScrollTop(), 500 * 20, 'scrollToIndex aligns the row at the top');
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const windowEl = h.view.getWindowElement();
+			assert.strictEqual(windowEl.style.top, '300px', 'the first buffered row starts at 300px');
+			assert.strictEqual(windowEl.style.height, '500px', 'the window spans the rendered rows');
+			assert.deepStrictEqual(h.view.getVisibleRange(), [15, 40]);
+			assert.strictEqual(h.rendered.length, 25);
+			assert.strictEqual(h.rendered[0], 15);
+			assert.strictEqual(h.rendered[h.rendered.length - 1], 39);
+			assert.deepStrictEqual(h.ranges[h.ranges.length - 1], [15, 40]);
 		} finally {
 			h.restore();
 		}
 	});
 
-	test('Shift+wheel drives the native horizontal offset and reports it', () => {
+	test('the shared horizontal offset translates the window', () => {
 		const h = harness();
 		try {
-			const scroll = h.view.scroll as FakeElement;
-			scroll.scrollWidth = 2000;
-			scroll.clientWidth = 200;
-			let prevented = false;
-			h.view.onWheel({
-				shiftKey: true,
-				deltaY: 120,
-				deltaX: 0,
-				preventDefault() {
-					prevented = true;
-				}
-			});
-			assert.ok(prevented, 'Shift+wheel is claimed by the horizontal scroller');
-			assert.strictEqual(scroll.scrollLeft, 120);
-			assert.deepStrictEqual(h.notified[h.notified.length - 1], [0, 120], 'the host sees the new offset');
-			h.view.onWheel({ shiftKey: false, deltaY: 120, deltaX: 0, preventDefault() {} });
-			assert.strictEqual(scroll.scrollLeft, 120, 'a plain wheel stays vertical');
+			h.view.render({ top: 0, left: 40, height: 100, width: 800 });
+			assert.strictEqual(h.view.getWindowElement().style.transform, 'translateX(-40px)');
 		} finally {
 			h.restore();
 		}
 	});
 
-	test('the stylesheet is the one shared surface', () => {
-		const styles = webviewCss('components', 'documentTree', 'documentTree.css');
-		assert.ok(/\.document-tree-scroll\s*\{[^}]*overflow:\s*auto/.test(styles), 'native two-axis scroller');
-		assert.ok(/\.document-tree-scroll\s*\{[^}]*scrollbar-gutter:\s*stable/.test(styles), 'native bar keeps its height');
-		assert.ok(/\.document-tree-window\s*\{[^}]*min-width:\s*var\(--document-tree-content-width/.test(styles));
-		assert.ok(
-			/body\[data-view="document"\] \.comment\[data-subtree="true"\] > \.row\s*\{[^}]*background-color:\s*var\(--subtree-bg\)/.test(
-				styles
-			),
-			'the selected subtree tints annotation rows'
-		);
-		assert.ok(!/\.hscroll/.test(styles), 'no proxy scrollbar');
-		assert.ok(!/height:\s*12px/.test(styles), 'no clipped scrollbar strip');
-		assert.ok(
-			/^mark\s*\{[^}]*background:\s*var\(--match-bg\)/m.test(styles),
-			'a search mark keeps its background on both pages'
-		);
-		assert.ok(webviewCss('styles', 'tokens.css').includes('--container-accent: #4EC9B0'), 'shared tokens live in styles/');
-		assert.ok(styles.includes('body[data-view="document"] .row[data-level="3"]'));
+	test('an unchanged viewport skips the DOM render and a move forces a new slice', () => {
+		const h = harness(1000);
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const before = h.rendered.length;
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			assert.strictEqual(h.rendered.length, before, 'same viewport is a no-op');
+			h.view.render({ top: 520, left: 0, height: 100, width: 800 });
+			assert.ok(h.rendered.length > before, 'a moved viewport renders a new slice');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('clicking a row reports its virtual index', () => {
+		const h = harness();
+		try {
+			const row = element();
+			row.dataset.documentIndex = '3';
+			h.view.onClick({ target: { closest: () => row } });
+			assert.deepStrictEqual(h.clicked, [3]);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('an empty model clears the window', () => {
+		const h = harness(0);
+		try {
+			h.view.render({ top: 0, left: 0, height: 100, width: 800 });
+			assert.strictEqual(h.view.getWindowElement().style.top, '0px');
+			assert.strictEqual(h.view.getWindowElement().style.height, '0px');
+			assert.deepStrictEqual(h.view.getVisibleRange(), [0, 0]);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('the stylesheet owns the absolute window, not a scroller or pinned header', () => {
+		const css = webviewCss('components', 'documentTree', 'documentTree.css');
+		assert.ok(/\.document-tree-window\s*\{[^}]*position:\s*absolute/.test(css));
+		assert.ok(/\.document-tree-header-row\s*\{/.test(css));
+		assert.ok(!/\.document-tree-scroll\s*\{/.test(css));
+		assert.ok(!/\.document-tree-title-bar\s*\{/.test(css));
 	});
 });

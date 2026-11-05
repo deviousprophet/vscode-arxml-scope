@@ -4,16 +4,16 @@
 
 ## Scope / Trigger
 
-Owns `src/webview/components/diffView/` (`diffView.ts`, `diffViewRender.ts`, `diffView.css`): the
-50/50 pane grid, two `DocumentTreeView` instances, pane headers and synchronized vertical/horizontal
-offsets. `diffViewRender.ts` is the pure body markup; `diffView.ts` is the mount/sync controller. Host
-owns the diff model, view mode, selection, search, status and toolbar.
+Owns `src/webview/components/diffView/` (`diffView.ts`, `diffViewRender.ts`, `diffView.css`): the fixed
+file-name strip, one shared `VirtualScroll` and two `DocumentTreeView` window renderers. `diffViewRender.ts`
+is the pure body markup; `diffView.ts` is the mount/header/scroll controller. Host owns the diff model,
+view mode, selection, search, status and toolbar.
 
 ## Layout
 
 ```text
 src/webview/components/diffView/
-    diffView.ts          pane composition + sync controller
+    diffView.ts          fixed header + shared scroll composition
     diffViewRender.ts    pure page/body markup
     diffView.css         component styles
 src/webview/diffViewer.ts    composition root
@@ -24,34 +24,32 @@ src/test/webview/components/diffView.test.ts
 
 ```typescript
 interface DiffViewCallbacks {
-    onVisibleWindowChange?(pane: 'left' | 'right', top: number, left: number): void;
     onRowClick?(pane: 'left' | 'right', index: number, event: MouseEvent): void;
+    onRender?(pane: string): void;
+    onViewportChange?(viewport: DocumentTreeViewport): void;
 }
 class DiffView {
     constructor(callbacks?: DiffViewCallbacks);
     mount(): void;
-    syncPanes(pane: 'left' | 'right', top: number, left: number): void;
-    render(force: boolean): void;
+    render(viewport: DocumentTreeViewport, force: boolean): void;
     setModel(model: DocumentTreeViewModel): void;
+    setContent(content: VirtualScrollContent): void;
     setHeader(header: { left: DocumentTreeHeader; right: DocumentTreeHeader }): void;
     setContentWidth(width: number): void;
-    setScrollTop(top: number): void;
-    setScrollLeft(left: number): void;
+    setScrollTop(top: number, defer?: boolean): void;
+    setScrollLeft(left: number, defer?: boolean): void;
     resetHorizontal(): void;
 }
 ```
 
 ## Rules
 
-- Each pane owns a `DocumentTreeView`; no shared row DOM.
-- Vertical is synchronized: both panes scroll natively; the pane that scrolled is the driver and the follower copies the offset on the next animation frame. Only the left vertical scrollbar is visible; the right pane hides it without reserving a gutter.
-- Horizontal: each pane has its own bar; moving either mirrors both.
-- Swap resets horizontal offsets only; vertical position is preserved.
-- Pane headers are pinned in two strips: the file label and the schema/package block both sit above
-  the scroller; only the rows scroll. `header.lines` pads the shorter meta block so both panes start
-  their rows at the same height, and neither strip consumes wheel or scrollbar distance.
-- Every diff row is the base row height: the Document-only module gap and its `data-gap` marker are
-  not part of this surface.
+- The fixed file-name strip sits above the shared `VirtualScroll` and never scrolls. It is one row split into two columns at the pane divider; each column shows the shortest distinguishing label with the full path in its tooltip. `Swap sides` swaps the columns.
+- One `VirtualScroll` owns both axes and the offsets. It creates the two pane layers and the two `DocumentTreeView` windows; there is one vertical and one horizontal bar. The pane split stays fixed while both pane contents pan together.
+- Both panes render the same virtual row index from one shared offsets table. Header rows are the first virtual rows; they are padded to the longer side with blank rows so the first compared row starts at the same y.
+- Vertical and horizontal position belong to `VirtualScroll`. `Swap sides` resets horizontal only; vertical position is preserved.
+- Header rows are content: they scroll with the rows, use the document row shell and are searchable. One aligned header row is one search candidate with the combined left/right haystack.
+- Every diff row is the base row height: the Document-only module gap and its `data-gap` marker are not part of this surface.
 - Split line is 3px and diff-specific; the editor's resizer and pane sashes are 6px.
 - Status tint is diff-only; Document view never sets it.
 - A changed row may carry a word diff for the fields it displays (label, value/target, condition,
@@ -66,8 +64,8 @@ class DiffView {
 
 ## Behaviour
 
-- Both panes show the same aligned display row; each side renders its own node/brace/comment/blank.
-- Pane drivers mirror offsets without feedback loops.
+- Both panes show the same aligned display row; each side renders its own node/brace/comment/blank or header line.
+- Header rows do not change the ECUC selection or Details; search can focus and highlight them.
 - A changed row renders unchanged words normally and wraps changed runs in
   `.word-changed[data-word-side="left|right"]`; changed runs still go through the field writer, so
   condition token colours and search marks survive. Only rendered rows compute word pairs.
@@ -77,21 +75,21 @@ class DiffView {
 | Condition | Behaviour |
 |---|---|
 | One-sided row | Opposite cell blank, row stays aligned |
-| Swap | Header/value/reveal sides flip, horizontal resets, vertical holds |
-| Large diff | Both panes virtualize independently |
+| Swap | Header columns and pane sides flip, horizontal resets, vertical holds |
+| Large diff | One shared scroll window; both panes virtualized by the same offsets |
+| Header line count differs | Blank rows pad the shorter side, first compared row aligns |
 | Added/removed row | Full-cell tint, no word spans |
 | Search match inside a changed word | `<mark>` background inside the outlined word span |
 
 ## Tests Required
 
-`src/test/webview/components/diffView.test.ts`: two scrollers, single visible vertical bar, native
-vertical driver with deferred follower render, horizontal mirror, swap reset, header parity, status
-optional, word-colour CSS, no module-gap CSS.
-`src/test/webview/page/diffPage.test.ts`: the file name and schema/package meta are pinned above the
-scroller and not searchable, changed-word runs in both panes, swapped colours, search overlap, no word
-spans on added/removed, unchanged rows, module height and no `data-gap`; selecting a container
-highlights the same subtree and annotation rows in both panes, a new selection drops the old subtree,
-and an added/removed row highlights only its owning pane.
+`src/test/webview/components/diffView.test.ts`: fixed title strip, one VirtualScroll, two window panes,
+shared content geometry, swap reset and header update, no host model access.
+`src/test/webview/page/diffPage.test.ts`: fixed file names outside the scroll surface, header rows as
+content and search candidates, header padding, changed-word runs in both panes, swapped colours, search
+overlap, no word spans on added/removed, unchanged rows, module height and no `data-gap`; selecting a
+container highlights the same subtree and annotation rows in both panes, a new selection drops the old
+subtree, and an added/removed row highlights only its owning pane.
 `src/test/core/wordDiff.test.ts`: tokenizer, LCS, empty sides and segment merging.
 
 ## Anti-patterns

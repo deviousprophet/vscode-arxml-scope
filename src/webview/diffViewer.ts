@@ -17,7 +17,7 @@ import {
 } from '../core/diff/diffModel';
 import { diffWords, type WordPair } from '../core/diff/wordDiff';
 import type { MetaPart } from '../core/ecuc/renderRows';
-import { calcRowOffset, calcVisibleRange } from './render/virtualScroll';
+import { buildOffsets, totalHeightOf } from './render/virtualScroll';
 import {
 	buildDocumentBraceRow,
 	buildDocumentCommentRow,
@@ -30,7 +30,7 @@ import type { DocumentTreeHeader } from './components/documentTree/documentTreeV
 import { DiffToolbar } from './components/toolbar/toolbar';
 import { SearchBar } from './components/searchBar/searchBar';
 import { RowSearchEngine } from './render/rowSearch';
-import { setHighlightQuery } from './render/rowView';
+import { appendHighlighted, setHighlightQuery } from './render/rowView';
 import { installNoticeErrors } from './render/pageError';
 import { postToHost, resetVsCodeApi } from './vscodeApi';
 import type { DiffProviderToWebview } from '../diffProtocol';
@@ -109,7 +109,12 @@ let searchMatches: string[] = [];
 let searchIndex = -1;
 let searchRunning = false;
 let searchFirstJumpDone = false;
-let searchCandidates: DiffRow[] = [];
+interface DiffSearchCandidate {
+	key: string;
+	haystack: string;
+}
+
+let searchCandidates: DiffSearchCandidate[] = [];
 let showChangesOnly = false;
 let swapped = false;
 let diffDocument: DiffDocument = {
@@ -142,8 +147,10 @@ let windowRange: [number, number] = [0, 0];
 let renderedByKey = new Map<string, HTMLElement>();
 let heights = { row: 20 };
 let heightFn: (index: number) => number = function () { return heights.row; };
+let offsets: number[] = [0];
 let diffContent = 0;
-let headerLineCount = 0;
+let headerRowCount = 0;
+let headerRows: Array<{ left?: { keyword: string; text: string }; right?: { keyword: string; text: string } }> = [];
 let views: DiffView | undefined;
 function hasChanges() {
 	const summary = diffDocument.summary ?? { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
@@ -175,6 +182,7 @@ function buildHeightFn() {
 	heightFn = function () {
 		return base;
 	};
+	offsets = buildOffsets(headerRowCount + displayRows.length, heightFn);
 }
 function rebuildDisplay() {
 	displayRows = flattenDiffDocument(rows, {
@@ -190,7 +198,7 @@ function rebuildDisplay() {
 			continue;
 		}
 		const row = rows[flat.rowIndex];
-		displayIndexByKey.set(row.key, at);
+		displayIndexByKey.set(row.key, headerRowCount + at);
 		navigationVisible[flat.rowIndex] = true;
 	}
 	if (!hasChanges()) {
@@ -202,19 +210,39 @@ function rebuildDisplay() {
 	}
 	buildHeightFn();
 }
+function headerLines(header: any): Array<{ keyword: string; text: string }> {
+	const value = headerOf(header);
+	const out: Array<{ keyword: string; text: string }> = [];
+	if (value.schema) {
+		out.push({ keyword: 'schema', text: value.schema });
+	}
+	for (const pkg of Array.isArray(value.packages) ? value.packages : []) {
+		out.push({ keyword: 'package', text: pkg });
+	}
+	return out;
+}
+function buildHeaderRows(): void {
+	const left = headerLines(swapped ? diffDocument.rightHeader : diffDocument.leftHeader);
+	const right = headerLines(swapped ? diffDocument.leftHeader : diffDocument.rightHeader);
+	const count = Math.max(left.length, right.length);
+	headerRows = [];
+	for (let at = 0; at < count; at++) {
+		headerRows.push({ left: left[at], right: right[at] });
+	}
+	headerRowCount = headerRows.length;
+}
 function renderHeaders() {
 	const headers = diffPaneHeaders(diffDocument, swapped);
-	headerLineCount = headers.left.lines ?? 0;
+	buildHeaderRows();
 	if (!views) {
 		return;
 	}
-	views.left.setHeader(headers.left);
-	views.right.setHeader(headers.right);
+	views.setHeader(headers);
 }
 function paneModel() {
 	return {
-		rowCount: displayRows.length,
-		heightFn: heightFn,
+		rowCount: headerRowCount + displayRows.length,
+		offsets: offsets,
 		renderRow: renderRow,
 		contentWidth: diffContent
 	};
@@ -223,8 +251,13 @@ function applyModels() {
 	if (!views) {
 		return;
 	}
-	views.left.setModel(paneModel());
-	views.right.setModel(paneModel());
+	views.setModel(paneModel());
+	views.setContent({
+		rowCount: headerRowCount + displayRows.length,
+		offsets: offsets,
+		totalHeight: totalHeightOf(offsets),
+		contentWidth: diffContent
+	});
 }
 function setDocument(next: any): void {
 	if (!next || !Array.isArray(next.rows)) {
@@ -253,6 +286,7 @@ function setDocument(next: any): void {
 	if (focusKey !== undefined && !rowByKey.has(focusKey)) {
 		focusKey = selectedKey;
 	}
+	buildHeaderRows();
 	refreshVisibility();
 	rebuildDisplay();
 	// The empty/rows layout has to be in step before measuring; a still-hidden
@@ -297,8 +331,7 @@ function measureDiffWidth() {
 	}
 	diffContent = diffContentWidth(maxChars, chWidth);
 	if (views) {
-		views.left.setContentWidth(diffContent);
-		views.right.setContentWidth(diffContent);
+		views.setContentWidth(diffContent);
 	}
 }
 function selectedSubtreeIds(): Set<string> {
@@ -429,8 +462,46 @@ function wordDiffForRow(row: DiffRow): DocumentWordDiff | undefined {
 		meta,
 	};
 }
+function renderHeaderRow(index: number, pane: string): any {
+	const side = pane === 'left' ? 'left' : 'right';
+	const header = headerRows[index];
+	const line = header ? (side === 'left' ? header.left : header.right) : undefined;
+	const element = document.createElement('div');
+	element.className = 'diff-row diff-header-row';
+	element.dataset.side = side;
+	element.dataset.key = 'header:' + index;
+	element.setAttribute('role', 'presentation');
+	element.tabIndex = -1;
+	const cell = document.createElement('div');
+	cell.className = 'diff-cell diff-header-cell';
+	cell.dataset.side = side;
+	if (line) {
+		const row = document.createElement('div');
+		row.className = 'row document-tree-header-row';
+		const key = document.createElement('span');
+		key.className = 'keyword';
+		key.textContent = line.keyword;
+		row.appendChild(key);
+		row.appendChild(document.createTextNode(' '));
+		const value = document.createElement('span');
+		value.className = line.keyword === 'schema' ? 'number' : 'package';
+		appendHighlighted(value, line.text, searchQuery);
+		row.appendChild(value);
+		cell.appendChild(row);
+		if (searchQuery.trim() !== '' && currentMatchKey() === element.dataset.key) {
+			element.dataset.searchCurrent = 'true';
+		}
+	} else {
+		cell.dataset.headerEmpty = 'true';
+	}
+	element.appendChild(cell);
+	return element;
+}
 function renderRow(index: number, pane: string): any {
-	const flat = displayRows[index];
+	if (index < headerRowCount) {
+		return renderHeaderRow(index, pane);
+	}
+	const flat = displayRows[index - headerRowCount];
 	const element = document.createElement('div');
 	element.className = 'diff-row';
 	if (!flat) {
@@ -555,6 +626,9 @@ function renderRow(index: number, pane: string): any {
 	return element;
 }
 function focusedKey() {
+	if (typeof document === 'undefined') {
+		return undefined;
+	}
 	const active = document.activeElement;
 	if (active && active.closest) {
 		const item = active.closest('[data-key]') as HTMLElement | null;
@@ -600,6 +674,9 @@ function refocus(key: string | undefined): void {
 	element.focus({ preventScroll: true });
 }
 function renderWindow(force?: boolean): void {
+	if (typeof document === 'undefined') {
+		return;
+	}
 	// Keep the list's layout state in step with the row list before the
 	// component measures its scroll region.
 	list.hidden = displayRows.length === 0;
@@ -607,9 +684,9 @@ function renderWindow(force?: boolean): void {
 		return;
 	}
 	const previousFocus = focusedKey();
-	views.left.render(force === true);
-	views.right.render(force === true);
-	windowRange = views.left.getVisibleRange();
+	const viewport = views.scroll ? views.scroll.getViewport() : { top: 0, left: 0, height: 0, width: 0 };
+	views.render(viewport, force === true);
+	windowRange = views.getVisibleRange();
 	let rovingKey = previousFocus;
 	if (rovingKey === undefined || !renderedByKey.has(rovingKey)) {
 		rovingKey = focusKey !== undefined && renderedByKey.has(focusKey) ? focusKey : selectedKey;
@@ -629,60 +706,57 @@ function ensureVisible(displayIndex: number): void {
 	if (!views) {
 		return;
 	}
-	views.left.scrollToIndex(displayIndex);
-	// The sync callback runs on the next scroll event; copy now so a focus or
-	// reveal shows the same window in both panes immediately.
-	views.right.setScrollTop(views.left.getScrollTop());
+	views.scrollToIndex(displayIndex);
 }
-function anchorState(scrollTop: number): any {
-	return {
-		rowCount: displayRows.length,
-		rowHeight: heightFn,
-		containerHeight: views ? views.left.clientHeight() : 0,
-		scrollTop: scrollTop,
-		bufferSize: 0,
-		heightVersion: 1
-	};
+function virtualKeyAt(index: number): string | undefined {
+	if (index < 0) {
+		return undefined;
+	}
+	if (index < headerRowCount) {
+		return 'header:' + index;
+	}
+	const flat = displayRows[index - headerRowCount];
+	return flat ? rows[flat.rowIndex].key : undefined;
+}
+function virtualIndexForKey(key: string | undefined): number | undefined {
+	if (key === undefined) {
+		return undefined;
+	}
+	if (key.startsWith('header:')) {
+		const index = Number(key.slice('header:'.length));
+		return Number.isFinite(index) ? index : undefined;
+	}
+	return displayIndexByKey.get(key);
 }
 function captureAnchor() {
-	if (!views || displayRows.length === 0) {
+	if (!views || headerRowCount + displayRows.length === 0) {
 		return null;
 	}
-	const top = views.left.getRowsScrollTop();
-	const state = anchorState(top);
-	const range = calcVisibleRange(state);
+	const top = views.getScrollTop();
+	const range = views.getVisibleRange();
 	let index = range[0];
-	while (index < displayRows.length && displayRows[index].gap) {
-		index++;
+	while (index < headerRowCount + displayRows.length) {
+		if (index >= headerRowCount && displayRows[index - headerRowCount]?.gap) {
+			index++;
+			continue;
+		}
+		break;
 	}
-	const flat = displayRows[index];
-	if (!flat) {
+	const key = virtualKeyAt(index);
+	if (key === undefined) {
 		return null;
 	}
-	const native = views.left.getScrollTop();
-	return {
-		key: rows[flat.rowIndex].key,
-		delta: top - calcRowOffset(index, state),
-		// The pinned title is outside the scroller, and so is the schema/package
-		// meta. Only the scroll padding can sit above the first row; a refresh at
-		// the top must not move the rows.
-		native,
-		inHeader: native < views.left.padTopHeight(),
-	};
+	return { key: key, delta: top - (offsets[index] ?? 0) };
 }
 function restoreAnchor(anchor: any): void {
-	if (!anchor || !views || !displayIndexByKey.has(anchor.key)) {
+	if (!anchor || !views) {
 		return;
 	}
-	if (anchor.inHeader) {
-		views.left.setScrollTop(anchor.native);
-		views.right.setScrollTop(views.left.getScrollTop());
+	const index = virtualIndexForKey(anchor.key);
+	if (index === undefined) {
 		return;
 	}
-	const index = displayIndexByKey.get(anchor.key);
-	const state = anchorState(0);
-	views.left.setRowsScrollTop(Math.max(0, calcRowOffset(index as number, state) + anchor.delta));
-	views.right.setScrollTop(views.left.getScrollTop());
+	views.setScrollTop(Math.max(0, (offsets[index] ?? 0) + anchor.delta));
 }
 function updateSelection() {
 	if (!views) {
@@ -723,16 +797,15 @@ function updateEmptyState() {
 }
 function applyView() {
 	const anchor = captureAnchor();
-	const scrollTop = views ? views.left.getScrollTop() : 0;
+	const scrollTop = views ? views.getScrollTop() : 0;
 	refreshVisibility();
 	rebuildDisplay();
 	applyModels();
 	renderWindow(true);
-	if (anchor && displayIndexByKey.has(anchor.key)) {
+	if (anchor && virtualIndexForKey(anchor.key) !== undefined) {
 		restoreAnchor(anchor);
 	} else if (views) {
-		views.left.setScrollTop(scrollTop);
-		views.right.setScrollTop(views.left.getScrollTop());
+		views.setScrollTop(scrollTop);
 	}
 	renderWindow(true);
 	updateSelection();
@@ -766,9 +839,44 @@ function renderSearchUi() {
 		searchBar.setCount((searchIndex + 1) + ' / ' + searchMatches.length);
 	}
 }
+function buildDiffSearchCandidates(): DiffSearchCandidate[] {
+	const out: DiffSearchCandidate[] = [];
+	for (let at = 0; at < headerRowCount; at++) {
+		const row = headerRows[at];
+		const parts: string[] = [];
+		if (row.left) {
+			parts.push(row.left.keyword + ' ' + row.left.text);
+		}
+		if (row.right) {
+			parts.push(row.right.keyword + ' ' + row.right.text);
+		}
+		out.push({ key: 'header:' + at, haystack: parts.join(' ').toLowerCase() });
+	}
+	for (const row of searchCandidatesFor(rows, showChangesOnly)) {
+		out.push({ key: row.key, haystack: row.haystack });
+	}
+	return out;
+}
 function jumpToSearchMatch(index: number): void {
 	const key = searchMatches[index];
 	if (key === undefined) {
+		return;
+	}
+	if (key.startsWith('header:')) {
+		const headerIndex = Number(key.slice('header:'.length));
+		if (!Number.isFinite(headerIndex)) {
+			return;
+		}
+		ensureVisible(headerIndex);
+		renderWindow(true);
+		const element = views ? views.left.elementAt(headerIndex) : undefined;
+		if (element) {
+			element.tabIndex = 0;
+			element.focus({ preventScroll: true });
+		}
+		updateSelection();
+		renderSearchUi();
+		searchBar.focus();
 		return;
 	}
 	if (expandAncestors(key)) {
@@ -807,7 +915,7 @@ function startSearch(query: string, previousKey?: string, immediate?: boolean): 
 	searchMatches = [];
 	searchIndex = -1;
 	searchFirstJumpDone = previousKey !== undefined;
-	searchCandidates = searchCandidatesFor(rows, showChangesOnly);
+	searchCandidates = buildDiffSearchCandidates();
 	setSearchBusy(true);
 	renderWindow(true);
 	searchEngine.search(
@@ -930,11 +1038,11 @@ function setSwapped(next: boolean): void {
 	swapped = next === true;
 	if (views) {
 		// Swap resets horizontal only; the vertical position is preserved.
-		views.left.setScrollLeft(0);
-		views.right.setScrollLeft(0);
+		views.resetHorizontal();
 	}
 	updateViewButtons();
 	renderHeaders();
+	applyModels();
 	renderWindow(true);
 	updateSelection();
 }
@@ -1026,7 +1134,7 @@ function toggleCollapsed(key: string): void {
 	refocus(focused);
 }
 function toggleGap(key: string): void {
-	const scrollTop = views ? views.left.getScrollTop() : 0;
+	const scrollTop = views ? views.getScrollTop() : 0;
 	const next = new Set(expandedGaps);
 	if (next.has(key)) {
 		next.delete(key);
@@ -1037,8 +1145,7 @@ function toggleGap(key: string): void {
 	rebuildDisplay();
 	applyModels();
 	if (views) {
-		views.left.setScrollTop(scrollTop);
-		views.right.setScrollTop(views.left.getScrollTop());
+		views.setScrollTop(scrollTop);
 	}
 	renderWindow(true);
 	updateSelection();
@@ -1064,7 +1171,8 @@ function moveSelection(offset: number): void {
 	if (displayRows.length === 0) {
 		return;
 	}
-	let at = selectedKey === undefined ? undefined : displayIndexByKey.get(selectedKey);
+	const virtualAt = selectedKey === undefined ? undefined : displayIndexByKey.get(selectedKey);
+	let at = virtualAt === undefined ? undefined : virtualAt - headerRowCount;
 	if (at === undefined) {
 		at = offset > 0 ? -1 : displayRows.length;
 	}
@@ -1089,10 +1197,11 @@ function selectedChild() {
 	if (selectedKey === undefined) {
 		return undefined;
 	}
-	const at = displayIndexByKey.get(selectedKey);
-	if (at === undefined) {
+	const virtualAt = displayIndexByKey.get(selectedKey);
+	if (virtualAt === undefined) {
 		return undefined;
 	}
+	const at = virtualAt - headerRowCount;
 	const childAt = nextNodeIndex(at, 1);
 	if (childAt < 0) {
 		return undefined;
@@ -1169,7 +1278,15 @@ function onKeyDown(event: any): void {
 	}
 }
 function onPaneRowClick(index: number, event: any): void {
-	const flat = displayRows[index];
+	if (index < headerRowCount) {
+		const header = event && event.target && event.target.closest ? event.target.closest('.diff-header-row') : null;
+		if (header && typeof header.focus === 'function') {
+			header.tabIndex = 0;
+			header.focus({ preventScroll: true });
+		}
+		return;
+	}
+	const flat = displayRows[index - headerRowCount];
 	if (!flat) {
 		return;
 	}
@@ -1189,11 +1306,6 @@ function onPaneRowClick(index: number, event: any): void {
 		return;
 	}
 	selectKey(row.key, true);
-}
-function syncPanes(pane: 'left' | 'right', top: number, left: number): void {
-	if (views) {
-		views.syncPanes(pane, top, left);
-	}
 }
 /** Bind the document-level gestures once the page refs exist. */
 function mountDiffDomListeners(): void {
@@ -1220,14 +1332,13 @@ export function handleDiffMessage(message: DiffProviderToWebview): void {
 		delete notice.dataset.kind;
 		semanticMatching = message.semantic !== false;
 		const anchor = captureAnchor();
-		const scrollTop = views ? views.left.getScrollTop() : 0;
+		const scrollTop = views ? views.getScrollTop() : 0;
 		setDocument(message.document);
 		renderWindow(true);
-		if (anchor && displayIndexByKey.has(anchor.key)) {
+		if (anchor && virtualIndexForKey(anchor.key) !== undefined) {
 			restoreAnchor(anchor);
 		} else if (views) {
-			views.left.setScrollTop(scrollTop);
-			views.right.setScrollTop(views.left.getScrollTop());
+			views.setScrollTop(scrollTop);
 		}
 		renderWindow(true);
 		updateSelection();
@@ -1269,6 +1380,13 @@ views = new DiffView({
 	},
 	onRowClick: function (pane, index, event) {
 		onPaneRowClick(index, event);
+	},
+	onViewportChange: function () {
+		windowRange = views ? views.getVisibleRange() : [0, 0];
+		const key = focusedKey();
+		if (key !== undefined) {
+			applyRoving(key);
+		}
 	}
 });
 views.mount();
@@ -1343,8 +1461,10 @@ function resetDiffState(): void {
 	renderedByKey = new Map();
 	heights = { row: 20 };
 	heightFn = function () { return heights.row; };
+	offsets = [0];
 	diffContent = 0;
-	headerLineCount = 0;
+	headerRowCount = 0;
+	headerRows = [];
 	views = undefined;
 	searchQuery = '';
 	searchMatches = [];

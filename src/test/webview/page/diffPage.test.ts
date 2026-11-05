@@ -226,7 +226,8 @@ suite('semantic diff page', () => {
 		assert.ok(!/<script(?![^>]*src=)/.test(html), 'no inline script');
 		assert.ok(!html.includes('type="application/json"'), 'no embedded document');
 		assert.strictEqual((html.match(/id="diff-list"/g) || []).length, 1);
-		assert.ok(html.includes('id="diff-pane-left"') && html.includes('id="diff-pane-right"'));
+		assert.ok(html.includes('id="diff-title-strip"'));
+		assert.ok(html.includes('id="diff-title-left"') && html.includes('id="diff-title-right"'));
 		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'));
 	});
 
@@ -239,30 +240,34 @@ suite('semantic diff page', () => {
 				dom.document.querySelectorAll('#diff-pane-right .diff-row').length > 0,
 				'the right pane has rows'
 			);
-			assert.ok(dom.document.querySelector('#diff-pane-left .document-tree-header'), 'each pane owns its meta');
-			const scroller = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-header-row'), 'each pane owns its header rows');
+			const scroller = dom.document.querySelector('#diff-list > .virtual-scroll-vscroll') as HTMLElement;
+			assert.ok(scroller, 'one shared vertical scroller');
 			assert.ok(
-				scroller.firstElementChild!.className.includes('document-tree-top'),
-				'the scroller starts with the top spacer'
+				dom.document.querySelector('#diff-pane-left .document-tree-window'),
+				'the left docs view window is inside the shared scroll surface'
 			);
-			const titleBar = dom.document.querySelector('#diff-pane-left > .document-tree-title-bar') as HTMLElement;
-			assert.ok(titleBar, 'the file name is pinned outside the scroller');
-			assert.strictEqual(titleBar.hidden, false, 'the diff pins the file name');
 			assert.ok(
-				dom.document.querySelector('#diff-pane-left > .document-tree-header'),
-				'the schema/package meta is pinned above the scroller'
+				dom.document.querySelector('#diff-pane-right .document-tree-window'),
+				'the right docs view window is inside the shared scroll surface'
+			);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .document-tree-header'), null);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .document-tree-title-bar'), null);
+			assert.strictEqual(
+				dom.document.getElementById('diff-title-left')!.textContent,
+				'left.arxml',
+				'the fixed file name is outside the scroll surface'
 			);
 			assert.strictEqual(
-				scroller.querySelector('.document-tree-header'),
-				null,
-				'the meta is not part of the scrolled content'
+				dom.document.getElementById('diff-title-right')!.textContent,
+				'right.arxml',
+				'the fixed file name is outside the scroll surface'
 			);
 			assert.ok(
-				dom.document.querySelector('#diff-pane-left .document-tree-title')!.textContent === 'left.arxml'
+				dom.document.getElementById('diff-title-left')!.title.endsWith('left.arxml'),
+				'the full path stays in the tooltip'
 			);
-			assert.ok(
-				dom.document.querySelector('#diff-pane-right .document-tree-title')!.textContent === 'right.arxml'
-			);
+			assert.ok(!dom.document.querySelector('#diff-list [role="presentation"] .document-tree-header'));
 			const headers = diffPaneHeaders(document, false);
 			assert.deepStrictEqual(headers.left.packages, ['PkgA']);
 			assert.deepStrictEqual(headers.right.packages, ['PkgB', 'PkgC']);
@@ -302,7 +307,7 @@ suite('semantic diff page', () => {
 			(dom.document.getElementById('diff-swap') as HTMLElement).click();
 			assert.strictEqual(dom.document.getElementById('diff-swap')!.getAttribute('aria-pressed'), 'true');
 			assert.strictEqual(
-				dom.document.querySelector('#diff-pane-left .document-tree-title')!.textContent,
+				dom.document.getElementById('diff-title-left')!.textContent,
 				'right.arxml',
 				'the displayed side follows the swap'
 			);
@@ -1032,27 +1037,37 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('the pane header is not part of the search haystack', async () => {
+	test('the header rows are searchable and one paired line is one match', async () => {
 		const changed = wordRow({ left: wordCell(), right: wordCell({ shownValue: '200', value: '200' }) });
 		const document = wordDocument([changed]);
 		document.leftHeader = { schema: '00048', packages: ['NoSuchPkg'] };
 		document.rightHeader = { schema: '00048', packages: ['NoSuchPkg'] };
 		const { dom } = mount(document);
 		try {
-			assert.ok((dom.document.querySelector('#diff-pane-left .document-tree-header')!.textContent || '').includes('NoSuchPkg'));
+			const headerRows = Array.from(
+				dom.document.querySelectorAll('#diff-pane-left .diff-header-row')
+			) as HTMLElement[];
+			assert.ok(
+				headerRows.some((row) => (row.textContent || '').includes('NoSuchPkg')),
+				`header rows: ${headerRows.map((row) => row.textContent).join(' | ')}`
+			);
 			const input = dom.document.getElementById('diff-search-input') as HTMLInputElement;
 			input.value = 'NoSuchPkg';
 			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
 			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
 			await settleSearch();
-			assert.strictEqual(dom.document.getElementById('diff-search-count')!.textContent, '0 / 0');
-			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-left mark').length, 0);
+			assert.strictEqual(dom.document.getElementById('diff-search-count')!.textContent, '1 / 1');
+			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-left .diff-header-row mark').length, 1);
+			assert.ok(
+				dom.document.querySelector('#diff-pane-left .diff-header-row[data-search-current="true"]'),
+				'the header row is the current match'
+			);
 		} finally {
 			dom.restore();
 		}
 	});
 
-	test('a refresh or a view switch at the top keeps the header in view', () => {
+	test('a refresh or a view switch at the top keeps the header rows at the top', () => {
 		const rows = Array.from({ length: 200 }, (_, at) =>
 			wordRow({
 				key: `row-${at}`,
@@ -1063,28 +1078,40 @@ suite('semantic diff page', () => {
 			})
 		);
 		const document = wordDocument(rows);
+		document.leftHeader = { schema: '00048', packages: ['PkgA'] };
+		document.rightHeader = { schema: '00048', packages: ['PkgA'] };
 		const { dom } = mount(document);
 		try {
-			// jsdom has no layout; a real header would be measured once it is on
-			// screen. Stub the height, then change the scroller width and fire the
-			// resize path: the width change is what makes the component re-measure
-			// the cached header height, exactly as a real window resize does.
-			const scroller = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
-			const rightScroller = dom.document.querySelector('#diff-pane-right .document-tree-scroll') as HTMLElement;
-			for (const header of Array.from(dom.document.querySelectorAll('#diff-list .document-tree-header'))) {
-				Object.defineProperty(header, 'offsetHeight', { value: 40, configurable: true });
-			}
-			for (const pane of [scroller, rightScroller]) {
-				Object.defineProperty(pane, 'clientWidth', { value: 880, configurable: true });
-			}
-			dom.window.dispatchEvent(new dom.window.Event('resize'));
-			assert.strictEqual(scroller.scrollTop, 0, 'the header is fully visible');
+			const scroller = dom.document.querySelector('#diff-list > .virtual-scroll-vscroll') as HTMLElement;
+			assert.strictEqual(scroller.scrollTop, 0, 'the header rows are at the top');
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-header-row'));
 			dom.post({ type: 'document', semantic: false, document });
-			assert.strictEqual(scroller.scrollTop, 0, 'a refresh at the top keeps the header visible');
+			assert.strictEqual(scroller.scrollTop, 0, 'a refresh at the top keeps the header rows');
 			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
-			assert.strictEqual(scroller.scrollTop, 0, 'Show diff at the top keeps the header visible');
+			assert.strictEqual(scroller.scrollTop, 0, 'Show diff at the top keeps the header rows');
 			(dom.document.getElementById('diff-view-all') as HTMLElement).click();
-			assert.strictEqual(scroller.scrollTop, 0, 'Show all at the top keeps the header visible');
+			assert.strictEqual(scroller.scrollTop, 0, 'Show all at the top keeps the header rows');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the shorter header is padded so the first compared row aligns', () => {
+		const document = wordDocument([
+			wordRow({ left: wordCell(), right: wordCell({ shownValue: '200', value: '200' }) })
+		]);
+		document.leftHeader = { schema: '00048', packages: ['PkgA'] };
+		document.rightHeader = { schema: '00048', packages: ['PkgB', 'PkgC'] };
+		const { dom } = mount(document);
+		try {
+			const leftRows = Array.from(dom.document.querySelectorAll('#diff-pane-left .diff-header-row')) as HTMLElement[];
+			const rightRows = Array.from(dom.document.querySelectorAll('#diff-pane-right .diff-header-row')) as HTMLElement[];
+			assert.strictEqual(leftRows.length, 3);
+			assert.strictEqual(rightRows.length, 3);
+			assert.ok(leftRows[0].textContent!.includes('00048'));
+			assert.ok(rightRows[0].textContent!.includes('00048'));
+			assert.ok(leftRows[2].querySelector('.diff-header-cell[data-header-empty="true"]'), 'the left pad row is blank');
+			assert.ok(rightRows[2].textContent!.includes('PkgC'));
 		} finally {
 			dom.restore();
 		}
@@ -1115,7 +1142,7 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('module rows use the base row height in the virtual spacers', () => {
+	test('module rows use the base row height in the virtual content', () => {
 		const rows = Array.from({ length: 100 }, (_, at) =>
 			wordRow({
 				key: `m${at}`,
@@ -1134,15 +1161,11 @@ suite('semantic diff page', () => {
 		);
 		const { dom } = mount(wordDocument(rows));
 		try {
-			const scroll = dom.document.querySelector('#diff-pane-left .document-tree-scroll') as HTMLElement;
+			const scroll = dom.document.querySelector('#diff-list > .virtual-scroll-vscroll') as HTMLElement;
+			const content = scroll.querySelector('.virtual-scroll-content') as HTMLElement;
 			const rendered = treeRows(dom.document, '#diff-pane-left').length;
 			assert.ok(rendered > 0 && rendered < 100, 'only the window is rendered');
-			assert.strictEqual(scroll.style.getPropertyValue('--document-tree-top'), '0px');
-			assert.strictEqual(
-				scroll.style.getPropertyValue('--document-tree-bottom'),
-				(100 - rendered) * 20 + 'px',
-				'no per-module gap term in the height function'
-			);
+			assert.strictEqual(content.style.height, '2000px', '100 rows at one base row height');
 		} finally {
 			dom.restore();
 		}

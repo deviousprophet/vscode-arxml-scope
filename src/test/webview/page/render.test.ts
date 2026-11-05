@@ -148,26 +148,16 @@ suite('editor bundled page', () => {
 				dom.document.querySelector('#tree .node')!.getAttribute('role') === 'treeitem',
 				'the row builder owns tree semantics'
 			);
-			const scroller = dom.document.querySelector('#tree > .document-tree-scroll') as HTMLElement;
-			assert.ok(scroller, 'the rows scroller is the tree root child');
+			const scroller = dom.document.querySelector('#tree > .virtual-scroll-vscroll') as HTMLElement;
+			assert.ok(scroller, 'the shared scroll surface is the tree root child');
+			const windowEl = dom.document.querySelector('#tree-pane .document-tree-window') as HTMLElement;
+			assert.ok(windowEl, 'the docs view window is inside the pane layer');
 			assert.ok(
-				scroller.firstElementChild!.className.includes('document-tree-top'),
-				'the Document scroller starts with the top spacer'
+				dom.document.querySelector('#tree-pane .document-tree-header-row'),
+				'the schema/package lines are content rows'
 			);
-			assert.ok(
-				dom.document.querySelector('#tree > .document-tree-title-bar'),
-				'the title strip exists'
-			);
-			assert.strictEqual(
-				(dom.document.querySelector('#tree > .document-tree-title-bar') as HTMLElement).hidden,
-				true,
-				'the editor does not pin a file name'
-			);
-			assert.ok(
-				dom.document.querySelector('#tree > .document-tree-header'),
-				'the Document meta is pinned above the scroller'
-			);
-			assert.strictEqual(scroller.querySelector('.document-tree-header'), null);
+			assert.strictEqual(dom.document.querySelector('.document-tree-title-bar'), null);
+			assert.strictEqual(dom.document.querySelector('.document-tree-header'), null);
 			assert.strictEqual(dom.document.querySelector('#tree').getAttribute('aria-label'), 'ECUC values');
 		} finally {
 			dom.restore();

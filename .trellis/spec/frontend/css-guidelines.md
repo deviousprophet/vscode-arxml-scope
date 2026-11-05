@@ -70,13 +70,14 @@ Rules:
   `[aria-invalid="true"]`. Do not add a class whose only purpose is to mirror state the DOM already
   carries.
 - **Classes name structure.** `.row`, `.label`, `.value`, `.value-text`, `.row-meta`, `.twisty`,
-  `.guide`, `.condition`, `.annotation`, `.comment`, `.document-tree-scroll`, `.document-tree-header`,
-  `.diff-row`, `.diff-cell`, `.word-changed`, `.sb-section-head`, `.sb-body`. The row builders and the
-  tests select these names; renaming one is a contract change.
+  `.guide`, `.condition`, `.annotation`, `.comment`, `.virtual-scroll-vscroll`, `.virtual-scroll-content`,
+  `.virtual-scroll-pane`, `.document-tree-window`, `.diff-row`, `.diff-cell`, `.word-changed`,
+  `.sb-section-head`, `.sb-body`. The row builders and the tests select these names; renaming one is a
+  contract change.
 - **IDs are singletons owned by the shell.** `#tree`, `#sidebar`, `#side-tabs`, `#row-menu`,
-  `#diff-list`, `#diff-pane-left` / `#diff-pane-right`. A component that must support two instances
-  takes a root selector (`DocumentTreeView('#diff-pane-left', 'left')`) and never queries a global id
-  inside its own logic.
+  `#diff-list`, `#diff-title-left` / `#diff-title-right`. VirtualScroll creates the pane layers
+  (`#diff-pane-left` / `#diff-pane-right`, `#tree-pane`); a window renderer takes the pane element, not
+  a global id, and never queries a global id inside its own logic.
 - Prefer shallow selectors and a scoped custom property over a long descendant chain. The generated
   depth rules are two levels (`body[data-view="document"] .row[data-level]`); the existing
   high-contrast/selection rules go deeper only because they must scope to a view, a tree and a state at
@@ -89,16 +90,17 @@ Rules:
 
 ### Virtual rows and the Document surface
 
-- `.document-tree` is the component root; inside it, `.document-tree-scroll` is the native two-axis
-  scroller and the only scroll container. Its content is `.document-tree-header`, `.document-tree-top`,
-  `.document-tree-window` and `.document-tree-bottom`, in that order. The header is a fixed flex row
-  above the scroller and stays pinned; it is not scrolled content. Its own bottom padding supplies the
-  header-to-row gap, and the scroller has no top padding.
-- The window is positioned by two spacer heights written as CSSOM custom properties on the scroller:
-  `--document-tree-top` and `--document-tree-bottom`. The window's minimum width comes from
-  `--document-tree-content-width`. Never set these as a `style` attribute in the markup.
-- `.document-tree-scroll` keeps `overflow-anchor: none`, `scrollbar-gutter: stable`, the editor font
-  stack, `font-variant-ligatures: none`, `tab-size: 4` and `white-space: pre`.
+- `.virtual-scroll` is the component root; inside it, `.virtual-scroll-vscroll` is the native vertical
+  scroller and the only vertical scroll container. Its content is `.virtual-scroll-content`, whose
+  height is the precomputed content length; one `.virtual-scroll-pane` per view holds the absolutely
+  positioned `.document-tree-window`. The horizontal bar is `.virtual-scroll-hscroll` with a
+  `.virtual-scroll-hspacer` of the shared content width.
+- `.document-tree-window` is positioned at `offsets[start]`, sized to the rendered slice and translated
+  by the shared horizontal offset. Its minimum width comes from `--document-tree-content-width`. Never
+  set these as a `style` attribute in the markup.
+- `.virtual-scroll-vscroll` keeps `overflow-anchor: none`, `scrollbar-gutter: stable`, the editor font
+  stack, `font-variant-ligatures: none`, `tab-size: 4` and `white-space: pre`. Header rows use the same
+  `.row` geometry; they are content, not a pinned block.
 - A row is one flex line: `.row { display: flex; flex-wrap: nowrap; gap: 1ch; height: var(--ecuc-lh);
   padding-left: var(--content-pad); }`. `.value` is a direct child of `.row`.
 - The fold gutter is fixed at 26px. `.twisty` is absolutely positioned at `left: 2px`, spans the row
@@ -106,7 +108,7 @@ Rules:
 - Depth comes from `data-level` and the generated rules in `documentTree.css`:
   `padding-left: calc(var(--content-pad) + var(--indent) * (level - 1))` for levels 1–24. Guides use the
   matching `.guide[data-level]` left offset plus `0.5ch`. No style attribute, no inline depth.
-- `.row-meta` is the inline meta line, not the schema/package header (`.document-tree-meta`). It uses
+- `.row-meta` is the inline meta line, not a schema/package row. It uses
   `gap: 1ch` and `white-space: pre`. A condition chip is bounded: `max-width: 56ch`, ellipsis, and its
   full text lives in `title`. The annotation chip is a comment row above its node, not inline meta.
   A selected subtree tints `.node[data-subtree="true"] > .row`, `.brace[data-subtree="true"] > .row`
@@ -135,10 +137,11 @@ Rules:
 
 ### Diff
 
-- `#diff-body` is the flex column; `#diff-list` inside it is the two-pane grid, and `.diff-pane`
-  instances are separated by the 3px divider. Each pane mounts its own `DocumentTreeView`, so each has
-  its own `.document-tree-scroll` and its header inside it. Both panes pad the shorter header to the
-  same line count and share the row height, so synchronized scrolling starts rows at the same y.
+- `#diff-body` is the flex column; the fixed `.diff-title-strip` sits above `#diff-list`, which mounts
+  one `VirtualScroll` with two pane layers. Each pane mounts a `DocumentTreeView` window renderer, so
+  there is one vertical and one horizontal bar, and the pane split stays fixed. Header rows are the
+  first virtual rows; both panes pad the shorter header to the same line count and share one offsets
+  table, so the first compared row starts at the same y.
 - Status is a tint on `.diff-row > .diff-cell[data-side="left|right"]`, driven by
   `[data-status="added|removed|changed"]`. The status tint never recolours syntax tokens.
 - There is no inter-module gap selector on this surface: every `.diff-row` is one `--ecuc-lh` high.
@@ -149,8 +152,8 @@ Rules:
   (fallback `--diff-added-bg`) with a 1px `--diff-added-edge` outline. A search `<mark>` inside one
   keeps `--match-bg` (or `--match-hi` when current); the word span's outline stays. Forced-colors and
   high contrast replace both fills with a dotted outline.
-- Both panes receive the same content width and row height. Pane headers repeat the Document
-  `.document-tree-header` geometry so the rows align.
+- Both panes receive the same content width, row height and offsets. Header rows use the Document
+  `.document-tree-header-row` geometry and the shorter header is padded so the rows align.
 
 ## Build and Bundle
 

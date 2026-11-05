@@ -84,11 +84,11 @@ suite('editor document view', () => {
 		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(css));
 		assert.ok(/--rail:\s*var\(--vscode-focusBorder/.test(css));
 
-		assert.ok(/.document-tree-scroll\s*{[^}]*position:\s*relative/.test(css));
-		assert.ok(/.document-tree-scroll\s*{[^}]*font-family:\s*var\(--vscode-editor-font-family/.test(css));
-		assert.ok(/.document-tree-scroll\s*{[^}]*font-size:\s*var\(--ecuc-fs\)/.test(css));
-		assert.ok(/.document-tree-scroll\s*{[^}]*line-height:\s*var\(--ecuc-lh\)/.test(css));
-		assert.ok(/.document-tree-scroll\s*{[^}]*white-space:\s*pre/.test(css));
+		assert.ok(/\.document-tree\s*\{[^}]*position:\s*relative/.test(css));
+		assert.ok(/\.document-tree-pane\s*\{[^}]*font-family:\s*var\(--vscode-editor-font-family/.test(css));
+		assert.ok(/\.document-tree-pane\s*\{[^}]*font-size:\s*var\(--ecuc-fs\)/.test(css));
+		assert.ok(/\.document-tree-pane\s*\{[^}]*line-height:\s*var\(--ecuc-lh\)/.test(css));
+		assert.ok(/\.document-tree-pane\s*\{[^}]*white-space:\s*pre/.test(css));
 		assert.ok(/\.row\s*\{[^}]*display:\s*flex/.test(css));
 		assert.ok(/\.row\s*\{[^}]*gap:\s*1ch/.test(css));
 		assert.ok(/\.row\s*\{[^}]*padding:\s*0 0 0 var\(--content-pad\)/.test(css));
@@ -140,7 +140,7 @@ suite('editor document view', () => {
 			)
 		);
 		assert.ok(/body\[data-view="document"\] \.node\[data-kind="parameter"\] > \.row > \.label,[\s\S]*?--tok-key/.test(css));
-		assert.ok(/body\[data-view="document"\] \.document-tree-meta \.keyword\s*\{[^}]*--tok-keyword/.test(css));
+		assert.ok(/\.document-tree-header-row \.keyword\s*\{[^}]*--tok-keyword/.test(css));
 		assert.ok(!/body\[data-view="document"\] \.hex\s*\{/.test(css), 'the Document has no hex meta style');
 		assert.ok(!/body\[data-view="document"\] \.target\s*\{/.test(css), 'reference targets have no Document link style');
 	});

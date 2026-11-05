@@ -33,10 +33,12 @@ compared, not just the bytes on disk.
 - The toolbar is icon-over-label: **Show all** / **Show diff** ÷ **Context** ÷ **Semantic** /
   **Strict** ÷ **Prev diff** / **Next diff**, with **Swap sides** centered over the pane divider and
   Search on the right. There is no changed/added/removed/renamed count in the page.
-- Each pane pins its file name and its schema/package block above the rows. Only the rows scroll,
-  so the first wheel notch or scrollbar pixel moves the row content immediately. The shorter pane's
-  meta lines are padded so both panes start their rows at the same y, and neither the pinned title nor
-  the meta block is searched.
+- A fixed file-name strip above the two panes shows the shortest distinguishing label on each side,
+  with the full path in its tooltip. It is chrome, not content: it never scrolls.
+- Schema and package lines are the first rows of each pane's document content. They scroll with the
+  rows, use the same row shell and are searchable; a shorter header is padded with blank rows so the
+  first compared row starts at the same y in both panes. Search treats one aligned header row as one
+  candidate, so the count stays one per visible line.
 - Rows are aligned: a line that exists on only one side has a blank cell on the other side. There is no
   blank spacer row between modules; every row is one line high.
 - Annotations, braces and bracket guides follow each side of the comparison. Both panes use the same
@@ -46,11 +48,10 @@ compared, not just the bytes on disk.
 - Selecting a container or module tints its whole subtree in both panes, including the annotation rows
   of descendant containers. An added or removed row highlights only the pane that owns its cell; the
   blank side stays blank.
-- Only the visible window is rendered in each pane. Both panes scroll natively; only the left pane
-  shows a vertical scrollbar, and the right one hides it without reserving a gutter. Both panes have
-  their own horizontal scrollbar; scrolling either pane or bar mirrors the other, and `Shift+wheel`
-  over either pane scrolls both horizontally. `Swap sides` resets the horizontal offsets but keeps the
-  vertical position.
+- One shared virtual-scroll surface owns the scrollbars and the row offsets. It has one vertical and
+  one horizontal bar; both panes pan together while the pane split stays fixed. The content height is
+  precomputed, so the thumb and drag match the rendered lines, and only the visible window is rendered.
+  `Swap sides` resets the horizontal offset but keeps the vertical position.
 
 ## What counts as a change
 

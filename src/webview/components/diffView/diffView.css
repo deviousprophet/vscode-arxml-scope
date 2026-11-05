@@ -109,10 +109,31 @@ body[data-page="diff"] .nav-btn:disabled {
 	min-width: 0;
 	min-height: 0;
 }
+.diff-title-strip {
+	display: flex;
+	flex: none;
+	min-width: 0;
+	background: var(--vscode-editor-background);
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.diff-title-cell {
+	flex: 1 1 0;
+	min-width: 0;
+	padding: 0 10px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 18px;
+	color: var(--vscode-editor-foreground);
+}
+.diff-title-cell + .diff-title-cell {
+	border-left: 3px solid var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
+}
 #diff-list {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-	grid-auto-rows: minmax(0, 1fr);
 	flex: 1 1 auto;
 	min-width: 0;
 	min-height: 0;
@@ -120,19 +141,8 @@ body[data-page="diff"] .nav-btn:disabled {
 #diff-list[hidden] {
 	display: none;
 }
-.diff-pane {
+#diff-list .virtual-scroll-vscroll {
 	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
-}
-.diff-pane + .diff-pane {
-	border-left: 3px solid var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
-	box-shadow: none;
-}
-#diff-pane-right .document-tree-scroll {
-	overflow-y: auto;
-	scrollbar-gutter: auto;
-}
-#diff-pane-right .document-tree-scroll::-webkit-scrollbar:vertical {
-	width: 0;
 }
 #diff-measure {
 	position: absolute;
@@ -156,6 +166,15 @@ body[data-page="diff"] .nav-btn:disabled {
 	display: flex;
 	align-items: stretch;
 	outline: none;
+}
+.diff-header-row {
+	background: var(--vscode-editor-background);
+}
+.diff-header-cell {
+	padding: 0;
+}
+.diff-header-cell[data-header-empty="true"] {
+	background: none;
 }
 .diff-cell {
 	flex: 1 1 auto;
