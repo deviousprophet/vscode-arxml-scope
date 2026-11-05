@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/components/component-document-tree.md","reason":"Check the docs view is a window renderer with no pinned header."}
+{"file":".trellis/spec/frontend/components/component-virtual-scroll.md","reason":"Check one shared scroll surface and precomputed offsets."}
+{"file":".trellis/spec/frontend/components/component-diff-view.md","reason":"Check one shared scroll surface, fixed names and aligned panes."}
+{"file":".trellis/spec/frontend/editor-lifecycle.md","reason":"Check header rows, search and selection boundaries."}
+{"file":".trellis/spec/frontend/testing.md","reason":"Check each new branch fails when removed."}
+{"file":".trellis/tasks/11-05-editor-content-header-single-scroll/design.md","reason":"Compare the result with D1-D12."}
+{"file":".trellis/tasks/11-05-editor-content-header-single-scroll/implement.md","reason":"Run the review gates and verification commands."}
