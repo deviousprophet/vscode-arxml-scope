@@ -1,8 +1,0 @@
-{"file":".trellis/spec/frontend/components/component-document-tree.md","reason":"Window-renderer contract, row offsets and header removal."}
-{"file":".trellis/spec/frontend/components/component-virtual-scroll.md","reason":"Shared scroll surface, offsets and both bars."}
-{"file":".trellis/spec/frontend/components/component-diff-view.md","reason":"Shared scroll surface, fixed file names and header alignment."}
-{"file":".trellis/spec/frontend/editor-lifecycle.md","reason":"Docs-view header rows, search and scroll lifecycle."}
-{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Component boundaries and shared geometry."}
-{"file":".trellis/spec/frontend/testing.md","reason":"Page and component test conventions."}
-{"file":".trellis/tasks/11-05-editor-content-header-single-scroll/design.md","reason":"Settled decisions D1-D12 and target architecture."}
-{"file":".trellis/tasks/11-05-editor-content-header-single-scroll/implement.md","reason":"Ordered implementation checklist and review gates."}
