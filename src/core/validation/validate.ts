@@ -124,6 +124,23 @@ export function validateWorkspace(
 		if (fileCount > 1 && !crossFile) {
 			continue;
 		}
+		const sameIdentity = sorted.every(
+			(element) => element.kind === first.kind && element.definitionRef === first.definitionRef
+		);
+		const hashes = new Set(sorted.map((element) => element.contentHash));
+		const identical = hashes.size < sorted.length;
+		const guards = new Set(sorted.map((element) => element.syscond ?? ''));
+		const allVariants = sorted.length > 1 && guards.size === sorted.length && !guards.has('');
+
+		// AUTOSAR split files repeat one container per file with different children;
+		// the copies are one merged element, not duplicates.
+		if (sameIdentity && fileCount > 1 && !identical) {
+			continue;
+		}
+		// Identical copies that are mutually exclusive variants.
+		if (allVariants) {
+			continue;
+		}
 		const related: DiagnosticRelated[] = sorted.slice(1).map((element) => ({
 			file: element.file,
 			range: element.range,
@@ -198,14 +215,27 @@ export function validateWorkspace(
 		}
 		const lower = lowerRaw ?? 0;
 		const count = group.elements.length + group.references.length;
-		if (count < lower || (upper !== undefined && upper >= 0 && count > upper)) {
+		const perGuard = new Map<string, number>();
+		for (const item of [...group.elements, ...group.references]) {
+			const guard = item.syscond ?? '';
+			perGuard.set(guard, (perGuard.get(guard) ?? 0) + 1);
+		}
+		// An unguarded occurrence is present under every condition, so it adds to
+		// each guarded bucket. Distinct guards are mutually exclusive alternatives.
+		const unguarded = perGuard.get('') ?? 0;
+		const guarded = Math.max(0, ...[...perGuard].filter(([guard]) => guard !== '').map(([, value]) => value));
+		const worst = unguarded + guarded;
+		const exceedsUpper = upper !== undefined && upper >= 0 && worst > upper;
+		const offender = exceedsUpper ? Math.max(worst, ...perGuard.values()) : count;
+		const conditionCount = perGuard.size > (perGuard.has('') ? 1 : 0);
+		if (count < lower || exceedsUpper) {
 			const first = group.elements[0] ?? group.references[0];
 			const expected = upper === undefined ? `${lower}..` : upper < 0 ? `${lower}..*` : lower === upper ? `${lower}` : `${lower}..${upper}`;
 			add(
 				'multiplicity',
 				first.file,
 				first.range,
-				`"${definition.shortName}" occurs ${count} times in this file; the definition allows ${expected}.`
+				`"${definition.shortName}" occurs ${offender} times${exceedsUpper && conditionCount ? ' under one condition' : ''} in this file; the definition allows ${expected}.`
 			);
 		}
 	}
@@ -282,7 +312,12 @@ export function validateWorkspace(
 		};
 		for (const child of children) {
 			const lower = multiplicityValue(child.lowerMultiplicity) ?? 0;
-			if (lower <= 0 || child.kind === 'ECUC-ADD-INFO-PARAM-DEF' || child.defaultValue !== undefined) {
+			if (
+				lower <= 0 ||
+				child.kind === 'ECUC-ADD-INFO-PARAM-DEF' ||
+				child.defaultValue !== undefined ||
+				child.withAuto === true
+			) {
 				continue;
 			}
 			const isReference = child.kind.endsWith('-REFERENCE-DEF');

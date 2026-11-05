@@ -23,6 +23,13 @@ export interface IndexElement {
 	uuid?: string;
 	/** Decoded parameter `<VALUE>` text, when present. */
 	value?: string;
+	/**
+	 * FNV-1a over the element's normalized subtree. Set for `module` and
+	 * `container` only; used to tell split copies from identical copies.
+	 */
+	contentHash?: number;
+	/** Normalized own `VARIATION-POINT/SW-SYSCOND` text, when present. */
+	syscond?: string;
 	file: string;
 	range: Range;
 }
@@ -42,6 +49,8 @@ export interface IndexReference {
 	/** `DEST` of the `VALUE-REF` / `TARGET-REF`. */
 	targetDest?: string;
 	contextPaths: string[];
+	/** Normalized own `VARIATION-POINT/SW-SYSCOND` text, when present. */
+	syscond?: string;
 	file: string;
 	range: Range;
 }
@@ -73,6 +82,8 @@ export interface IndexDefinition {
 	destinationRef?: string;
 	/** The `DEST` attribute of `DESTINATION-REF` (the target type). */
 	destinationDest?: string;
+	/** AUTOSAR `WITH-AUTO`: the configuration tool assigns this element. */
+	withAuto?: boolean;
 	literals?: string[];
 	file: string;
 	range: Range;

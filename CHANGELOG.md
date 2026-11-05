@@ -5,6 +5,12 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- ECUC validation no longer reports AUTOSAR split-file container copies as duplicate names, variant alternatives (`VARIATION-POINT`/`SW-SYSCOND`) as multiplicity violations, `WITH-AUTO` parameters as missing, or same-definition local merge copies as ambiguous references
+
 ## [0.7.0] - 2026-11-05
 
 ### Added

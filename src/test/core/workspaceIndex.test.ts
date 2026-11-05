@@ -156,7 +156,7 @@ suite('workspaceIndex (core)', () => {
 		assert.deepStrictEqual(index.referencesFor(target!), []);
 	});
 
-	test('a local copy wins; two local copies and different identities stay ambiguous', () => {
+	test('a local copy wins; same-identity local copies merge; different identities stay ambiguous', () => {
 		const module = (uri: string, defRef: string, copies = 1): ReturnType<typeof buildFileIndex> => {
 			const containers = Array.from({ length: copies }, () =>
 				`<ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">${defRef}/C</DEFINITION-REF></ECUC-CONTAINER-VALUE>`
@@ -181,8 +181,11 @@ suite('workspaceIndex (core)', () => {
 
 		const sameFile = new WorkspaceIndex();
 		sameFile.upsert(module('file:///a.arxml', '/D/M', 2));
-		const ambiguous = sameFile.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE', 'file:///a.arxml');
-		assert.strictEqual(ambiguous.ok, false);
+		const merged = sameFile.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE', 'file:///a.arxml');
+		assert.strictEqual(merged.ok, true);
+		assert.strictEqual(merged.ok && merged.copies.length, 2);
+		assert.strictEqual(merged.ok && merged.element, merged.ok ? merged.copies[0] : undefined);
+		assert.strictEqual(merged.ok && merged.element.file, 'file:///a.arxml');
 
 		const different = new WorkspaceIndex();
 		different.upsert(module('file:///a.arxml', '/D/M'));

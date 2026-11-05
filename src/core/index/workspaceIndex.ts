@@ -352,7 +352,7 @@ function copiesFor(candidates: readonly IndexElement[], sourceFile: string | und
 	}
 	const local = candidates.filter((candidate) => candidate.file === sourceFile);
 	if (local.length > 1) {
-		return undefined;
+		return [...sortCopies(local), ...sortCopies(candidates.filter((candidate) => candidate.file !== sourceFile))];
 	}
 	if (local.length === 1) {
 		return [local[0], ...sortCopies(candidates.filter((candidate) => candidate !== local[0]))];

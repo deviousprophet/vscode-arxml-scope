@@ -139,9 +139,15 @@ that is not obvious from the code.
   indexed disk bytes.
 - **Copies of one path resolve together, never by guessing.** `WorkspaceIndex` keeps every candidate.
   Candidates that share kind and `DEFINITION-REF` are copies: resolution prefers the copy in the
-  referencing file, otherwise returns all copies sorted; navigation and definition return every copy.
-  Two local copies or differing identities stay ambiguous. `definitionCandidateCount` is how the UI
-  says `N definitions found` without choosing one.
+  referencing file, otherwise returns all copies sorted; multiple local copies with one identity are
+  all returned with the earliest local copy first. Differing identities stay ambiguous.
+  `definitionCandidateCount` is how the UI says `N definitions found` without choosing one.
+- **Split copies and variants are not duplicates.** `duplicateShortName` suppresses cross-file
+  same-identity copies whose normalized content hashes differ (AUTOSAR split files) and copies whose
+  distinct non-empty `SW-SYSCOND` guards make them alternatives. Byte-identical copies, same-file
+  groups and differing identities stay reported. `multiplicity` counts the lower bound against the
+  total but the upper bound per guard, with an unguarded occurrence counted in every guarded bucket.
+  `missingRequired` skips a child whose definition carries `withAuto === true`.
 - **Cross-file rules have one mode owner.** `arxmlScope.validation.crossFileRules` is `auto` by
   default; `auto` runs a rule only when the index has at least one definition, `always` reproduces the
   unconditional behaviour and `never` disables it. A fragment workspace (values without definitions)
