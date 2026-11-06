@@ -76,6 +76,29 @@ suite('workspaceIndex (core)', () => {
 		assert.strictEqual(index.element('/Synthetic/SampleModule')?.shortName, 'SampleModule', 'other files survive');
 	});
 
+	test('incremental lookups match a fresh build after updates and removals', () => {
+		const module = (uri: string, name: string, child: string): ReturnType<typeof buildFileIndex> =>
+			buildFileIndex(
+				uri,
+				`<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>${name}</SHORT-NAME><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>${child}</SHORT-NAME></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`
+			);
+		const index = new WorkspaceIndex();
+		index.upsert(module('file:///a.arxml', 'A', 'OnlyA'));
+		index.element('/P/A/OnlyA'); // build the lookups before the updates
+		index.upsert(module('file:///b.arxml', 'B', 'OnlyB'));
+		index.remove('file:///a.arxml');
+
+		const fresh = new WorkspaceIndex();
+		fresh.replaceAll([module('file:///b.arxml', 'B', 'OnlyB')]);
+		assert.deepStrictEqual(index.element('/P/B/OnlyB'), fresh.element('/P/B/OnlyB'));
+		assert.strictEqual(index.element('/P/A/OnlyA'), undefined);
+
+		// Replacing a file must remove its old paths before adding the new ones.
+		index.upsert(module('file:///b.arxml', 'B2', 'OnlyB2'));
+		assert.strictEqual(index.element('/P/B/OnlyB'), undefined);
+		assert.strictEqual(index.element('/P/B2/OnlyB2')?.shortName, 'OnlyB2');
+	});
+
 	test('replaceAll swaps the whole set in one change', () => {
 		const index = new WorkspaceIndex();
 		index.upsert(values('file:///values.arxml'));

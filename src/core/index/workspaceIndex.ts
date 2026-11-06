@@ -37,23 +37,41 @@ export class WorkspaceIndex {
 	private readonly listeners = new Set<() => void>();
 	private elements?: PathLookup<IndexElement>;
 	private definitions?: PathLookup<IndexDefinition>;
-	/** Bumped on every mutation so a cached lookup can never outlive a change. */
+	private lookupsValid = false;
+	private lookupsHealthy = true;
+	/** Bumped on every mutation so a cached reverse map can never outlive a change. */
 	private generation = 0;
-	private lookupsAt = -1;
+	private referencesByTarget?: Map<string, IndexReference[]>;
+	private referencesAt = -1;
 
 	/** Replaces one file's contribution and notifies subscribers. */
 	upsert(file: FileIndex): void {
+		const previous = this.files.get(file.uri);
 		this.files.set(file.uri, file);
+		if (this.lookupsValid && this.lookupsHealthy && this.elements !== undefined && this.definitions !== undefined) {
+			if (previous !== undefined) {
+				removeLookupItems(this.elements, previous.elements, (element) => element.path);
+				removeLookupItems(this.definitions, previous.definitions, (definition) => definition.path);
+			}
+			addLookupItems(this.elements, file.elements, (element) => element.path);
+			addLookupItems(this.definitions, file.definitions, (definition) => definition.path);
+		}
 		this.changed();
 	}
 
 	/** Removes one file's contribution. Returns false when it was not indexed. */
 	remove(uri: string): boolean {
-		const removed = this.files.delete(uri);
-		if (removed) {
-			this.changed();
+		const previous = this.files.get(uri);
+		if (previous === undefined) {
+			return false;
 		}
-		return removed;
+		this.files.delete(uri);
+		if (this.lookupsValid && this.lookupsHealthy && this.elements !== undefined && this.definitions !== undefined) {
+			removeLookupItems(this.elements, previous.elements, (element) => element.path);
+			removeLookupItems(this.definitions, previous.definitions, (definition) => definition.path);
+		}
+		this.changed();
+		return true;
 	}
 
 	/** Replaces the whole index in one notification (a full rebuild). */
@@ -62,6 +80,7 @@ export class WorkspaceIndex {
 		for (const file of files) {
 			this.files.set(file.uri, file);
 		}
+		this.invalidateLookups();
 		this.changed();
 	}
 
@@ -70,6 +89,7 @@ export class WorkspaceIndex {
 			return;
 		}
 		this.files.clear();
+		this.invalidateLookups();
 		this.changed();
 	}
 
@@ -156,21 +176,8 @@ export class WorkspaceIndex {
 
 	/** Every reference that resolves to the same element. */
 	referencesFor(target: IndexElement): IndexReference[] {
-		const out: IndexReference[] = [];
-		for (const file of this.files.values()) {
-			for (const reference of file.references) {
-				const resolution = this.resolveReference(reference);
-				if (
-					resolution.ok &&
-					resolution.element.file === target.file &&
-					resolution.element.range.start === target.range.start &&
-					resolution.element.range.end === target.range.end
-				) {
-					out.push(reference);
-				}
-			}
-		}
-		return out;
+		this.ensureReferenceMap();
+		return [...(this.referencesByTarget?.get(elementKey(target)) ?? [])];
 	}
 
 	/** Every element/reference whose own `DEFINITION-REF` resolves to this definition. */
@@ -244,11 +251,19 @@ export class WorkspaceIndex {
 		}
 	}
 
+	private invalidateLookups(): void {
+		this.elements = undefined;
+		this.definitions = undefined;
+		this.lookupsValid = false;
+		this.lookupsHealthy = true;
+		this.referencesByTarget = undefined;
+		this.referencesAt = -1;
+	}
+
 	private ensureLookups(): void {
-		if (this.lookupsAt === this.generation && this.elements !== undefined && this.definitions !== undefined) {
+		if (this.lookupsValid && this.elements !== undefined && this.definitions !== undefined) {
 			return;
 		}
-		const generation = this.generation;
 		try {
 			const elements: IndexElement[] = [];
 			const definitions: IndexDefinition[] = [];
@@ -269,8 +284,27 @@ export class WorkspaceIndex {
 			// optional data; degrading to "no lookup" keeps the editor usable.
 			this.elements = emptyLookup();
 			this.definitions = emptyLookup();
+			this.lookupsHealthy = false;
 		}
-		this.lookupsAt = generation;
+		this.lookupsValid = true;
+	}
+
+	private ensureReferenceMap(): void {
+		if (this.referencesAt === this.generation && this.referencesByTarget !== undefined) {
+			return;
+		}
+		const map = new Map<string, IndexReference[]>();
+		for (const file of this.files.values()) {
+			for (const reference of file.references) {
+				const resolution = this.resolveReference(reference);
+				if (!resolution.ok) {
+					continue;
+				}
+				addEntry(map, elementKey(resolution.element), reference);
+			}
+		}
+		this.referencesByTarget = map;
+		this.referencesAt = this.generation;
 	}
 }
 
@@ -288,8 +322,17 @@ function emptyLookup<T>(): PathLookup<T> {
  * every suffix. A unique path has a one-element array; only repeated paths grow.
  */
 function buildLookup<T>(items: readonly T[], pathOf: (item: T) => string | undefined): PathLookup<T> {
-	const exact = new Map<string, T[]>();
-	const suffix = new Map<string, T[]>();
+	const lookup = emptyLookup<T>();
+	addLookupItems(lookup, items, pathOf);
+	return lookup;
+}
+
+/** Adds one file's items to the live maps. */
+function addLookupItems<T>(
+	lookup: PathLookup<T>,
+	items: readonly T[],
+	pathOf: (item: T) => string | undefined
+): void {
 	for (const item of items) {
 		const path = pathOf(item);
 		if (path === undefined) {
@@ -299,24 +342,61 @@ function buildLookup<T>(items: readonly T[], pathOf: (item: T) => string | undef
 		if (segments.length === 0) {
 			continue;
 		}
-		const full = '/' + segments.join('/');
-		const exactList = exact.get(full);
-		if (exactList === undefined) {
-			exact.set(full, [item]);
-		} else {
-			exactList.push(item);
-		}
+		addEntry(lookup.exact, '/' + segments.join('/'), item);
 		for (let start = 0; start < segments.length; start++) {
-			const key = '/' + segments.slice(start).join('/');
-			const list = suffix.get(key);
-			if (list === undefined) {
-				suffix.set(key, [item]);
-			} else {
-				list.push(item);
-			}
+			addEntry(lookup.suffix, '/' + segments.slice(start).join('/'), item);
 		}
 	}
-	return { exact, suffix };
+}
+
+/** Removes one file's items from the live maps. */
+function removeLookupItems<T>(
+	lookup: PathLookup<T>,
+	items: readonly T[],
+	pathOf: (item: T) => string | undefined
+): void {
+	for (const item of items) {
+		const path = pathOf(item);
+		if (path === undefined) {
+			continue;
+		}
+		const segments = splitPath(path);
+		if (segments.length === 0) {
+			continue;
+		}
+		removeEntry(lookup.exact, '/' + segments.join('/'), item);
+		for (let start = 0; start < segments.length; start++) {
+			removeEntry(lookup.suffix, '/' + segments.slice(start).join('/'), item);
+		}
+	}
+}
+
+function addEntry<T>(map: Map<string, T[]>, key: string, item: T): void {
+	const list = map.get(key);
+	if (list === undefined) {
+		map.set(key, [item]);
+	} else {
+		list.push(item);
+	}
+}
+
+function removeEntry<T>(map: Map<string, T[]>, key: string, item: T): void {
+	const list = map.get(key);
+	if (list === undefined) {
+		return;
+	}
+	const at = list.indexOf(item);
+	if (at >= 0) {
+		list.splice(at, 1);
+	}
+	if (list.length === 0) {
+		map.delete(key);
+	}
+}
+
+/** The reverse-reference map key: the resolved element's file and range. */
+function elementKey(element: IndexElement): string {
+	return `${element.file}|${element.range.start}|${element.range.end}`;
 }
 
 function resolve<T>(lookup: PathLookup<T>, rawPath: string): T | undefined {
