@@ -98,7 +98,8 @@ add + remove pair, and keeps its children aligned inside it.
 - A near-tie stays unpaired, except when every child is identical: those siblings pair by name and then
   by ordinal position, so index-ordered containers such as `PDU_01`…`PDU_04` stay aligned.
 - Above 250,000 candidate pairs in one definition group, a linear name/position fallback runs instead of
-  the full score. If it still cannot pair containers, the toolbar reports how many were left out.
+  the full score. If it still cannot pair containers, a note above the diff rows reports how many were
+  left out.
 - Children of a semantic pair are compared by their final id segment, so a changed owner name does not
   turn every child into an add + remove pair.
 - A renamed container renders exactly like any other **changed** row; there is no badge, no dashed

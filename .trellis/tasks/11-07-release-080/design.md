@@ -65,7 +65,7 @@ Above 250,000 pairs:
 - Mark fallback matches with `fallback: true` in the match reasons so tests and the UI can
   distinguish them.
 - If any container remains unpaired after the fallback, increment a `semanticSkipped` count on the
-  diff document; the diff toolbar shows a one-line notice when the count is non-zero.
+  diff document; the diff view shows a one-line note above the rows when the count is non-zero.
 
 The fallback is O(n log n) and never builds the quadratic candidate matrix.
 
@@ -85,7 +85,8 @@ The fallback is O(n log n) and never builds the quadratic candidate matrix.
 - `runRebuild` increments the epoch before reading files.
 - `reindexFile` captures the epoch when it starts a read.
 - Before `index.upsert` or `index.remove`, if the captured epoch differs from the current epoch, drop
-  the result and add the URI to `dirtyDuringBuild`.
+  the result and add the URI to `dirtyDuringBuild`. If the building flag is already down, re-read the
+  file immediately instead of waiting for another watcher event.
 - The rebuild drains `dirtyDuringBuild` after `replaceAll`, so the dropped file is re-read from the
   post-rebuild state.
 
@@ -123,7 +124,7 @@ consistent. A generation counter remains for cache invalidation, but no longer f
 - `WorkspaceIndex` keeps `referencesByTarget: Map<string, IndexReference[]>` keyed by
   `file|start|end` of the resolved element.
 - Build it lazily on first `referencesFor` call per generation.
-- On a file upsert/remove, drop that file's contributions and rebuild the map lazily.
+- Any mutation invalidates the map; the next call rebuilds it from the current files.
 - `referencesFor(target)` reads the map; it never resolves the whole reference list.
 - The map is invalidated by the same generation counter used by the lookups.
 
@@ -134,8 +135,8 @@ fails above the existing 512 MiB budget.
 
 ### 4.1 Text features
 
-- Extend `CachedDocument` with `symbols?: SymbolData[]` and `links?: vscode.DocumentLink[]`, computed
-  on first use per document version.
+- Extend `CachedDocument` with cached symbol data, reference tokens and resolved links. Symbols and
+  tokens key on the document version; links key on the document version and the index revision.
 - Keep the existing `maxBytes` cap and document it as the text-feature cap. No new setting unless the
   benchmark shows a 40 MB document still blocks; in that case add
   `arxmlScope.textFeatures.maxFileSizeMB` with a default that preserves today's limit.
@@ -146,9 +147,11 @@ fails above the existing 512 MiB budget.
 - Split the pure engine into a preparation step (global maps, element/reference lists) and a
   per-file rule step. The preparation keeps the cross-file context; the per-file step returns the
   diagnostics for one file.
-- `ValidationService.refresh` becomes an async loop: prepare, then validate files in slices, yielding
-  with `setImmediate` every 4 ms or 50 files, whichever comes first.
+- `ValidationService.refresh` becomes an async loop: prepare, then validate files in fixed batches,
+  yielding with `setImmediate` between batches. The batch sizes are constants tuned by the validation
+  benchmark (currently 4,000 items, 1,000 scans and 500 groups; the longest slice measured 20 ms).
 - A generation token captured at start cancels the run when the index changes; a new run replaces it.
+  The index subscription increments the token immediately, before the debounce starts the next run.
 - Diagnostics are collected in a local map and published once at the end, with the same caps and the
   same summary diagnostics.
 - The status bar shows `$(sync~spin) ARXML Scope: validating…` while a run is active; it restores the
@@ -175,7 +178,7 @@ No rule text, severity, cap or related-information behavior changes.
 | Identical-child tie path pairs unrelated containers | Only when all children score ≥0.99; name and position must agree; otherwise leave unpaired |
 | Fallback hides reorderings | Position pairing only inside same-name duplicates above the limit; mark `fallback` and report the count |
 | Incremental lookup drifts from the full build | Keep `buildLookup` as the reference and add a test that compares both after random upserts/removes |
-| Reverse map memory growth | 512 MiB benchmark gate; per-file invalidation keeps it bounded |
+| Reverse map memory growth | 512 MiB benchmark gate; generation invalidation keeps it bounded |
 | Async validation publishes stale diagnostics | Generation token cancels; publish only the winning run |
 | Encoding detection misfires | BOM first, declaration second; unsupported encodings skip rather than guess |
 | Scope too large for one branch | Phase gates below; each phase ends with tests and a benchmark before the next starts |
