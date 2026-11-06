@@ -19,3 +19,12 @@ If you're using Codex or another agent-capable tool, additional project-scoped h
 Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
 
 <!-- TRELLIS:END -->
+
+<!-- DESIGN.md:START -->
+## Webview design
+
+Webview markup and CSS follow [`DESIGN.md`](DESIGN.md). Read it together with
+[`.trellis/spec/frontend/css-guidelines.md`](.trellis/spec/frontend/css-guidelines.md) before changing
+the document tree, diff, toolbar, search or sidebar. `npm run design:lint` validates the document.
+
+<!-- DESIGN.md:END -->
