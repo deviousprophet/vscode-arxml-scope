@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Token groups, literal-colour exceptions and selectors that DESIGN.md must mirror"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend guideline voice and documentation conventions"}
+{"file": ".trellis/tasks/11-07-design-md-setup/research/design-md-cli.md", "reason": "CLI validation behaviour, zero-warning token rules and the Windows bin alias"}
