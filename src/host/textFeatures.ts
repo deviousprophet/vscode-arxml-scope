@@ -22,6 +22,9 @@ interface CachedDocument {
 	model?: EcucDocumentModel;
 	file?: FileIndex;
 	oversized?: boolean;
+	/** Derived scans, reused until the document version changes. */
+	symbols?: SymbolData[];
+	tokens?: RefToken[];
 }
 
 const SELECTOR: vscode.DocumentSelector = [{ pattern: '**/*.arxml' }];
@@ -47,7 +50,9 @@ export class TextFeatures
 			return [];
 		}
 		if (data.model !== undefined) {
-			return documentSymbols(data.model).map((symbol) => this.toSymbol(document, symbol));
+			const symbols = data.symbols ?? documentSymbols(data.model);
+			data.symbols = symbols;
+			return symbols.map((symbol) => this.toSymbol(document, symbol));
 		}
 		const file = data.file ?? this.fileIndex(document);
 		return file.definitions.map((definition) => {
@@ -149,7 +154,9 @@ export class TextFeatures
 			return [];
 		}
 		const links: vscode.DocumentLink[] = [];
-		for (const token of refTokens(data.model)) {
+		const tokens = data.tokens ?? refTokens(data.model);
+		data.tokens = tokens;
+		for (const token of tokens) {
 			const target = this.targetFor(token, document.uri.toString());
 			if (target === undefined) {
 				continue;

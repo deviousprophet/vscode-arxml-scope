@@ -3,7 +3,7 @@ import * as assert from 'assert';
 import { buildFileIndex } from '../../core/index/indexBuilder';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
 import { DEFAULT_SEVERITIES, normalizeSeverities } from '../../core/validation/types';
-import { validateWorkspace } from '../../core/validation/validate';
+import { validateWorkspace, validateWorkspaceSlices } from '../../core/validation/validate';
 import { fixtureText } from './modelTestUtils';
 
 const DEFINITIONS = fixtureText('index/module-def.arxml');
@@ -38,6 +38,31 @@ function variantValues(guards: readonly string[]): string {
 suite('ECUC validation (core)', () => {
 	test('a clean file has no diagnostics', () => {
 		assert.deepStrictEqual(validateWorkspace(workspace(CLEAN), DEFAULT_SEVERITIES), []);
+	});
+
+	test('the sliced pass yields and returns the synchronous diagnostics', () => {
+		const containers = Array.from(
+			{ length: 4200 },
+			(_, at) =>
+				`<ECUC-CONTAINER-VALUE><SHORT-NAME>C${at}</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/MDef/C</DEFINITION-REF></ECUC-CONTAINER-VALUE>`
+		).join('');
+		const text = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/MDef</DEFINITION-REF><CONTAINERS>${containers}</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const index = new WorkspaceIndex();
+		index.upsert(buildFileIndex('file:///values.arxml', text));
+		index.upsert(buildFileIndex('file:///module-def.arxml', VARIANT_DEFINITIONS));
+
+		const sync = validateWorkspace(index, DEFAULT_SEVERITIES);
+		const iterator = validateWorkspaceSlices(index, DEFAULT_SEVERITIES);
+		let slices = 0;
+		while (true) {
+			const step = iterator.next();
+			if (step.done) {
+				assert.deepStrictEqual(step.value, sync);
+				break;
+			}
+			slices++;
+		}
+		assert.ok(slices > 0, 'the pass yields at least once');
 	});
 
 	test('broken reference', () => {
