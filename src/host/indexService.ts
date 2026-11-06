@@ -10,6 +10,8 @@ import { createReadStream, promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { IndexBuilder } from '../core/index/indexBuilder';
 import { compileExcludes } from '../core/index/glob';
+import { RebuildGuard } from '../core/index/rebuildGuard';
+import { detectEncoding } from '../core/text/encoding';
 import type { FileIndex, IndexElement, IndexReference, IndexStats } from '../core/index/indexModel';
 import { resolveDefinition } from '../core/index/definitions';
 import type { DefinitionInfo } from '../core/index/definitions';
@@ -73,12 +75,26 @@ export async function readFileIndex(uri: vscode.Uri, maxBytes: number): Promise<
 		return undefined;
 	}
 	const builder = new IndexBuilder(uri.toString());
-	const decoder = new TextDecoder('utf-8');
 	const stream = createReadStream(uri.fsPath, { highWaterMark: CHUNK_BYTES });
+	let decoder: TextDecoder | undefined;
+	let first = true;
 	for await (const chunk of stream) {
-		builder.write(decoder.decode(chunk, { stream: true }));
+		const bytes = chunk as Buffer;
+		if (first) {
+			first = false;
+			const detected = detectEncoding(bytes);
+			if (detected === undefined) {
+				return undefined;
+			}
+			decoder = new TextDecoder(detected.label);
+			builder.write(decoder.decode(bytes.subarray(detected.bomBytes), { stream: true }));
+		} else {
+			builder.write((decoder as TextDecoder).decode(bytes, { stream: true }));
+		}
 	}
-	builder.write(decoder.decode());
+	if (decoder !== undefined) {
+		builder.write(decoder.decode());
+	}
 	return builder.finish();
 }
 
@@ -88,6 +104,8 @@ export class IndexService implements vscode.Disposable {
 	private readonly status: vscode.StatusBarItem;
 	private readonly disposables: vscode.Disposable[] = [];
 	private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+	/** Invalidates a file read that started before the current rebuild. */
+	private readonly guard = new RebuildGuard();
 	/** Files the watcher touched while a rebuild was reading; drained after `replaceAll`. */
 	private readonly dirtyDuringBuild = new Set<string>();
 	/** Files that were too large or unreadable; reported in the tooltip only. */
@@ -208,8 +226,15 @@ export class IndexService implements vscode.Disposable {
 			}
 			return;
 		}
+		const readGeneration = this.guard.beginRead();
 		try {
 			const file = await readFileIndex(uri, settings.maxBytes);
+			if (this.guard.isStale(readGeneration)) {
+				// A rebuild started while this read was in flight; the rebuild or its
+				// late-drain pass must re-read the file instead of accepting this copy.
+				this.dirtyDuringBuild.add(uri.toString());
+				return;
+			}
 			if (file === undefined) {
 				this.skipped.add(uri.toString());
 				this.index.remove(uri.toString());
@@ -218,6 +243,10 @@ export class IndexService implements vscode.Disposable {
 				this.index.upsert(file);
 			}
 		} catch (error) {
+			if (this.guard.isStale(readGeneration)) {
+				this.dirtyDuringBuild.add(uri.toString());
+				return;
+			}
 			// A deleted file is not a skipped file: remove it and keep the status quiet.
 			// Any other read failure is reported as skipped.
 			const code = (error as NodeJS.ErrnoException).code;
@@ -262,6 +291,7 @@ export class IndexService implements vscode.Disposable {
 		}
 		this.building = true;
 		this.updateStatus();
+		this.guard.beginRebuild();
 		try {
 			const uris = await vscode.workspace.findFiles('**/*.arxml');
 			uris.sort((left, right) => left.toString().localeCompare(right.toString()));
@@ -308,8 +338,14 @@ export class IndexService implements vscode.Disposable {
 			// Discovery or a surprising read failure keeps the previous index. The
 			// finally block still clears the busy state and publishes the status.
 		} finally {
+			// A read that began before this rebuild can finish after the drain. Once the
+			// building flag is down, reindex those files again so the newest content wins.
+			const late = [...this.dirtyDuringBuild];
 			this.dirtyDuringBuild.clear();
 			this.building = false;
+			for (const key of late) {
+				void this.reindexFile(vscode.Uri.parse(key), true);
+			}
 			this.lastIndexedAt = Date.now();
 			this.publish();
 		}
@@ -417,7 +453,7 @@ export class IndexService implements vscode.Disposable {
 			const names = [...this.skipped].map(fileNameOf);
 			const shown = names.slice(0, 5).join(', ');
 			const more = names.length > 5 ? ` and ${names.length - 5} more` : '';
-			lines.push(`Skipped: ${shown}${more} (size limit or unreadable)`);
+			lines.push(`Skipped: ${shown}${more} (size limit, encoding or unreadable)`);
 		}
 		if (this.excludedCount > 0) {
 			lines.push(`${this.excludedCount} file${this.excludedCount === 1 ? '' : 's'} excluded by arxmlScope.index.exclude`);
