@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Verify every token and exception in DESIGN.md matches the shipped CSS"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify the change keeps the repository quality rules"}
-{"file": ".trellis/tasks/11-07-design-md-setup/research/design-md-cli.md", "reason": "Re-run the documented lint behaviour and zero-warning conditions"}
