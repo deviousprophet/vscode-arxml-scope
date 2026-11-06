@@ -837,6 +837,100 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.ok(shortName?.renameImplied, 'the name change is explained by the learned NMH→NM substitution');
 	});
 
+	/** Four containers whose `embedded` children carry the old container name. */
+	function renamedShape(
+		leftPrefix: string,
+		rightPrefix: string,
+		embedded: number,
+		count = 4,
+		total = 25
+	): { left: string; right: string } {
+		const make = (prefix: string): string => {
+			const containers: string[] = [];
+			for (let at = 1; at <= count; at++) {
+				const name = `${prefix}_A_0${at}`;
+				const parameters: string[] = [];
+				const references: string[] = [];
+				for (let child = 1; child <= total; child++) {
+					if (child <= embedded) {
+						references.push(reference(`R${child}`, `/P/${name}/CHILD_${child}`));
+					} else {
+						parameters.push(parameter(`P${child}`, String(child)));
+					}
+				}
+				containers.push(container(name, { definitionRef: '/D/MainBus', parameters, references }));
+			}
+			return arxml(module('M1', containers.join('')));
+		};
+		return { left: make(leftPrefix), right: make(rightPrefix) };
+	}
+
+	/** `count` containers under one definition, named `<prefix>_000` onward. */
+	function manyContainers(prefix: string, count: number, definitionRef: string): string {
+		const out: string[] = [];
+		for (let at = 0; at < count; at++) {
+			out.push(container(`${prefix}_${String(at).padStart(3, '0')}`, { definitionRef }));
+		}
+		return out.join('');
+	}
+
+	test('semantic matching learns the rename from names when children embed it', () => {
+		for (const embedded of [0, 5, 10, 15, 20, 25]) {
+			const { left, right } = renamedShape('NMH', 'NM', embedded);
+			const { document } = diffOf(left, right, true);
+			const renamed = document.rows.filter((row) => row.match?.kind === 'semantic');
+			assert.strictEqual(renamed.length, 4, `four containers pair at ${embedded} embedded children`);
+			assert.strictEqual(document.summary.added, 0, `no additions at ${embedded} embedded children`);
+			assert.strictEqual(document.summary.removed, 0, `no removals at ${embedded} embedded children`);
+		}
+	});
+
+	test('a single renamed container pairs with embedded-name children', () => {
+		const { left, right } = renamedShape('NMH', 'NM', 20, 1);
+		const { document } = diffOf(left, right, true);
+		assert.strictEqual(document.rows.filter((row) => row.match?.kind === 'semantic').length, 1);
+		assert.strictEqual(document.summary.added + document.summary.removed, 0);
+	});
+
+	test('identical-child siblings pair by name and position', () => {
+		const make = (prefix: string): string =>
+			arxml(
+				module(
+					'M1',
+					[1, 2, 3, 4]
+						.map((at) =>
+							container(`${prefix}_PDU_0${at}`, {
+								definitionRef: '/D/PDU',
+								parameters: [parameter('A', '1')],
+							})
+						)
+						.join('')
+				)
+			);
+		const { document } = diffOf(make('NMH'), make('NM'), true);
+		const pairs = document.rows.filter((row) => row.match?.kind === 'semantic');
+		assert.strictEqual(pairs.length, 4);
+		for (const row of pairs) {
+			assert.strictEqual(row.left?.shortName?.slice(-2), row.right?.shortName?.slice(-2));
+		}
+	});
+
+	test('the pair-limit fallback uses learned substitutions', () => {
+		const left = arxml(module('M1', manyContainers('OLD_SMALL', 2, '/D/SMALL') + manyContainers('OLD', 501, '/D/HUGE')));
+		const right = arxml(module('M1', manyContainers('NEW_SMALL', 2, '/D/SMALL') + manyContainers('NEW', 501, '/D/HUGE')));
+		const { document } = diffOf(left, right, true);
+		assert.strictEqual(document.semanticSkipped, 0);
+		assert.ok(document.summary.renamed >= 503, `all containers pair, got ${document.summary.renamed}`);
+	});
+
+	test('the pair-limit fallback reports containers it cannot pair', () => {
+		const left = arxml(module('M1', manyContainers('AAA', 501, '/D/HUGE')));
+		const right = arxml(module('M1', manyContainers('BBB', 501, '/D/HUGE')));
+		const { document } = diffOf(left, right, true);
+		assert.strictEqual(document.summary.renamed, 0);
+		assert.strictEqual(document.semanticSkipped, 1002);
+	});
+
 	test('strict matching keeps the pre-change removed/added output', () => {
 		const left = arxml(module('M1', container('NMH_X', { definitionRef: '/D/X' })));
 		const right = arxml(module('M1', container('NM_X', { definitionRef: '/D/X' })));

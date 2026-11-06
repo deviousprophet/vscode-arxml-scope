@@ -143,6 +143,7 @@ function wordDocument(rows: DiffRow[]): DiffDocument {
 		rightHeader: { packages: [] },
 		rows,
 		summary,
+		semanticSkipped: 0,
 	};
 }
 
@@ -229,6 +230,27 @@ suite('semantic diff page', () => {
 		assert.ok(html.includes('id="diff-title-strip"'));
 		assert.ok(html.includes('id="diff-title-left"') && html.includes('id="diff-title-right"'));
 		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'));
+	});
+
+	test('surfaces the semantic skip count from the document', () => {
+		const dom = installDom('diff');
+		try {
+			const module = loadModule<typeof import('../../../webview/diffViewer')>('../../webview/diffViewer');
+			module.mountDiff();
+			dom.post({
+				type: 'document',
+				semantic: true,
+				document: { ...documentOf(), semanticSkipped: 3 },
+			});
+			const notice = dom.document.getElementById('diff-semantic-skip') as HTMLElement;
+			assert.strictEqual(notice.hidden, false);
+			assert.strictEqual(notice.textContent, '3 containers in one group could not be matched semantically.');
+			dom.post({ type: 'document', semantic: true, document: documentOf() });
+			assert.strictEqual(notice.hidden, true);
+			assert.strictEqual(notice.textContent, '');
+		} finally {
+			dom.restore();
+		}
 	});
 
 	test('shows an in-progress state until the first document arrives', () => {
@@ -408,6 +430,7 @@ suite('semantic diff page', () => {
 			rightHeader: { packages: [] },
 			rows,
 			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0, renamed: 0 },
+			semanticSkipped: 0,
 		});
 		try {
 			const rendered = treeRows(dom.document, '#diff-pane-left').length;

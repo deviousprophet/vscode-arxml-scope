@@ -15,6 +15,7 @@ suite('DiffView component', () => {
 		assert.ok(html.includes('id="diff-list"'));
 		assert.ok(html.includes('id="diff-measure"') && html.includes('id="diff-ch-probe"'));
 		assert.ok(html.includes('id="diff-empty"') && html.includes('id="diff-empty-text"'));
+		assert.ok(html.includes('id="diff-semantic-skip"'));
 		assert.ok(!/id="diff-pane-left"/.test(html), 'the pane layers are created by VirtualScroll');
 	});
 
@@ -27,6 +28,7 @@ suite('DiffView component', () => {
 		assert.ok(/\.diff-title-strip\s*\{[^}]*width:\s*calc\(100% - var\(--diff-scrollbar-width/.test(css));
 		assert.ok(/\.diff-title-strip::after\s*\{[^}]*left:\s*50%/.test(css));
 		assert.ok(/\.diff-title-strip::after\s*\{[^}]*width:\s*3px/.test(css));
+		assert.ok(/\.diff-semantic-skip\s*\{[^}]*color:\s*var\(--vscode-descriptionForeground\)/.test(css));
 		assert.ok(/\.virtual-scroll-pane-right\s*\{[^}]*border-left:\s*3px/.test(css));
 		assert.ok(/\.virtual-scroll-vscroll\s*\{[^}]*overflow-y:\s*auto/.test(css));
 		assert.ok(/\.virtual-scroll-hbars\s*\{/.test(css));
