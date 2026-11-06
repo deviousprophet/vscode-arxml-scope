@@ -921,6 +921,10 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const { document } = diffOf(left, right, true);
 		assert.strictEqual(document.semanticSkipped, 0);
 		assert.ok(document.summary.renamed >= 503, `all containers pair, got ${document.summary.renamed}`);
+		assert.ok(
+			document.rows.filter((row) => row.match?.fallback === true).length >= 501,
+			'the fallback marks its pairs'
+		);
 	});
 
 	test('the pair-limit fallback reports containers it cannot pair', () => {

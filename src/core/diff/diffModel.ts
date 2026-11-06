@@ -485,8 +485,8 @@ interface SemanticPair extends SemanticScore {
 const SEMANTIC_PAIR_LIMIT = 250_000;
 const SEMANTIC_SCORE_FLOOR = 0.62;
 const SEMANTIC_MARGIN = 0.08;
-/** Token-Jaccard floor for the name-seed pass; the full name score stays the ranking score. */
-const SEMANTIC_NAME_SEED_FLOOR = 0.4;
+/** Token-Jaccard floor for choosing name seeds; the full name score gates learning. */
+const SEMANTIC_NAME_SEED_FLOOR = 0.55;
 const SEMANTIC_LEARN_SCORE = 0.62;
 
 /** Pairs leftover containers with the same parent, kind and definition ref. */
@@ -534,9 +534,9 @@ function semanticPass(
 			pairs = assignSemantic(bucket.lefts, bucket.rights, context);
 		}
 		// The deadlock breaker: learn the rename from container names when child
-		// values embed the old name and no high-confidence pair exists yet.
+		// values embed the old name and no high-confidence pair exists yet. It runs
+		// even after another bucket taught a different substitution.
 		if (
-			context.substitutions.size === 0 &&
 			pairs.length < Math.min(bucket.lefts.length, bucket.rights.length) &&
 			learnNameSubstitutions(bucket.lefts, bucket.rights, context.substitutions)
 		) {
@@ -578,6 +578,17 @@ function semanticPass(
 	}
 }
 
+/** Records the best and second-best value for one node. */
+function recordTopTwo(map: Map<TreeRow, number>, second: Map<TreeRow, number>, node: TreeRow, value: number): void {
+	const current = map.get(node);
+	if (current === undefined || value > current) {
+		second.set(node, current ?? 0);
+		map.set(node, value);
+	} else if (value > (second.get(node) ?? 0)) {
+		second.set(node, value);
+	}
+}
+
 /** Scores and greedily assigns one bucket. Near-ties stay unpaired, except for identical children. */
 function assignSemantic(lefts: readonly TreeRow[], rights: readonly TreeRow[], context: PairContext): SemanticPair[] {
 	const leftIndex = new Map(lefts.map((node, index) => [node, index]));
@@ -596,18 +607,9 @@ function assignSemantic(lefts: readonly TreeRow[], rights: readonly TreeRow[], c
 	const secondLeft = new Map<TreeRow, number>();
 	const bestRight = new Map<TreeRow, number>();
 	const secondRight = new Map<TreeRow, number>();
-	const record = (best: Map<TreeRow, number>, second: Map<TreeRow, number>, node: TreeRow, score: number): void => {
-		const current = best.get(node);
-		if (current === undefined || score > current) {
-			second.set(node, current ?? 0);
-			best.set(node, score);
-		} else if (score > (second.get(node) ?? 0)) {
-			second.set(node, score);
-		}
-	};
 	for (const candidate of candidates) {
-		record(bestLeft, secondLeft, candidate.left, candidate.score);
-		record(bestRight, secondRight, candidate.right, candidate.score);
+		recordTopTwo(bestLeft, secondLeft, candidate.left, candidate.score);
+		recordTopTwo(bestRight, secondRight, candidate.right, candidate.score);
 	}
 	const accepted = candidates.filter((candidate) => {
 		if (candidate.score < SEMANTIC_SCORE_FLOOR) {
@@ -657,8 +659,11 @@ function assignIdenticalChildren(
 	rightIndex: ReadonlyMap<TreeRow, number>,
 	substitutions: ReadonlyMap<string, string>
 ): SemanticPair[] {
-	const scored: Array<SemanticPair & { name: number; position: number }> = [];
+	const normalized = (node: TreeRow): string =>
+		applySubstitutions(nameOf(node), substitutions).toLowerCase().replace(/[0-9]+/g, '#');
+	const candidates: Array<SemanticPair & { nameKey: number; position: number }> = [];
 	for (const left of lefts) {
+		const leftName = normalized(left);
 		for (const right of rights) {
 			const name = nameScore(left, right, substitutions);
 			if (name < 0.5) {
@@ -666,8 +671,11 @@ function assignIdenticalChildren(
 			}
 			const position = positionScore(left, right, leftIndex, rightIndex);
 			const substitution = substitutionScore(left, right, substitutions);
-			const score = 0.55 + 0.3 * name + 0.1 * position + 0.05 * substitution;
-			scored.push({
+			// Names that differ only by numeric tokens count as the same name; the
+			// ordinal position then decides.
+			const nameKey = leftName === normalized(right) ? 1 : name;
+			const score = 0.55 + 0.3 * nameKey + 0.1 * position + 0.05 * substitution;
+			candidates.push({
 				left,
 				right,
 				score,
@@ -677,14 +685,34 @@ function assignIdenticalChildren(
 					position: round(position),
 					substitution: round(substitution),
 				},
-				name,
+				nameKey,
 				position,
 			});
 		}
 	}
-	scored.sort(
+	if (candidates.length === 0) {
+		return [];
+	}
+	const bestName = new Map<TreeRow, number>();
+	const secondName = new Map<TreeRow, number>();
+	const bestPosition = new Map<TreeRow, number>();
+	const secondPosition = new Map<TreeRow, number>();
+	for (const candidate of candidates) {
+		recordTopTwo(bestName, secondName, candidate.left, candidate.nameKey);
+		recordTopTwo(bestName, secondName, candidate.right, candidate.nameKey);
+		recordTopTwo(bestPosition, secondPosition, candidate.left, candidate.position);
+		recordTopTwo(bestPosition, secondPosition, candidate.right, candidate.position);
+	}
+	const accepted = candidates.filter((candidate) => {
+		const leftNameOk = candidate.nameKey >= (secondName.get(candidate.left) ?? 0) + 0.02;
+		const leftPositionOk = candidate.position > (secondPosition.get(candidate.left) ?? -1);
+		const rightNameOk = candidate.nameKey >= (secondName.get(candidate.right) ?? 0) + 0.02;
+		const rightPositionOk = candidate.position > (secondPosition.get(candidate.right) ?? -1);
+		return (leftNameOk || leftPositionOk) && (rightNameOk || rightPositionOk);
+	});
+	accepted.sort(
 		(a, b) =>
-			b.name - a.name ||
+			b.nameKey - a.nameKey ||
 			b.position - a.position ||
 			b.score - a.score ||
 			relativeId(a.left.row.id).localeCompare(relativeId(b.left.row.id)) ||
@@ -693,7 +721,7 @@ function assignIdenticalChildren(
 	const usedLeft = new Set<TreeRow>();
 	const usedRight = new Set<TreeRow>();
 	const out: SemanticPair[] = [];
-	for (const candidate of scored) {
+	for (const candidate of accepted) {
 		if (usedLeft.has(candidate.left) || usedRight.has(candidate.right)) {
 			continue;
 		}
@@ -778,9 +806,9 @@ function learnNameSubstitutions(
 		}
 	};
 	for (const left of lefts) {
-		const a = leftTokens.get(left) as Set<string>;
+		const a = leftTokens.get(left) ?? new Set<string>();
 		for (const right of rights) {
-			const b = rightTokens.get(right) as Set<string>;
+			const b = rightTokens.get(right) ?? new Set<string>();
 			const score = tokenJaccard(a, b);
 			if (score > 0) {
 				remember(bestRight, left, right, score);
@@ -794,11 +822,16 @@ function learnNameSubstitutions(
 		if (picked === undefined || bestLeft.get(picked.node)?.node !== left) {
 			continue;
 		}
+		// Jaccard chooses the mutual-best pair; the full name score gates learning.
+		const score = nameScore(left, picked.node, substitutions);
+		if (score < SEMANTIC_NAME_SEED_FLOOR) {
+			continue;
+		}
 		seeds.push({
 			left,
 			right: picked.node,
-			score: picked.score,
-			reasons: { children: 0, name: round(picked.score), position: 0, substitution: 0 },
+			score,
+			reasons: { children: 0, name: round(score), position: 0, substitution: 0 },
 		});
 	}
 	return learnSubstitutions(seeds, substitutions, SEMANTIC_NAME_SEED_FLOOR, true);
@@ -941,18 +974,29 @@ function learnSubstitutions(
 ): boolean {
 	const counts = new Map<string, Map<string, number>>();
 	const totals = new Map<string, number>();
+	/** True when this token came from a seed with exactly one usable token change. */
+	const sole = new Map<string, boolean>();
 	for (const seed of seeds) {
 		if (seed.score < minScore || nameOf(seed.left) === nameOf(seed.right)) {
 			continue;
 		}
+		const changes: Array<[string, string]> = [];
 		for (const [old, next] of tokenChanges(nameOf(seed.left), nameOf(seed.right))) {
 			if (old.length < 2 || next.length < 2 || /^\d+$/.test(old) || /^\d+$/.test(next)) {
 				continue;
 			}
+			changes.push([old, next]);
 			totals.set(old, (totals.get(old) ?? 0) + 1);
 			const byNext = counts.get(old) ?? new Map<string, number>();
 			byNext.set(next, (byNext.get(next) ?? 0) + 1);
 			counts.set(old, byNext);
+		}
+		if (changes.length === 1 && sole.get(changes[0][0]) !== false) {
+			sole.set(changes[0][0], true);
+		} else if (changes.length > 1) {
+			for (const [old] of changes) {
+				sole.set(old, false);
+			}
 		}
 	}
 	const candidates: Array<{ old: string; next: string; count: number }> = [];
@@ -967,8 +1011,8 @@ function learnSubstitutions(
 		}
 		const total = totals.get(old) ?? 0;
 		const consistent = bestCount >= 2 && bestCount / Math.max(1, total) >= 0.6;
-		// A single mutual-best name pair is enough when the change is unambiguous.
-		const single = allowSingle && bestCount === 1 && total === 1 && byNext.size === 1;
+		// A single mutual-best name pair is enough when it changed exactly one token.
+		const single = allowSingle && bestCount === 1 && total === 1 && byNext.size === 1 && sole.get(old) === true;
 		if (consistent || single) {
 			candidates.push({ old, next: bestNext, count: bestCount });
 		}
