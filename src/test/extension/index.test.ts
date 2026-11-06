@@ -153,6 +153,23 @@ suite('workspace index (extension)', function () {
 		assert.strictEqual(extension.indexStats().elements, 6);
 	});
 
+	test('indexes a UTF-16BE file with a BOM', async () => {
+		const text = fixtureText('index/values.arxml');
+		const be = Buffer.alloc(2 + text.length * 2);
+		be[0] = 0xfe;
+		be[1] = 0xff;
+		for (let at = 0; at < text.length; at++) {
+			const code = text.charCodeAt(at);
+			be[2 + at * 2] = code >> 8;
+			be[3 + at * 2] = code & 0xff;
+		}
+		fs.writeFileSync(extra, be);
+		const extension = await api();
+		await extension.reindex();
+		assert.strictEqual(extension.indexStats().files, 1);
+		assert.strictEqual(extension.indexStats().elements, 6);
+	});
+
 	test('skips a file with an unsupported encoding', async () => {
 		const text = '<?xml version="1.0" encoding="UTF-32"?><AUTOSAR/>';
 		fs.writeFileSync(extra, Buffer.from(text, 'utf8'));

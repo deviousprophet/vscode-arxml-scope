@@ -48,14 +48,7 @@ export class WorkspaceIndex {
 	upsert(file: FileIndex): void {
 		const previous = this.files.get(file.uri);
 		this.files.set(file.uri, file);
-		if (this.lookupsValid && this.lookupsHealthy && this.elements !== undefined && this.definitions !== undefined) {
-			if (previous !== undefined) {
-				removeLookupItems(this.elements, previous.elements, (element) => element.path);
-				removeLookupItems(this.definitions, previous.definitions, (definition) => definition.path);
-			}
-			addLookupItems(this.elements, file.elements, (element) => element.path);
-			addLookupItems(this.definitions, file.definitions, (definition) => definition.path);
-		}
+		this.applyLookupDelta(previous, file);
 		this.changed();
 	}
 
@@ -66,10 +59,7 @@ export class WorkspaceIndex {
 			return false;
 		}
 		this.files.delete(uri);
-		if (this.lookupsValid && this.lookupsHealthy && this.elements !== undefined && this.definitions !== undefined) {
-			removeLookupItems(this.elements, previous.elements, (element) => element.path);
-			removeLookupItems(this.definitions, previous.definitions, (definition) => definition.path);
-		}
+		this.applyLookupDelta(previous, undefined);
 		this.changed();
 		return true;
 	}
@@ -95,6 +85,11 @@ export class WorkspaceIndex {
 
 	get size(): number {
 		return this.files.size;
+	}
+
+	/** Monotonic mutation counter, for caches that live outside the index. */
+	get revision(): number {
+		return this.generation;
 	}
 
 	file(uri: string): FileIndex | undefined {
@@ -248,6 +243,25 @@ export class WorkspaceIndex {
 		this.generation++;
 		for (const listener of this.listeners) {
 			listener();
+		}
+	}
+
+	/** Applies one file delta to the live maps, or resets them after a failed build. */
+	private applyLookupDelta(previous: FileIndex | undefined, next: FileIndex | undefined): void {
+		if (!this.lookupsHealthy) {
+			this.invalidateLookups();
+			return;
+		}
+		if (!this.lookupsValid || this.elements === undefined || this.definitions === undefined) {
+			return;
+		}
+		if (previous !== undefined) {
+			removeLookupItems(this.elements, previous.elements, (element) => element.path);
+			removeLookupItems(this.definitions, previous.definitions, (definition) => definition.path);
+		}
+		if (next !== undefined) {
+			addLookupItems(this.elements, next.elements, (element) => element.path);
+			addLookupItems(this.definitions, next.definitions, (definition) => definition.path);
 		}
 	}
 

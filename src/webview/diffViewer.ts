@@ -101,7 +101,7 @@ let searchBar: SearchBar;
 let toolbar: DiffToolbar;
 let empty: any;
 let emptyText: any;
-let semanticSkip: any;
+let semanticSkip: HTMLElement | null;
 let reportError: (text: string) => void = function () {};
 const searchEngine = new RowSearchEngine();
 let searchQuery = '';
@@ -279,8 +279,11 @@ function setDocument(next: any): void {
 	diffDocument = next;
 	rows = next.rows;
 	loaded = true;
-	const skipped = Number(next.semanticSkipped);
-	if (semanticSkip) {
+	const skipped =
+		typeof next.semanticSkipped === 'number' && Number.isFinite(next.semanticSkipped)
+			? next.semanticSkipped
+			: 0;
+	if (semanticSkip !== null) {
 		semanticSkip.hidden = !(skipped > 0);
 		semanticSkip.textContent =
 			skipped > 0

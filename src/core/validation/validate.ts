@@ -21,6 +21,11 @@ import type {
 /** DESTs that name an indexed element with an AR path; all others are not judged. */
 const CHECKED_TARGET_DESTS = new Set(['ECUC-MODULE-CONFIGURATION-VALUES', 'ECUC-CONTAINER-VALUE']);
 
+/** Batch sizes for the sliced pass; each is sized to keep a slice well under 50 ms. */
+const YIELD_ITEMS = 4000;
+const YIELD_SCAN = 1000;
+const YIELD_GROUPS = 500;
+
 export function validateWorkspace(
 	index: WorkspaceIndex,
 	severities: SeveritySettings = DEFAULT_SEVERITIES,
@@ -68,19 +73,19 @@ export function* validateWorkspaceSlices(
 	for (const file of files) {
 		for (const element of file.elements) {
 			elements.push(element);
-			if (++flattenCount % 4000 === 0) {
+			if (++flattenCount % YIELD_ITEMS === 0) {
 				yield;
 			}
 		}
 		for (const reference of file.references) {
 			references.push(reference);
-			if (++flattenCount % 4000 === 0) {
+			if (++flattenCount % YIELD_ITEMS === 0) {
 				yield;
 			}
 		}
 		for (const definition of file.definitions) {
 			definitions.push(definition);
-			if (++flattenCount % 4000 === 0) {
+			if (++flattenCount % YIELD_ITEMS === 0) {
 				yield;
 			}
 		}
@@ -114,7 +119,7 @@ export function* validateWorkspaceSlices(
 		if (!crossFile) {
 			break;
 		}
-		if (++referenceCount % 1000 === 0) {
+		if (++referenceCount % YIELD_SCAN === 0) {
 			yield;
 		}
 		if (reference.targetDest !== undefined && !CHECKED_TARGET_DESTS.has(reference.targetDest)) {
@@ -145,7 +150,7 @@ export function* validateWorkspaceSlices(
 	// Duplicate SHORT-NAME / AR path: one diagnostic, with the other declarations attached.
 	let duplicateCount = 0;
 	for (const [path, group] of elementsByPath) {
-		if (++duplicateCount % 1000 === 0) {
+		if (++duplicateCount % YIELD_SCAN === 0) {
 			yield;
 		}
 		if (group.length < 2) {
@@ -195,7 +200,7 @@ export function* validateWorkspaceSlices(
 	// Value ranges, type forms and string lengths.
 	let valueCount = 0;
 	for (const element of elements) {
-		if (++valueCount % 1000 === 0) {
+		if (++valueCount % YIELD_SCAN === 0) {
 			yield;
 		}
 		if (element.kind !== 'parameter' || element.value === undefined || element.definitionRef === undefined) {
@@ -218,7 +223,7 @@ export function* validateWorkspaceSlices(
 	>();
 	let multiplicityCount = 0;
 	for (const element of elements) {
-		if (++multiplicityCount % 4000 === 0) {
+		if (++multiplicityCount % YIELD_ITEMS === 0) {
 			yield;
 		}
 		if (element.definitionRef === undefined) {
@@ -239,7 +244,7 @@ export function* validateWorkspaceSlices(
 		}
 	}
 	for (const reference of references) {
-		if (++multiplicityCount % 4000 === 0) {
+		if (++multiplicityCount % YIELD_ITEMS === 0) {
 			yield;
 		}
 		if (reference.definitionRef === undefined || reference.sourcePath === undefined) {
@@ -252,7 +257,7 @@ export function* validateWorkspaceSlices(
 	}
 	let multiplicityGroupCount = 0;
 	for (const group of multiplicityGroups.values()) {
-		if (++multiplicityGroupCount % 500 === 0) {
+		if (++multiplicityGroupCount % YIELD_GROUPS === 0) {
 			yield;
 		}
 		const definition = index.definitionEntry(group.definitionRef);
@@ -296,7 +301,7 @@ export function* validateWorkspaceSlices(
 	const occurrences: Array<{ path: string; file: string; range: { start: number; end: number } }> = [];
 	let missingCount = 0;
 	for (const element of elements) {
-		if (++missingCount % 4000 === 0) {
+		if (++missingCount % YIELD_ITEMS === 0) {
 			yield;
 		}
 		if (element.definitionRef !== undefined && index.definitionCandidateCount(element.definitionRef) === 0) {
@@ -305,7 +310,7 @@ export function* validateWorkspaceSlices(
 		}
 	}
 	for (const reference of references) {
-		if (++missingCount % 4000 === 0) {
+		if (++missingCount % YIELD_ITEMS === 0) {
 			yield;
 		}
 		if (reference.definitionRef !== undefined && index.definitionCandidateCount(reference.definitionRef) === 0) {
@@ -322,7 +327,7 @@ export function* validateWorkspaceSlices(
 		const groups = new Map<string, { file: string; range: { start: number; end: number }; count: number }>();
 		let occurrenceCount = 0;
 		for (const occurrence of occurrences) {
-			if (++occurrenceCount % 1000 === 0) {
+			if (++occurrenceCount % YIELD_SCAN === 0) {
 				yield;
 			}
 			const root = missingRoot(occurrence.path, missingPaths, moduleDefinitions);
@@ -353,7 +358,7 @@ export function* validateWorkspaceSlices(
 	}
 	let requiredCount = 0;
 	for (const element of elements) {
-		if (++requiredCount % 500 === 0) {
+		if (++requiredCount % YIELD_GROUPS === 0) {
 			yield;
 		}
 		if ((element.kind !== 'module' && element.kind !== 'container') || element.path === undefined || element.definitionRef === undefined) {

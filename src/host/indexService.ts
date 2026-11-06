@@ -77,20 +77,25 @@ export async function readFileIndex(uri: vscode.Uri, maxBytes: number): Promise<
 	const builder = new IndexBuilder(uri.toString());
 	const stream = createReadStream(uri.fsPath, { highWaterMark: CHUNK_BYTES });
 	let decoder: TextDecoder | undefined;
-	let first = true;
+	let head = Buffer.alloc(0);
 	for await (const chunk of stream) {
-		const bytes = chunk as Buffer;
-		if (first) {
-			first = false;
-			const detected = detectEncoding(bytes);
+		if (!Buffer.isBuffer(chunk)) {
+			continue;
+		}
+		if (decoder === undefined) {
+			head = Buffer.concat([head, chunk]);
+			if (head.length < 3) {
+				continue;
+			}
+			const detected = detectEncoding(head);
 			if (detected === undefined) {
 				return undefined;
 			}
 			decoder = new TextDecoder(detected.label);
-			builder.write(decoder.decode(bytes.subarray(detected.bomBytes), { stream: true }));
-		} else {
-			builder.write((decoder as TextDecoder).decode(bytes, { stream: true }));
+			builder.write(decoder.decode(head.subarray(detected.bomBytes), { stream: true }));
+			continue;
 		}
+		builder.write(decoder.decode(chunk, { stream: true }));
 	}
 	if (decoder !== undefined) {
 		builder.write(decoder.decode());
@@ -122,7 +127,9 @@ export class IndexService implements vscode.Disposable {
 	/** Fires after every completed rebuild or incremental file update. */
 	readonly onDidChange: vscode.Event<IndexStats> = this.emitter.event;
 
-	constructor() {
+	constructor(
+		private readonly reader: (uri: vscode.Uri, maxBytes: number) => Promise<FileIndex | undefined> = readFileIndex
+	) {
 		this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
 		this.status.command = 'vscode-arxml-scope.cycleCrossFileRules';
 		this.disposables.push(this.status, this.emitter);
@@ -228,11 +235,14 @@ export class IndexService implements vscode.Disposable {
 		}
 		const readGeneration = this.guard.beginRead();
 		try {
-			const file = await readFileIndex(uri, settings.maxBytes);
+			const file = await this.reader(uri, settings.maxBytes);
 			if (this.guard.isStale(readGeneration)) {
 				// A rebuild started while this read was in flight; the rebuild or its
 				// late-drain pass must re-read the file instead of accepting this copy.
 				this.dirtyDuringBuild.add(uri.toString());
+				if (!this.building) {
+					void this.reindexFile(uri, publish);
+				}
 				return;
 			}
 			if (file === undefined) {
@@ -245,6 +255,9 @@ export class IndexService implements vscode.Disposable {
 		} catch (error) {
 			if (this.guard.isStale(readGeneration)) {
 				this.dirtyDuringBuild.add(uri.toString());
+				if (!this.building) {
+					void this.reindexFile(uri, publish);
+				}
 				return;
 			}
 			// A deleted file is not a skipped file: remove it and keep the status quiet.
@@ -311,7 +324,7 @@ export class IndexService implements vscode.Disposable {
 					continue;
 				}
 				try {
-					const file = await readFileIndex(uri, settings.maxBytes);
+					const file = await this.reader(uri, settings.maxBytes);
 					if (file === undefined) {
 						skipped.add(uri.toString());
 					} else {

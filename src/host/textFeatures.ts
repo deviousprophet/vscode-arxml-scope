@@ -25,6 +25,8 @@ interface CachedDocument {
 	/** Derived scans, reused until the document version changes. */
 	symbols?: SymbolData[];
 	tokens?: RefToken[];
+	/** Resolved links, keyed by the workspace index revision as well as the document. */
+	links?: { revision: number; links: vscode.DocumentLink[] };
 }
 
 const SELECTOR: vscode.DocumentSelector = [{ pattern: '**/*.arxml' }];
@@ -153,6 +155,10 @@ export class TextFeatures
 		if (data.model === undefined) {
 			return [];
 		}
+		const revision = this.index.workspaceIndex.revision;
+		if (data.links !== undefined && data.links.revision === revision) {
+			return data.links.links;
+		}
 		const links: vscode.DocumentLink[] = [];
 		const tokens = data.tokens ?? refTokens(data.model);
 		data.tokens = tokens;
@@ -166,6 +172,7 @@ export class TextFeatures
 			link.tooltip = token.rawPath;
 			links.push(link);
 		}
+		data.links = { revision, links };
 		return links;
 	}
 

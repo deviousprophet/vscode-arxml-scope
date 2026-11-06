@@ -58,7 +58,12 @@ export class ValidationService implements vscode.Disposable {
 	constructor(private readonly index: IndexService) {
 		this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
 		this.status.text = '$(sync~spin) ARXML Scope: validating…';
-		this.subscription = index.subscribe(() => this.schedule());
+		this.subscription = index.subscribe(() => {
+			// Cancel an in-flight pass immediately; the debounced run starts the next one.
+			this.runToken++;
+			this.status.hide();
+			this.schedule();
+		});
 		this.configuration = vscode.workspace.onDidChangeConfiguration((event) => {
 			if (event.affectsConfiguration('arxmlScope.validation')) {
 				this.refresh();

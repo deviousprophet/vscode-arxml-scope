@@ -50,7 +50,11 @@ export function detectEncoding(head: Uint8Array): DetectedEncoding | undefined {
 
 	// The declaration is ASCII-compatible for every supported encoding without a
 	// BOM. A UTF-16 file without a BOM is not guessed.
-	const sample = Buffer.from(head.subarray(0, Math.min(head.length, 256))).toString('latin1');
+	const limit = Math.min(head.length, 256);
+	let sample = '';
+	for (let at = 0; at < limit; at++) {
+		sample += String.fromCharCode(head[at]);
+	}
 	const match = /<\?xml[^>]*\bencoding\s*=\s*["']([^"']+)["']/i.exec(sample);
 	if (match === null) {
 		return { label: 'utf-8', bomBytes: 0 };
