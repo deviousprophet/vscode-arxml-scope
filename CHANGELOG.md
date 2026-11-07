@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A semantic group above the pair limit now uses a name/position fallback and reports containers it could not pair instead of silently skipping them
 - A file saved while a full rebuild is reading is no longer overwritten by the rebuild snapshot
 
+### Security
+
+- Updated the development toolchain to `minimatch` 11.0.5, closing a globparts denial-of-service
+- Updated the development toolchain to `glob` 14.0.4, closing an `AbortSignal` cancellation bypass
+
 ## [0.7.0] - 2026-11-05
 
 ### Added
