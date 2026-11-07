@@ -7,7 +7,7 @@
  */
 import { performance } from 'node:perf_hooks';
 import { IndexBuilder } from '../../core/index/indexBuilder';
-import type { FileIndex, IndexDefinition } from '../../core/index/indexModel';
+import type { FileIndex, IndexDefinition, IndexReference } from '../../core/index/indexModel';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
 
 const CONTAINERS = 1800;
@@ -147,6 +147,75 @@ function run(): void {
 	);
 	if (found.container === undefined || found.definition === undefined) {
 		throw new Error('index lookup did not resolve the large file');
+	}
+
+	// A single-file change must update the live maps, not rebuild the 216k-element
+	// workspace. This is the G8 guard.
+	const extra: FileIndex = {
+		uri: 'file:///extra.arxml',
+		packages: [],
+		elements: [
+			{
+				kind: 'container',
+				path: '/Extra/C',
+				shortName: 'C',
+				file: 'file:///extra.arxml',
+				range: { start: 0, end: 1 },
+			},
+		],
+		references: [],
+		definitions: [],
+	};
+	const upsertStarted = performance.now();
+	index.upsert(extra);
+	const upsertElapsedMs = Math.round(performance.now() - upsertStarted);
+	const resolved = index.element('/Extra/C');
+	console.log(
+		JSON.stringify({
+			_type: 'index-mutation',
+			name: 'upsert-one-file',
+			elapsedMs: upsertElapsedMs,
+			resolved: resolved !== undefined,
+		})
+	);
+	if (resolved === undefined) {
+		throw new Error('the incremental upsert did not add its element');
+	}
+	if (upsertElapsedMs > 50) {
+		throw new Error(`upsert-one-file took ${upsertElapsedMs} ms; limit is 50 ms`);
+	}
+	index.remove('file:///extra.arxml');
+
+	// Find References must answer from the reverse map after the first build.
+	const refs: IndexReference[] = [];
+	for (let at = 0; at < 5000; at++) {
+		refs.push({
+			kind: 'reference',
+			targetRawPath: '/SyntheticPkg/Module0/Container0',
+			targetDest: 'ECUC-CONTAINER-VALUE',
+			contextPaths: [],
+			file: 'file:///refs.arxml',
+			range: { start: at, end: at + 1 },
+		});
+	}
+	index.upsert({ uri: 'file:///refs.arxml', packages: [], elements: [], references: refs, definitions: [] });
+	index.referencesFor(found.container);
+	const referencesStarted = performance.now();
+	const references = index.referencesFor(found.container);
+	const referencesElapsedMs = Math.round(performance.now() - referencesStarted);
+	console.log(
+		JSON.stringify({
+			_type: 'index-references',
+			name: 'references-warm',
+			references: references.length,
+			elapsedMs: referencesElapsedMs,
+		})
+	);
+	if (references.length !== refs.length) {
+		throw new Error(`referencesFor returned ${references.length} of ${refs.length} references`);
+	}
+	if (referencesElapsedMs > 100) {
+		throw new Error(`references-warm took ${referencesElapsedMs} ms; limit is 100 ms`);
 	}
 
 	const total = Math.max(0, retainedBytes() - baseline);

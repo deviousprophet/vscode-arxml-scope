@@ -9,7 +9,7 @@ import { performance } from 'node:perf_hooks';
 import { buildFileIndex } from '../../core/index/indexBuilder';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
 import { DEFAULT_SEVERITIES } from '../../core/validation/types';
-import { validateWorkspace } from '../../core/validation/validate';
+import { validateWorkspace, validateWorkspaceSlices } from '../../core/validation/validate';
 
 const FILE_COUNT = 10;
 const CONTAINERS_PER_FILE = 1000;
@@ -104,6 +104,40 @@ function run(): void {
 	}
 	if (retainedMiB * 1048576 > MAX_RETAINED_BYTES) {
 		throw new Error(`validation retained ${retainedMiB} MiB; limit is ${MAX_RETAINED_BYTES / 1048576} MiB`);
+	}
+
+	// The host consumes the generator in slices. Measure the longest slice; this
+	// run does not await between yields, so the number is the work upper bound.
+	const iterator = validateWorkspaceSlices(index, DEFAULT_SEVERITIES);
+	let slices = 0;
+	let maxSliceMs = 0;
+	let slicedCount = 0;
+	const slicedStarted = performance.now();
+	while (true) {
+		const stepStarted = performance.now();
+		const step = iterator.next();
+		maxSliceMs = Math.max(maxSliceMs, performance.now() - stepStarted);
+		if (step.done) {
+			slicedCount = step.value.length;
+			break;
+		}
+		slices++;
+	}
+	const slicedElapsedMs = Math.round(performance.now() - slicedStarted);
+	console.log(
+		JSON.stringify({
+			_type: 'validation-slices',
+			slices,
+			maxSliceMs: Math.round(maxSliceMs),
+			diagnostics: slicedCount,
+			elapsedMs: slicedElapsedMs,
+		})
+	);
+	if (slicedCount !== diagnostics.length) {
+		throw new Error(`the sliced pass returned ${slicedCount} of ${diagnostics.length} diagnostics`);
+	}
+	if (maxSliceMs > 50) {
+		throw new Error(`the longest validation slice took ${Math.round(maxSliceMs)} ms; limit is 50 ms`);
 	}
 }
 

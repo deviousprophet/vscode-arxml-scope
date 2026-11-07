@@ -101,6 +101,7 @@ let searchBar: SearchBar;
 let toolbar: DiffToolbar;
 let empty: any;
 let emptyText: any;
+let semanticSkip: HTMLElement | null;
 let reportError: (text: string) => void = function () {};
 const searchEngine = new RowSearchEngine();
 let searchQuery = '';
@@ -124,7 +125,8 @@ let diffDocument: DiffDocument = {
 	leftHeader: { packages: [] },
 	rightHeader: { packages: [] },
 	rows: [],
-	summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 }
+	summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 },
+	semanticSkipped: 0
 };
 let rows: DiffRow[] = [];
 let semanticMatching = true;
@@ -277,6 +279,17 @@ function setDocument(next: any): void {
 	diffDocument = next;
 	rows = next.rows;
 	loaded = true;
+	const skipped =
+		typeof next.semanticSkipped === 'number' && Number.isFinite(next.semanticSkipped)
+			? next.semanticSkipped
+			: 0;
+	if (semanticSkip !== null) {
+		semanticSkip.hidden = !(skipped > 0);
+		semanticSkip.textContent =
+			skipped > 0
+				? `${skipped} container${skipped === 1 ? '' : 's'} in one group could not be matched semantically.`
+				: '';
+	}
 	expandedGaps = new Set();
 	rowsRevision++;
 	subtreeCache = undefined;
@@ -1383,6 +1396,7 @@ export function mountDiff(): void {
 	notice = document.getElementById('diff-notice');
 	empty = document.getElementById('diff-empty');
 	emptyText = document.getElementById('diff-empty-text');
+	semanticSkip = document.getElementById('diff-semantic-skip');
 	reportError = installNoticeErrors(document, window, {
 		noticeId: 'diff-notice',
 		label: 'The diff page failed',
@@ -1462,7 +1476,8 @@ function resetDiffState(): void {
 		leftHeader: { packages: [] },
 		rightHeader: { packages: [] },
 		rows: [],
-		summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 }
+		summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 },
+		semanticSkipped: 0
 	};
 	rows = [];
 	rowByKey = new Map();

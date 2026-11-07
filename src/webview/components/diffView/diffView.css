@@ -130,6 +130,19 @@ body[data-page="diff"] .nav-btn:disabled {
 	background: var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
 	pointer-events: none;
 }
+.diff-semantic-skip {
+	flex: none;
+	margin: 0;
+	padding: 2px 10px;
+	font-size: 11px;
+	line-height: 16px;
+	color: var(--vscode-descriptionForeground);
+	background: var(--vscode-editor-background);
+	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
+}
+.diff-semantic-skip[hidden] {
+	display: none;
+}
 .diff-title-cell {
 	min-width: 0;
 	padding: 0 10px;

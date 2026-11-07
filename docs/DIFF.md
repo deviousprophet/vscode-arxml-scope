@@ -81,25 +81,32 @@ Duplicate-named siblings are paired by exact compared content first, then by the
 by id and an ordinal-free base key. This means a reordered duplicate keeps its parameters and
 references paired, and a changed duplicate lands on one changed row instead of an add + remove pair.
 
-## Renamed containers
+## Renamed modules and containers
 
-`arxmlScope.diff.semanticMatching` (default `true`) adds one more pairing pass for containers that the
-strict rules left unpaired. It lets a renamed container stay one changed row instead of becoming an
-add + remove pair, and keeps its children aligned inside it.
+`arxmlScope.diff.semanticMatching` (default `true`) adds one more pairing pass for modules and
+containers that the strict rules left unpaired. It lets a renamed module or container stay one changed
+row instead of becoming an add + remove pair, and keeps its children aligned inside it.
 
-- Pairing is attempted only between containers with the same `DEFINITION-REF` and the same parent.
+- Pairing is attempted only between modules or containers with the same `DEFINITION-REF` and the same
+  parent.
+- Names are compared first. Mutual-best name pairs can teach a token substitution (for example
+  `NMH→NM`) before child values are scored, so children whose values embed the old container name do
+  not deadlock the match. A single unambiguous rename is enough.
 - A score combines the similarity of the children (0.55), the short name (0.30), the relative position
   (0.10) and learned token substitutions (0.05). A pair is accepted at 0.62 or higher.
-- A near-tie stays unpaired: the best candidate must beat the second best by 0.08 on both sides, so two
-  equally plausible containers are not guessed.
-- Consistent token changes across several high-confidence pairs become substitutions (for example
-  `NMH→NM`). A later pair can then be accepted because its remaining difference is exactly that
-  substitution. Substitutions are learned per comparison and never persisted.
+- Learning and scoring repeat until no new substitution appears, so partial renames inside child values
+  are covered too.
+- A near-tie stays unpaired, except when every child is identical: those siblings pair by name and then
+  by ordinal position, so index-ordered containers such as `PDU_01`…`PDU_04` stay aligned.
+- Above 250,000 candidate pairs in one definition group, a linear name/position fallback runs instead of
+  the full score. If it still cannot pair containers, a note above the diff rows reports how many were
+  left out.
 - Children of a semantic pair are compared by their final id segment, so a changed owner name does not
   turn every child into an add + remove pair.
-- A renamed container renders exactly like any other **changed** row; there is no badge, no dashed
-  underline and no visible count. The pairing still keeps the row and its children aligned.
-- Only containers are paired semantically. Parameters and references keep the strict pairing rules.
+- A renamed module or container renders exactly like any other **changed** row; there is no badge, no
+  dashed underline and no visible count. The pairing still keeps the row and its children aligned.
+- Only modules and containers are paired semantically. Parameters and references keep the strict
+  pairing rules.
 
 The toolbar has a **Semantic** / **Strict** view group; selecting one switches the current panel only
 and posts the new mode to the host, which rebuilds the comparison without changing the setting. The
@@ -197,8 +204,9 @@ the same merged rows, so the search result set does not change.
   cross-file target index.
 - Search and navigation are over the merged display list; there is no filter control, global
   Collapse/Expand or bottom action strip.
-- Semantic pairing is a heuristic. A container rename that changes the `DEFINITION-REF`, the parent or
-  most of the children stays an add + remove pair; use Strict to see that view explicitly.
+- Semantic pairing is a heuristic. A rename that changes the `DEFINITION-REF` or the parent stays an
+  add + remove pair. A group above 250,000 candidate pairs uses the name/position fallback and reports
+  any containers it could not pair; use Strict to see the unscored view explicitly.
 - Switching modes does not re-scan either file. A very large diff that contains renames can still
   need one rebuild and one document transfer on the first switch; the toolbar shows a spinner and
   `Switching to …` while that happens.

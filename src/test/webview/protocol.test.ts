@@ -60,6 +60,7 @@ suite('webview protocol', () => {
 					rightHeader: { packages: [] },
 					rows: [],
 					summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 },
+					semanticSkipped: 0,
 				},
 			},
 			{ type: 'error', message: 'refresh failed' },

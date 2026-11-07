@@ -5,6 +5,32 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-11-07
+
+### Added
+
+- The workspace index reads UTF-8 with or without a BOM, UTF-16LE and UTF-16BE with a BOM, and files that declare ISO-8859-1, windows-1252 or US-ASCII; unsupported encodings are skipped and reported
+
+### Changed
+
+- A save updates only that file's index contribution instead of rebuilding every lookup
+- **Find References** answers from a reverse-reference map, so repeated queries no longer scan the whole workspace
+- Outline, document links and hover reuse a cached scan for the open document
+- Validation runs in short slices and shows `ARXML Scope: validating…` in the status bar, and a newer index change cancels the running pass
+
+### Fixed
+
+- Semantic diff now pairs renamed containers whose children embed the old name, including a single renamed container, instead of showing one removal and one addition
+- Semantic diff now pairs a renamed module as one changed row instead of a removal plus an addition
+- Containers with identical children and index-ordered names now pair by name and position
+- A semantic group above the pair limit now uses a name/position fallback and reports containers it could not pair instead of silently skipping them
+- A file saved while a full rebuild is reading is no longer overwritten by the rebuild snapshot
+
+### Security
+
+- Updated the development toolchain to `minimatch` 11.0.5, closing a globparts denial-of-service
+- Updated the development toolchain to `glob` 14.0.4, closing an `AbortSignal` cancellation bypass
+
 ## [0.7.0] - 2026-11-05
 
 ### Added

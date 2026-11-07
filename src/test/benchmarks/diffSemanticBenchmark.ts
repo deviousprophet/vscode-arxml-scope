@@ -76,6 +76,20 @@ function retainedBytes(): number {
 	return memory.heapUsed + memory.arrayBuffers;
 }
 
+/** Children whose values embed the container name, the shape the semantic deadlock hit. */
+function embeddedRows(prefix: string, containers: number): EcucRow[] {
+	const out: EcucRow[] = [];
+	for (let at = 0; at < containers; at++) {
+		const id = `container:Root/${prefix}_A_${at}#0`;
+		out.push(containerRow(id, null, `${prefix}_A_${at}`, '/D/MainBus', 10));
+		for (let child = 0; child < 10; child++) {
+			const value = child < 6 ? `${prefix}_A_${at}_V_${child}` : String(child);
+			out.push(parameterRow(`${id}/param:P${child}#0`, id, value));
+		}
+	}
+	return out;
+}
+
 function run(): void {
 	// Ten normal buckets plus one 500x400 bucket, all above the rename threshold.
 	const counts = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 500];
@@ -118,8 +132,44 @@ function run(): void {
 	}
 }
 
+function runEmbedded(): void {
+	const leftRows = embeddedRows('NMH', 200);
+	const rightRows = embeddedRows('NM', 200);
+	const sourceRows = leftRows.length + rightRows.length;
+	const before = retainedBytes();
+	const started = performance.now();
+	const document = buildDiffDocument(
+		{ name: 'left.arxml', path: '/work/left.arxml' },
+		{ name: 'right.arxml', path: '/work/right.arxml' },
+		leftRows,
+		rightRows,
+		undefined,
+		undefined,
+		undefined,
+		{ semanticMatching: true }
+	);
+	const elapsedMs = Math.round(performance.now() - started);
+	const retainedMiB = Math.round(Math.max(0, retainedBytes() - before) / 1048576);
+	console.log(
+		JSON.stringify({
+			_type: 'diff-semantic-embedded',
+			sourceRows,
+			pairs: document.summary.renamed,
+			elapsedMs,
+			retainedMiB,
+		})
+	);
+	if (document.summary.renamed < 200) {
+		throw new Error(`embedded-name semantic matched ${document.summary.renamed} of 200 containers`);
+	}
+	if (elapsedMs > MAX_STEP_MS) {
+		throw new Error(`embedded-name semantic diff took ${elapsedMs} ms; limit is ${MAX_STEP_MS} ms`);
+	}
+}
+
 try {
 	run();
+	runEmbedded();
 } catch (error) {
 	console.error(error instanceof Error ? error.message : error);
 	process.exitCode = 1;

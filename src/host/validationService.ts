@@ -6,8 +6,8 @@ import * as vscode from 'vscode';
 import type { IndexSubscription } from '../core/index/workspaceIndex';
 import { positionAt } from '../core/validation/position';
 import { DEFAULT_SEVERITIES, normalizeSeverities } from '../core/validation/types';
-import type { CrossFileMode, SeveritySettings } from '../core/validation/types';
-import { validateWorkspace } from '../core/validation/validate';
+import type { CrossFileMode, EcucDiagnostic, SeveritySettings } from '../core/validation/types';
+import { validateWorkspaceSlices } from '../core/validation/validate';
 import { crossFileRulesSetting, IndexService } from './indexService';
 
 const DEBOUNCE_MS = 400;
@@ -49,12 +49,21 @@ function toSeverity(level: string): vscode.DiagnosticSeverity {
 
 export class ValidationService implements vscode.Disposable {
 	private readonly collection = vscode.languages.createDiagnosticCollection('arxmlScope');
+	private readonly status: vscode.StatusBarItem;
 	private readonly subscription: IndexSubscription;
 	private readonly configuration: vscode.Disposable;
 	private timer?: ReturnType<typeof setTimeout>;
+	private runToken = 0;
 
 	constructor(private readonly index: IndexService) {
-		this.subscription = index.subscribe(() => this.schedule());
+		this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+		this.status.text = '$(sync~spin) ARXML Scope: validating…';
+		this.subscription = index.subscribe(() => {
+			// Cancel an in-flight pass immediately; the debounced run starts the next one.
+			this.runToken++;
+			this.status.hide();
+			this.schedule();
+		});
 		this.configuration = vscode.workspace.onDidChangeConfiguration((event) => {
 			if (event.affectsConfiguration('arxmlScope.validation')) {
 				this.refresh();
@@ -65,11 +74,43 @@ export class ValidationService implements vscode.Disposable {
 
 	/** Recomputes every diagnostic; an empty collection means no current problem. */
 	refresh(): void {
+		void this.run();
+	}
+
+	private async run(): Promise<void> {
+		const token = ++this.runToken;
 		if (!validationEnabled()) {
 			this.collection.clear();
+			this.status.hide();
 			return;
 		}
-		const diagnostics = validateWorkspace(this.index.workspaceIndex, validationSeverities(), crossFileRules());
+		this.status.show();
+		try {
+			const iterator = validateWorkspaceSlices(this.index.workspaceIndex, validationSeverities(), crossFileRules());
+			let diagnostics: EcucDiagnostic[] | undefined;
+			while (true) {
+				const step = iterator.next();
+				if (step.done) {
+					diagnostics = step.value;
+					break;
+				}
+				await new Promise<void>((resolve) => setImmediate(resolve));
+				if (token !== this.runToken) {
+					return;
+				}
+			}
+			if (token !== this.runToken || diagnostics === undefined) {
+				return;
+			}
+			this.publish(diagnostics);
+		} finally {
+			if (token === this.runToken) {
+				this.status.hide();
+			}
+		}
+	}
+
+	private publish(diagnostics: EcucDiagnostic[]): void {
 		const caps = validationCaps();
 		const byFile = new Map<string, vscode.Diagnostic[]>();
 		const hidden = new Map<string, number>();
@@ -141,6 +182,7 @@ export class ValidationService implements vscode.Disposable {
 		this.subscription.dispose();
 		this.configuration.dispose();
 		this.collection.dispose();
+		this.status.dispose();
 	}
 
 	private schedule(): void {

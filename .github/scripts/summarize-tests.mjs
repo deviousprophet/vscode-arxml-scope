@@ -220,23 +220,25 @@ ${tailLines(logText, 40)}
 
 const registry = new Map();
 
-registry.set("large-file-load", (records) => {
-  const header = `| Name | Source (MiB) | Records | Elapsed (ms) | Retained (MiB) |
-|---|---:|---:|---:|---:|
-`;
-  const rows = records.map(r =>
-    `| ${[r.name, r.sourceMiB, r.records, r.elapsedMs, r.retainedMiB].map(v => v ?? "").join(" | ")} |\n`
-  ).join("");
-  return { body: `${header}${rows}\n` };
-});
+function renderTable(headers, rows) {
+  const header = `| ${headers.join(" | ")} |\n| ${headers.map(() => "---").join(" | ")} |\n`;
+  const body = rows.map((row) => `| ${row.map((value) => value ?? "").join(" | ")} |\n`).join("");
+  return `${header}${body}\n`;
+}
 
-registry.set("large-file-summary", (records) => {
-  const s = records[0];
-  if (!s) {
-    return { body: "" };
-  }
-  return { body: `${ICONS.clipboard} Concurrent retained: **${s.concurrentRetainedMiB} MiB** (documents: ${s.documents?.join(", ") ?? ""})\n\n` };
-});
+registry.set("large-file-load", (records) => ({
+  body: renderTable(
+    ["Name", "Source (MiB)", "Records", "Elapsed (ms)", "Retained (MiB)"],
+    records.map((r) => [r.name, r.sourceMiB, r.records, r.elapsedMs, r.retainedMiB])
+  ),
+}));
+
+registry.set("large-file-summary", (records) => ({
+  body: renderTable(
+    ["Documents", "Source (MiB)", "Concurrent retained (MiB)"],
+    records.map((s) => [s.documents?.join(", ") ?? "", s.sourceMiB, s.concurrentRetainedMiB])
+  ),
+}));
 
 registry.set("memory-release", (records) => {
   const m = records[0];
@@ -244,17 +246,84 @@ registry.set("memory-release", (records) => {
     return { body: `${ICONS.failed} No measurement found.\n\n` };
   }
   return {
-    body: `| Baseline | Opened | Closed | Allocated | Retained |
-|---:|---:|---:|---:|---:|
-| ${m.baseline} | ${m.opened} | ${m.closed} | ${m.allocated} | ${m.retained} |
-
-`
+    body: renderTable(
+      ["Baseline", "Opened", "Closed", "Allocated", "Retained"],
+      [[m.baseline, m.opened, m.closed, m.allocated, m.retained]]
+    ),
   };
 });
+
+registry.set("diff-toggle", (records) => ({
+  body: renderTable(
+    [
+      "Source rows",
+      "Renamed",
+      "Strict rows",
+      "Semantic first (ms)",
+      "Strict first (ms)",
+      "Cached (ms)",
+      "Equivalent first (ms)",
+      "Equivalent cached (ms)",
+    ],
+    records.map((r) => [
+      r.sourceRows,
+      r.renamed,
+      r.strictRows,
+      r.semanticFirstMs,
+      r.strictFirstMs,
+      r.cachedMs,
+      r.equivalentFirstMs,
+      r.equivalentCachedMs,
+    ])
+  ),
+}));
+
+registry.set("diff-semantic", (records) => ({
+  body: renderTable(
+    ["Source rows", "Pairs", "Changed", "Elapsed (ms)", "Retained (MiB)"],
+    records.map((r) => [r.sourceRows, r.pairs, r.changed, r.elapsedMs, r.retainedMiB])
+  ),
+}));
+
+registry.set("diff-semantic-embedded", (records) => ({
+  body: renderTable(
+    ["Source rows", "Pairs", "Elapsed (ms)", "Retained (MiB)"],
+    records.map((r) => [r.sourceRows, r.pairs, r.elapsedMs, r.retainedMiB])
+  ),
+}));
+
+registry.set("index-mutation", (records) => ({
+  body: renderTable(
+    ["Name", "Elapsed (ms)", "Resolved"],
+    records.map((r) => [r.name, r.elapsedMs, r.resolved])
+  ),
+}));
+
+registry.set("index-references", (records) => ({
+  body: renderTable(
+    ["Name", "References", "Elapsed (ms)"],
+    records.map((r) => [r.name, r.references, r.elapsedMs])
+  ),
+}));
+
+registry.set("validation", (records) => ({
+  body: renderTable(
+    ["Source (MiB)", "Records", "Diagnostics", "Elapsed (ms)", "Retained (MiB)"],
+    records.map((r) => [r.sourceMiB, r.records, r.diagnostics, r.elapsedMs, r.retainedMiB])
+  ),
+}));
+
+registry.set("validation-slices", (records) => ({
+  body: renderTable(
+    ["Slices", "Max slice (ms)", "Diagnostics", "Elapsed (ms)"],
+    records.map((r) => [r.slices, r.maxSliceMs, r.diagnostics, r.elapsedMs])
+  ),
+}));
 
 // -- Typed-summary driver ---------------------------------------------------
 
 function renderUnknownType(type, records) {
+  console.warn(`Unknown benchmark type: ${type}`);
   return {
     body: `\n<details>\n<summary>\`${type}\` (unknown benchmark type)</summary>\n\n\`\`\`json\n${records.map(r => JSON.stringify(r, null, 2)).join("\n")}\n\`\`\`\n\n</details>\n`
   };
