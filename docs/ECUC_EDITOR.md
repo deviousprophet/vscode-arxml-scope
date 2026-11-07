@@ -241,7 +241,7 @@ lookup is also cross-file and updates an open panel when a definition file chang
 | `arxmlScope.validation.maxDiagnosticsPerFile` | number ≥ 0 | `500` | Maximum diagnostics per file; `0` is unlimited. A summary reports hidden problems. |
 | `arxmlScope.validation.maxDiagnostics` | number ≥ 0 | `5000` | Maximum diagnostics for the workspace; `0` is unlimited. |
 | `arxmlScope.validation.crossFileRules` | `auto` / `always` / `never` | `auto` | `auto` runs cross-file checks only when the index contains an ECUC definition; `always` reproduces the unconditional behaviour; `never` disables them. The status bar cycles this setting. |
-| `arxmlScope.diff.semanticMatching` | boolean | `true` | Pair renamed containers as one changed row. The diff toolbar toggle changes only the current panel. |
+| `arxmlScope.diff.semanticMatching` | boolean | `true` | Pair renamed modules and containers as one changed row. The diff toolbar toggle changes only the current panel. |
 
 An open panel re-renders when `arxmlScope.ecuc.editor` changes; you do not need to reopen the file. A
 definition saved anywhere in the workspace re-renders the open panel as well, and the diagnostic

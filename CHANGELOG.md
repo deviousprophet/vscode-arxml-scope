@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Semantic diff now pairs renamed containers whose children embed the old name, including a single renamed container, instead of showing one removal and one addition
+- Semantic diff now pairs a renamed module as one changed row instead of a removal plus an addition
 - Containers with identical children and index-ordered names now pair by name and position
 - A semantic group above the pair limit now uses a name/position fallback and reports containers it could not pair instead of silently skipping them
 - A file saved while a full rebuild is reading is no longer overwritten by the rebuild snapshot

@@ -489,7 +489,7 @@ const SEMANTIC_MARGIN = 0.08;
 const SEMANTIC_NAME_SEED_FLOOR = 0.55;
 const SEMANTIC_LEARN_SCORE = 0.62;
 
-/** Pairs leftover containers with the same parent, kind and definition ref. */
+/** Pairs leftover modules and containers with the same parent and definition ref. */
 function semanticPass(
 	leftChildren: readonly TreeRow[],
 	rightChildren: readonly TreeRow[],
@@ -498,8 +498,8 @@ function semanticPass(
 	matchedLeft: ReadonlySet<TreeRow>,
 	matchOfRight: ReadonlyMap<TreeRow, TreeRow>
 ): void {
-	const lefts = leftChildren.filter((node) => !matchedLeft.has(node) && node.row.kind === 'container');
-	const rights = rightChildren.filter((node) => !matchOfRight.has(node) && node.row.kind === 'container');
+	const lefts = leftChildren.filter((node) => !matchedLeft.has(node) && isSemanticKind(node.row.kind));
+	const rights = rightChildren.filter((node) => !matchOfRight.has(node) && isSemanticKind(node.row.kind));
 	if (lefts.length === 0 || rights.length === 0) {
 		return;
 	}
@@ -576,6 +576,11 @@ function semanticPass(
 		context.semanticSkipped +=
 			bucket.lefts.length - pairedLeft.size + (bucket.rights.length - pairedRight.size);
 	}
+}
+
+/** Semantic pairing covers modules and containers; parameters and references stay strict. */
+function isSemanticKind(kind: EcucRow['kind']): boolean {
+	return kind === 'container' || kind === 'module';
 }
 
 /** Records the best and second-best value for one node. */

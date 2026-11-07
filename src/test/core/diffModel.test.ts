@@ -69,10 +69,10 @@ function arxml(...elements: string[]): string {
 </AUTOSAR>`;
 }
 
-function module(shortName: string, containers: string): string {
+function module(shortName: string, containers: string, definitionRef = `/P/${shortName}`): string {
 	return `<ECUC-MODULE-CONFIGURATION-VALUES>
 	<SHORT-NAME>${shortName}</SHORT-NAME>
-	<DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/${shortName}</DEFINITION-REF>
+	<DEFINITION-REF DEST="ECUC-MODULE-DEF">${definitionRef}</DEFINITION-REF>
 	<CONTAINERS>${containers}</CONTAINERS>
 </ECUC-MODULE-CONFIGURATION-VALUES>`;
 }
@@ -933,6 +933,37 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const { document } = diffOf(left, right, true);
 		assert.strictEqual(document.summary.renamed, 0);
 		assert.strictEqual(document.semanticSkipped, 1002);
+	});
+
+	test('semantic matching pairs a renamed module and aligns its children', () => {
+		const left = arxml(
+			module(
+				'ModuleRenameOld',
+				container('Body', { parameters: [parameter('Value', '1')] }),
+				'/P/ModuleRename'
+			)
+		);
+		const right = arxml(
+			module(
+				'ModuleRenameNew',
+				container('Body', { parameters: [parameter('Value', '1')] }),
+				'/P/ModuleRename'
+			)
+		);
+		const { document } = diffOf(left, right, true);
+		const moduleRow = document.rows.find(
+			(row) => row.kind === 'module' && row.left?.shortName === 'ModuleRenameOld'
+		);
+		assert.ok(moduleRow, 'the left module row exists');
+		assert.strictEqual(moduleRow!.status, 'changed');
+		assert.strictEqual(moduleRow!.match?.kind, 'semantic');
+		assert.strictEqual(moduleRow!.right?.shortName, 'ModuleRenameNew');
+		assert.deepStrictEqual(
+			document.rows.filter((row) => row.status === 'added' || row.status === 'removed'),
+			[]
+		);
+		const body = document.rows.find((row) => row.kind === 'container' && row.left?.shortName === 'Body');
+		assert.strictEqual(body?.status, 'unchanged');
 	});
 
 	test('strict matching keeps the pre-change removed/added output', () => {

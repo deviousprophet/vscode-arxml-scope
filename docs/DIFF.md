@@ -81,13 +81,14 @@ Duplicate-named siblings are paired by exact compared content first, then by the
 by id and an ordinal-free base key. This means a reordered duplicate keeps its parameters and
 references paired, and a changed duplicate lands on one changed row instead of an add + remove pair.
 
-## Renamed containers
+## Renamed modules and containers
 
-`arxmlScope.diff.semanticMatching` (default `true`) adds one more pairing pass for containers that the
-strict rules left unpaired. It lets a renamed container stay one changed row instead of becoming an
-add + remove pair, and keeps its children aligned inside it.
+`arxmlScope.diff.semanticMatching` (default `true`) adds one more pairing pass for modules and
+containers that the strict rules left unpaired. It lets a renamed module or container stay one changed
+row instead of becoming an add + remove pair, and keeps its children aligned inside it.
 
-- Pairing is attempted only between containers with the same `DEFINITION-REF` and the same parent.
+- Pairing is attempted only between modules or containers with the same `DEFINITION-REF` and the same
+  parent.
 - Names are compared first. Mutual-best name pairs can teach a token substitution (for example
   `NMH→NM`) before child values are scored, so children whose values embed the old container name do
   not deadlock the match. A single unambiguous rename is enough.
@@ -102,9 +103,10 @@ add + remove pair, and keeps its children aligned inside it.
   left out.
 - Children of a semantic pair are compared by their final id segment, so a changed owner name does not
   turn every child into an add + remove pair.
-- A renamed container renders exactly like any other **changed** row; there is no badge, no dashed
-  underline and no visible count. The pairing still keeps the row and its children aligned.
-- Only containers are paired semantically. Parameters and references keep the strict pairing rules.
+- A renamed module or container renders exactly like any other **changed** row; there is no badge, no
+  dashed underline and no visible count. The pairing still keeps the row and its children aligned.
+- Only modules and containers are paired semantically. Parameters and references keep the strict
+  pairing rules.
 
 The toolbar has a **Semantic** / **Strict** view group; selecting one switches the current panel only
 and posts the new mode to the host, which rebuilds the comparison without changing the setting. The
