@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check that the diff protocol, index generation and validation scheduling stay consistent"}
-{"file": ".trellis/spec/frontend/components/component-diff-view.md", "reason": "Check the diff notice and match-mode behavior against the component contract"}
-{"file": ".trellis/tasks/11-07-release-080/research/review-verification.md", "reason": "Use the verified claims and corrections as the acceptance baseline"}
