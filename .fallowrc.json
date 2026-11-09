@@ -1,7 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
-    "src/extension.ts",
     "src/webview/editorViewer.ts",
     "src/webview/diffViewer.ts",
     "src/test/**/*.test.ts",
