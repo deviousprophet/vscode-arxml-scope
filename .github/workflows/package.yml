@@ -13,12 +13,63 @@ on:
     outputs:
       vsix_name:
         description: 'Produced VSIX name'
-        value: ${{ jobs.build.outputs.vsix_name }}
+        value: ${{ jobs.Build.outputs.vsix_name }}
 
 jobs:
+  Native:
+    name: Native ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: windows-latest
+            target: win32-x64
+          - os: macos-13
+            target: darwin-x64
+          - os: macos-14
+            target: darwin-arm64
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+          cache-workspaces: rust
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Native Addon
+        run: npm run rust:build
+
+      - name: Native Smoke Test
+        run: npm run rust:smoke
+
+      - name: Upload Native Addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/native/${{ matrix.target }}
+          overwrite: true
+
   Build:
     name: Build
+    needs: Native
     runs-on: ubuntu-latest
+    env:
+      ARXML_SKIP_RUST_BUILD: '1'
     outputs:
       vsix_name: ${{ steps.package-output.outputs.vsix_name }}
     steps:
@@ -31,8 +82,21 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+          cache-workspaces: rust
+
       - name: Install Dependencies
         run: npm ci
+
+      - name: Download Native Addons
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/native
+          pattern: '*'
 
       - name: Compile Extension
         run: npm run compile
@@ -58,6 +122,15 @@ jobs:
 
       - name: Package VSIX
         run: npx @vscode/vsce package --out ${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}.vsix
+
+      - name: Verify Every Native Addon In VSIX
+        run: |
+          set -euo pipefail
+          for target in linux-x64 win32-x64 darwin-x64 darwin-arm64; do
+            test -f "dist/native/${target}/arxml_node.node"
+            unzip -l "${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}.vsix" \
+              | grep -q "dist/native/${target}/arxml_node.node"
+          done
 
       - name: Upload VSIX Artifact
         uses: actions/upload-artifact@v4

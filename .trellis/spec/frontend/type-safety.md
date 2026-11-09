@@ -18,7 +18,7 @@ compiler cannot see: persisted webview state and `postMessage` payloads.
 | `src/core/validation/validate.ts` | `validateWorkspace`, `validateWorkspaceSlices` (the yielding form) and the seven-rule engine. |
 | `src/core/text/encoding.ts` | `DetectedEncoding`, `detectEncoding`: BOM and XML-declaration detection for the streamed index reader. |
 | `src/core/text/arxmlFeatures.ts` | `RefToken`, `RefTokenKind`, `SymbolData`, `refTokenAt`, `refTokens`, `documentSymbols`. |
-| `src/core/diff/diffModel.ts` | The diff value model: `DiffCell`, `DiffStatus`, `DiffChange`, `DiffMatch`, `DiffRow`, `DiffSummary`, `DiffDocument` (including `semanticSkipped`), `DiffHeader`, `FileLabel`, `RangeLookup`, `FlatDiffRow`, `DiffDisplayRow`, `DiffGap`, plus `buildDiffDocument`, `diffRows`, `summarizeDiff`, `diffVisibility`, `flattenDiffRows`, `flattenDiffDocument`, `nextChangeIndex`, `baseId`, `disambiguatedLabels`, `compareTitle`. |
+| `src/core/diff/diffModel.ts` | The diff value model: `DiffCell`, `DiffStatus`, `DiffChange`, `DiffMatch`, `DiffRow`, `DiffSummary`, `DiffDocument` (including `semanticSkipped` and optional `semanticLimitReason`), `SemanticLimitReason`, `DiffHeader`, `FileLabel`, `RangeLookup`, `FlatDiffRow`, `DiffDisplayRow`, `DiffGap`, plus `buildDiffDocument`, `diffRows`, `summarizeDiff`, `diffVisibility`, `flattenDiffRows`, `flattenDiffDocument`, `nextChangeIndex`, `baseId`, `disambiguatedLabels`, `compareTitle`. |
 | `src/core/diff/wordDiff.ts` | The token-level comparison: `WordSegment`, `WordPair` and `diffWords`. Pure; the diff page renders its segments. |
 | `src/webviewProtocol.ts` | The editor surface's two message unions (`EditorProviderToWebview`, `EditorWebviewToProvider`), `EditorDocumentHeader`, `EditorDocumentPayload`, `documentHeader`, `editorMessageType`, `isEditorProviderMessage`. |
 | `src/diffProtocol.ts` | The diff surface's two message unions (`DiffProviderToWebview`, `DiffWebviewToProvider`) and `diffMessageType` / `isDiffProviderMessage`. |
@@ -114,6 +114,22 @@ Rules:
 - **Both directions stay symmetric with the tests.** A protocol change updates
   `src/test/webview/page/*.test.ts` and the extension suites that post the message; a source-level grep
   is not a substitute for driving the page's handler.
+
+## Engine Boundary
+
+- `src/host/engine/coreEngine.ts` owns `CoreEngine`, `EngineKind` and
+  `EXPECTED_ENGINE_ABI`. `EngineKind` is `'rust'`; there is no TypeScript core engine and no
+  fallback. Do not re-declare the interface or the ABI constant locally.
+- `src/host/engine/nativeLoader.ts` is the only place that knows the
+  `dist/native/<platform>-<arch>/arxml_node.node` layout. It loads `unknown`, validates the
+  exported probe and ABI, and throws a clear activation error on failure.
+- `src/host/engine/rustEngine.ts` adapts the validated module to `CoreEngine`. Rust records
+  and Node-specific types do not leak past this adapter; later engine operations are coarse
+  host-shaped calls, not a generic RPC.
+- The TypeScript side is the VS Code host/UI layer. Do not add a second core implementation,
+  an engine-selection setting, or a runtime fallback.
+- `EXPECTED_ENGINE_ABI` in TypeScript must match `ENGINE_ABI` in
+  `rust/arxml-core/src/lib.rs`; an ABI change updates both sides and the loader test.
 
 ## Numeric and Value Rules
 

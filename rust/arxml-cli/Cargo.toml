@@ -1,0 +1,13 @@
+[package]
+name = "arxml-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Debug and parity CLI for the ARXML Scope core."
+
+[dependencies]
+arxml-core = { path = "../arxml-core" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true

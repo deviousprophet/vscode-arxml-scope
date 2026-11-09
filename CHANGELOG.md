@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Semantic diff now matches bulk renames of hundreds of containers quickly and reports when a comparison is limited by its work budget or a large definition group
 - Contributors install with Node 24 and npm 11 or newer; an older npm fails with a clear version message instead of a lockfile error
+- Releases now require the native Rust core addon and include builds for Linux x64, Windows x64 and macOS x64/arm64
 
 ### Fixed
 

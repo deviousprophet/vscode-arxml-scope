@@ -8,6 +8,8 @@ import { CompareSelectionStore } from './host/compareSelection';
 import { IndexService } from './host/indexService';
 import { ValidationService } from './host/validationService';
 import { registerTextFeatures } from './host/textFeatures';
+import { resolveEngine } from './host/engine/nativeLoader';
+import type { CoreEngine } from './host/engine/coreEngine';
 import type { IndexStats } from './core/index/indexModel';
 
 /**
@@ -23,6 +25,19 @@ export interface ArxmlScopeApi {
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext): ArxmlScopeApi {
+	// Resolve the required engine before registering any service: a bad addon
+	// fails activation without leaving partial registrations behind.
+	let resolvedEngine: CoreEngine;
+	try {
+		resolvedEngine = resolveEngine(context.extensionPath);
+	} catch (error) {
+		void vscode.window.showErrorMessage(
+			`ARXML Scope: ${error instanceof Error ? error.message : String(error)}`
+		);
+		throw error;
+	}
+	context.subscriptions.push({ dispose: () => resolvedEngine.dispose() });
+
 	// The workspace index is in memory only. It starts in the background so a large
 	// workspace never delays activation.
 	const indexService = new IndexService();
