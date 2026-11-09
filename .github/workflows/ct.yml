@@ -22,6 +22,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+          cache-workspaces: rust
+
       - name: Install Dependencies
         run: npm ci
 
@@ -75,9 +82,50 @@ jobs:
           name: benchmark-output-${{ github.sha }}
           overwrite: true
 
+  Rust:
+    name: Rust Core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+          cache-workspaces: rust
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Check Formatting
+        run: npm run rust:fmt
+
+      - name: Clippy
+        run: npm run rust:clippy
+
+      - name: Rust Tests
+        run: npm run rust:test
+
+      - name: Build Native Addon
+        run: npm run rust:build
+
+      - name: Native Smoke Test
+        run: npm run rust:smoke
+
+      - name: Cross-Language Parity
+        run: npm run parity
+
   Finalize:
     name: Finalize Workflow
-    needs: [UT_Test, Benchmarks]
+    needs: [UT_Test, Benchmarks, Rust]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -88,6 +136,7 @@ jobs:
         run: |
           UT_RESULT="${{ needs.UT_Test.result }}"
           BENCHMARK_RESULT="${{ needs.Benchmarks.result }}"
+          RUST_RESULT="${{ needs.Rust.result }}"
           FAILED=false
           if [[ "$UT_RESULT" != "success" ]]; then
             echo "Unit Test job: $UT_RESULT"
@@ -100,6 +149,12 @@ jobs:
             FAILED=true
           else
             echo "Benchmarks job: $BENCHMARK_RESULT"
+          fi
+          if [[ "$RUST_RESULT" != "success" ]]; then
+            echo "Rust job: $RUST_RESULT"
+            FAILED=true
+          else
+            echo "Rust job: $RUST_RESULT"
           fi
           if [[ "$FAILED" == "true" ]]; then
             exit 1

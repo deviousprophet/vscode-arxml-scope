@@ -1,6 +1,9 @@
+rust-toolchain.toml
 out/**
 node_modules/**
 src/**
+rust/**
+scripts/**
 .gitignore
 esbuild.js
 **/tsconfig.json

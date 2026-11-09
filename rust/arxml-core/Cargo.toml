@@ -1,0 +1,12 @@
+[package]
+name = "arxml-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Pure ARXML/ECUC core engine; no Node or VS Code dependencies."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]

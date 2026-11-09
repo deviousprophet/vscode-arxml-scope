@@ -30,19 +30,17 @@ semantic diff. The custom editor is opt-in: a plain open still uses the text edi
 
 ## Contributing
 
-The project uses Node 24 and npm 11 or newer. The supported versions are declared in
-`package.json` and `.nvmrc`; `engine-strict=true` makes an older npm fail with a clear
-version message instead of a lockfile error.
+Use Node 24 and npm 11+. The core engine is Rust; the TypeScript side is the VS Code
+host and UI layer.
 
 ```bash
 npm ci
 npm run compile
 npm test
-npm run benchmark
 ```
 
-`npm run compile` runs the type check, lint and extension bundles. `npm test` uses the
-VS Code test runner; `npm run benchmark` runs the headless performance suite.
+`npm run compile` and `npm test` build the native addon first. `npm run benchmark` runs
+the optional performance suite.
 
 ## Issues
 
