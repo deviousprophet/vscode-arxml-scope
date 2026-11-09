@@ -10,7 +10,9 @@
     "url": "https://github.com/deviousprophet/vscode-arxml-scope"
   },
   "engines": {
-    "vscode": "^1.125.0"
+    "vscode": "^1.125.0",
+    "node": ">=24",
+    "npm": ">=11"
   },
   "icon": "images/icon.png",
   "categories": [

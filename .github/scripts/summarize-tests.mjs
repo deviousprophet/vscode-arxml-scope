@@ -292,6 +292,35 @@ registry.set("diff-semantic-embedded", (records) => ({
   ),
 }));
 
+registry.set("rename-scale", (records) => ({
+  body: renderTable(
+    [
+      "Renames",
+      "Source rows",
+      "Pairs",
+      "Changed",
+      "Added",
+      "Removed",
+      "Limited",
+      "Reason",
+      "Elapsed (ms)",
+      "Retained (MiB)",
+    ],
+    records.map((r) => [
+      r.renames,
+      r.sourceRows,
+      r.pairs,
+      r.changed,
+      r.added,
+      r.removed,
+      r.limited,
+      r.reason,
+      r.elapsedMs,
+      r.retainedMiB,
+    ])
+  ),
+}));
+
 registry.set("index-mutation", (records) => ({
   body: renderTable(
     ["Name", "Elapsed (ms)", "Resolved"],

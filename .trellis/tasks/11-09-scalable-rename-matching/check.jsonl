@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Quality gate: forbidden patterns and write rules"}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Test completeness and branch-removal checks"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Protocol/type compatibility check"}
+{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Diff panel lifecycle and cached toggle checks"}
+{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "No CSS regressions if the notice markup changes"}
+{"file": "DESIGN.md", "reason": "Webview design system and notice styling"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Cross-layer payload review"}
+{"file": "docs/DIFF.md", "reason": "Public behavior documentation to verify"}
+{"file": ".trellis/tasks/11-09-scalable-rename-matching/research/00-plan-and-rust-review.md", "reason": "Evidence for acceptance and benchmark bounds"}
+{"file": ".trellis/tasks/11-09-scalable-rename-matching/research/01-reverse-map-measurement.md", "reason": "E6 decision evidence"}
+{"file": ".trellis/tasks/11-09-scalable-rename-matching/research/02-code-review.md", "reason": "Review findings to verify before release"}

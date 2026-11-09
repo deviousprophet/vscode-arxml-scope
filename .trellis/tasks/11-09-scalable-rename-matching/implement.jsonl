@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Repository conventions and spec index"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Forbidden patterns and write-path rules"}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Fixture, assertion and isolation conventions"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Type ownership and protocol boundary rules"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Core/host/webview layering"}
+{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Diff session and panel protocol contracts"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Host to webview protocol changes"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse matcher helpers instead of duplicating"}
+{"file": ".trellis/tasks/11-09-scalable-rename-matching/research/00-plan-and-rust-review.md", "reason": "Measured evidence and plan/Rust review"}
+{"file": ".trellis/tasks/11-09-scalable-rename-matching/research/01-reverse-map-measurement.md", "reason": "E6 reverse-map measurement and deferral"}
+{"file": ".trellis/tasks/11-09-scalable-rename-matching/research/02-code-review.md", "reason": "Standards/spec review findings and resolutions"}

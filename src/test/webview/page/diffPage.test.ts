@@ -253,6 +253,35 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('surfaces the reason a semantic comparison was limited', () => {
+		const dom = installDom('diff');
+		try {
+			const module = loadModule<typeof import('../../../webview/diffViewer')>('../../webview/diffViewer');
+			module.mountDiff();
+			dom.post({
+				type: 'document',
+				semantic: true,
+				document: { ...documentOf(), semanticSkipped: 2, semanticLimitReason: 'budget' },
+			});
+			const notice = dom.document.getElementById('diff-semantic-skip') as HTMLElement;
+			assert.strictEqual(
+				notice.textContent,
+				'2 containers were left unmatched because the comparison reached its work budget.'
+			);
+			dom.post({
+				type: 'document',
+				semantic: true,
+				document: { ...documentOf(), semanticSkipped: 1, semanticLimitReason: 'fallback' },
+			});
+			assert.strictEqual(
+				notice.textContent,
+				'1 container in a large group could not be matched semantically.'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('shows an in-progress state until the first document arrives', () => {
 		const dom = installDom('diff');
 		try {

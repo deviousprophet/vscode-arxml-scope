@@ -93,6 +93,13 @@ export interface DiffSummary {
 export interface DiffOptions {
 	/** Enable the semantic container-rename pass; default false preserves strict output. */
 	semanticMatching?: boolean;
+	/**
+	 * Deterministic cap on scored semantic pairs. The production default is the
+	 * module budget; exposed so a test can exercise the limited path. Host code
+	 * must not set it.
+	 * @internal
+	 */
+	semanticPairBudget?: number;
 }
 
 /** A file label plus its path, the pair the title disambiguation needs. */
@@ -100,6 +107,9 @@ export interface FileLabel {
 	name: string;
 	path: string;
 }
+
+/** Why a semantic comparison stopped early. */
+export type SemanticLimitReason = 'budget' | 'fallback';
 
 export interface DiffDocument {
 	left: FileLabel;
@@ -121,6 +131,8 @@ export interface DiffDocument {
 	 * unless a bucket exceeded the semantic pair limit and still had leftovers.
 	 */
 	semanticSkipped: number;
+	/** Why the comparison was limited; absent when every candidate had a chance. */
+	semanticLimitReason?: SemanticLimitReason;
 }
 
 /** The small Document header repeated in each diff pane. */
@@ -172,6 +184,16 @@ interface PairContext {
 	substitutions: Map<string, string>;
 	/** Counts containers the above-limit fallback could not pair. */
 	semanticSkipped: number;
+	/** Deterministic scored-pair budget shared by every bucket in one document. */
+	semanticBudgetUsed: number;
+	semanticBudgetLimit: number;
+	/** True once a bucket hit the candidate/scored-pair budget. */
+	semanticBudgetHit: boolean;
+	/** Leftovers attributable to each limit, used to pick the dominant reason. */
+	semanticBudgetSkipped: number;
+	semanticFallbackSkipped: number;
+	/** Why the comparison was limited, when it was. */
+	semanticLimitReason?: SemanticLimitReason;
 }
 
 /** A row id to its source range; the row itself deliberately carries no position. */
@@ -481,6 +503,177 @@ interface SemanticPair extends SemanticScore {
 	right: TreeRow;
 }
 
+/**
+ * One leftover container prepared for the semantic scorer. The child multiset
+ * and token set are built once per pass; the old scorer rebuilt them for every
+ * left/right pair.
+ */
+interface SemanticNode {
+	tree: TreeRow;
+	/** Position in the bucket, used for the deterministic position score. */
+	index: number;
+	/** Original name, used by the substitution reason. */
+	name: string;
+	/** Name after learned substitutions, lower-cased. */
+	substituted: string;
+	tokens: ReadonlySet<string>;
+	/** Digit-collapsed name; bulk renames share one signature after learning. */
+	signature: string;
+	childKeys: ReadonlyMap<string, number>;
+	/** Order-independent child-key identity; empty string means no children. */
+	childKeySignature: string;
+	/** Original child names/identities, built once for substitutionScore. */
+	childBlob: string;
+}
+
+/** Above this product, a bucket uses candidate blocking instead of scoring every pair. */
+const SEMANTIC_FULL_SCORE_PRODUCT = 4_096;
+/** Deterministic caps; a candidate count, not a wall clock. */
+const SEMANTIC_MAX_CANDIDATES_PER_NODE = 48;
+const SEMANTIC_MAX_TOTAL_CANDIDATES = 50_000;
+const SEMANTIC_SCORE_BUDGET = 250_000;
+/** Number of nearest positions added so a near-tie still has a second score. */
+const SEMANTIC_POSITION_NEIGHBOURS = 2;
+
+function semanticNodes(trees: readonly TreeRow[], substitutions: ReadonlyMap<string, string>): SemanticNode[] {
+	return trees.map((tree, index) => {
+		const name = nameOf(tree);
+		const substituted = applySubstitutions(name, substitutions).toLowerCase();
+		const childKeys = new Map<string, number>();
+		for (const child of tree.children) {
+			const key = childKey(child, substitutions);
+			childKeys.set(key, (childKeys.get(key) ?? 0) + 1);
+		}
+		return {
+			tree,
+			index,
+			name,
+			substituted,
+			tokens: new Set(tokensOf(substituted)),
+			signature: substituted.replace(/[0-9]+/g, '#'),
+			childKeys,
+			childKeySignature: childKeys.size === 0 ? '' : countsSignature(childKeys),
+			childBlob: childBlob(tree),
+		};
+	});
+}
+
+function countsSignature(counts: ReadonlyMap<string, number>): string {
+	return [...counts.entries()]
+		.sort(([left], [right]) => left.localeCompare(right))
+		.map(([key, count]) => `${key}\u0000${count}`)
+		.join('\u0001');
+}
+
+function childCount(counts: ReadonlyMap<string, number>): number {
+	let total = 0;
+	for (const count of counts.values()) {
+		total += count;
+	}
+	return total;
+}
+
+/** Multiset Jaccard over precomputed child keys. */
+function childrenScoreNodes(left: SemanticNode, right: SemanticNode): number {
+	const leftSize = childCount(left.childKeys);
+	const rightSize = childCount(right.childKeys);
+	if (leftSize === 0 && rightSize === 0) {
+		return 1;
+	}
+	if (leftSize === 0 || rightSize === 0) {
+		return 0;
+	}
+	let intersection = 0;
+	let union = 0;
+	for (const key of new Set([...left.childKeys.keys(), ...right.childKeys.keys()])) {
+		const leftCountValue = left.childKeys.get(key) ?? 0;
+		const rightCountValue = right.childKeys.get(key) ?? 0;
+		intersection += Math.min(leftCountValue, rightCountValue);
+		union += Math.max(leftCountValue, rightCountValue);
+	}
+	return union === 0 ? 1 : intersection / union;
+}
+
+function nameSimilarity(
+	leftName: string,
+	leftTokens: ReadonlySet<string>,
+	rightName: string,
+	rightTokens: ReadonlySet<string>
+): number {
+	if (leftName === '' || rightName === '') {
+		return 0;
+	}
+	const union = new Set([...leftTokens, ...rightTokens]);
+	let intersection = 0;
+	for (const token of leftTokens) {
+		if (rightTokens.has(token)) {
+			intersection++;
+		}
+	}
+	const jaccard = union.size === 0 ? 0 : intersection / union.size;
+	const distance = levenshtein(leftName, rightName);
+	const similarity = 1 - distance / Math.max(leftName.length, rightName.length, 1);
+	return 0.5 * jaccard + 0.5 * similarity;
+}
+
+function nameScoreNodes(left: SemanticNode, right: SemanticNode): number {
+	return nameSimilarity(left.substituted, left.tokens, right.substituted, right.tokens);
+}
+
+function positionScoreNodes(left: SemanticNode, right: SemanticNode, leftCount: number, rightCount: number): number {
+	return Math.max(0, Math.min(1, 1 - Math.abs(left.index - right.index) / Math.max(1, leftCount, rightCount)));
+}
+
+function substitutionScoreNodes(
+	left: SemanticNode,
+	right: SemanticNode,
+	substitutions: ReadonlyMap<string, string>
+): number {
+	if (substitutions.size === 0) {
+		return 0;
+	}
+	if (
+		applySubstitutions(left.name, substitutions) === right.name ||
+		applySubstitutions(right.name, substitutions) === left.name
+	) {
+		return 1;
+	}
+	const blob = `${left.name} ${right.name} ${left.childBlob} ${right.childBlob}`;
+	for (const old of substitutions.keys()) {
+		if (blob.includes(old)) {
+			return 0.5;
+		}
+	}
+	return 0;
+}
+
+function scoreSemanticNode(
+	left: SemanticNode,
+	right: SemanticNode,
+	leftCount: number,
+	rightCount: number,
+	substitutions: ReadonlyMap<string, string>
+): SemanticScore {
+	const children = childrenScoreNodes(left, right);
+	if (children === 0) {
+		return { score: 0, reasons: { children: 0, name: 0, position: 0, substitution: 0 } };
+	}
+	const name = nameScoreNodes(left, right);
+	const position = positionScoreNodes(left, right, leftCount, rightCount);
+	const substitution = substitutionScoreNodes(left, right, substitutions);
+	const score = 0.55 * children + 0.3 * name + 0.1 * position + 0.05 * substitution;
+	return {
+		score,
+		reasons: {
+			children: round(children),
+			name: round(name),
+			position: round(position),
+			substitution: round(substitution),
+		},
+	};
+}
+
+
 /** Above this product, a bucket uses the linear fallback instead of scoring every pair. */
 const SEMANTIC_PAIR_LIMIT = 250_000;
 const SEMANTIC_SCORE_FLOOR = 0.62;
@@ -530,13 +723,14 @@ function semanticPass(
 	for (const bucket of normal) {
 		// The original path: score, learn from high-confidence pairs, score again.
 		let pairs = assignSemantic(bucket.lefts, bucket.rights, context);
-		if (learnSubstitutions(pairs, context.substitutions, 0.8, false)) {
+		if (!context.semanticBudgetHit && learnSubstitutions(pairs, context.substitutions, 0.8, false)) {
 			pairs = assignSemantic(bucket.lefts, bucket.rights, context);
 		}
 		// The deadlock breaker: learn the rename from container names when child
 		// values embed the old name and no high-confidence pair exists yet. It runs
 		// even after another bucket taught a different substitution.
 		if (
+			!context.semanticBudgetHit &&
 			pairs.length < Math.min(bucket.lefts.length, bucket.rights.length) &&
 			learnNameSubstitutions(bucket.lefts, bucket.rights, context.substitutions)
 		) {
@@ -544,7 +738,7 @@ function semanticPass(
 		}
 		// Partial renames can hide further token changes; learn again from the
 		// accepted pairs and rescore, with a small bound so this stays linear.
-		for (let pass = 0; pass < 3; pass++) {
+		for (let pass = 0; pass < 3 && !context.semanticBudgetHit; pass++) {
 			if (!learnSubstitutions(pairs, context.substitutions, SEMANTIC_LEARN_SCORE, false)) {
 				break;
 			}
@@ -559,9 +753,21 @@ function semanticPass(
 				...(used.length === 0 ? {} : { substitutions: used }),
 			});
 		}
+		if (context.semanticBudgetHit) {
+			const pairedLeft = new Set(pairs.map((pair) => pair.left));
+			const pairedRight = new Set(pairs.map((pair) => pair.right));
+			const unpaired =
+				bucket.lefts.length - pairedLeft.size + (bucket.rights.length - pairedRight.size);
+			context.semanticBudgetSkipped += unpaired;
+			context.semanticSkipped += unpaired;
+		}
 	}
 
 	for (const bucket of oversized) {
+		// Learn the rename from names before the name-key fallback. Without this,
+		// a single above-limit bucket has no normal bucket to teach it a
+		// substitution and its fallback pairs nothing.
+		learnNameSubstitutions(bucket.lefts, bucket.rights, context.substitutions);
 		const pairs = assignFallback(bucket.lefts, bucket.rights, context.substitutions);
 		for (const pair of pairs) {
 			tryPair(pair.right, pair.left, {
@@ -573,8 +779,17 @@ function semanticPass(
 		}
 		const pairedLeft = new Set(pairs.map((pair) => pair.left));
 		const pairedRight = new Set(pairs.map((pair) => pair.right));
-		context.semanticSkipped +=
-			bucket.lefts.length - pairedLeft.size + (bucket.rights.length - pairedRight.size);
+		const unpaired = bucket.lefts.length - pairedLeft.size + (bucket.rights.length - pairedRight.size);
+		context.semanticFallbackSkipped += unpaired;
+		context.semanticSkipped += unpaired;
+	}
+	if (context.semanticSkipped > 0) {
+		context.semanticLimitReason =
+			context.semanticBudgetSkipped > context.semanticFallbackSkipped
+				? 'budget'
+				: context.semanticFallbackSkipped > 0
+					? 'fallback'
+					: 'budget';
 	}
 }
 
@@ -594,16 +809,173 @@ function recordTopTwo(map: Map<TreeRow, number>, second: Map<TreeRow, number>, n
 	}
 }
 
+/** Groups nodes by a deterministic key, preserving their bucket order. */
+function groupBy<T>(
+	nodes: readonly T[],
+	keyOf: (node: T) => string,
+	skipEmpty = false
+): Map<string, T[]> {
+	const groups = new Map<string, T[]>();
+	for (const node of nodes) {
+		const key = keyOf(node);
+		if (skipEmpty && key === '') {
+			continue;
+		}
+		const list = groups.get(key);
+		if (list) {
+			list.push(node);
+		} else {
+			groups.set(key, [node]);
+		}
+	}
+	return groups;
+}
+
+function buildTokenPostings<T>(nodes: readonly T[], tokensOf: (node: T) => ReadonlySet<string>): Map<string, T[]> {
+	const postings = new Map<string, T[]>();
+	for (const node of nodes) {
+		for (const token of tokensOf(node)) {
+			const list = postings.get(token);
+			if (list) {
+				list.push(node);
+			} else {
+				postings.set(token, [node]);
+			}
+		}
+	}
+	return postings;
+}
+
+/**
+ * Candidate blocking for one bucket.
+ *
+ * Small buckets keep the original all-pairs behavior. Large buckets get
+ * signature groups (the bulk-rename path), non-empty child-key groups, rare
+ * tokens and a few position neighbours. Neighbours are deliberate: the near-tie
+ * margin needs a second score, so a single candidate must not look certain.
+ */
+function collectSemanticCandidates(
+	lefts: readonly SemanticNode[],
+	rights: readonly SemanticNode[],
+	context: PairContext
+): Array<[SemanticNode, SemanticNode]> {
+	if (lefts.length * rights.length <= SEMANTIC_FULL_SCORE_PRODUCT) {
+		const all: Array<[SemanticNode, SemanticNode]> = [];
+		for (const left of lefts) {
+			for (const right of rights) {
+				all.push([left, right]);
+			}
+		}
+		return all;
+	}
+
+	const out: Array<[SemanticNode, SemanticNode]> = [];
+	const seen = new Set<string>();
+	const perLeft = new Map<number, number>();
+	const add = (left: SemanticNode, right: SemanticNode): void => {
+		if (out.length >= SEMANTIC_MAX_TOTAL_CANDIDATES) {
+			context.semanticBudgetHit = true;
+			return;
+		}
+		if ((perLeft.get(left.index) ?? 0) >= SEMANTIC_MAX_CANDIDATES_PER_NODE) {
+			return;
+		}
+		const key = `${left.index}\u0000${right.index}`;
+		if (seen.has(key)) {
+			return;
+		}
+		seen.add(key);
+		perLeft.set(left.index, (perLeft.get(left.index) ?? 0) + 1);
+		out.push([left, right]);
+	};
+
+	const addGroups = (keyOf: (node: SemanticNode) => string, skipEmpty: boolean): void => {
+		const leftGroups = groupBy(lefts, keyOf, skipEmpty);
+		const rightGroups = groupBy(rights, keyOf, skipEmpty);
+		for (const [key, leftGroup] of leftGroups) {
+			const rightGroup = rightGroups.get(key);
+			if (rightGroup === undefined) {
+				continue;
+			}
+			const common = Math.min(leftGroup.length, rightGroup.length);
+			for (let at = 0; at < common; at++) {
+				add(leftGroup[at], rightGroup[at]);
+			}
+			// Unequal groups still get the nearest alternatives for the margin.
+			for (let at = common; at < leftGroup.length; at++) {
+				add(leftGroup[at], rightGroup[Math.min(at, rightGroup.length - 1)]);
+			}
+		}
+	};
+
+	addGroups((node) => node.signature, false);
+	addGroups((node) => node.childKeySignature, true);
+
+	// Rare tokens: digits usually give a cheap 1:1 ordinal seed. Suppress tokens
+	// common enough to produce the full product.
+	const postings = buildTokenPostings(rights, (right) => right.tokens);
+	const frequencyLimit = Math.max(32, Math.ceil(rights.length * 0.1));
+	for (const left of lefts) {
+		const candidates = new Map<number, SemanticNode>();
+		for (const token of left.tokens) {
+			const list = postings.get(token);
+			if (list === undefined || list.length > frequencyLimit) {
+				continue;
+			}
+			for (const right of list) {
+				candidates.set(right.index, right);
+			}
+		}
+		const ranked = [...candidates.values()].sort(
+			(a, b) => tokenJaccard(left.tokens, b.tokens) - tokenJaccard(left.tokens, a.tokens) || a.index - b.index
+		);
+		for (const right of ranked.slice(0, SEMANTIC_MAX_CANDIDATES_PER_NODE)) {
+			add(left, right);
+		}
+	}
+
+	// Every left needs at least a second candidate for the near-tie margin, even
+	// when no signature/child/token candidate exists. Position neighbours are
+	// deterministic and cheap; the scorer still rejects a low score or a tie.
+	for (const left of lefts) {
+		if ((perLeft.get(left.index) ?? 0) >= 2) {
+			continue;
+		}
+		for (let offset = 0; offset <= SEMANTIC_POSITION_NEIGHBOURS; offset++) {
+			for (const direction of offset === 0 ? [0] : [-1, 1]) {
+				const at = left.index + direction * offset;
+				if (at >= 0 && at < rights.length) {
+					add(left, rights[at]);
+				}
+			}
+		}
+	}
+	return out;
+}
+
 /** Scores and greedily assigns one bucket. Near-ties stay unpaired, except for identical children. */
 function assignSemantic(lefts: readonly TreeRow[], rights: readonly TreeRow[], context: PairContext): SemanticPair[] {
+	const leftNodes = semanticNodes(lefts, context.substitutions);
+	const rightNodes = semanticNodes(rights, context.substitutions);
+	const candidateNodes = collectSemanticCandidates(leftNodes, rightNodes, context);
+	if (candidateNodes.length === 0) {
+		return [];
+	}
+	const remainingBudget = Math.max(0, context.semanticBudgetLimit - context.semanticBudgetUsed);
+	const considered =
+		candidateNodes.length > remainingBudget ? candidateNodes.slice(0, remainingBudget) : candidateNodes;
+	const budgetLimited = considered.length < candidateNodes.length;
+	if (budgetLimited) {
+		context.semanticBudgetHit = true;
+	}
+	context.semanticBudgetUsed += considered.length;
+
 	const leftIndex = new Map(lefts.map((node, index) => [node, index]));
 	const rightIndex = new Map(rights.map((node, index) => [node, index]));
 	const candidates: SemanticPair[] = [];
-	for (const left of lefts) {
-		for (const right of rights) {
-			const scored = scoreSemantic(left, right, leftIndex, rightIndex, context.substitutions);
-			candidates.push({ left, right, ...scored });
-		}
+	for (const [left, right] of considered) {
+		const scored = scoreSemanticNode(left, right, leftNodes.length, rightNodes.length, context.substitutions);
+		candidates.push({ left: left.tree, right: right.tree, ...scored });
 	}
 	if (candidates.length === 0) {
 		return [];
@@ -642,6 +1014,10 @@ function assignSemantic(lefts: readonly TreeRow[], rights: readonly TreeRow[], c
 		out.push(candidate);
 	}
 
+	if (budgetLimited) {
+		return out;
+	}
+
 	// Identical children make every pair score the same, so the 0.08 margin can
 	// never accept one. Pair the leftovers by name, then by ordinal position.
 	const remainingLeft = lefts.filter((node) => !usedLeft.has(node));
@@ -664,80 +1040,63 @@ function assignIdenticalChildren(
 	rightIndex: ReadonlyMap<TreeRow, number>,
 	substitutions: ReadonlyMap<string, string>
 ): SemanticPair[] {
-	const normalized = (node: TreeRow): string =>
-		applySubstitutions(nameOf(node), substitutions).toLowerCase().replace(/[0-9]+/g, '#');
-	const candidates: Array<SemanticPair & { nameKey: number; position: number }> = [];
-	for (const left of lefts) {
-		const leftName = normalized(left);
-		for (const right of rights) {
-			const name = nameScore(left, right, substitutions);
-			if (name < 0.5) {
-				continue;
-			}
-			const position = positionScore(left, right, leftIndex, rightIndex);
-			const substitution = substitutionScore(left, right, substitutions);
-			// Names that differ only by numeric tokens count as the same name; the
-			// ordinal position then decides.
-			const nameKey = leftName === normalized(right) ? 1 : name;
-			const score = 0.55 + 0.3 * nameKey + 0.1 * position + 0.05 * substitution;
-			candidates.push({
-				left,
-				right,
-				score,
-				reasons: {
-					children: 1,
-					name: round(name),
-					position: round(position),
-					substitution: round(substitution),
-				},
-				nameKey,
-				position,
-			});
-		}
-	}
-	if (candidates.length === 0) {
-		return [];
-	}
-	const bestName = new Map<TreeRow, number>();
-	const secondName = new Map<TreeRow, number>();
-	const bestPosition = new Map<TreeRow, number>();
-	const secondPosition = new Map<TreeRow, number>();
-	for (const candidate of candidates) {
-		recordTopTwo(bestName, secondName, candidate.left, candidate.nameKey);
-		recordTopTwo(bestName, secondName, candidate.right, candidate.nameKey);
-		recordTopTwo(bestPosition, secondPosition, candidate.left, candidate.position);
-		recordTopTwo(bestPosition, secondPosition, candidate.right, candidate.position);
-	}
-	const accepted = candidates.filter((candidate) => {
-		const leftNameOk = candidate.nameKey >= (secondName.get(candidate.left) ?? 0) + 0.02;
-		const leftPositionOk = candidate.position > (secondPosition.get(candidate.left) ?? -1);
-		const rightNameOk = candidate.nameKey >= (secondName.get(candidate.right) ?? 0) + 0.02;
-		const rightPositionOk = candidate.position > (secondPosition.get(candidate.right) ?? -1);
-		return (leftNameOk || leftPositionOk) && (rightNameOk || rightPositionOk);
-	});
-	accepted.sort(
-		(a, b) =>
-			b.nameKey - a.nameKey ||
-			b.position - a.position ||
-			b.score - a.score ||
-			relativeId(a.left.row.id).localeCompare(relativeId(b.left.row.id)) ||
-			relativeId(a.right.row.id).localeCompare(relativeId(b.right.row.id))
-	);
+	const substitutedName = (node: TreeRow): string =>
+		applySubstitutions(nameOf(node), substitutions).toLowerCase();
+	const normalized = (node: TreeRow): string => substitutedName(node).replace(/[0-9]+/g, '#');
 	const usedLeft = new Set<TreeRow>();
 	const usedRight = new Set<TreeRow>();
 	const out: SemanticPair[] = [];
-	for (const candidate of accepted) {
-		if (usedLeft.has(candidate.left) || usedRight.has(candidate.right)) {
+
+	const pair = (left: TreeRow, right: TreeRow): void => {
+		const name = nameScore(left, right, substitutions);
+		const position = positionScore(left, right, leftIndex, rightIndex);
+		const substitution = substitutionScore(left, right, substitutions);
+		const nameKey = normalized(left) === normalized(right) ? 1 : name;
+		out.push({
+			left,
+			right,
+			score: 0.55 + 0.3 * nameKey + 0.1 * position + 0.05 * substitution,
+			reasons: {
+				children: 1,
+				name: round(name),
+				position: round(position),
+				substitution: round(substitution),
+			},
+		});
+		usedLeft.add(left);
+		usedRight.add(right);
+	};
+
+	/** Zips matching groups in bucket order; leftovers remain for the next key. */
+	const pairGroups = (keyOf: (node: TreeRow) => string): void => {
+		const leftGroups = groupBy(lefts.filter((node) => !usedLeft.has(node)), keyOf);
+		const rightGroups = groupBy(rights.filter((node) => !usedRight.has(node)), keyOf);
+		for (const [key, leftGroup] of leftGroups) {
+			const rightGroup = rightGroups.get(key);
+			if (rightGroup === undefined) {
+				continue;
+			}
+			const common = Math.min(leftGroup.length, rightGroup.length);
+			for (let at = 0; at < common; at++) {
+				pair(leftGroup[at], rightGroup[at]);
+			}
+		}
+	};
+
+	pairGroups(substitutedName);
+	pairGroups(normalized);
+	// Anything left is paired by ordinal position, but only when the names are
+	// still plausibly related; identical children alone must not invent a pair.
+	const remainingLeft = lefts.filter((node) => !usedLeft.has(node));
+	const remainingRight = rights.filter((node) => !usedRight.has(node));
+	const common = Math.min(remainingLeft.length, remainingRight.length);
+	for (let at = 0; at < common; at++) {
+		const left = remainingLeft[at];
+		const right = remainingRight[at];
+		if (nameScore(left, right, substitutions) < 0.5) {
 			continue;
 		}
-		usedLeft.add(candidate.left);
-		usedRight.add(candidate.right);
-		out.push({
-			left: candidate.left,
-			right: candidate.right,
-			score: candidate.score,
-			reasons: candidate.reasons,
-		});
+		pair(left, right);
 	}
 	return out;
 }
@@ -749,20 +1108,8 @@ function assignFallback(
 	substitutions: ReadonlyMap<string, string>
 ): SemanticPair[] {
 	const keyOf = (node: TreeRow): string => applySubstitutions(nameOf(node), substitutions).toLowerCase();
-	const leftGroups = new Map<string, TreeRow[]>();
-	const rightGroups = new Map<string, TreeRow[]>();
-	for (const left of lefts) {
-		const key = keyOf(left);
-		const group = leftGroups.get(key) ?? [];
-		group.push(left);
-		leftGroups.set(key, group);
-	}
-	for (const right of rights) {
-		const key = keyOf(right);
-		const group = rightGroups.get(key) ?? [];
-		group.push(right);
-		rightGroups.set(key, group);
-	}
+	const leftGroups = groupBy(lefts, keyOf);
+	const rightGroups = groupBy(rights, keyOf);
 	const out: SemanticPair[] = [];
 	for (const [key, leftGroup] of leftGroups) {
 		const rightGroup = rightGroups.get(key);
@@ -797,6 +1144,11 @@ function learnNameSubstitutions(
 	};
 	const leftTokens = tokenSets(lefts);
 	const rightTokens = tokenSets(rights);
+
+	// Inverted index over the right side. A token shared by more than a tenth of
+	// the bucket is a stop token; the unique ordinal token still gives a seed.
+	const postings = buildTokenPostings(rights, (right) => rightTokens.get(right) ?? new Set<string>());
+	const frequencyLimit = Math.max(32, Math.ceil(rights.length * 0.1));
 	const bestRight = new Map<TreeRow, { node: TreeRow; score: number }>();
 	const bestLeft = new Map<TreeRow, { node: TreeRow; score: number }>();
 	const remember = (
@@ -810,11 +1162,39 @@ function learnNameSubstitutions(
 			map.set(from, { node: to, score });
 		}
 	};
-	for (const left of lefts) {
+	for (let leftAt = 0; leftAt < lefts.length; leftAt++) {
+		const left = lefts[leftAt];
 		const a = leftTokens.get(left) ?? new Set<string>();
-		for (const right of rights) {
-			const b = rightTokens.get(right) ?? new Set<string>();
-			const score = tokenJaccard(a, b);
+		const candidates = new Map<TreeRow, number>();
+		for (const token of a) {
+			const list = postings.get(token);
+			if (list === undefined || list.length > frequencyLimit) {
+				continue;
+			}
+			for (const right of list) {
+				if (!candidates.has(right)) {
+					candidates.set(right, tokenJaccard(a, rightTokens.get(right) ?? new Set<string>()));
+				}
+			}
+		}
+		// A bucket with no rare token still gets a few position alternatives.
+		if (candidates.size < 2) {
+			for (const offset of [0, -1, 1]) {
+				const at = leftAt + offset;
+				if (at >= 0 && at < rights.length) {
+					const right = rights[at];
+					if (!candidates.has(right)) {
+						candidates.set(right, tokenJaccard(a, rightTokens.get(right) ?? new Set<string>()));
+					}
+				}
+			}
+		}
+		const ranked = [...candidates.entries()]
+			.sort(([leftNode, leftScore], [rightNode, rightScore]) =>
+				rightScore - leftScore || leftNode.row.id.localeCompare(rightNode.row.id)
+			)
+			.slice(0, 16);
+		for (const [right, score] of ranked) {
 			if (score > 0) {
 				remember(bestRight, left, right, score);
 				remember(bestLeft, right, left, score);
@@ -856,52 +1236,6 @@ function tokenJaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): nu
 	return union === 0 ? 0 : intersection / union;
 }
 
-function scoreSemantic(
-	left: TreeRow,
-	right: TreeRow,
-	leftIndex: ReadonlyMap<TreeRow, number>,
-	rightIndex: ReadonlyMap<TreeRow, number>,
-	substitutions: ReadonlyMap<string, string>
-): SemanticScore {
-	const children = childrenScore(left, right, substitutions);
-	if (children === 0) {
-		return { score: 0, reasons: { children: 0, name: 0, position: 0, substitution: 0 } };
-	}
-	const name = nameScore(left, right, substitutions);
-	const position = positionScore(left, right, leftIndex, rightIndex);
-	const substitution = substitutionScore(left, right, substitutions);
-	const score = 0.55 * children + 0.3 * name + 0.1 * position + 0.05 * substitution;
-	return {
-		score,
-		reasons: {
-			children: round(children),
-			name: round(name),
-			position: round(position),
-			substitution: round(substitution),
-		},
-	};
-}
-
-function childrenScore(left: TreeRow, right: TreeRow, substitutions: ReadonlyMap<string, string>): number {
-	if (left.children.length === 0 && right.children.length === 0) {
-		return 1;
-	}
-	if (left.children.length === 0 || right.children.length === 0) {
-		return 0;
-	}
-	const leftKeys = multiset(left.children.map((child) => childKey(child, substitutions)));
-	const rightKeys = multiset(right.children.map((child) => childKey(child, substitutions)));
-	let intersection = 0;
-	let union = 0;
-	for (const key of new Set([...leftKeys.keys(), ...rightKeys.keys()])) {
-		const leftCount = leftKeys.get(key) ?? 0;
-		const rightCount = rightKeys.get(key) ?? 0;
-		intersection += Math.min(leftCount, rightCount);
-		union += Math.max(leftCount, rightCount);
-	}
-	return union === 0 ? 1 : intersection / union;
-}
-
 function childKey(node: TreeRow, substitutions: ReadonlyMap<string, string>): string {
 	return `${node.row.kind}|${node.row.definitionRef}|${applySubstitutions(sortIdentity(node.row), substitutions)}`;
 }
@@ -912,19 +1246,7 @@ function nameScore(left: TreeRow, right: TreeRow, substitutions: ReadonlyMap<str
 	if (leftName === '' || rightName === '') {
 		return 0;
 	}
-	const tokensLeft = new Set(tokensOf(leftName));
-	const tokensRight = new Set(tokensOf(rightName));
-	const union = new Set([...tokensLeft, ...tokensRight]);
-	let intersection = 0;
-	for (const token of tokensLeft) {
-		if (tokensRight.has(token)) {
-			intersection++;
-		}
-	}
-	const jaccard = union.size === 0 ? 0 : intersection / union.size;
-	const distance = levenshtein(leftName, rightName);
-	const similarity = 1 - distance / Math.max(leftName.length, rightName.length, 1);
-	return 0.5 * jaccard + 0.5 * similarity;
+	return nameSimilarity(leftName, new Set(tokensOf(leftName)), rightName, new Set(tokensOf(rightName)));
 }
 
 function positionScore(
@@ -1074,14 +1396,6 @@ function tokensOf(text: string): string[] {
 
 function nameOf(node: TreeRow): string {
 	return node.row.shortName || node.row.label;
-}
-
-function multiset(values: readonly string[]): Map<string, number> {
-	const counts = new Map<string, number>();
-	for (const value of values) {
-		counts.set(value, (counts.get(value) ?? 0) + 1);
-	}
-	return counts;
 }
 
 function levenshtein(left: string, right: string): number {
@@ -1268,6 +1582,7 @@ function flattenMerged(nodes: readonly MergedNode[], parentKey: string | null, l
 interface DiffRowsResult {
 	rows: DiffRow[];
 	semanticSkipped: number;
+	semanticLimitReason?: SemanticLimitReason;
 }
 
 /** The merged diff rows for two display-row lists, in deterministic order. */
@@ -1295,11 +1610,20 @@ function diffRowsWithMetrics(
 		semantic: options.semanticMatching === true,
 		substitutions: new Map(),
 		semanticSkipped: 0,
+		semanticBudgetUsed: 0,
+		semanticBudgetLimit: options.semanticPairBudget ?? SEMANTIC_SCORE_BUDGET,
+		semanticBudgetHit: false,
+		semanticBudgetSkipped: 0,
+		semanticFallbackSkipped: 0,
 	};
 	const merged = mergeChildren(treeOf(leftRows), treeOf(rightRows), leftLookup, rightLookup, context);
 	const out: DiffRow[] = [];
 	flattenMerged(merged, null, 1, out);
-	return { rows: out, semanticSkipped: context.semanticSkipped };
+	return {
+		rows: out,
+		semanticSkipped: context.semanticSkipped,
+		...(context.semanticLimitReason === undefined ? {} : { semanticLimitReason: context.semanticLimitReason }),
+	};
 }
 
 /** Counts every row with a status, descendants included. */
@@ -1325,7 +1649,7 @@ export function buildDiffDocument(
 	headers?: { left: DiffHeader; right: DiffHeader },
 	options: DiffOptions = {}
 ): DiffDocument {
-	const { rows, semanticSkipped } = diffRowsWithMetrics(
+	const { rows, semanticSkipped, semanticLimitReason } = diffRowsWithMetrics(
 		leftRows,
 		rightRows,
 		leftRanges,
@@ -1341,6 +1665,7 @@ export function buildDiffDocument(
 		rows,
 		summary: summarizeDiff(rows),
 		semanticSkipped,
+		...(semanticLimitReason === undefined ? {} : { semanticLimitReason }),
 	};
 }
 

@@ -28,6 +28,22 @@ semantic diff. The custom editor is opt-in: a plain open still uses the text edi
 - [Synthetic ECUC example](examples/README.md) — a small file to open, edit and compare.
 - [Changelog](CHANGELOG.md) · [License](LICENSE)
 
+## Contributing
+
+The project uses Node 24 and npm 11 or newer. The supported versions are declared in
+`package.json` and `.nvmrc`; `engine-strict=true` makes an older npm fail with a clear
+version message instead of a lockfile error.
+
+```bash
+npm ci
+npm run compile
+npm test
+npm run benchmark
+```
+
+`npm run compile` runs the type check, lint and extension bundles. `npm test` uses the
+VS Code test runner; `npm run benchmark` runs the headless performance suite.
+
 ## Issues
 
 Found a bug or want a feature? Open an issue: [Issues](https://github.com/deviousprophet/vscode-arxml-scope/issues). Include a short description, steps to reproduce, and sample files when possible.
