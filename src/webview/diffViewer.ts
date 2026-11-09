@@ -71,6 +71,12 @@ export function diffContentWidth(maxChars: number, chWidth: number): number {
 	return Math.ceil(safeChars * safeChar) + 26 + 8;
 }
 
+const LIMITED_NOTICE: Record<'budget' | 'fallback', (count: number, noun: string, was: string) => string> = {
+	budget: (count, noun, was) =>
+		`${count} ${noun} ${was} left unmatched because the comparison reached its work budget.`,
+	fallback: (count, noun) => `${count} ${noun} in a large group could not be matched semantically.`,
+};
+
 /** The candidate rows for Search: the active view decides whether unchanged rows count. */
 export function searchCandidatesFor(rows: readonly DiffRow[], changesOnly: boolean): DiffRow[] {
 	return changesOnly ? rows.filter((row) => row.status !== 'unchanged') : rows.slice();
@@ -285,9 +291,16 @@ function setDocument(next: any): void {
 			: 0;
 	if (semanticSkip !== null) {
 		semanticSkip.hidden = !(skipped > 0);
+		const noun = `container${skipped === 1 ? '' : 's'}`;
+		const was = skipped === 1 ? 'was' : 'were';
+		const rawReason = next.semanticLimitReason;
+		const reason: 'budget' | 'fallback' | undefined =
+			rawReason === 'budget' || rawReason === 'fallback' ? rawReason : undefined;
 		semanticSkip.textContent =
 			skipped > 0
-				? `${skipped} container${skipped === 1 ? '' : 's'} in one group could not be matched semantically.`
+				? reason === undefined
+					? `${skipped} ${noun} in one group could not be matched semantically.`
+					: LIMITED_NOTICE[reason](skipped, noun, was)
 				: '';
 	}
 	expandedGaps = new Set();

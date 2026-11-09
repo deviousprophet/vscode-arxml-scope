@@ -92,15 +92,25 @@ row instead of becoming an add + remove pair, and keeps its children aligned ins
 - Names are compared first. Mutual-best name pairs can teach a token substitution (for example
   `NMH→NM`) before child values are scored, so children whose values embed the old container name do
   not deadlock the match. A single unambiguous rename is enough.
+- Candidate blocking keeps the cost near-linear: containers are grouped by a digit-normalized name
+  signature and by their child-key multiset, and rare name tokens provide a short list of candidates.
+  Only that short list is fully scored; the rest of a large definition group is not compared
+  exhaustively.
 - A score combines the similarity of the children (0.55), the short name (0.30), the relative position
   (0.10) and learned token substitutions (0.05). A pair is accepted at 0.62 or higher.
 - Learning and scoring repeat until no new substitution appears, so partial renames inside child values
   are covered too.
 - A near-tie stays unpaired, except when every child is identical: those siblings pair by name and then
   by ordinal position, so index-ordered containers such as `PDU_01`…`PDU_04` stay aligned.
+- A comparison has a deterministic work budget. When the budget is reached, the pairs already found
+  stay visible and the notice reports how many containers were left unmatched and why. The budget is a
+  candidate count, so the same files produce the same result on every run.
 - Above 250,000 candidate pairs in one definition group, a linear name/position fallback runs instead of
-  the full score. If it still cannot pair containers, a note above the diff rows reports how many were
-  left out.
+  the full score. If it still cannot pair containers, the note above the diff rows reports the fallback
+  count. A budget-limited comparison uses a different note so the two cases are distinguishable.
+- The scale benchmark pairs 500 renamed containers with 25 embedded-name children in about 0.2 s and
+  700 in about 0.1 s on the development machine. The CI guards are 3 s for 500 and 6 s for 700, so an
+  ordinary slower runner still passes while a return to quadratic scoring fails.
 - Children of a semantic pair are compared by their final id segment, so a changed owner name does not
   turn every child into an add + remove pair.
 - A renamed module or container renders exactly like any other **changed** row; there is no badge, no
@@ -205,8 +215,9 @@ the same merged rows, so the search result set does not change.
 - Search and navigation are over the merged display list; there is no filter control, global
   Collapse/Expand or bottom action strip.
 - Semantic pairing is a heuristic. A rename that changes the `DEFINITION-REF` or the parent stays an
-  add + remove pair. A group above 250,000 candidate pairs uses the name/position fallback and reports
-  any containers it could not pair; use Strict to see the unscored view explicitly.
+  add + remove pair. A group above 250,000 candidate pairs uses the name/position fallback, and a
+  comparison that reaches its work budget stops scoring. Both cases report the containers they could not
+  pair; use Strict to see the unscored view explicitly.
 - Switching modes does not re-scan either file. A very large diff that contains renames can still
   need one rebuild and one document transfer on the first switch; the toolbar shows a spinner and
   `Switching to …` while that happens.

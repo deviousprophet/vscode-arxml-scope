@@ -26,7 +26,7 @@ function side(text: string): Side {
 	return { rows, rangeOf: (id) => index.byId.get(id)?.range };
 }
 
-function diffOf(leftText: string, rightText: string, semanticMatching = false) {
+function diffOf(leftText: string, rightText: string, semanticMatching = false, semanticPairBudget?: number) {
 	const left = side(leftText);
 	const right = side(rightText);
 	const document = buildDiffDocument(
@@ -37,7 +37,7 @@ function diffOf(leftText: string, rightText: string, semanticMatching = false) {
 		left.rangeOf,
 		right.rangeOf,
 		undefined,
-		{ semanticMatching }
+		{ semanticMatching, ...(semanticPairBudget === undefined ? {} : { semanticPairBudget }) }
 	);
 	return { document, left, right };
 }
@@ -982,5 +982,88 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.strictEqual(document.summary.renamed, 0);
 		assert.ok(document.rows.some((row) => row.status === 'removed'));
 		assert.ok(document.rows.some((row) => row.status === 'added'));
+	});
+
+	test('candidate blocking pairs 500 embedded-name containers in one bucket', () => {
+		const { left, right } = renamedShape('NMH', 'NM', 25, 500);
+		const { document } = diffOf(left, right, true);
+		assert.strictEqual(document.summary.renamed, 500);
+		assert.strictEqual(document.summary.added, 0);
+		assert.strictEqual(document.summary.removed, 0);
+		assert.strictEqual(document.semanticSkipped, 0);
+	});
+
+	test('an oversized bucket learns its rename before the fallback', () => {
+		const left = arxml(module('M1', manyContainers('NMH', 501, '/D/HUGE')));
+		const right = arxml(module('M1', manyContainers('NM', 501, '/D/HUGE')));
+		const { document } = diffOf(left, right, true);
+		assert.strictEqual(document.summary.renamed, 501);
+		assert.strictEqual(document.semanticSkipped, 0);
+	});
+
+	test('a deterministic budget limits work and reports the reason', () => {
+		const left = arxml(module('M1', manyContainers('NMH', 500, '/D/HUGE')));
+		const right = arxml(module('M1', manyContainers('NM', 500, '/D/HUGE')));
+		const first = diffOf(left, right, true, 10).document;
+		const second = diffOf(left, right, true, 10).document;
+		assert.strictEqual(first.semanticLimitReason, 'budget');
+		assert.strictEqual(first.semanticSkipped, 980);
+		assert.strictEqual(first.summary.renamed, second.summary.renamed);
+		assert.strictEqual(first.semanticSkipped, second.semanticSkipped);
+		assert.strictEqual(first.semanticLimitReason, second.semanticLimitReason);
+	});
+
+	test('a near-tie at scale stays unpaired', () => {
+		const make = (prefix: string): string => {
+			const containers: string[] = [];
+			for (let at = 0; at < 500; at++) {
+				const parameters = [1, 2, 3, 4, 5].map((child) => parameter(`Shared${child}`, '1'));
+				parameters.push(parameter('Unique', `${prefix}_${at}`));
+				containers.push(
+					container(`Item_${prefix}_${String(at).padStart(3, '0')}`, {
+						definitionRef: '/D/Tie',
+						parameters,
+					})
+				);
+			}
+			return arxml(module('M1', containers.join('')));
+		};
+		const { document } = diffOf(make('L'), make('R'), true);
+		assert.strictEqual(document.summary.renamed, 0);
+		assert.strictEqual(document.semanticLimitReason, undefined);
+	});
+
+	test('a large unrelated bucket does not pair through shared stop tokens', () => {
+		const left = arxml(module('M1', manyContainers('AAA', 500, '/D/UNRELATED')));
+		const right = arxml(module('M1', manyContainers('BBB', 500, '/D/UNRELATED')));
+		const { document } = diffOf(left, right, true);
+		assert.strictEqual(document.summary.renamed, 0);
+		assert.strictEqual(document.semanticLimitReason, undefined);
+	});
+
+	test('identical-child pairing is deterministic', () => {
+		const make = (prefix: string): string =>
+			arxml(
+				module(
+					'M1',
+					Array.from({ length: 20 }, (_, at) =>
+						container(`${prefix}_PDU_${String(at).padStart(2, '0')}`, {
+							definitionRef: '/D/PDU',
+							parameters: [parameter('A', '1')],
+						})
+					).join('')
+				)
+			);
+		const left = make('NMH');
+		const right = make('NM');
+		const first = diffOf(left, right, true).document;
+		const second = diffOf(left, right, true).document;
+		const pairs = (document: typeof first): string[] =>
+			document.rows
+				.filter((row) => row.match?.kind === 'semantic')
+				.map((row) => `${row.left?.shortName}->${row.right?.shortName}`)
+				.sort();
+		assert.strictEqual(pairs(first).length, 20);
+		assert.deepStrictEqual(pairs(first), pairs(second));
 	});
 });
