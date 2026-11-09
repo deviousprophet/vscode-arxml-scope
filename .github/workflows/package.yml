@@ -5,11 +5,6 @@ env:
 
 on:
   workflow_call:
-    inputs:
-      use_package_version:
-        required: false
-        type: boolean
-        default: false
     outputs:
       vsix_name:
         description: 'Produced VSIX name'
@@ -104,16 +99,6 @@ jobs:
       - name: Strip Unreleased Changelog
         run: node .github/scripts/strip-unreleased-changelog.mjs
 
-      - name: Determine Suffix
-        id: suffix
-        run: |
-          if [ "${{ inputs.use_package_version }}" = "true" ]; then
-            SUFFIX=$(node -p "require('./package.json').version")
-          else
-            SUFFIX="$GITHUB_SHA"
-          fi
-          echo "suffix=$SUFFIX" >> $GITHUB_OUTPUT
-
       - name: Extract Extension Name
         id: extension-name
         run: |
@@ -121,24 +106,24 @@ jobs:
           echo "extension_name=$NAME" >> $GITHUB_OUTPUT
 
       - name: Package VSIX
-        run: npx @vscode/vsce package --out ${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}.vsix
+        run: npx @vscode/vsce package --out ${{ steps.extension-name.outputs.extension_name }}.vsix
 
       - name: Verify Every Native Addon In VSIX
         run: |
           set -euo pipefail
           for target in linux-x64 win32-x64 darwin-x64 darwin-arm64; do
             test -f "dist/native/${target}/arxml_node.node"
-            unzip -l "${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}.vsix" \
+            unzip -l "${{ steps.extension-name.outputs.extension_name }}.vsix" \
               | grep -q "dist/native/${target}/arxml_node.node"
           done
 
       - name: Upload VSIX Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}
-          path: ${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}.vsix
+          name: ${{ steps.extension-name.outputs.extension_name }}
+          path: ${{ steps.extension-name.outputs.extension_name }}.vsix
 
       - name: Set outputs
         id: package-output
         run: |
-          echo "vsix_name=${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}" >> $GITHUB_OUTPUT
+          echo "vsix_name=${{ steps.extension-name.outputs.extension_name }}" >> $GITHUB_OUTPUT

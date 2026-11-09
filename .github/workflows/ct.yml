@@ -49,7 +49,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: unit-test-output.log
-          name: unit-test-output-${{ github.sha }}
+          name: unit-test-output
           overwrite: true
 
   Benchmarks:
@@ -79,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: benchmark-output.log
-          name: benchmark-output-${{ github.sha }}
+          name: benchmark-output
           overwrite: true
 
   Rust:
@@ -164,14 +164,14 @@ jobs:
         if: always()
         uses: actions/download-artifact@v4
         with:
-          name: unit-test-output-${{ github.sha }}
+          name: unit-test-output
           path: .
 
       - name: Download Benchmark Log
         if: always()
         uses: actions/download-artifact@v4
         with:
-          name: benchmark-output-${{ github.sha }}
+          name: benchmark-output
           path: .
 
       - name: Unit Test Summary

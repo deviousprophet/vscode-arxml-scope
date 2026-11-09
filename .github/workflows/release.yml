@@ -17,8 +17,6 @@ jobs:
   Package:
     name: Package VSIX
     uses: ./.github/workflows/package.yml
-    with:
-      use_package_version: true
     permissions:
       contents: read
 
