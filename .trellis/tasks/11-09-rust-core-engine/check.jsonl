@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Repository conventions and spec index"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Forbidden patterns and core purity"}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Test and fixture conventions"}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Type ownership and boundary rules"}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Core/host/webview layering"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Cross-language boundary and fallback"}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse the TypeScript oracle and engine seam"}
-{"file": ".trellis/tasks/11-09-rust-core-foundation/research/00-rust-review.md", "reason": "Rust feasibility evidence and measured baseline"}
