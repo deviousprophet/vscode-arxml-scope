@@ -198,6 +198,17 @@ body[data-page="diff"] .nav-btn:disabled {
 .diff-header-cell[data-header-empty="true"] {
 	background: none;
 }
+.diff-header-gap-row {
+	background: var(--vscode-editor-background);
+	height: var(--ecuc-lh);
+	align-items: center;
+}
+.diff-header-gap-line {
+	flex: 1 1 auto;
+	align-self: center;
+	margin: 0;
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border, var(--tok-dim)));
+}
 .diff-cell {
 	flex: 1 1 auto;
 	min-width: 0;

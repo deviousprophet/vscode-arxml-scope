@@ -147,6 +147,47 @@ function wordDocument(rows: DiffRow[]): DiffDocument {
 	};
 }
 
+/** A module, a nested container and two changed parameters for collapse tests. */
+function nestedRows(): DiffRow[] {
+	return [
+		wordRow({
+			key: 'm',
+			kind: 'module',
+			level: 1,
+			hasChildren: true,
+			subtreeSize: 3,
+			left: containerCell('M'),
+			right: containerCell('M'),
+		}),
+		wordRow({
+			key: 'c1',
+			parentKey: 'm',
+			kind: 'container',
+			level: 2,
+			hasChildren: true,
+			subtreeSize: 2,
+			left: containerCell('C1'),
+			right: containerCell('C1'),
+		}),
+		wordRow({
+			key: 'p1',
+			parentKey: 'c1',
+			kind: 'parameter',
+			level: 3,
+			left: wordCell({ label: 'P1' }),
+			right: wordCell({ label: 'P1', shownValue: '200', value: '200' }),
+		}),
+		wordRow({
+			key: 'p2',
+			parentKey: 'c1',
+			kind: 'parameter',
+			level: 3,
+			left: wordCell({ label: 'P2' }),
+			right: wordCell({ label: 'P2', shownValue: '300', value: '300' }),
+		}),
+	];
+}
+
 /** A 14-parameter container with one changed row, enough for a 5-line context window. */
 function contextRows(): DiffRow[] {
 	const moduleCell = (): NonNullable<DiffRow['left']> =>
@@ -932,6 +973,9 @@ suite('semantic diff page', () => {
 		const toolbar = webviewCss('components', 'toolbar', 'toolbar.css');
 		assert.ok(toolbar.includes('.diff-tool'));
 		assert.ok(toolbar.includes('.toolbar-divider'));
+		const diffGapCss = webviewCss('components', 'diffView', 'diffView.css');
+		assert.ok(/\.diff-header-gap-row\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(diffGapCss));
+		assert.ok(/\.diff-header-gap-line\s*\{[^}]*border-top:\s*1px solid var\(--vscode-editorGroup-border/.test(diffGapCss));
 		assert.ok(toolbar.includes('flex-direction: column'));
 		assert.ok(toolbar.includes('width: 60px'), 'one fixed width for every diff button');
 		assert.ok(toolbar.includes('height: 48px'), 'one fixed height for every diff button');
@@ -1183,6 +1227,120 @@ suite('semantic diff page', () => {
 			assert.ok(rightRows[0].textContent!.includes('00048'));
 			assert.ok(leftRows[2].querySelector('.diff-header-cell[data-header-empty="true"]'), 'the left pad row is blank');
 			assert.ok(rightRows[2].textContent!.includes('PkgC'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the header gap is one non-selectable rule row in both panes', () => {
+		const { dom } = mount(documentOf());
+		try {
+			for (const pane of ['left', 'right']) {
+				const gap = dom.document.querySelector(`#diff-pane-${pane} .diff-header-gap-row`) as HTMLElement;
+				assert.ok(gap, `${pane} gap exists`);
+				assert.strictEqual(gap.getAttribute('role'), 'presentation');
+				assert.strictEqual(gap.getAttribute('aria-hidden'), 'true');
+				assert.strictEqual(gap.hasAttribute('data-key'), false);
+				assert.strictEqual(gap.tabIndex, -1);
+				assert.ok(gap.querySelector('.diff-header-gap-line'), `${pane} gap rule exists`);
+				assert.ok(gap.previousElementSibling?.classList.contains('diff-header-row'), `${pane} gap follows headers`);
+				assert.ok(gap.nextElementSibling?.classList.contains('diff-row'), `${pane} gap precedes data rows`);
+			}
+			const gap = dom.document.querySelector('#diff-pane-left .diff-header-gap-row') as HTMLElement;
+			gap.click();
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 0, 'clicking the gap does not reveal');
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'clicking the gap does not select');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the header gap is absent when there is no schema/package header', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-header-gap-row'), null);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-right .diff-header-gap-row'), null);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Collapse all hides every child in both panes and Expand restores them', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			const collapse = dom.document.getElementById('diff-collapse-all') as HTMLElement;
+			const expand = dom.document.getElementById('diff-expand-all') as HTMLElement;
+			collapse.focus();
+			collapse.click();
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-row[data-key="m"]'));
+			assert.ok(dom.document.querySelector('#diff-pane-right .diff-row[data-key="m"]'));
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="c1"]'), null);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-right .diff-row[data-key="c1"]'), null);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p1"]'), null);
+			assert.strictEqual(
+				dom.document.querySelector('#diff-pane-left .diff-row[data-key="m"] .node')?.getAttribute('aria-expanded'),
+				'false'
+			);
+			assert.strictEqual(dom.document.activeElement, collapse, 'focus stays on the toolbar button');
+			collapse.click();
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="c1"]'), null);
+			expand.click();
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-row[data-key="c1"]'));
+			assert.ok(dom.document.querySelector('#diff-pane-right .diff-row[data-key="p2"]'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Collapse all moves a hidden selection to its nearest visible ancestor', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			const p1 = dom.document.querySelector(
+				'#diff-pane-left .diff-row[data-key="p1"] .row'
+			) as HTMLElement;
+			p1.click();
+			(dom.document.getElementById('diff-collapse-all') as HTMLElement).click();
+			assert.strictEqual(
+				dom.document.querySelector('#diff-pane-left .diff-row[data-key="m"]')?.getAttribute('data-selected'),
+				'true',
+				'selection moves to the nearest visible ancestor'
+			);
+			assert.strictEqual(
+				dom.document.querySelector('#diff-pane-left .diff-row[data-key="m"] .node')?.getAttribute('data-selected'),
+				'true',
+				'the visible ancestor is painted selected in both panes'
+			);
+			(dom.document.getElementById('diff-expand-all') as HTMLElement).click();
+			assert.strictEqual(
+				dom.document.querySelector('#diff-pane-left .diff-row[data-key="m"]')?.getAttribute('data-selected'),
+				'true',
+				'expand restores rows without moving the selection'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Collapse all works in Show diff with Context off', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			(dom.document.getElementById('diff-context') as HTMLElement).click();
+			assert.strictEqual(dom.document.getElementById('diff-context')!.getAttribute('aria-pressed'), 'false');
+			(dom.document.getElementById('diff-collapse-all') as HTMLElement).click();
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="c1"]'), null);
+			(dom.document.getElementById('diff-expand-all') as HTMLElement).click();
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-row[data-key="c1"]'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Collapse all is a no-op for a leaf-only document', () => {
+		const { dom } = mount(wordDocument([wordRow({ left: wordCell(), right: wordCell() })]));
+		try {
+			(dom.document.getElementById('diff-collapse-all') as HTMLElement).click();
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p1"]'));
 		} finally {
 			dom.restore();
 		}

@@ -111,6 +111,7 @@ interface EditorSearchCandidate {
 
 let headerRows: EditorHeaderRow[] = [];
 let headerRowCount = 0;
+let headerGapCount = 0;
 let offsets: number[] = [0];
 let contentWidth = 0;
 let searchCandidates: EditorSearchCandidate[] = [];
@@ -147,15 +148,22 @@ function indexRows() {
 	}
 }
 
+function contentRowStart(): number {
+	return headerRowCount + headerGapCount;
+}
+
 function buildHeightFn() {
 	const base = heights.document;
 	heightFn = function (index) {
 		if (index < headerRowCount) {
 			return base;
 		}
-		return base + (carriesGroupGap(rows, displayRows, index - headerRowCount) ? base : 0);
+		if (index === headerRowCount && headerGapCount > 0) {
+			return base;
+		}
+		return base + (carriesGroupGap(rows, displayRows, index - contentRowStart()) ? base : 0);
 	};
-	offsets = buildOffsets(headerRowCount + displayRows.length, heightFn);
+	offsets = buildOffsets(contentRowStart() + displayRows.length, heightFn);
 	contentWidth = Math.max(contentWidth, estimateContentWidth());
 	syncTreeModel();
 }
@@ -186,6 +194,7 @@ function setHeaderRows(header: DocumentTreeHeader | undefined): void {
 	headerRows = [];
 	if (!header) {
 		headerRowCount = 0;
+		headerGapCount = 0;
 		return;
 	}
 	if (header.schema) {
@@ -206,6 +215,7 @@ function setHeaderRows(header: DocumentTreeHeader | undefined): void {
 		});
 	}
 	headerRowCount = headerRows.length;
+	headerGapCount = Math.min(1, headerRowCount);
 }
 
 function buildSearchCandidates(): void {
@@ -250,7 +260,7 @@ function rebuildDisplay() {
 		const flat = displayRows[at];
 		if (flat.type === 'node') {
 			const row = rows[flat.rowIndex];
-			displayIndexById.set(row.id, headerRowCount + at);
+			displayIndexById.set(row.id, contentRowStart() + at);
 			visibleNodeIds.push(row.id);
 			// Expansion is the display list's decision, carried on the row; the page
 			// must not re-derive it from neighbouring rows (see treeQuery.ts).
@@ -319,7 +329,7 @@ function documentRowOptions(displayIndex: number): any {
 
 function treeModel() {
 	return {
-		rowCount: headerRowCount + displayRows.length,
+		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
 		renderRow: renderRow
 	};
@@ -331,7 +341,7 @@ function syncTreeModel() {
 	}
 	if (virtualScroll) {
 		virtualScroll.setContent({
-			rowCount: headerRowCount + displayRows.length,
+			rowCount: contentRowStart() + displayRows.length,
 			offsets: offsets,
 			totalHeight: totalHeightOf(offsets),
 			contentWidth: contentWidth
@@ -379,12 +389,27 @@ function buildHeaderRow(header: EditorHeaderRow, virtualIndex: number): any {
 	return row;
 }
 
+function buildHeaderGapRow(): HTMLElement {
+	const row = document.createElement('div');
+	row.className = 'document-tree-header-gap';
+	row.setAttribute('role', 'presentation');
+	row.setAttribute('aria-hidden', 'true');
+	row.tabIndex = -1;
+	const line = document.createElement('span');
+	line.className = 'document-tree-header-gap-line';
+	row.appendChild(line);
+	return row;
+}
+
 function renderRow(index: number): any {
 	if (index < headerRowCount) {
 		const header = headerRows[index];
 		return header ? buildHeaderRow(header, index) : document.createElement('div');
 	}
-	const displayIndex = index - headerRowCount;
+	if (index === headerRowCount && headerGapCount > 0) {
+		return buildHeaderGapRow();
+	}
+	const displayIndex = index - contentRowStart();
 	const flat = displayRows[displayIndex];
 	return flat ? buildDisplayRow(flat, displayIndex) : document.createElement('div');
 }
@@ -1388,6 +1413,7 @@ function resetEditorState(): void {
 	focusId = undefined;
 	headerRows = [];
 	headerRowCount = 0;
+	headerGapCount = 0;
 	offsets = [0];
 	contentWidth = 0;
 	searchCandidates = [];

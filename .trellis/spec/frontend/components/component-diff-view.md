@@ -49,9 +49,10 @@ class DiffView {
 - One `VirtualScroll` owns the vertical surface and the offsets. It creates the two pane layers and
   the two `DocumentTreeView` windows; there is one vertical bar and one horizontal bar per pane. The
   pane split stays fixed and moving either horizontal bar pans both panes in sync.
-- Both panes render the same virtual row index from one shared offsets table. Header rows are the first virtual rows; they are padded to the longer side with blank rows so the first compared row starts at the same y.
+- Both panes render the same virtual row index from one shared offsets table. Header rows are the first virtual rows; they are padded to the longer side with blank rows so the first compared row starts at the same y. When a header exists, one `diff-header-gap-row` rule follows the padded headers and precedes the first compared row.
 - Vertical and horizontal position belong to `VirtualScroll`. `Swap sides` resets horizontal only; vertical position is preserved.
 - Header rows are content: they scroll with the rows, use the document row shell and are searchable. One aligned header row is one search candidate with the combined left/right haystack.
+- The header gap is `role="presentation"`, `aria-hidden`, non-focusable and has no `data-key`; it counts as one virtual row in both panes but never participates in selection, search or F7.
 - Every diff row is the base row height: the Document-only module gap and its `data-gap` marker are not part of this surface.
 - Split line is 3px and diff-specific; the editor's resizer and pane sashes are 6px.
 - Status tint is diff-only; Document view never sets it.
@@ -81,6 +82,7 @@ class DiffView {
 | Swap | Header columns and pane sides flip, horizontal resets, vertical holds |
 | Large diff | One shared scroll window; both panes virtualized by the same offsets |
 | Header line count differs | Blank rows pad the shorter side, first compared row aligns |
+| Header gap | One inert rule row follows the padded headers; absent with no header |
 | Added/removed row | Full-cell tint, no word spans |
 | Search match inside a changed word | `<mark>` background inside the outlined word span |
 
@@ -90,8 +92,8 @@ class DiffView {
 VirtualScroll, two window panes with per-pane horizontal bars, shared content geometry, swap reset and
 header update, no host model access.
 `src/test/webview/page/diffPage.test.ts`: loading state before the first document, fixed file names
-outside the scroll surface, header rows as content and search candidates, header padding, independent
-horizontal bars, changed-word runs in both panes, swapped colours, search overlap, no word spans on
+outside the scroll surface, header rows as content and search candidates, header padding, header gap in
+both panes, independent horizontal bars, changed-word runs in both panes, swapped colours, search overlap, no word spans on
 added/removed, unchanged rows, module height and no `data-gap`; selecting a container highlights the
 same subtree and annotation rows in both panes, a new selection drops the old subtree, and an
 added/removed row highlights only its owning pane.

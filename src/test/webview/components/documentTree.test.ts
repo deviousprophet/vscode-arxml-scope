@@ -245,6 +245,8 @@ suite('DocumentTreeView component', () => {
 		const css = webviewCss('components', 'documentTree', 'documentTree.css');
 		assert.ok(/\.document-tree-window\s*\{[^}]*position:\s*absolute/.test(css));
 		assert.ok(/\.document-tree-header-row\s*\{/.test(css));
+		assert.ok(/\.document-tree-header-gap\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(css));
+		assert.ok(/\.document-tree-header-gap-line\s*\{[^}]*border-top:\s*1px solid var\(--vscode-editorGroup-border/.test(css));
 		assert.ok(!/\.document-tree-scroll\s*\{/.test(css));
 		assert.ok(!/\.document-tree-title-bar\s*\{/.test(css));
 	});

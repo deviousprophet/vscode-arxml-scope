@@ -205,6 +205,17 @@ mark {
 	font-family: inherit;
 	line-height: var(--ecuc-lh);
 }
+.document-tree-header-gap {
+	height: var(--ecuc-lh);
+	padding: 0 var(--content-pad);
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+}
+.document-tree-header-gap-line {
+	flex: 1 1 auto;
+	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border, var(--tok-dim)));
+}
 body[data-view="document"] .row {
 	background-color: transparent;
 }

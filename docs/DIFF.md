@@ -31,16 +31,18 @@ compared, not just the bytes on disk.
 
 - One panel titled `<left> ↔ <right>`, with the two panes side by side.
 - The toolbar is icon-over-label: **Show all** / **Show diff** ÷ **Context** ÷ **Semantic** /
-  **Strict** ÷ **Prev diff** / **Next diff**, with **Swap sides** centered over the pane divider and
-  Search on the right. There is no changed/added/removed/renamed count in the page.
+  **Strict** ÷ **Prev diff** / **Next diff** ÷ **Collapse** / **Expand**, with **Swap sides**
+  centered over the pane divider and Search on the right. There is no
+  changed/added/removed/renamed count in the page.
 - A fixed file-name strip above the two panes shows the shortest distinguishing label on each side,
   with the full path in its tooltip. It is chrome, not content: it never scrolls.
 - Schema and package lines are the first rows of each pane's document content. They scroll with the
   rows, use the same row shell and are searchable; a shorter header is padded with blank rows so the
-  first compared row starts at the same y in both panes. Search treats one aligned header row as one
+  first compared row starts at the same y in both panes. One non-selectable horizontal rule row
+  separates the header from the first module in both panes. Search treats one aligned header row as one
   candidate, so the count stays one per visible line.
 - Rows are aligned: a line that exists on only one side has a blank cell on the other side. There is no
-  blank spacer row between modules; every row is one line high.
+  blank spacer row between modules; the only separator row is the header rule.
 - Annotations, braces and bracket guides follow each side of the comparison. Both panes use the same
   Document view as the editor, so annotations, braces, guides, colours and typography match.
 - A **read-only** status tint marks added, removed and changed cells; changed words are highlighted
@@ -178,6 +180,7 @@ split line. The split line is a display control only; it never changes the compa
 | **Show all** | Show every row, including unchanged rows. |
 | **Show diff** | Keep changed/added/removed rows, five context rows above and below each change, and split lines for the hidden runs. |
 | **Prev diff** / **Next diff** | Move to the previous/next changed row, wrapping at the ends. |
+| **Collapse** / **Expand** | Collapse every container in both panes or restore the full tree. |
 | `F7` / `Shift+F7` | Same as Next/Prev while focus is in the diff list. |
 | **Swap sides** | Mirror the displayed sides; display only, no re-comparison. |
 | **Semantic** / **Strict** | Two-button view group for renamed-container pairing. The group flips immediately and a spinner/status shows while the new view is prepared. |

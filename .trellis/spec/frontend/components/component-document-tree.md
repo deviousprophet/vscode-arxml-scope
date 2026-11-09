@@ -53,6 +53,7 @@ class DocumentTreeView {
 - Owns an absolutely positioned `.document-tree-window` inside a pane layer. The window is placed at `offsets[start]`, sized to the rendered slice and translated by the shared horizontal offset. It never creates a scroller, a pinned header, a spacer or a title bar.
 - `VirtualScroll` owns the scroll surface and the precomputed offsets; this component receives only the viewport and renders the visible slice plus overscan.
 - Header rows are ordinary indices in the model. The host decides their markup, search haystack and interaction; the component only calls `renderRow`.
+- A header gap row is also an ordinary, host-rendered index. It is `role="presentation"`, `aria-hidden`, non-focusable and has no node key; it participates in the row count and offsets but never in search or selection.
 - A render whose range, total height, viewport and revision are unchanged does no DOM work. Incremental edge updates keep the rendered window bounded.
 - Host supplies rows and status; the editor never supplies a diff status. Root-scoped; two instances coexist without id collisions.
 - No scroll or size math in this component beyond choosing the visible slice from the supplied offsets.
@@ -60,6 +61,7 @@ class DocumentTreeView {
 ## Behaviour
 
 - Annotation, node, brace and header rows in display order; the Document host sets the module gap on the first row. The diff host sets no gap.
+- When a header exists, one `.document-tree-header-gap` / `.diff-header-gap-row` rule row follows the last header and precedes the first module. It uses the standard row height and a theme border token; no hover, focus, search or selection treatment.
 - Header rows use the document row shell: same height, content padding, hover/focus and token styling, no twisty and no ECUC selection.
 - Guides nested by ancestor level; closing brace rows carry ancestors only.
 - Status tint is a diff-only render input applied by the host callback.
@@ -73,6 +75,7 @@ class DocumentTreeView {
 | Empty model | The window clears and reports `[0, 0]` |
 | Large model | Rendered DOM bounded by viewport + overscan |
 | Header present | Header rows are content and scroll; they never pin and never change ECUC selection |
+| Header gap | One inert rule row after the last header; absent when no header exists |
 | Two instances | Independent windows, one shared VirtualScroll in the diff |
 
 ## Tests Required
@@ -85,7 +88,10 @@ setters, row scroll-to and one coalesced frame.
 
 `src/test/webview/page/render.test.ts`: selecting a container highlights a descendant sub-container's
 annotation row, clicking an annotation does not change the selection, and node/brace/comment rows carry
-`data-subtree` only inside the selected subtree; header rows are content.
+`data-subtree` only inside the selected subtree; header rows are content and the header gap is inert.
+
+`src/test/webview/page/diffPage.test.ts`: the header gap is present in both panes when a header exists,
+absent when it does not, and never receives selection or focus.
 
 ## Anti-patterns
 

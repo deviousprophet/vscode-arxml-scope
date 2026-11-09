@@ -156,9 +156,38 @@ suite('editor bundled page', () => {
 				dom.document.querySelector('#tree-pane .document-tree-header-row'),
 				'the schema/package lines are content rows'
 			);
+			const headerGap = dom.document.querySelector(
+				'#tree-pane .document-tree-header-gap'
+			) as HTMLElement;
+			assert.ok(headerGap, 'a header gap row follows the schema/package lines');
+			assert.strictEqual(headerGap.getAttribute('role'), 'presentation');
+			assert.strictEqual(headerGap.getAttribute('aria-hidden'), 'true');
+			assert.strictEqual(headerGap.tabIndex, -1);
+			assert.strictEqual(headerGap.hasAttribute('data-node-id'), false);
+			assert.ok(headerGap.querySelector('.document-tree-header-gap-line'), 'the gap has a rule');
+			assert.ok(headerGap.previousElementSibling?.classList.contains('document-tree-header-row'));
+			const firstNode = dom.document.querySelector('#tree-pane .node') as HTMLElement;
+			assert.ok(firstNode, 'the first module node exists');
+			assert.ok(
+				(headerGap.compareDocumentPosition(firstNode) & 4) !== 0,
+				'the gap precedes the first module node'
+			);
+			const headerCount = dom.document.querySelectorAll('#tree-pane .document-tree-header-row').length;
+			assert.strictEqual(headerGap.getAttribute('data-document-index'), String(headerCount));
+			headerGap.click();
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'clicking the gap does not select');
 			assert.strictEqual(dom.document.querySelector('.document-tree-title-bar'), null);
 			assert.strictEqual(dom.document.querySelector('.document-tree-header'), null);
 			assert.strictEqual(dom.document.querySelector('#tree').getAttribute('aria-label'), 'ECUC values');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the header gap is absent when there is no schema or package header', () => {
+		const { dom } = mount({ rows: editorDocument().rows });
+		try {
+			assert.strictEqual(dom.document.querySelector('#tree-pane .document-tree-header-gap'), null);
 		} finally {
 			dom.restore();
 		}

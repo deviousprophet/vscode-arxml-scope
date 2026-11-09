@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Collapse all and Expand all controls in the semantic diff toolbar
+- A separator rule between the schema/package header and the module content in the Document and diff views
+
 ### Changed
 
 - Semantic diff now matches bulk renames of hundreds of containers quickly and reports when a comparison is limited by its work budget or a large definition group

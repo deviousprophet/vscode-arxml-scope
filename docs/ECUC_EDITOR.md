@@ -31,7 +31,8 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
   a parameter shows its name, `=`, value and quiet meta; a reference shows its name and target.
 - Schema and package information is the first content in the document. These lines scroll with the
   rows, use the same row shell and are searchable and focusable, but they are not ECUC nodes: clicking
-  one never changes the selection or Details. The editor has no file-name strip.
+  one never changes the selection or Details. A non-selectable horizontal rule separates the header
+  from the first module. The editor has no file-name strip.
 - Annotations appear as muted italic comment lines directly above their node. Selecting a container
   tints the annotation rows of its descendants; the annotation rows stay non-selectable and clicking
   one changes nothing.

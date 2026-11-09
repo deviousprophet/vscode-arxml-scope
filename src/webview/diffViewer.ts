@@ -158,6 +158,7 @@ let heightFn: (index: number) => number = function () { return heights.row; };
 let offsets: number[] = [0];
 let diffContent = 0;
 let headerRowCount = 0;
+let headerGapCount = 0;
 let headerRows: Array<{ left?: { keyword: string; text: string }; right?: { keyword: string; text: string } }> = [];
 let views: DiffView | undefined;
 let loaded = false;
@@ -184,6 +185,9 @@ function indexRows() {
 function refreshVisibility() {
 	visibility = diffVisibility(rows, showChangesOnly, contextActive ? CONTEXT_LINES : 0);
 }
+function contentRowStart(): number {
+	return headerRowCount + headerGapCount;
+}
 function buildHeightFn() {
 	const base = heights.row;
 	// Diff rows are uniform: the Document-only module gap is not part of the
@@ -191,7 +195,7 @@ function buildHeightFn() {
 	heightFn = function () {
 		return base;
 	};
-	offsets = buildOffsets(headerRowCount + displayRows.length, heightFn);
+	offsets = buildOffsets(contentRowStart() + displayRows.length, heightFn);
 }
 function rebuildDisplay() {
 	displayRows = flattenDiffDocument(rows, {
@@ -207,7 +211,7 @@ function rebuildDisplay() {
 			continue;
 		}
 		const row = rows[flat.rowIndex];
-		displayIndexByKey.set(row.key, headerRowCount + at);
+		displayIndexByKey.set(row.key, contentRowStart() + at);
 		navigationVisible[flat.rowIndex] = true;
 	}
 	if (!hasChanges()) {
@@ -239,6 +243,7 @@ function buildHeaderRows(): void {
 		headerRows.push({ left: left[at], right: right[at] });
 	}
 	headerRowCount = headerRows.length;
+	headerGapCount = Math.min(1, headerRowCount);
 }
 function renderHeaders() {
 	const headers = diffPaneHeaders(diffDocument, swapped);
@@ -250,7 +255,7 @@ function renderHeaders() {
 }
 function paneModel() {
 	return {
-		rowCount: headerRowCount + displayRows.length,
+		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
 		renderRow: renderRow,
 		contentWidth: diffContent
@@ -262,7 +267,7 @@ function applyModels() {
 	}
 	views.setModel(paneModel());
 	views.setContent({
-		rowCount: headerRowCount + displayRows.length,
+		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
 		totalHeight: totalHeightOf(offsets),
 		contentWidth: diffContent,
@@ -529,11 +534,26 @@ function renderHeaderRow(index: number, pane: string): any {
 	element.appendChild(cell);
 	return element;
 }
+function renderHeaderGapRow(pane: string): HTMLElement {
+	const element = document.createElement('div');
+	element.className = 'diff-row diff-header-gap-row';
+	element.dataset.side = pane === 'left' ? 'left' : 'right';
+	element.setAttribute('role', 'presentation');
+	element.setAttribute('aria-hidden', 'true');
+	element.tabIndex = -1;
+	const line = document.createElement('div');
+	line.className = 'diff-header-gap-line';
+	element.appendChild(line);
+	return element;
+}
 function renderRow(index: number, pane: string): any {
 	if (index < headerRowCount) {
 		return renderHeaderRow(index, pane);
 	}
-	const flat = displayRows[index - headerRowCount];
+	if (index === headerRowCount && headerGapCount > 0) {
+		return renderHeaderGapRow(pane);
+	}
+	const flat = displayRows[index - contentRowStart()];
 	const element = document.createElement('div');
 	element.className = 'diff-row';
 	if (!flat) {
@@ -747,7 +767,10 @@ function virtualKeyAt(index: number): string | undefined {
 	if (index < headerRowCount) {
 		return 'header:' + index;
 	}
-	const flat = displayRows[index - headerRowCount];
+	if (index === headerRowCount && headerGapCount > 0) {
+		return undefined;
+	}
+	const flat = displayRows[index - contentRowStart()];
 	return flat ? rows[flat.rowIndex].key : undefined;
 }
 function virtualIndexForKey(key: string | undefined): number | undefined {
@@ -761,14 +784,18 @@ function virtualIndexForKey(key: string | undefined): number | undefined {
 	return displayIndexByKey.get(key);
 }
 function captureAnchor() {
-	if (!views || headerRowCount + displayRows.length === 0) {
+	if (!views || contentRowStart() + displayRows.length === 0) {
 		return null;
 	}
 	const top = views.getScrollTop();
 	const range = views.getVisibleRange();
 	let index = range[0];
-	while (index < headerRowCount + displayRows.length) {
-		if (index >= headerRowCount && displayRows[index - headerRowCount]?.gap) {
+	while (index < contentRowStart() + displayRows.length) {
+		if (index === headerRowCount && headerGapCount > 0) {
+			index++;
+			continue;
+		}
+		if (index >= contentRowStart() && displayRows[index - contentRowStart()]?.gap) {
 			index++;
 			continue;
 		}
@@ -1175,6 +1202,46 @@ function toggleCollapsed(key: string): void {
 	updateSelection();
 	refocus(focused);
 }
+function visibleAncestorKey(key: string): string | undefined {
+	let current = rowByKey.get(key);
+	while (current !== undefined && !displayIndexByKey.has(current.key)) {
+		current = current.parentKey === null ? undefined : rowByKey.get(current.parentKey);
+	}
+	return current?.key;
+}
+function collapseChanged(reconcileSelection: boolean): void {
+	const previousSelection = selectedKey;
+	rebuildDisplay();
+	if (reconcileSelection && previousSelection !== undefined && !displayIndexByKey.has(previousSelection)) {
+		const ancestor = visibleAncestorKey(previousSelection);
+		selectedKey = ancestor;
+		focusKey = ancestor;
+	}
+	applyModels();
+	renderWindow(true);
+	updateSelection();
+	applyRoving(selectedKey);
+}
+function collapseAll(): void {
+	const next = new Set(collapsed);
+	for (const row of rows) {
+		if (row.hasChildren) {
+			next.add(row.key);
+		}
+	}
+	if (next.size === collapsed.size) {
+		return;
+	}
+	collapsed = next;
+	collapseChanged(true);
+}
+function expandAll(): void {
+	if (collapsed.size === 0) {
+		return;
+	}
+	collapsed = new Set();
+	collapseChanged(false);
+}
 function toggleGap(key: string): void {
 	const scrollTop = views ? views.getScrollTop() : 0;
 	const next = new Set(expandedGaps);
@@ -1214,7 +1281,7 @@ function moveSelection(offset: number): void {
 		return;
 	}
 	const virtualAt = selectedKey === undefined ? undefined : displayIndexByKey.get(selectedKey);
-	let at = virtualAt === undefined ? undefined : virtualAt - headerRowCount;
+	let at = virtualAt === undefined ? undefined : virtualAt - contentRowStart();
 	if (at === undefined) {
 		at = offset > 0 ? -1 : displayRows.length;
 	}
@@ -1243,7 +1310,7 @@ function selectedChild() {
 	if (virtualAt === undefined) {
 		return undefined;
 	}
-	const at = virtualAt - headerRowCount;
+	const at = virtualAt - contentRowStart();
 	const childAt = nextNodeIndex(at, 1);
 	if (childAt < 0) {
 		return undefined;
@@ -1328,7 +1395,10 @@ function onPaneRowClick(index: number, event: any): void {
 		}
 		return;
 	}
-	const flat = displayRows[index - headerRowCount];
+	if (index === headerRowCount && headerGapCount > 0) {
+		return;
+	}
+	const flat = displayRows[index - contentRowStart()];
 	if (!flat) {
 		return;
 	}
@@ -1441,6 +1511,8 @@ toolbar = new DiffToolbar({
 	onViewDiff: function () { setView(true); },
 	onPrev: function () { gotoChange(-1); },
 	onNext: function () { gotoChange(1); },
+	onCollapseAll: function () { collapseAll(); },
+	onExpandAll: function () { expandAll(); },
 	onSwap: function () { setSwapped(!swapped); },
 	onMatchMode: function (semantic: boolean) {
 		semanticMatching = semantic;
@@ -1511,6 +1583,7 @@ function resetDiffState(): void {
 	offsets = [0];
 	diffContent = 0;
 	headerRowCount = 0;
+	headerGapCount = 0;
 	headerRows = [];
 	views = undefined;
 	loaded = false;
