@@ -24,6 +24,12 @@ export interface DocumentTreeHeader {
 	lines?: number;
 }
 
+/** The line-number state of one virtual row, or `undefined` for a blank cell. */
+export interface DocumentTreeLineInfo {
+	number?: number;
+	status?: 'changed' | 'added' | 'removed' | 'unchanged';
+}
+
 /** What the host supplies: virtual row count, offsets and row markup. */
 export interface DocumentTreeViewModel {
 	rowCount: number;
@@ -32,6 +38,10 @@ export interface DocumentTreeViewModel {
 	/** Build the row for this pane; the host decides header/node/brace/status. */
 	renderRow(index: number, pane: string): any;
 	contentWidth?: number;
+	/** The line number and diff tint for one virtual row; absent leaves the cell blank. */
+	lineInfo?(index: number, pane: string): DocumentTreeLineInfo | undefined;
+	/** The virtual row whose number is active, or undefined when nothing is selected. */
+	activeLine?(pane: string): number | undefined;
 }
 
 export interface DocumentTreeViewport {
@@ -55,6 +65,8 @@ export class DocumentTreeView {
 	callbacks: DocumentTreeViewCallbacks;
 	model: DocumentTreeViewModel | undefined;
 	windowEl: any;
+	linesEl: HTMLElement | undefined;
+	lineCells: Array<{ index: number; element: HTMLElement; numbered: boolean }>;
 	bufferSize: number;
 	revision: number;
 	lastKey: string;
@@ -62,6 +74,8 @@ export class DocumentTreeView {
 	renderedEnd: number | undefined;
 	renderedRevision: number;
 	contentWidth: number;
+	lineNumberColumns: number;
+	focusedLine: number | undefined;
 	lastRange: [number, number];
 	lastViewport: DocumentTreeViewport | undefined;
 
@@ -71,6 +85,8 @@ export class DocumentTreeView {
 		this.callbacks = callbacks || {};
 		this.model = undefined;
 		this.windowEl = undefined;
+		this.linesEl = undefined;
+		this.lineCells = [];
 		this.bufferSize = 10;
 		this.revision = 0;
 		this.lastKey = '';
@@ -78,11 +94,13 @@ export class DocumentTreeView {
 		this.renderedEnd = undefined;
 		this.renderedRevision = -1;
 		this.contentWidth = 0;
+		this.lineNumberColumns = 0;
+		this.focusedLine = undefined;
 		this.lastRange = [0, 0];
 		this.lastViewport = undefined;
 	}
 
-	/** Create the absolutely positioned window inside the pane layer. */
+	/** Create the absolutely positioned window and gutter inside the pane layer. */
 	mount(): void {
 		if (!this.root) {
 			return;
@@ -92,7 +110,16 @@ export class DocumentTreeView {
 		this.windowEl.className = 'document-tree-window';
 		this.windowEl.setAttribute('role', 'presentation');
 		this.root.appendChild(this.windowEl);
+		this.linesEl = document.createElement('div');
+		this.linesEl.className = 'document-tree-lines';
+		this.linesEl.setAttribute('aria-hidden', 'true');
+		this.linesEl.setAttribute('data-side', this.pane);
+		this.linesEl.tabIndex = -1;
+		this.linesEl.addEventListener('click', (event: any) => this.onLineClick(event));
+		this.root.appendChild(this.linesEl);
 		this.root.addEventListener('click', (event: any) => this.onClick(event));
+		this.root.addEventListener('focusin', (event: any) => this.onFocusIn(event));
+		this.root.addEventListener('focusout', () => this.applyFocusedLine(undefined));
 		this.revision++;
 		this.lastKey = '';
 	}
@@ -101,7 +128,19 @@ export class DocumentTreeView {
 	setModel(model: DocumentTreeViewModel): void {
 		this.model = model;
 		this.setContentWidth(model && typeof model.contentWidth === 'number' ? model.contentWidth : 0);
+		this.lineNumberColumns = this.measureLineNumberChars(model);
+		this.applyLineNumberWidth();
 		this.invalidate();
+	}
+
+	/** The number-column width in `ch`: `max(digits(max number), 5)`, 0 when empty. */
+	lineNumberChars(): number {
+		return this.lineNumberColumns;
+	}
+
+	/** Re-apply the active row colour without rebuilding the window. */
+	refreshActiveLine(): void {
+		this.applyActiveLine();
 	}
 
 	/** The horizontal content width; 0 leaves the natural width alone. */
@@ -134,6 +173,7 @@ export class DocumentTreeView {
 			this.windowEl.style.top = '0px';
 			this.windowEl.style.height = '0px';
 			this.windowEl.style.transform = 'translateX(0px)';
+			this.clearLineNumbers();
 			this.lastKey = '';
 			this.renderedStart = undefined;
 			this.renderedEnd = undefined;
@@ -167,6 +207,7 @@ export class DocumentTreeView {
 			this.revision;
 		if (!force && key === this.lastKey) {
 			this.lastRange = [start, end];
+			this.applyActiveLine();
 			return;
 		}
 		this.lastKey = key;
@@ -211,6 +252,7 @@ export class DocumentTreeView {
 			}
 		}
 		this.renderedRevision = this.revision;
+		this.renderLineNumbers(model, start, end);
 		if (focused !== undefined) {
 			const element = this.elementAt(focused);
 			if (element && typeof element.focus === 'function') {
@@ -231,6 +273,134 @@ export class DocumentTreeView {
 			element.dataset.documentIndex = String(index);
 		}
 		return element;
+	}
+
+	/** The cached `max(digits(max number), 5)` column count for this pane. */
+	measureLineNumberChars(model: DocumentTreeViewModel | undefined): number {
+		if (!model || typeof model.lineInfo !== 'function') {
+			return 0;
+		}
+		const rowCount = Math.max(0, Math.floor(model.rowCount || 0));
+		let max = 0;
+		for (let at = 0; at < rowCount; at++) {
+			const info = model.lineInfo(at, this.pane);
+			const number = info && typeof info.number === 'number' && Number.isFinite(info.number) ? info.number : undefined;
+			if (number !== undefined && number > max) {
+				max = number;
+			}
+		}
+		if (max <= 0) {
+			return 0;
+		}
+		return Math.max(String(Math.floor(max)).length, 5);
+	}
+
+	/** Publish the number-column width to the pane's CSS geometry. */
+	applyLineNumberWidth(): void {
+		if (!this.root || !this.root.style || typeof this.root.style.setProperty !== 'function') {
+			return;
+		}
+		this.root.style.setProperty('--line-numbers-width', this.lineNumberColumns + 'ch');
+	}
+
+	/** Rebuild the gutter cells for the slice the window just rendered. */
+	renderLineNumbers(model: DocumentTreeViewModel, start: number, end: number): void {
+		if (!this.linesEl) {
+			return;
+		}
+		if (this.lineNumberColumns <= 0) {
+			this.clearLineNumbers();
+			return;
+		}
+		this.linesEl.textContent = '';
+		this.lineCells = [];
+		const offsets = model.offsets;
+		for (let at = start; at < end; at++) {
+			const cell = document.createElement('div');
+			cell.className = 'document-tree-line-number';
+			cell.dataset.documentIndex = String(at);
+			const info = typeof model.lineInfo === 'function' ? model.lineInfo(at, this.pane) : undefined;
+			const number =
+				info && typeof info.number === 'number' && Number.isFinite(info.number) ? Math.floor(info.number) : undefined;
+			if (number !== undefined) {
+				cell.textContent = String(number);
+			}
+			if (info && info.status) {
+				cell.dataset.status = info.status;
+			}
+			const top = offsets[at] ?? 0;
+			const next = offsets[at + 1] ?? top;
+			cell.style.top = top + 'px';
+			cell.style.height = Math.max(0, next - top) + 'px';
+			this.linesEl.appendChild(cell);
+			this.lineCells.push({ index: at, element: cell, numbered: number !== undefined });
+		}
+		this.applyActiveLine();
+		this.applyFocusedLine(this.focusedLine);
+	}
+
+	/** Re-colour the current row's number; blank missing-side cells stay inactive. */
+	applyActiveLine(): void {
+		const active =
+			this.model && typeof this.model.activeLine === 'function' ? this.model.activeLine(this.pane) : undefined;
+		for (const cell of this.lineCells) {
+			if (active !== undefined && cell.index === active && cell.numbered) {
+				cell.element.dataset.active = 'true';
+			} else {
+				delete cell.element.dataset.active;
+			}
+		}
+	}
+
+	clearLineNumbers(): void {
+		if (this.linesEl) {
+			this.linesEl.textContent = '';
+		}
+		this.lineCells = [];
+	}
+
+	/** A gutter click reuses the row's own click handler. */
+	onLineClick(event: any): void {
+		if (!this.linesEl) {
+			return;
+		}
+		const target = event ? event.target : undefined;
+		const cell = target && target.closest ? target.closest('.document-tree-line-number') : null;
+		if (!cell || (typeof this.linesEl.contains === 'function' && !this.linesEl.contains(cell))) {
+			return;
+		}
+		const index = Number(cell.dataset ? cell.dataset.documentIndex : NaN);
+		if (!Number.isFinite(index)) {
+			return;
+		}
+		const element = this.elementAt(index);
+		if (element && typeof element.click === 'function') {
+			element.click();
+		}
+	}
+
+	/** Track the focused node row so the gutter can repeat its 2px focus rail. */
+	onFocusIn(event: any): void {
+		const target = event ? event.target : undefined;
+		const item = target && target.closest ? target.closest('.node[data-document-index]') : null;
+		if (!item || (this.windowEl && typeof this.windowEl.contains === 'function' && !this.windowEl.contains(item))) {
+			this.applyFocusedLine(undefined);
+			return;
+		}
+		const index = Number(item.dataset ? item.dataset.documentIndex : NaN);
+		this.applyFocusedLine(Number.isFinite(index) ? index : undefined);
+	}
+
+	/** Repeat the Document focus rail on the gutter cell; headers and gaps stay unmarked. */
+	applyFocusedLine(index: number | undefined): void {
+		this.focusedLine = index;
+		for (const cell of this.lineCells) {
+			if (index !== undefined && cell.index === index && cell.numbered) {
+				cell.element.dataset.focused = 'true';
+			} else {
+				delete cell.element.dataset.focused;
+			}
+		}
 	}
 
 	/** The window element, for a host that needs to inspect the rendered rows. */
@@ -294,5 +464,6 @@ export class DocumentTreeView {
 
 	destroy(): void {
 		this.model = undefined;
+		this.clearLineNumbers();
 	}
 }

@@ -25,9 +25,10 @@ body[data-view] {
 	--match-bg: rgba(234, 179, 8, 0.32);
 	--match-hi: rgba(234, 179, 8, 0.7);
 	--fold-gutter: 26px;
+	--line-numbers-width: 0px;
 	--doc-pad: 3ch;
 	--indent: 4ch;
-	--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
+	--content-pad: calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad));
 	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
 }
 @supports (color: color-mix(in srgb, currentColor 50%, transparent)) {

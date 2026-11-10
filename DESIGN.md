@@ -218,8 +218,9 @@ Rules:
 ## Layout & Spacing
 
 - The spacing scale is 4px based: hairline 1px, then 2, 4, 6, 8 and 12px.
-- Source geometry: a 26px fold gutter, `3ch` document padding and `4ch` indent per level.
-  `--content-pad` is the gutter plus the document padding, and depth is generated from it.
+- Source geometry: a line-number column of `max(digits, 5)` characters, a 26px fold gutter,
+  `3ch` document padding and `4ch` indent per level. `--content-pad` is the number column plus
+  the fold gutter plus the document padding, and depth is generated from it.
 - Chrome: 26px toolbar, 26px search input, 28px sidebar tab strip, 6px resizer and pane sashes.
   The sidebar defaults to 360px. The diff toolbar grows to a 54px minimum so icon-over-label groups
   fit.
@@ -253,7 +254,11 @@ Rules:
 ### Document surface
 
 The document is one virtualised list of monospace rows. A row is a single flex line with a 26px fold
-gutter and indentation from `data-level`. `document-row-hover` and `document-row-selected` are the only
+gutter and indentation from `data-level`. A fixed line-number gutter sits before the fold gutter and
+numbers display rows from 1 in the editor line-number colours; it has no separator border and stays
+put when the rows pan horizontally. The selected and keyboard-focused rows repeat their 2px rail on
+the number cell so the indicator is not hidden under the opaque gutter. `document-row-hover` and
+`document-row-selected` are the only
 row states that change the background; the selected subtree also tints its descendants. Container
 names use the teal accent, references use the yellow fallback, and meta text uses the muted foreground.
 
@@ -274,7 +279,9 @@ because a theme may resolve them to transparent.
 
 Each pane is its own surface inside the shared scroller. Status is a background tint plus a 3px rail:
 `added` on the right, `removed` on the left, `changed` on both. Changed words get a 1px outline in the
-same colour. Syntax tokens keep their own colours.
+same colour. Each pane also owns its own line-number gutter: rows missing on a side leave that gutter
+blank, hidden unchanged runs are not numbered, and the gutter cell repeats the pane's status tint so
+the number stays legible over the tinted row. Syntax tokens keep their own colours.
 
 ### Diagnostics and overlay
 

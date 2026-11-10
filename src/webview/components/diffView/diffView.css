@@ -203,12 +203,6 @@ body[data-page="diff"] .nav-btn:disabled {
 	height: var(--ecuc-lh);
 	align-items: center;
 }
-.diff-header-gap-line {
-	flex: 1 1 auto;
-	align-self: center;
-	margin: 0;
-	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border, var(--tok-dim)));
-}
 .diff-cell {
 	flex: 1 1 auto;
 	min-width: 0;
@@ -239,6 +233,35 @@ body[data-page="diff"] .nav-btn:disabled {
 }
 .diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
 	box-shadow: inset 3px 0 0 var(--diff-removed-edge);
+}
+/* The gutter overlays the row cells, so it carries the same status tint and
+ * redraws the left pane's leading rail on its own cell. */
+.document-tree-line-number[data-status="added"] {
+	background-image: linear-gradient(
+		var(--vscode-diffEditorGutter-insertedLineBackground, var(--vscode-diffEditor-insertedLineBackground, var(--diff-added-bg))),
+		var(--vscode-diffEditorGutter-insertedLineBackground, var(--vscode-diffEditor-insertedLineBackground, var(--diff-added-bg)))
+	);
+}
+.document-tree-line-number[data-status="removed"] {
+	background-image: linear-gradient(
+		var(--vscode-diffEditorGutter-removedLineBackground, var(--vscode-diffEditor-removedLineBackground, var(--diff-removed-bg))),
+		var(--vscode-diffEditorGutter-removedLineBackground, var(--vscode-diffEditor-removedLineBackground, var(--diff-removed-bg)))
+	);
+}
+.document-tree-line-number[data-status="changed"] {
+	background-image: linear-gradient(
+		var(--vscode-diffEditor-modifiedTextBackground, var(--diff-changed-bg)),
+		var(--vscode-diffEditor-modifiedTextBackground, var(--diff-changed-bg))
+	);
+}
+.document-tree-lines[data-side="left"] .document-tree-line-number[data-status="changed"] {
+	box-shadow: inset 3px 0 0 var(--diff-changed-edge);
+}
+.document-tree-lines[data-side="left"] .document-tree-line-number[data-status="removed"] {
+	box-shadow: inset 3px 0 0 var(--diff-removed-edge);
+}
+.document-tree-lines[data-side="right"] .document-tree-line-number[data-status="added"] {
+	box-shadow: inset 3px 0 0 var(--diff-added-edge);
 }
 /* Selection is painted by the shared document-tree rule on the inner .node,
  * so the diff and the document page use one container/parameter treatment. */

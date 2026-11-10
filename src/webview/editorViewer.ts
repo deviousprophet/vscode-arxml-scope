@@ -187,7 +187,8 @@ function estimateContentWidth(): number {
 			maxChars = chars;
 		}
 	}
-	return 26 + 8 + Math.ceil(maxChars * chWidth);
+	const lineChars = treeView ? treeView.lineNumberChars() : 0;
+	return 26 + 8 + Math.ceil(maxChars * chWidth + lineChars * chWidth);
 }
 
 function setHeaderRows(header: DocumentTreeHeader | undefined): void {
@@ -331,7 +332,13 @@ function treeModel() {
 	return {
 		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
-		renderRow: renderRow
+		renderRow: renderRow,
+		lineInfo: function (index: number) {
+			return { number: index + 1 };
+		},
+		activeLine: function () {
+			return selectedId === undefined ? undefined : displayIndexById.get(selectedId);
+		}
 	};
 }
 
@@ -376,9 +383,12 @@ function buildHeaderRow(header: EditorHeaderRow, virtualIndex: number): any {
 	row.setAttribute('role', 'presentation');
 	row.setAttribute('data-header-id', header.id);
 	row.tabIndex = -1;
+	if (searchQuery.trim() !== '' && header.id === currentMatchId()) {
+		row.dataset.searchCurrent = 'true';
+	}
 	const key = document.createElement('span');
 	key.className = 'keyword';
-	key.textContent = header.keyword;
+	appendHighlighted(key, header.keyword, searchQuery);
 	row.appendChild(key);
 	row.appendChild(document.createTextNode(' '));
 	const value = document.createElement('span');
@@ -395,9 +405,6 @@ function buildHeaderGapRow(): HTMLElement {
 	row.setAttribute('role', 'presentation');
 	row.setAttribute('aria-hidden', 'true');
 	row.tabIndex = -1;
-	const line = document.createElement('span');
-	line.className = 'document-tree-header-gap-line';
-	row.appendChild(line);
 	return row;
 }
 
@@ -556,6 +563,9 @@ function setSelection(id: string | undefined): void {
 		} else {
 			delete structural.dataset.subtree;
 		}
+	}
+	if (treeView) {
+		treeView.refreshActiveLine();
 	}
 	updateInspector();
 }

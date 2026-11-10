@@ -6,7 +6,7 @@
  */
 import * as assert from 'assert';
 
-import { DocumentTreeView } from '../../../webview/components/documentTree/documentTreeView';
+import { DocumentTreeView, type DocumentTreeLineInfo } from '../../../webview/components/documentTree/documentTreeView';
 import { buildOffsets } from '../../../webview/render/virtualScroll';
 import { webviewCss } from '../cssTestUtils';
 
@@ -106,6 +106,22 @@ function element(name = 'div'): FakeElement {
 			return true;
 		}
 	};
+	let text = '';
+	Object.defineProperty(node, 'textContent', {
+		configurable: true,
+		enumerable: true,
+		get() {
+			return text;
+		},
+		set(value: string) {
+			text = value;
+			if (value === '') {
+				node.children = [];
+				node.firstChild = undefined;
+				node.lastChild = undefined;
+			}
+		}
+	});
 	return node;
 }
 
@@ -118,7 +134,9 @@ interface Harness {
 	restore(): void;
 }
 
-function harness(rowCount = 1000): Harness {
+type LineInfo = (index: number, pane: string) => DocumentTreeLineInfo | undefined;
+
+function harness(rowCount = 1000, lineInfo?: LineInfo, activeLine?: (pane: string) => number | undefined): Harness {
 	const root = element();
 	const globals = globalThis as unknown as Record<string, unknown>;
 	const saved = { document: globals.document };
@@ -152,7 +170,9 @@ function harness(rowCount = 1000): Harness {
 			rendered.push(index);
 			return element();
 		},
-		contentWidth: 500
+		contentWidth: 500,
+		...(lineInfo ? { lineInfo } : {}),
+		...(activeLine ? { activeLine } : {})
 	});
 	const restore = () => {
 		globals.document = saved.document;
@@ -160,17 +180,176 @@ function harness(rowCount = 1000): Harness {
 	return { root, view, rendered, ranges, clicked, restore };
 }
 
+function gutterOf(root: FakeElement): FakeElement {
+	const gutter = root.children.find((child) => child.className === 'document-tree-lines');
+	assert.ok(gutter, 'the pane has a line-number gutter');
+	return gutter;
+}
+
 suite('DocumentTreeView component', () => {
-	test('mount creates the window inside the pane layer', () => {
+	test('mount creates the window and the line-number gutter inside the pane layer', () => {
 		const h = harness();
 		try {
-			assert.strictEqual(h.root.children.length, 1);
+			assert.strictEqual(h.root.children.length, 2);
 			assert.strictEqual(h.root.children[0].className, 'document-tree-window');
+			const gutter = gutterOf(h.root);
+			assert.strictEqual(gutter.attributes['aria-hidden'], 'true');
+			assert.strictEqual(gutter.attributes['data-side'], 'document');
+			assert.strictEqual(gutter.tabIndex, -1);
+			assert.ok(gutter.listeners['click'], 'the gutter owns its click forwarding');
 			assert.ok(h.root.listeners['click'], 'the pane owns the click listener');
 			assert.strictEqual(
 				h.view.getWindowElement().style.values['--document-tree-content-width'],
 				'500px'
 			);
+			assert.strictEqual(h.root.style.values['--line-numbers-width'], '0ch', 'no model numbers collapse the column');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('the number column is max(digits(max number), 5) and shrinks for an empty model', () => {
+		const h = harness(1000, (index) => ({ number: index + 1 }));
+		try {
+			assert.strictEqual(h.view.lineNumberChars(), 5, 'four digits still reserve five characters');
+			assert.strictEqual(h.root.style.values['--line-numbers-width'], '5ch');
+			h.view.setModel({
+				rowCount: 120000,
+				offsets: buildOffsets(120000, () => 20),
+				renderRow: () => element(),
+				lineInfo: (index) => ({ number: index + 1 })
+			});
+			assert.strictEqual(h.view.lineNumberChars(), 6, 'the column grows with the digit count');
+			assert.strictEqual(h.root.style.values['--line-numbers-width'], '6ch');
+			h.view.setModel({
+				rowCount: 0,
+				offsets: [0],
+				renderRow: () => element(),
+				lineInfo: (index) => ({ number: index + 1 })
+			});
+			assert.strictEqual(h.view.lineNumberChars(), 0, 'an empty model hides the gutter');
+			assert.strictEqual(h.root.style.values['--line-numbers-width'], '0ch');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('the gutter renders cells for the visible slice from the offsets', () => {
+		const h = harness(1000, (index) => ({ number: index + 1 }));
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const gutter = gutterOf(h.root);
+			assert.strictEqual(gutter.children.length, 25, 'the gutter follows the window range');
+			const first = gutter.children[0];
+			assert.strictEqual(first.className, 'document-tree-line-number');
+			assert.strictEqual(first.dataset.documentIndex, '15');
+			assert.strictEqual(first.textContent, '16', 'the number is the 1-based virtual row');
+			assert.strictEqual(first.style.top, '300px', 'the cell sits at the row offset');
+			assert.strictEqual(first.style.height, '20px', 'the cell spans the row height');
+			assert.strictEqual(gutter.children[24].textContent, '40');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('an empty model clears the gutter cells', () => {
+		const h = harness(0, (index) => ({ number: index + 1 }));
+		try {
+			h.view.render({ top: 0, left: 0, height: 100, width: 800 });
+			assert.strictEqual(gutterOf(h.root).children.length, 0);
+			assert.strictEqual(h.view.lineNumberChars(), 0);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('refreshActiveLine re-colours one numbered cell without a rebuild', () => {
+		let active: number | undefined = 15;
+		const h = harness(1000, (index) => ({ number: index + 1 }), () => active);
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const gutter = gutterOf(h.root);
+			assert.strictEqual(gutter.children[0].dataset.active, 'true');
+			assert.strictEqual(
+				gutter.children.filter((cell) => cell.dataset.active === 'true').length,
+				1
+			);
+			active = 20;
+			h.view.refreshActiveLine();
+			assert.strictEqual(gutter.children[0].dataset.active, undefined);
+			assert.strictEqual(gutter.children[5].dataset.active, 'true');
+			active = undefined;
+			h.view.refreshActiveLine();
+			assert.strictEqual(
+				gutter.children.filter((cell) => cell.dataset.active === 'true').length,
+				0,
+				'clearing the selection clears the active number'
+			);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('a blank missing-side cell never carries the active colour', () => {
+		const h = harness(10, (index) => (index % 2 === 0 ? { number: index / 2 + 1 } : undefined), () => 2);
+		try {
+			h.view.render({ top: 0, left: 0, height: 100, width: 800 });
+			const gutter = gutterOf(h.root);
+			assert.strictEqual(gutter.children[2].dataset.active, 'true', 'the numbered cell is active');
+			assert.strictEqual(gutter.children[1].dataset.active, undefined, 'the blank cell stays inactive');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('the focused node cell repeats the focus rail and clears with focus', () => {
+		const h = harness(1000, (index) => ({ number: index + 1 }));
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const gutter = gutterOf(h.root);
+			h.view.onFocusIn({ target: { closest: () => ({ dataset: { documentIndex: '19' } }) } });
+			assert.strictEqual(gutter.children[4].dataset.focused, 'true');
+			assert.strictEqual(
+				gutter.children.filter((cell) => cell.dataset.focused === 'true').length,
+				1
+			);
+			h.view.applyFocusedLine(undefined);
+			assert.strictEqual(
+				gutter.children.filter((cell) => cell.dataset.focused === 'true').length,
+				0,
+				'leaving the row clears the gutter focus rail'
+			);
+			h.view.onFocusIn({ target: { closest: () => null } });
+			assert.strictEqual(
+				gutter.children.filter((cell) => cell.dataset.focused === 'true').length,
+				0,
+				'a header focus never marks a gutter cell'
+			);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('clicking a number forwards to the row click action', () => {
+		const h = harness(1000, (index) => ({ number: index + 1 }));
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const gutter = gutterOf(h.root);
+			let requested: number | undefined;
+			let clicked = 0;
+			h.view.elementAt = (index: number) => {
+				requested = index;
+				return {
+					click() {
+						clicked++;
+					}
+				};
+			};
+			h.view.onLineClick({ target: { closest: () => gutter.children[4] } });
+			assert.strictEqual(requested, 19);
+			assert.strictEqual(clicked, 1);
+			h.view.onLineClick({ target: { closest: () => undefined } });
+			assert.strictEqual(clicked, 1, 'a click outside a cell does nothing');
 		} finally {
 			h.restore();
 		}
@@ -241,12 +420,42 @@ suite('DocumentTreeView component', () => {
 		}
 	});
 
-	test('the stylesheet owns the absolute window, not a scroller or pinned header', () => {
+	test('the stylesheet owns the absolute window, the fixed gutter and no gap rule', () => {
 		const css = webviewCss('components', 'documentTree', 'documentTree.css');
 		assert.ok(/\.document-tree-window\s*\{[^}]*position:\s*absolute/.test(css));
 		assert.ok(/\.document-tree-header-row\s*\{/.test(css));
 		assert.ok(/\.document-tree-header-gap\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(css));
-		assert.ok(/\.document-tree-header-gap-line\s*\{[^}]*border-top:\s*1px solid var\(--vscode-editorGroup-border/.test(css));
+		assert.ok(!/\.document-tree-header-gap-line/.test(css), 'the gap has no rule element or border');
+		assert.ok(/\.document-tree-lines\s*\{[^}]*position:\s*absolute/.test(css));
+		assert.ok(/\.document-tree-lines\s*\{[^}]*width:\s*var\(--line-numbers-width\)/.test(css));
+		assert.ok(/\.document-tree-lines\s*\{[^}]*background:\s*var\(--vscode-editorGutter-background/.test(css));
+		assert.ok(/\.document-tree-lines\s*\{[^}]*user-select:\s*none/.test(css));
+		assert.ok(
+			/\.document-tree-pane\s*\{[^}]*--content-pad:\s*calc\(var\(--line-numbers-width\) \+ var\(--fold-gutter\) \+ var\(--doc-pad\)\)/.test(
+				css
+			),
+			'the pane redeclares the content pad from its own number column'
+		);
+		assert.ok(/\.document-tree-line-number\s*\{[^}]*text-align:\s*right/.test(css));
+		assert.ok(/\.document-tree-line-number\s*\{[^}]*font-variant-numeric:\s*tabular-nums/.test(css));
+		assert.ok(/\.document-tree-line-number\s*\{[^}]*cursor:\s*default/.test(css));
+		assert.ok(
+			/\.document-tree-line-number\s*\{[^}]*color:\s*var\(--vscode-editorLineNumber-foreground\)/.test(css)
+		);
+		assert.ok(
+			/\.document-tree-line-number\[data-active="true"\]\s*\{[^}]*var\(--vscode-editorLineNumber-activeForeground\)/.test(css)
+		);
+		assert.ok(
+			/body\[data-view="document"\] \.document-tree-line-number\[data-active="true"\],\s*body\[data-view="document"\] \.document-tree-line-number\[data-focused="true"\]\s*\{[^}]*inset 2px 0 0 var\(--rail\)/.test(
+				css
+			),
+			'the Document gutter repeats the selection and focus rail'
+		);
+		assert.ok(/\.twisty\s*\{[^}]*left:\s*calc\(var\(--line-numbers-width\) \+ 2px\)/.test(css));
+		assert.ok(
+			/\.document-tree-header-row\[data-search-current="true"\] mark\s*\{[^}]*var\(--match-hi\)/.test(css),
+			'the current header uses the strong search tier'
+		);
 		assert.ok(!/\.document-tree-scroll\s*\{/.test(css));
 		assert.ok(!/\.document-tree-title-bar\s*\{/.test(css));
 	});

@@ -38,11 +38,19 @@ compared, not just the bytes on disk.
   with the full path in its tooltip. It is chrome, not content: it never scrolls.
 - Schema and package lines are the first rows of each pane's document content. They scroll with the
   rows, use the same row shell and are searchable; a shorter header is padded with blank rows so the
-  first compared row starts at the same y in both panes. One non-selectable horizontal rule row
-  separates the header from the first module in both panes. Search treats one aligned header row as one
-  candidate, so the count stays one per visible line.
+  first compared row starts at the same y in both panes. One blank line separates the header from the
+  first module in both panes. Search treats one aligned header row as one candidate, so the count stays
+  one per visible line, and marks the `schema`/`package` keyword as well as its value.
 - Rows are aligned: a line that exists on only one side has a blank cell on the other side. There is no
-  blank spacer row between modules; the only separator row is the header rule.
+  blank spacer row between modules; the only separator row is the blank header line.
+- Each pane has a fixed line-number gutter that numbers its own display lines from 1. A padded header
+  line or a row missing on one side leaves that pane's number blank; a hidden unchanged run is not
+  numbered, and visible numbers renumber around it. The selected row's number uses the active colour.
+  The gutter stays fixed while the rows scroll horizontally, scrolls with them vertically, and is not
+  searchable, selectable or focusable.
+- Diff status also tints the gutter cell for added, removed and changed lines, using the VS Code diff
+  gutter colours with the pane's line tint as the fallback. The pane-side 3px rails hidden under the
+  gutter are redrawn on the gutter cell (left changed/removed, right added).
 - Annotations, braces and bracket guides follow each side of the comparison. Both panes use the same
   Document view as the editor, so annotations, braces, guides, colours and typography match.
 - A **read-only** status tint marks added, removed and changed cells; changed words are highlighted
@@ -215,8 +223,10 @@ the same merged rows, so the search result set does not change.
   attributes the scanner does not model.
 - Reference following is a single-file feature; the diff reveals source ranges, it does not build a
   cross-file target index.
-- Search and navigation are over the merged display list; there is no filter control, global
-  Collapse/Expand or bottom action strip.
+- Line numbers follow display rows, not XML source lines: Show diff/Context, a collapse or a swap
+  renumbers the visible lines. There is no configurable line-number width.
+- Search and navigation are over the merged display list; there is no filter control or bottom action
+  strip.
 - Semantic pairing is a heuristic. A rename that changes the `DEFINITION-REF` or the parent stays an
   add + remove pair. A group above 250,000 candidate pairs uses the name/position fallback, and a
   comparison that reaches its work budget stops scoring. Both cases report the containers they could not

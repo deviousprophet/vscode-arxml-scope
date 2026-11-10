@@ -10,7 +10,7 @@ These rules describe the stylesheets that ship in `dist/editorViewer.css` and `d
 |---|---|
 | `src/webview/styles/tokens.css` | Theme tokens and the fallback set for the Document surface and the diff. Imported first by both pages. |
 | `src/webview/styles/base.css` | Reset, `body` layout, `#content` / `#main` boxes, `#tree-measure` probe host, `.sr-only`, `.grow` and the narrow layout. |
-| `components/documentTree/documentTree.css` | `.document-tree*` shell (header, scroller, window, spacers), `.row`, `.label`, `.value`, `.row-meta`, `.twisty`, `.guide`, condition/annotation/mark styling, depth and high-contrast rules. |
+| `components/documentTree/documentTree.css` | `.document-tree*` shell (header, scroller, window, spacers, line-number gutter), `.row`, `.label`, `.value`, `.row-meta`, `.twisty`, `.guide`, condition/annotation/mark styling, depth and high-contrast rules. |
 | `components/diffView/diffView.css` | Diff page tokens, the `#diff-body` column, the `#diff-list` / `.diff-pane` grid, `.diff-row` / `.diff-cell` status tints, `.word-changed` removed/inserted runs, the empty state and pane header parity. |
 | `components/toolbar/toolbar.css` | `.toolbar`, `.toolbar-left` / `-center` / `-right`, `.tool`, `.icon-tool`. |
 | `components/searchBar/searchBar.css` | `.search-box`, `.search-field`, `.search-input`, `.search-clear`, `.search-nav`, `.search-count`, `.search-progress`. |
@@ -45,7 +45,7 @@ also sets `data-page="diff"`, which scopes its own surface tokens. Plain declara
 | Typography | `--ecuc-fs`, `--ecuc-lh` | `--ecuc-lh` is `calc(var(--ecuc-fs) * 1.55)`; the CSS and the page's `heightFn` must agree. |
 | Syntax | `--tok-keyword`, `--tok-string`, `--tok-number`, `--tok-meta`, `--tok-comment`, `--tok-key`, `--tok-punct`, `--tok-dim` | Every value resolves from a `--vscode-*` token, with the editor foreground as the fallback. |
 | Surfaces | `--hover-bg`, `--sel-bg`, `--sel-bg-focus`, `--subtree-bg`, `--sel-container-bg`, `--sel-outline`, `--rail` | Selection uses tint + rail; it never recolours syntax. |
-| Geometry | `--fold-gutter: 26px`, `--doc-pad: 3ch`, `--indent: 4ch`, `--content-pad` | `--content-pad` is `calc(var(--fold-gutter) + var(--doc-pad))`; depth is generated from it. |
+| Geometry | `--fold-gutter: 26px`, `--line-numbers-width: 0px`, `--doc-pad: 3ch`, `--indent: 4ch`, `--content-pad` | `--content-pad` is `calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad))`; depth is generated from it. `--line-numbers-width` is written per pane as `<chars>ch` and defaults to `0px`. |
 | Search | `--match-bg`, `--match-hi` | Fixed dark-theme yellow tiers (see the exception log). |
 | Container accent | `--container-accent` | Fixed `#4EC9B0` (see the exception log). |
 
@@ -98,13 +98,24 @@ Rules:
 - `.document-tree-window` is positioned at `offsets[start]`, sized to the rendered slice and translated
   by the shared horizontal offset. Its minimum width comes from `--document-tree-content-width`. Never
   set these as a `style` attribute in the markup.
+- `.document-tree-lines` is a sibling after the window, inside the pane. It is absolutely positioned,
+  full pane height, `width: var(--line-numbers-width)`, `overflow: hidden`, `z-index: 1`,
+  `aria-hidden="true"` and `user-select: none`. One `.document-tree-line-number` cell per rendered row is
+  placed with the CSSOM `top`/`height` from the shared offsets; the pane publishes
+  `--line-numbers-width: <max(digits, 5)>ch` (`0ch` for an empty model) and redeclares
+  `--content-pad` from it, because `var()` inside a custom property is substituted where the
+  property is declared, not where it is used. The gutter is never translated,
+  so horizontal panning leaves it fixed; the window scrolls underneath its opaque
+  `editorGutter.background`. The Document gutter repeats the row's 2px selection and focus rails on the
+  numbered cell (`data-active`, `data-focused`) because the opaque column covers the row's leading edge.
 - `.virtual-scroll-vscroll` keeps `overflow-anchor: none`, `scrollbar-gutter: stable`, the editor font
   stack, `font-variant-ligatures: none`, `tab-size: 4` and `white-space: pre`. Header rows use the same
   `.row` geometry; they are content, not a pinned block.
 - A row is one flex line: `.row { display: flex; flex-wrap: nowrap; gap: 1ch; height: var(--ecuc-lh);
   padding-left: var(--content-pad); }`. `.value` is a direct child of `.row`.
-- The fold gutter is fixed at 26px. `.twisty` is absolutely positioned at `left: 2px`, spans the row
-  height and holds a 16px chevron. Leaves reserve the gutter but render no twisty.
+- The fold gutter is fixed at 26px. `.twisty` is absolutely positioned at
+  `left: calc(var(--line-numbers-width) + 2px)`, spans the row height and holds a 16px chevron. Leaves
+  reserve the gutter but render no twisty.
 - Depth comes from `data-level` and the generated rules in `documentTree.css`:
   `padding-left: calc(var(--content-pad) + var(--indent) * (level - 1))` for levels 1–24. Guides use the
   matching `.guide[data-level]` left offset plus `0.5ch`. No style attribute, no inline depth.
@@ -114,6 +125,8 @@ Rules:
   A selected subtree tints `.node[data-subtree="true"] > .row`, `.brace[data-subtree="true"] > .row`
   and `.comment[data-subtree="true"] > .row`; the comment node itself stays `aria-hidden` and carries
   no focus.
+- The schema/package header ends with one blank host row at `--ecuc-lh`. It has no rule child, border,
+  gradient or separator decoration; it is numbered like any other display line.
 - Empty containers show a muted `{ }` via `.node[data-kind="container"][data-empty="true"] > .row::after`;
   a collapsed container shows ` { … }`. These are CSS content, not markup.
 - Under `@media (max-width: 720px)` the document narrows `--doc-pad` to `2.5ch` and `--indent` to `3ch`;
@@ -153,8 +166,16 @@ Rules:
   (fallback `--diff-added-bg`) with a 1px `--diff-added-edge` outline. A search `<mark>` inside one
   keeps `--match-bg` (or `--match-hi` when current); the word span's outline stays. Forced-colors and
   high contrast replace both fills with a dotted outline.
-- Both panes receive the same content width, row height and offsets. Header rows use the Document
-  `.document-tree-header-row` geometry and the shorter header is padded so the rows align.
+- Both panes share the same row height, offsets and text content width; each pane's horizontal extent
+  adds its own number column (`diffContent + chars * chWidth`), so the last characters stay reachable.
+  Header rows use the Document `.document-tree-header-row` geometry and the shorter header is padded so
+  the rows align.
+- Each pane numbers its own display lines in a fixed gutter. A padded header line or a row missing on
+  that side leaves the cell blank; hidden unchanged-run rows are not numbered; header/gap/comment and
+  brace lines are numbered. The gutter cell reuses the `diffEditorGutter-*` tint with the diff
+  line-background fallbacks and redraws the pane-side rails hidden under the overlay (left
+  changed/removed, right added).
+- The header gap is one blank row with no rule child or border, numbered on both sides.
 
 ## Build and Bundle
 

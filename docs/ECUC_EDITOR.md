@@ -31,8 +31,16 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
   a parameter shows its name, `=`, value and quiet meta; a reference shows its name and target.
 - Schema and package information is the first content in the document. These lines scroll with the
   rows, use the same row shell and are searchable and focusable, but they are not ECUC nodes: clicking
-  one never changes the selection or Details. A non-selectable horizontal rule separates the header
-  from the first module. The editor has no file-name strip.
+  one never changes the selection or Details. One blank line separates the header from the first
+  module. The editor has no file-name strip.
+- A fixed line-number gutter numbers each display line from 1: the schema/package lines, the blank
+  separator, annotations, braces and nodes. Numbers renumber when containers collapse or the document
+  changes, and the selected row's number uses the active line-number colour. The selected and
+  keyboard-focused rows also repeat their 2px rail on the number cell, so the indicator stays visible
+  beside the opaque gutter. The gutter stays fixed
+  while the document scrolls horizontally, follows the rows vertically, and is not searchable,
+  selectable or focusable. Clicking a number performs the row's own action: it selects a node, focuses a
+  header, and does nothing for the blank separator.
 - Annotations appear as muted italic comment lines directly above their node. Selecting a container
   tints the annotation rows of its descendants; the annotation rows stay non-selectable and clicking
   one changes nothing.
@@ -70,6 +78,9 @@ Search runs on `Enter`; typing alone never scans.
 - `Escape` clears the query and returns focus to the Document.
 - The count reads `1 / N`, or `0 / 0` when nothing matches. All matches are marked; the current row uses
   the stronger highlight.
+- The schema/package keyword (`schema`, `package`) and its value are search candidates: both are
+  marked, and the current header uses the stronger tier. A header jump focuses the header line and posts
+  no `select` message, so the ECUC selection and Details stay unchanged.
 - Search jumps and marks; it never hides rows. A jump expands the target's ancestors and selects the
   target but keeps focus in the Search field.
 
@@ -283,3 +294,5 @@ collection is recomputed after every index change.
   fills.
 - Large files are virtualized, but browser layout/paint cost is not eliminated. Use the benchmark suite
   for scan/row/diff/index timing, not as a promise for every machine.
+- Line numbers follow display rows, not XML source lines, so collapsing or filtering renumbers them.
+  Their width is at least five characters; there is no line-number setting.

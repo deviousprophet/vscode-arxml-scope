@@ -97,6 +97,37 @@ function clickRow(dom: ReturnType<typeof installDom>, label: string): any {
 	return windowRow;
 }
 
+function gutterElement(dom: ReturnType<typeof installDom>, pane = '#tree-pane'): HTMLElement {
+	const gutter = dom.document.querySelector(`${pane} .document-tree-lines`) as HTMLElement | null;
+	assert.ok(gutter, `${pane} has a line-number gutter`);
+	return gutter;
+}
+
+function gutterCells(dom: ReturnType<typeof installDom>, pane = '#tree-pane'): HTMLElement[] {
+	return Array.from(gutterElement(dom, pane).querySelectorAll('.document-tree-line-number')) as HTMLElement[];
+}
+
+function lineCell(dom: ReturnType<typeof installDom>, index: number, pane = '#tree-pane'): HTMLElement {
+	const cell = gutterElement(dom, pane).querySelector(
+		`.document-tree-line-number[data-document-index="${index}"]`
+	) as HTMLElement | null;
+	assert.ok(cell, `the gutter has a cell for virtual row ${index}`);
+	return cell;
+}
+
+/** Every rendered row has the 1-based number of its virtual index. */
+function assertSequentialNumbers(dom: ReturnType<typeof installDom>, pane = '#tree-pane'): void {
+	const windowElement = dom.document.querySelector(`${pane} .document-tree-window`) as HTMLElement;
+	const rows = Array.from(windowElement.children) as HTMLElement[];
+	const cells = gutterCells(dom, pane);
+	assert.strictEqual(cells.length, rows.length, 'one gutter cell per rendered row');
+	for (let at = 0; at < rows.length; at++) {
+		const index = Number(rows[at].dataset.documentIndex);
+		assert.strictEqual(cells[at].dataset.documentIndex, String(index));
+		assert.strictEqual(cells[at].textContent, String(index + 1), `row ${index} is numbered ${index + 1}`);
+	}
+}
+
 function rowNamed(dom: ReturnType<typeof installDom>, label: string): any {
 	const row = treeRows(dom.document).find(
 		(candidate) => candidate.querySelector('.label')?.textContent === label
@@ -164,7 +195,7 @@ suite('editor bundled page', () => {
 			assert.strictEqual(headerGap.getAttribute('aria-hidden'), 'true');
 			assert.strictEqual(headerGap.tabIndex, -1);
 			assert.strictEqual(headerGap.hasAttribute('data-node-id'), false);
-			assert.ok(headerGap.querySelector('.document-tree-header-gap-line'), 'the gap has a rule');
+			assert.strictEqual(headerGap.children.length, 0, 'the gap is one blank line with no rule child');
 			assert.ok(headerGap.previousElementSibling?.classList.contains('document-tree-header-row'));
 			const firstNode = dom.document.querySelector('#tree-pane .node') as HTMLElement;
 			assert.ok(firstNode, 'the first module node exists');
@@ -188,6 +219,179 @@ suite('editor bundled page', () => {
 		const { dom } = mount({ rows: editorDocument().rows });
 		try {
 			assert.strictEqual(dom.document.querySelector('#tree-pane .document-tree-header-gap'), null);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the Document numbers every virtual row, including the header, gap, comments and braces', () => {
+		const { dom } = mount(annotationDocument());
+		try {
+			const gutter = gutterElement(dom);
+			assert.strictEqual(gutter.getAttribute('aria-hidden'), 'true');
+			assert.strictEqual(gutter.getAttribute('data-side'), 'document');
+			assert.strictEqual(gutter.tabIndex, -1);
+			assert.ok(gutter.previousElementSibling?.classList.contains('document-tree-window'), 'the gutter is after the window');
+			const width = (dom.document.querySelector('#tree-pane') as HTMLElement).style.getPropertyValue('--line-numbers-width');
+			assert.ok(/^[5-9]\d*ch$/.test(width), `the gutter width is at least five characters (${width})`);
+			assert.ok(dom.document.querySelector('#tree-pane .comment'), 'the fixture renders an annotation line');
+			assert.ok(dom.document.querySelector('#tree-pane .brace'), 'the fixture renders brace lines');
+			assertSequentialNumbers(dom);
+			const headerCount = dom.document.querySelectorAll('#tree-pane .document-tree-header-row').length;
+			assert.ok(headerCount > 0, 'the fixture has a schema/package header');
+			assert.strictEqual(lineCell(dom, headerCount).textContent, String(headerCount + 1), 'the gap is a numbered line');
+			const firstNode = dom.document.querySelector('#tree-pane .node') as HTMLElement;
+			assert.strictEqual(
+				lineCell(dom, Number(firstNode.dataset.documentIndex)).textContent,
+				String(Number(firstNode.dataset.documentIndex) + 1),
+				'the first module line follows the gap'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('collapsing and expanding a container renumbers the display rows', () => {
+		const { dom } = mount();
+		try {
+			const beforeIniIndex = Number(rowNamed(dom, 'IniValue').dataset.documentIndex);
+			assert.strictEqual(lineCell(dom, beforeIniIndex).textContent, String(beforeIniIndex + 1));
+			const beforeCount = gutterCells(dom).length;
+			const twisty = rowNamed(dom, 'ContA').querySelector('.twisty') as HTMLElement;
+			twisty.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			assert.strictEqual(
+				treeRows(dom.document).some((row) => row.querySelector('.label')?.textContent === 'IniValue'),
+				false,
+				'the collapsed subtree is hidden'
+			);
+			assert.ok(gutterCells(dom).length < beforeCount, 'hidden rows leave the gutter');
+			assertSequentialNumbers(dom);
+			const expand = rowNamed(dom, 'ContA').querySelector('.twisty') as HTMLElement;
+			expand.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			const afterIniIndex = Number(rowNamed(dom, 'IniValue').dataset.documentIndex);
+			assert.strictEqual(afterIniIndex, beforeIniIndex, 'expanding restores the row index');
+			assert.strictEqual(lineCell(dom, afterIniIndex).textContent, String(afterIniIndex + 1));
+			assertSequentialNumbers(dom);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the selected row number is active and a re-scan without the row clears it', () => {
+		const { dom, document } = mount();
+		try {
+			clickRow(dom, 'IniValue');
+			const index = Number(rowNamed(dom, 'IniValue').dataset.documentIndex);
+			const active = Array.from(
+				dom.document.querySelectorAll('#tree-pane .document-tree-line-number[data-active="true"]')
+			) as HTMLElement[];
+			assert.strictEqual(active.length, 1, 'exactly one number is active');
+			assert.strictEqual(active[0].textContent, String(index + 1));
+			const selectedId = rowFor(document, 'IniValue').id;
+			dom.post({
+				type: 'document',
+				document: {
+					rows: document.rows.filter((row) => row.id !== selectedId),
+					header: document.header,
+				},
+			});
+			assert.strictEqual(
+				dom.document.querySelector('#tree-pane .document-tree-line-number[data-active="true"]'),
+				null,
+				'a selection that no longer exists clears the active number'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the focused row number repeats the focus rail and clears when focus leaves', () => {
+		const { dom } = mount();
+		try {
+			const row = rowNamed(dom, 'IniValue');
+			const index = Number(row.dataset.documentIndex);
+			row.focus();
+			assert.strictEqual(lineCell(dom, index).dataset.focused, 'true', 'the focused row number carries the rail');
+			const other = rowNamed(dom, 'ContA');
+			other.focus();
+			assert.strictEqual(lineCell(dom, index).dataset.focused, undefined, 'the previous row clears');
+			assert.strictEqual(
+				lineCell(dom, Number(other.dataset.documentIndex)).dataset.focused,
+				'true',
+				'the new focused row is marked'
+			);
+			(dom.document.getElementById('search-input') as HTMLElement).focus();
+			assert.strictEqual(
+				lineCell(dom, Number(other.dataset.documentIndex)).dataset.focused,
+				undefined,
+				'focus outside the tree clears the gutter rail'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the gutter stays fixed horizontally and follows the rows vertically', async () => {
+		const { dom } = mount();
+		try {
+			const gutter = gutterElement(dom);
+			const bar = dom.document.querySelector('#tree .virtual-scroll-hscroll') as HTMLElement;
+			bar.scrollLeft = 40;
+			bar.dispatchEvent(new dom.window.Event('scroll'));
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			const windowEl = dom.document.querySelector('#tree-pane .document-tree-window') as HTMLElement;
+			assert.strictEqual(windowEl.style.transform, 'translateX(-40px)', 'the rows pan horizontally');
+			assert.strictEqual(gutter.style.transform, '', 'the gutter never translates with the rows');
+			assert.ok(gutterCells(dom).length > 0, 'the numbers survive horizontal scroll');
+
+			const scroller = dom.document.querySelector('#tree > .virtual-scroll-vscroll') as HTMLElement;
+			scroller.scrollTop = 400;
+			scroller.dispatchEvent(new dom.window.Event('scroll'));
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			const cells = gutterCells(dom);
+			assert.ok(cells.length > 0, 'the numbers are present after vertical scroll');
+			assert.strictEqual(cells[0].style.top, windowEl.style.top, 'the gutter starts at the rendered window top');
+			assertSequentialNumbers(dom);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the gutter is inert decoration: no tree semantics, no search marks and no focus stop', async () => {
+		const { dom } = mount();
+		try {
+			const gutter = gutterElement(dom);
+			assert.strictEqual(gutter.querySelectorAll('[data-node-id], [role="treeitem"], [tabindex="0"]').length, 0);
+			assert.strictEqual(gutter.tabIndex, -1);
+			const input = dom.document.getElementById('search-input') as HTMLInputElement;
+			input.value = 'IniValue';
+			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			await settleSearch();
+			assert.ok(/^1 \/ [1-9]/.test(dom.document.getElementById('search-count')!.textContent || ''));
+			assert.strictEqual(gutter.querySelectorAll('mark').length, 0, 'the gutter text is not searched');
+			assert.strictEqual(gutter.querySelectorAll('[data-search-current]').length, 0);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('clicking a number selects its row; a header or gap number selects nothing', () => {
+		const { dom } = mount();
+		try {
+			const row = rowNamed(dom, 'IniValue');
+			const index = Number(row.dataset.documentIndex);
+			lineCell(dom, index).click();
+			assert.deepStrictEqual(messagesOf(dom.api, 'select'), [
+				{ type: 'select', nodeId: row.dataset.nodeId },
+			]);
+			const header = dom.document.querySelector('#tree-pane .document-tree-header-row') as HTMLElement;
+			lineCell(dom, Number(header.dataset.documentIndex)).click();
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 1, 'a header number never selects');
+			assert.strictEqual(dom.document.activeElement, header, 'the header number focuses the header row');
+			const gap = dom.document.querySelector('#tree-pane .document-tree-header-gap') as HTMLElement;
+			lineCell(dom, Number(gap.dataset.documentIndex)).click();
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 1, 'the gap number never selects');
 		} finally {
 			dom.restore();
 		}

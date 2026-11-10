@@ -249,6 +249,45 @@ function wordTexts(row: Element | null, side: 'left' | 'right'): string[] {
 	);
 }
 
+function paneGutter(dom: ReturnType<typeof installDom>, pane: 'left' | 'right'): HTMLElement {
+	const gutter = dom.document.querySelector(`#diff-pane-${pane} .document-tree-lines`) as HTMLElement | null;
+	assert.ok(gutter, `${pane} pane has a line-number gutter`);
+	return gutter;
+}
+
+function paneCells(dom: ReturnType<typeof installDom>, pane: 'left' | 'right'): HTMLElement[] {
+	return Array.from(paneGutter(dom, pane).querySelectorAll('.document-tree-line-number')) as HTMLElement[];
+}
+
+function paneCellAt(dom: ReturnType<typeof installDom>, pane: 'left' | 'right', index: number): HTMLElement {
+	const cell = paneGutter(dom, pane).querySelector(
+		`.document-tree-line-number[data-document-index="${index}"]`
+	) as HTMLElement | null;
+	assert.ok(cell, `${pane} gutter has a cell for virtual row ${index}`);
+	return cell;
+}
+
+/** Numbered cells in one pane read 1..N; blank missing-side cells are skipped. */
+function assertPaneNumbering(dom: ReturnType<typeof installDom>, pane: 'left' | 'right'): number {
+	let expected = 1;
+	for (const cell of paneCells(dom, pane)) {
+		if ((cell.textContent ?? '') === '') {
+			continue;
+		}
+		assert.strictEqual(cell.textContent, String(expected), `${pane} line ${expected} is numbered in order`);
+		expected++;
+	}
+	return expected - 1;
+}
+
+async function runDiffSearch(dom: ReturnType<typeof installDom>, query: string): Promise<void> {
+	const input = dom.document.getElementById('diff-search-input') as HTMLInputElement;
+	input.value = query;
+	input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+	input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+	await settleSearch();
+}
+
 suite('semantic diff page', () => {
 	test('the host shell is strict and loads the bundled script and stylesheet', () => {
 		const html = diffShell({
@@ -975,7 +1014,41 @@ suite('semantic diff page', () => {
 		assert.ok(toolbar.includes('.toolbar-divider'));
 		const diffGapCss = webviewCss('components', 'diffView', 'diffView.css');
 		assert.ok(/\.diff-header-gap-row\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(diffGapCss));
-		assert.ok(/\.diff-header-gap-line\s*\{[^}]*border-top:\s*1px solid var\(--vscode-editorGroup-border/.test(diffGapCss));
+		assert.ok(!diffGapCss.includes('.diff-header-gap-line'), 'the header gap has no rule element');
+		assert.ok(
+			/\.document-tree-line-number\[data-status="added"\]\s*\{[^}]*--vscode-diffEditorGutter-insertedLineBackground[^}]*--diff-added-bg/.test(
+				diffGapCss
+			),
+			'the added gutter follows the inserted tint'
+		);
+		assert.ok(
+			/\.document-tree-line-number\[data-status="removed"\]\s*\{[^}]*--vscode-diffEditorGutter-removedLineBackground[^}]*--diff-removed-bg/.test(
+				diffGapCss
+			),
+			'the removed gutter follows the deleted tint'
+		);
+		assert.ok(
+			/\.document-tree-line-number\[data-status="changed"\]\s*\{[^}]*--diff-changed-bg/.test(diffGapCss),
+			'the changed gutter follows the changed tint'
+		);
+		assert.ok(
+			diffGapCss.includes(
+				'.document-tree-lines[data-side="left"] .document-tree-line-number[data-status="changed"]'
+			),
+			'the left pane redraws its changed rail over the gutter'
+		);
+		assert.ok(
+			diffGapCss.includes(
+				'.document-tree-lines[data-side="left"] .document-tree-line-number[data-status="removed"]'
+			),
+			'the left pane redraws its removed rail over the gutter'
+		);
+		assert.ok(
+			diffGapCss.includes(
+				'.document-tree-lines[data-side="right"] .document-tree-line-number[data-status="added"]'
+			),
+			'the right pane redraws its added rail over the gutter'
+		);
 		assert.ok(toolbar.includes('flex-direction: column'));
 		assert.ok(toolbar.includes('width: 60px'), 'one fixed width for every diff button');
 		assert.ok(toolbar.includes('height: 48px'), 'one fixed height for every diff button');
@@ -1152,31 +1225,46 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('the header rows are searchable and one paired line is one match', async () => {
+	test('the header keyword and value are searchable and marked in both panes', async () => {
 		const changed = wordRow({ left: wordCell(), right: wordCell({ shownValue: '200', value: '200' }) });
 		const document = wordDocument([changed]);
-		document.leftHeader = { schema: '00048', packages: ['NoSuchPkg'] };
-		document.rightHeader = { schema: '00048', packages: ['NoSuchPkg'] };
+		document.leftHeader = { schema: '00048', packages: ['HeaderPkg'] };
+		document.rightHeader = { schema: '00048', packages: ['HeaderPkg'] };
 		const { dom } = mount(document);
 		try {
-			const headerRows = Array.from(
-				dom.document.querySelectorAll('#diff-pane-left .diff-header-row')
-			) as HTMLElement[];
-			assert.ok(
-				headerRows.some((row) => (row.textContent || '').includes('NoSuchPkg')),
-				`header rows: ${headerRows.map((row) => row.textContent).join(' | ')}`
-			);
-			const input = dom.document.getElementById('diff-search-input') as HTMLInputElement;
-			input.value = 'NoSuchPkg';
-			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-			await settleSearch();
-			assert.strictEqual(dom.document.getElementById('diff-search-count')!.textContent, '1 / 1');
-			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-left .diff-header-row mark').length, 1);
-			assert.ok(
-				dom.document.querySelector('#diff-pane-left .diff-header-row[data-search-current="true"]'),
-				'the header row is the current match'
-			);
+			for (const query of ['Head', 'HeaderPkg', 'package', 'pack', 'schema', 'sche', '00048']) {
+				await runDiffSearch(dom, query);
+				assert.strictEqual(
+					dom.document.getElementById('diff-search-count')!.textContent,
+					'1 / 1',
+					`${query}: one aligned header line is one match`
+				);
+				for (const pane of ['left', 'right'] as const) {
+					const row = dom.document.querySelector(
+						`#diff-pane-${pane} .diff-header-row[data-search-current="true"]`
+					) as HTMLElement | null;
+					assert.ok(row, `${pane} ${query}: the header row is the current match`);
+					const mark = row.querySelector('mark');
+					assert.ok(mark, `${pane} ${query}: the matched text is marked`);
+					assert.ok(
+						(mark.textContent ?? '').toLowerCase().includes(query.toLowerCase()),
+						`${pane} ${query}: the mark covers the match`
+					);
+					if (query === 'package' || query === 'pack' || query === 'schema' || query === 'sche') {
+						assert.ok(row.querySelector('.keyword mark'), `${pane} ${query}: the keyword is marked`);
+					} else {
+						assert.ok(
+							row.querySelector('.package mark, .number mark'),
+							`${pane} ${query}: the value is marked`
+						);
+					}
+					assert.strictEqual(
+						dom.document.querySelectorAll(`#diff-pane-${pane} .diff-header-row[data-search-current="true"]`).length,
+						1
+					);
+				}
+			}
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'a header search jump never selects');
 		} finally {
 			dom.restore();
 		}
@@ -1232,24 +1320,199 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('the header gap is one non-selectable rule row in both panes', () => {
+	test('the header gap is one inert blank line with no rule in both panes', () => {
 		const { dom } = mount(documentOf());
 		try {
-			for (const pane of ['left', 'right']) {
+			for (const pane of ['left', 'right'] as const) {
 				const gap = dom.document.querySelector(`#diff-pane-${pane} .diff-header-gap-row`) as HTMLElement;
 				assert.ok(gap, `${pane} gap exists`);
 				assert.strictEqual(gap.getAttribute('role'), 'presentation');
 				assert.strictEqual(gap.getAttribute('aria-hidden'), 'true');
 				assert.strictEqual(gap.hasAttribute('data-key'), false);
 				assert.strictEqual(gap.tabIndex, -1);
-				assert.ok(gap.querySelector('.diff-header-gap-line'), `${pane} gap rule exists`);
+				assert.strictEqual(gap.children.length, 0, `${pane} gap has no rule child`);
 				assert.ok(gap.previousElementSibling?.classList.contains('diff-header-row'), `${pane} gap follows headers`);
 				assert.ok(gap.nextElementSibling?.classList.contains('diff-row'), `${pane} gap precedes data rows`);
+				const headerCount = dom.document.querySelectorAll(
+					`#diff-pane-${pane} .diff-header-cell:not([data-header-empty="true"])`
+				).length;
+				assert.strictEqual(
+					paneCellAt(dom, pane, Number(gap.dataset.documentIndex)).textContent,
+					String(headerCount + 1),
+					`${pane} gap is a numbered blank line`
+				);
 			}
 			const gap = dom.document.querySelector('#diff-pane-left .diff-header-gap-row') as HTMLElement;
 			gap.click();
 			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 0, 'clicking the gap does not reveal');
 			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'clicking the gap does not select');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('each pane numbers its own lines and leaves a padded header side blank', () => {
+		const { dom } = mount(documentOf());
+		try {
+			const left = paneGutter(dom, 'left');
+			const right = paneGutter(dom, 'right');
+			assert.strictEqual(left.getAttribute('data-side'), 'left');
+			assert.strictEqual(right.getAttribute('data-side'), 'right');
+			assert.strictEqual(left.getAttribute('aria-hidden'), 'true');
+			assert.strictEqual(left.tabIndex, -1);
+			const leftWidth = (dom.document.getElementById('diff-pane-left') as HTMLElement).style.getPropertyValue(
+				'--line-numbers-width'
+			);
+			const rightWidth = (dom.document.getElementById('diff-pane-right') as HTMLElement).style.getPropertyValue(
+				'--line-numbers-width'
+			);
+			assert.ok(/^\d+ch$/.test(leftWidth) && /^\d+ch$/.test(rightWidth), `${leftWidth} / ${rightWidth}`);
+			assert.ok(Number.parseFloat(leftWidth) >= 5 && Number.parseFloat(rightWidth) >= 5);
+
+			// left header: one package line; right header: schema + two packages.
+			assert.strictEqual(paneCellAt(dom, 'left', 0).textContent, '1');
+			assert.strictEqual(paneCellAt(dom, 'left', 1).textContent, '', 'the padded left header line is blank');
+			assert.strictEqual(paneCellAt(dom, 'left', 2).textContent, '', 'the padded left header line is blank');
+			assert.deepStrictEqual(['0', '1', '2'].map((index) => paneCellAt(dom, 'right', Number(index)).textContent), [
+				'1',
+				'2',
+				'3',
+			]);
+			assert.strictEqual(paneCellAt(dom, 'left', 3).textContent, '2', 'the gap continues the left numbering');
+			assert.strictEqual(paneCellAt(dom, 'right', 3).textContent, '4', 'the gap continues the right numbering');
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a row missing on one side leaves that gutter blank', () => {
+		const added = wordRow({
+			key: 'add',
+			status: 'added',
+			left: undefined,
+			right: wordCell({ shownValue: '200', value: '200' }),
+		});
+		const removed = wordRow({ key: 'rem', status: 'removed', left: wordCell(), right: undefined });
+		const { dom } = mount(wordDocument([added, removed]));
+		try {
+			assert.strictEqual(paneCellAt(dom, 'left', 0).textContent, '', 'an added row has no left line');
+			assert.strictEqual(paneCellAt(dom, 'right', 0).textContent, '1');
+			assert.strictEqual(paneCellAt(dom, 'left', 1).textContent, '1');
+			assert.strictEqual(paneCellAt(dom, 'right', 1).textContent, '', 'a removed row has no right line');
+			assert.strictEqual(assertPaneNumbering(dom, 'left'), 1);
+			assert.strictEqual(assertPaneNumbering(dom, 'right'), 1);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a hidden unchanged run is not numbered and visible rows renumber around it', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'document', semantic: true, document: wordDocument(contextRows()) });
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			const gap = dom.document.querySelector('#diff-pane-left .diff-gap-row') as HTMLElement;
+			assert.ok(gap, 'a hidden unchanged run is a split line');
+			assert.strictEqual(
+				paneCellAt(dom, 'left', Number(gap.dataset.documentIndex)).textContent,
+				'',
+				'the split line is not numbered'
+			);
+			assert.strictEqual(
+				paneCellAt(dom, 'right', Number(gap.dataset.documentIndex)).textContent,
+				''
+			);
+			const numbers = paneCells(dom, 'left').filter((cell) => (cell.textContent ?? '') !== '');
+			for (let at = 1; at < numbers.length; at++) {
+				assert.strictEqual(
+					Number(numbers[at].textContent),
+					Number(numbers[at - 1].textContent) + 1,
+					'numbering skips the hidden run without a gap'
+				);
+			}
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Show diff, Context, Swap and Collapse renumber both gutters', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			assert.strictEqual(assertPaneNumbering(dom, 'left'), 8, 'nodes and brace lines all carry numbers');
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
+			(dom.document.getElementById('diff-context') as HTMLElement).click();
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
+			(dom.document.getElementById('diff-swap') as HTMLElement).click();
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
+			(dom.document.getElementById('diff-collapse-all') as HTMLElement).click();
+			assert.strictEqual(assertPaneNumbering(dom, 'left'), 1, 'only the module row keeps a line');
+			assert.strictEqual(assertPaneNumbering(dom, 'right'), 1);
+			(dom.document.getElementById('diff-expand-all') as HTMLElement).click();
+			assert.strictEqual(assertPaneNumbering(dom, 'left'), 8);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the selected row number is active in both panes and clears with the row', () => {
+		const nested = wordDocument(nestedRows());
+		const { dom } = mount(nested);
+		try {
+			const row = dom.document.querySelector('#diff-pane-left .diff-row[data-key="c1"] .row') as HTMLElement;
+			row.click();
+			const index = Number(
+				(dom.document.querySelector('#diff-pane-left .diff-row[data-key="c1"]') as HTMLElement).dataset.documentIndex
+			);
+			for (const pane of ['left', 'right'] as const) {
+				const active = paneCells(dom, pane).filter((cell) => cell.dataset.active === 'true');
+				assert.strictEqual(active.length, 1, `${pane} has one active number`);
+				assert.strictEqual(Number(active[0].dataset.documentIndex), index);
+			}
+			dom.post({
+				type: 'document',
+				semantic: false,
+				document: { ...nested, rows: nested.rows.filter((candidate) => candidate.key !== 'c1') },
+			});
+			for (const pane of ['left', 'right'] as const) {
+				assert.strictEqual(
+					paneCells(dom, pane).filter((cell) => cell.dataset.active === 'true').length,
+					0,
+					`${pane} clears the active number`
+				);
+			}
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the gutters never translate with the horizontally panned rows', async () => {
+		const { dom } = mount();
+		try {
+			const bar = dom.document.querySelector('#diff-list .virtual-scroll-hscroll[data-pane="0"]') as HTMLElement;
+			Object.defineProperty(bar, 'scrollLeft', { configurable: true, value: 40 });
+			bar.dispatchEvent(new dom.window.Event('scroll'));
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			for (const pane of ['left', 'right']) {
+				const windowEl = dom.document.querySelector(
+					`#diff-pane-${pane} .document-tree-window`
+				) as HTMLElement;
+				assert.strictEqual(windowEl.style.transform, 'translateX(-40px)');
+				assert.strictEqual(
+					(dom.document.querySelector(`#diff-pane-${pane} .document-tree-lines`) as HTMLElement).style.transform,
+					'',
+					`${pane} gutter stays fixed`
+				);
+			}
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
 		} finally {
 			dom.restore();
 		}

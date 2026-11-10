@@ -4,6 +4,7 @@
 import * as assert from 'assert';
 
 import { DiffView, renderDiffViewHtml } from '../../../webview/components/diffView/diffView';
+import { buildOffsets } from '../../../webview/render/virtualScroll';
 import { webviewCss } from '../cssTestUtils';
 import { installMarkup } from '../pageTestUtils';
 
@@ -88,6 +89,57 @@ suite('DiffView component', () => {
 				(dom.document.getElementById('diff-body') as HTMLElement).style.getPropertyValue('--diff-scrollbar-width'),
 				'15px'
 			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('both panes mount a gutter with independent widths and ranges', () => {
+		const dom = installMarkup(`<body>${renderDiffViewHtml()}</body>`);
+		try {
+			const view = new DiffView();
+			view.mount();
+			const rowCount = 120000;
+			view.setModel({
+				rowCount,
+				offsets: buildOffsets(rowCount, () => 20),
+				renderRow: () => document.createElement('div'),
+				lineInfo(index: number, pane: string) {
+					if (pane === 'left') {
+						return { number: index + 1 };
+					}
+					return index % 2 === 0 ? { number: index / 2 + 1 } : undefined;
+				},
+				activeLine: () => 2
+			});
+			view.render({ top: 0, left: 0, height: 100, width: 800 }, true);
+			const left = dom.document.querySelector('#diff-pane-left .document-tree-lines') as HTMLElement;
+			const right = dom.document.querySelector('#diff-pane-right .document-tree-lines') as HTMLElement;
+			assert.ok(left && right, 'each pane owns a gutter');
+			assert.strictEqual(left.getAttribute('aria-hidden'), 'true');
+			assert.strictEqual(left.getAttribute('data-side'), 'left');
+			assert.strictEqual(right.getAttribute('data-side'), 'right');
+			assert.strictEqual(
+				(dom.document.getElementById('diff-pane-left') as HTMLElement).style.getPropertyValue('--line-numbers-width'),
+				'6ch',
+				'the left digit count sets its own column'
+			);
+			assert.strictEqual(
+				(dom.document.getElementById('diff-pane-right') as HTMLElement).style.getPropertyValue('--line-numbers-width'),
+				'5ch',
+				'the right pane keeps an independent width'
+			);
+			const leftCells = left.querySelectorAll('.document-tree-line-number');
+			const rightCells = right.querySelectorAll('.document-tree-line-number');
+			assert.strictEqual(leftCells.length, 15);
+			assert.strictEqual(rightCells.length, 15);
+			assert.strictEqual(leftCells[0].textContent, '1');
+			assert.strictEqual(leftCells[14].textContent, '15');
+			assert.strictEqual(rightCells[0].textContent, '1');
+			assert.strictEqual(rightCells[1].textContent, '', 'the missing side stays blank');
+			assert.strictEqual(rightCells[2].textContent, '2');
+			assert.strictEqual((leftCells[2] as HTMLElement).getAttribute('data-active'), 'true');
+			assert.strictEqual((rightCells[1] as HTMLElement).hasAttribute('data-active'), false);
 		} finally {
 			dom.restore();
 		}

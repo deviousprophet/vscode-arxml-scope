@@ -26,7 +26,7 @@ import {
 	type DocumentWordDiff,
 } from './components/documentTree/documentRows';
 import { DiffView } from './components/diffView/diffView';
-import type { DocumentTreeHeader } from './components/documentTree/documentTreeView';
+import type { DocumentTreeHeader, DocumentTreeLineInfo } from './components/documentTree/documentTreeView';
 import { DiffToolbar } from './components/toolbar/toolbar';
 import { SearchBar } from './components/searchBar/searchBar';
 import { RowSearchEngine } from './render/rowSearch';
@@ -157,9 +157,12 @@ let heights = { row: 20 };
 let heightFn: (index: number) => number = function () { return heights.row; };
 let offsets: number[] = [0];
 let diffContent = 0;
+let chWidth = 0;
 let headerRowCount = 0;
 let headerGapCount = 0;
 let headerRows: Array<{ left?: { keyword: string; text: string }; right?: { keyword: string; text: string } }> = [];
+/** Per-pane display line numbers, aligned with the virtual rows. */
+let lineNumbers: { left: Array<number | undefined>; right: Array<number | undefined> } = { left: [], right: [] };
 let views: DiffView | undefined;
 let loaded = false;
 function hasChanges() {
@@ -253,25 +256,96 @@ function renderHeaders() {
 	}
 	views.setHeader(headers);
 }
+/**
+ * Number each pane's own display lines. Headers number per owning side, the
+ * blank header gap is a line on both sides, a hidden unchanged run is not a
+ * line, and a blank cell on one side leaves that gutter empty.
+ */
+function buildLineNumbers(): void {
+	const total = contentRowStart() + displayRows.length;
+	lineNumbers = { left: new Array(total), right: new Array(total) };
+	let left = 0;
+	let right = 0;
+	for (let index = 0; index < headerRowCount; index++) {
+		const row = headerRows[index];
+		if (row && row.left) {
+			left++;
+			lineNumbers.left[index] = left;
+		}
+		if (row && row.right) {
+			right++;
+			lineNumbers.right[index] = right;
+		}
+	}
+	if (headerGapCount > 0) {
+		const gapIndex = headerRowCount;
+		left++;
+		right++;
+		lineNumbers.left[gapIndex] = left;
+		lineNumbers.right[gapIndex] = right;
+	}
+	for (let at = 0; at < displayRows.length; at++) {
+		const flat = displayRows[at];
+		if (flat.gap) {
+			continue;
+		}
+		const virtualIndex = contentRowStart() + at;
+		const leftKind = swapped ? flat.right : flat.left;
+		const rightKind = swapped ? flat.left : flat.right;
+		if (leftKind !== 'blank' && leftKind !== 'gap') {
+			left++;
+			lineNumbers.left[virtualIndex] = left;
+		}
+		if (rightKind !== 'blank' && rightKind !== 'gap') {
+			right++;
+			lineNumbers.right[virtualIndex] = right;
+		}
+	}
+}
+
+/** The gutter state for one virtual row: a number, plus the node's diff tint. */
+function lineInfoFor(index: number, pane: string): DocumentTreeLineInfo | undefined {
+	const numbers = pane === 'left' ? lineNumbers.left : lineNumbers.right;
+	const number = numbers[index];
+	if (number === undefined) {
+		return undefined;
+	}
+	const flat = index >= contentRowStart() ? displayRows[index - contentRowStart()] : undefined;
+	if (!flat || flat.gap) {
+		return { number };
+	}
+	const kind = pane === 'left' ? (swapped ? flat.right : flat.left) : swapped ? flat.left : flat.right;
+	if (kind !== 'node') {
+		return { number };
+	}
+	return { number, status: displayStatus(rows[flat.rowIndex]) };
+}
+
 function paneModel() {
 	return {
 		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
 		renderRow: renderRow,
-		contentWidth: diffContent
+		contentWidth: diffContent,
+		lineInfo: lineInfoFor,
+		activeLine: function () {
+			return selectedKey === undefined ? undefined : displayIndexByKey.get(selectedKey);
+		}
 	};
 }
 function applyModels() {
 	if (!views) {
 		return;
 	}
+	buildLineNumbers();
 	views.setModel(paneModel());
+	const chars = views.lineNumberChars();
 	views.setContent({
 		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
 		totalHeight: totalHeightOf(offsets),
 		contentWidth: diffContent,
-		contentWidths: [diffContent, diffContent]
+		contentWidths: [diffContent + chars[0] * chWidth, diffContent + chars[1] * chWidth]
 	});
 }
 function setDocument(next: any): void {
@@ -354,7 +428,7 @@ function measureHeights() {
  */
 function measureDiffWidth() {
 	const probe = document.getElementById('diff-ch-probe');
-	let chWidth = 0;
+	chWidth = 0;
 	if (probe) {
 		const rect = probe.getBoundingClientRect();
 		chWidth = rect.width > 0 ? rect.width / 100 : 0;
@@ -517,7 +591,7 @@ function renderHeaderRow(index: number, pane: string): any {
 		row.className = 'row document-tree-header-row';
 		const key = document.createElement('span');
 		key.className = 'keyword';
-		key.textContent = line.keyword;
+		appendHighlighted(key, line.keyword, searchQuery);
 		row.appendChild(key);
 		row.appendChild(document.createTextNode(' '));
 		const value = document.createElement('span');
@@ -541,9 +615,6 @@ function renderHeaderGapRow(pane: string): HTMLElement {
 	element.setAttribute('role', 'presentation');
 	element.setAttribute('aria-hidden', 'true');
 	element.tabIndex = -1;
-	const line = document.createElement('div');
-	line.className = 'diff-header-gap-line';
-	element.appendChild(line);
 	return element;
 }
 function renderRow(index: number, pane: string): any {
@@ -836,6 +907,7 @@ function updateSelection() {
 			}
 		}
 	}
+	views.refreshActiveLine();
 }
 function updateViewButtons() {
 	if (toolbar) {
@@ -1582,9 +1654,11 @@ function resetDiffState(): void {
 	heightFn = function () { return heights.row; };
 	offsets = [0];
 	diffContent = 0;
+	chWidth = 0;
 	headerRowCount = 0;
 	headerGapCount = 0;
 	headerRows = [];
+	lineNumbers = { left: [], right: [] };
 	views = undefined;
 	loaded = false;
 	searchQuery = '';
