@@ -13,7 +13,6 @@ import type { EcucRow } from '../core/ecuc/renderRows';
 import {
 	FlatRow,
 	ancestorIds,
-	carriesGroupGap,
 	flattenRows,
 	stepMatch,
 } from './render/treeQuery';
@@ -111,6 +110,7 @@ interface EditorSearchCandidate {
 
 let headerRows: EditorHeaderRow[] = [];
 let headerRowCount = 0;
+let headerGapCount = 0;
 let offsets: number[] = [0];
 let contentWidth = 0;
 let searchCandidates: EditorSearchCandidate[] = [];
@@ -147,45 +147,72 @@ function indexRows() {
 	}
 }
 
+function contentRowStart(): number {
+	return headerRowCount + headerGapCount;
+}
+
 function buildHeightFn() {
 	const base = heights.document;
-	heightFn = function (index) {
-		if (index < headerRowCount) {
-			return base;
-		}
-		return base + (carriesGroupGap(rows, displayRows, index - headerRowCount) ? base : 0);
+	// Every display row is one base row high, including the header and module gaps.
+	heightFn = function () {
+		return base;
 	};
-	offsets = buildOffsets(headerRowCount + displayRows.length, heightFn);
+	offsets = buildOffsets(contentRowStart() + displayRows.length, heightFn);
 	contentWidth = Math.max(contentWidth, estimateContentWidth());
 	syncTreeModel();
 }
 
-/** A deterministic lower bound for the horizontal content width. */
+/**
+ * A deterministic full-document width estimate. It covers every row in the
+ * document, not the rendered slice: the header lines, indentation, the
+ * `module ` label prefix, comments, values and meta. A long row scrolling in
+ * or out therefore cannot change the window's minimum width.
+ */
 function estimateContentWidth(): number {
 	if (chWidth <= 0) {
 		return 0;
 	}
+	const indentChars = (level: number): number => Math.max(0, level - 1) * 4;
 	let maxChars = 0;
+	const widest = (chars: number): void => {
+		if (chars > maxChars) {
+			maxChars = chars;
+		}
+	};
 	for (const row of rows) {
-		let chars = row.label.length;
-		if (row.kind === 'parameter') {
-			chars += 3 + (row.shownValue === undefined ? 0 : row.shownValue.length);
+		let chars = indentChars(row.level) + row.label.length;
+		if (row.kind === 'module') {
+			// `.row.k-module .label::before` renders "module ".
+			chars += 7;
+		}
+		if (row.kind === 'parameter' || row.kind === 'reference') {
+			// `valueSpan` renders "= " plus the value or reference target.
+			const value = row.shownValue !== undefined ? row.shownValue : row.target || '';
+			chars += 3 + value.length;
 		}
 		for (const part of row.meta) {
 			chars += part.text.length + 1;
 		}
-		chars += Math.max(0, row.level - 1) * 4;
-		if (chars > maxChars) {
-			maxChars = chars;
+		widest(chars);
+		for (const comment of row.comments ?? []) {
+			// Indent plus `/* ` + text + ` */`, with the row's flex gap.
+			widest(indentChars(row.level) + 7 + comment.length + 1);
 		}
 	}
-	return 26 + 8 + Math.ceil(maxChars * chWidth);
+	for (const header of headerRows) {
+		// `schema ` / `package ` plus the value, with both row flex gaps.
+		widest(header.keyword.length + 1 + header.text.length + 2);
+	}
+	const lineChars = treeView ? treeView.lineNumberChars() : 0;
+	// Fold gutter plus slack, the number column and the document padding.
+	return 26 + 8 + Math.ceil((maxChars + lineChars + 3) * chWidth);
 }
 
 function setHeaderRows(header: DocumentTreeHeader | undefined): void {
 	headerRows = [];
 	if (!header) {
 		headerRowCount = 0;
+		headerGapCount = 0;
 		return;
 	}
 	if (header.schema) {
@@ -206,6 +233,7 @@ function setHeaderRows(header: DocumentTreeHeader | undefined): void {
 		});
 	}
 	headerRowCount = headerRows.length;
+	headerGapCount = Math.min(1, headerRowCount);
 }
 
 function buildSearchCandidates(): void {
@@ -240,7 +268,8 @@ function measureHeights() {
 function rebuildDisplay() {
 	displayRows = flattenRows(rows, {
 		collapsed: collapsed,
-		braces: true
+		braces: true,
+		moduleGaps: true
 	});
 	guideLevels = guidesFor(displayRows, rows);
 	displayIndexById = new Map();
@@ -250,7 +279,7 @@ function rebuildDisplay() {
 		const flat = displayRows[at];
 		if (flat.type === 'node') {
 			const row = rows[flat.rowIndex];
-			displayIndexById.set(row.id, headerRowCount + at);
+			displayIndexById.set(row.id, contentRowStart() + at);
 			visibleNodeIds.push(row.id);
 			// Expansion is the display list's decision, carried on the row; the page
 			// must not re-derive it from neighbouring rows (see treeQuery.ts).
@@ -305,23 +334,28 @@ function setRows(nextRows: any, nextSelectedId?: string, nextHeader?: DocumentTr
 
 /** The host half of the component: the rows for one display index. */
 function documentRowOptions(displayIndex: number): any {
-	const flat = displayRows[displayIndex];
 	return {
 		selectedId: selectedId,
 		expandedIds: expandedIds,
 		searchQuery: searchQuery,
 		currentId: currentMatchId(),
 		subtreeIds: subtreeIds,
-		gap: flat ? carriesGroupGap(rows, displayRows, displayIndex) : false,
 		guides: guideLevels[displayIndex] || []
 	};
 }
 
 function treeModel() {
 	return {
-		rowCount: headerRowCount + displayRows.length,
+		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
-		renderRow: renderRow
+		contentWidth: contentWidth,
+		renderRow: renderRow,
+		lineInfo: function (index: number) {
+			return { number: index + 1 };
+		},
+		activeLine: function () {
+			return selectedId === undefined ? undefined : displayIndexById.get(selectedId);
+		}
 	};
 }
 
@@ -331,7 +365,7 @@ function syncTreeModel() {
 	}
 	if (virtualScroll) {
 		virtualScroll.setContent({
-			rowCount: headerRowCount + displayRows.length,
+			rowCount: contentRowStart() + displayRows.length,
 			offsets: offsets,
 			totalHeight: totalHeightOf(offsets),
 			contentWidth: contentWidth
@@ -351,7 +385,19 @@ function buildCommentRow(flat: any, displayIndex: number): any {
 	return buildDocumentCommentRow(flat.text, flat.level, rows[flat.rowIndex].id, documentRowOptions(displayIndex));
 }
 
+function buildModuleGapRow(): HTMLElement {
+	const row = document.createElement('div');
+	row.className = 'document-tree-module-gap';
+	row.setAttribute('role', 'presentation');
+	row.setAttribute('aria-hidden', 'true');
+	row.tabIndex = -1;
+	return row;
+}
+
 function buildDisplayRow(flat: any, displayIndex: number): any {
+	if (flat.type === 'module-gap') {
+		return buildModuleGapRow();
+	}
 	if (flat.type === 'comment') {
 		return buildCommentRow(flat, displayIndex);
 	}
@@ -366,9 +412,12 @@ function buildHeaderRow(header: EditorHeaderRow, virtualIndex: number): any {
 	row.setAttribute('role', 'presentation');
 	row.setAttribute('data-header-id', header.id);
 	row.tabIndex = -1;
+	if (searchQuery.trim() !== '' && header.id === currentMatchId()) {
+		row.dataset.searchCurrent = 'true';
+	}
 	const key = document.createElement('span');
 	key.className = 'keyword';
-	key.textContent = header.keyword;
+	appendHighlighted(key, header.keyword, searchQuery);
 	row.appendChild(key);
 	row.appendChild(document.createTextNode(' '));
 	const value = document.createElement('span');
@@ -379,12 +428,24 @@ function buildHeaderRow(header: EditorHeaderRow, virtualIndex: number): any {
 	return row;
 }
 
+function buildHeaderGapRow(): HTMLElement {
+	const row = document.createElement('div');
+	row.className = 'document-tree-header-gap';
+	row.setAttribute('role', 'presentation');
+	row.setAttribute('aria-hidden', 'true');
+	row.tabIndex = -1;
+	return row;
+}
+
 function renderRow(index: number): any {
 	if (index < headerRowCount) {
 		const header = headerRows[index];
 		return header ? buildHeaderRow(header, index) : document.createElement('div');
 	}
-	const displayIndex = index - headerRowCount;
+	if (index === headerRowCount && headerGapCount > 0) {
+		return buildHeaderGapRow();
+	}
+	const displayIndex = index - contentRowStart();
 	const flat = displayRows[displayIndex];
 	return flat ? buildDisplayRow(flat, displayIndex) : document.createElement('div');
 }
@@ -480,7 +541,12 @@ function ensureVisible(displayIndex: number): void {
 function syncContentWidth(): void {
 	const win = treeView ? treeView.getWindowElement() : undefined;
 	const measured = win && Number.isFinite(win.scrollWidth) ? win.scrollWidth : 0;
-	if (measured > contentWidth) {
+	const paneWidth = treeView ? treeView.clientWidth() : 0;
+	// The window is at least the pane wide (`min-width: max(100%, …)`), so
+	// `scrollWidth` equals the pane when the content is shorter. That pane width
+	// must not become the content width, or resizing wider would ratchet the
+	// selection fill and leave a horizontal scrollbar behind.
+	if (measured > contentWidth && (paneWidth <= 0 || measured > paneWidth)) {
 		contentWidth = measured;
 		if (treeView) {
 			treeView.setContentWidth(measured);
@@ -531,6 +597,9 @@ function setSelection(id: string | undefined): void {
 		} else {
 			delete structural.dataset.subtree;
 		}
+	}
+	if (treeView) {
+		treeView.refreshActiveLine();
 	}
 	updateInspector();
 }
@@ -1388,6 +1457,7 @@ function resetEditorState(): void {
 	focusId = undefined;
 	headerRows = [];
 	headerRowCount = 0;
+	headerGapCount = 0;
 	offsets = [0];
 	contentWidth = 0;
 	searchCandidates = [];

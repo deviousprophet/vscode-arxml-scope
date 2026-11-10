@@ -7,6 +7,7 @@ on:
   workflow_call:
     inputs:
       use_package_version:
+        description: 'Use the package version as the VSIX suffix; otherwise use the 7-character Git SHA'
         required: false
         type: boolean
         default: false
@@ -104,13 +105,13 @@ jobs:
       - name: Strip Unreleased Changelog
         run: node .github/scripts/strip-unreleased-changelog.mjs
 
-      - name: Determine Suffix
+      - name: Determine VSIX Suffix
         id: suffix
         run: |
           if [ "${{ inputs.use_package_version }}" = "true" ]; then
             SUFFIX=$(node -p "require('./package.json').version")
           else
-            SUFFIX="$GITHUB_SHA"
+            SUFFIX="${GITHUB_SHA::7}"
           fi
           echo "suffix=$SUFFIX" >> $GITHUB_OUTPUT
 

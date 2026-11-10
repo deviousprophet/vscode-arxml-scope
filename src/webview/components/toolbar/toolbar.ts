@@ -60,6 +60,8 @@ export interface DiffToolbarCallbacks {
 	onViewDiff?(): void;
 	onPrev?(): void;
 	onNext?(): void;
+	onCollapseAll?(): void;
+	onExpandAll?(): void;
 	onSwap?(): void;
 	onMatchMode?(semantic: boolean): void;
 	onContext?(active: boolean): void;
@@ -81,6 +83,8 @@ const ICON_SEMANTIC = diffIcon(
 const ICON_STRICT = diffIcon('<path d="M3 5.5h10M3 10.5h10"/>');
 const ICON_PREV = diffIcon('<path d="M8 12V4M4 8l4-4 4 4"/>');
 const ICON_NEXT = diffIcon('<path d="M8 4v8M4 8l4 4 4-4"/>');
+const ICON_COLLAPSE_ALL = diffIcon('<path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/>');
+const ICON_EXPAND_ALL = diffIcon('<path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/>');
 const ICON_SWAP = diffIcon(
 	'<path d="M3 5h9m0 0-2.5-2.5M12 5 9.5 7.5M13 11H4m0 0 2.5-2.5M4 11l2.5 2.5"/>'
 );
@@ -105,6 +109,9 @@ export function renderDiffToolbarHtml(searchHtml: string): string {
 <span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
 <button id="diff-prev" class="tool diff-tool" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference">${ICON_PREV}<span class="lbl">Prev diff</span></button>
 <button id="diff-next" class="tool diff-tool" type="button" title="Next difference (F7)" aria-label="Next difference">${ICON_NEXT}<span class="lbl">Next diff</span></button>
+<span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
+<button id="diff-collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
+<button id="diff-expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
 </div>
 <div class="toolbar-center">
 <button id="diff-swap" class="tool diff-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false">${ICON_SWAP}<span class="lbl">Swap sides</span></button>
@@ -134,6 +141,8 @@ export class DiffToolbar {
 		this.bind('diff-view-diff', () => this.callbacks.onViewDiff && this.callbacks.onViewDiff());
 		this.bind('diff-prev', () => this.callbacks.onPrev && this.callbacks.onPrev());
 		this.bind('diff-next', () => this.callbacks.onNext && this.callbacks.onNext());
+		this.bind('diff-collapse-all', () => this.callbacks.onCollapseAll && this.callbacks.onCollapseAll());
+		this.bind('diff-expand-all', () => this.callbacks.onExpandAll && this.callbacks.onExpandAll());
 		this.bind('diff-swap', () => this.callbacks.onSwap && this.callbacks.onSwap());
 		this.bind('diff-mode-semantic', () => this.callbacks.onMatchMode && this.callbacks.onMatchMode(true));
 		this.bind('diff-mode-strict', () => this.callbacks.onMatchMode && this.callbacks.onMatchMode(false));

@@ -26,7 +26,7 @@ import {
 	type DocumentWordDiff,
 } from './components/documentTree/documentRows';
 import { DiffView } from './components/diffView/diffView';
-import type { DocumentTreeHeader } from './components/documentTree/documentTreeView';
+import type { DocumentTreeHeader, DocumentTreeLineInfo } from './components/documentTree/documentTreeView';
 import { DiffToolbar } from './components/toolbar/toolbar';
 import { SearchBar } from './components/searchBar/searchBar';
 import { RowSearchEngine } from './render/rowSearch';
@@ -157,8 +157,12 @@ let heights = { row: 20 };
 let heightFn: (index: number) => number = function () { return heights.row; };
 let offsets: number[] = [0];
 let diffContent = 0;
+let chWidth = 0;
 let headerRowCount = 0;
+let headerGapCount = 0;
 let headerRows: Array<{ left?: { keyword: string; text: string }; right?: { keyword: string; text: string } }> = [];
+/** Per-pane display line numbers, aligned with the virtual rows. */
+let lineNumbers: { left: Array<number | undefined>; right: Array<number | undefined> } = { left: [], right: [] };
 let views: DiffView | undefined;
 let loaded = false;
 function hasChanges() {
@@ -184,20 +188,24 @@ function indexRows() {
 function refreshVisibility() {
 	visibility = diffVisibility(rows, showChangesOnly, contextActive ? CONTEXT_LINES : 0);
 }
+function contentRowStart(): number {
+	return headerRowCount + headerGapCount;
+}
 function buildHeightFn() {
 	const base = heights.row;
-	// Diff rows are uniform: the Document-only module gap is not part of the
-	// comparison surface, so a module row is exactly one base row high.
+	// Diff rows are uniform: the shared module gap is one real display row, so
+	// it is exactly one base row high like every other line.
 	heightFn = function () {
 		return base;
 	};
-	offsets = buildOffsets(headerRowCount + displayRows.length, heightFn);
+	offsets = buildOffsets(contentRowStart() + displayRows.length, heightFn);
 }
 function rebuildDisplay() {
 	displayRows = flattenDiffDocument(rows, {
 		collapsed: collapsed,
 		visible: visibility,
-		expandedGaps: expandedGaps
+		expandedGaps: expandedGaps,
+		moduleGaps: true
 	});
 	displayIndexByKey = new Map();
 	navigationVisible = new Array(rows.length).fill(false);
@@ -207,7 +215,7 @@ function rebuildDisplay() {
 			continue;
 		}
 		const row = rows[flat.rowIndex];
-		displayIndexByKey.set(row.key, headerRowCount + at);
+		displayIndexByKey.set(row.key, contentRowStart() + at);
 		navigationVisible[flat.rowIndex] = true;
 	}
 	if (!hasChanges()) {
@@ -239,6 +247,7 @@ function buildHeaderRows(): void {
 		headerRows.push({ left: left[at], right: right[at] });
 	}
 	headerRowCount = headerRows.length;
+	headerGapCount = Math.min(1, headerRowCount);
 }
 function renderHeaders() {
 	const headers = diffPaneHeaders(diffDocument, swapped);
@@ -248,25 +257,118 @@ function renderHeaders() {
 	}
 	views.setHeader(headers);
 }
+/**
+ * Number each pane's own display lines. Headers number per owning side, the
+ * blank header gap is a line on both sides, a hidden unchanged run is not a
+ * line, and a blank cell on one side leaves that gutter empty.
+ */
+function buildLineNumbers(): void {
+	const total = contentRowStart() + displayRows.length;
+	lineNumbers = { left: new Array(total), right: new Array(total) };
+	let left = 0;
+	let right = 0;
+	for (let index = 0; index < headerRowCount; index++) {
+		const row = headerRows[index];
+		if (row && row.left) {
+			left++;
+			lineNumbers.left[index] = left;
+		}
+		if (row && row.right) {
+			right++;
+			lineNumbers.right[index] = right;
+		}
+	}
+	if (headerGapCount > 0) {
+		const gapIndex = headerRowCount;
+		left++;
+		right++;
+		lineNumbers.left[gapIndex] = left;
+		lineNumbers.right[gapIndex] = right;
+	}
+	for (let at = 0; at < displayRows.length; at++) {
+		const flat = displayRows[at];
+		const virtualIndex = contentRowStart() + at;
+		if (flat.gap) {
+			continue;
+		}
+		if (flat.moduleGap) {
+			left++;
+			right++;
+			lineNumbers.left[virtualIndex] = left;
+			lineNumbers.right[virtualIndex] = right;
+			continue;
+		}
+		const leftKind = swapped ? flat.right : flat.left;
+		const rightKind = swapped ? flat.left : flat.right;
+		if (leftKind !== 'blank' && leftKind !== 'gap') {
+			left++;
+			lineNumbers.left[virtualIndex] = left;
+		}
+		if (rightKind !== 'blank' && rightKind !== 'gap') {
+			right++;
+			lineNumbers.right[virtualIndex] = right;
+		}
+	}
+}
+
+/** The gutter state for one virtual row: a number, plus the node's diff tint. */
+function lineInfoFor(index: number, pane: string): DocumentTreeLineInfo | undefined {
+	const numbers = pane === 'left' ? lineNumbers.left : lineNumbers.right;
+	const number = numbers[index];
+	if (number === undefined) {
+		return undefined;
+	}
+	const flat = index >= contentRowStart() ? displayRows[index - contentRowStart()] : undefined;
+	if (!flat || flat.gap) {
+		return { number };
+	}
+	const kind = pane === 'left' ? (swapped ? flat.right : flat.left) : swapped ? flat.left : flat.right;
+	if (kind !== 'node') {
+		return { number };
+	}
+	return { number, status: displayStatus(rows[flat.rowIndex]) };
+}
+
 function paneModel() {
 	return {
-		rowCount: headerRowCount + displayRows.length,
+		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
 		renderRow: renderRow,
-		contentWidth: diffContent
+		contentWidth: diffContent,
+		lineInfo: lineInfoFor,
+		activeLine: function () {
+			return selectedKey === undefined ? undefined : displayIndexByKey.get(selectedKey);
+		}
 	};
+}
+/**
+ * The window floor for the diff panes. `diffContent` is the text plus fold
+ * width; each row also reserves its pane's number column in the content pad, so
+ * the floor must add it, exactly like the per-pane horizontal extent. Otherwise
+ * the longest row leaving the rendered slice would shrink the selection fill by
+ * the gutter width.
+ */
+function publishContentWidth(): void {
+	if (!views) {
+		return;
+	}
+	const chars = views.lineNumberChars();
+	views.setContentWidth(diffContent + Math.max(chars[0], chars[1]) * chWidth);
 }
 function applyModels() {
 	if (!views) {
 		return;
 	}
+	buildLineNumbers();
 	views.setModel(paneModel());
+	const chars = views.lineNumberChars();
+	publishContentWidth();
 	views.setContent({
-		rowCount: headerRowCount + displayRows.length,
+		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
 		totalHeight: totalHeightOf(offsets),
 		contentWidth: diffContent,
-		contentWidths: [diffContent, diffContent]
+		contentWidths: [diffContent + chars[0] * chWidth, diffContent + chars[1] * chWidth]
 	});
 }
 function setDocument(next: any): void {
@@ -346,10 +448,12 @@ function measureHeights() {
  * One content width per rebuild. The row font is monospace, so one font probe
  * plus character counts give the longest row without reading layout per row.
  * Both panes share it so a synchronized horizontal offset cannot clamp early.
+ * Header lines take part too: a long package path must not exceed the window
+ * minimum, or the selection fill would shrink below the pane.
  */
 function measureDiffWidth() {
 	const probe = document.getElementById('diff-ch-probe');
-	let chWidth = 0;
+	chWidth = 0;
 	if (probe) {
 		const rect = probe.getBoundingClientRect();
 		chWidth = rect.width > 0 ? rect.width / 100 : 0;
@@ -361,10 +465,20 @@ function measureDiffWidth() {
 			maxChars = chars;
 		}
 	}
-	diffContent = diffContentWidth(maxChars, chWidth);
-	if (views) {
-		views.setContentWidth(diffContent);
+	for (const row of headerRows) {
+		for (const line of [row.left, row.right]) {
+			if (!line) {
+				continue;
+			}
+			// `keyword ` plus the value, with both row flex gaps.
+			const chars = line.keyword.length + 1 + line.text.length + 1;
+			if (chars > maxChars) {
+				maxChars = chars;
+			}
+		}
 	}
+	diffContent = diffContentWidth(maxChars, chWidth);
+	publishContentWidth();
 }
 function selectedSubtreeIds(): Set<string> {
 	if (subtreeCache && subtreeCache.key === selectedKey && subtreeCache.revision === rowsRevision) {
@@ -512,7 +626,7 @@ function renderHeaderRow(index: number, pane: string): any {
 		row.className = 'row document-tree-header-row';
 		const key = document.createElement('span');
 		key.className = 'keyword';
-		key.textContent = line.keyword;
+		appendHighlighted(key, line.keyword, searchQuery);
 		row.appendChild(key);
 		row.appendChild(document.createTextNode(' '));
 		const value = document.createElement('span');
@@ -529,11 +643,32 @@ function renderHeaderRow(index: number, pane: string): any {
 	element.appendChild(cell);
 	return element;
 }
+function renderHeaderGapRow(pane: string): HTMLElement {
+	const element = document.createElement('div');
+	element.className = 'diff-row diff-header-gap-row';
+	element.dataset.side = pane === 'left' ? 'left' : 'right';
+	element.setAttribute('role', 'presentation');
+	element.setAttribute('aria-hidden', 'true');
+	element.tabIndex = -1;
+	return element;
+}
 function renderRow(index: number, pane: string): any {
 	if (index < headerRowCount) {
 		return renderHeaderRow(index, pane);
 	}
-	const flat = displayRows[index - headerRowCount];
+	if (index === headerRowCount && headerGapCount > 0) {
+		return renderHeaderGapRow(pane);
+	}
+	const flat = displayRows[index - contentRowStart()];
+	if (flat && flat.moduleGap) {
+		const gap = document.createElement('div');
+		gap.className = 'diff-row diff-module-gap-row';
+		gap.dataset.side = pane === 'left' ? 'left' : 'right';
+		gap.setAttribute('role', 'presentation');
+		gap.setAttribute('aria-hidden', 'true');
+		gap.tabIndex = -1;
+		return gap;
+	}
 	const element = document.createElement('div');
 	element.className = 'diff-row';
 	if (!flat) {
@@ -747,7 +882,10 @@ function virtualKeyAt(index: number): string | undefined {
 	if (index < headerRowCount) {
 		return 'header:' + index;
 	}
-	const flat = displayRows[index - headerRowCount];
+	if (index === headerRowCount && headerGapCount > 0) {
+		return undefined;
+	}
+	const flat = displayRows[index - contentRowStart()];
 	return flat ? rows[flat.rowIndex].key : undefined;
 }
 function virtualIndexForKey(key: string | undefined): number | undefined {
@@ -761,14 +899,20 @@ function virtualIndexForKey(key: string | undefined): number | undefined {
 	return displayIndexByKey.get(key);
 }
 function captureAnchor() {
-	if (!views || headerRowCount + displayRows.length === 0) {
+	if (!views || contentRowStart() + displayRows.length === 0) {
 		return null;
 	}
 	const top = views.getScrollTop();
 	const range = views.getVisibleRange();
 	let index = range[0];
-	while (index < headerRowCount + displayRows.length) {
-		if (index >= headerRowCount && displayRows[index - headerRowCount]?.gap) {
+	while (index < contentRowStart() + displayRows.length) {
+		if (index === headerRowCount && headerGapCount > 0) {
+			index++;
+			continue;
+		}
+		const flat = index >= contentRowStart() ? displayRows[index - contentRowStart()] : undefined;
+		if (flat && (flat.gap || flat.moduleGap)) {
+			// Inert blank rows cannot carry an anchor; use the next real line.
 			index++;
 			continue;
 		}
@@ -809,6 +953,7 @@ function updateSelection() {
 			}
 		}
 	}
+	views.refreshActiveLine();
 }
 function updateViewButtons() {
 	if (toolbar) {
@@ -1175,6 +1320,46 @@ function toggleCollapsed(key: string): void {
 	updateSelection();
 	refocus(focused);
 }
+function visibleAncestorKey(key: string): string | undefined {
+	let current = rowByKey.get(key);
+	while (current !== undefined && !displayIndexByKey.has(current.key)) {
+		current = current.parentKey === null ? undefined : rowByKey.get(current.parentKey);
+	}
+	return current?.key;
+}
+function collapseChanged(reconcileSelection: boolean): void {
+	const previousSelection = selectedKey;
+	rebuildDisplay();
+	if (reconcileSelection && previousSelection !== undefined && !displayIndexByKey.has(previousSelection)) {
+		const ancestor = visibleAncestorKey(previousSelection);
+		selectedKey = ancestor;
+		focusKey = ancestor;
+	}
+	applyModels();
+	renderWindow(true);
+	updateSelection();
+	applyRoving(selectedKey);
+}
+function collapseAll(): void {
+	const next = new Set(collapsed);
+	for (const row of rows) {
+		if (row.hasChildren) {
+			next.add(row.key);
+		}
+	}
+	if (next.size === collapsed.size) {
+		return;
+	}
+	collapsed = next;
+	collapseChanged(true);
+}
+function expandAll(): void {
+	if (collapsed.size === 0) {
+		return;
+	}
+	collapsed = new Set();
+	collapseChanged(false);
+}
 function toggleGap(key: string): void {
 	const scrollTop = views ? views.getScrollTop() : 0;
 	const next = new Set(expandedGaps);
@@ -1214,7 +1399,7 @@ function moveSelection(offset: number): void {
 		return;
 	}
 	const virtualAt = selectedKey === undefined ? undefined : displayIndexByKey.get(selectedKey);
-	let at = virtualAt === undefined ? undefined : virtualAt - headerRowCount;
+	let at = virtualAt === undefined ? undefined : virtualAt - contentRowStart();
 	if (at === undefined) {
 		at = offset > 0 ? -1 : displayRows.length;
 	}
@@ -1243,7 +1428,7 @@ function selectedChild() {
 	if (virtualAt === undefined) {
 		return undefined;
 	}
-	const at = virtualAt - headerRowCount;
+	const at = virtualAt - contentRowStart();
 	const childAt = nextNodeIndex(at, 1);
 	if (childAt < 0) {
 		return undefined;
@@ -1328,8 +1513,15 @@ function onPaneRowClick(index: number, event: any): void {
 		}
 		return;
 	}
-	const flat = displayRows[index - headerRowCount];
+	if (index === headerRowCount && headerGapCount > 0) {
+		return;
+	}
+	const flat = displayRows[index - contentRowStart()];
 	if (!flat) {
+		return;
+	}
+	if (flat.moduleGap) {
+		// The module gap is decoration: clicking it or its number changes nothing.
 		return;
 	}
 	if (flat.gap) {
@@ -1441,6 +1633,8 @@ toolbar = new DiffToolbar({
 	onViewDiff: function () { setView(true); },
 	onPrev: function () { gotoChange(-1); },
 	onNext: function () { gotoChange(1); },
+	onCollapseAll: function () { collapseAll(); },
+	onExpandAll: function () { expandAll(); },
 	onSwap: function () { setSwapped(!swapped); },
 	onMatchMode: function (semantic: boolean) {
 		semanticMatching = semantic;
@@ -1510,8 +1704,11 @@ function resetDiffState(): void {
 	heightFn = function () { return heights.row; };
 	offsets = [0];
 	diffContent = 0;
+	chWidth = 0;
 	headerRowCount = 0;
+	headerGapCount = 0;
 	headerRows = [];
+	lineNumbers = { left: [], right: [] };
 	views = undefined;
 	loaded = false;
 	searchQuery = '';

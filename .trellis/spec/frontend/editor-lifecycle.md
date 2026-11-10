@@ -276,7 +276,7 @@ export function buildDiffDocument(
 ): DiffDocument;
 export function diffRows(leftRows: readonly EcucRow[], rightRows: readonly EcucRow[], leftRanges?: RangeLookup, rightRanges?: RangeLookup): DiffRow[];
 export function diffVisibility(rows: readonly DiffRow[], changesOnly: boolean, contextLines?: number): boolean[];
-export function flattenDiffDocument(rows: readonly DiffRow[], options?: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[]; expandedGaps?: ReadonlySet<string> }): DiffDisplayRow[];
+export function flattenDiffDocument(rows: readonly DiffRow[], options?: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[]; expandedGaps?: ReadonlySet<string>; moduleGaps?: boolean }): DiffDisplayRow[];
 export function summarizeDiff(rows: readonly DiffRow[]): DiffSummary;
 export function nextChangeIndex(rows: readonly DiffRow[], visible: readonly boolean[] | undefined, from: number, direction: 1 | -1): number;
 export function disambiguatedLabels(a: FileLabel, b: FileLabel): [string, string];
@@ -364,7 +364,8 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
     rows: they scroll with the document, are searchable/focusable, and never change the ECUC selection.
     The shorter header is padded with blank rows so the first compared row aligns. One `VirtualScroll`
     owns the vertical surface and the offsets; each pane has its own horizontal bar, and the pane split
-    stays fixed. The diff adds no inter-module blank row: every diff row is exactly one base row high.
+    stays fixed. One shared blank `diff-module-gap-row` separates visible module groups after the
+    first; it is numbered on both sides and does not change the one-base-row height.
 11. **The page owns view state.** Show all / Show diff, Prev diff / Next diff, selection, collapse,
     search and scroll survive a refresh. Search is Enter-only, chunked and cancellable; it never removes
     a row. `nextChangeIndex` wraps and skips unchanged or hidden rows. A changed row may render inline
@@ -418,12 +419,13 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
   hex literal, path slashes), LCS, empty sides and adjacent-segment merging.
 - `src/test/webview/components/diffView.test.ts` — fixed title strip with an aligned divider, one
   VirtualScroll, two window panes with per-pane horizontal bars, shared content geometry, swap reset,
-  header update, optional status, word-colour CSS and the absent module gap.
+  header update, optional status, word-colour CSS and the shared module gap row.
 - `src/test/webview/page/diffPage.test.ts` — loading state before the first document, toolbar both
   ways, search wiring, display projection, reveal-side mapping, refresh state retention, fixed file
   names outside the scroll surface, header rows as content and search candidates, header padding,
   independent horizontal bars, changed-word runs in both panes, swapped colours, search overlap,
-  added/removed rows without word spans, unchanged rows, module height and no `data-gap`.
+  added/removed rows without word spans, unchanged rows, the one-base-row height including the module
+  gap, and no `data-gap`.
 - `src/test/webview/page/search.test.ts` — Enter-only chunked search and count states.
 - Reveal is asserted through `reveal.test.ts` / `uxReveal.test.ts`; the source-level `beside` forcing
   is a regression guard, while the real panel behaviour is observed in the Extension Development Host.

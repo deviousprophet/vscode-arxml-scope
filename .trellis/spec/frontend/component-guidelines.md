@@ -170,9 +170,9 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   annotation directly above its node (`buildDocumentCommentRow`), using the node's level for indentation and
   guides. Comment rows are `aria-hidden`, fixed-height, never enter `visibleNodeIds`/`renderedById`,
   and `buildDocumentNodeRow` filters `cls === 'annotation'` out of `metaSpan`. The annotation still lives in
-  the row's `meta`/haystack and in Details. The module group's blank line belongs to the first display
-  item of the group, so an annotated module carries it on its first comment row, not on the node row;
-  `carriesGroupGap` is the one predicate the height function and both row builders share.
+  the row's `meta`/haystack and in Details. `flattenRows` with `moduleGaps: true` emits one real
+  `module-gap` display row before every module after the first, above its annotations; the gap is an
+  ordinary numbered display row, not a height or padding predicate on a node or comment.
 - **Conditions are token-coloured.** `conditionTokens` preserves every character and assigns
   `syscond-name`, `syscond-number`, `syscond-string`, `syscond-operator`, `syscond-literal` and
   `syscond-punct`, all backed by the existing `--tok-*` variables. A false condition marks its chip
@@ -246,8 +246,9 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   `role="group"` wrappers. The accessibility tree exposes the rendered window, not every offscreen
   row; keyboard navigation renders the target before focusing it, and the inspector is a `region`,
   not a live region. Record the window limitation rather than claiming full-tree exposure.
-- Document node/brace rows use `--ecuc-lh` plus a module gap attribute. The diff supplies no gap, so
-  every diff row is one base height; the CSS and each page's `heightFn` must agree.
+- Document node/brace rows, the header gap and the shared module gap are all one `--ecuc-lh` high; the
+  diff supplies the same one-row module gap, so every diff row is one base height. The CSS and each
+  page's `heightFn` must agree.
 
 ## Manual previews
 

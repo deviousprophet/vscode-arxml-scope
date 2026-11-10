@@ -16,7 +16,7 @@
 }
 .twisty {
 	position: absolute;
-	left: 2px;
+	left: calc(var(--line-numbers-width) + 2px);
 	top: 0;
 	bottom: 0;
 	width: 16px;
@@ -166,6 +166,9 @@ mark {
 .node[data-search-current="true"] > .row mark {
 	background: var(--match-hi);
 }
+.document-tree-header-row[data-search-current="true"] mark {
+	background: var(--match-hi);
+}
 
 /* Document view: quiet source. The VirtualScroll surface owns the scroller;
  * this component supplies the absolutely positioned row window. */
@@ -175,6 +178,10 @@ mark {
 	min-height: 0;
 }
 .document-tree-pane {
+	/* A custom property resolves its var() references where it is declared, so
+	 * the derived pad must be redeclared on the pane to see the pane's own
+	 * --line-numbers-width. Both hosts then reserve the gutter in the row pad. */
+	--content-pad: calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad));
 	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
 	font-size: var(--ecuc-fs);
 	font-weight: var(--vscode-editor-font-weight, normal);
@@ -188,8 +195,45 @@ mark {
 	position: absolute;
 	left: 0;
 	display: flow-root;
-	min-width: var(--document-tree-content-width, 0px);
+	/* Never narrower than the pane, never narrower than the whole content. The
+	 * selection and subtree fills are painted on rows inside this window, so a
+	 * short row still spans the pane and a long row cannot change that. */
+	min-width: max(100%, var(--document-tree-content-width, 0px));
 	white-space: pre;
+}
+/* The fixed line-number gutter: a sibling of the translated window, so it
+ * scrolls vertically with the rows and never moves horizontally. */
+.document-tree-lines {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: var(--line-numbers-width);
+	overflow: hidden;
+	z-index: 1;
+	background: var(--vscode-editorGutter-background, var(--vscode-editor-background));
+	user-select: none;
+}
+.document-tree-line-number {
+	position: absolute;
+	left: 0;
+	right: 0;
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-end;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	cursor: default;
+	color: var(--vscode-editorLineNumber-foreground);
+}
+.document-tree-line-number[data-active="true"] {
+	color: var(--vscode-editorLineNumber-activeForeground);
+}
+/* The gutter overlays the row's leading rail. Repeat it for the selected and
+ * keyboard-focused Document rows so navigation never loses its indicator. */
+body[data-view="document"] .document-tree-line-number[data-active="true"],
+body[data-view="document"] .document-tree-line-number[data-focused="true"] {
+	box-shadow: inset 2px 0 0 var(--rail);
 }
 .document-tree-header-row {
 	color: var(--vscode-editor-foreground);
@@ -204,6 +248,14 @@ mark {
 .document-tree-header-row .package {
 	font-family: inherit;
 	line-height: var(--ecuc-lh);
+}
+.document-tree-header-gap,
+.document-tree-module-gap {
+	height: var(--ecuc-lh);
+	padding: 0 var(--content-pad);
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
 }
 body[data-view="document"] .row {
 	background-color: transparent;
@@ -268,9 +320,6 @@ body[data-view="document"] .guide[data-level="21"] { left: calc(var(--content-pa
 body[data-view="document"] .guide[data-level="22"] { left: calc(var(--content-pad) + var(--indent) * 21 + 0.5ch); }
 body[data-view="document"] .guide[data-level="23"] { left: calc(var(--content-pad) + var(--indent) * 22 + 0.5ch); }
 body[data-view="document"] .guide[data-level="24"] { left: calc(var(--content-pad) + var(--indent) * 23 + 0.5ch); }
-body[data-view="document"] .node[data-gap="true"] {
-	padding-top: var(--ecuc-lh);
-}
 body[data-view="document"] .brace {
 	height: var(--ecuc-lh);
 }
@@ -381,11 +430,6 @@ body[data-view="document"] .row-meta > span.condition {
 }
 body[data-view="document"] .comment {
 	height: var(--ecuc-lh);
-}
-body[data-view="document"] .comment[data-gap="true"] {
-	height: calc(var(--ecuc-lh) * 2);
-	padding-top: var(--ecuc-lh);
-	box-sizing: border-box;
 }
 body[data-view="document"] .comment > .row {
 	color: var(--tok-comment);
@@ -512,7 +556,7 @@ body.vscode-high-contrast[data-view] .node.flash > .row {
 body[data-view="document"] {
 		--doc-pad: 2.5ch;
 		--indent: 3ch;
-		--content-pad: calc(var(--fold-gutter) + var(--doc-pad));
+		--content-pad: calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad));
 	}
 }
 

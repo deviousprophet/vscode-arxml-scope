@@ -10,6 +10,7 @@ import { buildRows } from '../../../core/ecuc/renderRows';
 import { SORT_EXCEPTIONS } from '../../../core/ecuc/order';
 import { TreeRow, flattenRows, haystack, matchRanges, searchRows, stepMatch } from '../../../webview/render/treeQuery';
 import { fixtureText } from '../../core/modelTestUtils';
+import { webviewCss } from '../cssTestUtils';
 import { installDom, loadModule, messagesOf, settleSearch, treeRows } from '../pageTestUtils';
 
 const ROWS: TreeRow[] = [
@@ -184,6 +185,54 @@ suite('search page', () => {
 			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'search does not select an ECUC row');
 			headerRow.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
 			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'clicking a header row does not select');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the header keyword and its value are marked and the current header uses the strong tier', async () => {
+		const dom = mountEditor();
+		try {
+			const model = scanEcucValues(fixtureText('editor/render.arxml'));
+			dom.post({
+				type: 'document',
+				document: {
+					rows: buildRows(model, { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows,
+					header: { schema: '00048', packages: ['HeaderPkg'] }
+				}
+			});
+			for (const query of ['package', 'pack', 'schema', 'sche', '00048', 'Head']) {
+				await runSearch(dom, query);
+				assert.strictEqual(
+					dom.document.getElementById('search-count')!.textContent,
+					'1 / 1',
+					`${query}: the header line is one match`
+				);
+				const headerRow = dom.document.querySelector(
+					'#tree .document-tree-header-row[data-search-current="true"]'
+				) as HTMLElement | null;
+				assert.ok(headerRow, `${query}: the header row is the current match`);
+				const mark = headerRow.querySelector('mark');
+				assert.ok(mark, `${query}: the matched header text is marked`);
+				assert.ok(
+					(mark.textContent ?? '').toLowerCase().includes(query.toLowerCase()),
+					`${query}: the mark covers the match`
+				);
+				if (query === 'package' || query === 'pack' || query === 'schema' || query === 'sche') {
+					assert.ok(headerRow.querySelector('.keyword mark'), `${query}: the keyword is marked`);
+				} else {
+					assert.ok(
+						headerRow.querySelector('.package mark, .number mark'),
+						`${query}: the value is marked`
+					);
+				}
+				assert.strictEqual(messagesOf(dom.api, 'select').length, 0, `${query}: a header jump never selects`);
+			}
+			const css = webviewCss('components', 'documentTree', 'documentTree.css');
+			assert.ok(
+				/\.document-tree-header-row\[data-search-current="true"\] mark\s*\{[^}]*var\(--match-hi\)/.test(css),
+				'the current header uses the strong search tier'
+			);
 		} finally {
 			dom.restore();
 		}

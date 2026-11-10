@@ -95,15 +95,18 @@ suite('editor document view', () => {
 		assert.ok(/body\[data-view\]\s*\{[^}]*--doc-pad:\s*3ch/.test(css));
 		assert.ok(/body\[data-view\]\s*\{[^}]*--indent:\s*4ch/.test(css));
 		assert.ok(/body\[data-view\]\s*\{[^}]*--fold-gutter:\s*26px/.test(css));
+		assert.ok(/body\[data-view\]\s*\{[^}]*--line-numbers-width:\s*0px/.test(css), 'the gutter collapses by default');
 		assert.ok(
-			/body\[data-view\]\s*\{[^}]*--content-pad:\s*calc\(var\(--fold-gutter\) \+ var\(--doc-pad\)\)/.test(css)
+			/body\[data-view\]\s*\{[^}]*--content-pad:\s*calc\(var\(--line-numbers-width\) \+ var\(--fold-gutter\) \+ var\(--doc-pad\)\)/.test(
+				css
+			)
 		);
 		assert.ok(
 			/body\[data-view="document"\] \.row\[data-level="3"\]\s*\{[^}]*padding-left:\s*calc\(var\(--content-pad\) \+ var\(--indent\) \* 2\)/.test(
 				css
 			)
 		);
-		assert.ok(!/--ln-w|--ln-digits|--gut/.test(css), 'no line-number/gutter variables');
+		assert.ok(/\.document-tree-lines\s*\{[^}]*width:\s*var\(--line-numbers-width\)/.test(css), 'the gutter uses the column width');
 		assert.ok(/\.guide\s*\{[^}]*opacity:\s*0\.28/.test(css), 'bracket guides start faded');
 		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(css), 'hover makes the guide clearer');
 		assert.ok(
@@ -112,12 +115,26 @@ suite('editor document view', () => {
 			)
 		);
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(css));
-		assert.ok(/body\[data-view="document"\] \.comment\[data-gap="true"\]\s*\{[^}]*height:\s*calc\(var\(--ecuc-lh\) \* 2\)/.test(css));
+		assert.ok(
+			/\.document-tree-header-gap,\s*\.document-tree-module-gap\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(css),
+			'the header and module gaps share one blank row height'
+		);
+		assert.ok(
+			/\.document-tree-window\s*\{[^}]*min-width:\s*max\(100%, var\(--document-tree-content-width, 0px\)\)/.test(
+				css
+			),
+			'the window is never narrower than the pane or the content'
+		);
+		assert.ok(!/\[data-gap="true"\]/.test(css), 'no padding-based module gap remains');
+		assert.ok(
+			!/\.document-tree-module-gap\s*\{[^}]*[\s;]border(?:-(?:top|right|bottom|left))?\s*:/.test(css),
+			'the gap has no border or rule'
+		);
 		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*content:\s*"module /.test(css));
 		assert.ok(!/body\[data-view="tree"\]/.test(css), 'no Tree scoped CSS');
 	});
 
-	test('rows carry no display-only source positions or line-number width', () => {
+	test('rows carry no display-only source positions', () => {
 		for (const row of rows()) {
 			for (const key of ['sourceLine', 'line', 'column', 'endLine', 'endColumn']) {
 				assert.ok(!(key in row), `no ${key}`);
@@ -177,7 +194,10 @@ suite('editor document view', () => {
 		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"/.test(html));
 		assert.ok(/\.icon-tool\s*\{[^}]*min-width:\s*28px/.test(css));
 		assert.ok(/\.twisty\s*\{[^}]*opacity:\s*0;/.test(css), 'expanded folds start hidden');
-		assert.ok(/\.twisty\s*\{[^}]*left:\s*2px/.test(css), 'the chevron is inset into the gutter');
+		assert.ok(
+			/\.twisty\s*\{[^}]*left:\s*calc\(var\(--line-numbers-width\) \+ 2px\)/.test(css),
+			'the chevron follows the number column'
+		);
 		assert.ok(
 			/body\[data-view="document"\] \.node\[aria-expanded="false"\] > \.row > \.twisty\s*\{[^}]*opacity:\s*1/.test(css),
 			'collapsed folds stay visible'

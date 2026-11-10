@@ -7,14 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Collapse all and Expand all controls in the semantic diff toolbar
+- VS Code-style line-number gutters in the Document view and both diff panes, numbered by display row with a per-pane diff status tint
+
 ### Changed
 
+- One numbered blank module gap separates module groups in the Document and both diff panes; it is inert and never a change row
+- The schema/package header is separated from the module content by one blank line instead of a horizontal rule in the Document and diff views
 - Semantic diff now matches bulk renames of hundreds of containers quickly and reports when a comparison is limited by its work budget or a large definition group
 - Contributors install with Node 24 and npm 11 or newer; an older npm fails with a clear version message instead of a lockfile error
 - Releases now require the native Rust core addon and include builds for Linux x64, Windows x64 and macOS x64/arm64
 
 ### Fixed
 
+- The selection and selected-subtree highlight keep a stable width in the Document and both diff panes instead of shrinking to the longest rendered row
+- Search highlights the `schema` and `package` header keyword, and the current header uses the strong highlight tier
 - Semantic diff no longer turns a large renamed definition group into removals plus additions; an oversized group learns the rename before pairing
 - A near-tie at scale stays unpaired instead of becoming a guessed pair, while containers with identical children still pair by name and position
 

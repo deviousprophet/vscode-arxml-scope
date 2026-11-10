@@ -38,7 +38,9 @@ suite('Toolbar component', () => {
 		assert.ok(left.indexOf('id="diff-mode-semantic"') < left.indexOf('id="diff-mode-strict"'));
 		assert.ok(left.indexOf('id="diff-mode-strict"') < left.indexOf('id="diff-prev"'));
 		assert.ok(left.indexOf('id="diff-prev"') < left.indexOf('id="diff-next"'));
-		assert.strictEqual(left.split('toolbar-divider').length - 1, 3, 'three group dividers');
+		assert.ok(left.indexOf('id="diff-next"') < left.indexOf('id="diff-collapse-all"'));
+		assert.ok(left.indexOf('id="diff-collapse-all"') < left.indexOf('id="diff-expand-all"'));
+		assert.strictEqual(left.split('toolbar-divider').length - 1, 4, 'four group dividers');
 		assert.ok(left.includes('>Show diff<'), 'the label is Show diff');
 		const centre = html.slice(html.indexOf('class="toolbar-center"'), html.indexOf('class="toolbar-right"'));
 		assert.ok(centre.includes('id="diff-swap"'));
@@ -54,12 +56,17 @@ suite('Toolbar component', () => {
 	test('every main diff toolbar button has an icon over a label', () => {
 		const html = renderDiffToolbarHtml('<div class="search-box"></div>');
 		const buttons = html.match(/<button[^>]*class="tool diff-tool"[\s\S]*?<\/button>/g) ?? [];
-		assert.strictEqual(buttons.length, 8);
+		assert.strictEqual(buttons.length, 10);
 		for (const button of buttons) {
 			assert.ok(button.includes('<svg'), `icon missing: ${button}`);
+			assert.ok(button.includes('width="18"'), `18px icon missing: ${button}`);
 			assert.ok(button.includes('<span class="lbl">'), `label missing: ${button}`);
 			assert.ok(button.includes('title='), `title missing: ${button}`);
 		}
+		assert.ok(/id="diff-collapse-all"[^>]*aria-label="Collapse every container"/.test(html));
+		assert.ok(/id="diff-expand-all"[^>]*aria-label="Expand every container"/.test(html));
+		assert.ok(html.includes('<span class="lbl">Collapse</span>'));
+		assert.ok(html.includes('<span class="lbl">Expand</span>'));
 	});
 
 	test('mount is idempotent and reports one action per click', () => {
@@ -89,6 +96,8 @@ suite('Toolbar component', () => {
 				onViewDiff: () => calls.push('diff'),
 				onPrev: () => calls.push('prev'),
 				onNext: () => calls.push('next'),
+				onCollapseAll: () => calls.push('collapse'),
+				onExpandAll: () => calls.push('expand'),
 				onSwap: () => calls.push('swap'),
 				onMatchMode: (semantic) => calls.push(semantic ? 'semantic' : 'strict'),
 				onContext: (active) => calls.push(`context:${active}`),
@@ -101,9 +110,11 @@ suite('Toolbar component', () => {
 			dom.document.getElementById('diff-mode-semantic').click();
 			dom.document.getElementById('diff-prev').click();
 			dom.document.getElementById('diff-next').click();
+			dom.document.getElementById('diff-collapse-all').click();
+			dom.document.getElementById('diff-expand-all').click();
 			dom.document.getElementById('diff-swap').click();
 			dom.document.getElementById('diff-context').click();
-			assert.deepStrictEqual(calls, ['all', 'diff', 'strict', 'semantic', 'prev', 'next', 'swap', 'context:false']);
+			assert.deepStrictEqual(calls, ['all', 'diff', 'strict', 'semantic', 'prev', 'next', 'collapse', 'expand', 'swap', 'context:false']);
 			assert.strictEqual(dom.document.getElementById('diff-view-diff').getAttribute('aria-pressed'), 'true');
 			toolbar.setSwapped(true);
 			assert.strictEqual(dom.document.getElementById('diff-swap').getAttribute('aria-pressed'), 'true');
