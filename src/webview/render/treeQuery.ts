@@ -11,9 +11,9 @@
  * row matched.
  *
  * `flattenRows` turns the row order and the collapsed set into the display list
- * (nodes and, for the Document view, brace rows). No DOM is involved, so the
- * whole module is unit-testable and its functions stay small enough to serialise
- * into the page.
+ * (nodes, comments, brace rows and the optional module gap). No DOM is involved,
+ * so the whole module is unit-testable and its functions stay small enough to
+ * serialise into the page.
  */
 
 import { haystack } from '../../core/ecuc/haystack';
@@ -61,6 +61,8 @@ export interface TreeRow {
 	/** Descendants in display order, contiguous after the row. */
 	subtreeSize: number;
 	hasChildren: boolean;
+	/** The ECUC row kind; `module` starts a new module group. */
+	kind?: string;
 	/** Lower-cased label + short name + value. */
 	haystack: string;
 	/** Annotation lines shown above this row, in source order. */
@@ -99,31 +101,43 @@ export interface FlatCommentRow {
 	text: string;
 }
 
-export type FlatRow = FlatNodeRow | FlatBraceRow | FlatCommentRow;
+/** A blank line between module groups; not focusable and not a tree row. */
+export interface FlatModuleGapRow {
+	type: 'module-gap';
+	level: 1;
+}
+
+export type FlatRow = FlatNodeRow | FlatBraceRow | FlatCommentRow | FlatModuleGapRow;
 
 export interface FlattenOptions {
 	/** The saved collapsed ids; never mutated by this function. */
 	collapsed?: ReadonlySet<string>;
 	/** Document view: emit brace-open/brace-close around expanded subtrees. */
 	braces?: boolean;
+	/** Document view: emit one inert blank row before every module after the first. */
+	moduleGaps?: boolean;
 }
 
 /**
  * The display list: source rows in order, subtrees skipped when collapsed, plus
- * optional Document brace rows. A row is expanded when it has children and is
- * not collapsed; the collapsed set is only read, never modified. Brace rows are
- * only emitted around an expanded subtree, so a collapsed container does not
- * show empty braces.
+ * optional Document brace rows and one blank module gap before every module after
+ * the first. A row is expanded when it has children and is not collapsed; the
+ * collapsed set is only read, never modified. Brace rows are only emitted around
+ * an expanded subtree, so a collapsed container does not show empty braces. A
+ * module gap sits above the module's comments, exactly where the group separator
+ * belongs.
  */
 export function flattenRows(rows: readonly TreeRow[], options: FlattenOptions = {}): FlatRow[] {
 	const count = rows.length;
 	const collapsed = options.collapsed;
 	const braces = options.braces === true;
+	const moduleGaps = options.moduleGaps === true;
 	const subtreeEnd = (index: number): number =>
 		Math.min(count, index + Math.max(0, rows[index].subtreeSize) + 1);
 
 	const out: FlatRow[] = [];
 	const open: Array<{ end: number; level: number; rowIndex: number }> = [];
+	let hasModule = false;
 	let i = 0;
 	while (i < count) {
 		if (braces) {
@@ -133,6 +147,12 @@ export function flattenRows(rows: readonly TreeRow[], options: FlattenOptions = 
 			}
 		}
 		const row = rows[i];
+		if (moduleGaps && row.kind === 'module') {
+			if (hasModule) {
+				out.push({ type: 'module-gap', level: 1 });
+			}
+			hasModule = true;
+		}
 		const expanded = row.hasChildren && !(collapsed ? collapsed.has(row.id) : false);
 		for (const text of row.comments ?? []) {
 			out.push({ type: 'comment', rowIndex: i, level: row.level, text });
@@ -159,33 +179,6 @@ export function flattenRows(rows: readonly TreeRow[], options: FlattenOptions = 
 		out.push({ type: 'brace-close', rowIndex: closed.rowIndex, level: closed.level });
 	}
 	return out;
-}
-
-/**
- * True when display item `index` carries the blank line that separates module
- * groups. The gap belongs to the first display item of the group, so an
- * annotated module carries it on its first comment row; without comments the
- * node row carries it, exactly as before. The CSS and `heightFn` both call this,
- * so the reserved height and the painted padding can never disagree.
- */
-export function carriesGroupGap(
-	rows: readonly { kind: string }[],
-	display: readonly { type: string; rowIndex: number }[],
-	index: number
-): boolean {
-	const flat = display[index];
-	if (!flat || index <= 0) {
-		return false;
-	}
-	if (flat.type !== 'node' && flat.type !== 'comment') {
-		return false;
-	}
-	const row = rows[flat.rowIndex];
-	if (!row || row.kind !== 'module') {
-		return false;
-	}
-	const previous = display[index - 1];
-	return !previous || previous.rowIndex !== flat.rowIndex;
 }
 
 /**

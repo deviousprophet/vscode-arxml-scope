@@ -33,14 +33,17 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
   rows, use the same row shell and are searchable and focusable, but they are not ECUC nodes: clicking
   one never changes the selection or Details. One blank line separates the header from the first
   module. The editor has no file-name strip.
+- One blank numbered line separates consecutive module groups. It sits above the module's annotations,
+  has no rule, border, hover or selection treatment, and clicking it or its number changes nothing. The
+  first module has no module gap.
 - A fixed line-number gutter numbers each display line from 1: the schema/package lines, the blank
-  separator, annotations, braces and nodes. Numbers renumber when containers collapse or the document
-  changes, and the selected row's number uses the active line-number colour. The selected and
-  keyboard-focused rows also repeat their 2px rail on the number cell, so the indicator stays visible
-  beside the opaque gutter. The gutter stays fixed
+  separator, the module gaps, annotations, braces and nodes. Numbers renumber when containers collapse
+  or the document changes, and the selected row's number uses the active line-number colour. The
+  selected and keyboard-focused rows also repeat their 2px rail on the number cell, so the indicator
+  stays visible beside the opaque gutter. The gutter stays fixed
   while the document scrolls horizontally, follows the rows vertically, and is not searchable,
   selectable or focusable. Clicking a number performs the row's own action: it selects a node, focuses a
-  header, and does nothing for the blank separator.
+  header, and does nothing for a blank separator or module gap.
 - Annotations appear as muted italic comment lines directly above their node. Selecting a container
   tints the annotation rows of its descendants; the annotation rows stay non-selectable and clicking
   one changes nothing.
@@ -48,12 +51,16 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
 - Collapsed containers show a ` { … }` hint and stay collapsible from the fixed 26px fold gutter.
 - Bracket guides follow the open ancestor containers. They fade at rest and activate on hover.
 - Selecting a container tints its visible subtree; syntax tokens keep their colours.
+- The selected row background, its 2px rail and the selected-subtree tint span a stable width: at least
+  the visible pane and the full document content width. A longer row scrolling into or out of the
+  rendered window does not change that width, and the highlight starts after the fixed gutter and
+  reaches the pane's right edge.
 - Long labels, values and metadata stay on one line and scroll horizontally.
 
-Only the visible window is rendered. The page precomputes the row offsets, including the header rows
-and module gaps, so the scrollbar thumb and drag match the content; a scroll frame only renders the
-visible window. One virtual-scroll surface owns the vertical scroll and the row offsets; the docs view
-has one horizontal bar, and the scrollbars are native.
+Only the visible window is rendered. The page precomputes the row offsets, including the header rows,
+the header gap and the module gaps, so the scrollbar thumb and drag match the content; a scroll frame
+only renders the visible window. One virtual-scroll surface owns the vertical scroll and the row
+offsets; the docs view has one horizontal bar, and the scrollbars are native.
 
 ### Keyboard
 

@@ -1652,12 +1652,12 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('two modules carry no gap row', () => {
-		const moduleRow = (key: string, left: string, right: string): DiffRow =>
+	test('the shared module gap is one blank numbered row in both panes', () => {
+		const moduleRow = (key: string, posinset: number, left: string, right: string): DiffRow =>
 			wordRow({
 				key,
 				kind: 'module',
-				posinset: Number(key.slice(1)),
+				posinset,
 				setsize: 2,
 				left: wordCell({ kind: 'module', label: left, shownValue: undefined, value: undefined, valueKind: undefined }),
 				right: wordCell({
@@ -1668,10 +1668,230 @@ suite('semantic diff page', () => {
 					valueKind: undefined,
 				}),
 			});
-		const { dom } = mount(wordDocument([moduleRow('m1', 'PkgA', 'PkgX'), moduleRow('m2', 'PkgB', 'PkgY')]));
+		const { dom } = mount(
+			wordDocument([moduleRow('m1', 1, 'PkgA', 'PkgX'), moduleRow('m2', 2, 'PkgB', 'PkgY')])
+		);
 		try {
-			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-left [data-gap]').length, 0);
-			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-right [data-gap]').length, 0);
+			const gaps = ['left', 'right'].map(
+				(pane) =>
+					dom.document.querySelector(`#diff-pane-${pane} .diff-module-gap-row`) as HTMLElement
+			);
+			assert.ok(gaps[0] && gaps[1], 'both panes render the shared gap');
+			assert.strictEqual(
+				gaps[0].dataset.documentIndex,
+				gaps[1].dataset.documentIndex,
+				'the gap is the same virtual row in both panes'
+			);
+			const index = Number(gaps[0].dataset.documentIndex);
+			for (const gap of gaps) {
+				assert.ok(gap.classList.contains('diff-row'));
+				assert.strictEqual(gap.getAttribute('role'), 'presentation');
+				assert.strictEqual(gap.getAttribute('aria-hidden'), 'true');
+				assert.strictEqual(gap.tabIndex, -1);
+				assert.strictEqual(gap.hasAttribute('data-key'), false);
+				assert.strictEqual(gap.hasAttribute('data-status'), false);
+				assert.strictEqual(gap.children.length, 0, 'the gap has no cell or rule child');
+				assert.strictEqual(
+					gap.previousElementSibling?.getAttribute('data-key'),
+					'm1',
+					'the gap follows the first module'
+				);
+				assert.strictEqual(gap.nextElementSibling?.getAttribute('data-key'), 'm2');
+			}
+			assert.strictEqual(
+				dom.document.querySelectorAll('#diff-pane-left .diff-cell').length,
+				dom.document.querySelectorAll('#diff-pane-left [role="treeitem"]').length +
+					dom.document.querySelectorAll('#diff-pane-left .diff-structural').length,
+				'the gap adds no cell'
+			);
+			for (const pane of ['left', 'right'] as const) {
+				assert.strictEqual(paneCellAt(dom, pane, index).textContent, '2', `${pane} numbers the gap`);
+				assert.strictEqual(assertPaneNumbering(dom, pane), 3, `${pane} numbering continues through it`);
+			}
+
+			gaps[0].click();
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'clicking the gap does not select');
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 0, 'clicking the gap does not reveal');
+			paneCellAt(dom, 'left', index).click();
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'clicking the gap number does not select');
+
+			const tree = dom.document.getElementById('diff-pane-left') as HTMLElement;
+			tree.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'F7', bubbles: true, cancelable: true }));
+			assert.strictEqual(
+				dom.document.querySelectorAll('.diff-module-gap-row[data-selected="true"]').length,
+				0,
+				'F7 never selects the gap'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a module hidden by Show diff gets no gap; Show all restores it', () => {
+		const rows: DiffRow[] = [
+			wordRow({
+				key: 'm1',
+				kind: 'module',
+				hasChildren: true,
+				subtreeSize: 1,
+				status: 'unchanged',
+				left: containerCell('M1'),
+				right: containerCell('M1'),
+			}),
+			wordRow({
+				key: 'p1',
+				parentKey: 'm1',
+				level: 2,
+				status: 'unchanged',
+				left: wordCell({ label: 'P1' }),
+				right: wordCell({ label: 'P1' }),
+			}),
+			wordRow({
+				key: 'm2',
+				kind: 'module',
+				posinset: 2,
+				setsize: 2,
+				hasChildren: true,
+				subtreeSize: 1,
+				status: 'unchanged',
+				left: containerCell('M2'),
+				right: containerCell('M2'),
+			}),
+			wordRow({
+				key: 'p2',
+				parentKey: 'm2',
+				level: 2,
+				status: 'changed',
+				left: wordCell({ label: 'P2' }),
+				right: wordCell({ label: 'P2', shownValue: '2', value: '2' }),
+			}),
+		];
+		const comparison = wordDocument(rows);
+		const { dom } = mount(comparison);
+		try {
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			(dom.document.getElementById('diff-context') as HTMLElement).click();
+			assert.strictEqual(
+				dom.document.querySelectorAll('.diff-module-gap-row').length,
+				0,
+				'the hidden first module leaves no gap and the first visible module needs none'
+			);
+			assert.strictEqual(
+				dom.document.querySelectorAll('.diff-gap-row').length,
+				2,
+				'each hidden run is still its own split line'
+			);
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
+
+			(dom.document.getElementById('diff-view-all') as HTMLElement).click();
+			const left = dom.document.querySelector('#diff-pane-left .diff-module-gap-row') as HTMLElement;
+			const right = dom.document.querySelector('#diff-pane-right .diff-module-gap-row') as HTMLElement;
+			assert.ok(left && right, 'Show all restores the gap in both panes');
+			assert.strictEqual(left.dataset.documentIndex, right.dataset.documentIndex);
+			assert.ok(
+				left.previousElementSibling?.classList.contains('diff-structural'),
+				'the gap follows the first module subtree'
+			);
+			assert.ok(
+				left.nextElementSibling?.classList.contains('diff-row') &&
+					left.nextElementSibling?.getAttribute('data-key') === 'm2',
+				'the gap precedes the second module'
+			);
+			assert.strictEqual(
+				assertPaneNumbering(dom, 'left'),
+				9,
+				'both modules, their braces and the gap are numbered'
+			);
+			(dom.document.getElementById('diff-swap') as HTMLElement).click();
+			assert.ok(
+				dom.document.querySelector('#diff-pane-left .diff-module-gap-row') &&
+					dom.document.querySelector('#diff-pane-right .diff-module-gap-row'),
+				'a swap keeps the shared gap'
+			);
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
+			dom.post({ type: 'document', semantic: false, document: comparison });
+			assert.ok(
+				dom.document.querySelector('#diff-pane-left .diff-module-gap-row') &&
+					dom.document.querySelector('#diff-pane-right .diff-module-gap-row'),
+				'a refresh rebuilds the shared gap'
+			);
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
+			(dom.document.getElementById('diff-collapse-all') as HTMLElement).click();
+			assert.strictEqual(
+				dom.document.querySelectorAll('.diff-module-gap-row').length,
+				2,
+				'collapse rebuilds the gap in both panes'
+			);
+			assertPaneNumbering(dom, 'left');
+			assertPaneNumbering(dom, 'right');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('search skips the shared module gap', async () => {
+		const moduleRow = (key: string, posinset: number, label: string): DiffRow =>
+			wordRow({
+				key,
+				kind: 'module',
+				posinset,
+				setsize: 2,
+				left: wordCell({ kind: 'module', label, shownValue: undefined, value: undefined, valueKind: undefined }),
+				right: wordCell({ kind: 'module', label, shownValue: undefined, value: undefined, valueKind: undefined }),
+			});
+		const { dom } = mount(wordDocument([moduleRow('m1', 1, 'PkgA'), moduleRow('m2', 2, 'PkgB')]));
+		try {
+			await runDiffSearch(dom, 'PkgB');
+			assert.strictEqual(
+				dom.document.querySelectorAll('.diff-module-gap-row[data-search-current="true"]').length,
+				0,
+				'the gap is not a search candidate'
+			);
+			const gapIndex = Number(
+				(dom.document.querySelector('#diff-pane-left .diff-module-gap-row') as HTMLElement).dataset
+					.documentIndex
+			);
+			assert.strictEqual(
+				dom.document.querySelectorAll(
+					`#diff-pane-left [data-search-current="true"][data-document-index="${gapIndex}"]`
+				).length,
+				0
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the diff content width includes the header lines', () => {
+		const document = wordDocument([wordRow({ left: wordCell(), right: wordCell() })]);
+		const longPackage = 'Pkg.' + 'X'.repeat(180);
+		document.leftHeader = { packages: [longPackage] };
+		document.rightHeader = { packages: [longPackage] };
+		const { dom } = mount(document);
+		try {
+			const spacer = dom.document.querySelector(
+				'#diff-list .virtual-scroll-hscroll[data-pane="0"] .virtual-scroll-hspacer'
+			) as HTMLElement;
+			assert.ok(
+				Number.parseFloat(spacer.style.width) > longPackage.length,
+				'a long package path drives the horizontal extent'
+			);
+			const windowEl = dom.document.querySelector('#diff-pane-left .document-tree-window') as HTMLElement;
+			const contentWidth = Number.parseFloat(
+				windowEl.style.getPropertyValue('--document-tree-content-width')
+			);
+			assert.ok(
+				contentWidth > longPackage.length,
+				`the pane model publishes the header width (${contentWidth})`
+			);
+			assert.strictEqual(
+				Number.parseFloat(spacer.style.width),
+				contentWidth,
+				'the window minimum covers the pane content extent, including the number column'
+			);
 		} finally {
 			dom.restore();
 		}
@@ -1699,8 +1919,12 @@ suite('semantic diff page', () => {
 			const scroll = dom.document.querySelector('#diff-list > .virtual-scroll-vscroll') as HTMLElement;
 			const content = scroll.querySelector('.virtual-scroll-content') as HTMLElement;
 			const rendered = treeRows(dom.document, '#diff-pane-left').length;
-			assert.ok(rendered > 0 && rendered < 100, 'only the window is rendered');
-			assert.strictEqual(content.style.height, '2000px', '100 rows at one base row height');
+			assert.ok(rendered > 0 && rendered < 199, 'only the window is rendered');
+			assert.strictEqual(
+				content.style.height,
+				'3980px',
+				'100 rows plus 99 shared module gaps at one base row height'
+			);
 		} finally {
 			dom.restore();
 		}

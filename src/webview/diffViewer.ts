@@ -193,8 +193,8 @@ function contentRowStart(): number {
 }
 function buildHeightFn() {
 	const base = heights.row;
-	// Diff rows are uniform: the Document-only module gap is not part of the
-	// comparison surface, so a module row is exactly one base row high.
+	// Diff rows are uniform: the shared module gap is one real display row, so
+	// it is exactly one base row high like every other line.
 	heightFn = function () {
 		return base;
 	};
@@ -204,7 +204,8 @@ function rebuildDisplay() {
 	displayRows = flattenDiffDocument(rows, {
 		collapsed: collapsed,
 		visible: visibility,
-		expandedGaps: expandedGaps
+		expandedGaps: expandedGaps,
+		moduleGaps: true
 	});
 	displayIndexByKey = new Map();
 	navigationVisible = new Array(rows.length).fill(false);
@@ -286,10 +287,17 @@ function buildLineNumbers(): void {
 	}
 	for (let at = 0; at < displayRows.length; at++) {
 		const flat = displayRows[at];
+		const virtualIndex = contentRowStart() + at;
 		if (flat.gap) {
 			continue;
 		}
-		const virtualIndex = contentRowStart() + at;
+		if (flat.moduleGap) {
+			left++;
+			right++;
+			lineNumbers.left[virtualIndex] = left;
+			lineNumbers.right[virtualIndex] = right;
+			continue;
+		}
 		const leftKind = swapped ? flat.right : flat.left;
 		const rightKind = swapped ? flat.left : flat.right;
 		if (leftKind !== 'blank' && leftKind !== 'gap') {
@@ -333,6 +341,20 @@ function paneModel() {
 		}
 	};
 }
+/**
+ * The window floor for the diff panes. `diffContent` is the text plus fold
+ * width; each row also reserves its pane's number column in the content pad, so
+ * the floor must add it, exactly like the per-pane horizontal extent. Otherwise
+ * the longest row leaving the rendered slice would shrink the selection fill by
+ * the gutter width.
+ */
+function publishContentWidth(): void {
+	if (!views) {
+		return;
+	}
+	const chars = views.lineNumberChars();
+	views.setContentWidth(diffContent + Math.max(chars[0], chars[1]) * chWidth);
+}
 function applyModels() {
 	if (!views) {
 		return;
@@ -340,6 +362,7 @@ function applyModels() {
 	buildLineNumbers();
 	views.setModel(paneModel());
 	const chars = views.lineNumberChars();
+	publishContentWidth();
 	views.setContent({
 		rowCount: contentRowStart() + displayRows.length,
 		offsets: offsets,
@@ -425,6 +448,8 @@ function measureHeights() {
  * One content width per rebuild. The row font is monospace, so one font probe
  * plus character counts give the longest row without reading layout per row.
  * Both panes share it so a synchronized horizontal offset cannot clamp early.
+ * Header lines take part too: a long package path must not exceed the window
+ * minimum, or the selection fill would shrink below the pane.
  */
 function measureDiffWidth() {
 	const probe = document.getElementById('diff-ch-probe');
@@ -440,10 +465,20 @@ function measureDiffWidth() {
 			maxChars = chars;
 		}
 	}
-	diffContent = diffContentWidth(maxChars, chWidth);
-	if (views) {
-		views.setContentWidth(diffContent);
+	for (const row of headerRows) {
+		for (const line of [row.left, row.right]) {
+			if (!line) {
+				continue;
+			}
+			// `keyword ` plus the value, with both row flex gaps.
+			const chars = line.keyword.length + 1 + line.text.length + 1;
+			if (chars > maxChars) {
+				maxChars = chars;
+			}
+		}
 	}
+	diffContent = diffContentWidth(maxChars, chWidth);
+	publishContentWidth();
 }
 function selectedSubtreeIds(): Set<string> {
 	if (subtreeCache && subtreeCache.key === selectedKey && subtreeCache.revision === rowsRevision) {
@@ -625,6 +660,15 @@ function renderRow(index: number, pane: string): any {
 		return renderHeaderGapRow(pane);
 	}
 	const flat = displayRows[index - contentRowStart()];
+	if (flat && flat.moduleGap) {
+		const gap = document.createElement('div');
+		gap.className = 'diff-row diff-module-gap-row';
+		gap.dataset.side = pane === 'left' ? 'left' : 'right';
+		gap.setAttribute('role', 'presentation');
+		gap.setAttribute('aria-hidden', 'true');
+		gap.tabIndex = -1;
+		return gap;
+	}
 	const element = document.createElement('div');
 	element.className = 'diff-row';
 	if (!flat) {
@@ -866,7 +910,9 @@ function captureAnchor() {
 			index++;
 			continue;
 		}
-		if (index >= contentRowStart() && displayRows[index - contentRowStart()]?.gap) {
+		const flat = index >= contentRowStart() ? displayRows[index - contentRowStart()] : undefined;
+		if (flat && (flat.gap || flat.moduleGap)) {
+			// Inert blank rows cannot carry an anchor; use the next real line.
 			index++;
 			continue;
 		}
@@ -1472,6 +1518,10 @@ function onPaneRowClick(index: number, event: any): void {
 	}
 	const flat = displayRows[index - contentRowStart()];
 	if (!flat) {
+		return;
+	}
+	if (flat.moduleGap) {
+		// The module gap is decoration: clicking it or its number changes nothing.
 		return;
 	}
 	if (flat.gap) {

@@ -127,7 +127,10 @@ export class DocumentTreeView {
 	/** Install or replace the virtual row model. */
 	setModel(model: DocumentTreeViewModel): void {
 		this.model = model;
-		this.setContentWidth(model && typeof model.contentWidth === 'number' ? model.contentWidth : 0);
+		// The model owns the full-content width. A new model may legitimately be
+		// narrower (a re-scan to a shorter document), so reset the monotonic
+		// measurement floor before applying it.
+		this.applyContentWidth(model && typeof model.contentWidth === 'number' ? model.contentWidth : 0);
 		this.lineNumberColumns = this.measureLineNumberChars(model);
 		this.applyLineNumberWidth();
 		this.invalidate();
@@ -143,12 +146,27 @@ export class DocumentTreeView {
 		this.applyActiveLine();
 	}
 
-	/** The horizontal content width; 0 leaves the natural width alone. */
-	setContentWidth(width: number): void {
-		this.contentWidth = Number.isFinite(width) && width > 0 ? width : 0;
+	/** Write the window's content-width floor; 0 leaves the pane width as the floor. */
+	private applyContentWidth(width: number): void {
+		const next = Number.isFinite(width) && width > 0 ? width : 0;
+		this.contentWidth = next;
 		if (this.windowEl && this.windowEl.style && typeof this.windowEl.style.setProperty === 'function') {
 			this.windowEl.style.setProperty('--document-tree-content-width', this.contentWidth + 'px');
 		}
+	}
+
+	/**
+	 * Grow the measured content width. Monotonic within one model: a visible-slice
+	 * measurement may raise the minimum but never lower it, so a long row leaving
+	 * the rendered window cannot shrink the selection fill. `setModel` resets the
+	 * floor because the new document may be narrower.
+	 */
+	setContentWidth(width: number): void {
+		const next = Number.isFinite(width) && width > 0 ? width : 0;
+		if (next <= this.contentWidth) {
+			return;
+		}
+		this.applyContentWidth(next);
 	}
 
 	/** Force the next render to rebuild even when the slice key matches. */

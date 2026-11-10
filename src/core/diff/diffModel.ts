@@ -1761,6 +1761,8 @@ export interface DiffDisplayRow {
 	expanded: boolean;
 	/** Present only on a split-line row. */
 	gap?: DiffGap;
+	/** Present only on the shared blank row between module groups. */
+	moduleGap?: boolean;
 	guidesLeft: { level: number; id: string }[];
 	guidesRight: { level: number; id: string }[];
 }
@@ -1773,6 +1775,11 @@ export interface DiffDisplayRow {
  * When a visibility map hides a run, the run becomes one expandable gap row.
  * An expanded gap keeps its header and walks the hidden rows, so the same row
  * can collapse them again.
+ *
+ * With `moduleGaps`, one shared blank row is inserted before the first visible
+ * line of every module after the first. The gap is not a change row: it carries
+ * no key, status or search candidate, and a hidden module neither shows a gap nor
+ * counts as the first seen module.
  */
 export function flattenDiffDocument(
 	rows: readonly DiffRow[],
@@ -1780,6 +1787,7 @@ export function flattenDiffDocument(
 		collapsed?: ReadonlySet<string>;
 		visible?: readonly boolean[];
 		expandedGaps?: ReadonlySet<string>;
+		moduleGaps?: boolean;
 	} = {}
 ): DiffDisplayRow[] {
 	const count = rows.length;
@@ -1840,6 +1848,7 @@ export function flattenDiffDocument(
 		return rows[index].hasChildren;
 	};
 	const out: DiffDisplayRow[] = [];
+	let hasModule = false;
 
 	const walk = (
 		start: number,
@@ -1871,6 +1880,26 @@ export function flattenDiffDocument(
 				continue;
 			}
 			const row = rows[index];
+			if (
+				options.moduleGaps === true &&
+				row.kind === 'module' &&
+				leftOpen.length === 0 &&
+				rightOpen.length === 0
+			) {
+				if (hasModule) {
+					out.push({
+						rowIndex: index,
+						level: 1,
+						left: 'blank',
+						right: 'blank',
+						expanded: false,
+						moduleGap: true,
+						guidesLeft: [],
+						guidesRight: []
+					});
+				}
+				hasModule = true;
+			}
 			const nodeIndex = index;
 			const leftComments = row.left && row.left.comments ? row.left.comments : [];
 			const rightComments = row.right && row.right.comments ? row.right.comments : [];

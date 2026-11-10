@@ -45,7 +45,6 @@ export interface DocumentRowContext {
 	searchQuery: string;
 	currentId?: string;
 	subtreeIds: ReadonlySet<string>;
-	gap?: boolean;
 	guides?: readonly DocumentGuide[];
 	wordDiff?: DocumentWordDiff;
 	/** The displayed pane; the changed-word colour follows it after a swap. */
@@ -99,9 +98,6 @@ export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext):
 	}
 	if (context.subtreeIds.has(row.id) && row.id !== context.selectedId) {
 		node.dataset.subtree = 'true';
-	}
-	if (context.gap) {
-		node.dataset.gap = 'true';
 	}
 	if (row.empty) {
 		node.dataset.empty = 'true';
@@ -244,9 +240,6 @@ export function buildDocumentCommentRow(
 	node.dataset.rowId = rowId;
 	if (context.subtreeIds.has(rowId)) {
 		node.dataset.subtree = 'true';
-	}
-	if (context.gap) {
-		node.dataset.gap = 'true';
 	}
 	const rowElement = document.createElement('span');
 	rowElement.className = 'row comment-row';

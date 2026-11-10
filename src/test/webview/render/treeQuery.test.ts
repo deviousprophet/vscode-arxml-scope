@@ -5,7 +5,7 @@
  */
 import * as assert from 'assert';
 
-import { TreeRow, ancestorIds, carriesGroupGap, flattenRows } from '../../../webview/render/treeQuery';
+import { FlatRow, TreeRow, ancestorIds, flattenRows } from '../../../webview/render/treeQuery';
 
 const ROWS: TreeRow[] = [
 	{ id: 'm', parentId: null, level: 1, subtreeSize: 5, hasChildren: true, haystack: 'pkga.pkgb.moddefs.modx modx' },
@@ -16,8 +16,12 @@ const ROWS: TreeRow[] = [
 	{ id: 'p3', parentId: 'b', level: 3, subtreeSize: 0, hasChildren: false, haystack: 'text nested' },
 ];
 
-function nodeIndexes(collapsed?: ReadonlySet<string>): number[] {
-	return flattenRows(ROWS, { collapsed }).map((row) => row.rowIndex);
+function sourceIndex(row: FlatRow): number | 'gap' {
+	return row.type === 'module-gap' ? 'gap' : row.rowIndex;
+}
+
+function nodeIndexes(collapsed?: ReadonlySet<string>): Array<number | 'gap'> {
+	return flattenRows(ROWS, { collapsed }).map(sourceIndex);
 }
 
 suite('tree query helpers', () => {
@@ -31,7 +35,7 @@ suite('tree query helpers', () => {
 		);
 		const list = flattenRows(rows, { braces: true });
 		assert.deepStrictEqual(
-			list.map((row) => `${row.type}:${row.rowIndex}`),
+			list.map((row) => `${row.type}:${sourceIndex(row)}`),
 			[
 				'node:0',
 				'brace-open:0',
@@ -61,43 +65,69 @@ suite('tree query helpers', () => {
 		);
 	});
 
-	test('the module group gap sits on the first annotation, not the node', () => {
-		const rows = [
-			{ kind: 'module', comments: ['first'] },
-			{ kind: 'module', comments: ['one', 'two'] },
-			{ kind: 'module', comments: ['only'] },
-		];
-		const asTree = rows.map((row, index) => ({
-			...row,
-			id: `m${index}`,
-			parentId: null,
-			level: 1,
-			subtreeSize: 0,
-			hasChildren: false,
-			haystack: '',
-		}));
-		const display = flattenRows(asTree);
-		assert.deepStrictEqual(
-			display.map((flat, index) => carriesGroupGap(rows, display, index)),
-			[false, false, true, false, false, true, false],
-			'the first comment of a later module carries the gap; its node and later comments do not'
-		);
-		const plain = [{ kind: 'module' }, { kind: 'module' }];
-		const plainDisplay = flattenRows(
-			plain.map((row, index) => ({
-				...row,
-				id: `p${index}`,
+	test('the module gap is one blank display row before every module after the first', () => {
+		const modules: TreeRow[] = [
+			{
+				id: 'm0',
 				parentId: null,
 				level: 1,
 				subtreeSize: 0,
 				hasChildren: false,
+				kind: 'module',
 				haystack: '',
-			}))
-		);
+				comments: ['first'],
+			},
+			{
+				id: 'm1',
+				parentId: null,
+				level: 1,
+				subtreeSize: 0,
+				hasChildren: false,
+				kind: 'module',
+				haystack: '',
+				comments: ['one', 'two'],
+			},
+			{ id: 'm2', parentId: null, level: 1, subtreeSize: 0, hasChildren: false, kind: 'module', haystack: '' },
+		];
 		assert.deepStrictEqual(
-			plainDisplay.map((flat, index) => carriesGroupGap(plain, plainDisplay, index)),
-			[false, true],
-			'a module without annotations keeps the gap on its node row'
+			flattenRows(modules).map((row) => `${row.type}:${sourceIndex(row)}`),
+			['comment:0', 'node:0', 'comment:1', 'comment:1', 'node:1', 'node:2'],
+			'without the option the display list is unchanged'
+		);
+		const display = flattenRows(modules, { moduleGaps: true });
+		assert.deepStrictEqual(
+			display.map((row) => (row.type === 'module-gap' ? `gap:${row.level}` : `${row.type}:${sourceIndex(row)}`)),
+			['comment:0', 'node:0', 'gap:1', 'comment:1', 'comment:1', 'node:1', 'gap:1', 'node:2'],
+			'one gap per later module, above its annotations; the first module has none'
+		);
+		assert.strictEqual(
+			display.filter((row) => row.type === 'module-gap').length,
+			2,
+			'the gap is a display row, not a property of a node row'
+		);
+	});
+
+	test('the module gap follows the previous module brace-close and precedes the next module', () => {
+		const rows: TreeRow[] = [
+			{ id: 'm0', parentId: null, level: 1, subtreeSize: 1, hasChildren: true, kind: 'module', haystack: '' },
+			{ id: 'p0', parentId: 'm0', level: 2, subtreeSize: 0, hasChildren: false, kind: 'parameter', haystack: '' },
+			{
+				id: 'm1',
+				parentId: null,
+				level: 1,
+				subtreeSize: 0,
+				hasChildren: false,
+				kind: 'module',
+				haystack: '',
+				comments: ['note'],
+			},
+		];
+		assert.deepStrictEqual(
+			flattenRows(rows, { braces: true, moduleGaps: true }).map(
+				(row) => `${row.type}:${sourceIndex(row)}`
+			),
+			['node:0', 'brace-open:0', 'node:1', 'brace-close:0', 'module-gap:gap', 'comment:2', 'node:2'],
+			'the gap sits between the module groups, not inside the previous subtree'
 		);
 	});
 
@@ -110,7 +140,7 @@ suite('tree query helpers', () => {
 	test('Document adds brace rows around expanded subtrees', () => {
 		const document = flattenRows(ROWS, { braces: true });
 		assert.deepStrictEqual(
-			document.map((row) => `${row.type}:${row.rowIndex}:${row.level}`),
+			document.map((row) => `${row.type}:${sourceIndex(row)}:${row.level}`),
 			[
 				'node:0:1',
 				'brace-open:0:1',
@@ -131,7 +161,7 @@ suite('tree query helpers', () => {
 	test('a collapsed node keeps its row but gets no brace pair', () => {
 		const document = flattenRows(ROWS, { collapsed: new Set(['a']), braces: true });
 		assert.deepStrictEqual(
-			document.map((row) => `${row.type}:${row.rowIndex}`),
+			document.map((row) => `${row.type}:${sourceIndex(row)}`),
 			[
 				'node:0',
 				'brace-open:0',
@@ -144,7 +174,9 @@ suite('tree query helpers', () => {
 			]
 		);
 		assert.deepStrictEqual(
-			flattenRows(ROWS, { collapsed: new Set(['m']), braces: true }).map((row) => `${row.type}:${row.rowIndex}`),
+			flattenRows(ROWS, { collapsed: new Set(['m']), braces: true }).map(
+				(row) => `${row.type}:${sourceIndex(row)}`
+			),
 			['node:0'],
 			'a collapsed module is its own stub, with no braces'
 		);

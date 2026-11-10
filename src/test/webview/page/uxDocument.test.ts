@@ -115,7 +115,21 @@ suite('editor document view', () => {
 			)
 		);
 		assert.ok(/@media \(max-width: 720px\)[\s\S]*?--doc-pad:\s*2\.5ch/.test(css));
-		assert.ok(/body\[data-view="document"\] \.comment\[data-gap="true"\]\s*\{[^}]*height:\s*calc\(var\(--ecuc-lh\) \* 2\)/.test(css));
+		assert.ok(
+			/\.document-tree-header-gap,\s*\.document-tree-module-gap\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(css),
+			'the header and module gaps share one blank row height'
+		);
+		assert.ok(
+			/\.document-tree-window\s*\{[^}]*min-width:\s*max\(100%, var\(--document-tree-content-width, 0px\)\)/.test(
+				css
+			),
+			'the window is never narrower than the pane or the content'
+		);
+		assert.ok(!/\[data-gap="true"\]/.test(css), 'no padding-based module gap remains');
+		assert.ok(
+			!/\.document-tree-module-gap\s*\{[^}]*[\s;]border(?:-(?:top|right|bottom|left))?\s*:/.test(css),
+			'the gap has no border or rule'
+		);
 		assert.ok(/body\[data-view="document"\] \.row\.k-module \.label::before\s*\{[^}]*content:\s*"module /.test(css));
 		assert.ok(!/body\[data-view="tree"\]/.test(css), 'no Tree scoped CSS');
 	});

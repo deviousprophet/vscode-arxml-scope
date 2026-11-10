@@ -203,6 +203,11 @@ body[data-page="diff"] .nav-btn:disabled {
 	height: var(--ecuc-lh);
 	align-items: center;
 }
+/* The shared blank module gap: one base row, no cell, tint, rail or rule. */
+.diff-module-gap-row {
+	background: var(--vscode-editor-background);
+	height: var(--ecuc-lh);
+}
 .diff-cell {
 	flex: 1 1 auto;
 	min-width: 0;

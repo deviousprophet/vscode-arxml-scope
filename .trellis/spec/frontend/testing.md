@@ -125,10 +125,19 @@ is not simulated by the page test; the host write is covered by the apply test.
 Diff tests assert the toolbar both ways: Search, Show all/Show diff, Context, Semantic/Strict,
 Prev/Next, Swap and Collapse/Expand are present in the documented left/divider/center order, and
 Filter/changes checkbox/count summary are absent.
-`diffModel` tests cover query-free `diffVisibility`, the five-line context window, gap rows and
-expand/collapse, and collapse-aware flattening; page tests assert the gap toggle, Context state, the
-search wiring, the `displayLeft`/`displayRight`/`displayStatus` projection, reveal-side mapping,
-pinned pane headers and the two `DocumentTreeView` panes with their gutters.
+`diffModel` tests cover query-free `diffVisibility`, the five-line context window, hidden-run split rows
+and expand/collapse, collapse-aware flattening, and the `moduleGaps` display option (one shared blank row
+before every visible module after the first, none for a hidden module, hidden-run split rows unchanged);
+page tests assert the gap toggle, Context state, the search wiring, the
+`displayLeft`/`displayRight`/`displayStatus` projection, reveal-side mapping,
+pinned pane headers and the two `DocumentTreeView` panes with their gutters. The shared diff module gap
+is asserted in both panes at one virtual index, numbered by both gutters, inert to click/F7/search, and
+absent for the first visible or a hidden module. `documentTree.test.ts` pins the
+`min-width: max(100%, var(--document-tree-content-width, 0px))` rule, the monotonic measurement
+within one model and the `setModel` reset;
+`render.test.ts`/`diffPage.test.ts` pin the published full content width (header lines and comments
+included), and a real-webview pass verifies the rendered fill stays stable while a long row scrolls in
+or out.
 The headless diff probe drives typing (no marks), Enter (count/current), Shift+Enter, a view switch
 and a swap.
 
@@ -144,7 +153,12 @@ put the twisty back inline; replace the Codicon chevron with a filled triangle; 
 gutter; show expanded chevrons at rest; re-add the `=` to a reference tooltip; drop the DEST capture;
 treat every numeric as integer; remove the format padding; put `(= 0x…)` back in a row; re-add a
 Document follow link; hide the details Jump button; use a text input for Boolean; drop the input
-sanitizer; each mutation must fail a test. A CSS selector assertion
+sanitizer; return the module gap to `data-gap` padding or a second-height row; render a diff gap with a
+cell, key or status; number a diff gap on one side only; emit a gap before the first visible module or
+for a hidden module; shrink the window to its rendered slice instead of
+`max(100%, var(--document-tree-content-width, 0px))`; lower the content width on a later
+visible-slice measurement; fail to reset the floor when a narrower model is installed; drop header
+lines or comments from the width estimate; each mutation must fail a test. A CSS selector assertion
 is still not a rendered-layout test, so pair it with the dark/HC/selected parameter/selected
 container/guide-hover/details/narrow/deep captures and a real-webview pass. Assertions and captures must
 match the production CSS, never the prototype file. The gutter is display-row based; there is no

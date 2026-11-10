@@ -716,6 +716,84 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		);
 	});
 
+	test('moduleGaps inserts one shared blank row before every module after the first', () => {
+		const annotated = (shortName: string, containers: string): string =>
+			module(shortName, containers).replace(
+				'<CONTAINERS>',
+				'<ANNOTATIONS><ANNOTATION><ANNOTATION-TEXT><VERBATIM><L-5 L="EN">group note</L-5></VERBATIM></ANNOTATION-TEXT></ANNOTATION></ANNOTATIONS><CONTAINERS>'
+			);
+		const left = arxml(
+			module('M1', container('C1', { parameters: [parameter('Value', '0')] })) +
+				annotated('M2', container('C2', { parameters: [parameter('Value', '0')] }))
+		);
+		const right = arxml(
+			module('M1', container('C1', { parameters: [parameter('Value', '0')] })) +
+				annotated('M2', container('C2', { parameters: [parameter('Value', '1')] }))
+		);
+		const { document } = diffOf(left, right);
+		const rows = document.rows;
+		const plain = flattenDiffDocument(rows);
+		assert.strictEqual(plain.some((row) => row.moduleGap), false, 'without the option there is no gap');
+
+		const display = flattenDiffDocument(rows, { moduleGaps: true });
+		const gaps = display.filter((row) => row.moduleGap);
+		assert.strictEqual(gaps.length, 1, 'one shared gap after the first module');
+		const modules = rows
+			.map((row, index) => ({ row, index }))
+			.filter((entry) => entry.row.kind === 'module');
+		assert.strictEqual(modules.length, 2, 'two modules are in the model');
+		const m2 = modules[1];
+		const gap = gaps[0];
+		assert.strictEqual(gap.rowIndex, m2.index, 'the gap refers to the module it precedes');
+		assert.strictEqual(gap.left, 'blank');
+		assert.strictEqual(gap.right, 'blank');
+		assert.strictEqual(gap.level, 1);
+		assert.strictEqual(gap.expanded, false);
+		assert.deepStrictEqual([gap.guidesLeft, gap.guidesRight], [[], []]);
+		const moduleAt = display.findIndex((row) => row.rowIndex === m2.index && row.left === 'node');
+		const gapAt = display.indexOf(gap);
+		assert.strictEqual(display[gapAt + 1].left, 'comment', 'the gap sits above the module annotations');
+		assert.strictEqual(display[gapAt + 1].commentLeft, 'group note');
+		assert.strictEqual(display[gapAt + 2].left, 'node', 'the module label follows the annotation');
+		assert.strictEqual(gapAt + 2, moduleAt, 'the gap and its annotation precede the module');
+		assert.strictEqual(display[0].moduleGap, undefined, 'the first module has no gap before it');
+	});
+
+	test('a module hidden by Show diff gets no gap and does not count as the first seen module', () => {
+		const left = arxml(
+			module('M1', container('C1', { parameters: [parameter('Value', '0')] })) +
+				module('M2', container('C2', { parameters: [parameter('Value', '0')] })) +
+				module('M3', container('C3', { parameters: [parameter('Value', '0')] }))
+		);
+		const right = arxml(
+			module('M1', container('C1', { parameters: [parameter('Value', '0')] })) +
+				module('M2', container('C2', { parameters: [parameter('Value', '1')] })) +
+				module('M3', container('C3', { parameters: [parameter('Value', '2')] }))
+		);
+		const { document } = diffOf(left, right);
+		const rows = document.rows;
+		const visible = diffVisibility(rows, true, 0);
+		const modules = rows
+			.map((row, index) => ({ row, index }))
+			.filter((entry) => entry.row.kind === 'module');
+		assert.strictEqual(modules.length, 3, 'three modules are in the model');
+		const hiddenModule = modules[0].index;
+		assert.strictEqual(visible[hiddenModule], false, 'the unchanged first module is hidden');
+		const display = flattenDiffDocument(rows, { visible, moduleGaps: true });
+		const gaps = display.filter((row) => row.moduleGap);
+		assert.strictEqual(gaps.length, 1, 'only the second visible module gets a gap');
+		assert.strictEqual(gaps[0].rowIndex, modules[2].index);
+		assert.strictEqual(
+			display.filter((row) => row.rowIndex === hiddenModule && row.moduleGap).length,
+			0,
+			'the hidden module has no gap before it'
+		);
+		const split = display.filter((row) => row.gap);
+		assert.strictEqual(split.length, 1, 'the hidden run still becomes one split line');
+		assert.strictEqual(split[0].left, 'gap');
+		assert.strictEqual(split[0].right, 'gap');
+	});
+
 	test('design §3.3: flatten skips collapsed subtrees in every view', () => {
 		const left = arxml(
 			module(

@@ -66,7 +66,7 @@ Rules:
 - **State is data.** Style from attributes the row builders already write:
   `[data-value-kind="numeric|textual|boolean"]`, `[data-selected="true"]`, `[data-subtree="true"]`,
   `[data-disabled="true"]`, `[data-search-current="true"]`, `[data-state="false"]`, `[data-empty="true"]`,
-  `[data-gap="true"]`, `[data-word-side="left|right"]`, `[data-level]`, `[aria-expanded]`,
+  `[data-word-side="left|right"]`, `[data-level]`, `[aria-expanded]`,
   `[aria-invalid="true"]`. Do not add a class whose only purpose is to mirror state the DOM already
   carries.
 - **Classes name structure.** `.row`, `.label`, `.value`, `.value-text`, `.row-meta`, `.twisty`,
@@ -96,8 +96,10 @@ Rules:
   positioned `.document-tree-window`. The horizontal bars are `.virtual-scroll-hbars` with one
   `.virtual-scroll-hscroll` per pane and a `.virtual-scroll-hspacer` of that pane's content width.
 - `.document-tree-window` is positioned at `offsets[start]`, sized to the rendered slice and translated
-  by the shared horizontal offset. Its minimum width comes from `--document-tree-content-width`. Never
-  set these as a `style` attribute in the markup.
+  by the shared horizontal offset. Its `min-width` is `max(100%, var(--document-tree-content-width, 0px))`:
+  at least the pane, at least the full content estimate. That single rule is what makes the selection and
+  subtree fills span a stable width; never narrow it to the rendered slice or set these as a `style`
+  attribute in the markup.
 - `.document-tree-lines` is a sibling after the window, inside the pane. It is absolutely positioned,
   full pane height, `width: var(--line-numbers-width)`, `overflow: hidden`, `z-index: 1`,
   `aria-hidden="true"` and `user-select: none`. One `.document-tree-line-number` cell per rendered row is
@@ -127,6 +129,10 @@ Rules:
   no focus.
 - The schema/package header ends with one blank host row at `--ecuc-lh`. It has no rule child, border,
   gradient or separator decoration; it is numbered like any other display line.
+- Every module group after the first starts with one blank host row at `--ecuc-lh` (the module gap). It
+  shares the header-gap rule (`.document-tree-header-gap, .document-tree-module-gap`), so both use the
+  same height and content padding and neither gets a rule, border, gradient, hover, selection or tint.
+  There is no `[data-gap]` padding: the gap is a real row and the row count owns its height.
 - Empty containers show a muted `{ }` via `.node[data-kind="container"][data-empty="true"] > .row::after`;
   a collapsed container shows ` { … }`. These are CSS content, not markup.
 - Under `@media (max-width: 720px)` the document narrows `--doc-pad` to `2.5ch` and `--indent` to `3ch`;
@@ -158,8 +164,8 @@ Rules:
   table, so the first compared row starts at the same y.
 - Status is a tint on `.diff-row > .diff-cell[data-side="left|right"]`, driven by
   `[data-status="added|removed|changed"]`. The status tint never recolours syntax tokens.
-- There is no inter-module gap selector on this surface: every `.diff-row` is one `--ecuc-lh` high.
-  `[data-gap="true"]` and its `padding-top` belong to the Document view only.
+- Both panes show the shared blank `.diff-module-gap-row` before every module after the first: one
+  `--ecuc-lh` high, editor background, no cell, tint, rail, border or word span. It is not a change row.
 - A changed row's changed words are `.word-changed[data-word-side="left|right"]`. The left pane uses
   `--vscode-diffEditor-removedTextBackground` (fallback `--diff-removed-bg`) with a 1px
   `--diff-removed-edge` outline; the right pane uses `--vscode-diffEditor-insertedTextBackground`
@@ -169,13 +175,15 @@ Rules:
 - Both panes share the same row height, offsets and text content width; each pane's horizontal extent
   adds its own number column (`diffContent + chars * chWidth`), so the last characters stay reachable.
   Header rows use the Document `.document-tree-header-row` geometry and the shorter header is padded so
-  the rows align.
+  the rows align. `diffContent` is computed over every row and header line, and the pane window keeps
+  `min-width: max(100%, ...)`, so a short selected row still fills the pane.
 - Each pane numbers its own display lines in a fixed gutter. A padded header line or a row missing on
-  that side leaves the cell blank; hidden unchanged-run rows are not numbered; header/gap/comment and
-  brace lines are numbered. The gutter cell reuses the `diffEditorGutter-*` tint with the diff
-  line-background fallbacks and redraws the pane-side rails hidden under the overlay (left
-  changed/removed, right added).
-- The header gap is one blank row with no rule child or border, numbered on both sides.
+  that side leaves the cell blank; hidden unchanged-run rows are not numbered. The module gap is
+  numbered on both sides; header/gap/comment and brace lines are numbered. The gutter cell reuses the
+  `diffEditorGutter-*` tint with the diff line-background fallbacks and redraws the pane-side rails
+  hidden under the overlay (left changed/removed, right added).
+- The header gap is one blank row with no rule child or border, numbered on both sides. The module gap
+  shares that treatment, adds no cell and never carries a status attribute.
 
 ## Build and Bundle
 

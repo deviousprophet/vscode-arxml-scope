@@ -41,11 +41,14 @@ compared, not just the bytes on disk.
   first compared row starts at the same y in both panes. One blank line separates the header from the
   first module in both panes. Search treats one aligned header row as one candidate, so the count stays
   one per visible line, and marks the `schema`/`package` keyword as well as its value.
-- Rows are aligned: a line that exists on only one side has a blank cell on the other side. There is no
-  blank spacer row between modules; the only separator row is the blank header line.
+- Rows are aligned: a line that exists on only one side has a blank cell on the other side. One shared
+  blank line separates consecutive module groups in both panes; it sits above the later module's
+  annotations. A module hidden by **Show diff** or **Context** has no visible gap, and the first visible
+  module has none. The module gap is not a change row: no key, no status tint and no cell.
 - Each pane has a fixed line-number gutter that numbers its own display lines from 1. A padded header
   line or a row missing on one side leaves that pane's number blank; a hidden unchanged run is not
-  numbered, and visible numbers renumber around it. The selected row's number uses the active colour.
+  numbered, and visible numbers renumber around it. The module gap is one shared display line and is
+  numbered on both sides. The selected row's number uses the active colour.
   The gutter stays fixed while the rows scroll horizontally, scrolls with them vertically, and is not
   searchable, selectable or focusable.
 - Diff status also tints the gutter cell for added, removed and changed lines, using the VS Code diff
@@ -57,7 +60,8 @@ compared, not just the bytes on disk.
   inside changed rows. Syntax tokens keep their colours.
 - Selecting a container or module tints its whole subtree in both panes, including the annotation rows
   of descendant containers. An added or removed row highlights only the pane that owns its cell; the
-  blank side stays blank.
+  blank side stays blank. The highlight spans a stable width: at least the pane and the full content
+  width, including header lines, so a short selected row does not shrink to the rendered slice.
 - One shared virtual-scroll surface owns the vertical scrollbar and the row offsets. Each pane has its
   own horizontal scrollbar; moving either bar scrolls both panes in sync, and the pane split stays
   fixed. The content height is precomputed, so the thumb and drag match the rendered lines, and only the

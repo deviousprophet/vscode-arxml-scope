@@ -69,6 +69,53 @@ function annotationDocument(): EditorDocumentPayload {
 	};
 }
 
+function twoModuleDocument(): EditorDocumentPayload {
+	const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>Pkg</SHORT-NAME>
+      <ELEMENTS>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>ModA</SHORT-NAME>
+          <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/ModA</DEFINITION-REF>
+          <CONTAINERS>
+            <ECUC-CONTAINER-VALUE>
+              <SHORT-NAME>ContA</SHORT-NAME>
+              <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/ModA/ContA</DEFINITION-REF>
+              <PARAMETER-VALUES>
+                <ECUC-NUMERICAL-PARAM-VALUE>
+                  <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/ModA/ContA/Value</DEFINITION-REF>
+                  <VALUE>1</VALUE>
+                </ECUC-NUMERICAL-PARAM-VALUE>
+              </PARAMETER-VALUES>
+            </ECUC-CONTAINER-VALUE>
+          </CONTAINERS>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>ModB</SHORT-NAME>
+          <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/ModB</DEFINITION-REF>
+          <ANNOTATIONS>
+            <ANNOTATION>
+              <ANNOTATION-TEXT>
+                <VERBATIM>
+                  <L-5 L="EN">second module note</L-5>
+                </VERBATIM>
+              </ANNOTATION-TEXT>
+            </ANNOTATION>
+          </ANNOTATIONS>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>`;
+	const model = scanEcucValues(xml);
+	return {
+		rows: buildRows(model, { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows,
+		header: documentHeader(model),
+	};
+}
+
 function mount(payload: EditorDocumentPayload = editorDocument()): {
 	dom: ReturnType<typeof installDom>;
 	page: any;
@@ -210,6 +257,155 @@ suite('editor bundled page', () => {
 			assert.strictEqual(dom.document.querySelector('.document-tree-title-bar'), null);
 			assert.strictEqual(dom.document.querySelector('.document-tree-header'), null);
 			assert.strictEqual(dom.document.querySelector('#tree').getAttribute('aria-label'), 'ECUC values');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the module gap is one inert numbered row between two modules', () => {
+		const { dom } = mount(twoModuleDocument());
+		try {
+			const gaps = Array.from(
+				dom.document.querySelectorAll('#tree-pane .document-tree-module-gap')
+			) as HTMLElement[];
+			assert.strictEqual(gaps.length, 1, 'one gap separates the two modules');
+			const gap = gaps[0];
+			assert.strictEqual(gap.getAttribute('role'), 'presentation');
+			assert.strictEqual(gap.getAttribute('aria-hidden'), 'true');
+			assert.strictEqual(gap.tabIndex, -1);
+			assert.strictEqual(gap.hasAttribute('data-node-id'), false);
+			assert.strictEqual(gap.hasAttribute('data-gap'), false);
+			assert.strictEqual(gap.children.length, 0, 'the gap is one blank line with no rule child');
+			assert.strictEqual(
+				dom.document.querySelectorAll('#tree-pane [data-gap]').length,
+				0,
+				'no row keeps the old padding marker'
+			);
+			const index = Number(gap.dataset.documentIndex);
+			assert.strictEqual(lineCell(dom, index).textContent, String(index + 1), 'the gap is a numbered line');
+			assert.strictEqual(lineCell(dom, index).style.height, '20px', 'the gap is exactly one base row high');
+
+			assert.ok(
+				gap.previousElementSibling?.classList.contains('brace'),
+				'the gap follows the first module subtree'
+			);
+			const annotation = gap.nextElementSibling as HTMLElement;
+			assert.ok(annotation.classList.contains('comment'), 'the gap sits above the module annotations');
+			assert.ok((annotation.textContent || '').includes('second module note'));
+			const modules = Array.from(
+				dom.document.querySelectorAll('#tree-pane .node[data-kind="module"]')
+			) as HTMLElement[];
+			assert.strictEqual(modules.length, 2);
+			assert.strictEqual(
+				Number(modules[1].dataset.documentIndex),
+				index + 2,
+				'the gap and its annotation precede the module label'
+			);
+			assert.strictEqual(
+				Number(lineCell(dom, Number(modules[1].dataset.documentIndex)).textContent),
+				Number(lineCell(dom, index).textContent) + 2,
+				'the gap, its annotation and then the module label are consecutive lines'
+			);
+			assertSequentialNumbers(dom);
+
+			gap.click();
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'clicking the gap does not select');
+			lineCell(dom, index).click();
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'clicking the gap number does not select');
+			assert.strictEqual(gap.hasAttribute('aria-selected'), false, 'the gap is not a tree row');
+
+			const moduleBId = modules[1].dataset.nodeId;
+			const lastModuleARow = rowNamed(dom, 'Value');
+			lastModuleARow.focus();
+			lastModuleARow.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
+			);
+			const focusedModule = dom.document.querySelector(
+				`#tree-pane .node[data-node-id="${moduleBId}"]`
+			) as HTMLElement | null;
+			assert.ok(focusedModule, 'the second module is rendered');
+			assert.strictEqual(
+				(dom.document.activeElement as HTMLElement | null)?.dataset?.nodeId,
+				moduleBId,
+				'keyboard navigation skips the module gap'
+			);
+
+			const before = Number(gap.dataset.documentIndex);
+			const twisty = rowNamed(dom, 'ContA').querySelector('.twisty') as HTMLElement;
+			twisty.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			const collapsedGap = dom.document.querySelector('#tree-pane .document-tree-module-gap') as HTMLElement;
+			assert.ok(collapsedGap, 'the gap survives a collapse');
+			assert.ok(
+				Number(collapsedGap.dataset.documentIndex) < before,
+				'collapsing the first module moves the gap up'
+			);
+			assertSequentialNumbers(dom);
+			const expand = rowNamed(dom, 'ContA').querySelector('.twisty') as HTMLElement;
+			expand.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			assert.strictEqual(
+				Number((dom.document.querySelector('#tree-pane .document-tree-module-gap') as HTMLElement).dataset
+					.documentIndex),
+				before,
+				'expanding restores the gap position'
+			);
+			assertSequentialNumbers(dom);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('search skips the module gap and the full content width covers header lines', async () => {
+		const payload = twoModuleDocument();
+		const longPackage = 'Pkg.' + 'X'.repeat(180);
+		const { dom } = mount({ ...payload, header: { packages: [longPackage] } });
+		try {
+			const windowEl = dom.document.querySelector('#tree-pane .document-tree-window') as HTMLElement;
+			const contentWidth = Number.parseFloat(
+				windowEl.style.getPropertyValue('--document-tree-content-width')
+			);
+			assert.ok(
+				contentWidth >= longPackage.length,
+				`the full content estimate covers the header line (${contentWidth})`
+			);
+			assert.notStrictEqual(contentWidth, 0, 'the model publishes its content width');
+			const spacer = dom.document.querySelector('#tree .virtual-scroll-hspacer') as HTMLElement;
+			assert.strictEqual(
+				Number.parseFloat(spacer.style.width),
+				contentWidth,
+				'the scroll extent matches the content width, so the right edge stays reachable'
+			);
+			assert.strictEqual(
+				dom.document.querySelectorAll('#tree-pane .document-tree-module-gap[data-search-current]').length,
+				0
+			);
+			const input = dom.document.getElementById('search-input') as HTMLInputElement;
+			input.value = 'ModB';
+			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			await settleSearch();
+			const count = dom.document.getElementById('search-count')!.textContent;
+			assert.ok(/1 \/ 1/.test(count || ''), `search counts only the row, not the gap (${count})`);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the full content width covers long annotation rows', () => {
+		const payload = twoModuleDocument();
+		const longComment = 'N'.repeat(180);
+		const rows = payload.rows.map((row) =>
+			row.kind === 'module' ? { ...row, comments: [longComment] } : row
+		);
+		const { dom } = mount({ rows, header: { packages: [] } });
+		try {
+			const windowEl = dom.document.querySelector('#tree-pane .document-tree-window') as HTMLElement;
+			const contentWidth = Number.parseFloat(
+				windowEl.style.getPropertyValue('--document-tree-content-width')
+			);
+			assert.ok(
+				contentWidth >= longComment.length,
+				`the full content estimate covers comment rows (${contentWidth})`
+			);
 		} finally {
 			dom.restore();
 		}

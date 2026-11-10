@@ -44,7 +44,22 @@ suite('DiffView component', () => {
 			/\.diff-row \.word-changed\[data-word-side="right"\]\s*\{[^}]*var\(--vscode-diffEditor-insertedTextBackground/.test(css),
 			'changed words on the displayed right use the inserted text background'
 		);
-		assert.ok(!/\.diff-row\[data-gap/.test(css), 'the diff has no module gap row');
+		assert.ok(
+			/\.diff-module-gap-row\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(css),
+			'the shared module gap is one base row high'
+		);
+		assert.ok(
+			/\.diff-module-gap-row\s*\{[^}]*background:\s*var\(--vscode-editor-background\)/.test(css),
+			'the module gap carries no status tint'
+		);
+		assert.ok(!/\.diff-module-gap-row\s*\{[^}]*border/.test(css), 'the module gap has no border or rail');
+		assert.ok(!/\.diff-row\[data-gap/.test(css), 'the old Document-only padding marker is gone');
+		assert.ok(
+			/\.document-tree-window\s*\{[^}]*min-width:\s*max\(100%, var\(--document-tree-content-width, 0px\)\)/.test(
+				css
+			),
+			'both diff panes fill at least the pane or the content width'
+		);
 	});
 
 	test('mount creates one shared scroll surface and two window panes', () => {

@@ -208,6 +208,41 @@ suite('DocumentTreeView component', () => {
 		}
 	});
 
+	test('the measurement only grows; a new model can reset the content width', () => {
+		const h = harness();
+		try {
+			const windowEl = h.view.getWindowElement();
+			assert.strictEqual(windowEl.style.values['--document-tree-content-width'], '500px');
+			h.view.setContentWidth(320);
+			assert.strictEqual(
+				windowEl.style.values['--document-tree-content-width'],
+				'500px',
+				'a smaller measurement never lowers the minimum'
+			);
+			h.view.setContentWidth(760);
+			assert.strictEqual(windowEl.style.values['--document-tree-content-width'], '760px');
+			h.view.setModel({
+				rowCount: 1,
+				offsets: [0, 20],
+				renderRow: () => element(),
+				contentWidth: 120
+			});
+			assert.strictEqual(
+				windowEl.style.values['--document-tree-content-width'],
+				'120px',
+				'a new, narrower model resets the floor'
+			);
+			h.view.setContentWidth(80);
+			assert.strictEqual(
+				windowEl.style.values['--document-tree-content-width'],
+				'120px',
+				'the new model still ignores a smaller visible-slice measurement'
+			);
+		} finally {
+			h.restore();
+		}
+	});
+
 	test('the number column is max(digits(max number), 5) and shrinks for an empty model', () => {
 		const h = harness(1000, (index) => ({ number: index + 1 }));
 		try {
@@ -423,9 +458,19 @@ suite('DocumentTreeView component', () => {
 	test('the stylesheet owns the absolute window, the fixed gutter and no gap rule', () => {
 		const css = webviewCss('components', 'documentTree', 'documentTree.css');
 		assert.ok(/\.document-tree-window\s*\{[^}]*position:\s*absolute/.test(css));
+		assert.ok(
+			/\.document-tree-window\s*\{[^}]*min-width:\s*max\(100%, var\(--document-tree-content-width, 0px\)\)/.test(
+				css
+			),
+			'the window is never narrower than the pane or the full content'
+		);
 		assert.ok(/\.document-tree-header-row\s*\{/.test(css));
-		assert.ok(/\.document-tree-header-gap\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(css));
+		assert.ok(
+			/\.document-tree-header-gap,\s*\.document-tree-module-gap\s*\{[^}]*height:\s*var\(--ecuc-lh\)/.test(css),
+			'the header and module gaps share the blank row geometry'
+		);
 		assert.ok(!/\.document-tree-header-gap-line/.test(css), 'the gap has no rule element or border');
+		assert.ok(!/\[data-gap/.test(css), 'the module gap is a row, not padding');
 		assert.ok(/\.document-tree-lines\s*\{[^}]*position:\s*absolute/.test(css));
 		assert.ok(/\.document-tree-lines\s*\{[^}]*width:\s*var\(--line-numbers-width\)/.test(css));
 		assert.ok(/\.document-tree-lines\s*\{[^}]*background:\s*var\(--vscode-editorGutter-background/.test(css));
