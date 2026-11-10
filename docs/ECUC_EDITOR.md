@@ -170,6 +170,10 @@ The same index backs the normal text editor, without opening the custom editor:
 The text editor uses the document's current text, so unsaved edits participate. The custom editor's
 **Find references** button lists the same reverse references in a Quick Pick.
 
+The reverse-reference map is updated per file when a save only changes values or references. A
+structural change (a module/container added, removed or renamed, or a changed `DEFINITION-REF`)
+invalidates it, and the next **Find References** rebuilds it lazily.
+
 The right edge also has a **Conditions** tab. Both tabs share the panel; only one is visible at a time.
 The sidebar width, active tab, section sizes and collapsed sections persist across a webview reload.
 
@@ -287,8 +291,11 @@ collection is recomputed after every index change.
   indexed incorrectly.
 - A file matching `arxmlScope.index.exclude` stays editable as text but gets no outline, definition,
   references, links, hover or diagnostics from the extension.
-- Every index change rebuilds the shared lookup maps. This is fast for ordinary workspaces, but a very
-  large workspace can pause briefly after a save.
+- A save updates only that file's element and reference contribution. A value or reference edit updates
+  that file's reverse-reference map in place, so **Find References** answers immediately. A structural
+  edit (a module/container added, removed or renamed, or a changed `DEFINITION-REF`) invalidates the
+  reverse map, and the next **Find References** rebuilds it; a very large workspace can pause briefly on
+  that first query.
 - The single-file editor model (`core/ecuc/scanner.ts`) and the workspace index
   (`core/index/xmlStream.ts`) are separate parsers. They share the XML text helpers; they converge only
   when cross-file features need one model.

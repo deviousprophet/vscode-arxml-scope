@@ -335,6 +335,13 @@ registry.set("index-references", (records) => ({
   ),
 }));
 
+registry.set("index-find-references", (records) => ({
+  body: renderTable(
+    ["Name", "References", "Full builds", "Elapsed (ms)"],
+    records.map((r) => [r.name, r.references, r.builds, r.elapsedMs])
+  ),
+}));
+
 registry.set("validation", (records) => ({
   body: renderTable(
     ["Source (MiB)", "Records", "Diagnostics", "Elapsed (ms)", "Retained (MiB)"],

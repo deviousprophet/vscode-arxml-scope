@@ -3,6 +3,9 @@
  * workspace lookups. The 200k+ element file is the size class that exposed the
  * array-spread crash on a large file.
  *
+ * It also measures save-then-Find-References on the incremental reverse map and
+ * on the structural fallback; the reported build count proves which path ran.
+ *
  * Headless and synthetic: no `vscode`, no DOM, no customer data.
  */
 import { performance } from 'node:perf_hooks';
@@ -14,6 +17,25 @@ const CONTAINERS = 1800;
 const PARAMETERS_PER_CONTAINER = 120;
 const MAX_STEP_MS = 60_000;
 const MAX_RETAINED_BYTES = 1024 * 1024 * 1024;
+const MAX_FIND_REFERENCES_MS = 5_000;
+
+function withShiftedRanges(file: FileIndex, shift: number): FileIndex {
+	return {
+		...file,
+		elements: file.elements.map((element) =>
+			element.path === undefined
+				? element
+				: { ...element, range: { start: element.range.start + shift, end: element.range.end + shift } }
+		),
+	};
+}
+
+function withPathChange(file: FileIndex, from: string, to: string): FileIndex {
+	return {
+		...file,
+		elements: file.elements.map((element) => (element.path === from ? { ...element, path: to } : element)),
+	};
+}
 
 function indent(depth: number): string {
 	return '  '.repeat(depth);
@@ -216,6 +238,109 @@ function run(): void {
 	}
 	if (referencesElapsedMs > 100) {
 		throw new Error(`references-warm took ${referencesElapsedMs} ms; limit is 100 ms`);
+	}
+
+	// Save-then-Find-References. A value or reference save must use the incremental
+	// reverse map; a structural save pays the lazy full rebuild. The build count is
+	// the fast-path proof; the elapsed bound is deliberately generous.
+	const referenceSave: IndexReference[] = [];
+	for (let at = 0; at < 20_000; at++) {
+		referenceSave.push({
+			kind: 'reference',
+			targetRawPath: '/SyntheticPkg/Module0/Container0',
+			targetDest: 'ECUC-CONTAINER-VALUE',
+			contextPaths: [],
+			file: 'file:///refs-extra.arxml',
+			range: { start: at * 2, end: at * 2 + 1 },
+		});
+	}
+	const referenceSaveStarted = performance.now();
+	index.upsert({
+		uri: 'file:///refs-extra.arxml',
+		packages: [],
+		elements: [],
+		references: referenceSave,
+		definitions: [],
+	});
+	const savedReferences = index.referencesFor(found.container);
+	const referenceSaveElapsedMs = Math.round(performance.now() - referenceSaveStarted);
+	const referenceSaveBuilds = index.referenceMapBuildCount;
+	console.log(
+		JSON.stringify({
+			_type: 'index-find-references',
+			name: 'reference-only-save',
+			references: savedReferences.length,
+			builds: referenceSaveBuilds,
+			elapsedMs: referenceSaveElapsedMs,
+		})
+	);
+	if (savedReferences.length !== refs.length + referenceSave.length) {
+		throw new Error(`reference-only save returned ${savedReferences.length} references`);
+	}
+	if (referenceSaveBuilds !== 1) {
+		throw new Error(`reference-only save rebuilt the map ${referenceSaveBuilds} times`);
+	}
+	if (referenceSaveElapsedMs > MAX_FIND_REFERENCES_MS) {
+		throw new Error(`reference-only save took ${referenceSaveElapsedMs} ms; limit is ${MAX_FIND_REFERENCES_MS} ms`);
+	}
+	index.remove('file:///refs-extra.arxml');
+
+	// A value edit rebuilds the file's elements but leaves its target shape intact.
+	const valueEdited = withShiftedRanges(file, 1);
+	const valueSaveStarted = performance.now();
+	index.upsert(valueEdited);
+	const editedContainer = index.element('/SyntheticPkg/Module0/Container0');
+	const editedReferences = editedContainer === undefined ? [] : index.referencesFor(editedContainer);
+	const valueSaveElapsedMs = Math.round(performance.now() - valueSaveStarted);
+	const valueSaveBuilds = index.referenceMapBuildCount;
+	console.log(
+		JSON.stringify({
+			_type: 'index-find-references',
+			name: 'value-edited-target-save',
+			references: editedReferences.length,
+			builds: valueSaveBuilds,
+			elapsedMs: valueSaveElapsedMs,
+		})
+	);
+	if (editedContainer === undefined || editedReferences.length !== refs.length) {
+		throw new Error(`value-edited target save returned ${editedReferences.length} references`);
+	}
+	if (valueSaveBuilds !== 1) {
+		throw new Error(`value-edited target save rebuilt the map ${valueSaveBuilds} times`);
+	}
+	if (valueSaveElapsedMs > MAX_FIND_REFERENCES_MS) {
+		throw new Error(`value-edited target save took ${valueSaveElapsedMs} ms; limit is ${MAX_FIND_REFERENCES_MS} ms`);
+	}
+
+	// A path change is structural: the map is invalidated and the query rebuilds it.
+	const structural = withPathChange(
+		valueEdited,
+		'/SyntheticPkg/Module0/Container1799',
+		'/SyntheticPkg/Module0/Container1799X'
+	);
+	const structuralStarted = performance.now();
+	index.upsert(structural);
+	const structuralContainer = index.element('/SyntheticPkg/Module0/Container0');
+	const structuralReferences = structuralContainer === undefined ? [] : index.referencesFor(structuralContainer);
+	const structuralElapsedMs = Math.round(performance.now() - structuralStarted);
+	const structuralBuilds = index.referenceMapBuildCount;
+	console.log(
+		JSON.stringify({
+			_type: 'index-find-references',
+			name: 'structural-save-fallback',
+			references: structuralReferences.length,
+			builds: structuralBuilds,
+			elapsedMs: structuralElapsedMs,
+		})
+	);
+	if (structuralContainer === undefined || structuralReferences.length !== refs.length) {
+		throw new Error(`structural save returned ${structuralReferences.length} references`);
+	}
+	if (structuralBuilds !== 2) {
+		throw new Error(`structural save did not rebuild the map (${structuralBuilds} builds)`);
+	}
+	if (structuralElapsedMs > MAX_FIND_REFERENCES_MS) {
+		throw new Error(`structural save took ${structuralElapsedMs} ms; limit is ${MAX_FIND_REFERENCES_MS} ms`);
 	}
 
 	const total = Math.max(0, retainedBytes() - baseline);
