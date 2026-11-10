@@ -41,7 +41,7 @@ export function totalHeightOf(offsets: RowOffsets): number {
 }
 
 /** The first row whose `[offset, offset + height)` range contains `offset`. */
-export function rowAtOffsetFromOffsets(offsets: RowOffsets, offset: number): number {
+function rowAtOffsetFromOffsets(offsets: RowOffsets, offset: number): number {
 	const rowCount = Math.max(0, offsets.length - 1);
 	if (rowCount === 0) {
 		return 0;

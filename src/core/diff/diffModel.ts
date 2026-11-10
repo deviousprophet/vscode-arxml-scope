@@ -168,7 +168,7 @@ interface MergedNode {
  * ordinals, their children differ only by that embedded ordinal; removing both
  * makes the group depend on the ECUC path, not on either side's declaration order.
  */
-export function baseId(id: string): string {
+function baseId(id: string): string {
 	return id.replace(/#\d+(?=\/|$)/g, '');
 }
 
@@ -205,7 +205,7 @@ function rangeOf(lookup: RangeLookup | undefined, id: string): Range {
 }
 
 /** Projects a display row to the fields both panes show and compare. */
-export function toDiffCell(row: EcucRow, range?: Range): DiffCell {
+function toDiffCell(row: EcucRow, range?: Range): DiffCell {
 	return {
 		kind: row.kind,
 		label: row.label,
@@ -1375,7 +1375,7 @@ function tokenChanges(left: string, right: string): Array<[string, string]> {
 }
 
 /** Replaces whole identifier tokens; display text is never rewritten by the model. */
-export function applySubstitutions(text: string, substitutions: ReadonlyMap<string, string>): string {
+function applySubstitutions(text: string, substitutions: ReadonlyMap<string, string>): string {
 	if (substitutions.size === 0) {
 		return text;
 	}
@@ -1585,17 +1585,6 @@ interface DiffRowsResult {
 	semanticLimitReason?: SemanticLimitReason;
 }
 
-/** The merged diff rows for two display-row lists, in deterministic order. */
-export function diffRows(
-	leftRows: readonly EcucRow[],
-	rightRows: readonly EcucRow[],
-	leftRanges?: RangeLookup,
-	rightRanges?: RangeLookup,
-	options: DiffOptions = {}
-): DiffRow[] {
-	return diffRowsWithMetrics(leftRows, rightRows, leftRanges, rightRanges, options).rows;
-}
-
 function diffRowsWithMetrics(
 	leftRows: readonly EcucRow[],
 	rightRows: readonly EcucRow[],
@@ -1627,7 +1616,7 @@ function diffRowsWithMetrics(
 }
 
 /** Counts every row with a status, descendants included. */
-export function summarizeDiff(rows: readonly DiffRow[]): DiffSummary {
+function summarizeDiff(rows: readonly DiffRow[]): DiffSummary {
 	const summary: DiffSummary = { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
 	for (const row of rows) {
 		summary[row.status]++;

@@ -6,7 +6,7 @@
  * row's haystack, and the two sides cannot drift. Pure: no DOM, no `vscode`.
  */
 
-export interface QueryFields {
+interface QueryFields {
 	label: string;
 	shortName?: string;
 	value?: string;

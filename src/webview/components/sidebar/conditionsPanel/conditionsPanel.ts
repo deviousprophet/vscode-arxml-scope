@@ -594,15 +594,6 @@ export function applyDisabledCount(): void {
 	conditionsCount.hidden = disabled === 0;
 }
 
-/** Applies a host entries refresh (a reloaded page) and reports whether it handled the message. */
-export function applyConditionsMessage(message: any): boolean {
-	if (!message || message.type !== 'conditions') {
-		return false;
-	}
-	renderConditionEntries(message.entries);
-	return true;
-}
-
 export function mountConditionsPanel(): void {
 	editingConditionRow = null;
 	conditionsRows = [];

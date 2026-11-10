@@ -8,7 +8,6 @@
  */
 import './virtualScroll.css';
 import {
-	rowAtOffsetFromOffsets,
 	totalHeightOf,
 	visibleRangeFromOffsets,
 } from '../../render/virtualScroll';
@@ -205,22 +204,6 @@ export class VirtualScroll {
 		this.applyContent();
 	}
 
-	/** Set one pane's horizontal extent. */
-	setPaneContentWidth(index: number, width: number): void {
-		if (index < 0 || index >= this.contentWidths.length) {
-			return;
-		}
-		const next = Number.isFinite(width) && width > 0 ? width : 0;
-		if (next <= this.contentWidths[index]) {
-			return;
-		}
-		this.contentWidths[index] = next;
-		if (index === 0) {
-			this.contentWidth = next;
-		}
-		this.applyContent();
-	}
-
 	getViewport(): VirtualScrollViewport {
 		return this.getViewportFor(0);
 	}
@@ -326,14 +309,6 @@ export class VirtualScroll {
 
 	render(): void {
 		this.emit();
-	}
-
-	destroy(): void {
-		if (this.frame !== 0 && typeof cancelAnimationFrame === 'function') {
-			cancelAnimationFrame(this.frame);
-		}
-		this.frame = 0;
-		this.mounted = false;
 	}
 
 	private onHorizontalBarScroll(index: number): void {

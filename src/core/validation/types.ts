@@ -37,7 +37,7 @@ export interface EcucDiagnostic {
 
 export type SeveritySettings = Record<DiagnosticRule, DiagnosticSeverity>;
 
-export const DIAGNOSTIC_RULES: readonly DiagnosticRule[] = [
+const DIAGNOSTIC_RULES: readonly DiagnosticRule[] = [
 	'brokenReference',
 	'destMismatch',
 	'duplicateShortName',

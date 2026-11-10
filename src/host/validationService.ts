@@ -12,16 +12,16 @@ import { crossFileRulesSetting, IndexService } from './indexService';
 
 const DEBOUNCE_MS = 400;
 
-export function validationEnabled(): boolean {
+function validationEnabled(): boolean {
 	return vscode.workspace.getConfiguration('arxmlScope.validation').get<boolean>('enabled', true);
 }
 
-export function validationSeverities(): SeveritySettings {
+function validationSeverities(): SeveritySettings {
 	const raw = vscode.workspace.getConfiguration('arxmlScope.validation').get<unknown>('severities', DEFAULT_SEVERITIES);
 	return normalizeSeverities(raw);
 }
 
-export function validationCaps(): { perFile: number; total: number } {
+function validationCaps(): { perFile: number; total: number } {
 	const config = vscode.workspace.getConfiguration('arxmlScope.validation');
 	const perFile = config.get<number>('maxDiagnosticsPerFile', 500);
 	const total = config.get<number>('maxDiagnostics', 5000);
@@ -32,7 +32,7 @@ export function validationCaps(): { perFile: number; total: number } {
 }
 
 /** The cross-file rule mode; `auto` needs at least one indexed definition. */
-export function crossFileRules(): CrossFileMode {
+function crossFileRules(): CrossFileMode {
 	return crossFileRulesSetting();
 }
 

@@ -17,7 +17,6 @@
  */
 
 import { haystack } from '../../core/ecuc/haystack';
-export type { QueryFields } from '../../core/ecuc/haystack';
 export { haystack };
 
 /** An occurrence of the query, as `[start, end)` offsets into the searched text. */

@@ -157,20 +157,8 @@ export class DiffView {
 		return this.scroll ? this.scroll.getVisibleRange() : [0, 0];
 	}
 
-	clientHeight(): number {
-		return this.scroll ? this.scroll.clientHeight() : 0;
-	}
-
-	clientWidth(): number {
-		return this.scroll ? this.scroll.clientWidth() : 0;
-	}
-
 	scrollToIndex(index: number, align?: 'auto' | 'start' | 'end'): void {
 		this.scroll?.scrollToIndex(index, align);
-	}
-
-	getWindowElement(): any {
-		return this.left ? this.left.getWindowElement() : undefined;
 	}
 
 	/** Match the fixed title strip's width to the vertical scrollbar's gutter. */

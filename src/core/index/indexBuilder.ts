@@ -572,7 +572,7 @@ function joinPath(parts: readonly (string | undefined)[]): string | undefined {
 }
 
 /** Schema release from `xsi:schemaLocation`, same rule as the ECUC scanner. */
-export function schemaReleaseFrom(schemaLocation: string): string | undefined {
+function schemaReleaseFrom(schemaLocation: string): string | undefined {
 	const tokens = schemaLocation.trim().split(/\s+/);
 	const last = tokens[tokens.length - 1];
 	if (!last) {

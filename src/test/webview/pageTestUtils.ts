@@ -173,11 +173,6 @@ export function loadModule<T>(path: string): T {
 	}
 }
 
-/** Wait one animation frame so a scheduled render has run. */
-export async function nextFrame(): Promise<void> {
-	await new Promise((resolve) => setTimeout(resolve, 15));
-}
-
 /** Wait past the search debounce and two chunk timers. */
 export async function settleSearch(): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, 220));

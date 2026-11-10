@@ -9,14 +9,8 @@
  */
 import * as vscode from 'vscode';
 
+import type { ConditionEntry } from '../core/ecuc/conditionEntry';
 import { ConditionValue, isConditionName, parseConditionValue } from '../core/ecuc/syscond';
-
-export { isConditionName };
-
-export interface ConditionEntry {
-	name: string;
-	value: string;
-}
 
 export interface ParsedConditions {
 	/** Trimmed, de-duplicated (last wins), invalid rows removed. */

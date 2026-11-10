@@ -188,7 +188,7 @@ let persistUiState: () => void = function () {};
 
 
 
-export function sidebarTabName(button: any): SidebarTab {
+function sidebarTabName(button: any): SidebarTab {
 	const controls = button.getAttribute('aria-controls');
 	return controls === 'sbp-conditions' ? 'conditions' : 'details';
 }
@@ -201,7 +201,7 @@ export function setSidebarPersistence(persist: () => void): void {
 	persistUiState = persist;
 }
 
-export function layoutSidebarPanes(): void {
+function layoutSidebarPanes(): void {
 	for (let at = 0; at < sidebarPaneViews.length; at++) {
 		sidebarPaneViews[at].layout();
 	}
@@ -303,7 +303,7 @@ function applySidebarWidth(width: number, persist: boolean): void {
 	}
 }
 
-export function onTabKeydown(event: any, button: any): void {
+function onTabKeydown(event: any, button: any): void {
 	const tabs = document.getElementById('side-tabs');
 	if (!tabs) {
 		return;
@@ -421,7 +421,7 @@ export class SidebarPaneView {
 	}
 
 	bindHead(section: any, head: any, id: string): void {
-		const view = this;
+		const view: SidebarPaneView = this;
 		head.addEventListener('click', function (event: any) {
 			if (event.target instanceof Element && event.target.closest('.sb-section-actions')) {
 				return;
@@ -484,7 +484,7 @@ export class SidebarPaneView {
 		const sashes = this.root.querySelectorAll('.sb-pane-sash') as unknown as any[];
 		for (let at = 0; at < sashes.length; at++) {
 			const sash = sashes[at];
-			const view = this;
+			const view: SidebarPaneView = this;
 			sash.addEventListener('mousedown', function (event: any) {
 				if (event.button !== 0) {
 					return;

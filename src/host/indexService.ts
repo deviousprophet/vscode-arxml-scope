@@ -16,7 +16,8 @@ import type { FileIndex, IndexElement, IndexReference, IndexStats } from '../cor
 import { resolveDefinition } from '../core/index/definitions';
 import type { DefinitionInfo } from '../core/index/definitions';
 import { WorkspaceIndex } from '../core/index/workspaceIndex';
-import type { ElementResolution, IndexSubscription, ReferenceResolution } from '../core/index/workspaceIndex';
+import type { ElementResolution, IndexSubscription } from '../core/index/workspaceIndex';
+import type { DefinitionSource } from './ecucEditorProvider';
 
 const DEBOUNCE_MS = 250;
 /** Read chunk; large enough to keep syscall overhead low, small enough to stay responsive. */
@@ -49,7 +50,7 @@ export function isIndexableUri(uri: vscode.Uri): boolean {
 }
 
 /** `N file` / `N files`; one owner for the status bar and its tooltip. */
-export function fileCountText(count: number): string {
+function fileCountText(count: number): string {
 	return `${count} file${count === 1 ? '' : 's'}`;
 }
 
@@ -60,7 +61,7 @@ export function crossFileRulesSetting(): 'auto' | 'always' | 'never' {
 }
 
 /** The status bar label for one index state. */
-export function statusBarText(stats: IndexStats, building: boolean, modeLabel?: string): string {
+function statusBarText(stats: IndexStats, building: boolean, modeLabel?: string): string {
 	if (building) {
 		return '$(sync~spin) ARXML Scope: indexing…';
 	}
@@ -69,7 +70,7 @@ export function statusBarText(stats: IndexStats, building: boolean, modeLabel?: 
 }
 
 /** Reads one ARXML file and returns its index contribution. */
-export async function readFileIndex(uri: vscode.Uri, maxBytes: number): Promise<FileIndex | undefined> {
+async function readFileIndex(uri: vscode.Uri, maxBytes: number): Promise<FileIndex | undefined> {
 	const stat = await fs.stat(uri.fsPath);
 	if (!stat.isFile() || stat.size > maxBytes) {
 		return undefined;
@@ -103,9 +104,8 @@ export async function readFileIndex(uri: vscode.Uri, maxBytes: number): Promise<
 	return builder.finish();
 }
 
-export class IndexService implements vscode.Disposable {
+export class IndexService implements vscode.Disposable, DefinitionSource {
 	private readonly index = new WorkspaceIndex();
-	private readonly emitter = new vscode.EventEmitter<IndexStats>();
 	private readonly status: vscode.StatusBarItem;
 	private readonly disposables: vscode.Disposable[] = [];
 	private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
@@ -124,15 +124,12 @@ export class IndexService implements vscode.Disposable {
 	private rebuildPromise?: Promise<void>;
 	private rebuildQueued = false;
 
-	/** Fires after every completed rebuild or incremental file update. */
-	readonly onDidChange: vscode.Event<IndexStats> = this.emitter.event;
-
 	constructor(
 		private readonly reader: (uri: vscode.Uri, maxBytes: number) => Promise<FileIndex | undefined> = readFileIndex
 	) {
 		this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
 		this.status.command = 'vscode-arxml-scope.cycleCrossFileRules';
-		this.disposables.push(this.status, this.emitter);
+		this.disposables.push(this.status);
 	}
 
 	/** Starts the watcher and the first build. Does not await the build. */
@@ -190,11 +187,6 @@ export class IndexService implements vscode.Disposable {
 	/** Resolves a reference target across the workspace, with the reason kept. */
 	resolveTarget(targetPath: string, targetDest?: string, sourceFile?: string): ElementResolution {
 		return this.index.resolveTarget(targetPath, targetDest, sourceFile);
-	}
-
-	/** Resolves one indexed reference; used by the provider's Jump action. */
-	resolveReference(reference: IndexReference): ReferenceResolution {
-		return this.index.resolveReference(reference);
 	}
 
 	/** References that resolve to the given element, across every indexed file. */
@@ -434,7 +426,6 @@ export class IndexService implements vscode.Disposable {
 
 	private publish(): void {
 		this.updateStatus();
-		this.emitter.fire(this.index.stats());
 	}
 
 	private updateStatus(): void {

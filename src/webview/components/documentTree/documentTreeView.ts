@@ -479,9 +479,4 @@ export class DocumentTreeView {
 			this.callbacks.onRowClick(index, event);
 		}
 	}
-
-	destroy(): void {
-		this.model = undefined;
-		this.clearLineNumbers();
-	}
 }

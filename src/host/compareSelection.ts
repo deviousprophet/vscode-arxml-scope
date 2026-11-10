@@ -7,7 +7,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-export const COMPARE_SELECTION_CONTEXT = 'arxmlScope.hasCompareSelection';
+const COMPARE_SELECTION_CONTEXT = 'arxmlScope.hasCompareSelection';
 
 /** The basename used in titles, messages and labels. */
 export function fileName(uri: vscode.Uri): string {

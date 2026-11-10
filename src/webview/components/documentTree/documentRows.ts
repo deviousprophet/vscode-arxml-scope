@@ -51,7 +51,7 @@ export interface DocumentRowContext {
 	wordSide?: 'left' | 'right';
 }
 
-export function appendDocumentGuides(rowElement: HTMLElement, guides: readonly DocumentGuide[] | undefined): void {
+function appendDocumentGuides(rowElement: HTMLElement, guides: readonly DocumentGuide[] | undefined): void {
 	for (const segment of guides || []) {
 		const guide = document.createElement('span');
 		guide.className = 'guide';
@@ -195,7 +195,7 @@ function isWordDiffMetaClass(cls: string): cls is DocumentWordDiffMetaClass {
 	return WORD_DIFF_META_CLASSES.some((candidate) => candidate === cls);
 }
 
-export function twistySpan(): HTMLElement {
+function twistySpan(): HTMLElement {
 	const span = document.createElement('span');
 	span.className = 'twisty';
 	span.setAttribute('aria-hidden', 'true');

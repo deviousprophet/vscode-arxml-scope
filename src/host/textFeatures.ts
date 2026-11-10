@@ -31,7 +31,7 @@ interface CachedDocument {
 
 const SELECTOR: vscode.DocumentSelector = [{ pattern: '**/*.arxml' }];
 
-export class TextFeatures
+class TextFeatures
 	implements
 		vscode.DocumentSymbolProvider,
 		vscode.DefinitionProvider,
