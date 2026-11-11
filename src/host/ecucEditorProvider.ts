@@ -29,6 +29,7 @@ import {
 	planDelete,
 	planDuplicate,
 } from './ecucStructureEdit';
+import type { StructureEditRecord } from './ecucStructureEdit';
 import { followReference, nodeIdForRange, revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
 import type { BootWatchdog } from './bootWatchdog';
@@ -132,11 +133,8 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 
 	constructor(conditionStore?: ConditionValueStore, extensionUri?: vscode.Uri, definitionSource?: DefinitionSource) {
 		this.conditionStore = conditionStore;
-		this.conditionEntries = conditionStore?.load() ?? [];
-		this.extensionUri =
-			extensionUri ??
-			vscode.extensions.getExtension('deviousprophet.vscode-arxml-scope')?.extensionUri ??
-			vscode.Uri.file(path.join(__dirname, '..'));
+		this.conditionEntries = storedConditionEntries(conditionStore);
+		this.extensionUri = resolvedExtensionUri(extensionUri);
 		this.definitionSource = definitionSource;
 	}
 
@@ -158,6 +156,20 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	/** The evaluation map, rebuilt from the same normalization `load` applies. */
 	private conditionValues(): Map<string, ConditionValue> {
 		return parseConditionEntries(this.conditionEntries).values;
+	}
+
+	/** The row-build options for one panel: settings, conditions and the index when present. */
+	private rowOptions(key: string): RowBuildOptions {
+		const base: RowBuildOptions = { ...editorSettings(), conditions: this.conditionValues() };
+		const source = this.definitionSource;
+		if (source === undefined) {
+			return base;
+		}
+		return {
+			...base,
+			definitions: (ref: string) => source.definition(ref),
+			...definitionExtras(source, key),
+		};
 	}
 
 	public resolveCustomTextEditor(
@@ -203,27 +215,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		// change, which re-renders the model that is already scanned.
 		const push = (): void => {
 			const current = this.selections.get(key);
-			const options: RowBuildOptions = {
-				...editorSettings(),
-				conditions: this.conditionValues(),
-				...(this.definitionSource === undefined
-					? {}
-					: { definitions: (ref: string) => this.definitionSource!.definition(ref) }),
-				...(this.definitionSource?.definitionCandidateCount === undefined
-					? {}
-					: { ambiguousDefinitions: (ref: string) => this.definitionSource!.definitionCandidateCount!(ref) }),
-				...(this.definitionSource?.resolveTarget === undefined
-					? {}
-					: {
-							referenceResolver: (targetPath: string, targetDest?: string) => {
-								const resolution = this.definitionSource!.resolveTarget!(targetPath, targetDest, key);
-								return resolution.ok
-									? { followable: true }
-									: { followable: false, reason: refusalReason(resolution, targetPath) };
-							},
-						}),
-			};
-			const rowDocument = buildRows(model, options);
+			const rowDocument = buildRows(model, this.rowOptions(key));
 			// The page owns the row store; a re-scan replaces it without markup.
 			void panel.webview.postMessage({
 				type: 'document',
@@ -709,19 +701,19 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			await this.postStructureNotice(panel, plan.reason);
 			return;
 		}
-		const descendants =
-			plan.descendants > 0
-				? ` Its ${plan.descendants} descendant${plan.descendants === 1 ? '' : 's'} will also be deleted.`
-				: '';
-		const answer = await vscode.window.showWarningMessage(
-			`Delete "${plan.label}"?${descendants} You can undo with Ctrl+Z.`,
-			{ modal: true },
-			'Delete'
-		);
-		if (answer !== 'Delete') {
+		if (!(await confirmDelete(plan))) {
 			return;
 		}
-		const applied = await applyStructureEdit(document, plan.record);
+		await this.applyStructure(document, plan.record, panel);
+	}
+
+	/** Applies a structural record and reports a refusal in Details. */
+	private async applyStructure(
+		document: vscode.TextDocument,
+		record: StructureEditRecord,
+		panel: vscode.WebviewPanel
+	): Promise<void> {
+		const applied = await applyStructureEdit(document, record);
 		if (!applied.ok) {
 			await this.postStructureNotice(panel, applied.reason);
 		}
@@ -743,40 +735,47 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			await this.postStructureNotice(panel, initial.reason);
 			return;
 		}
-		let name = initial.record.duplicateName;
-		if (name !== undefined) {
-			const chosen = await vscode.window.showInputBox({
-				prompt: 'New short name for the duplicate',
-				value: name,
-				validateInput: (value) => duplicateNameRefusal(scanEcucValues(document.getText()), nodeId, value),
-			});
-			if (chosen === undefined) {
-				return;
-			}
-			name = chosen.trim();
+		const name = await this.duplicateNameFor(document, nodeId, initial.record.duplicateName);
+		if (name === null) {
+			return;
 		}
+		await this.confirmDuplicate(document, panel, nodeId, name);
+	}
+
+	/** The chosen duplicate name, `undefined` for a parameter, or `null` when cancelled. */
+	private async duplicateNameFor(
+		document: vscode.TextDocument,
+		nodeId: string,
+		suggested: string | undefined
+	): Promise<string | null | undefined> {
+		if (suggested === undefined) {
+			return undefined;
+		}
+		const chosen = await vscode.window.showInputBox({
+			prompt: 'New short name for the duplicate',
+			value: suggested,
+			validateInput: (value) => duplicateNameRefusal(scanEcucValues(document.getText()), nodeId, value),
+		});
+		return chosen === undefined ? null : chosen.trim();
+	}
+
+	/** Re-plans against the current bytes, confirms the modal, then writes. */
+	private async confirmDuplicate(
+		document: vscode.TextDocument,
+		panel: vscode.WebviewPanel,
+		nodeId: string,
+		name: string | undefined
+	): Promise<void> {
 		const text = document.getText();
 		const plan = planDuplicate(scanEcucValues(text), text, nodeId, name);
 		if (!plan.ok) {
 			await this.postStructureNotice(panel, plan.reason);
 			return;
 		}
-		const message =
-			name === undefined
-				? `Duplicate parameter "${plan.label}"?`
-				: `Duplicate "${plan.label}" as "${name}"?`;
-		const answer = await vscode.window.showWarningMessage(
-			`${message} You can undo with Ctrl+Z.`,
-			{ modal: true },
-			'Duplicate'
-		);
-		if (answer !== 'Duplicate') {
+		if (!(await confirmDuplicateWrite(plan.label, name))) {
 			return;
 		}
-		const applied = await applyStructureEdit(document, plan.record);
-		if (!applied.ok) {
-			await this.postStructureNotice(panel, applied.reason);
-		}
+		await this.applyStructure(document, plan.record, panel);
 	}
 
 	private async postStructureNotice(panel: vscode.WebviewPanel, message: string): Promise<void> {
@@ -817,21 +816,30 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		const plan =
 			field === 'value' ? buildEdit(model, text, nodeId, value) : buildFieldEdit(model, text, nodeId, field, value);
 		if (!plan.ok) {
-			await panel.webview.postMessage({ type: 'notice', message: plan.reason, kind: 'warn', inline: true, scope: 'details' });
+			await postInlineNotice(panel, plan.reason);
 			return;
 		}
 		const previous = this.selections.get(key);
-		if (plan.nextNodeId !== undefined && plan.nextNodeId !== nodeId) {
-			this.selections.set(key, plan.nextNodeId);
-		}
+		this.rememberPredictedId(key, nodeId, plan.nextNodeId);
 		const applied = await applyEdit(document, plan.record);
 		if (!applied.ok) {
-			if (previous === undefined) {
-				this.selections.delete(key);
-			} else {
-				this.selections.set(key, previous);
-			}
-			await panel.webview.postMessage({ type: 'notice', message: applied.reason, kind: 'warn', inline: true, scope: 'details' });
+			this.restoreSelection(key, previous);
+			await postInlineNotice(panel, applied.reason);
+		}
+	}
+
+	/** Stores the post-write id a rename predicts, so the panel stays on the node. */
+	private rememberPredictedId(key: string, nodeId: string, nextNodeId: string | undefined): void {
+		if (nextNodeId !== undefined && nextNodeId !== nodeId) {
+			this.selections.set(key, nextNodeId);
+		}
+	}
+
+	private restoreSelection(key: string, previous: string | undefined): void {
+		if (previous === undefined) {
+			this.selections.delete(key);
+		} else {
+			this.selections.set(key, previous);
 		}
 	}
 }
@@ -918,4 +926,85 @@ function refusalReason(resolution: Extract<ElementResolution, { ok: false }>, ra
 		case 'dest-mismatch':
 			return `Target "${rawPath}" is a ${resolution.actualKind}, not the type the reference expects.`;
 	}
+}
+
+/** The condition entries a store holds, or none when the provider runs without one. */
+function storedConditionEntries(store?: ConditionValueStore): ConditionEntry[] {
+	return store?.load() ?? [];
+}
+
+/** The explicit extension root, the packaged one, or the built output's parent. */
+function resolvedExtensionUri(explicit?: vscode.Uri): vscode.Uri {
+	return explicit ?? packagedExtensionUri() ?? vscode.Uri.file(path.join(__dirname, '..'));
+}
+
+function packagedExtensionUri(): vscode.Uri | undefined {
+	return vscode.extensions.getExtension('deviousprophet.vscode-arxml-scope')?.extensionUri;
+}
+
+type ResolveTarget = NonNullable<DefinitionSource['resolveTarget']>;
+
+/** The optional definition count/resolver options, for a provider with an index. */
+function definitionExtras(source: DefinitionSource, key: string): Partial<RowBuildOptions> {
+	const candidateCount = source.definitionCandidateCount?.bind(source);
+	const resolveTarget = source.resolveTarget?.bind(source);
+	return { ...candidateCountOption(candidateCount), ...resolverOption(resolveTarget, key) };
+}
+
+function candidateCountOption(candidateCount: ((definitionRef: string) => number) | undefined): Partial<RowBuildOptions> {
+	if (candidateCount === undefined) {
+		return {};
+	}
+	return { ambiguousDefinitions: candidateCount };
+}
+
+function resolverOption(resolveTarget: ResolveTarget | undefined, key: string): Partial<RowBuildOptions> {
+	if (resolveTarget === undefined) {
+		return {};
+	}
+	return {
+		referenceResolver: (targetPath, targetDest) =>
+			followableTarget(resolveTarget(targetPath, targetDest, key), targetPath),
+	};
+}
+
+function followableTarget(
+	resolution: ElementResolution,
+	targetPath: string
+): { followable: boolean; reason?: string } {
+	if (resolution.ok) {
+		return { followable: true };
+	}
+	return { followable: false, reason: refusalReason(resolution, targetPath) };
+}
+
+/** A Details notice shown beside the edited field rather than only in the toolbar. */
+async function postInlineNotice(panel: vscode.WebviewPanel, message: string): Promise<void> {
+	await panel.webview.postMessage({ type: 'notice', message, kind: 'warn', inline: true, scope: 'details' });
+}
+
+async function confirmDelete(plan: { label: string; descendants: number }): Promise<boolean> {
+	const answer = await vscode.window.showWarningMessage(
+		`Delete "${plan.label}"?${deletedDescendants(plan.descendants)} You can undo with Ctrl+Z.`,
+		{ modal: true },
+		'Delete'
+	);
+	return answer === 'Delete';
+}
+
+function deletedDescendants(count: number): string {
+	if (count === 0) {
+		return '';
+	}
+	return ` Its ${count} descendant${count === 1 ? '' : 's'} will also be deleted.`;
+}
+
+async function confirmDuplicateWrite(label: string, name: string | undefined): Promise<boolean> {
+	const message = name === undefined ? `Duplicate parameter "${label}"?` : `Duplicate "${label}" as "${name}"?`;
+	const answer = await vscode.window.showWarningMessage(
+		`${message} You can undo with Ctrl+Z.`,
+		{ modal: true },
+		'Duplicate'
+	);
+	return answer === 'Duplicate';
 }

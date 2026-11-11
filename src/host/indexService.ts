@@ -50,6 +50,20 @@ export function isIndexableUri(uri: vscode.Uri): boolean {
 	return !compileExcludes(indexSettings().exclude)(relative);
 }
 
+/** True when this file should be represented in the index at all. */
+function indexesFile(uri: vscode.Uri, settings: IndexSettings): boolean {
+	return settings.enabled && isIndexableUri(uri);
+}
+
+/** True when a discovery hit is outside a workspace folder or excluded by settings. */
+function isExcludedUri(uri: vscode.Uri, exclude: (relative: string) => boolean): boolean {
+	if (vscode.workspace.getWorkspaceFolder(uri) === undefined) {
+		return true;
+	}
+	const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+	return exclude(relative);
+}
+
 /** `N file` / `N files`; one owner for the status bar and its tooltip. */
 function fileCountText(count: number): string {
 	return `${count} file${count === 1 ? '' : 's'}`;
@@ -247,49 +261,91 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 	/** Reindexes exactly one file; used by the watcher and the rebuild drain. */
 	async reindexFile(uri: vscode.Uri, publish = true): Promise<void> {
 		const settings = indexSettings();
-		if (!settings.enabled || !isIndexableUri(uri)) {
-			if (this.index.remove(uri.toString()) && publish) {
-				this.publish();
-			}
+		if (!indexesFile(uri, settings)) {
+			this.dropUnindexed(uri, publish);
 			return;
 		}
 		const readGeneration = this.guard.beginRead();
+		let completed = false;
 		try {
 			const file = await this.reader(uri, settings.maxBytes);
-			if (this.guard.isStale(readGeneration)) {
-				// A rebuild started while this read was in flight; the rebuild or its
-				// late-drain pass must re-read the file instead of accepting this copy.
-				this.dirtyDuringBuild.add(uri.toString());
-				if (!this.building) {
-					void this.reindexFile(uri, publish);
-				}
-				return;
-			}
-			if (file === undefined) {
-				this.skipped.add(uri.toString());
-				this.index.remove(uri.toString());
-			} else {
-				this.skipped.delete(uri.toString());
-				this.index.upsert(file);
-			}
+			completed = this.applyReadResult(uri, file, readGeneration, publish);
 		} catch (error) {
-			if (this.guard.isStale(readGeneration)) {
-				this.dirtyDuringBuild.add(uri.toString());
-				if (!this.building) {
-					void this.reindexFile(uri, publish);
-				}
-				return;
-			}
-			// A deleted file is not a skipped file: remove it and keep the status quiet.
-			// Any other read failure is reported as skipped.
-			const code = (error as NodeJS.ErrnoException).code;
-			if (code === 'ENOENT') {
-				this.skipped.delete(uri.toString());
-			} else {
-				this.skipped.add(uri.toString());
-			}
-			this.index.remove(uri.toString());
+			completed = this.applyReadFailure(uri, error, readGeneration, publish);
 		}
+		if (completed) {
+			this.finishReindex(publish);
+		}
+	}
+
+	/** Not indexable: drop any stale entry and publish only when it existed. */
+	private dropUnindexed(uri: vscode.Uri, publish: boolean): void {
+		if (this.index.remove(uri.toString()) && publish) {
+			this.publish();
+		}
+	}
+
+	/** Stores a fresh read; `false` when a rebuild superseded it. */
+	private applyReadResult(
+		uri: vscode.Uri,
+		file: FileIndex | undefined,
+		generation: number,
+		publish: boolean
+	): boolean {
+		if (this.guard.isStale(generation)) {
+			this.deferStaleRead(uri, publish);
+			return false;
+		}
+		this.storeReadResult(uri, file);
+		return true;
+	}
+
+	/** Records a fresh read failure; `false` when a rebuild superseded it. */
+	private applyReadFailure(uri: vscode.Uri, error: unknown, generation: number, publish: boolean): boolean {
+		if (this.guard.isStale(generation)) {
+			this.deferStaleRead(uri, publish);
+			return false;
+		}
+		this.recordReadFailure(uri, error);
+		return true;
+	}
+
+	/**
+	 * A rebuild started while this read was in flight; the rebuild or its
+	 * late-drain pass must re-read the file instead of accepting this copy.
+	 */
+	private deferStaleRead(uri: vscode.Uri, publish: boolean): void {
+		this.dirtyDuringBuild.add(uri.toString());
+		if (!this.building) {
+			void this.reindexFile(uri, publish);
+		}
+	}
+
+	private storeReadResult(uri: vscode.Uri, file: FileIndex | undefined): void {
+		if (file === undefined) {
+			this.skipped.add(uri.toString());
+			this.index.remove(uri.toString());
+		} else {
+			this.skipped.delete(uri.toString());
+			this.index.upsert(file);
+		}
+	}
+
+	/**
+	 * A deleted file is not a skipped file: remove it and keep the status quiet.
+	 * Any other read failure is reported as skipped.
+	 */
+	private recordReadFailure(uri: vscode.Uri, error: unknown): void {
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code === 'ENOENT') {
+			this.skipped.delete(uri.toString());
+		} else {
+			this.skipped.add(uri.toString());
+		}
+		this.index.remove(uri.toString());
+	}
+
+	private finishReindex(publish: boolean): void {
 		this.lastIndexedAt = Date.now();
 		if (publish) {
 			this.publish();
@@ -315,73 +371,110 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 	private async runRebuild(): Promise<void> {
 		const settings = indexSettings();
 		if (!settings.enabled) {
-			this.index.clear();
-			this.skipped.clear();
-			this.excludedCount = 0;
-			this.building = false;
-			this.publish();
+			this.clearDisabledIndex();
 			return;
 		}
-		this.building = true;
-		this.updateStatus();
-		this.guard.beginRebuild();
+		this.beginBuilding();
 		try {
-			const uris = await vscode.workspace.findFiles('**/*.arxml');
-			uris.sort((left, right) => left.toString().localeCompare(right.toString()));
-			const files: FileIndex[] = [];
-			const skipped = new Set<string>();
-			const exclude = compileExcludes(settings.exclude);
-			let excluded = 0;
-			for (const uri of uris) {
-				const folder = vscode.workspace.getWorkspaceFolder(uri);
-				if (folder === undefined) {
-					excluded++;
-					continue;
-				}
-				const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
-				if (exclude(relative)) {
-					excluded++;
-					continue;
-				}
-				try {
-					const file = await this.reader(uri, settings.maxBytes);
-					if (file === undefined) {
-						skipped.add(uri.toString());
-					} else {
-						files.push(file);
-					}
-				} catch {
-					skipped.add(uri.toString());
-				}
-			}
-			this.excludedCount = excluded;
-			this.index.replaceAll(files);
-			this.skipped.clear();
-			for (const uri of skipped) {
-				this.skipped.add(uri);
-			}
-			// A save that landed while the rebuild was reading must not be lost to the
-			// `replaceAll` above. Apply those files on top of the fresh snapshot.
-			const dirty = [...this.dirtyDuringBuild];
-			this.dirtyDuringBuild.clear();
-			for (const key of dirty) {
-				await this.reindexFile(vscode.Uri.parse(key), false);
-			}
+			this.applyRebuildSnapshot(await this.collectRebuildFiles(settings));
+			await this.drainDirtyDuringBuild(false);
 		} catch {
 			// Discovery or a surprising read failure keeps the previous index. The
 			// finally block still clears the busy state and publishes the status.
 		} finally {
-			// A read that began before this rebuild can finish after the drain. Once the
-			// building flag is down, reindex those files again so the newest content wins.
-			const late = [...this.dirtyDuringBuild];
-			this.dirtyDuringBuild.clear();
-			this.building = false;
-			for (const key of late) {
-				void this.reindexFile(vscode.Uri.parse(key), true);
-			}
-			this.lastIndexedAt = Date.now();
-			this.publish();
+			this.finishBuilding();
 		}
+	}
+
+	/** The disabled index is empty and publishes that state immediately. */
+	private clearDisabledIndex(): void {
+		this.index.clear();
+		this.skipped.clear();
+		this.excludedCount = 0;
+		this.building = false;
+		this.publish();
+	}
+
+	private beginBuilding(): void {
+		this.building = true;
+		this.updateStatus();
+		this.guard.beginRebuild();
+	}
+
+	/** Discovers and reads every indexable file without touching the live index. */
+	private async collectRebuildFiles(
+		settings: IndexSettings
+	): Promise<{ files: FileIndex[]; skipped: Set<string>; excluded: number }> {
+		const uris = await vscode.workspace.findFiles('**/*.arxml');
+		uris.sort((left, right) => left.toString().localeCompare(right.toString()));
+		const files: FileIndex[] = [];
+		const skipped = new Set<string>();
+		const exclude = compileExcludes(settings.exclude);
+		let excluded = 0;
+		for (const uri of uris) {
+			if (isExcludedUri(uri, exclude)) {
+				excluded++;
+				continue;
+			}
+			await this.readRebuildFile(uri, settings.maxBytes, skipped, files);
+		}
+		return { files, skipped, excluded };
+	}
+
+	/** Reads one discovery hit; an unreadable file is skipped, never fatal. */
+	private async readRebuildFile(
+		uri: vscode.Uri,
+		maxBytes: number,
+		skipped: Set<string>,
+		files: FileIndex[]
+	): Promise<void> {
+		try {
+			const file = await this.reader(uri, maxBytes);
+			if (file === undefined) {
+				skipped.add(uri.toString());
+			} else {
+				files.push(file);
+			}
+		} catch {
+			skipped.add(uri.toString());
+		}
+	}
+
+	/** Swaps in the collected snapshot, then reports exactly its skipped files. */
+	private applyRebuildSnapshot(snapshot: { files: FileIndex[]; skipped: Set<string>; excluded: number }): void {
+		this.excludedCount = snapshot.excluded;
+		this.index.replaceAll(snapshot.files);
+		this.skipped.clear();
+		for (const uri of snapshot.skipped) {
+			this.skipped.add(uri);
+		}
+	}
+
+	/**
+	 * Saves that landed while the rebuild was reading must not be lost to
+	 * `replaceAll`; apply those files on top of the fresh snapshot.
+	 */
+	private async drainDirtyDuringBuild(publish: boolean): Promise<void> {
+		const dirty = [...this.dirtyDuringBuild];
+		this.dirtyDuringBuild.clear();
+		for (const key of dirty) {
+			await this.reindexFile(vscode.Uri.parse(key), publish);
+		}
+	}
+
+	/**
+	 * A read that began before this rebuild can finish after the drain. Once the
+	 * building flag is down, reindex those files again so the newest content wins.
+	 */
+	private finishBuilding(): void {
+		const late = [...this.dirtyDuringBuild];
+		this.dirtyDuringBuild.clear();
+		this.building = false;
+		for (const key of late) {
+			void this.reindexFile(vscode.Uri.parse(key), true);
+		}
+		this.lastIndexedAt = Date.now();
+		this.publish();
 	}
 
 	private startWatcher(): void {
@@ -420,20 +513,34 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 
 	private remove(uri: vscode.Uri): void {
 		const key = uri.toString();
+		this.markDirtyDuringBuild(key);
+		this.clearPendingTimer(key);
+		if (this.discardIndexedFile(key)) {
+			this.lastIndexedAt = Date.now();
+			this.publish();
+		}
+	}
+
+	/** The index/watch bookkeeping for one key, without status effects. */
+	private markDirtyDuringBuild(key: string): void {
 		if (this.building) {
 			this.dirtyDuringBuild.add(key);
 		}
+	}
+
+	private clearPendingTimer(key: string): void {
 		const timer = this.pending.get(key);
 		if (timer !== undefined) {
 			clearTimeout(timer);
 			this.pending.delete(key);
 		}
+	}
+
+	/** Removes the file from both the index and the skipped list; true when either held it. */
+	private discardIndexedFile(key: string): boolean {
 		const wasSkipped = this.skipped.delete(key);
 		const removed = this.index.remove(key);
-		if (removed || wasSkipped) {
-			this.lastIndexedAt = Date.now();
-			this.publish();
-		}
+		return removed || wasSkipped;
 	}
 
 	private async onConfigurationChanged(): Promise<void> {
@@ -459,44 +566,94 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 	private updateStatus(): void {
 		const settings = indexSettings();
 		const stats = this.index.stats();
-		const noWorkspace = (vscode.workspace.workspaceFolders?.length ?? 0) === 0;
-		if (!settings.enabled || (!this.building && stats.files === 0 && !noWorkspace)) {
+		if (this.shouldHideStatus(settings, stats)) {
 			this.status.hide();
 			this.status.text = '';
 			return;
 		}
 		const mode = crossFileRulesSetting();
-		const modeLabel =
-			mode === 'always'
-				? 'cross-file checks always'
-				: mode === 'never'
-					? 'cross-file checks off'
-					: stats.definitions === 0
-						? 'cross-file checks off (no project)'
-						: undefined;
-		this.status.text = statusBarText(stats, this.building, modeLabel);
-		const lines = [
-			`${fileCountText(stats.files)} indexed`,
-			`${stats.elements} elements, ${stats.references} references, ${stats.definitions} definitions`,
-			`${stats.packages} packages`,
-			`Cross-file checks: ${mode === 'always' ? 'always' : mode === 'never' ? 'never' : stats.definitions === 0 ? 'off (no project)' : 'auto'}`,
-		];
-		if (this.skipped.size > 0) {
-			const names = [...this.skipped].map(fileNameOf);
-			const shown = names.slice(0, 5).join(', ');
-			const more = names.length > 5 ? ` and ${names.length - 5} more` : '';
-			lines.push(`Skipped: ${shown}${more} (size limit, encoding or unreadable)`);
+		this.status.text = statusBarText(stats, this.building, crossFileModeLabel(mode, stats.definitions));
+		this.status.tooltip = this.statusTooltip(stats, mode);
+		this.status.show();
+	}
+
+	/** Hidden while disabled, and on an empty non-workspace window. */
+	private shouldHideStatus(settings: IndexSettings, stats: IndexStats): boolean {
+		if (!settings.enabled) {
+			return true;
 		}
+		return !this.building && stats.files === 0 && workspaceFoldersExist();
+	}
+
+	private statusTooltip(stats: IndexStats, mode: ReturnType<typeof crossFileRulesSetting>): string {
+		const lines = baseStatusLines(stats, mode);
+		this.appendSkippedLine(lines);
 		if (this.excludedCount > 0) {
-			lines.push(`${this.excludedCount} file${this.excludedCount === 1 ? '' : 's'} excluded by arxmlScope.index.exclude`);
+			lines.push(excludedBySettingText(this.excludedCount));
 		}
+		this.appendUpdatedLine(lines);
+		lines.push('Click to cycle cross-file checks; run ARXML Scope: Rebuild Workspace Index to rebuild.');
+		return lines.join('\n');
+	}
+
+	private appendSkippedLine(lines: string[]): void {
+		if (this.skipped.size === 0) {
+			return;
+		}
+		lines.push(skippedText([...this.skipped].map(fileNameOf)));
+	}
+
+	private appendUpdatedLine(lines: string[]): void {
 		if (this.lastIndexedAt !== undefined) {
 			lines.push(`Updated ${new Date(this.lastIndexedAt).toLocaleTimeString()}`);
 		}
-		lines.push('Click to cycle cross-file checks; run ARXML Scope: Rebuild Workspace Index to rebuild.');
-		this.status.tooltip = lines.join('\n');
-		this.status.show();
 	}
+}
+
+function workspaceFoldersExist(): boolean {
+	return (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
+}
+
+/** The short cross-file label shown after the indexed file count. */
+function crossFileModeLabel(mode: ReturnType<typeof crossFileRulesSetting>, definitions: number): string | undefined {
+	if (mode === 'always') {
+		return 'cross-file checks always';
+	}
+	if (mode === 'never') {
+		return 'cross-file checks off';
+	}
+	return definitions === 0 ? 'cross-file checks off (no project)' : undefined;
+}
+
+/** The tooltip's cross-file sentence, which spells out the resolved mode. */
+function crossFileSummary(mode: ReturnType<typeof crossFileRulesSetting>, definitions: number): string {
+	if (mode === 'always') {
+		return 'always';
+	}
+	if (mode === 'never') {
+		return 'never';
+	}
+	return definitions === 0 ? 'off (no project)' : 'auto';
+}
+
+function baseStatusLines(stats: IndexStats, mode: ReturnType<typeof crossFileRulesSetting>): string[] {
+	return [
+		`${fileCountText(stats.files)} indexed`,
+		`${stats.elements} elements, ${stats.references} references, ${stats.definitions} definitions`,
+		`${stats.packages} packages`,
+		`Cross-file checks: ${crossFileSummary(mode, stats.definitions)}`,
+	];
+}
+
+/** `Skipped: …` with the first five names and a count for the rest. */
+function skippedText(names: string[]): string {
+	const shown = names.slice(0, 5).join(', ');
+	const more = names.length > 5 ? ` and ${names.length - 5} more` : '';
+	return `Skipped: ${shown}${more} (size limit, encoding or unreadable)`;
+}
+
+function excludedBySettingText(count: number): string {
+	return `${count} file${count === 1 ? '' : 's'} excluded by arxmlScope.index.exclude`;
 }
 
 /** The last path segment of a URI, for the skipped-file tooltip. */

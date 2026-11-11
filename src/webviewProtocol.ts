@@ -63,14 +63,11 @@ export function editorMessageType(message: unknown): string | undefined {
 	return typeof type === 'string' ? type : undefined;
 }
 
+/** The message types a host → editor page payload may carry. */
+const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set(['document', 'conditions', 'select', 'notice', 'error']);
+
 /** A host message with the editor protocol's shape; the page ignores anything else. */
 export function isEditorProviderMessage(message: unknown): message is EditorProviderToWebview {
 	const type = editorMessageType(message);
-	return (
-		type === 'document' ||
-		type === 'conditions' ||
-		type === 'select' ||
-		type === 'notice' ||
-		type === 'error'
-	);
+	return type !== undefined && PROVIDER_MESSAGE_TYPES.has(type);
 }

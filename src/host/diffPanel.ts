@@ -15,6 +15,7 @@ import * as vscode from 'vscode';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { FileLabel, RangeLookup, compareTitle } from '../core/diff/diffModel';
+import type { DiffCell } from '../core/diff/diffModel';
 import { DiffSession } from '../core/diff/diffSession';
 import type { DiffPreparedSide } from '../core/diff/diffSession';
 import { diffShell } from './webviewShell';
@@ -64,6 +65,45 @@ function prepareSide(document: vscode.TextDocument): PreparedSide {
 	return { document, version: document.version, ...rowsFor(document) };
 }
 
+/** The first refusal reason for either side, or `undefined` when both are ECUC. */
+function firstGateReason(
+	left: vscode.TextDocument,
+	leftUri: vscode.Uri,
+	right: vscode.TextDocument,
+	rightUri: vscode.Uri
+): string | undefined {
+	return gateReason(left.getText(), leftUri.fsPath) ?? gateReason(right.getText(), rightUri.fsPath);
+}
+
+function shellHtml(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): string {
+	return diffShell({
+		cspSource: panel.webview.cspSource || 'https://webview.test',
+		scriptUri: webviewAsset(panel, context, 'diffViewer.js', 'https://webview.test/diffViewer.js'),
+		styleUri: webviewAsset(panel, context, 'diffViewer.css', 'https://webview.test/diffViewer.css'),
+		nonce: randomBytes(16).toString('base64'),
+	});
+}
+
+function webviewAsset(
+	panel: vscode.WebviewPanel,
+	context: vscode.ExtensionContext,
+	file: string,
+	fallback: string
+): string {
+	return typeof panel.webview.asWebviewUri === 'function'
+		? panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'dist', file)).toString()
+		: fallback;
+}
+
+/** True once the panel is disposed or a newer refresh superseded this one. */
+function isStale(disposed: boolean, generation: number, currentGeneration: number): boolean {
+	return disposed || generation !== currentGeneration;
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 export class DiffPanel {
 	public static readonly viewType = 'vscode-arxml-scope.diff';
 
@@ -84,8 +124,7 @@ export class DiffPanel {
 		if (!right) {
 			return false;
 		}
-		const reason =
-			gateReason(left.getText(), leftUri.fsPath) ?? gateReason(right.getText(), rightUri.fsPath);
+		const reason = firstGateReason(left, leftUri, right, rightUri);
 		if (reason) {
 			void vscode.window.showWarningMessage(reason);
 			return false;
@@ -115,22 +154,7 @@ export class DiffPanel {
 		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 		let documentGeneration = 0;
 
-		panel.webview.html = diffShell({
-			cspSource: panel.webview.cspSource || 'https://webview.test',
-			scriptUri:
-				typeof panel.webview.asWebviewUri === 'function'
-					? panel.webview
-							.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'dist', 'diffViewer.js'))
-							.toString()
-					: 'https://webview.test/diffViewer.js',
-			styleUri:
-				typeof panel.webview.asWebviewUri === 'function'
-					? panel.webview
-							.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'dist', 'diffViewer.css'))
-							.toString()
-					: 'https://webview.test/diffViewer.css',
-			nonce: randomBytes(16).toString('base64'),
-		});
+		panel.webview.html = shellHtml(panel, context);
 
 		const boot = watchBoot(() => {
 			void vscode.window.showWarningMessage(
@@ -145,39 +169,98 @@ export class DiffPanel {
 			await panel.webview.postMessage({ type: 'error', message });
 		};
 
+		const clearRefreshTimer = (): void => {
+			if (refreshTimer !== undefined) {
+				clearTimeout(refreshTimer);
+				refreshTimer = undefined;
+			}
+		};
+
+		const refreshDocuments = async (generation: number): Promise<void> => {
+			const nextLeft = await vscode.workspace.openTextDocument(leftUri);
+			const nextRight = await vscode.workspace.openTextDocument(rightUri);
+			if (isStale(disposed, generation, documentGeneration)) {
+				return;
+			}
+			const why = firstGateReason(nextLeft, leftUri, nextRight, rightUri);
+			if (why) {
+				// Keep the last good document: the page still shows a useful
+				// comparison and the banner explains why it stopped updating.
+				await postError(why);
+				return;
+			}
+			preparedLeft = prepareSide(nextLeft);
+			preparedRight = prepareSide(nextRight);
+			session = new DiffSession(leftLabel, rightLabel, preparedLeft, preparedRight);
+			current = session.document(semantic).document;
+			if (isStale(disposed, generation, documentGeneration)) {
+				return;
+			}
+			await panel.webview.postMessage({ type: 'document', document: current, semantic });
+		};
+
+		const reportRefreshFailure = async (generation: number, error: unknown): Promise<void> => {
+			if (isStale(disposed, generation, documentGeneration)) {
+				return;
+			}
+			await postError(`The comparison could not be refreshed: ${errorMessage(error)}`);
+		};
+
 		const refreshNow = async (): Promise<void> => {
 			const generation = ++documentGeneration;
 			try {
-				const nextLeft = await vscode.workspace.openTextDocument(leftUri);
-				const nextRight = await vscode.workspace.openTextDocument(rightUri);
-				if (disposed || generation !== documentGeneration) {
-					return;
-				}
-				const why =
-					gateReason(nextLeft.getText(), leftUri.fsPath) ??
-					gateReason(nextRight.getText(), rightUri.fsPath);
-				if (why) {
-					// Keep the last good document: the page still shows a useful
-					// comparison and the banner explains why it stopped updating.
-					await postError(why);
-					return;
-				}
-				preparedLeft = prepareSide(nextLeft);
-				preparedRight = prepareSide(nextRight);
-				session = new DiffSession(leftLabel, rightLabel, preparedLeft, preparedRight);
-				current = session.document(semantic).document;
-				if (disposed || generation !== documentGeneration) {
-					return;
-				}
-				await panel.webview.postMessage({ type: 'document', document: current, semantic });
+				await refreshDocuments(generation);
 			} catch (error) {
-				if (disposed || generation !== documentGeneration) {
-					return;
-				}
-				await postError(
-					`The comparison could not be refreshed: ${error instanceof Error ? error.message : String(error)}`
-				);
+				await reportRefreshFailure(generation, error);
 			}
+		};
+
+		const postMatchModeState = async (value: boolean): Promise<void> => {
+			await panel.webview.postMessage({ type: 'matchModeState', semantic: value });
+		};
+
+		const preparedSidesStale = (
+			liveLeft: vscode.TextDocument,
+			liveRight: vscode.TextDocument
+		): boolean => {
+			return liveLeft.version !== preparedLeft.version || liveRight.version !== preparedRight.version;
+		};
+
+		const fullRefresh = async (): Promise<void> => {
+			clearRefreshTimer();
+			await refreshNow();
+		};
+
+		const switchMatchMode = async (next: boolean, generation: number): Promise<void> => {
+			const liveLeft = await vscode.workspace.openTextDocument(leftUri);
+			const liveRight = await vscode.workspace.openTextDocument(rightUri);
+			if (isStale(disposed, generation, documentGeneration)) {
+				return;
+			}
+			if (preparedSidesStale(liveLeft, liveRight)) {
+				await fullRefresh();
+				return;
+			}
+			const result = session.document(next);
+			current = result.document;
+			if (result.changed) {
+				await panel.webview.postMessage({ type: 'document', document: current, semantic });
+			} else {
+				await postMatchModeState(semantic);
+			}
+		};
+
+		const restoreMatchMode = async (
+			previous: boolean,
+			generation: number,
+			error: unknown
+		): Promise<void> => {
+			if (isStale(disposed, generation, documentGeneration)) {
+				return;
+			}
+			semantic = previous;
+			await postMatchModeState(previous);
+			await postError(`The comparison mode could not be switched: ${errorMessage(error)}`);
 		};
 
 		/**
@@ -191,42 +274,16 @@ export class DiffPanel {
 			}
 			if (semantic === next) {
 				// A duplicate request still clears the page's pending state.
-				await panel.webview.postMessage({ type: 'matchModeState', semantic });
+				await postMatchModeState(semantic);
 				return;
 			}
 			const previous = semantic;
 			semantic = next;
 			const generation = ++documentGeneration;
 			try {
-				const liveLeft = await vscode.workspace.openTextDocument(leftUri);
-				const liveRight = await vscode.workspace.openTextDocument(rightUri);
-				if (disposed || generation !== documentGeneration) {
-					return;
-				}
-				if (liveLeft.version !== preparedLeft.version || liveRight.version !== preparedRight.version) {
-					if (refreshTimer !== undefined) {
-						clearTimeout(refreshTimer);
-						refreshTimer = undefined;
-					}
-					await refreshNow();
-					return;
-				}
-				const result = session.document(next);
-				current = result.document;
-				if (result.changed) {
-					await panel.webview.postMessage({ type: 'document', document: current, semantic });
-				} else {
-					await panel.webview.postMessage({ type: 'matchModeState', semantic });
-				}
+				await switchMatchMode(next, generation);
 			} catch (error) {
-				if (disposed || generation !== documentGeneration) {
-					return;
-				}
-				semantic = previous;
-				await panel.webview.postMessage({ type: 'matchModeState', semantic: previous });
-				await postError(
-					`The comparison mode could not be switched: ${error instanceof Error ? error.message : String(error)}`
-				);
+				await restoreMatchMode(previous, generation, error);
 			}
 		};
 
@@ -240,28 +297,62 @@ export class DiffPanel {
 			}, REFRESH_DEBOUNCE_MS);
 		};
 
-		const reveal = async (side: 'left' | 'right', key: string): Promise<void> => {
+		const cellForReveal = (side: 'left' | 'right', key: string): DiffCell | undefined => {
 			const row = current.rows.find((candidate) => candidate.key === key);
-			const cell = row ? (side === 'left' ? row.left : row.right) : undefined;
+			if (row === undefined) {
+				return undefined;
+			}
+			return side === 'left' ? row.left : row.right;
+		};
+
+		const revealCell = async (side: 'left' | 'right', range: DiffCell['range']): Promise<void> => {
+			const uri = side === 'left' ? leftUri : rightUri;
+			const document = await vscode.workspace.openTextDocument(uri);
+			if (disposed) {
+				return;
+			}
+			// `beside` is forced: the diff tab must survive even when the user's
+			// revealMode is `replace`.
+			await revealRangeInTextEditor(document, range, {
+				viewColumn: panel.viewColumn,
+				mode: 'beside',
+			});
+		};
+
+		const reveal = async (side: 'left' | 'right', key: string): Promise<void> => {
+			const cell = cellForReveal(side, key);
 			if (!cell) {
 				return;
 			}
 			try {
-				const uri = side === 'left' ? leftUri : rightUri;
-				const document = await vscode.workspace.openTextDocument(uri);
-				if (disposed) {
-					return;
-				}
-				// `beside` is forced: the diff tab must survive even when the user's
-				// revealMode is `replace`.
-				await revealRangeInTextEditor(document, cell.range, {
-					viewColumn: panel.viewColumn,
-					mode: 'beside',
-				});
+				await revealCell(side, cell.range);
 			} catch (error) {
-				await postError(
-					`Could not open the ${side} source: ${error instanceof Error ? error.message : String(error)}`
-				);
+				await postError(`Could not open the ${side} source: ${errorMessage(error)}`);
+			}
+		};
+
+		const onReady = (): void => {
+			boot.settle();
+			void panel.webview.postMessage({ type: 'document', document: current, semantic });
+		};
+
+		const onMatchMode = (value: unknown): void => {
+			if (typeof value === 'boolean') {
+				void applyMatchMode(value);
+			}
+		};
+
+		const handleMessage = (message: DiffWebviewToProvider): void => {
+			if (message.type === 'ready') {
+				onReady();
+				return;
+			}
+			if (message.type === 'matchMode') {
+				onMatchMode(message.semantic);
+				return;
+			}
+			if (message.type === 'reveal') {
+				void reveal(message.side, message.key);
 			}
 		};
 
@@ -279,31 +370,14 @@ export class DiffPanel {
 				if (!diffMessageType(raw)) {
 					return;
 				}
-				const message = raw as DiffWebviewToProvider;
-				if (message.type === 'ready') {
-					boot.settle();
-					void panel.webview.postMessage({ type: 'document', document: current, semantic });
-					return;
-				}
-				if (message.type === 'matchMode') {
-					if (typeof message.semantic === 'boolean') {
-						void applyMatchMode(message.semantic);
-					}
-					return;
-				}
-				if (message.type === 'reveal') {
-					void reveal(message.side, message.key);
-				}
+				handleMessage(raw as DiffWebviewToProvider);
 			})
 		);
 
 		panel.onDidDispose(() => {
 			disposed = true;
 			boot.dispose();
-			if (refreshTimer !== undefined) {
-				clearTimeout(refreshTimer);
-				refreshTimer = undefined;
-			}
+			clearRefreshTimer();
 			for (const disposable of disposables) {
 				disposable.dispose();
 			}

@@ -39,55 +39,108 @@ const VALUE_LIMIT = 200;
  * (unknown) rather than as the known empty string.
  */
 export function parseConditionEntries(input: unknown, limit = ENTRY_LIMIT): ParsedConditions {
-	const entries: ConditionEntry[] = [];
-	const values = new Map<string, ConditionValue>();
-	const invalid: string[] = [];
+	const result: ParsedConditions = { entries: [], values: new Map(), invalid: [] };
 	if (!Array.isArray(input)) {
-		return { entries, values, invalid };
+		return result;
 	}
 	const cap = Math.max(0, Math.floor(limit));
 	const positions = new Map<string, number>();
 	for (const item of input) {
-		if (!item || typeof item !== 'object' || Array.isArray(item)) {
+		const candidate = candidateEntry(item);
+		if (candidate === undefined) {
 			continue;
 		}
-		const candidate = item as { name?: unknown; value?: unknown };
-		if (typeof candidate.name !== 'string' || typeof candidate.value !== 'string') {
-			continue;
-		}
-		const name = candidate.name.trim().slice(0, NAME_LIMIT);
-		if (name === '') {
-			continue;
-		}
-		if (!isConditionName(name)) {
-			if (!invalid.includes(name)) {
-				invalid.push(name);
-			}
-			continue;
-		}
-		const value = candidate.value.trim().slice(0, VALUE_LIMIT);
-		const at = positions.get(name);
-		if (at !== undefined) {
-			// Later duplicates replace the value but keep the first position, and the
-			// Map keeps its first insertion position for the same key.
-			entries[at] = { name, value };
-			if (value === '') {
-				values.delete(name);
-			} else {
-				values.set(name, parseConditionValue(value));
-			}
-			continue;
-		}
-		if (entries.length >= cap) {
-			continue;
-		}
-		positions.set(name, entries.length);
-		entries.push({ name, value });
-		if (value !== '') {
-			values.set(name, parseConditionValue(value));
-		}
+		recordEntry(candidate, cap, positions, result);
 	}
-	return { entries, values, invalid };
+	return result;
+}
+
+/** True for a non-array object, the only shape an entry row can have. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** The raw name/value strings of one row; undefined for anything else. */
+function readRawEntry(item: unknown): { name: string; value: string } | undefined {
+	if (!isRecord(item)) {
+		return undefined;
+	}
+	const { name, value } = item;
+	if (typeof name !== 'string' || typeof value !== 'string') {
+		return undefined;
+	}
+	return { name, value };
+}
+
+/** A row trimmed and capped, with an empty name already rejected. */
+function candidateEntry(item: unknown): { name: string; value: string } | undefined {
+	const raw = readRawEntry(item);
+	if (raw === undefined) {
+		return undefined;
+	}
+	const name = raw.name.trim().slice(0, NAME_LIMIT);
+	if (name === '') {
+		return undefined;
+	}
+	return { name, value: raw.value.trim().slice(0, VALUE_LIMIT) };
+}
+
+/** Reports an invalid name once, keeping the first occurrence's position. */
+function addInvalid(invalid: string[], name: string): void {
+	if (!invalid.includes(name)) {
+		invalid.push(name);
+	}
+}
+
+/** A later duplicate replaces the value in place; an empty value means unknown. */
+function replaceEntry(
+	entries: ConditionEntry[],
+	values: Map<string, ConditionValue>,
+	at: number,
+	candidate: { name: string; value: string }
+): void {
+	entries[at] = { name: candidate.name, value: candidate.value };
+	if (candidate.value === '') {
+		values.delete(candidate.name);
+	} else {
+		values.set(candidate.name, parseConditionValue(candidate.value));
+	}
+}
+
+/** Adds a new, in-cap row at the next position. */
+function appendEntry(
+	entries: ConditionEntry[],
+	values: Map<string, ConditionValue>,
+	positions: Map<string, number>,
+	candidate: { name: string; value: string }
+): void {
+	positions.set(candidate.name, entries.length);
+	entries.push({ name: candidate.name, value: candidate.value });
+	if (candidate.value !== '') {
+		values.set(candidate.name, parseConditionValue(candidate.value));
+	}
+}
+
+/** Validates one candidate and records it in `result` (or in `invalid`). */
+function recordEntry(
+	candidate: { name: string; value: string },
+	cap: number,
+	positions: Map<string, number>,
+	result: ParsedConditions
+): void {
+	if (!isConditionName(candidate.name)) {
+		addInvalid(result.invalid, candidate.name);
+		return;
+	}
+	const at = positions.get(candidate.name);
+	if (at !== undefined) {
+		replaceEntry(result.entries, result.values, at, candidate);
+		return;
+	}
+	if (result.entries.length >= cap) {
+		return;
+	}
+	appendEntry(result.entries, result.values, positions, candidate);
 }
 
 /** Persists the normalized entries in the per-workspace memento. */
