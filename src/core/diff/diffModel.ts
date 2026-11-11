@@ -754,10 +754,7 @@ function semanticPass(
 			});
 		}
 		if (context.semanticBudgetHit) {
-			const pairedLeft = new Set(pairs.map((pair) => pair.left));
-			const pairedRight = new Set(pairs.map((pair) => pair.right));
-			const unpaired =
-				bucket.lefts.length - pairedLeft.size + (bucket.rights.length - pairedRight.size);
+			const unpaired = unpairedCount(bucket.lefts, bucket.rights, pairs);
 			context.semanticBudgetSkipped += unpaired;
 			context.semanticSkipped += unpaired;
 		}
@@ -777,9 +774,7 @@ function semanticPass(
 				fallback: true,
 			});
 		}
-		const pairedLeft = new Set(pairs.map((pair) => pair.left));
-		const pairedRight = new Set(pairs.map((pair) => pair.right));
-		const unpaired = bucket.lefts.length - pairedLeft.size + (bucket.rights.length - pairedRight.size);
+		const unpaired = unpairedCount(bucket.lefts, bucket.rights, pairs);
 		context.semanticFallbackSkipped += unpaired;
 		context.semanticSkipped += unpaired;
 	}
@@ -806,6 +801,62 @@ function recordTopTwo(map: Map<TreeRow, number>, second: Map<TreeRow, number>, n
 		map.set(node, value);
 	} else if (value > (second.get(node) ?? 0)) {
 		second.set(node, value);
+	}
+}
+
+/** The subtree/visibility queries shared by both flatten passes. */
+interface VisibleRows {
+	subtreeEnd(index: number): number;
+	hasVisibleDescendant(index: number): boolean;
+}
+
+/** Precomputes the visible prefix so a collapsed subtree check stays O(1). */
+function visibleRows(rows: readonly DiffRow[], visible: readonly boolean[] | undefined): VisibleRows {
+	let prefix: Int32Array | undefined;
+	if (visible) {
+		prefix = new Int32Array(rows.length + 1);
+		for (let i = 0; i < rows.length; i++) {
+			prefix[i + 1] = prefix[i] + (visible[i] ? 1 : 0);
+		}
+	}
+	const subtreeEnd = (index: number): number =>
+		Math.min(rows.length, index + Math.max(0, rows[index].subtreeSize) + 1);
+	const hasVisibleDescendant = (index: number): boolean => {
+		const end = subtreeEnd(index);
+		if (end <= index + 1) {
+			return false;
+		}
+		if (prefix) {
+			return prefix[end] - prefix[index + 1] > 0;
+		}
+		return rows[index].hasChildren;
+	};
+	return { subtreeEnd, hasVisibleDescendant };
+}
+
+/** How many nodes a semantic pass left unpaired on both sides. */
+function unpairedCount<T>(
+	lefts: readonly T[],
+	rights: readonly T[],
+	pairs: readonly { left: T; right: T }[]
+): number {
+	const pairedLeft = new Set(pairs.map((pair) => pair.left));
+	const pairedRight = new Set(pairs.map((pair) => pair.right));
+	return lefts.length - pairedLeft.size + (rights.length - pairedRight.size);
+}
+
+/** Visits every pairing bucket present on both sides, with the shorter length. */
+function forEachCommonGroup<T>(
+	leftGroups: ReadonlyMap<string, readonly T[]>,
+	rightGroups: ReadonlyMap<string, readonly T[]>,
+	each: (leftGroup: readonly T[], rightGroup: readonly T[], common: number) => void
+): void {
+	for (const [key, leftGroup] of leftGroups) {
+		const rightGroup = rightGroups.get(key);
+		if (rightGroup === undefined) {
+			continue;
+		}
+		each(leftGroup, rightGroup, Math.min(leftGroup.length, rightGroup.length));
 	}
 }
 
@@ -892,12 +943,7 @@ function collectSemanticCandidates(
 	const addGroups = (keyOf: (node: SemanticNode) => string, skipEmpty: boolean): void => {
 		const leftGroups = groupBy(lefts, keyOf, skipEmpty);
 		const rightGroups = groupBy(rights, keyOf, skipEmpty);
-		for (const [key, leftGroup] of leftGroups) {
-			const rightGroup = rightGroups.get(key);
-			if (rightGroup === undefined) {
-				continue;
-			}
-			const common = Math.min(leftGroup.length, rightGroup.length);
+		forEachCommonGroup(leftGroups, rightGroups, (leftGroup, rightGroup, common) => {
 			for (let at = 0; at < common; at++) {
 				add(leftGroup[at], rightGroup[at]);
 			}
@@ -905,7 +951,7 @@ function collectSemanticCandidates(
 			for (let at = common; at < leftGroup.length; at++) {
 				add(leftGroup[at], rightGroup[Math.min(at, rightGroup.length - 1)]);
 			}
-		}
+		});
 	};
 
 	addGroups((node) => node.signature, false);
@@ -1071,16 +1117,11 @@ function assignIdenticalChildren(
 	const pairGroups = (keyOf: (node: TreeRow) => string): void => {
 		const leftGroups = groupBy(lefts.filter((node) => !usedLeft.has(node)), keyOf);
 		const rightGroups = groupBy(rights.filter((node) => !usedRight.has(node)), keyOf);
-		for (const [key, leftGroup] of leftGroups) {
-			const rightGroup = rightGroups.get(key);
-			if (rightGroup === undefined) {
-				continue;
-			}
-			const common = Math.min(leftGroup.length, rightGroup.length);
+		forEachCommonGroup(leftGroups, rightGroups, (leftGroup, rightGroup, common) => {
 			for (let at = 0; at < common; at++) {
 				pair(leftGroup[at], rightGroup[at]);
 			}
-		}
+		});
 	};
 
 	pairGroups(substitutedName);
@@ -1818,24 +1859,7 @@ export function flattenDiffDocument(
 			effectiveVisible = next;
 		}
 	}
-	let visiblePrefix: Int32Array | undefined;
-	if (effectiveVisible) {
-		visiblePrefix = new Int32Array(count + 1);
-		for (let i = 0; i < count; i++) {
-			visiblePrefix[i + 1] = visiblePrefix[i] + (effectiveVisible[i] ? 1 : 0);
-		}
-	}
-	const subtreeEnd = (index: number): number => Math.min(count, index + Math.max(0, rows[index].subtreeSize) + 1);
-	const hasVisibleDescendant = (index: number): boolean => {
-		const end = subtreeEnd(index);
-		if (end <= index + 1) {
-			return false;
-		}
-		if (visiblePrefix) {
-			return visiblePrefix[end] - visiblePrefix[index + 1] > 0;
-		}
-		return rows[index].hasChildren;
-	};
+	const { subtreeEnd, hasVisibleDescendant } = visibleRows(rows, effectiveVisible);
 	const out: DiffDisplayRow[] = [];
 	let hasModule = false;
 
@@ -1965,25 +1989,7 @@ export function flattenDiffRows(
 	const collapsed = options.collapsed;
 	const visible = options.visible;
 
-	let visiblePrefix: Int32Array | undefined;
-	if (visible) {
-		visiblePrefix = new Int32Array(count + 1);
-		for (let i = 0; i < count; i++) {
-			visiblePrefix[i + 1] = visiblePrefix[i] + (visible[i] ? 1 : 0);
-		}
-	}
-
-	const subtreeEnd = (index: number): number => Math.min(count, index + Math.max(0, rows[index].subtreeSize) + 1);
-	const hasVisibleDescendant = (index: number): boolean => {
-		const end = subtreeEnd(index);
-		if (end <= index + 1) {
-			return false;
-		}
-		if (visiblePrefix) {
-			return visiblePrefix[end] - visiblePrefix[index + 1] > 0;
-		}
-		return rows[index].hasChildren;
-	};
+	const { subtreeEnd, hasVisibleDescendant } = visibleRows(rows, visible);
 
 	const out: FlatDiffRow[] = [];
 	let i = 0;

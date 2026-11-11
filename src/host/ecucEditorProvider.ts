@@ -21,6 +21,7 @@ import { ConditionValue } from '../core/ecuc/syscond';
 import { ConditionValueStore, parseConditionEntries } from './conditionValues';
 import { buildRows, RowBuildOptions } from '../core/ecuc/renderRows';
 import { buildNodeIndex } from '../core/ecuc/nodeId';
+import type { NodeEntry } from '../core/ecuc/nodeId';
 import { applyEdit, buildEdit, buildFieldEdit } from './ecucEdit';
 import {
 	applyStructureEdit,
@@ -285,11 +286,18 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				}
 				if (message.type === 'reveal') {
-					void this.revealNode(document, model, nodeId, panel);
+					const entry = this.nodeEntry(model, nodeId);
+					if (entry !== undefined) {
+						void this.revealNode(document, entry, panel);
+					}
 				} else if (message.type === 'follow') {
-					void this.followReference(document, model, nodeId, panel);
+					const entry = this.nodeEntry(model, nodeId);
+					if (entry !== undefined) {
+						void this.followReference(document, model, entry, panel);
+					}
 				} else if (message.type === 'references') {
-					void this.findReferences(document, model, nodeId, panel);
+					// A stale id keeps the old no-path notice instead of silently doing nothing.
+					void this.findReferences(document, this.nodeEntry(model, nodeId), panel);
 				} else if (message.type === 'edit' && typeof message.value === 'string') {
 					const field: EditField = message.field ?? 'value';
 					// An unknown field is ignored rather than guessed at.
@@ -342,6 +350,14 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
 	}
 
+	/** Resolves a page's node id against the current model; a stale id yields undefined. */
+	private nodeEntry(
+		model: ReturnType<typeof scanEcucValues>,
+		nodeId: string
+	): NodeEntry | undefined {
+		return buildNodeIndex(model).byId.get(nodeId);
+	}
+
 	/**
 	 * Reveals a node's range in the source without destroying the custom editor's tab.
 	 * The panel's own column is passed through so the source opens
@@ -349,25 +365,19 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	 */
 	private async revealNode(
 		document: vscode.TextDocument,
-		model: ReturnType<typeof scanEcucValues>,
-		nodeId: string,
+		entry: NodeEntry,
 		panel: vscode.WebviewPanel
 	): Promise<void> {
-		const entry = buildNodeIndex(model).byId.get(nodeId);
-		if (!entry) {
-			return;
-		}
 		await revealRangeInTextEditor(document, entry.range, { viewColumn: panel.viewColumn });
 	}
 
 	private async followReference(
 		document: vscode.TextDocument,
 		model: ReturnType<typeof scanEcucValues>,
-		nodeId: string,
+		entry: NodeEntry,
 		panel: vscode.WebviewPanel
 	): Promise<void> {
-		const entry = buildNodeIndex(model).byId.get(nodeId);
-		if (!entry || entry.kind !== 'reference') {
+		if (entry.kind !== 'reference') {
 			return;
 		}
 		const reference = entry.node as ReferenceNode;
@@ -453,12 +463,10 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	/** Lists every indexed reference that resolves to the selected module/container. */
 	private async findReferences(
 		document: vscode.TextDocument,
-		model: ReturnType<typeof scanEcucValues>,
-		nodeId: string,
+		entry: NodeEntry | undefined,
 		panel: vscode.WebviewPanel
 	): Promise<void> {
-		const entry = buildNodeIndex(model).byId.get(nodeId);
-		if (!entry || entry.path === undefined) {
+		if (entry === undefined || entry.path === undefined) {
 			await this.postStructureNotice(panel, 'Find references needs a module or container with an AR path.');
 			return;
 		}

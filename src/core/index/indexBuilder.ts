@@ -7,6 +7,7 @@
  * size.
  */
 import type { Range } from '../ecuc/model';
+import { schemaReleaseFrom } from '../ecuc/schemaRelease';
 import { LineStartBuilder } from '../text/offsets';
 import { decodeXml } from '../text/xmlText';
 import type { FileIndex, IndexDefinition, IndexElement, IndexReference } from './indexModel';
@@ -569,15 +570,4 @@ function setDefinitionField(frame: Frame, tag: string, text: string): void {
 function joinPath(parts: readonly (string | undefined)[]): string | undefined {
 	const clean = parts.filter((part): part is string => part !== undefined && part !== '');
 	return clean.length === 0 ? undefined : '/' + clean.join('/');
-}
-
-/** Schema release from `xsi:schemaLocation`, same rule as the ECUC scanner. */
-function schemaReleaseFrom(schemaLocation: string): string | undefined {
-	const tokens = schemaLocation.trim().split(/\s+/);
-	const last = tokens[tokens.length - 1];
-	if (!last) {
-		return undefined;
-	}
-	const parts = last.split('.')[0].split('_');
-	return parts[parts.length - 1].replace(/-/g, '.');
 }

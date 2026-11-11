@@ -28,8 +28,15 @@ import {
 import { DiffView } from './components/diffView/diffView';
 import type { DocumentTreeHeader, DocumentTreeLineInfo } from './components/documentTree/documentTreeView';
 import { DiffToolbar } from './components/toolbar/toolbar';
-import { SearchBar } from './components/searchBar/searchBar';
+import type { SearchBar } from './components/searchBar/searchBar';
 import { RowSearchEngine } from './render/rowSearch';
+import {
+	beginSearch,
+	finishSearch,
+	mountSearchBar,
+	renderSearchCount,
+	retainedSearchIndex,
+} from './render/searchState';
 import { appendHighlighted, setHighlightQuery } from './render/rowView';
 import { installNoticeErrors } from './render/pageError';
 import { postToHost, resetVsCodeApi } from './vscodeApi';
@@ -124,16 +131,21 @@ interface DiffSearchCandidate {
 let searchCandidates: DiffSearchCandidate[] = [];
 let showChangesOnly = false;
 let swapped = false;
-let diffDocument: DiffDocument = {
-	left: { name: '', path: '' },
-	right: { name: '', path: '' },
-	labels: ['', ''],
-	leftHeader: { packages: [] },
-	rightHeader: { packages: [] },
-	rows: [],
-	summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 },
-	semanticSkipped: 0
-};
+/** A fresh empty document; the page starts and reloads from this exact shape. */
+function emptyDiffDocument(): DiffDocument {
+	return {
+		left: { name: '', path: '' },
+		right: { name: '', path: '' },
+		labels: ['', ''],
+		leftHeader: { packages: [] },
+		rightHeader: { packages: [] },
+		rows: [],
+		summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 },
+		semanticSkipped: 0
+	};
+}
+
+let diffDocument: DiffDocument = emptyDiffDocument();
 let rows: DiffRow[] = [];
 let semanticMatching = true;
 /** Unchanged rows kept above and below each change in Show diff. */
@@ -934,6 +946,24 @@ function restoreAnchor(anchor: any): void {
 	}
 	views.setScrollTop(Math.max(0, (offsets[index] ?? 0) + anchor.delta));
 }
+/**
+ * Re-renders around a model swap while keeping the same visible line on top.
+ * The swap callback owns only the model/visibility change.
+ */
+function renderKeepingAnchor(swap: () => void): void {
+	const anchor = captureAnchor();
+	const scrollTop = views ? views.getScrollTop() : 0;
+	swap();
+	renderWindow(true);
+	if (anchor && virtualIndexForKey(anchor.key) !== undefined) {
+		restoreAnchor(anchor);
+	} else if (views) {
+		views.setScrollTop(scrollTop);
+	}
+	renderWindow(true);
+	updateSelection();
+	updateEmptyState();
+}
 function updateSelection() {
 	if (!views) {
 		return;
@@ -983,20 +1013,11 @@ function updateEmptyState() {
 	emptyText.textContent = hasChanges() ? 'No rows.' : 'No differences';
 }
 function applyView() {
-	const anchor = captureAnchor();
-	const scrollTop = views ? views.getScrollTop() : 0;
-	refreshVisibility();
-	rebuildDisplay();
-	applyModels();
-	renderWindow(true);
-	if (anchor && virtualIndexForKey(anchor.key) !== undefined) {
-		restoreAnchor(anchor);
-	} else if (views) {
-		views.setScrollTop(scrollTop);
-	}
-	renderWindow(true);
-	updateSelection();
-	updateEmptyState();
+	renderKeepingAnchor(function () {
+		refreshVisibility();
+		rebuildDisplay();
+		applyModels();
+	});
 	if (searchQuery.trim() !== '') {
 		startSearch(searchQuery, currentMatchKey(), true);
 	}
@@ -1012,19 +1033,7 @@ function searchIndexOfKey(key: string | undefined): number {
 	return key === undefined ? -1 : searchMatches.indexOf(key);
 }
 function renderSearchUi() {
-	const hasText = searchBar.hasText();
-	const active = searchQuery.trim() !== '';
-	const hasMatches = searchMatches.length > 0;
-	searchBar.setBusy(searchRunning);
-	searchBar.setClearVisible(hasText);
-	searchBar.setNavigationEnabled(hasMatches);
-	if (!active) {
-		searchBar.setCount('');
-	} else if (!hasMatches) {
-		searchBar.setCount('0 / 0');
-	} else {
-		searchBar.setCount((searchIndex + 1) + ' / ' + searchMatches.length);
-	}
+	renderSearchCount(searchBar, searchBar.hasText(), searchQuery, searchMatches.length, searchIndex, searchRunning);
 }
 function buildDiffSearchCandidates(): DiffSearchCandidate[] {
 	const out: DiffSearchCandidate[] = [];
@@ -1091,23 +1100,21 @@ function cycleSearch(direction: number): void {
 	jumpToSearchMatch(searchIndex);
 }
 function startSearch(query: string, previousKey?: string, immediate?: boolean): void {
-	const text = query || '';
-	if (text.trim() === '') {
+	const start = beginSearch<string>(searchEngine, query, previousKey, setHighlightQuery);
+	if (start === undefined) {
 		resetSearchResults();
 		return;
 	}
-	searchEngine.clear();
-	searchQuery = text;
-	setHighlightQuery(text);
-	searchMatches = [];
-	searchIndex = -1;
-	searchFirstJumpDone = previousKey !== undefined;
+	searchQuery = start.query;
+	searchMatches = start.matches;
+	searchIndex = start.index;
+	searchFirstJumpDone = start.firstJumpDone;
 	searchCandidates = buildDiffSearchCandidates();
 	setSearchBusy(true);
 	renderWindow(true);
 	searchEngine.search(
 		searchCandidates,
-		text,
+		start.query,
 		{
 			onProgressUpdate: function (indices) {
 				const currentKey = currentMatchKey();
@@ -1120,14 +1127,12 @@ function startSearch(query: string, previousKey?: string, immediate?: boolean): 
 					return;
 				}
 				const wanted = currentKey !== undefined ? currentKey : previousKey;
-				const kept = searchIndexOfKey(wanted);
-				if (searchMatches.length === 0) {
-					searchIndex = -1;
-				} else if (kept >= 0) {
-					searchIndex = kept;
-				} else {
-					searchIndex = Math.min(Math.max(searchIndex, 0), searchMatches.length - 1);
-				}
+				searchIndex = retainedSearchIndex(
+					wanted,
+					searchMatches.length,
+					searchIndexOfKey,
+					Math.min(Math.max(searchIndex, 0), searchMatches.length - 1)
+				);
 				renderSearchUi();
 				renderWindow(true);
 			},
@@ -1135,22 +1140,15 @@ function startSearch(query: string, previousKey?: string, immediate?: boolean): 
 				const currentKey = currentMatchKey();
 				searchMatches = indices.map(function (index) { return searchCandidates[index].key; });
 				const wanted = currentKey !== undefined ? currentKey : previousKey;
-				const kept = searchIndexOfKey(wanted);
-				if (searchMatches.length === 0) {
-					searchIndex = -1;
-				} else if (kept >= 0) {
-					searchIndex = kept;
-				} else {
-					searchIndex = 0;
-				}
+				searchIndex = retainedSearchIndex(wanted, searchMatches.length, searchIndexOfKey, 0);
 				searchFirstJumpDone = true;
-				setSearchBusy(false);
-				renderSearchUi();
-				if (searchIndex >= 0) {
-					jumpToSearchMatch(searchIndex);
-				} else {
-					renderWindow(true);
-				}
+				finishSearch(
+					searchIndex,
+					setSearchBusy,
+					renderSearchUi,
+					jumpToSearchMatch,
+					function () { renderWindow(true); }
+				);
 			}
 		},
 		immediate === true
@@ -1166,25 +1164,6 @@ function resetSearchResults() {
 	searchFirstJumpDone = false;
 	setSearchBusy(false);
 	renderWindow(true);
-}
-function executeSearch(direction: number): void {
-	const query = searchBar.value();
-	if (query.trim() === '') {
-		resetSearchResults();
-		return;
-	}
-	if (query !== searchQuery) {
-		startSearch(query, undefined, false);
-		return;
-	}
-	cycleSearch(direction === -1 ? -1 : 1);
-}
-function clearSearch(focusInput: boolean): void {
-	searchBar.setValue('');
-	resetSearchResults();
-	if (focusInput) {
-		searchBar.focus();
-	}
 }
 function focusListAfterSearch() {
 	const key =
@@ -1568,18 +1547,7 @@ export function handleDiffMessage(message: DiffProviderToWebview): void {
 		notice.textContent = '';
 		delete notice.dataset.kind;
 		semanticMatching = message.semantic !== false;
-		const anchor = captureAnchor();
-		const scrollTop = views ? views.getScrollTop() : 0;
-		setDocument(message.document);
-		renderWindow(true);
-		if (anchor && virtualIndexForKey(anchor.key) !== undefined) {
-			restoreAnchor(anchor);
-		} else if (views) {
-			views.setScrollTop(scrollTop);
-		}
-		renderWindow(true);
-		updateSelection();
-		updateEmptyState();
+		renderKeepingAnchor(function () { setDocument(message.document); });
 	} else if (message.type === 'matchModeState') {
 		semanticMatching = message.semantic !== false;
 		updateViewButtons();
@@ -1648,25 +1616,18 @@ toolbar = new DiffToolbar({
 	}
 });
 toolbar.mount();
-searchBar = new SearchBar('diff-', {
-	onExecute: function (direction) { executeSearch(direction); },
-	onCycle: function (direction) { cycleSearch(direction); },
-	onClear: function () { resetSearchResults(); },
-	onEscape: function () { clearSearch(true); focusListAfterSearch(); },
-	onInput: function (value) {
-		if (value === searchQuery) {
-			setHighlightQuery(value);
-			renderSearchUi();
-			return;
-		}
-		if (searchQuery === '' && searchMatches.length === 0) {
-			renderSearchUi();
-			return;
-		}
-		resetSearchResults();
-	}
-});
-searchBar.mount();
+searchBar = mountSearchBar(
+	'diff-',
+	() => searchQuery,
+	() => searchMatches.length > 0,
+	resetSearchResults,
+	startSearch,
+	cycleSearch,
+	renderSearchUi,
+	setHighlightQuery,
+	true,
+	focusListAfterSearch
+);
 renderWindow(true);
 updateSelection();
 updateViewButtons();
@@ -1676,16 +1637,7 @@ postToHost({ type: 'ready' });
 
 /** A page reload starts from the initial protocol state, exactly like a fresh bundle. */
 function resetDiffState(): void {
-	diffDocument = {
-		left: { name: '', path: '' },
-		right: { name: '', path: '' },
-		labels: ['', ''],
-		leftHeader: { packages: [] },
-		rightHeader: { packages: [] },
-		rows: [],
-		summary: { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 },
-		semanticSkipped: 0
-	};
+	diffDocument = emptyDiffDocument();
 	rows = [];
 	rowByKey = new Map();
 	rowIndexByKey = new Map();

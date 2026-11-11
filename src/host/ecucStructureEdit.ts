@@ -13,6 +13,7 @@ import { validateShortName } from '../core/ecuc/validate';
 import { LineIndex } from '../core/text/offsets';
 import { EcucNode, buildNodeIndex } from '../core/ecuc/nodeId';
 import { ApplyResult } from './ecucEdit';
+import { touchesCdata } from './editRange';
 
 export type StructureAction = 'delete' | 'duplicate';
 
@@ -134,20 +135,6 @@ function validRange(text: string, range: Range): boolean {
 		range.end <= text.length &&
 		range.start < range.end
 	);
-}
-
-/** True when the element bytes include or sit inside a CDATA section. */
-function touchesCdata(text: string, range: Range): boolean {
-	const bytes = text.slice(range.start, range.end);
-	if (bytes.includes('<![CDATA[') || bytes.includes(']]>')) {
-		return true;
-	}
-	const open = text.lastIndexOf('<![CDATA[', range.start);
-	if (open < 0) {
-		return false;
-	}
-	const close = text.indexOf(']]>', open + 9);
-	return close < 0 || close > range.start;
 }
 
 function countDescendants(node: ContainerNode): number {

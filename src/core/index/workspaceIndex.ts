@@ -327,13 +327,15 @@ export class WorkspaceIndex {
 		);
 	}
 
-	/** Removes one file's references using the lookup state that produced them. */
-	private removeReferenceContribution(file: FileIndex): void {
-		const map = this.referencesByTarget;
-		const keys = this.elementKeys;
-		if (map === undefined || keys === undefined) {
-			return;
-		}
+	/**
+	 * Resolves one file's references through the live lookup and stable keys.
+	 * A reference that no longer resolves is skipped, never guessed.
+	 */
+	private forEachResolvedReference(
+		file: FileIndex,
+		keys: WeakMap<IndexElement, string>,
+		each: (key: string, reference: IndexReference) => void
+	): void {
 		for (const reference of file.references) {
 			const resolution = this.resolveReference(reference);
 			if (!resolution.ok) {
@@ -343,8 +345,18 @@ export class WorkspaceIndex {
 			if (key === undefined) {
 				continue;
 			}
-			removeEntry(map, key, reference);
+			each(key, reference);
 		}
+	}
+
+	/** Removes one file's references using the lookup state that produced them. */
+	private removeReferenceContribution(file: FileIndex): void {
+		const map = this.referencesByTarget;
+		const keys = this.elementKeys;
+		if (map === undefined || keys === undefined) {
+			return;
+		}
+		this.forEachResolvedReference(file, keys, (key, reference) => removeEntry(map, key, reference));
 	}
 
 	/** Adds one file's references against the current lookup. */
@@ -355,17 +367,7 @@ export class WorkspaceIndex {
 			return;
 		}
 		addElementKeys(keys, file);
-		for (const reference of file.references) {
-			const resolution = this.resolveReference(reference);
-			if (!resolution.ok) {
-				continue;
-			}
-			const key = keys.get(resolution.element);
-			if (key === undefined) {
-				continue;
-			}
-			addEntry(map, key, reference);
-		}
+		this.forEachResolvedReference(file, keys, (key, reference) => addEntry(map, key, reference));
 	}
 
 	/** Drops the replaced element identities; old objects are not targets any more. */
@@ -453,17 +455,7 @@ export class WorkspaceIndex {
 			addElementKeys(keys, file);
 		}
 		for (const file of this.files.values()) {
-			for (const reference of file.references) {
-				const resolution = this.resolveReference(reference);
-				if (!resolution.ok) {
-					continue;
-				}
-				const key = keys.get(resolution.element);
-				if (key === undefined) {
-					continue;
-				}
-				addEntry(map, key, reference);
-			}
+			this.forEachResolvedReference(file, keys, (key, reference) => addEntry(map, key, reference));
 		}
 		this.referencesByTarget = map;
 		this.elementKeys = keys;
@@ -526,11 +518,12 @@ function buildLookup<T>(items: readonly T[], pathOf: (item: T) => string | undef
 	return lookup;
 }
 
-/** Adds one file's items to the live maps. */
-function addLookupItems<T>(
+/** Applies one file's items to both candidate maps, exact first then every suffix. */
+function updateLookupItems<T>(
 	lookup: PathLookup<T>,
 	items: readonly T[],
-	pathOf: (item: T) => string | undefined
+	pathOf: (item: T) => string | undefined,
+	update: (map: Map<string, T[]>, key: string, item: T) => void
 ): void {
 	for (const item of items) {
 		const path = pathOf(item);
@@ -541,11 +534,20 @@ function addLookupItems<T>(
 		if (segments.length === 0) {
 			continue;
 		}
-		addEntry(lookup.exact, '/' + segments.join('/'), item);
+		update(lookup.exact, '/' + segments.join('/'), item);
 		for (let start = 0; start < segments.length; start++) {
-			addEntry(lookup.suffix, '/' + segments.slice(start).join('/'), item);
+			update(lookup.suffix, '/' + segments.slice(start).join('/'), item);
 		}
 	}
+}
+
+/** Adds one file's items to the live maps. */
+function addLookupItems<T>(
+	lookup: PathLookup<T>,
+	items: readonly T[],
+	pathOf: (item: T) => string | undefined
+): void {
+	updateLookupItems(lookup, items, pathOf, addEntry);
 }
 
 /** Removes one file's items from the live maps. */
@@ -554,20 +556,7 @@ function removeLookupItems<T>(
 	items: readonly T[],
 	pathOf: (item: T) => string | undefined
 ): void {
-	for (const item of items) {
-		const path = pathOf(item);
-		if (path === undefined) {
-			continue;
-		}
-		const segments = splitPath(path);
-		if (segments.length === 0) {
-			continue;
-		}
-		removeEntry(lookup.exact, '/' + segments.join('/'), item);
-		for (let start = 0; start < segments.length; start++) {
-			removeEntry(lookup.suffix, '/' + segments.slice(start).join('/'), item);
-		}
-	}
+	updateLookupItems(lookup, items, pathOf, removeEntry);
 }
 
 function addEntry<T>(map: Map<string, T[]>, key: string, item: T): void {

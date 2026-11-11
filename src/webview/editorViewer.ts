@@ -36,6 +36,14 @@ import {
 } from './components/documentTree/documentTreeState';
 import { RowSearchEngine } from './render/rowSearch';
 import {
+	beginSearch,
+	finishSearch,
+	mountSearchBar,
+	renderSearchCount,
+	retainedSearchIndex,
+} from './render/searchState';
+import { inspectorElement } from './render/dom';
+import {
 	getSidebarState,
 	mountSidebarShell,
 	setSidebarPersistence,
@@ -65,7 +73,7 @@ import {
 	setDetailsEditorHost,
 } from './components/detailsEditor/detailsEditor';
 import { EditorToolbar } from './components/toolbar/toolbar';
-import { SearchBar } from './components/searchBar/searchBar';
+import type { SearchBar } from './components/searchBar/searchBar';
 import { hideRowMenu, mountContextMenu } from './components/contextMenu/contextMenu';
 import { appendConditionTokens, appendHighlighted, setHighlightQuery } from './render/rowView';
 import { installConsoleErrors } from './render/pageError';
@@ -856,23 +864,21 @@ function setSearchBusy(busy: boolean): void {
  * and a re-scan; immediate skips the 120 ms debounce for a re-scan.
  */
 function startSearch(query: string, previousId?: string, immediate?: boolean): void {
-	const text = query || '';
-	if (text.trim() === '') {
+	const start = beginSearch<number>(searchEngine, query, previousId, setHighlightQuery);
+	if (start === undefined) {
 		resetSearchResults();
 		return;
 	}
-	searchEngine.clear();
-	searchQuery = text;
-	setHighlightQuery(text);
-	searchMatches = [];
-	searchIndex = -1;
-	searchFirstJumpDone = previousId !== undefined;
+	searchQuery = start.query;
+	searchMatches = start.matches;
+	searchIndex = start.index;
+	searchFirstJumpDone = start.firstJumpDone;
 	setSearchBusy(true);
 	renderSearchUi();
 	renderWindow(true);
 	searchEngine.search(
 		searchCandidates,
-		text,
+		start.query,
 		{
 			onProgressUpdate: function (matches) {
 				const currentId = currentMatchId();
@@ -885,14 +891,12 @@ function startSearch(query: string, previousId?: string, immediate?: boolean): v
 					return;
 				}
 				const wanted = currentId !== undefined ? currentId : previousId;
-				const kept = searchIndexOfId(wanted);
-				if (searchMatches.length === 0) {
-					searchIndex = -1;
-				} else if (kept >= 0) {
-					searchIndex = kept;
-				} else {
-					searchIndex = Math.min(Math.max(searchIndex, 0), searchMatches.length - 1);
-				}
+				searchIndex = retainedSearchIndex(
+					wanted,
+					searchMatches.length,
+					searchIndexOfId,
+					Math.min(Math.max(searchIndex, 0), searchMatches.length - 1)
+				);
 				renderSearchUi();
 				renderWindow(true);
 			},
@@ -900,22 +904,15 @@ function startSearch(query: string, previousId?: string, immediate?: boolean): v
 				const currentId = currentMatchId();
 				searchMatches = matches;
 				const wanted = currentId !== undefined ? currentId : previousId;
-				const kept = searchIndexOfId(wanted);
-				if (searchMatches.length === 0) {
-					searchIndex = -1;
-				} else if (kept >= 0) {
-					searchIndex = kept;
-				} else {
-					searchIndex = 0;
-				}
+				searchIndex = retainedSearchIndex(wanted, searchMatches.length, searchIndexOfId, 0);
 				searchFirstJumpDone = true;
-				setSearchBusy(false);
-				renderSearchUi();
-				if (searchIndex >= 0) {
-					jumpToSearchMatch(searchIndex);
-				} else {
-					renderWindow(true);
-				}
+				finishSearch(
+					searchIndex,
+					setSearchBusy,
+					renderSearchUi,
+					jumpToSearchMatch,
+					function () { renderWindow(true); }
+				);
 			}
 		},
 		immediate === true
@@ -924,19 +921,7 @@ function startSearch(query: string, previousId?: string, immediate?: boolean): v
 
 /** The count and control state: '1 / N', '0 / 0', or empty for a blank query. */
 function renderSearchUi() {
-	const hasText = searchBar.hasText();
-	const active = searchQuery.trim() !== '';
-	const hasMatches = searchMatches.length > 0;
-	searchBar.setBusy(searchRunning);
-	searchBar.setClearVisible(hasText);
-	searchBar.setNavigationEnabled(hasMatches);
-	if (!active) {
-		searchBar.setCount('');
-	} else if (!hasMatches) {
-		searchBar.setCount('0 / 0');
-	} else {
-		searchBar.setCount((searchIndex + 1) + ' / ' + searchMatches.length);
-	}
+	renderSearchCount(searchBar, searchBar.hasText(), searchQuery, searchMatches.length, searchIndex, searchRunning);
 }
 
 /** Move to one match: expand ancestors, rebuild, scroll, select, keep focus in Search. */
@@ -999,29 +984,6 @@ function resetSearchResults() {
 	renderWindow(true);
 }
 
-/** Enter: start a changed query, or move through the current result set. */
-function executeSearch(direction: number): void {
-	const query = searchBar.value();
-	if (query.trim() === '') {
-		resetSearchResults();
-		return;
-	}
-	if (query !== searchQuery) {
-		startSearch(query, undefined, false);
-		return;
-	}
-	cycleSearch(direction === -1 ? -1 : 1);
-}
-
-/** Clear the search and its highlight; optionally return focus to it. */
-function clearSearch(focusInput: boolean): void {
-	searchBar.setValue('');
-	resetSearchResults();
-	if (focusInput) {
-		searchBar.focus();
-	}
-}
-
 /** Escape returns focus to the tree: the selected row when visible, else the first. */
 function focusTreeAfterSearch() {
 	const id =
@@ -1055,17 +1017,7 @@ function syncSearchToSelection(id: string): void {
 	}
 }
 
-function inspectorElement(tag: string, className?: string, text?: string): HTMLElement {
-	const element = document.createElement(tag);
-	if (className) {
-		element.className = className;
-	}
-	if (text !== undefined) {
-		element.textContent = text;
-	}
-	return element;
-}
-
+/** One inspector row: a label span and a code/empty container. */
 function inspectorRow(key: string, value: string): HTMLElement {
 	const row = inspectorElement('div', 'inspector-row');
 	row.appendChild(inspectorElement('span', 'inspector-key', key));
@@ -1396,25 +1348,18 @@ mountConditionsPanel();
 mountSidebarShell();
 const editorToolbar = new EditorToolbar({ onCollapseAll: collapseAll, onExpandAll: expandAll });
 editorToolbar.mount();
-searchBar = new SearchBar('', {
-	onExecute: function (direction) { executeSearch(direction); },
-	onCycle: function (direction) { cycleSearch(direction); },
-	onClear: function () { resetSearchResults(); },
-	onEscape: function () { clearSearch(false); focusTreeAfterSearch(); },
-	onInput: function (value) {
-		if (value === searchQuery) {
-			setHighlightQuery(value);
-			renderSearchUi();
-			return;
-		}
-		if (searchQuery === '' && searchMatches.length === 0) {
-			renderSearchUi();
-			return;
-		}
-		resetSearchResults();
-	}
-});
-searchBar.mount();
+searchBar = mountSearchBar(
+	'',
+	() => searchQuery,
+	() => searchMatches.length > 0,
+	resetSearchResults,
+	startSearch,
+	cycleSearch,
+	renderSearchUi,
+	setHighlightQuery,
+	false,
+	focusTreeAfterSearch
+);
 virtualScroll = new VirtualScroll(
 	'#tree',
 	[{ id: 'tree-pane', className: 'document-tree-pane document-tree', role: 'presentation' }],

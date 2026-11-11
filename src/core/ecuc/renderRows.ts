@@ -270,6 +270,29 @@ function definitionCountFor(
 	return count >= 2 ? count : undefined;
 }
 
+/** The resolved definition fields, omitted entirely when absent. */
+function definitionFields(
+	definition: DefinitionInfo | undefined,
+	definitionCount: number | undefined
+): Partial<EcucRow> {
+	return {
+		...(definition === undefined ? {} : { definition }),
+		...(definitionCount === undefined ? {} : { definitionCount }),
+	};
+}
+
+/** Applies the row's own condition, appends it, and returns the inherited disabled state. */
+function appendRow(
+	rows: EcucRow[],
+	row: EcucRow,
+	condition: RowCondition | undefined,
+	disabledByAncestor: boolean
+): boolean {
+	const disabled = applyCondition(row, condition, disabledByAncestor);
+	rows.push(row);
+	return disabled;
+}
+
 function moduleRow(
 	ctx: BuildContext,
 	rows: EcucRow[],
@@ -305,11 +328,9 @@ function moduleRow(
 		meta,
 		comments: commentLines(meta),
 		haystack: haystack({ label: dotted(module.definitionRef), shortName: module.shortName, meta }),
-		...(definition === undefined ? {} : { definition }),
-		...(definitionCount === undefined ? {} : { definitionCount }),
+		...definitionFields(definition, definitionCount),
 	};
-	const disabled = applyCondition(row, condition, disabledByAncestor);
-	rows.push(row);
+	const disabled = appendRow(rows, row, condition, disabledByAncestor);
 
 	const containers = orderContainers(module.containers, ctx.sort, ctx.except);
 	for (let at = 0; at < containers.length; at++) {
@@ -354,11 +375,9 @@ function containerRow(
 			shortName: container.shortName,
 			meta,
 		}),
-		...(definition === undefined ? {} : { definition }),
-		...(definitionCount === undefined ? {} : { definitionCount }),
+		...definitionFields(definition, definitionCount),
 	};
-	const disabled = applyCondition(row, condition, disabledByAncestor);
-	rows.push(row);
+	const disabled = appendRow(rows, row, condition, disabledByAncestor);
 
 	// Parameters, then references, then nested containers: one contiguous
 	// posinset group per container, exactly as `containerItem` rendered it.
@@ -423,11 +442,9 @@ function parameterRow(
 		meta,
 		comments: commentLines(meta),
 		haystack: haystack({ label: parameter.name, value, meta }),
-		...(definition === undefined ? {} : { definition }),
-		...(definitionCount === undefined ? {} : { definitionCount }),
+		...definitionFields(definition, definitionCount),
 	};
-	applyCondition(row, condition, disabledByAncestor);
-	rows.push(row);
+	appendRow(rows, row, condition, disabledByAncestor);
 }
 
 function referenceRow(
@@ -481,11 +498,9 @@ function referenceRow(
 		meta,
 		comments: commentLines(meta),
 		haystack: haystack({ label: reference.name, value: target, meta }),
-		...(definition === undefined ? {} : { definition }),
-		...(definitionCount === undefined ? {} : { definitionCount }),
+		...definitionFields(definition, definitionCount),
 	};
-	applyCondition(row, condition, disabledByAncestor);
-	rows.push(row);
+	appendRow(rows, row, condition, disabledByAncestor);
 }
 
 /** Evaluates a node's own condition, or `undefined` when it has none. */

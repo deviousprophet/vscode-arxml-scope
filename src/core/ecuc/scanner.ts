@@ -8,6 +8,7 @@
  */
 import { ContainerNode, EcucDocumentModel, ModuleNode, ParameterNode, Range, ReferenceNode, lastShortName } from './model';
 import { decodeXml, isXmlWhitespace, markupDeclarationEnd, stripXmlPrefix } from '../text/xmlText';
+import { schemaReleaseFrom } from './schemaRelease';
 
 type RecKind =
 	| 'autosar'
@@ -697,21 +698,6 @@ function suffixesOf(rec: Rec): {
 		postBuildRange: rec.postBuildRange,
 		annotations: rec.annotations,
 	};
-}
-
-/**
- * Schema release from `xsi:schemaLocation` (legacy §2.2): last whitespace token,
- * first `.`-segment, last `_`-segment, `-` replaced by `.`. `AUTOSAR_00048.xsd`
- * therefore yields `00048`.
- */
-function schemaReleaseFrom(schemaLocation: string): string | undefined {
-	const tokens = schemaLocation.trim().split(/\s+/);
-	const last = tokens[tokens.length - 1];
-	if (!last) {
-		return undefined;
-	}
-	const parts = last.split('.')[0].split('_');
-	return parts[parts.length - 1].replace(/-/g, '.');
 }
 
 function applySchema(rec: Rec, model: EcucDocumentModel): void {

@@ -207,6 +207,40 @@ export function resetDetailsEditorState(): void {
 	flashId = null;
 }
 
+/**
+ * Stores one field's draft, restores a draft that survived a re-scan, and wires
+ * the shared key handling.
+ */
+function detailsDraft(
+	row: { id: string },
+	field: string,
+	input: HTMLInputElement | HTMLSelectElement,
+	error: HTMLSpanElement,
+	original: string,
+	type?: string
+): DetailsEdit {
+	const previous = detailsStoredEdit(row, field);
+	if (previous) {
+		input.value = previous.input.value;
+	}
+	const edit: DetailsEdit = {
+		rowId: row.id,
+		field: field,
+		input: input,
+		error: error,
+		pending: previous ? previous.pending : false,
+		...(type === undefined ? {} : { type }),
+		original: previous ? previous.original : original
+	};
+	detailsEdits[field] = edit;
+	if (previous && previous.error && previous.error.textContent) {
+		edit.error.textContent = previous.error.textContent;
+		edit.input.setAttribute('aria-invalid', 'true');
+	}
+	detailsRegisterKeydown(input, edit);
+	return edit;
+}
+
 /** The details value control for one parameter row (input or Boolean select). */
 export function detailsValueInput(row: any, data: any): any {
 	const rowElement = document.createElement('div');
@@ -235,28 +269,10 @@ export function detailsValueInput(row: any, data: any): any {
 		input.inputMode = type === 'Integer' ? 'numeric' : type === 'Float' ? 'decimal' : 'text';
 	}
 	input.value = original;
-	const previous = detailsStoredEdit(row, 'value');
-	if (previous) {
-		input.value = previous.input.value;
-	}
 	const error = detailsErrorSpan();
 	rowElement.appendChild(input);
 	rowElement.appendChild(error);
-	const edit: DetailsEdit = {
-		rowId: row.id,
-		field: 'value',
-		input: input,
-		error: error,
-		pending: previous ? previous.pending : false,
-		type: type,
-		original: previous ? previous.original : original
-	};
-	detailsEdits.value = edit;
-	if (previous && previous.error && previous.error.textContent) {
-		edit.error.textContent = previous.error.textContent;
-		edit.input.setAttribute('aria-invalid', 'true');
-	}
-	detailsRegisterKeydown(input, edit);
+	detailsDraft(row, 'value', input, error, original, type);
 	input.addEventListener('beforeinput', function (event: any) {
 		if (event.data && !detailsInputAllowed(type, event.data)) {
 			event.preventDefault();
@@ -278,27 +294,10 @@ function detailsFieldInput(row: any, field: string, label: string, value: string
 	input.setAttribute('data-field', field);
 	input.setAttribute('aria-label', label + ' of ' + (row.label || 'container'));
 	input.value = value;
-	const previous = detailsStoredEdit(row, field);
-	if (previous) {
-		input.value = previous.input.value;
-	}
 	const error = detailsErrorSpan();
 	rowElement.appendChild(input);
 	rowElement.appendChild(error);
-	const edit: DetailsEdit = {
-		rowId: row.id,
-		field: field,
-		input: input,
-		error: error,
-		pending: previous ? previous.pending : false,
-		original: previous ? previous.original : value
-	};
-	detailsEdits[field] = edit;
-	if (previous && previous.error && previous.error.textContent) {
-		edit.error.textContent = previous.error.textContent;
-		edit.input.setAttribute('aria-invalid', 'true');
-	}
-	detailsRegisterKeydown(input, edit);
+	detailsDraft(row, field, input, error, value);
 	return rowElement;
 }
 
