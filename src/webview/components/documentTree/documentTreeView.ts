@@ -59,6 +59,188 @@ export interface DocumentTreeViewCallbacks {
 	onRender?(range: [number, number]): void;
 }
 
+/** The clamped virtual row count of a model. */
+function modelRowCount(model: DocumentTreeViewModel): number {
+	return Math.max(0, Math.floor(model.rowCount || 0));
+}
+
+/** Whether a model supplies at least one virtual row. */
+function hasRows(model: DocumentTreeViewModel | undefined): model is DocumentTreeViewModel {
+	if (!model) {
+		return false;
+	}
+	return modelRowCount(model) > 0;
+}
+
+/** The slice key: any change to the range, viewport or revision forces a new render. */
+function renderKey(
+	offsets: DocumentTreeViewModel['offsets'],
+	range: readonly [number, number],
+	viewport: DocumentTreeViewport,
+	revision: number
+): string {
+	const total = offsets.length > 0 ? offsets[offsets.length - 1] : 0;
+	return (
+		range[0] +
+		':' +
+		range[1] +
+		':' +
+		total +
+		':' +
+		viewport.top +
+		':' +
+		viewport.left +
+		':' +
+		viewport.height +
+		':' +
+		viewport.width +
+		':' +
+		revision
+	);
+}
+
+function offsetAt(offsets: DocumentTreeViewModel['offsets'], index: number, fallback: number): number {
+	return offsets[index] ?? fallback;
+}
+
+function positiveWidth(width: number): number {
+	return Number.isFinite(width) && width > 0 ? width : 0;
+}
+
+function lineInfoAt(
+	model: DocumentTreeViewModel,
+	at: number,
+	pane: string
+): DocumentTreeLineInfo | undefined {
+	return typeof model.lineInfo === 'function' ? model.lineInfo(at, pane) : undefined;
+}
+
+function finiteLineNumber(info: DocumentTreeLineInfo | undefined): number | undefined {
+	const number = info?.number;
+	return typeof number === 'number' && Number.isFinite(number) ? number : undefined;
+}
+
+function lineNumberOf(info: DocumentTreeLineInfo | undefined): number | undefined {
+	const number = finiteLineNumber(info);
+	return number === undefined ? undefined : Math.floor(number);
+}
+
+function maxLineNumber(model: DocumentTreeViewModel, pane: string, rowCount: number): number {
+	let max = 0;
+	for (let at = 0; at < rowCount; at++) {
+		const number = finiteLineNumber(lineInfoAt(model, at, pane));
+		if (number !== undefined && number > max) {
+			max = number;
+		}
+	}
+	return max;
+}
+
+function writeLineStatus(cell: HTMLElement, info: DocumentTreeLineInfo | undefined): void {
+	if (info && info.status) {
+		cell.dataset.status = info.status;
+	}
+}
+
+function placeLineCell(cell: HTMLElement, offsets: DocumentTreeViewModel['offsets'], at: number): void {
+	const top = offsetAt(offsets, at, 0);
+	const next = offsetAt(offsets, at + 1, top);
+	cell.style.top = top + 'px';
+	cell.style.height = Math.max(0, next - top) + 'px';
+}
+
+function cellIsMarked(cell: { index: number; numbered: boolean }, index: number | undefined): boolean {
+	return index !== undefined && cell.index === index && cell.numbered;
+}
+
+/** The duck-typed event target the pane listeners receive. */
+interface PaneEvent {
+	target?: PaneItem | null;
+}
+
+/** A DOM item the tree looks up by its `data-document-index`. */
+interface PaneItem {
+	dataset?: { documentIndex?: string };
+	closest?(selector: string): PaneItem | null;
+}
+
+/** A container that can answer whether it owns an item. */
+interface PaneContainer {
+	contains?(item: unknown): boolean;
+}
+
+function isFocusable(value: unknown): value is { focus(options: { preventScroll: boolean }): void } {
+	return hasMethod(value, 'focus');
+}
+
+function isClickable(value: unknown): value is { click(): void } {
+	return hasMethod(value, 'click');
+}
+
+function hasMethod(value: unknown, name: string): boolean {
+	const isObject = typeof value === 'object' || typeof value === 'function';
+	return isObject && value !== null && typeof Reflect.get(value, name) === 'function';
+}
+
+function focusElement(element: unknown): void {
+	if (isFocusable(element)) {
+		element.focus({ preventScroll: true });
+	}
+}
+
+function clickElement(element: unknown): void {
+	if (isClickable(element)) {
+		element.click();
+	}
+}
+
+function closestFromEvent(event: PaneEvent | null | undefined, selector: string): PaneItem | null {
+	const target = event ? event.target : undefined;
+	return target && target.closest ? target.closest(selector) : null;
+}
+
+function isOwnedItem(item: PaneItem | null | undefined, container: PaneContainer | undefined): boolean {
+	if (!item) {
+		return false;
+	}
+	if (!hasContains(container)) {
+		return true;
+	}
+	return container.contains(item);
+}
+
+function hasContains(
+	container: PaneContainer | undefined
+): container is PaneContainer & { contains(item: unknown): boolean } {
+	if (!container) {
+		return false;
+	}
+	return typeof container.contains === 'function';
+}
+
+function documentIndex(item: PaneItem): number | undefined {
+	const index = Number(item.dataset ? item.dataset.documentIndex : NaN);
+	return Number.isFinite(index) ? index : undefined;
+}
+
+function focusInsideWindow(
+	active: PaneItem | null | undefined,
+	windowEl: PaneContainer | undefined
+): boolean {
+	if (!active || active === windowEl) {
+		return false;
+	}
+	if (!hasContains(windowEl)) {
+		return true;
+	}
+	return windowEl.contains(active);
+}
+
+function closestRowItem(active: PaneItem): PaneItem | undefined {
+	const item = active.closest ? active.closest('[data-document-index]') : null;
+	return item || undefined;
+}
+
 export class DocumentTreeView {
 	root: any;
 	pane: string;
@@ -148,11 +330,14 @@ export class DocumentTreeView {
 
 	/** Write the window's content-width floor; 0 leaves the pane width as the floor. */
 	private applyContentWidth(width: number): void {
-		const next = Number.isFinite(width) && width > 0 ? width : 0;
-		this.contentWidth = next;
-		if (this.windowEl && this.windowEl.style && typeof this.windowEl.style.setProperty === 'function') {
+		this.contentWidth = positiveWidth(width);
+		if (this.hasWindowStyle()) {
 			this.windowEl.style.setProperty('--document-tree-content-width', this.contentWidth + 'px');
 		}
+	}
+
+	private hasWindowStyle(): boolean {
+		return Boolean(this.windowEl) && Boolean(this.windowEl.style) && typeof this.windowEl.style.setProperty === 'function';
 	}
 
 	/**
@@ -162,7 +347,7 @@ export class DocumentTreeView {
 	 * floor because the new document may be narrower.
 	 */
 	setContentWidth(width: number): void {
-		const next = Number.isFinite(width) && width > 0 ? width : 0;
+		const next = positiveWidth(width);
 		if (next <= this.contentWidth) {
 			return;
 		}
@@ -185,100 +370,165 @@ export class DocumentTreeView {
 		}
 		this.lastViewport = viewport;
 		const model = this.model;
-		const rowCount = model ? Math.max(0, Math.floor(model.rowCount || 0)) : 0;
-		if (!model || rowCount === 0) {
-			this.windowEl.textContent = '';
-			this.windowEl.style.top = '0px';
-			this.windowEl.style.height = '0px';
-			this.windowEl.style.transform = 'translateX(0px)';
-			this.clearLineNumbers();
-			this.lastKey = '';
-			this.renderedStart = undefined;
-			this.renderedEnd = undefined;
-			this.renderedRevision = -1;
-			this.lastRange = [0, 0];
-			if (this.callbacks.onRender) {
-				this.callbacks.onRender([0, 0]);
-			}
+		if (!hasRows(model)) {
+			this.renderEmpty();
 			return;
 		}
 		const offsets = model.offsets;
 		const range = visibleRangeFromOffsets(offsets, viewport.top, viewport.height, this.bufferSize);
-		const start = range[0];
-		const end = range[1];
-		const total = offsets.length > 0 ? offsets[offsets.length - 1] : 0;
-		const key =
-			start +
-			':' +
-			end +
-			':' +
-			total +
-			':' +
-			viewport.top +
-			':' +
-			viewport.left +
-			':' +
-			viewport.height +
-			':' +
-			viewport.width +
-			':' +
-			this.revision;
-		if (!force && key === this.lastKey) {
-			this.lastRange = [start, end];
+		const key = renderKey(offsets, range, viewport, this.revision);
+		if (this.shouldSkipRender(force, key)) {
+			this.lastRange = range;
 			this.applyActiveLine();
 			return;
 		}
+		this.renderSlice(model, offsets, range, viewport, key, force);
+	}
+
+	private shouldSkipRender(force: boolean | undefined, key: string): boolean {
+		return !force && key === this.lastKey;
+	}
+
+	/** Clear the window, gutter and range state for a model with no rows. */
+	private renderEmpty(): void {
+		this.windowEl.textContent = '';
+		this.windowEl.style.top = '0px';
+		this.windowEl.style.height = '0px';
+		this.windowEl.style.transform = 'translateX(0px)';
+		this.clearLineNumbers();
+		this.lastKey = '';
+		this.renderedStart = undefined;
+		this.renderedEnd = undefined;
+		this.renderedRevision = -1;
+		this.lastRange = [0, 0];
+		this.reportRender([0, 0]);
+	}
+
+	private renderSlice(
+		model: DocumentTreeViewModel,
+		offsets: DocumentTreeViewModel['offsets'],
+		range: readonly [number, number],
+		viewport: DocumentTreeViewport,
+		key: string,
+		force: boolean | undefined
+	): void {
+		const start = range[0];
+		const end = range[1];
 		this.lastKey = key;
 		this.lastRange = [start, end];
-		this.windowEl.style.top = (offsets[start] ?? 0) + 'px';
-		this.windowEl.style.height = Math.max(0, (offsets[end] ?? total) - (offsets[start] ?? 0)) + 'px';
-		this.windowEl.style.transform = 'translateX(' + -viewport.left + 'px)';
-
+		this.positionWindow(offsets, start, end, viewport.left);
 		const focused = this.focusedIndex();
-		const overlap =
-			this.renderedStart !== undefined &&
-			this.renderedEnd !== undefined &&
-			start < this.renderedEnd &&
-			end > this.renderedStart;
-		const full = force === true || this.renderedRevision !== this.revision || !overlap;
-		if (full) {
-			const fragment = document.createDocumentFragment();
-			for (let at = start; at < end; at++) {
-				fragment.appendChild(this.buildRow(model, at));
-			}
-			this.windowEl.textContent = '';
-			this.windowEl.appendChild(fragment);
-			this.renderedStart = start;
-			this.renderedEnd = end;
-		} else {
-			const windowEl = this.windowEl;
-			while (this.renderedStart !== undefined && this.renderedStart < start) {
-				windowEl.removeChild(windowEl.firstChild);
-				this.renderedStart++;
-			}
-			while (this.renderedEnd !== undefined && this.renderedEnd > end) {
-				windowEl.removeChild(windowEl.lastChild);
-				this.renderedEnd--;
-			}
-			while (this.renderedStart !== undefined && this.renderedStart > start) {
-				this.renderedStart--;
-				windowEl.insertBefore(this.buildRow(model, this.renderedStart), windowEl.firstChild);
-			}
-			while (this.renderedEnd !== undefined && this.renderedEnd < end) {
-				windowEl.appendChild(this.buildRow(model, this.renderedEnd));
-				this.renderedEnd++;
-			}
-		}
+		this.reconcileWindow(model, start, end, force);
 		this.renderedRevision = this.revision;
 		this.renderLineNumbers(model, start, end);
-		if (focused !== undefined) {
-			const element = this.elementAt(focused);
-			if (element && typeof element.focus === 'function') {
-				element.focus({ preventScroll: true });
-			}
+		this.restoreFocus(focused);
+		this.reportRender([start, end]);
+	}
+
+	private positionWindow(
+		offsets: DocumentTreeViewModel['offsets'],
+		start: number,
+		end: number,
+		left: number
+	): void {
+		const total = offsets.length > 0 ? offsets[offsets.length - 1] : 0;
+		const top = offsetAt(offsets, start, 0);
+		this.windowEl.style.top = top + 'px';
+		this.windowEl.style.height = Math.max(0, offsetAt(offsets, end, total) - top) + 'px';
+		this.windowEl.style.transform = 'translateX(' + -left + 'px)';
+	}
+
+	/** Rebuild the whole window or patch the rows that left and entered the slice. */
+	private reconcileWindow(
+		model: DocumentTreeViewModel,
+		start: number,
+		end: number,
+		force: boolean | undefined
+	): void {
+		if (this.needsFullRender(force, start, end)) {
+			this.rebuildWindow(model, start, end);
+			return;
 		}
+		this.patchWindow(model, start, end);
+	}
+
+	private needsFullRender(force: boolean | undefined, start: number, end: number): boolean {
+		if (force === true) {
+			return true;
+		}
+		if (this.renderedRevision !== this.revision) {
+			return true;
+		}
+		return !this.hasOverlap(start, end);
+	}
+
+	private hasOverlap(start: number, end: number): boolean {
+		if (this.renderedStart === undefined || this.renderedEnd === undefined) {
+			return false;
+		}
+		return start < this.renderedEnd && end > this.renderedStart;
+	}
+
+	private rebuildWindow(model: DocumentTreeViewModel, start: number, end: number): void {
+		const fragment = document.createDocumentFragment();
+		for (let at = start; at < end; at++) {
+			fragment.appendChild(this.buildRow(model, at));
+		}
+		this.windowEl.textContent = '';
+		this.windowEl.appendChild(fragment);
+		this.renderedStart = start;
+		this.renderedEnd = end;
+	}
+
+	private patchWindow(model: DocumentTreeViewModel, start: number, end: number): void {
+		this.trimBefore(start);
+		this.trimAfter(end);
+		this.extendBefore(model, start);
+		this.extendAfter(model, end);
+	}
+
+	private trimBefore(start: number): void {
+		const windowEl = this.windowEl;
+		while (this.renderedStart !== undefined && this.renderedStart < start) {
+			windowEl.removeChild(windowEl.firstChild);
+			this.renderedStart++;
+		}
+	}
+
+	private trimAfter(end: number): void {
+		const windowEl = this.windowEl;
+		while (this.renderedEnd !== undefined && this.renderedEnd > end) {
+			windowEl.removeChild(windowEl.lastChild);
+			this.renderedEnd--;
+		}
+	}
+
+	private extendBefore(model: DocumentTreeViewModel, start: number): void {
+		const windowEl = this.windowEl;
+		while (this.renderedStart !== undefined && this.renderedStart > start) {
+			this.renderedStart--;
+			windowEl.insertBefore(this.buildRow(model, this.renderedStart), windowEl.firstChild);
+		}
+	}
+
+	private extendAfter(model: DocumentTreeViewModel, end: number): void {
+		const windowEl = this.windowEl;
+		while (this.renderedEnd !== undefined && this.renderedEnd < end) {
+			windowEl.appendChild(this.buildRow(model, this.renderedEnd));
+			this.renderedEnd++;
+		}
+	}
+
+	private restoreFocus(index: number | undefined): void {
+		if (index === undefined) {
+			return;
+		}
+		focusElement(this.elementAt(index));
+	}
+
+	private reportRender(range: [number, number]): void {
 		if (this.callbacks.onRender) {
-			this.callbacks.onRender([start, end]);
+			this.callbacks.onRender(range);
 		}
 	}
 
@@ -298,15 +548,7 @@ export class DocumentTreeView {
 		if (!model || typeof model.lineInfo !== 'function') {
 			return 0;
 		}
-		const rowCount = Math.max(0, Math.floor(model.rowCount || 0));
-		let max = 0;
-		for (let at = 0; at < rowCount; at++) {
-			const info = model.lineInfo(at, this.pane);
-			const number = info && typeof info.number === 'number' && Number.isFinite(info.number) ? info.number : undefined;
-			if (number !== undefined && number > max) {
-				max = number;
-			}
-		}
+		const max = maxLineNumber(model, this.pane, modelRowCount(model));
 		if (max <= 0) {
 			return 0;
 		}
@@ -334,40 +576,39 @@ export class DocumentTreeView {
 		this.lineCells = [];
 		const offsets = model.offsets;
 		for (let at = start; at < end; at++) {
-			const cell = document.createElement('div');
-			cell.className = 'document-tree-line-number';
-			cell.dataset.documentIndex = String(at);
-			const info = typeof model.lineInfo === 'function' ? model.lineInfo(at, this.pane) : undefined;
-			const number =
-				info && typeof info.number === 'number' && Number.isFinite(info.number) ? Math.floor(info.number) : undefined;
-			if (number !== undefined) {
-				cell.textContent = String(number);
-			}
-			if (info && info.status) {
-				cell.dataset.status = info.status;
-			}
-			const top = offsets[at] ?? 0;
-			const next = offsets[at + 1] ?? top;
-			cell.style.top = top + 'px';
-			cell.style.height = Math.max(0, next - top) + 'px';
-			this.linesEl.appendChild(cell);
-			this.lineCells.push({ index: at, element: cell, numbered: number !== undefined });
+			const cell = this.buildLineCell(model, offsets, at);
+			this.linesEl.appendChild(cell.element);
+			this.lineCells.push({ index: at, element: cell.element, numbered: cell.numbered });
 		}
 		this.applyActiveLine();
 		this.applyFocusedLine(this.focusedLine);
 	}
 
+	private buildLineCell(
+		model: DocumentTreeViewModel,
+		offsets: DocumentTreeViewModel['offsets'],
+		at: number
+	): { element: HTMLElement; numbered: boolean } {
+		const cell = document.createElement('div');
+		cell.className = 'document-tree-line-number';
+		cell.dataset.documentIndex = String(at);
+		const info = lineInfoAt(model, at, this.pane);
+		const number = lineNumberOf(info);
+		if (number !== undefined) {
+			cell.textContent = String(number);
+		}
+		writeLineStatus(cell, info);
+		placeLineCell(cell, offsets, at);
+		return { element: cell, numbered: number !== undefined };
+	}
+
 	/** Re-colour the current row's number; blank missing-side cells stay inactive. */
 	applyActiveLine(): void {
-		const active =
-			this.model && typeof this.model.activeLine === 'function' ? this.model.activeLine(this.pane) : undefined;
-		for (const cell of this.lineCells) {
-			if (active !== undefined && cell.index === active && cell.numbered) {
-				cell.element.dataset.active = 'true';
-			} else {
-				delete cell.element.dataset.active;
-			}
-		}
+		this.applyLineMark(this.activeLineIndex(), 'active');
+	}
+
+	private activeLineIndex(): number | undefined {
+		return this.model && typeof this.model.activeLine === 'function' ? this.model.activeLine(this.pane) : undefined;
 	}
 
 	clearLineNumbers(): void {
@@ -382,41 +623,35 @@ export class DocumentTreeView {
 		if (!this.linesEl) {
 			return;
 		}
-		const target = event ? event.target : undefined;
-		const cell = target && target.closest ? target.closest('.document-tree-line-number') : null;
-		if (!cell || (typeof this.linesEl.contains === 'function' && !this.linesEl.contains(cell))) {
+		const cell = this.eventItem(event, '.document-tree-line-number', this.linesEl);
+		if (!cell) {
 			return;
 		}
-		const index = Number(cell.dataset ? cell.dataset.documentIndex : NaN);
-		if (!Number.isFinite(index)) {
+		const index = documentIndex(cell);
+		if (index === undefined) {
 			return;
 		}
-		const element = this.elementAt(index);
-		if (element && typeof element.click === 'function') {
-			element.click();
-		}
+		clickElement(this.elementAt(index));
 	}
 
 	/** Track the focused node row so the gutter can repeat its 2px focus rail. */
 	onFocusIn(event: any): void {
-		const target = event ? event.target : undefined;
-		const item = target && target.closest ? target.closest('.node[data-document-index]') : null;
-		if (!item || (this.windowEl && typeof this.windowEl.contains === 'function' && !this.windowEl.contains(item))) {
-			this.applyFocusedLine(undefined);
-			return;
-		}
-		const index = Number(item.dataset ? item.dataset.documentIndex : NaN);
-		this.applyFocusedLine(Number.isFinite(index) ? index : undefined);
+		const item = this.eventItem(event, '.node[data-document-index]', this.windowEl);
+		this.applyFocusedLine(item ? documentIndex(item) : undefined);
 	}
 
 	/** Repeat the Document focus rail on the gutter cell; headers and gaps stay unmarked. */
 	applyFocusedLine(index: number | undefined): void {
 		this.focusedLine = index;
+		this.applyLineMark(index, 'focused');
+	}
+
+	private applyLineMark(index: number | undefined, mark: 'active' | 'focused'): void {
 		for (const cell of this.lineCells) {
-			if (index !== undefined && cell.index === index && cell.numbered) {
-				cell.element.dataset.focused = 'true';
+			if (cellIsMarked(cell, index)) {
+				cell.element.dataset[mark] = 'true';
 			} else {
-				delete cell.element.dataset.focused;
+				delete cell.element.dataset[mark];
 			}
 		}
 	}
@@ -440,22 +675,19 @@ export class DocumentTreeView {
 	}
 
 	focusedIndex(): number | undefined {
+		const element = this.activeRowElement();
+		return element ? documentIndex(element) : undefined;
+	}
+
+	private activeRowElement(): PaneItem | undefined {
 		if (!this.windowEl) {
 			return undefined;
 		}
 		const active = document.activeElement;
-		if (!active || active === this.windowEl) {
+		if (!active || !focusInsideWindow(active, this.windowEl)) {
 			return undefined;
 		}
-		if (typeof this.windowEl.contains === 'function' && !this.windowEl.contains(active)) {
-			return undefined;
-		}
-		const item = active.closest ? (active.closest('[data-document-index]') as HTMLElement | null) : null;
-		if (!item || !item.dataset) {
-			return undefined;
-		}
-		const index = Number(item.dataset.documentIndex);
-		return Number.isFinite(index) ? index : undefined;
+		return closestRowItem(active);
 	}
 
 	elementAt(index: number): any {
@@ -466,17 +698,33 @@ export class DocumentTreeView {
 	}
 
 	onClick(event: any): void {
-		if (!this.callbacks.onRowClick || !this.windowEl) {
+		const report = this.callbacks.onRowClick;
+		if (!report) {
 			return;
 		}
-		const target = event ? event.target : undefined;
-		const item = target && target.closest ? target.closest('[data-document-index]') : null;
-		if (!item || (typeof this.windowEl.contains === 'function' && !this.windowEl.contains(item))) {
-			return;
+		const index = this.eventRowIndex(event);
+		if (index !== undefined) {
+			report(index, event);
 		}
-		const index = Number(item.dataset ? item.dataset.documentIndex : NaN);
-		if (Number.isFinite(index)) {
-			this.callbacks.onRowClick(index, event);
+	}
+
+	private eventRowIndex(event: PaneEvent | null | undefined): number | undefined {
+		if (!this.windowEl) {
+			return undefined;
 		}
+		const item = this.eventItem(event, '[data-document-index]', this.windowEl);
+		return item ? documentIndex(item) : undefined;
+	}
+
+	private eventItem(
+		event: PaneEvent | null | undefined,
+		selector: string,
+		container: PaneContainer | undefined
+	): PaneItem | undefined {
+		const item = closestFromEvent(event, selector);
+		if (!item || !isOwnedItem(item, container)) {
+			return undefined;
+		}
+		return item;
 	}
 }

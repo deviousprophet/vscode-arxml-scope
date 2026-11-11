@@ -6,7 +6,7 @@
  * definitions, so a label, value or meta chip cannot drift between them.
  */
 import type { EcucRow, MetaPart } from '../../../core/ecuc/renderRows';
-import type { WordPair } from '../../../core/diff/wordDiff';
+import type { WordPair, WordSegment } from '../../../core/diff/wordDiff';
 import {
 	appendHighlighted,
 	appendMetaPartText,
@@ -64,41 +64,87 @@ function appendDocumentGuides(rowElement: HTMLElement, guides: readonly Document
 
 export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext): HTMLElement {
 	const inlineMeta = row.meta.filter((part) => part.cls !== 'annotation');
-	const wordDiff = context.wordDiff;
-	const wordSide = context.wordSide;
-	const writePlain = (target: PageElement, text: string): void => {
-		appendHighlighted(target, text);
-	};
 	const node = document.createElement('div');
+	applyNodeIdentity(node, row, inlineMeta, context);
+	applyNodeExpansion(node, row, context);
+	applyNodeTabIndex(node);
+	applyNodeData(node, row);
+	applyNodeState(node, row, context);
+	applyRowFlags(node, row);
+	node.appendChild(buildRowShell(row, context, inlineMeta));
+	return node;
+}
+
+/** The node's own class and ARIA identity. */
+function applyNodeIdentity(
+	node: HTMLElement,
+	row: EcucRow,
+	inlineMeta: readonly MetaPart[],
+	context: DocumentRowContext
+): void {
 	node.className = inlineMeta.length > 0 ? 'node has-meta' : 'node';
 	node.setAttribute('role', 'treeitem');
 	node.setAttribute('aria-level', String(row.level));
 	node.setAttribute('aria-posinset', String(row.posinset));
 	node.setAttribute('aria-setsize', String(row.setsize));
 	node.setAttribute('aria-selected', row.id === context.selectedId ? 'true' : 'false');
+}
+
+function applyNodeExpansion(node: HTMLElement, row: EcucRow, context: DocumentRowContext): void {
 	if (row.hasChildren) {
 		node.setAttribute('aria-expanded', context.expandedIds.has(row.id) ? 'true' : 'false');
 	}
+}
+
+/** The roving tab stop: every node joins the tree's own keyboard focus model. */
+function applyNodeTabIndex(node: HTMLElement): void {
 	node.tabIndex = -1;
+}
+
+/** The datasets every node carries, plus the field its kind owns. */
+function applyNodeData(node: HTMLElement, row: EcucRow): void {
 	node.dataset.nodeId = row.id;
 	node.dataset.kind = row.kind;
 	node.dataset.definitionRef = row.definitionRef;
 	node.dataset.shortName = row.shortName || '';
+	writeParameterValue(node, row);
+	writeReferenceTarget(node, row);
+}
+
+function writeParameterValue(node: HTMLElement, row: EcucRow): void {
 	if (row.kind === 'parameter') {
 		node.dataset.value = row.value || '';
 	}
+}
+
+function writeReferenceTarget(node: HTMLElement, row: EcucRow): void {
 	if (row.kind === 'reference') {
 		node.dataset.target = row.target || '';
 	}
+}
+
+/** Selection, current search hit and subtree membership. */
+function applyNodeState(node: HTMLElement, row: EcucRow, context: DocumentRowContext): void {
 	if (row.id === context.selectedId) {
 		node.dataset.selected = 'true';
 	}
-	if (context.searchQuery.trim() !== '' && row.id === context.currentId) {
+	if (isSearchCurrent(row, context)) {
 		node.dataset.searchCurrent = 'true';
 	}
-	if (context.subtreeIds.has(row.id) && row.id !== context.selectedId) {
+	if (isSubtreeRow(row, context)) {
 		node.dataset.subtree = 'true';
 	}
+}
+
+function isSearchCurrent(row: EcucRow, context: DocumentRowContext): boolean {
+	return context.searchQuery.trim() !== '' && row.id === context.currentId;
+}
+
+function isSubtreeRow(row: EcucRow, context: DocumentRowContext): boolean {
+	return context.subtreeIds.has(row.id) && row.id !== context.selectedId;
+}
+
+function applyRowFlags(node: HTMLElement, row: EcucRow): void {
 	if (row.empty) {
 		node.dataset.empty = 'true';
 	}
@@ -106,57 +152,130 @@ export function buildDocumentNodeRow(row: EcucRow, context: DocumentRowContext):
 		node.dataset.disabled = 'true';
 	}
 	node.title = row.title;
+}
 
+/** The visible row shell: twisty, label, value, meta, disabled suffix and guides. */
+function buildRowShell(
+	row: EcucRow,
+	context: DocumentRowContext,
+	inlineMeta: readonly MetaPart[]
+): HTMLElement {
 	const rowElement = document.createElement('span');
 	rowElement.className = 'row k-' + row.kind + (row.shownValue !== undefined ? ' has-value' : ' no-value');
 	rowElement.dataset.level = String(row.level);
 	if (row.hasChildren) {
 		rowElement.appendChild(twistySpan());
 	}
+	rowElement.appendChild(buildLabel(row, context));
+	appendValuePart(rowElement, row, context);
+	appendMeta(rowElement, row, context, inlineMeta);
+	appendDisabledSuffix(rowElement, row);
+	appendDocumentGuides(rowElement, context.guides);
+	return rowElement;
+}
+
+function buildLabel(row: EcucRow, context: DocumentRowContext): HTMLElement {
 	const label = document.createElement('span');
 	label.className = 'label';
-	if (!appendWordSegments(label, wordDiff && wordDiff.label, wordSide, writePlain)) {
+	if (!appendWordSegments(label, context.wordDiff && context.wordDiff.label, context.wordSide, writePlain)) {
 		appendHighlighted(label, row.label);
 	}
-	rowElement.appendChild(label);
-	if (row.kind === 'parameter' || row.kind === 'reference') {
-		rowElement.appendChild(
-			valueSpan(row, false, undefined, (target, text) => {
-				if (!appendWordSegments(target, wordDiff && wordDiff.value, wordSide, writePlain)) {
-					appendHighlighted(target, text);
-				}
-			})
-		);
+	return label;
+}
+
+function writePlain(target: PageElement, text: string): void {
+	appendHighlighted(target, text);
+}
+
+function appendValuePart(rowElement: HTMLElement, row: EcucRow, context: DocumentRowContext): void {
+	if (!isValueRow(row)) {
+		return;
 	}
-	if (inlineMeta.length > 0) {
-		const metaIndexes = new Map<string, number>();
-		const writePart: MetaPartWriter = (span, part) => {
-			if (!wordDiff || !wordSide || !isWordDiffMetaClass(part.cls)) {
-				return false;
-			}
-			// Count every chip of a class, paired or not, so the pair index
-			// matches the display order even when one side has extra chips.
-			const at = metaIndexes.get(part.cls) || 0;
-			metaIndexes.set(part.cls, at + 1);
-			const pair = wordDiff.meta ? wordDiff.meta[part.cls]?.[at] : undefined;
-			if (!pair) {
-				return false;
-			}
-			return appendWordSegments(span, pair, wordSide, (target, text) =>
-				appendMetaPartText(target, { cls: part.cls, text })
-			);
-		};
-		rowElement.appendChild(metaSpan({ ...row, meta: inlineMeta }, undefined, writePart));
+	rowElement.appendChild(
+		valueSpan(row, false, undefined, (target, text) => writeValue(target, text, context))
+	);
+}
+
+function isValueRow(row: EcucRow): boolean {
+	return row.kind === 'parameter' || row.kind === 'reference';
+}
+
+function writeValue(target: PageElement, text: string, context: DocumentRowContext): void {
+	if (!appendWordSegments(target, context.wordDiff && context.wordDiff.value, context.wordSide, writePlain)) {
+		appendHighlighted(target, text);
 	}
-	if (row.disabled) {
-		const suffix = document.createElement('span');
-		suffix.className = 'sr-only';
-		suffix.textContent = '(disabled by condition)';
-		rowElement.appendChild(suffix);
+}
+
+function appendMeta(
+	rowElement: HTMLElement,
+	row: EcucRow,
+	context: DocumentRowContext,
+	inlineMeta: readonly MetaPart[]
+): void {
+	if (inlineMeta.length === 0) {
+		return;
 	}
-	appendDocumentGuides(rowElement, context.guides);
-	node.appendChild(rowElement);
-	return node;
+	const metaIndexes = new Map<string, number>();
+	const writePart: MetaPartWriter = (span, part) => writeWordDiffMeta(span, part, context, metaIndexes);
+	rowElement.appendChild(metaSpan({ ...row, meta: inlineMeta }, undefined, writePart));
+}
+
+function writeWordDiffMeta(
+	span: HTMLElement,
+	part: { cls: string; text: string },
+	context: DocumentRowContext,
+	metaIndexes: Map<string, number>
+): boolean {
+	if (!isDiffableMeta(part, context)) {
+		return false;
+	}
+	// Count every chip of a class, paired or not, so the pair index
+	// matches the display order even when one side has extra chips.
+	const at = nextMetaIndex(metaIndexes, part.cls);
+	const pair = metaPair(context.wordDiff, part.cls, at);
+	if (!pair) {
+		return false;
+	}
+	return appendWordSegments(span, pair, context.wordSide, (target, text) =>
+		appendMetaPartText(target, { cls: part.cls, text })
+	);
+}
+
+type DiffableMetaPart = { cls: DocumentWordDiffMetaClass; text: string };
+
+function isDiffableMeta(
+	part: { cls: string; text: string },
+	context: DocumentRowContext
+): part is DiffableMetaPart {
+	return Boolean(context.wordDiff) && Boolean(context.wordSide) && isWordDiffMetaClass(part.cls);
+}
+
+function nextMetaIndex(indexes: Map<string, number>, cls: string): number {
+	const at = indexes.get(cls) || 0;
+	indexes.set(cls, at + 1);
+	return at;
+}
+
+function metaPair(
+	wordDiff: DocumentWordDiff | undefined,
+	cls: DocumentWordDiffMetaClass,
+	at: number
+): WordPair | undefined {
+	if (!wordDiff) {
+		return undefined;
+	}
+	const meta = wordDiff.meta;
+	return meta ? meta[cls]?.[at] : undefined;
+}
+
+function appendDisabledSuffix(rowElement: HTMLElement, row: EcucRow): void {
+	if (!row.disabled) {
+		return;
+	}
+	const suffix = document.createElement('span');
+	suffix.className = 'sr-only';
+	suffix.textContent = '(disabled by condition)';
+	rowElement.appendChild(suffix);
 }
 
 /**
@@ -175,19 +294,31 @@ function appendWordSegments(
 	if (!pair || !side) {
 		return false;
 	}
-	const segments = side === 'left' ? pair.left : pair.right;
-	for (const segment of segments) {
-		if (!segment.changed) {
-			writePlain(parent, segment.text);
-			continue;
-		}
-		const span = document.createElement('span');
-		span.className = 'word-changed';
-		span.dataset.wordSide = side;
-		writePlain(span, segment.text);
-		parent.appendChild(span);
+	for (const segment of wordSegments(pair, side)) {
+		appendWordSegment(parent, segment, side, writePlain);
 	}
 	return true;
+}
+
+function wordSegments(pair: WordPair, side: 'left' | 'right'): readonly WordSegment[] {
+	return side === 'left' ? pair.left : pair.right;
+}
+
+function appendWordSegment(
+	parent: PageElement,
+	segment: WordSegment,
+	side: 'left' | 'right',
+	writePlain: (target: PageElement, text: string) => void
+): void {
+	if (!segment.changed) {
+		writePlain(parent, segment.text);
+		return;
+	}
+	const span = document.createElement('span');
+	span.className = 'word-changed';
+	span.dataset.wordSide = side;
+	writePlain(span, segment.text);
+	parent.appendChild(span);
 }
 
 /** Whether a meta class takes part in the word diff. */
