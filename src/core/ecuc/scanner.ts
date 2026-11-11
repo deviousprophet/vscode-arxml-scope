@@ -114,178 +114,262 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 	const len = text.length;
 	let i = 0;
 
+	/** Skips XML whitespace from `from`. */
+	const skipWhitespace = (from: number): number => {
+		let at = from;
+		while (at < len && isXmlWhitespace(text[at])) {
+			at++;
+		}
+		return at;
+	};
+
+	/** Count of XML whitespace characters at the start of `raw`. */
+	const leadingWhitespace = (raw: string): number => {
+		let at = 0;
+		while (at < raw.length && isXmlWhitespace(raw[at])) {
+			at++;
+		}
+		return at;
+	};
+
+	/** Count of XML whitespace characters at the end of `raw`, before `leading`. */
+	const trailingWhitespace = (raw: string, leading: number): number => {
+		let at = 0;
+		while (at < raw.length - leading && isXmlWhitespace(raw[raw.length - 1 - at])) {
+			at++;
+		}
+		return at;
+	};
+
+	/** An open `SW-SYSCOND` run without its formatting whitespace. */
+	const syscondRun = (
+		raw: string,
+		from: number,
+		to: number
+	): { chunk: string; start: number; end: number } => {
+		const leading = leadingWhitespace(raw);
+		const trailing = trailingWhitespace(raw, leading);
+		return {
+			chunk: raw.slice(leading, raw.length - trailing),
+			start: from + leading,
+			end: to - trailing,
+		};
+	};
+
+	/** The captured run and its offsets, whitespace-trimmed inside `SW-SYSCOND`. */
+	const capturedRun = (
+		e: Entry,
+		raw: string,
+		from: number,
+		to: number
+	): { chunk: string; start: number; end: number } => {
+		if (e.name !== 'SW-SYSCOND') {
+			return { chunk: raw, start: from, end: to };
+		}
+		return syscondRun(raw, from, to);
+	};
+
 	/** Appends raw characters `[from, to)` to the innermost open element. */
 	const append = (raw: string, from: number, to: number): void => {
 		const e = stack[stack.length - 1];
 		if (!e) {
 			return;
 		}
-		let chunk = raw;
-		let start = from;
-		let end = to;
-		if (e.name === 'SW-SYSCOND') {
-			// The formatting whitespace between a condition's parts is not part of the
-			// condition: the legacy text joins the trimmed parts, so
-			// `(\n <SYSC-REF/> \n ==0)` reads `(CANIPCORETYPE_SC==0)`. XML whitespace
-			// only, matching `isWs`, so a condition's own characters are never dropped.
-			let leading = 0;
-			while (leading < raw.length && isXmlWhitespace(raw[leading])) {
-				leading++;
-			}
-			let trailing = 0;
-			while (trailing < raw.length - leading && isXmlWhitespace(raw[raw.length - 1 - trailing])) {
-				trailing++;
-			}
-			chunk = raw.slice(leading, raw.length - trailing);
-			start = from + leading;
-			end = to - trailing;
-			if (chunk === '') {
-				return;
-			}
+		// The formatting whitespace between a condition's parts is not part of the
+		// condition: the legacy text joins the trimmed parts, so
+		// `(\n <SYSC-REF/> \n ==0)` reads `(CANIPCORETYPE_SC==0)`. XML whitespace
+		// only, matching `isWs`, so a condition's own characters are never dropped.
+		const run = capturedRun(e, raw, from, to);
+		if (run.chunk === '') {
+			return;
 		}
-		e.text += chunk;
+		e.text += run.chunk;
 		if (e.textStart < 0) {
-			e.textStart = start;
+			e.textStart = run.start;
 		}
-		e.textEnd = end;
+		e.textEnd = run.end;
 	};
 
-	/** Parses one tag at `at`; returns the offset just past it. */
-	const readTag = (at: number): number => {
-		const start = at;
-		let j = at + 1;
-		let closing = false;
-		if (text[j] === '/') {
-			closing = true;
-			j++;
-		}
-		const nameStart = j;
-		while (j < len && !isXmlWhitespace(text[j]) && text[j] !== '>' && text[j] !== '/') {
-			j++;
-		}
-		const name = stripXmlPrefix(text.slice(nameStart, j));
-		const attrs = new Map<string, string>();
-		let selfClosing = false;
+	/** Whitespace, `>`, and `/` end an element name. */
+	const isNameStop = (character: string): boolean =>
+		isXmlWhitespace(character) || character === '>' || character === '/';
 
-		while (j < len) {
-			while (j < len && isXmlWhitespace(text[j])) {
-				j++;
-			}
-			const c = text[j];
-			if (c === undefined) {
-				break;
-			}
-			if (c === '>') {
-				j++;
-				break;
-			}
-			if (c === '/') {
-				j++;
-				if (text[j] === '>') {
-					j++;
-					selfClosing = true;
-				}
-				break;
-			}
-			const attrStart = j;
-			while (j < len && !isXmlWhitespace(text[j]) && text[j] !== '=' && text[j] !== '>' && text[j] !== '/') {
-				j++;
-			}
-			const attrName = stripXmlPrefix(text.slice(attrStart, j));
-			while (j < len && isXmlWhitespace(text[j])) {
-				j++;
-			}
-			if (text[j] !== '=') {
-				if (attrName) {
-					attrs.set(attrName, '');
-				}
-				continue;
-			}
-			j++;
-			while (j < len && isXmlWhitespace(text[j])) {
-				j++;
-			}
-			const quote = text[j];
-			if (quote === '"' || quote === "'") {
-				// Quote-aware: a '>' inside the value cannot terminate the tag.
-				j++;
-				const valueStart = j;
-				while (j < len && text[j] !== quote) {
-					j++;
-				}
-				attrs.set(attrName, text.slice(valueStart, j));
-				if (j < len) {
-					j++;
-				}
-			} else {
-				const valueStart = j;
-				while (j < len && !isXmlWhitespace(text[j]) && text[j] !== '>') {
-					j++;
-				}
-				attrs.set(attrName, text.slice(valueStart, j));
-			}
-		}
+	/** `=` ends an attribute name in addition to the element-name stops. */
+	const isAttributeNameStop = (character: string): boolean =>
+		isNameStop(character) || character === '=';
 
-		if (closing) {
-			closeElement(name, j);
-			return j;
+	/** Scans an element name and strips its namespace prefix. */
+	const readName = (from: number): { value: string; end: number } => {
+		let at = from;
+		while (at < len && !isNameStop(text[at])) {
+			at++;
 		}
+		return { value: stripXmlPrefix(text.slice(from, at)), end: at };
+	};
 
+	/** Scans an attribute name and strips its namespace prefix. */
+	const readAttributeName = (from: number): { value: string; end: number } => {
+		let at = from;
+		while (at < len && !isAttributeNameStop(text[at])) {
+			at++;
+		}
+		return { value: stripXmlPrefix(text.slice(from, at)), end: at };
+	};
+
+	/** An unquoted attribute value: everything up to whitespace or `>`. */
+	const readBareValue = (from: number): { value: string; end: number } => {
+		let at = from;
+		while (at < len && !isXmlWhitespace(text[at]) && text[at] !== '>') {
+			at++;
+		}
+		return { value: text.slice(from, at), end: at };
+	};
+
+	/** A quoted attribute value: everything up to the matching quote. */
+	const readQuotedValue = (from: number, quote: string): { value: string; end: number } => {
+		let at = from + 1;
+		while (at < len && text[at] !== quote) {
+			at++;
+		}
+		return { value: text.slice(from + 1, at), end: at < len ? at + 1 : at };
+	};
+
+	/** Reads one attribute value; quote-aware, so `>` inside it cannot end the tag. */
+	const readAttributeValue = (from: number): { value: string; end: number } => {
+		const quote = text[from];
+		if (quote === '"' || quote === "'") {
+			return readQuotedValue(from, quote);
+		}
+		return readBareValue(from);
+	};
+
+	/** Reads one attribute (or a valueless name) and returns the new offset. */
+	const readAttribute = (from: number, attrs: Map<string, string>): number => {
+		const name = readAttributeName(from);
+		const afterName = skipWhitespace(name.end);
+		if (text[afterName] !== '=') {
+			if (name.value) {
+				attrs.set(name.value, '');
+			}
+			return afterName;
+		}
+		const value = readAttributeValue(skipWhitespace(afterName + 1));
+		attrs.set(name.value, value.value);
+		return value.end;
+	};
+
+	/** The end of a tag's attribute list, and whether it self-closes. */
+	interface TagStop {
+		end: number;
+		selfClosing: boolean;
+	}
+
+	const selfCloseStop = (at: number): TagStop => {
+		const closes = text[at + 1] === '>';
+		return { end: closes ? at + 2 : at + 1, selfClosing: closes };
+	};
+
+	/** `>` or the `/>` pair at `at`, or `undefined` for another attribute. */
+	const tagStop = (at: number): TagStop | undefined => {
+		const character = text[at];
+		if (character === '>') {
+			return { end: at + 1, selfClosing: false };
+		}
+		if (character === undefined) {
+			return { end: at, selfClosing: false };
+		}
+		return character === '/' ? selfCloseStop(at) : undefined;
+	};
+
+	/** Reads every attribute of a tag up to its `>` or `/>`. */
+	const readAttributes = (from: number, attrs: Map<string, string>): TagStop => {
+		let at = from;
+		while (at < len) {
+			const skipped = skipWhitespace(at);
+			const stop = tagStop(skipped);
+			if (stop !== undefined) {
+				return stop;
+			}
+			at = readAttribute(skipped, attrs);
+		}
+		return { end: at, selfClosing: false };
+	};
+
+	/** The tag names whose `DEST` attribute the scanner keeps. */
+	const keepsAttributes = (name: string): boolean =>
+		name === 'DEFINITION-REF' || name === 'VALUE-REF' || name === 'TARGET-REF';
+
+	/** A record whose `<VALUE>` child carries a parameter's or condition's value. */
+	const isValueRecord = (rec: Rec | undefined): boolean => rec?.kind === 'value';
+
+	/** Pushes the open element's entry, closing it at once when self-closing. */
+	const openElement = (
+		name: string,
+		start: number,
+		end: number,
+		attrs: Map<string, string>,
+		selfClosing: boolean
+	): void => {
 		const entry: Entry = { name, start, text: '', textStart: -1, textEnd: -1 };
-		if (name === 'DEFINITION-REF' || name === 'VALUE-REF' || name === 'TARGET-REF') {
+		if (keepsAttributes(name)) {
 			entry.attrs = attrs;
 		}
 		entry.rec = openRecord(name, attrs);
-		if (entry.rec?.kind === 'value') {
+		if (isValueRecord(entry.rec)) {
 			entry.valueRole = valueRole(stack);
 		}
 		stack.push(entry);
 		if (selfClosing) {
 			// Pushed and immediately popped, so a single close path serves both forms.
-			closeElement(name, j);
+			closeElement(name, end);
 		}
-		return j;
+	};
+
+	/** Parses one tag at `at`; returns the offset just past it. */
+	const readTag = (at: number): number => {
+		const start = at;
+		const closing = text[at + 1] === '/';
+		const name = readName(closing ? at + 2 : at + 1);
+		const attrs = new Map<string, string>();
+		const tail = readAttributes(name.end, attrs);
+		if (closing) {
+			closeElement(name.value, tail.end);
+			return tail.end;
+		}
+		openElement(name.value, start, tail.end, attrs, tail.selfClosing);
+		return tail.end;
+	};
+
+	/** The stack index of the nearest open element called `name`, or -1. */
+	const findOpenElement = (name: string): number => {
+		for (let at = stack.length - 1; at >= 0; at--) {
+			if (stack[at].name === name) {
+				return at;
+			}
+		}
+		return -1;
+	};
+
+	/** Finalizes the spliced entries innermost first. */
+	const finishClosed = (closing: Entry[], end: number): void => {
+		for (let at = closing.length - 1; at >= 0; at--) {
+			finish(closing[at], end, stack);
+		}
 	};
 
 	/** Closes the nearest matching open element, and anything it is nested in. */
 	const closeElement = (name: string, end: number): void => {
-		let idx = -1;
-		for (let k = stack.length - 1; k >= 0; k--) {
-			if (stack[k].name === name) {
-				idx = k;
-				break;
-			}
-		}
+		const idx = findOpenElement(name);
 		if (idx < 0) {
 			return; // stray end tag
 		}
-		const closing = stack.splice(idx);
-		for (let k = closing.length - 1; k >= 0; k--) {
-			finish(closing[k], end, stack);
-		}
+		finishClosed(stack.splice(idx), end);
 	};
 
 	/** Finalizes one element as its tags close. */
 	const finish = (entry: Entry, end: number, ancestors: Entry[]): void => {
 		if (entry.name === 'SYSC-REF') {
-			// A condition can name a system constant inline. The captured text is the
-			// raw runs only, so the reference has to be substituted where it stood —
-			// the legacy text uses the path tail, not the full path.
-			const holder = ancestors[ancestors.length - 1];
-			if (holder && holder.name === 'SW-SYSCOND') {
-				const tail = lastShortName(entry.text.trim());
-				holder.text += tail;
-				// The range must bound the condition text, not the reference's markup:
-				// when nothing precedes the reference the condition text starts with the
-				// tail, so the anchor is the tail inside the captured path. A range over
-				// `<SYSC-REF …>` would make reveal/selection highlight markup.
-				const at = tail === '' ? -1 : entry.text.lastIndexOf(tail);
-				const start = entry.textStart >= 0 && at >= 0 ? entry.textStart + at : entry.start;
-				if (holder.textStart < 0) {
-					holder.textStart = start;
-				}
-				holder.textEnd = start + tail.length;
-			}
+			finishSyscRef(entry, ancestors);
 			return;
 		}
 		const rec = entry.rec;
@@ -293,118 +377,218 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 			return;
 		}
 		rec.range = { start: entry.start, end };
-		switch (rec.kind) {
-			case 'autosar':
-				applySchema(rec, model);
-				return;
-			case 'package':
-			case 'module':
-			case 'container':
-				finishNode(rec, ancestors);
-				return;
-			case 'param':
-				if (rec.displayValue === undefined) {
-					// Only a `<VALUE>` child normally supplies the value; this covers a parameter
-					// written as bare text.
-					rec.displayValue = decodeXml(entry.text).trim();
-				}
-				attachChild(ancestors, rec);
-				return;
-			case 'reference':
-				rec.targetRaw = (rec.targetRaw ?? '').trim();
-				rec.targetPath = structify(rec.targetRaw);
-				rec.contextPaths = (rec.contextRaw ?? []).map(structify);
-				delete rec.contextRaw;
-				attachChild(ancestors, rec);
-				return;
-			case 'text':
-				finishText(entry, rec, ancestors);
-				return;
-			case 'value':
-				finishValue(entry, ancestors);
-				return;
-			case 'pbConditions': {
-				const parent = nearest(ancestors, ...NODE_KINDS);
-				if (parent) {
-					parent.postBuildRange = rec.range;
-				}
-				return;
-			}
-			case 'pbCondition': {
-				const parent = nearest(ancestors, ...NODE_KINDS);
-				if (parent) {
-					(parent.pbVariants ??= []).push({
-						criterion: lastShortName(rec.criterionRaw ?? ''),
-						operator: '==',
-						value: (rec.pbValueRaw ?? '').trim(),
-					});
-				}
-				return;
-			}
-			case 'annotation': {
-				// One list entry per `ANNOTATION`. The legacy `\appendAnnotations`
-				// concatenates every annotation into a single `/* … */` run; a list is
-				// our deliberate semantic-preserving deviation (parent D6).
-				const parent = nearest(ancestors, 'annotations');
-				if (parent) {
-					(parent.annotations ??= []).push(
-						compact({
-							label: rec.label,
-							text: rec.text,
-							range: rec.range,
-						})
-					);
-				}
-				return;
-			}
-			case 'annotations': {
-				const parent = nearest(ancestors, ...NODE_KINDS);
-				if (parent && rec.annotations && rec.annotations.length > 0) {
-					parent.annotations = rec.annotations;
-				}
-				return;
-			}
+		finishRecord(rec, entry, ancestors);
+	};
+
+	const isSyscondHolder = (entry: Entry | undefined): entry is Entry =>
+		entry !== undefined && entry.name === 'SW-SYSCOND';
+
+	/** Where the substituted tail starts inside the condition's captured text. */
+	const syscRefStart = (entry: Entry, tail: string): number => {
+		const at = tail === '' ? -1 : entry.text.lastIndexOf(tail);
+		return entry.textStart >= 0 && at >= 0 ? entry.textStart + at : entry.start;
+	};
+
+	/**
+	 * A condition can name a system constant inline. The captured text is the
+	 * raw runs only, so the reference has to be substituted where it stood —
+	 * the legacy text uses the path tail, not the full path.
+	 */
+	const finishSyscRef = (entry: Entry, ancestors: Entry[]): void => {
+		const holder = ancestors[ancestors.length - 1];
+		if (!isSyscondHolder(holder)) {
+			return;
+		}
+		const tail = lastShortName(entry.text.trim());
+		holder.text += tail;
+		// The range must bound the condition text, not the reference's markup:
+		// when nothing precedes the reference the condition text starts with the
+		// tail, so the anchor is the tail inside the captured path. A range over
+		// `<SYSC-REF …>` would make reveal/selection highlight markup.
+		const start = syscRefStart(entry, tail);
+		if (holder.textStart < 0) {
+			holder.textStart = start;
+		}
+		holder.textEnd = start + tail.length;
+	};
+
+	const isNodeRecord = (rec: Rec): boolean =>
+		rec.kind === 'package' || rec.kind === 'module' || rec.kind === 'container';
+
+	const finishRecord = (rec: Rec, entry: Entry, ancestors: Entry[]): void => {
+		if (isNodeRecord(rec)) {
+			finishNode(rec, ancestors);
+			return;
+		}
+		if (rec.kind === 'text') {
+			finishText(entry, rec, ancestors);
+			return;
+		}
+		finishNonNodeRecord(rec, entry, ancestors);
+	};
+
+	const finishNonNodeRecord = (rec: Rec, entry: Entry, ancestors: Entry[]): void => {
+		if (rec.kind === 'param') {
+			finishParam(rec, entry, ancestors);
+			return;
+		}
+		if (rec.kind === 'reference') {
+			finishReference(rec, ancestors);
+			return;
+		}
+		finishMetaRecord(rec, entry, ancestors);
+	};
+
+	const finishMetaRecord = (rec: Rec, entry: Entry, ancestors: Entry[]): void => {
+		if (rec.kind === 'autosar') {
+			applySchema(rec, model);
+			return;
+		}
+		if (rec.kind === 'value') {
+			finishValue(entry, ancestors);
+			return;
+		}
+		finishConditionRecord(rec, ancestors);
+	};
+
+	const finishConditionRecord = (rec: Rec, ancestors: Entry[]): void => {
+		if (rec.kind === 'pbConditions') {
+			finishPbConditions(rec, ancestors);
+			return;
+		}
+		if (rec.kind === 'pbCondition') {
+			finishPbCondition(rec, ancestors);
+			return;
+		}
+		finishAnnotationRecord(rec, ancestors);
+	};
+
+	const finishAnnotationRecord = (rec: Rec, ancestors: Entry[]): void => {
+		if (rec.kind === 'annotation') {
+			finishAnnotation(rec, ancestors);
+			return;
+		}
+		finishAnnotations(rec, ancestors);
+	};
+
+	const finishParam = (rec: Rec, entry: Entry, ancestors: Entry[]): void => {
+		if (rec.displayValue === undefined) {
+			// Only a `<VALUE>` child normally supplies the value; this covers a parameter
+			// written as bare text.
+			rec.displayValue = decodeXml(entry.text).trim();
+		}
+		attachChild(ancestors, rec);
+	};
+
+	const finishReference = (rec: Rec, ancestors: Entry[]): void => {
+		rec.targetRaw = (rec.targetRaw ?? '').trim();
+		rec.targetPath = structify(rec.targetRaw);
+		rec.contextPaths = (rec.contextRaw ?? []).map(structify);
+		delete rec.contextRaw;
+		attachChild(ancestors, rec);
+	};
+
+	const finishPbConditions = (rec: Rec, ancestors: Entry[]): void => {
+		const parent = nearest(ancestors, ...NODE_KINDS);
+		if (parent) {
+			parent.postBuildRange = rec.range;
+		}
+	};
+
+	const finishPbCondition = (rec: Rec, ancestors: Entry[]): void => {
+		const parent = nearest(ancestors, ...NODE_KINDS);
+		if (parent) {
+			(parent.pbVariants ??= []).push(pbVariantOf(rec));
+		}
+	};
+
+	/** The legacy `criterion == value` post-build variant a condition contributes. */
+	const pbVariantOf = (rec: Rec): { criterion: string; operator: string; value: string } => ({
+		criterion: lastShortName(rec.criterionRaw ?? ''),
+		operator: '==',
+		value: (rec.pbValueRaw ?? '').trim(),
+	});
+
+	const finishAnnotation = (rec: Rec, ancestors: Entry[]): void => {
+		// One list entry per `ANNOTATION`. The legacy `\appendAnnotations`
+		// concatenates every annotation into a single `/* … */` run; a list is
+		// our deliberate semantic-preserving deviation (parent D6).
+		const parent = nearest(ancestors, 'annotations');
+		if (parent) {
+			(parent.annotations ??= []).push(
+				compact({
+					label: rec.label,
+					text: rec.text,
+					range: rec.range,
+				})
+			);
+		}
+	};
+
+	const finishAnnotations = (rec: Rec, ancestors: Entry[]): void => {
+		const parent = nearest(ancestors, ...NODE_KINDS);
+		if (parent && rec.annotations && rec.annotations.length > 0) {
+			parent.annotations = rec.annotations;
 		}
 	};
 
 	const finishNode = (rec: Rec, ancestors: Entry[]): void => {
 		const pkgChain = ancestorShortNames(ancestors, 'package');
 		const shortName = rec.shortName ?? '';
-
 		if (rec.kind === 'package') {
-			const chain = [...pkgChain, shortName];
-			addIndexKey(pathIndex, chain, rec.range);
-			// Recorded now: the package's own range is only known once its tags close.
-			packageRanges.set('/' + chain.join('/'), rec.range!);
+			finishPackage(rec, pkgChain, shortName);
 			return;
 		}
-
 		if (rec.kind === 'module') {
-			addIndexKey(pathIndex, [...pkgChain, shortName], rec.range);
-			const containerRecs = rec.containers ?? [];
-			modules.push(
-				compact<ModuleNode>({
-					kind: 'module',
-					definitionRef: rec.definitionRef ?? '',
-					definitionRefRange: rec.definitionRefRange,
-					shortName,
-					shortNameRange: rec.shortNameRange,
-					variant: rec.variant,
-					variantRange: rec.variantRange,
-					range: rec.range!,
-					containers: containerRecs.map(toContainer),
-					...suffixesOf(rec),
-				})
-			);
-			if (pkgChain.length > 0) {
-				const key = pkgChain.join('/');
-				if (!pendingPackages.some((p) => p.join('/') === key)) {
-					pendingPackages.push(pkgChain);
-				}
-			}
+			finishModule(rec, pkgChain, shortName);
 			return;
 		}
+		finishContainer(rec, ancestors, pkgChain, shortName);
+	};
 
+	const finishPackage = (rec: Rec, pkgChain: string[], shortName: string): void => {
+		const chain = [...pkgChain, shortName];
+		addIndexKey(pathIndex, chain, rec.range);
+		// Recorded now: the package's own range is only known once its tags close.
+		packageRanges.set('/' + chain.join('/'), rec.range!);
+	};
+
+	/** Remembers a module's package chain for the post-scan package list. */
+	const rememberPackage = (pkgChain: string[]): void => {
+		const key = pkgChain.join('/');
+		if (!pendingPackages.some((p) => p.join('/') === key)) {
+			pendingPackages.push(pkgChain);
+		}
+	};
+
+	const finishModule = (rec: Rec, pkgChain: string[], shortName: string): void => {
+		addIndexKey(pathIndex, [...pkgChain, shortName], rec.range);
+		const containerRecs = rec.containers ?? [];
+		modules.push(
+			compact<ModuleNode>({
+				kind: 'module',
+				definitionRef: rec.definitionRef ?? '',
+				definitionRefRange: rec.definitionRefRange,
+				shortName,
+				shortNameRange: rec.shortNameRange,
+				variant: rec.variant,
+				variantRange: rec.variantRange,
+				range: rec.range!,
+				containers: containerRecs.map(toContainer),
+				...suffixesOf(rec),
+			})
+		);
+		if (pkgChain.length > 0) {
+			rememberPackage(pkgChain);
+		}
+	};
+
+	const finishContainer = (
+		rec: Rec,
+		ancestors: Entry[],
+		pkgChain: string[],
+		shortName: string
+	): void => {
 		// Container: package chain, then the module short-name, then enclosing container
 		// short-names. See containerPath below.
 		const moduleRec = nearest(ancestors, 'module');
@@ -414,133 +598,247 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		attachChild(ancestors, rec);
 	};
 
+	const appendContainerChild = (parent: Rec, rec: Rec): void => {
+		(parent.containers ??= []).push(rec);
+	};
+
+	const appendParameterChild = (parent: Rec, rec: Rec): void => {
+		(parent.parameters ??= []).push(rec);
+	};
+
+	const appendReferenceChild = (parent: Rec, rec: Rec): void => {
+		(parent.references ??= []).push(rec);
+	};
+
+	const appendChildTo = (parent: Rec, rec: Rec): void => {
+		if (rec.kind === 'container') {
+			appendContainerChild(parent, rec);
+			return;
+		}
+		if (rec.kind === 'param') {
+			appendParameterChild(parent, rec);
+			return;
+		}
+		appendReferenceChild(parent, rec);
+	};
+
 	const attachChild = (ancestors: Entry[], rec: Rec): void => {
 		const parent = nearest(ancestors, 'container') ?? nearest(ancestors, 'module');
 		if (!parent) {
 			return;
 		}
-		if (rec.kind === 'container') {
-			(parent.containers ??= []).push(rec);
-		} else if (rec.kind === 'param') {
-			(parent.parameters ??= []).push(rec);
-		} else {
-			(parent.references ??= []).push(rec);
-		}
+		appendChildTo(parent, rec);
 	};
 
 	const finishText = (entry: Entry, rec: Rec, ancestors: Entry[]): void => {
 		const raw = entry.text;
 		const range = textRange(entry);
-		switch (rec.name) {
-			case 'SHORT-NAME': {
-				// A short name belongs to the element it is a direct child of; a short name of an
-				// element the model does not capture (e.g. inside a foreign collection) is ignored
-				// rather than mis-attributed to the enclosing node.
-				const parent = immediate(ancestors, 'package', ...NODE_KINDS);
-				if (parent) {
-					parent.shortName = raw.trim();
-					parent.shortNameRange = range;
-				}
-				return;
+		if (finishNameText(entry, rec, ancestors, raw, range)) {
+			return;
+		}
+		if (finishConditionText(rec, ancestors, raw, range)) {
+			return;
+		}
+		finishReferenceText(entry, rec, ancestors, raw, range);
+	};
+
+	/** `SHORT-NAME`, `DEFINITION-REF` and the implementation variant. */
+	const finishNameText = (
+		entry: Entry,
+		rec: Rec,
+		ancestors: Entry[],
+		raw: string,
+		range: Range | undefined
+	): boolean => {
+		if (rec.name === 'SHORT-NAME') {
+			finishShortName(ancestors, raw, range);
+			return true;
+		}
+		if (rec.name === 'DEFINITION-REF') {
+			finishDefinitionRef(entry, ancestors, raw, range);
+			return true;
+		}
+		if (rec.name === 'IMPLEMENTATION-CONFIG-VARIANT') {
+			finishVariant(ancestors, raw, range);
+			return true;
+		}
+		return false;
+	};
+
+	/** `SW-SYSCOND`, the post-build criterion and the annotation label layer. */
+	const finishConditionText = (
+		rec: Rec,
+		ancestors: Entry[],
+		raw: string,
+		range: Range | undefined
+	): boolean => {
+		if (rec.name === 'SW-SYSCOND') {
+			finishSyscond(ancestors, raw, range);
+			return true;
+		}
+		if (rec.name === 'MATCHING-CRITERION-REF') {
+			finishCriterion(ancestors, raw);
+			return true;
+		}
+		if (rec.name === 'L-4') {
+			finishLabel(ancestors, raw);
+			return true;
+		}
+		return false;
+	};
+
+	/** The annotation text layer and the reference target/context texts. */
+	const finishReferenceText = (
+		entry: Entry,
+		rec: Rec,
+		ancestors: Entry[],
+		raw: string,
+		range: Range | undefined
+	): void => {
+		if (rec.name === 'L-5') {
+			finishAnnotationText(ancestors, raw);
+			return;
+		}
+		if (rec.name === 'VALUE-REF' || rec.name === 'TARGET-REF') {
+			finishTargetRef(entry, ancestors, raw, range);
+			return;
+		}
+		finishContextRef(ancestors, raw);
+	};
+
+	const finishShortName = (
+		ancestors: Entry[],
+		raw: string,
+		range: Range | undefined
+	): void => {
+		// A short name belongs to the element it is a direct child of; a short name of an
+		// element the model does not capture (e.g. inside a foreign collection) is ignored
+		// rather than mis-attributed to the enclosing node.
+		const parent = immediate(ancestors, 'package', ...NODE_KINDS);
+		if (parent) {
+			parent.shortName = raw.trim();
+			parent.shortNameRange = range;
+		}
+	};
+
+	/** The retained `DEST` attribute, when the tag carries one. */
+	const destOf = (entry: Entry): string | undefined => entry.attrs?.get('DEST');
+
+	const finishDefinitionRef = (
+		entry: Entry,
+		ancestors: Entry[],
+		raw: string,
+		range: Range | undefined
+	): void => {
+		const parent = immediate(ancestors, ...NODE_KINDS);
+		if (parent) {
+			parent.definitionRef = raw.trim();
+			parent.definitionRefRange = range;
+			const dest = destOf(entry);
+			if (dest) {
+				parent.definitionDest = dest.trim();
 			}
-			case 'DEFINITION-REF': {
-				const parent = immediate(ancestors, ...NODE_KINDS);
-				if (parent) {
-					parent.definitionRef = raw.trim();
-					parent.definitionRefRange = range;
-					const dest = entry.attrs?.get('DEST');
-					if (dest) {
-						parent.definitionDest = dest.trim();
-					}
-				}
-				return;
+		}
+	};
+
+	const finishVariant = (ancestors: Entry[], raw: string, range: Range | undefined): void => {
+		const parent = immediate(ancestors, 'module');
+		if (parent) {
+			parent.variant = raw.trim();
+			parent.variantRange = range;
+		}
+	};
+
+	const finishSyscond = (ancestors: Entry[], raw: string, range: Range | undefined): void => {
+		const parent = nearest(ancestors, ...NODE_KINDS);
+		if (parent) {
+			parent.syscond = decodeXml(raw).trim();
+			parent.syscondRange = range;
+		}
+	};
+
+	const finishCriterion = (ancestors: Entry[], raw: string): void => {
+		const parent = nearest(ancestors, 'pbCondition');
+		if (parent) {
+			parent.criterionRaw = raw.trim();
+		}
+	};
+
+	const finishLabel = (ancestors: Entry[], raw: string): void => {
+		// Label = `LABEL/L-4` text. The `.mm` has no language predicate, so the
+		// first `L-4` in document order wins; later layers are ignored.
+		const parent = hasAncestor(ancestors, 'LABEL') ? nearest(ancestors, 'annotation') : undefined;
+		if (parent && parent.label === undefined) {
+			parent.label = decodeXml(raw).trim();
+		}
+	};
+
+	const annotationTextParent = (ancestors: Entry[]): Rec | undefined =>
+		hasAncestor(ancestors, 'ANNOTATION-TEXT') && hasAncestor(ancestors, 'VERBATIM')
+			? nearest(ancestors, 'annotation')
+			: undefined;
+
+	const finishAnnotationText = (ancestors: Entry[], raw: string): void => {
+		// Text = `ANNOTATION-TEXT/VERBATIM/L-5` text, first in document order.
+		const parent = annotationTextParent(ancestors);
+		if (parent && parent.text === undefined) {
+			parent.text = decodeXml(raw).trim();
+		}
+	};
+
+	const finishTargetRef = (
+		entry: Entry,
+		ancestors: Entry[],
+		raw: string,
+		range: Range | undefined
+	): void => {
+		const parent = nearest(ancestors, 'reference');
+		if (parent) {
+			parent.targetRaw = raw.trim();
+			parent.targetRange = range;
+			const dest = destOf(entry);
+			if (dest) {
+				parent.targetDest = dest.trim();
 			}
-			case 'IMPLEMENTATION-CONFIG-VARIANT': {
-				const parent = immediate(ancestors, 'module');
-				if (parent) {
-					parent.variant = raw.trim();
-					parent.variantRange = range;
-				}
-				return;
-			}
-			case 'SW-SYSCOND': {
-				const parent = nearest(ancestors, ...NODE_KINDS);
-				if (parent) {
-					parent.syscond = decodeXml(raw).trim();
-					parent.syscondRange = range;
-				}
-				return;
-			}
-			case 'MATCHING-CRITERION-REF': {
-				const parent = nearest(ancestors, 'pbCondition');
-				if (parent) {
-					parent.criterionRaw = raw.trim();
-				}
-				return;
-			}
-			case 'L-4': {
-				// Label = `LABEL/L-4` text. The `.mm` has no language predicate, so the
-				// first `L-4` in document order wins; later layers are ignored.
-				const parent = hasAncestor(ancestors, 'LABEL') ? nearest(ancestors, 'annotation') : undefined;
-				if (parent && parent.label === undefined) {
-					parent.label = decodeXml(raw).trim();
-				}
-				return;
-			}
-			case 'L-5': {
-				// Text = `ANNOTATION-TEXT/VERBATIM/L-5` text, first in document order.
-				const parent =
-					hasAncestor(ancestors, 'ANNOTATION-TEXT') && hasAncestor(ancestors, 'VERBATIM')
-						? nearest(ancestors, 'annotation')
-						: undefined;
-				if (parent && parent.text === undefined) {
-					parent.text = decodeXml(raw).trim();
-				}
-				return;
-			}
-			case 'VALUE-REF':
-			case 'TARGET-REF': {
-				const parent = nearest(ancestors, 'reference');
-				if (parent) {
-					parent.targetRaw = raw.trim();
-					parent.targetRange = range;
-					const dest = entry.attrs?.get('DEST');
-					if (dest) {
-						parent.targetDest = dest.trim();
-					}
-				}
-				return;
-			}
-			case 'CONTEXT-ELEMENT-REF': {
-				const parent = nearest(ancestors, 'reference');
-				if (parent) {
-					(parent.contextRaw ??= []).push(raw.trim());
-				}
-				return;
-			}
-			default:
-				return;
+		}
+	};
+
+	const finishContextRef = (ancestors: Entry[], raw: string): void => {
+		const parent = nearest(ancestors, 'reference');
+		if (parent) {
+			(parent.contextRaw ??= []).push(raw.trim());
 		}
 	};
 
 	const finishValue = (entry: Entry, ancestors: Entry[]): void => {
 		if (entry.valueRole === 'pb') {
-			const parent = nearest(ancestors, 'pbCondition');
-			if (parent) {
-				parent.pbValueRaw = entry.text;
-			}
+			finishPbValue(entry, ancestors);
 			return;
 		}
 		if (entry.valueRole === 'param') {
-			const parent = nearest(ancestors, 'param');
-			if (parent) {
-				// Decoded for display only; `valueRange` still points at the raw text.
-				parent.displayValue = decodeXml(entry.text).trim();
-				// Text present -> the inner text span, so the tags and surrounding whitespace stay
-				// untouched. Empty or self-closing -> the whole element span, which is the only
-				// shape a write may replace structurally.
-				parent.valueRange = textRange(entry) ?? entry.rec?.range;
-			}
+			finishParamValue(entry, ancestors);
+		}
+	};
+
+	const finishPbValue = (entry: Entry, ancestors: Entry[]): void => {
+		const parent = nearest(ancestors, 'pbCondition');
+		if (parent) {
+			parent.pbValueRaw = entry.text;
+		}
+	};
+
+	/** Text present -> the inner text span; empty or self-closing -> the element span. */
+	const valueRangeOf = (entry: Entry): Range | undefined => textRange(entry) ?? entry.rec?.range;
+
+	const finishParamValue = (entry: Entry, ancestors: Entry[]): void => {
+		const parent = nearest(ancestors, 'param');
+		if (parent) {
+			// Decoded for display only; `valueRange` still points at the raw text.
+			parent.displayValue = decodeXml(entry.text).trim();
+			// Text present -> the inner text span, so the tags and surrounding whitespace stay
+			// untouched. Empty or self-closing -> the whole element span, which is the only
+			// shape a write may replace structurally.
+			parent.valueRange = valueRangeOf(entry);
 		}
 	};
 
@@ -578,61 +876,110 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 		});
 	};
 
+	const parametersOf = (rec: Rec): ParameterNode[] => (rec.parameters ?? []).map(toParameter);
+	const referencesOf = (rec: Rec): ReferenceNode[] => (rec.references ?? []).map(toReference);
+	const containersOf = (rec: Rec): ContainerNode[] => (rec.containers ?? []).map(toContainer);
+
 	const toContainer = (rec: Rec): ContainerNode => {
-		const definitionRef = rec.definitionRef ?? '';
 		return compact<ContainerNode>({
 			kind: 'container',
-			definitionRef,
+			definitionRef: rec.definitionRef ?? '',
 			definitionRefRange: rec.definitionRefRange,
 			shortName: rec.shortName ?? '',
 			shortNameRange: rec.shortNameRange,
 			range: rec.range!,
 			containerPath: rec.containerPath ?? [],
-			parameters: (rec.parameters ?? []).map(toParameter),
-			references: (rec.references ?? []).map(toReference),
-			containers: (rec.containers ?? []).map(toContainer),
+			parameters: parametersOf(rec),
+			references: referencesOf(rec),
+			containers: containersOf(rec),
 			...suffixesOf(rec),
 		});
 	};
 
-	while (i < len) {
+	/** Appends the text run before the next `<`, if any. */
+	const scanText = (): void => {
 		const lt = text.indexOf('<', i);
-		const runEnd = lt < 0 ? len : lt;
-		if (runEnd > i) {
-			append(text.slice(i, runEnd), i, runEnd);
-			i = runEnd;
-			if (lt < 0) {
-				break;
-			}
+		if (lt < 0) {
+			append(text.slice(i, len), i, len);
+			i = len;
+			return;
 		}
+		if (lt > i) {
+			append(text.slice(i, lt), i, lt);
+			i = lt;
+		}
+	};
+
+	/** Moves `i` past `marker`, or to the end when it is missing. */
+	const skipTo = (marker: string, from: number, past: number): void => {
+		const end = text.indexOf(marker, from);
+		i = end < 0 ? len : end + past;
+	};
+
+	const skipComment = (): void => {
+		skipTo('-->', i + 4, 3);
+	};
+
+	const skipCdata = (): void => {
+		const end = text.indexOf(']]>', i + 9);
+		const stop = end < 0 ? len : end;
+		// An empty `<![CDATA[]]>` must not register a text chunk: it would set the
+		// element's text start/end to the marker itself and widen the recorded range
+		// past the real text (a write would then replace `]]>` or `<![CDATA[`).
+		if (stop > i + 9) {
+			append(text.slice(i + 9, stop), i + 9, stop);
+		}
+		i = end < 0 ? len : end + 3;
+	};
+
+	const skipProcessingInstruction = (): void => {
+		skipTo('?>', i + 2, 2);
+	};
+
+	/** Comments and CDATA, whose content is not markup. */
+	const scanCommentOrCdata = (): boolean => {
 		if (text.startsWith('<!--', i)) {
-			const e = text.indexOf('-->', i + 4);
-			i = e < 0 ? len : e + 3;
-			continue;
+			skipComment();
+			return true;
 		}
 		if (text.startsWith('<![CDATA[', i)) {
-			const e = text.indexOf(']]>', i + 9);
-			const stop = e < 0 ? len : e;
-			// An empty `<![CDATA[]]>` must not register a text chunk: it would set the
-			// element's text start/end to the marker itself and widen the recorded range
-			// past the real text (a write would then replace `]]>` or `<![CDATA[`).
-			if (stop > i + 9) {
-				append(text.slice(i + 9, stop), i + 9, stop);
-			}
-			i = e < 0 ? len : e + 3;
-			continue;
+			skipCdata();
+			return true;
 		}
+		return false;
+	};
+
+	/** Processing instructions and markup declarations. */
+	const scanPiOrDeclaration = (): boolean => {
 		if (text.startsWith('<?', i)) {
-			const e = text.indexOf('?>', i + 2);
-			i = e < 0 ? len : e + 2;
-			continue;
+			skipProcessingInstruction();
+			return true;
 		}
 		if (text.startsWith('<!', i)) {
 			i = skipMarkupDeclaration(text, i);
-			continue;
+			return true;
 		}
-		i = readTag(i);
-	}
+		return false;
+	};
+
+	/** Comments, CDATA, processing instructions and markup declarations. */
+	const scanMarkup = (): boolean => scanCommentOrCdata() || scanPiOrDeclaration();
+
+	const scanAll = (): void => {
+		while (i < len) {
+			scanText();
+			// The text run reached the end: there is no tag to read.
+			if (i >= len) {
+				return;
+			}
+			if (scanMarkup()) {
+				continue;
+			}
+			i = readTag(i);
+		}
+	};
+
+	scanAll();
 
 	// Ancestor AR-PACKAGE chain per module, with the chain's own element range.
 	for (const chain of pendingPackages) {
@@ -645,42 +992,113 @@ export function scanEcucValues(text: string): EcucDocumentModel {
 	return model;
 }
 
+/** A bare capture record. */
+function recordOf(kind: RecKind, name: string): Rec {
+	return { kind, name };
+}
+
+/** The module/container records, which own child lists. */
+function containerRecord(name: string): Rec | undefined {
+	switch (name) {
+		case 'ECUC-MODULE-CONFIGURATION-VALUES':
+			return {
+				...recordOf('module', name),
+				parameters: [],
+				references: [],
+				containers: [],
+			};
+		case 'ECUC-CONTAINER-VALUE':
+			return {
+				...recordOf('container', name),
+				parameters: [],
+				references: [],
+				containers: [],
+			};
+		default:
+			return undefined;
+	}
+}
+
+/** Numerical and textual parameters; the numeric flag is the value's type. */
+function parameterRecord(name: string): Rec | undefined {
+	switch (name) {
+		case 'ECUC-NUMERICAL-PARAM-VALUE':
+			return { ...recordOf('param', name), numeric: true };
+		case 'ECUC-TEXTUAL-PARAM-VALUE':
+			return { ...recordOf('param', name), numeric: false };
+		default:
+			return undefined;
+	}
+}
+
+function referenceRecord(name: string): Rec | undefined {
+	switch (name) {
+		case 'ECUC-REFERENCE-VALUE':
+			return { ...recordOf('reference', name), instance: false, contextRaw: [] };
+		case 'ECUC-INSTANCE-REFERENCE-VALUE':
+			return { ...recordOf('reference', name), instance: true, contextRaw: [] };
+		default:
+			return undefined;
+	}
+}
+
+function nodeRecord(name: string): Rec | undefined {
+	return containerRecord(name) ?? parameterRecord(name) ?? referenceRecord(name);
+}
+
+function autosarRecord(name: string, attrs: Map<string, string>): Rec | undefined {
+	return name === 'AUTOSAR' ? { ...recordOf('autosar', name), attrs } : undefined;
+}
+
+function postBuildRecord(name: string): Rec | undefined {
+	switch (name) {
+		case 'POST-BUILD-VARIANT-CONDITIONS':
+			return recordOf('pbConditions', name);
+		case 'POST-BUILD-VARIANT-CONDITION':
+			return recordOf('pbCondition', name);
+		default:
+			return undefined;
+	}
+}
+
+function annotationRecord(name: string): Rec | undefined {
+	switch (name) {
+		case 'ANNOTATIONS':
+			return recordOf('annotations', name);
+		case 'ANNOTATION':
+			return recordOf('annotation', name);
+		case 'VALUE':
+			return recordOf('value', name);
+		default:
+			return undefined;
+	}
+}
+
+function packageRecord(name: string): Rec | undefined {
+	return name === 'AR-PACKAGE' ? recordOf('package', name) : undefined;
+}
+
+function simpleRecord(name: string, attrs: Map<string, string>): Rec | undefined {
+	return autosarRecord(name, attrs) ?? packageRecord(name) ?? postBuildRecord(name) ?? annotationRecord(name);
+}
+
 /** Creates the capture record for `name`, or `undefined` for structural elements. */
 function openRecord(name: string, attrs: Map<string, string>): Rec | undefined {
-	const base = (kind: RecKind): Rec => ({ kind, name });
-	switch (name) {
-		case 'AUTOSAR':
-			return { ...base('autosar'), attrs };
-		case 'AR-PACKAGE':
-			return base('package');
-		case 'ECUC-MODULE-CONFIGURATION-VALUES':
-			return { ...base('module'), parameters: [], references: [], containers: [] };
-		case 'ECUC-CONTAINER-VALUE':
-			return { ...base('container'), parameters: [], references: [], containers: [] };
-		case 'ECUC-NUMERICAL-PARAM-VALUE':
-			return { ...base('param'), numeric: true };
-		case 'ECUC-TEXTUAL-PARAM-VALUE':
-			return { ...base('param'), numeric: false };
-		case 'ECUC-REFERENCE-VALUE':
-			return { ...base('reference'), instance: false, contextRaw: [] };
-		case 'ECUC-INSTANCE-REFERENCE-VALUE':
-			return { ...base('reference'), instance: true, contextRaw: [] };
-		case 'POST-BUILD-VARIANT-CONDITIONS':
-			return base('pbConditions');
-		case 'POST-BUILD-VARIANT-CONDITION':
-			return base('pbCondition');
-		case 'ANNOTATIONS':
-			return base('annotations');
-		case 'ANNOTATION':
-			return base('annotation');
-		case 'VALUE':
-			return base('value');
-		default:
-			// VARIATION-POINT, ELEMENTS, CONTAINERS, PARAMETER-VALUES, REFERENCE-VALUES,
-			// SUB-CONTAINERS and other structural elements are traversed but not recorded;
-			// their contents attach to the nearest enclosing node.
-			return TEXT_TAGS.has(name) ? base('text') : undefined;
+	const node = nodeRecord(name);
+	if (node !== undefined) {
+		return node;
 	}
+	return simpleRecord(name, attrs) ?? textRecord(name);
+}
+
+/**
+ * A text-bearing element the model reads directly.
+ * VARIATION-POINT, ELEMENTS, CONTAINERS, PARAMETER-VALUES, REFERENCE-VALUES,
+ * SUB-CONTAINERS and other structural elements are traversed but not recorded;
+ * their contents attach to the nearest enclosing node.
+ */
+function textRecord(name: string): Rec | undefined {
+	return TEXT_TAGS.has(name) ? recordOf('text', name) : undefined;
 }
 
 /** Extracts the shared `Suffixes` fields from a record; absent fields stay absent. */
@@ -721,12 +1139,19 @@ function addIndexKey(index: Map<string, Range>, chain: string[], range: Range | 
 	}
 }
 
+/** The short name of one ancestor record of `kind`, when it has one. */
+function ancestorShortName(entry: Entry, kind: RecKind): string | undefined {
+	const rec = entry.rec;
+	return rec?.kind === kind && rec.shortName ? rec.shortName : undefined;
+}
+
 /** Short names of ancestor records of one kind, outermost first. */
 function ancestorShortNames(ancestors: Entry[], kind: RecKind): string[] {
 	const out: string[] = [];
-	for (const a of ancestors) {
-		if (a.rec?.kind === kind && a.rec.shortName) {
-			out.push(a.rec.shortName);
+	for (const entry of ancestors) {
+		const name = ancestorShortName(entry, kind);
+		if (name !== undefined) {
+			out.push(name);
 		}
 	}
 	return out;
@@ -760,10 +1185,23 @@ function immediate(ancestors: Entry[], ...kinds: RecKind[]): Rec | undefined {
 
 /** Which enclosing element decides a `<VALUE>`. */
 function valueRole(stack: Entry[]): 'param' | 'pb' | undefined {
-	const parent = stack[stack.length - 1]?.name;
+	const parent = parentName(stack);
+	return paramRole(parent) ?? pbRole(parent);
+}
+
+/** The name of the innermost open element. */
+function parentName(stack: Entry[]): string | undefined {
+	return stack[stack.length - 1]?.name;
+}
+
+function paramRole(parent: string | undefined): 'param' | undefined {
 	if (parent === 'ECUC-NUMERICAL-PARAM-VALUE' || parent === 'ECUC-TEXTUAL-PARAM-VALUE') {
 		return 'param';
 	}
+	return undefined;
+}
+
+function pbRole(parent: string | undefined): 'pb' | undefined {
 	if (parent === 'POST-BUILD-VARIANT-CONDITION') {
 		return 'pb';
 	}

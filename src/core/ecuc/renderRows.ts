@@ -148,56 +148,93 @@ interface BuildContext {
 	referenceResolver?: (targetPath: string, targetDest?: string) => { followable: boolean; reason?: string };
 }
 
+/** The shared empty condition map, used when no values were supplied. */
+const EMPTY_CONDITIONS: ReadonlyMap<string, ConditionValue> = new Map();
+
 /**
  * Builds the row document from the model. The returned rows are in the same
  * order `renderTree` rendered them: modules, containers, parameters,
  * references, then child containers, with the same `aria-posinset` grouping.
  */
 export function buildRows(model: EcucDocumentModel, options: RowBuildOptions = {}): RowDocument {
-	const ctx: BuildContext = {
+	const ctx = buildContext(model, options);
+	const rows: EcucRow[] = [];
+	appendModuleRows(ctx, rows, model);
+	return { rows };
+}
+
+function buildContext(model: EcucDocumentModel, options: RowBuildOptions): BuildContext {
+	return {
 		index: buildNodeIndex(model),
 		sort: options.sort ?? 'all',
 		except: options.sortExcept ?? SORT_EXCEPTIONS,
 		pathIndex: model.pathIndex,
-		conditions: options.conditions ?? new Map<string, ConditionValue>(),
+		conditions: options.conditions ?? EMPTY_CONDITIONS,
 		definitions: options.definitions,
 		ambiguousDefinitions: options.ambiguousDefinitions,
 		referenceResolver: options.referenceResolver,
 	};
-	const rows: EcucRow[] = [];
+}
+
+function appendModuleRows(ctx: BuildContext, rows: EcucRow[], model: EcucDocumentModel): void {
 	const modules = orderModules(model.modules, ctx.sort, ctx.except);
 	for (let at = 0; at < modules.length; at++) {
 		moduleRow(ctx, rows, modules[at], 1, at + 1, modules.length, null, false);
 	}
-	return { rows };
 }
+
+/** AUTOSAR DEST types that narrow the details Type row directly. */
+const PARAMETER_TYPES: ReadonlyMap<string, string> = new Map([
+	['ECUC-INTEGER-PARAM-DEF', 'Integer'],
+	['ECUC-FLOAT-PARAM-DEF', 'Float'],
+	['ECUC-BOOLEAN-PARAM-DEF', 'Boolean'],
+	['ECUC-STRING-PARAM-DEF', 'String'],
+	['ECUC-ENUMERATION-PARAM-DEF', 'Enumeration'],
+	['ECUC-FUNCTION-NAME-DEF', 'Function name'],
+	['ECUC-LINKER-SYMBOL-DEF', 'Linker symbol'],
+]);
+
+/** Types whose values carry no Decimal/Hexadecimal/Binary rows. */
+const UNFORMATTED_TYPES: ReadonlySet<string> = new Set([
+	'Boolean',
+	'Textual',
+	'String',
+	'Enumeration',
+	'Function name',
+	'Linker symbol',
+]);
 
 /** Normalizes an AUTOSAR `DEFINITION-REF DEST` to the details Type row. */
 export function parameterType(
 	definitionDest: string | undefined,
 	valueKind: EcucRow['valueKind']
 ): string {
-	if (definitionDest) {
-		const known = new Map<string, string>([
-			['ECUC-INTEGER-PARAM-DEF', 'Integer'],
-			['ECUC-FLOAT-PARAM-DEF', 'Float'],
-			['ECUC-BOOLEAN-PARAM-DEF', 'Boolean'],
-			['ECUC-STRING-PARAM-DEF', 'String'],
-			['ECUC-ENUMERATION-PARAM-DEF', 'Enumeration'],
-			['ECUC-FUNCTION-NAME-DEF', 'Function name'],
-			['ECUC-LINKER-SYMBOL-DEF', 'Linker symbol'],
-		]);
-		const mapped = known.get(definitionDest);
-		if (mapped) {
-			return mapped;
-		}
-		if (definitionDest.startsWith('ECUC-') && definitionDest.endsWith('-PARAM-DEF')) {
-			const middle = definitionDest.slice(5, -10).toLowerCase().replace(/-/g, ' ');
-			if (middle) {
-				return middle.charAt(0).toUpperCase() + middle.slice(1);
-			}
-		}
+	return destType(definitionDest) ?? fallbackType(valueKind);
+}
+
+/** The type named by a known DEST, or the generic `ECUC-*-PARAM-DEF` spelling. */
+function destType(definitionDest: string | undefined): string | undefined {
+	if (!definitionDest) {
+		return undefined;
 	}
+	const mapped = PARAMETER_TYPES.get(definitionDest);
+	if (mapped !== undefined) {
+		return mapped;
+	}
+	return derivedType(definitionDest);
+}
+
+/** `ECUC-ONE-OFF-PARAM-DEF` -> `One off`; an empty middle has no type name. */
+function derivedType(definitionDest: string): string | undefined {
+	if (!definitionDest.startsWith('ECUC-') || !definitionDest.endsWith('-PARAM-DEF')) {
+		return undefined;
+	}
+	const middle = definitionDest.slice(5, -10).toLowerCase().replace(/-/g, ' ');
+	return middle === '' ? undefined : middle.charAt(0).toUpperCase() + middle.slice(1);
+}
+
+/** The value-kind fallback for a DEST the map does not name. */
+function fallbackType(valueKind: EcucRow['valueKind']): string {
 	if (valueKind === 'boolean') {
 		return 'Boolean';
 	}
@@ -215,7 +252,7 @@ export function parameterType(
  * floats/unknown non-integers get Decimal only; Boolean/textual values get none.
  */
 export function parameterFormats(value: string, type: string): ParameterFormat[] {
-	if (type === 'Boolean' || type === 'Textual' || type === 'String' || type === 'Enumeration' || type === 'Function name' || type === 'Linker symbol') {
+	if (UNFORMATTED_TYPES.has(type)) {
 		return [];
 	}
 	const raw = value.trim();
@@ -225,20 +262,27 @@ export function parameterFormats(value: string, type: string): ParameterFormat[]
 	if (type === 'Float') {
 		return [{ label: 'Decimal', value: raw }];
 	}
+	return numericFormats(raw, value, type);
+}
+
+/** Integer formats when the value parses, otherwise the Decimal-only forms. */
+function numericFormats(raw: string, value: string, type: string): ParameterFormat[] {
 	const integer = ecucIntegerValue(value);
 	if (integer !== undefined) {
-		const sign = integer < 0n ? '-' : '';
-		const magnitude = integer < 0n ? -integer : integer;
-		return [
-			{ label: 'Decimal', value: String(integer) },
-			{ label: 'Hexadecimal', value: `${sign}0x${magnitude.toString(16).toUpperCase().padStart(2, '0')}` },
-			{ label: 'Binary', value: `${sign}0b${magnitude.toString(2).padStart(8, '0')}` },
-		];
+		return integerFormats(integer);
 	}
-	if (type === 'Numeric') {
-		return [{ label: 'Decimal', value: raw }];
-	}
-	return [];
+	return type === 'Numeric' ? [{ label: 'Decimal', value: raw }] : [];
+}
+
+/** The signed value in decimal, hexadecimal and binary. */
+function integerFormats(integer: bigint): ParameterFormat[] {
+	const sign = integer < 0n ? '-' : '';
+	const magnitude = integer < 0n ? -integer : integer;
+	return [
+		{ label: 'Decimal', value: String(integer) },
+		{ label: 'Hexadecimal', value: `${sign}0x${magnitude.toString(16).toUpperCase().padStart(2, '0')}` },
+		{ label: 'Binary', value: `${sign}0b${magnitude.toString(2).padStart(8, '0')}` },
+	];
 }
 
 /** Parses decimal, `0x` or `0b` integer literals; non-integers return undefined. */
@@ -263,10 +307,18 @@ function definitionCountFor(
 	definitionRef: string,
 	definition: DefinitionInfo | undefined
 ): number | undefined {
-	if (definition !== undefined || definitionRef === '' || ctx.ambiguousDefinitions === undefined) {
+	if (definition !== undefined || definitionRef === '') {
 		return undefined;
 	}
-	const count = ctx.ambiguousDefinitions(definitionRef);
+	const counter = ctx.ambiguousDefinitions;
+	if (counter === undefined) {
+		return undefined;
+	}
+	return atLeastTwo(counter(definitionRef));
+}
+
+/** A count that is only worth showing when it is ambiguous. */
+function atLeastTwo(count: number): number | undefined {
 	return count >= 2 ? count : undefined;
 }
 
@@ -604,18 +656,10 @@ function conditionValueText(value: ConditionValue): string {
  * so the tooltip explains the inputs instead of repeating `true`/`false`.
  */
 export function conditionTooltip(condition: RowCondition): string {
-	const lines = condition.symbols.map((name) => {
-		const value = condition.values[name];
-		return `${name} = ${value === undefined ? '(not set)' : conditionValueText(value)}`;
-	});
+	const lines = condition.symbols.map((name) => symbolLine(condition, name));
 	// A parse/type reason is still useful next to its values; a bare `missing:`
 	// reason repeats the `(not set)` lines and is left out.
-	const reason =
-		condition.state === 'unknown' &&
-		condition.reason !== undefined &&
-		!condition.reason.startsWith('missing:')
-			? condition.reason
-			: undefined;
+	const reason = tooltipReason(condition);
 	if (lines.length === 0) {
 		return reason ?? condition.text;
 	}
@@ -625,24 +669,59 @@ export function conditionTooltip(condition: RowCondition): string {
 	return lines.join('\n');
 }
 
+/** One `NAME = value` tooltip line. */
+function symbolLine(condition: RowCondition, name: string): string {
+	const value = condition.values[name];
+	return `${name} = ${value === undefined ? '(not set)' : conditionValueText(value)}`;
+}
+
+/** The reason worth appending to the tooltip, when the result has one. */
+function tooltipReason(condition: RowCondition): string | undefined {
+	if (condition.state !== 'unknown' || condition.reason === undefined) {
+		return undefined;
+	}
+	return condition.reason.startsWith('missing:') ? undefined : condition.reason;
+}
+
 /**
  * Marks the row disabled when its own condition is false or an ancestor is
  * disabled. A true/unknown own condition never re-enables a row below a false
  * container. The return value is what the children inherit.
  */
 function applyCondition(row: EcucRow, condition: RowCondition | undefined, disabledByAncestor: boolean): boolean {
-	const ownFalse = condition !== undefined && condition.state === 'false';
 	if (condition) {
 		row.condition = condition;
 	}
+	const ownFalse = isOwnFalse(condition);
 	const disabled = disabledByAncestor || ownFalse;
+	applyDisabledFlags(row, condition, disabled, ownFalse);
+	return disabled;
+}
+
+/** A row is disabled by its own condition only when that condition is false. */
+function isOwnFalse(condition: RowCondition | undefined): boolean {
+	return condition !== undefined && condition.state === 'false';
+}
+
+/** Writes the disabled flags: a false ancestor always wins over a true own condition. */
+function applyDisabledFlags(
+	row: EcucRow,
+	condition: RowCondition | undefined,
+	disabled: boolean,
+	ownFalse: boolean
+): void {
 	if (disabled) {
-		row.disabled = true;
-		row.disabledBy = ownFalse ? 'self' : 'ancestor';
-	} else if (condition) {
+		disableRow(row, ownFalse);
+		return;
+	}
+	if (condition) {
 		row.disabled = false;
 	}
-	return disabled;
+}
+
+function disableRow(row: EcucRow, ownFalse: boolean): void {
+	row.disabled = true;
+	row.disabledBy = ownFalse ? 'self' : 'ancestor';
 }
 
 function shortPart(shortName: string): MetaPart {
@@ -661,25 +740,57 @@ function contextPart(contextPaths: readonly string[]): MetaPart {
 
 /** Conditions and annotations in the legacy order: syscond, post-build conditions, annotations. */
 function suffixParts(node: Suffixes, condition?: RowCondition): MetaPart[] {
+	return [
+		...conditionParts(node, condition),
+		...postBuildParts(node),
+		...annotationParts(node.annotations ?? []),
+	];
+}
+
+/** The row's own `SW-SYSCOND` chip, with its evaluated tooltip and state. */
+function conditionParts(node: Suffixes, condition: RowCondition | undefined): MetaPart[] {
+	if (!node.syscond) {
+		return [];
+	}
+	const text = `[${node.syscond}]`;
+	const title = condition ? conditionTooltip(condition) : text;
+	return [{ cls: 'condition', text, title, ...(condition ? { state: condition.state } : {}) }];
+}
+
+/** The `POST-BUILD-VARIANT-CONDITIONS` chip. */
+function postBuildParts(node: Suffixes): MetaPart[] {
+	if (!node.postBuildVariants || node.postBuildVariants.length === 0) {
+		return [];
+	}
+	const text = node.postBuildVariants.map((v) => `${v.criterion} ${v.operator} ${v.value}`).join(' && ');
+	return [{ cls: 'condition', text: `<${text}>`, title: `<${text}>` }];
+}
+
+/** One annotation chip per captured annotation, in source order. */
+function annotationParts(annotations: readonly { label?: string; text?: string }[]): MetaPart[] {
 	const parts: MetaPart[] = [];
-	if (node.syscond) {
-		const text = `[${node.syscond}]`;
-		const title = condition ? conditionTooltip(condition) : text;
-		parts.push({ cls: 'condition', text, title, ...(condition ? { state: condition.state } : {}) });
-	}
-	if (node.postBuildVariants && node.postBuildVariants.length > 0) {
-		const text = node.postBuildVariants.map((v) => `${v.criterion} ${v.operator} ${v.value}`).join(' && ');
-		parts.push({ cls: 'condition', text: `<${text}>`, title: `<${text}>` });
-	}
-	for (const annotation of node.annotations ?? []) {
-		const label = annotation.label ? `[${annotation.label}] ` : '';
-		const text = annotation.text ?? '';
-		if (label === '' && text === '') {
-			continue;
+	for (const annotation of annotations) {
+		const part = annotationPart(annotation);
+		if (part !== undefined) {
+			parts.push(part);
 		}
-		parts.push({ cls: 'annotation', text: label + text, title: label + text });
 	}
 	return parts;
+}
+
+function annotationPart(annotation: { label?: string; text?: string }): MetaPart | undefined {
+	const text = annotationText(annotation);
+	if (text === '') {
+		return undefined;
+	}
+	return { cls: 'annotation', text, title: text };
+}
+
+/** `[label] text`, with an absent label or text contributing nothing. */
+function annotationText(annotation: { label?: string; text?: string }): string {
+	const label = annotation.label ? `[${annotation.label}] ` : '';
+	const text = annotation.text ?? '';
+	return label + text;
 }
 
 /** The annotation parts, in source order, for the comment lines above a row. */

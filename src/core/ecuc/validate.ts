@@ -35,30 +35,53 @@ function xmlRefusal(input: string, subject: string): string | undefined {
 	return ILLEGAL_XML.test(input) ? `${subject} contains a character XML cannot represent` : undefined;
 }
 
-/**
- * Validates `input` for parameter `p` and returns the escaped text to write.
- * A known AUTOSAR `DEFINITION-REF DEST` narrows the accepted literal forms;
- * unknown/missing types keep the legacy numeric/text rule.
- */
-export function validateValue(p: ParameterNode, input: string): ValidationResult {
-	if (p.definitionDest === 'ECUC-BOOLEAN-PARAM-DEF' && !BOOLEAN.test(input)) {
-		return { ok: false, reason: `"${input}" is not a boolean value (true or false)` };
+/** The refusal for a value that does not match its known AUTOSAR DEST type. */
+function typedRefusal(p: ParameterNode, input: string): string | undefined {
+	return booleanRefusal(p, input) ?? integerRefusal(p, input) ?? floatRefusal(p, input);
+}
+
+function booleanRefusal(p: ParameterNode, input: string): string | undefined {
+	if (p.definitionDest !== 'ECUC-BOOLEAN-PARAM-DEF' || BOOLEAN.test(input)) {
+		return undefined;
 	}
-	if (p.definitionDest === 'ECUC-INTEGER-PARAM-DEF' && !INTEGER_LITERAL.test(input)) {
-		return { ok: false, reason: `"${input}" is not an integer (decimal, hexadecimal or binary)` };
+	return `"${input}" is not a boolean value (true or false)`;
+}
+
+function integerRefusal(p: ParameterNode, input: string): string | undefined {
+	if (p.definitionDest !== 'ECUC-INTEGER-PARAM-DEF' || INTEGER_LITERAL.test(input)) {
+		return undefined;
 	}
-	if (p.definitionDest === 'ECUC-FLOAT-PARAM-DEF' && !FLOAT_LITERAL.test(input)) {
-		return { ok: false, reason: `"${input}" is not a decimal or floating-point value` };
+	return `"${input}" is not an integer (decimal, hexadecimal or binary)`;
+}
+
+function floatRefusal(p: ParameterNode, input: string): string | undefined {
+	if (p.definitionDest !== 'ECUC-FLOAT-PARAM-DEF' || FLOAT_LITERAL.test(input)) {
+		return undefined;
 	}
-	if (
-		p.definitionDest !== 'ECUC-BOOLEAN-PARAM-DEF' &&
-		p.definitionDest !== 'ECUC-INTEGER-PARAM-DEF' &&
-		p.definitionDest !== 'ECUC-FLOAT-PARAM-DEF' &&
-		p.numeric &&
-		!isNumericLiteral(input)
-	) {
-		return { ok: false, reason: `"${input}" is not a valid numerical value (true, false, integer, hexadecimal or decimal fraction)` };
+	return `"${input}" is not a decimal or floating-point value`;
+}
+
+/** True when a DEST type narrows the literal forms on its own. */
+function hasTypedDest(definitionDest: string | undefined): boolean {
+	return (
+		definitionDest === 'ECUC-BOOLEAN-PARAM-DEF' ||
+		definitionDest === 'ECUC-INTEGER-PARAM-DEF' ||
+		definitionDest === 'ECUC-FLOAT-PARAM-DEF'
+	);
+}
+
+/** The legacy numeric/text rule for a parameter with no narrowing DEST. */
+function untypedRefusal(p: ParameterNode, input: string): string | undefined {
+	if (hasTypedDest(p.definitionDest) || !p.numeric) {
+		return undefined;
 	}
+	return isNumericLiteral(input)
+		? undefined
+		: `"${input}" is not a valid numerical value (true, false, integer, hexadecimal or decimal fraction)`;
+}
+
+/** The XML hazard and unchanged-value refusals, then the escaped write text. */
+function valueOrRefusal(p: ParameterNode, input: string): ValidationResult {
 	const illegal = xmlRefusal(input, 'the value');
 	if (illegal) {
 		return { ok: false, reason: illegal };
@@ -67,6 +90,23 @@ export function validateValue(p: ParameterNode, input: string): ValidationResult
 		return { ok: false, reason: 'the value is unchanged' };
 	}
 	return { ok: true, text: escapeXml(input) };
+}
+
+/**
+ * Validates `input` for parameter `p` and returns the escaped text to write.
+ * A known AUTOSAR `DEFINITION-REF DEST` narrows the accepted literal forms;
+ * unknown/missing types keep the legacy numeric/text rule.
+ */
+export function validateValue(p: ParameterNode, input: string): ValidationResult {
+	const typed = typedRefusal(p, input);
+	if (typed !== undefined) {
+		return { ok: false, reason: typed };
+	}
+	const untyped = untypedRefusal(p, input);
+	if (untyped !== undefined) {
+		return { ok: false, reason: untyped };
+	}
+	return valueOrRefusal(p, input);
 }
 
 /**

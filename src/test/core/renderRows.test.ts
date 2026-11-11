@@ -229,6 +229,11 @@ suite('editor row model (design §2)', () => {
 			'A = (not set)',
 			'a missing reason is not repeated after the not-set lines'
 		);
+		assert.strictEqual(
+			conditionTooltip(condition({ text: 'x', state: 'unknown', reason: 'bad syntax' })),
+			'bad syntax',
+			'a reason without symbols is the whole tooltip'
+		);
 	});
 
 	test('design §2: reference followability is same-file only', () => {
@@ -281,6 +286,19 @@ suite('editor row model (design §2)', () => {
 			{ label: 'Hexadecimal', value: '0x00' },
 			{ label: 'Binary', value: '0b00000000' },
 		]);
+		assert.deepStrictEqual(parameterFormats('1.5', 'Numeric'), [{ label: 'Decimal', value: '1.5' }]);
+		assert.deepStrictEqual(parameterFormats('abc', 'Numeric'), [{ label: 'Decimal', value: 'abc' }]);
+		assert.deepStrictEqual(parameterFormats('abc', 'Integer'), []);
+		assert.deepStrictEqual(parameterFormats('  ', 'Integer'), []);
+		assert.deepStrictEqual(
+			parameterFormats('+15', 'Integer'),
+			[
+				{ label: 'Decimal', value: '15' },
+				{ label: 'Hexadecimal', value: '0x0F' },
+				{ label: 'Binary', value: '0b00001111' },
+			],
+			'a leading plus is parsed, not displayed'
+		);
 		assert.deepStrictEqual(parameterFormats('1.5', 'Float'), [{ label: 'Decimal', value: '1.5' }]);
 		assert.deepStrictEqual(parameterFormats('5', 'Float'), [{ label: 'Decimal', value: '5' }]);
 		assert.deepStrictEqual(parameterFormats('hello', 'Add info'), []);

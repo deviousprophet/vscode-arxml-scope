@@ -296,6 +296,21 @@ suite('scanner (core)', () => {
 		assert.strictEqual(rendered.includes('keepable'), false);
 	});
 
+	test('characterization: stray end tags and text outside the root are ignored', () => {
+		// The stray `</X>` sits before the module while `AR-PACKAGE` is open: if it
+		// closed anything, the module would lose its package chain and the package
+		// range could not be recorded.
+		const model = scanEcucValues(
+			'  <AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS></X>' +
+				'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>' +
+				'<DEFINITION-REF DEST="ECUC-MODULE-DEF">/D/M</DEFINITION-REF>' +
+				'</ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
+		);
+		assert.strictEqual(model.modules[0].shortName, 'M', 'a stray end tag closes nothing');
+		assert.deepStrictEqual(model.packages.map((pkg) => pkg.path), [['P']]);
+		assert.ok(model.pathIndex.has('/P/M'));
+	});
+
 	test('namespace prefixes are stripped from every tag, and the schema release is derived', () => {
 		const model = scanFixture('namespaced.arxml') as EcucDocumentModel;
 		assert.deepStrictEqual(model.schema, { release: '00048' });
