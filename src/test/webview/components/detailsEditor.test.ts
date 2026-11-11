@@ -5,9 +5,12 @@
 import * as assert from 'assert';
 
 import {
+	beginDetailsEdit,
+	detailsContainerFields,
 	detailsInputAllowed,
 	detailsValueInput,
 	handleDetailsEditorMessage,
+	resetDetailsEditorState,
 	setDetailsEditorHost,
 } from '../../../webview/components/detailsEditor/detailsEditor';
 import { webviewCss } from '../cssTestUtils';
@@ -122,6 +125,191 @@ suite('DetailsEditor component', () => {
 			handleDetailsEditorMessage({ type: 'notice', message: 'Not an integer.', kind: 'warn', inline: true });
 			assert.strictEqual(input.getAttribute('aria-invalid'), 'true');
 			assert.strictEqual(container.querySelector('.details-value-error').textContent, '/* Not an integer. */');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('beginDetailsEdit reveals the panel, selects an unselected row and focuses the first field', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			const calls: string[] = [];
+			const field = dom.document.createElement('input');
+			field.id = 'details-value';
+			dom.document.body.appendChild(field);
+			setDetailsEditorHost(
+				host({
+					isDetailsTab: () => false,
+					showTab: (name: string) => calls.push('tab:' + name),
+					showSection: (id: string) => calls.push('section:' + id),
+					getSelectedId: () => 'other',
+					renderedItem: () => ({ id: 'p1' }),
+					selectItem: () => calls.push('select'),
+				})
+			);
+			assert.strictEqual(beginDetailsEdit('p1'), true);
+			assert.deepStrictEqual(calls, ['tab:details', 'section:sb-details', 'select']);
+			assert.strictEqual(dom.document.activeElement, field);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('beginDetailsEdit falls back to setSelection and reports a missing row', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			const calls: string[] = [];
+			const container = row({
+				id: 'c1',
+				kind: 'container',
+				label: 'Container',
+				value: '',
+				shortName: '',
+				definitionRef: '/P/M/C',
+			});
+			const field = dom.document.createElement('input');
+			field.id = 'details-definition-ref';
+			dom.document.body.appendChild(field);
+			setDetailsEditorHost(
+				host({
+					getRow: (id: string) => (id === 'c1' ? container : undefined),
+					getSelectedId: () => 'other',
+					renderedItem: () => undefined,
+					setSelection: (id: string) => calls.push('selection:' + id),
+					postSelect: (id: string) => calls.push('post:' + id),
+					focusRow: (id: string) => {
+						calls.push('focus-row:' + id);
+						return true;
+					},
+				})
+			);
+			assert.strictEqual(beginDetailsEdit('c1'), true, 'a container without a short name starts at its definition');
+			assert.deepStrictEqual(calls, ['selection:c1', 'post:c1', 'focus-row:c1']);
+			assert.strictEqual(dom.document.activeElement, field);
+			assert.strictEqual(beginDetailsEdit('missing'), false);
+			assert.strictEqual(dom.document.activeElement, field, 'a missing row leaves focus alone');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Tab from the value commits and moves to the adjacent parameter after the re-scan', async () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			const commits: unknown[] = [];
+			const moves: string[] = [];
+			setDetailsEditorHost(
+				host({
+					getRow: (id: string) => (id === 'p1' ? row() : id === 'p2' ? row({ id: 'p2', label: 'Other' }) : undefined),
+					commitEdit: (message: unknown) => commits.push(message),
+					focusAdjacentParameter: (from: string, dir: string) => {
+						moves.push(from + ':' + dir);
+						return 'p2';
+					},
+				})
+			);
+			const container = detailsValueInput(row(), { type: 'Integer' });
+			dom.document.body.appendChild(container);
+			const input = container.querySelector('input');
+			const tab = new dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+			input.dispatchEvent(tab);
+			assert.strictEqual(tab.defaultPrevented, true);
+			assert.deepStrictEqual(commits, [{ type: 'edit', nodeId: 'p1', value: '63' }]);
+			handleDetailsEditorMessage({ type: 'document', document: { rows: [] } });
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			assert.deepStrictEqual(moves, ['p1:prev']);
+			assert.strictEqual(dom.document.activeElement, input, 'the adjacent parameter field takes focus');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Tab between container fields commits and focuses the sibling after the re-scan', async () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			const commits: unknown[] = [];
+			const container = row({
+				id: 'c1',
+				kind: 'container',
+				label: 'Container',
+				value: '',
+				shortName: 'C',
+				definitionRef: '/P/M/C',
+			});
+			setDetailsEditorHost(
+				host({
+					getRow: (id: string) => (id === 'c1' ? container : undefined),
+					getSelectedId: () => 'c1',
+					commitEdit: (message: unknown) => commits.push(message),
+				})
+			);
+			const fields = detailsContainerFields(container, { shortName: 'C', definitionRef: '/P/M/C' });
+			dom.document.body.appendChild(fields);
+			const shortName = dom.document.getElementById('details-short-name');
+			const tab = new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+			shortName.dispatchEvent(tab);
+			assert.strictEqual(tab.defaultPrevented, true);
+			assert.deepStrictEqual(commits, [{ type: 'edit', nodeId: 'c1', field: 'shortName', value: 'C' }]);
+			handleDetailsEditorMessage({ type: 'document', document: { rows: [] } });
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			assert.strictEqual(dom.document.activeElement?.id, 'details-definition-ref');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Tab from the last container field commits without trapping focus', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			const commits: unknown[] = [];
+			const container = row({
+				id: 'c1',
+				kind: 'container',
+				label: 'Container',
+				value: '',
+				shortName: 'C',
+				definitionRef: '/P/M/C',
+			});
+			setDetailsEditorHost(
+				host({
+					getRow: (id: string) => (id === 'c1' ? container : undefined),
+					getSelectedId: () => 'c1',
+					commitEdit: (message: unknown) => commits.push(message),
+				})
+			);
+			const fields = detailsContainerFields(container, { shortName: 'C', definitionRef: '/P/M/C' });
+			dom.document.body.appendChild(fields);
+			const definition = dom.document.getElementById('details-definition-ref');
+			const tab = new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+			definition.dispatchEvent(tab);
+			assert.strictEqual(tab.defaultPrevented, false, 'the browser moves focus out of the panel');
+			assert.deepStrictEqual(commits, [{ type: 'edit', nodeId: 'c1', field: 'definitionRef', value: '/P/M/C' }]);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('an info notice leaves the pending draft waiting; an empty warning uses the default reason', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			const commits: unknown[] = [];
+			setDetailsEditorHost(host({ commitEdit: (message: unknown) => commits.push(message) }));
+			const container = detailsValueInput(row(), { type: 'Integer' });
+			const input = container.querySelector('input');
+			const enter = () => input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			enter();
+			handleDetailsEditorMessage({ type: 'notice', kind: 'info', message: 'Saved.' });
+			enter();
+			assert.strictEqual(commits.length, 1, 'a pending draft is not committed twice');
+			handleDetailsEditorMessage({ type: 'notice', kind: 'warn', message: '', inline: true });
+			assert.strictEqual(input.getAttribute('aria-invalid'), 'true');
+			assert.strictEqual(container.querySelector('.details-value-error').textContent, '/* The value was refused. */');
 		} finally {
 			dom.restore();
 		}

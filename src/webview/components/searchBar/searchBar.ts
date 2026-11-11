@@ -37,6 +37,13 @@ export function renderSearchBarHtml(prefix: string, ariaLabel: string): string {
 </div>`;
 }
 
+/** The key event the query field forwards. */
+interface SearchKeyEvent {
+	key?: string;
+	shiftKey?: boolean;
+	preventDefault(): void;
+}
+
 /** The page controller; the composition root instantiates it. */
 export class SearchBar {
 	prefix: string;
@@ -62,58 +69,83 @@ export class SearchBar {
 			return;
 		}
 		this.mounted = true;
+		this.mountInput();
+		this.mountClear();
+		this.mountNavigation();
+	}
+
+	private mountInput(): void {
 		const input = this.input();
-		if (input) {
-			input.addEventListener('input', () => {
-				if (this.callbacks.onInput) {
-					this.callbacks.onInput(input.value);
-				}
-			});
-			input.addEventListener('keydown', (event: any) => {
-				if (event.key === 'Enter') {
-					event.preventDefault();
-					if (this.callbacks.onExecute) {
-						this.callbacks.onExecute(event.shiftKey ? -1 : 1);
-					}
-				} else if (event.key === 'Escape') {
-					event.preventDefault();
-					this.clear();
-					if (this.callbacks.onEscape) {
-						this.callbacks.onEscape();
-					}
-				} else if (event.key === 'F3') {
-					event.preventDefault();
-					if (this.callbacks.onExecute) {
-						this.callbacks.onExecute(event.shiftKey ? -1 : 1);
-					}
-				}
-			});
+		if (!input) {
+			return;
 		}
+		input.addEventListener('input', () => this.emitInput(input));
+		input.addEventListener('keydown', (event: SearchKeyEvent) => this.onKeydown(event));
+	}
+
+	private emitInput(input: { value: string }): void {
+		if (this.callbacks.onInput) {
+			this.callbacks.onInput(input.value);
+		}
+	}
+
+	private onKeydown(event: SearchKeyEvent): void {
+		if (event.key === 'Enter') {
+			this.executeKey(event);
+		} else if (event.key === 'Escape') {
+			this.escapeKey(event);
+		} else if (event.key === 'F3') {
+			this.executeKey(event);
+		}
+	}
+
+	private executeKey(event: SearchKeyEvent): void {
+		event.preventDefault();
+		if (this.callbacks.onExecute) {
+			this.callbacks.onExecute(event.shiftKey ? -1 : 1);
+		}
+	}
+
+	private escapeKey(event: SearchKeyEvent): void {
+		event.preventDefault();
+		this.clear();
+		if (this.callbacks.onEscape) {
+			this.callbacks.onEscape();
+		}
+	}
+
+	private mountClear(): void {
 		const clear = document.getElementById(this.id('search-clear'));
-		if (clear) {
-			clear.addEventListener('click', () => {
-				this.clear();
-				if (this.callbacks.onClear) {
-					this.callbacks.onClear();
-				}
-				this.focus();
-			});
+		if (!clear) {
+			return;
 		}
-		const prev = document.getElementById(this.id('search-prev'));
-		if (prev) {
-			prev.addEventListener('click', () => {
-				if (this.callbacks.onCycle) {
-					this.callbacks.onCycle(-1);
-				}
-			});
+		clear.addEventListener('click', () => this.onClearClick());
+	}
+
+	private onClearClick(): void {
+		this.clear();
+		if (this.callbacks.onClear) {
+			this.callbacks.onClear();
 		}
-		const next = document.getElementById(this.id('search-next'));
-		if (next) {
-			next.addEventListener('click', () => {
-				if (this.callbacks.onCycle) {
-					this.callbacks.onCycle(1);
-				}
-			});
+		this.focus();
+	}
+
+	private mountNavigation(): void {
+		this.mountCycleButton('search-prev', -1);
+		this.mountCycleButton('search-next', 1);
+	}
+
+	private mountCycleButton(name: string, direction: 1 | -1): void {
+		const button = document.getElementById(this.id(name));
+		if (!button) {
+			return;
+		}
+		button.addEventListener('click', () => this.cycle(direction));
+	}
+
+	private cycle(direction: 1 | -1): void {
+		if (this.callbacks.onCycle) {
+			this.callbacks.onCycle(direction);
 		}
 	}
 
