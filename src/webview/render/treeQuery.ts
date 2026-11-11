@@ -117,6 +117,116 @@ export interface FlattenOptions {
 	moduleGaps?: boolean;
 }
 
+/** One open Document brace, closed when the walk reaches `end`. */
+interface OpenBrace {
+	end: number;
+	level: number;
+	rowIndex: number;
+}
+
+interface FlattenContext {
+	rows: readonly TreeRow[];
+	count: number;
+	collapsed: ReadonlySet<string> | undefined;
+	braces: boolean;
+	moduleGaps: boolean;
+	out: FlatRow[];
+	open: OpenBrace[];
+	hasModule: boolean;
+	index: number;
+}
+
+function createFlattenContext(rows: readonly TreeRow[], options: FlattenOptions): FlattenContext {
+	return {
+		rows,
+		count: rows.length,
+		collapsed: options.collapsed,
+		braces: options.braces === true,
+		moduleGaps: options.moduleGaps === true,
+		out: [],
+		open: [],
+		hasModule: false,
+		index: 0,
+	};
+}
+
+function subtreeEnd(context: FlattenContext, index: number): number {
+	return Math.min(context.count, index + Math.max(0, context.rows[index].subtreeSize) + 1);
+}
+
+function isCollapsed(context: FlattenContext, row: TreeRow): boolean {
+	return context.collapsed ? context.collapsed.has(row.id) : false;
+}
+
+function isExpanded(context: FlattenContext, row: TreeRow): boolean {
+	return row.hasChildren && !isCollapsed(context, row);
+}
+
+/** Emits the module gap above a later module, before its comments. */
+function pushModuleGap(context: FlattenContext, row: TreeRow): void {
+	if (!context.moduleGaps || row.kind !== 'module') {
+		return;
+	}
+	if (context.hasModule) {
+		context.out.push({ type: 'module-gap', level: 1 });
+	}
+	context.hasModule = true;
+}
+
+function pushComments(context: FlattenContext, row: TreeRow, index: number): void {
+	for (const text of row.comments ?? []) {
+		context.out.push({ type: 'comment', rowIndex: index, level: row.level, text });
+	}
+}
+
+function closeBrace(context: FlattenContext): void {
+	const top = context.open[context.open.length - 1];
+	context.open.pop();
+	context.out.push({ type: 'brace-close', rowIndex: top.rowIndex, level: top.level });
+}
+
+function closeFinishedBraces(context: FlattenContext): void {
+	while (context.open.length > 0 && context.open[context.open.length - 1].end <= context.index) {
+		closeBrace(context);
+	}
+}
+
+function closeOpenBraces(context: FlattenContext): void {
+	while (context.open.length > 0) {
+		closeBrace(context);
+	}
+}
+
+function advanceRow(context: FlattenContext, row: TreeRow, expanded: boolean): void {
+	if (!expanded) {
+		context.index = subtreeEnd(context, context.index);
+		return;
+	}
+	if (context.braces) {
+		context.out.push({ type: 'brace-open', rowIndex: context.index, level: row.level });
+		context.open.push({ end: subtreeEnd(context, context.index), level: row.level, rowIndex: context.index });
+	}
+	context.index++;
+}
+
+function appendRow(context: FlattenContext): void {
+	if (context.braces) {
+		closeFinishedBraces(context);
+	}
+	const row = context.rows[context.index];
+	pushModuleGap(context, row);
+	pushComments(context, row, context.index);
+	const expanded = isExpanded(context, row);
+	context.out.push({
+		type: 'node',
+		rowIndex: context.index,
+		depth: Math.max(0, row.level - 1),
+		level: row.level,
+		expanded,
+	});
+	advanceRow(context, row, expanded);
+}
+
 /**
  * The display list: source rows in order, subtrees skipped when collapsed, plus
  * optional Document brace rows and one blank module gap before every module after
@@ -127,57 +237,12 @@ export interface FlattenOptions {
  * belongs.
  */
 export function flattenRows(rows: readonly TreeRow[], options: FlattenOptions = {}): FlatRow[] {
-	const count = rows.length;
-	const collapsed = options.collapsed;
-	const braces = options.braces === true;
-	const moduleGaps = options.moduleGaps === true;
-	const subtreeEnd = (index: number): number =>
-		Math.min(count, index + Math.max(0, rows[index].subtreeSize) + 1);
-
-	const out: FlatRow[] = [];
-	const open: Array<{ end: number; level: number; rowIndex: number }> = [];
-	let hasModule = false;
-	let i = 0;
-	while (i < count) {
-		if (braces) {
-			while (open.length > 0 && open[open.length - 1].end <= i) {
-				const closed = open.pop() as { end: number; level: number; rowIndex: number };
-				out.push({ type: 'brace-close', rowIndex: closed.rowIndex, level: closed.level });
-			}
-		}
-		const row = rows[i];
-		if (moduleGaps && row.kind === 'module') {
-			if (hasModule) {
-				out.push({ type: 'module-gap', level: 1 });
-			}
-			hasModule = true;
-		}
-		const expanded = row.hasChildren && !(collapsed ? collapsed.has(row.id) : false);
-		for (const text of row.comments ?? []) {
-			out.push({ type: 'comment', rowIndex: i, level: row.level, text });
-		}
-		out.push({
-			type: 'node',
-			rowIndex: i,
-			depth: Math.max(0, row.level - 1),
-			level: row.level,
-			expanded,
-		});
-		if (expanded) {
-			if (braces) {
-				out.push({ type: 'brace-open', rowIndex: i, level: row.level });
-				open.push({ end: subtreeEnd(i), level: row.level, rowIndex: i });
-			}
-			i++;
-		} else {
-			i = subtreeEnd(i);
-		}
+	const context = createFlattenContext(rows, options);
+	while (context.index < context.count) {
+		appendRow(context);
 	}
-	while (open.length > 0) {
-		const closed = open.pop() as { end: number; level: number; rowIndex: number };
-		out.push({ type: 'brace-close', rowIndex: closed.rowIndex, level: closed.level });
-	}
-	return out;
+	closeOpenBraces(context);
+	return context.out;
 }
 
 /**
@@ -207,6 +272,10 @@ export function searchRows(rows: readonly TreeRow[], query: string): number[] {
  * "nothing selected yet": forward starts at the first match, backward at the last.
  * An empty list always yields -1 so the caller can keep its count/disabled state.
  */
+function isOutsideMatches(current: number, count: number): boolean {
+	return current < 0 || current >= count;
+}
+
 export function stepMatch(
 	matches: readonly number[],
 	current: number,
@@ -216,10 +285,19 @@ export function stepMatch(
 	if (count === 0) {
 		return -1;
 	}
-	if (current < 0 || current >= count) {
+	if (isOutsideMatches(current, count)) {
 		return direction === 1 ? 0 : count - 1;
 	}
 	return (current + direction + count) % count;
+}
+
+/** Index the row store by id for the ancestor walk. */
+function rowsById(rows: readonly TreeRow[]): Map<string, TreeRow> {
+	const byId = new Map<string, TreeRow>();
+	for (const row of rows) {
+		byId.set(row.id, row);
+	}
+	return byId;
 }
 
 /**
@@ -229,14 +307,11 @@ export function stepMatch(
  * display list decides what stays open, and nothing re-walks parents to find out.
  */
 export function ancestorIds(rows: readonly TreeRow[], id: string): string[] {
-	const byId = new Map<string, TreeRow>();
-	for (const row of rows) {
-		byId.set(row.id, row);
-	}
+	const byId = rowsById(rows);
 	const out: string[] = [];
 	const seen = new Set<string>([id]);
 	let current = byId.get(id);
-	while (current && current.parentId !== null) {
+	while (current !== undefined && current.parentId !== null) {
 		if (seen.has(current.parentId)) {
 			break;
 		}
