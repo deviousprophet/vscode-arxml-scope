@@ -335,6 +335,259 @@ suite('sidebar shell', () => {
 		assert.ok(/\.search-clear\s*\{[^}]*position:\s*absolute/.test(style));
 	});
 
+	test('loadUiState rejects invalid shapes and clamps every field', () => {
+		for (const saved of [null, 'state', 42, [], true]) {
+			assert.deepStrictEqual(loadUiState(saved), state({ sidebarWidth: 360 }));
+		}
+		assert.strictEqual(loadUiState({ sidebarWidth: 100 }).sidebarWidth, 260);
+		assert.strictEqual(loadUiState({ sidebarWidth: 5000 }).sidebarWidth, 900);
+		assert.strictEqual(loadUiState({ sidebarWidth: 420.6 }).sidebarWidth, 421);
+		assert.strictEqual(loadUiState({ sidebarWidth: Number.NaN }).sidebarWidth, 360);
+		assert.strictEqual(loadUiState({ sidebarWidth: Number.POSITIVE_INFINITY }).sidebarWidth, 360);
+		assert.deepStrictEqual(loadUiState({ panes: [] }).panes, {});
+		assert.deepStrictEqual(loadUiState({ panes: null }).panes, {});
+		assert.deepStrictEqual(loadUiState({ panes: { a: 100, b: 0, c: -1, d: 'x', e: Infinity, f: NaN } }).panes, {
+			a: 100,
+		});
+		assert.deepStrictEqual(loadUiState({ collapsed: ['x', 1, null, {}] }).collapsed, ['x']);
+		assert.strictEqual(loadUiState({ tab: 'conditions' }).tab, 'conditions');
+	});
+
+	test('tab keyboard navigation wraps, honours Home/End and ignores other keys', () => {
+		const dom = installDom('editor');
+		try {
+			let persisted = 0;
+			setSidebarState(state());
+			setSidebarPersistence(() => persisted++);
+			mountSidebarShell();
+			const details = dom.document.getElementById('stab-details') as HTMLElement;
+			const conditions = dom.document.getElementById('stab-conditions') as HTMLElement;
+			const press = (button: HTMLElement, key: string): KeyboardEvent => {
+				const event = new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+				button.dispatchEvent(event);
+				return event;
+			};
+			assert.strictEqual(details.getAttribute('aria-selected'), 'true');
+			assert.strictEqual(details.tabIndex, 0);
+			assert.strictEqual(conditions.tabIndex, -1);
+
+			details.focus();
+			assert.strictEqual(press(details, 'ArrowDown').defaultPrevented, true);
+			assert.strictEqual(persisted, 1);
+			assert.strictEqual(conditions.getAttribute('aria-selected'), 'true');
+			assert.strictEqual(dom.document.activeElement, conditions);
+
+			press(conditions, 'ArrowDown');
+			assert.strictEqual(persisted, 2, 'ArrowDown wraps to the first tab');
+			assert.strictEqual(dom.document.activeElement, details);
+
+			press(details, 'ArrowUp');
+			assert.strictEqual(persisted, 3, 'ArrowUp wraps to the last tab');
+			assert.strictEqual(dom.document.activeElement, conditions);
+
+			press(conditions, 'ArrowRight');
+			assert.strictEqual(persisted, 4);
+			assert.strictEqual(dom.document.activeElement, details);
+
+			const home = press(details, 'Home');
+			assert.strictEqual(home.defaultPrevented, true);
+			assert.strictEqual(persisted, 4, 'activating the current tab does not persist');
+			assert.strictEqual(dom.document.activeElement, details);
+
+			press(details, 'End');
+			assert.strictEqual(persisted, 5);
+			assert.strictEqual(dom.document.activeElement, conditions);
+
+			const ignored = press(conditions, 'x');
+			assert.strictEqual(ignored.defaultPrevented, false);
+			assert.strictEqual(persisted, 5);
+			assert.strictEqual(dom.document.activeElement, conditions);
+
+			details.click();
+			assert.strictEqual(persisted, 6, 'a tab click activates it');
+			details.click();
+			assert.strictEqual(persisted, 6, 'clicking the active tab is a no-op');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('section head click and keyboard ignore the actions and toggle on demand', () => {
+		const dom = installMarkup(`<body>${paneMarkup()}</body>`);
+		try {
+			const snapshots: string[][] = [];
+			setSidebarState(state());
+			setSidebarPersistence(() => snapshots.push([...getSidebarState().collapsed]));
+			const root = dom.document.getElementById('pane-view');
+			const view = new SidebarPaneView(root);
+			const head = root.querySelector('.sb-section-head') as HTMLElement;
+
+			head.click();
+			assert.strictEqual(view.isCollapsed('pane-a'), true);
+			assert.strictEqual(head.getAttribute('aria-expanded'), 'false');
+			assert.deepStrictEqual(snapshots, [['pane-a']]);
+			head.click();
+			assert.strictEqual(view.isCollapsed('pane-a'), false);
+			assert.deepStrictEqual(snapshots, [['pane-a'], []]);
+
+			const actions = dom.document.createElement('span');
+			actions.className = 'sb-section-actions';
+			head.appendChild(actions);
+			actions.click();
+			assert.strictEqual(view.isCollapsed('pane-a'), false, 'section actions do not toggle the pane');
+
+			const enter = new dom.window.KeyboardEvent('keydown', {
+				key: 'Enter',
+				bubbles: true,
+				cancelable: true,
+			});
+			head.dispatchEvent(enter);
+			assert.strictEqual(enter.defaultPrevented, true);
+			assert.strictEqual(view.isCollapsed('pane-a'), true);
+
+			head.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
+				key: ' ',
+				bubbles: true,
+				cancelable: true,
+			}));
+			assert.strictEqual(view.isCollapsed('pane-a'), false, 'Space toggles like Enter');
+
+			head.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
+				key: 'x',
+				bubbles: true,
+				cancelable: true,
+			}));
+			assert.strictEqual(view.isCollapsed('pane-a'), false, 'an unrelated key is ignored');
+
+			actions.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
+				key: 'ArrowLeft',
+				bubbles: true,
+				cancelable: true,
+			}));
+			assert.strictEqual(view.isCollapsed('pane-a'), false, 'a key from a child does not toggle');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('sash drag guards, commits once on release and ignores collapsed pairs', () => {
+		const dom = installMarkup(`<body>${paneMarkup()}</body>`);
+		try {
+			const snapshots: Record<string, number>[] = [];
+			setSidebarState(state());
+			setSidebarPersistence(() => snapshots.push({ ...getSidebarState().panes }));
+			const root = dom.document.getElementById('pane-view');
+			const view = new SidebarPaneView(root);
+			const first = dom.document.getElementById('pane-a');
+			const second = dom.document.getElementById('pane-b');
+			const sash = dom.document.querySelector('.sb-pane-sash') as HTMLElement;
+
+			view.setCollapsed('pane-b', true, false);
+			assert.strictEqual(first.style.getPropertyValue('--sb-pane-h'), '572px');
+			sash.dispatchEvent(new dom.window.MouseEvent('mousedown', {
+				button: 0,
+				clientY: 300,
+				bubbles: true,
+				cancelable: true,
+			}));
+			assert.strictEqual(sash.classList.contains('dragging'), false, 'a collapsed neighbour cannot be dragged');
+			sash.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
+				key: 'ArrowUp',
+				bubbles: true,
+				cancelable: true,
+			}));
+			sash.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+			assert.strictEqual(first.style.getPropertyValue('--sb-pane-h'), '572px');
+			assert.deepStrictEqual(snapshots, []);
+
+			view.setCollapsed('pane-b', false, false);
+			assert.strictEqual(first.style.getPropertyValue('--sb-pane-h'), '297px');
+			sash.dispatchEvent(new dom.window.MouseEvent('mousedown', {
+				button: 1,
+				clientY: 300,
+				bubbles: true,
+				cancelable: true,
+			}));
+			assert.strictEqual(sash.classList.contains('dragging'), false, 'only the primary button drags');
+
+			const down = new dom.window.MouseEvent('mousedown', {
+				button: 0,
+				clientY: 300,
+				bubbles: true,
+				cancelable: true,
+			});
+			sash.dispatchEvent(down);
+			assert.strictEqual(down.defaultPrevented, true);
+			assert.strictEqual(sash.classList.contains('dragging'), true);
+			assert.strictEqual(root.classList.contains('dragging'), true);
+			assert.strictEqual(dom.document.body.classList.contains('sb-row-resizing'), true);
+
+			dom.window.dispatchEvent(new dom.window.MouseEvent('mousemove', { clientY: 250 }));
+			assert.strictEqual(first.style.getPropertyValue('--sb-pane-h'), '247px');
+			assert.strictEqual(second.style.getPropertyValue('--sb-pane-h'), '347px');
+			assert.deepStrictEqual(snapshots, [], 'a drag previews without persisting');
+
+			dom.window.dispatchEvent(new dom.window.MouseEvent('mouseup'));
+			assert.strictEqual(sash.classList.contains('dragging'), false);
+			assert.strictEqual(root.classList.contains('dragging'), false);
+			assert.strictEqual(dom.document.body.classList.contains('sb-row-resizing'), false);
+			assert.deepStrictEqual(snapshots, [{ 'pane-a': 247, 'pane-b': 347 }]);
+
+			sash.dispatchEvent(new dom.window.MouseEvent('mousedown', {
+				button: 0,
+				clientY: 300,
+				bubbles: true,
+				cancelable: true,
+			}));
+			dom.window.dispatchEvent(new dom.window.MouseEvent('mouseup'));
+			assert.deepStrictEqual(snapshots, [{ 'pane-a': 247, 'pane-b': 347 }], 'a click without a move does not persist');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a stacked layout leaves the saved sidebar width alone', () => {
+		const dom = installDom('editor');
+		try {
+			Object.defineProperty(dom.window.HTMLElement.prototype, 'offsetParent', {
+				configurable: true,
+				get() {
+					return null;
+				},
+			});
+			dom.window.innerWidth = 1600;
+			(dom.document.getElementById('side-tabs') as any).dataset.testClientWidth = '28';
+			setSidebarState(state({ sidebarWidth: 460 }));
+			setSidebarPersistence(() => undefined);
+			mountSidebarShell();
+			const sidebar = dom.document.getElementById('sidebar') as any;
+			assert.strictEqual(sidebar.style.getPropertyValue('--sidebar-w'), '');
+			assert.strictEqual(getSidebarState().sidebarWidth, 460);
+
+			Object.defineProperty(dom.window.HTMLElement.prototype, 'offsetParent', {
+				configurable: true,
+				get(this: any) {
+					return this.parentElement;
+				},
+			});
+			dom.window.dispatchEvent(new dom.window.Event('resize'));
+			assert.strictEqual(sidebar.style.getPropertyValue('--sidebar-w'), '460px');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('mountSidebarShell does nothing without the shell elements', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			setSidebarState(state({ sidebarWidth: 460 }));
+			mountSidebarShell();
+			assert.strictEqual(getSidebarState().sidebarWidth, 460);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('the editor actions use the shared classes and the old toggles are gone', () => {
 		const html = page();
 		assert.ok(/id="collapse-all" class="sb-btn sb-btn-secondary/.test(html));

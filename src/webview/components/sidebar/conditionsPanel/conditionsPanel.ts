@@ -12,17 +12,25 @@ import type { ConditionEntry } from '../../../../core/ecuc/conditionEntry';
 
 /** The one validation rule for a row name, shared by Save and the tests. */
 export function conditionEntryError(name: string, others: readonly string[] = []): string {
-	const trimmed = typeof name === 'string' ? name.trim() : '';
+	const trimmed = trimmedConditionName(name);
 	if (trimmed === '') {
 		return 'Enter a constant name before saving.';
 	}
 	if (!conditionNameValid(trimmed)) {
 		return 'Invalid name: use a constant name or path (letters, digits, _ . - /).';
 	}
-	if (others && others.indexOf(trimmed) >= 0) {
+	if (duplicateConditionName(trimmed, others)) {
 		return `A condition value named ${trimmed} already exists.`;
 	}
 	return '';
+}
+
+function trimmedConditionName(name: string): string {
+	return typeof name === 'string' ? name.trim() : '';
+}
+
+function duplicateConditionName(name: string, others: readonly string[]): boolean {
+	return others ? others.indexOf(name) >= 0 : false;
 }
 
 export function conditionNameValid(name: string): boolean {
@@ -129,63 +137,103 @@ function renderConditionRow(row: any): void {
 	const editing = row.dataset.editing === 'true';
 	const isNew = row.dataset.new === 'true';
 	const auto = row.dataset.auto === 'true';
-	const name = row.dataset.name || '';
-	const value = row.dataset.value || '';
+	const name = conditionRowNameAttribute(row);
+	const value = conditionRowValueAttribute(row);
 	row.textContent = '';
-	if (editing && isNew) {
-		const nameInput = document.createElement('input');
-		nameInput.className = 'condition-name';
-		nameInput.type = 'text';
-		nameInput.placeholder = 'CONSTANT_NAME';
-		nameInput.setAttribute('aria-label', 'Constant name');
-		nameInput.setAttribute('aria-invalid', 'false');
-		nameInput.value = name;
-		row.appendChild(nameInput);
-	} else {
-		const nameText = document.createElement('span');
-		nameText.className = 'condition-name-text';
-		nameText.textContent = name;
-		nameText.title = name;
-		row.appendChild(nameText);
+	appendConditionName(row, editing, isNew, name);
+	appendConditionEquals(row);
+	if (editing) {
+		appendConditionEdit(row, value, name);
+		return;
 	}
+	appendConditionValueText(row, value);
+	appendConditionViewActions(row, name, auto);
+	updateConditionRowState(row);
+}
+
+function conditionRowNameAttribute(row: HTMLElement): string {
+	return row.dataset.name || '';
+}
+
+function conditionRowValueAttribute(row: HTMLElement): string {
+	return row.dataset.value || '';
+}
+
+function conditionNameInput(name: string): HTMLInputElement {
+	const nameInput = document.createElement('input');
+	nameInput.className = 'condition-name';
+	nameInput.type = 'text';
+	nameInput.placeholder = 'CONSTANT_NAME';
+	nameInput.setAttribute('aria-label', 'Constant name');
+	nameInput.setAttribute('aria-invalid', 'false');
+	nameInput.value = name;
+	return nameInput;
+}
+
+function conditionNameText(name: string): HTMLSpanElement {
+	const nameText = document.createElement('span');
+	nameText.className = 'condition-name-text';
+	nameText.textContent = name;
+	nameText.title = name;
+	return nameText;
+}
+
+function appendConditionName(row: HTMLElement, editing: boolean, isNew: boolean, name: string): void {
+	if (editing && isNew) {
+		row.appendChild(conditionNameInput(name));
+		return;
+	}
+	row.appendChild(conditionNameText(name));
+}
+
+function appendConditionEquals(row: HTMLElement): void {
 	const equals = document.createElement('span');
 	equals.className = 'punct';
 	equals.textContent = '=';
 	row.appendChild(equals);
-	if (editing) {
-		const valueInput = document.createElement('input');
-		valueInput.className = 'condition-value';
-		valueInput.type = 'text';
-		valueInput.placeholder = 'value';
-		valueInput.setAttribute('aria-label', 'Constant value');
-		valueInput.value = value;
-		row.appendChild(valueInput);
-		const actions = document.createElement('div');
-		actions.className = 'condition-actions';
-		const save = conditionIconButton(
+}
+
+function appendConditionEdit(row: HTMLElement, value: string, name: string): void {
+	const valueInput = document.createElement('input');
+	valueInput.className = 'condition-value';
+	valueInput.type = 'text';
+	valueInput.placeholder = 'value';
+	valueInput.setAttribute('aria-label', 'Constant value');
+	valueInput.value = value;
+	row.appendChild(valueInput);
+	const actions = document.createElement('div');
+	actions.className = 'condition-actions';
+	actions.appendChild(
+		conditionIconButton(
 			'condition-save',
 			'Save ' + (name || 'condition value'),
 			'Save this condition value',
 			'M3 8.5l3 3 7-7'
-		);
-		actions.appendChild(save);
-		const cancel = conditionIconButton(
+		)
+	);
+	actions.appendChild(
+		conditionIconButton(
 			'condition-cancel',
 			'Cancel ' + (name || 'new condition value'),
 			'Discard this change',
 			'M4 4l8 8M12 4l-8 8'
-		);
-		actions.appendChild(cancel);
-		row.appendChild(actions);
+		)
+	);
+	row.appendChild(actions);
+}
+
+function appendConditionValueText(row: HTMLElement, value: string): void {
+	if (value.trim() === '') {
 		return;
 	}
-	if (value.trim() !== '') {
-		const valueText = document.createElement('span');
-		valueText.className = 'condition-value-text';
-		valueText.textContent = value;
-		valueText.title = 'Value: ' + value;
-		row.appendChild(valueText);
-	}
+	const valueText = document.createElement('span');
+	valueText.className = 'condition-value-text';
+	valueText.textContent = value;
+	valueText.title = 'Value: ' + value;
+	row.appendChild(valueText);
+}
+
+function appendConditionViewActions(row: HTMLElement, name: string, auto: boolean): void {
 	const actions = document.createElement('div');
 	actions.className = 'condition-actions';
 	const state = document.createElement('span');
@@ -212,22 +260,45 @@ function renderConditionRow(row: any): void {
 		);
 	}
 	row.appendChild(actions);
-	updateConditionRowState(row);
+}
+
+interface ConditionRowOptions {
+	auto?: boolean;
+	editing?: boolean;
+	isNew?: boolean;
 }
 
 /** Creates a row from an entry and its committed flags, then renders it. */
-function conditionRowElement(entry: any, options?: { auto?: boolean; editing?: boolean; isNew?: boolean }): any {
+function conditionRowElement(entry: Partial<ConditionEntry> | null | undefined, options?: ConditionRowOptions): HTMLElement {
 	const row = document.createElement('div');
 	row.className = 'condition-row parent';
-	const name = entry && typeof entry.name === 'string' ? entry.name.trim() : '';
-	const value = entry && typeof entry.value === 'string' ? entry.value : '';
-	row.dataset.name = name;
-	row.dataset.value = value;
-	row.dataset.auto = options && options.auto === false ? 'false' : 'true';
-	row.dataset.editing = options && options.editing === true ? 'true' : 'false';
-	row.dataset.new = options && options.isNew === true ? 'true' : 'false';
+	row.dataset.name = conditionEntryName(entry);
+	row.dataset.value = conditionEntryValue(entry);
+	row.dataset.auto = conditionAutoAttribute(options);
+	row.dataset.editing = conditionEditingAttribute(options);
+	row.dataset.new = conditionNewAttribute(options);
 	renderConditionRow(row);
 	return row;
+}
+
+function conditionEntryName(entry: Partial<ConditionEntry> | null | undefined): string {
+	return entry && typeof entry.name === 'string' ? entry.name.trim() : '';
+}
+
+function conditionEntryValue(entry: Partial<ConditionEntry> | null | undefined): string {
+	return entry && typeof entry.value === 'string' ? entry.value : '';
+}
+
+function conditionAutoAttribute(options?: ConditionRowOptions): string {
+	return options && options.auto === false ? 'false' : 'true';
+}
+
+function conditionEditingAttribute(options?: ConditionRowOptions): string {
+	return options && options.editing === true ? 'true' : 'false';
+}
+
+function conditionNewAttribute(options?: ConditionRowOptions): string {
+	return options && options.isNew === true ? 'true' : 'false';
 }
 
 /**
@@ -242,26 +313,52 @@ function updateConditionRowState(row: any): void {
 	if (!state) {
 		return;
 	}
+	state.hidden = conditionStateHidden(row);
+}
+
+function conditionStateHidden(row: HTMLElement): boolean {
 	const editing = row.dataset.editing === 'true';
 	const value = (row.dataset.value || '').trim();
-	state.hidden = editing || value !== '';
+	return editing || value !== '';
 }
 
 function discoveredConditionSymbols(): string[] {
 	const seen = new Set<string>();
 	const out: string[] = [];
 	for (let at = 0; at < conditionsRows.length; at++) {
-		const condition = conditionsRows[at] ? conditionsRows[at].condition : undefined;
-		const symbols = condition && Array.isArray(condition.symbols) ? condition.symbols : [];
-		for (let symbol = 0; symbol < symbols.length; symbol++) {
-			const name = symbols[symbol];
-			if (typeof name === 'string' && name !== '' && !seen.has(name)) {
-				seen.add(name);
-				out.push(name);
-			}
-		}
+		collectConditionSymbols(conditionRowSymbolsAt(at), seen, out);
 	}
 	return out;
+}
+
+function conditionRowSymbolsAt(at: number): readonly unknown[] {
+	const row = conditionsRows[at];
+	const condition = row ? row.condition : undefined;
+	return condition && Array.isArray(condition.symbols) ? condition.symbols : [];
+}
+
+function isNewConditionSymbol(name: unknown, seen: Set<string>): name is string {
+	return typeof name === 'string' && name !== '' && !seen.has(name);
+}
+
+function collectConditionSymbols(symbols: readonly unknown[], seen: Set<string>, out: string[]): void {
+	for (let symbol = 0; symbol < symbols.length; symbol++) {
+		const name = symbols[symbol];
+		if (isNewConditionSymbol(name, seen)) {
+			seen.add(name);
+			out.push(name);
+		}
+	}
+}
+
+function rowConditionName(row: HTMLElement): string {
+	return row.dataset ? (row.dataset.name || '').trim() : '';
+}
+
+function addNameWhenPresent(names: Set<string>, name: string): void {
+	if (name !== '') {
+		names.add(name);
+	}
 }
 
 function existingConditionNames(): Set<string> {
@@ -271,10 +368,7 @@ function existingConditionNames(): Set<string> {
 	}
 	const list = conditionsList.querySelectorAll('.condition-row');
 	for (let at = 0; at < list.length; at++) {
-		const name = list[at].dataset ? (list[at].dataset.name || '').trim() : '';
-		if (name !== '') {
-			names.add(name);
-		}
+		addNameWhenPresent(names, rowConditionName(list[at]));
 	}
 	return names;
 }
@@ -287,15 +381,17 @@ function conditionOtherNames(row: any): string[] {
 	}
 	const list = conditionsList.querySelectorAll('.condition-row');
 	for (let at = 0; at < list.length; at++) {
-		if (list[at] === row) {
-			continue;
-		}
-		const name = list[at].dataset ? (list[at].dataset.name || '').trim() : '';
-		if (name !== '') {
-			names.push(name);
+		if (list[at] !== row) {
+			pushNameWhenPresent(names, rowConditionName(list[at]));
 		}
 	}
 	return names;
+}
+
+function pushNameWhenPresent(names: string[], name: string): void {
+	if (name !== '') {
+		names.push(name);
+	}
 }
 
 /**
@@ -311,18 +407,29 @@ function syncConditionRowAutoFlags(): void {
 	const discovered = new Set(discoveredConditionSymbols());
 	const list = conditionsList.querySelectorAll('.condition-row');
 	for (let at = 0; at < list.length; at++) {
-		const row = list[at];
-		const auto = discovered.has((row.dataset.name || '').trim());
-		row.dataset.auto = auto ? 'true' : 'false';
-		if (row.dataset.editing === 'true') {
-			continue;
-		}
-		const hasRemove = row.querySelector('.condition-remove') !== null;
-		const needsRemove = auto !== true;
-		if (hasRemove !== needsRemove) {
-			// Scanned rows must have no Remove, manual rows must have it.
-			renderConditionRow(row);
-		}
+		syncConditionRowAutoFlag(list[at], discovered);
+	}
+}
+
+function syncConditionRowAutoFlag(row: HTMLElement, discovered: Set<string>): void {
+	const auto = conditionRowIsAuto(row, discovered);
+	row.dataset.auto = auto ? 'true' : 'false';
+	if (row.dataset.editing === 'true') {
+		return;
+	}
+	ensureConditionRemoveAction(row, auto);
+}
+
+function conditionRowIsAuto(row: HTMLElement, discovered: Set<string>): boolean {
+	return discovered.has((row.dataset.name || '').trim());
+}
+
+function ensureConditionRemoveAction(row: HTMLElement, auto: boolean): void {
+	const hasRemove = row.querySelector('.condition-remove') !== null;
+	const needsRemove = auto !== true;
+	if (hasRemove !== needsRemove) {
+		// Scanned rows must have no Remove, manual rows must have it.
+		renderConditionRow(row);
 	}
 }
 
@@ -351,84 +458,140 @@ function readConditionEntries(): ConditionEntry[] {
 	}
 	const rows = conditionsList.querySelectorAll('.condition-row');
 	for (let at = 0; at < rows.length; at++) {
-		const row = rows[at];
-		if (row.dataset.new === 'true') {
-			continue;
+		const entry = committedConditionEntry(rows[at]);
+		if (entry) {
+			entries.push(entry);
 		}
-		const name = (row.dataset.name || '').trim();
-		if (!conditionNameValid(name)) {
-			continue;
-		}
-		const value = row.dataset.value || '';
-		// A discovered constant with no saved value is regenerated from the document;
-		// persisting it would turn it into a manual row in other files.
-		if (row.dataset.auto === 'true' && value === '') {
-			continue;
-		}
-		entries.push({ name: name, value: value });
 	}
 	return entries;
 }
 
-function updateConditionsChrome(): void {
-	let count = 0;
-	let missing = 0;
-	let total = 0;
-	if (conditionsList) {
-		const list = conditionsList.querySelectorAll('.condition-row');
-		total = list.length;
-		for (let at = 0; at < list.length; at++) {
-			const data = list[at].dataset;
-			if (!data || data.new === 'true') {
-				// An unsaved Add draft is not a committed constant yet.
-				continue;
-			}
-			count++;
-			if ((data.value || '').trim() === '') {
-				missing++;
-			}
-		}
+function committedConditionEntry(row: HTMLElement): ConditionEntry | null {
+	if (row.dataset.new === 'true') {
+		return null;
 	}
+	const name = committedConditionName(row);
+	if (!conditionNameValid(name)) {
+		return null;
+	}
+	if (conditionRowOmittedFromEntries(row)) {
+		return null;
+	}
+	return { name: name, value: committedConditionValue(row) };
+}
+
+function committedConditionName(row: HTMLElement): string {
+	return (row.dataset.name || '').trim();
+}
+
+function committedConditionValue(row: HTMLElement): string {
+	return row.dataset.value || '';
+}
+
+function conditionRowOmittedFromEntries(row: HTMLElement): boolean {
+	// A discovered constant with no saved value is regenerated from the document;
+	// persisting it would turn it into a manual row in other files.
+	return row.dataset.auto === 'true' && committedConditionValue(row) === '';
+}
+
+interface ConditionChromeCounts {
+	count: number;
+	missing: number;
+	total: number;
+}
+
+function conditionChromeCounts(): ConditionChromeCounts {
+	const counts: ConditionChromeCounts = { count: 0, missing: 0, total: 0 };
+	if (!conditionsList) {
+		return counts;
+	}
+	const list = conditionsList.querySelectorAll('.condition-row');
+	counts.total = list.length;
+	for (let at = 0; at < list.length; at++) {
+		countCommittedConditionRow(list[at], counts);
+	}
+	return counts;
+}
+
+function countCommittedConditionRow(row: HTMLElement, counts: ConditionChromeCounts): void {
+	const data = row.dataset;
+	if (!isCommittedConditionRow(data)) {
+		// An unsaved Add draft is not a committed constant yet.
+		return;
+	}
+	counts.count++;
+	if (conditionValueMissing(data)) {
+		counts.missing++;
+	}
+}
+
+function isCommittedConditionRow(data: DOMStringMap | undefined): data is DOMStringMap {
+	return !!data && data.new !== 'true';
+}
+
+function conditionValueMissing(data: DOMStringMap): boolean {
+	return (data.value || '').trim() === '';
+}
+
+function conditionBadgeText(counts: ConditionChromeCounts): string {
+	const label = counts.count + (counts.count === 1 ? ' constant' : ' constants');
+	return label + (counts.missing > 0 ? ' · ' + counts.missing + ' missing' : '');
+}
+
+function updateConditionsChrome(): void {
+	const counts = conditionChromeCounts();
 	if (conditionsEmpty) {
-		conditionsEmpty.hidden = total !== 0;
+		conditionsEmpty.hidden = counts.total !== 0;
 	}
 	if (conditionsClear) {
-		conditionsClear.disabled = count === 0;
+		conditionsClear.disabled = counts.count === 0;
 	}
 	if (conditionsValuesBadge) {
-		conditionsValuesBadge.textContent =
-			count + (count === 1 ? ' constant' : ' constants') + (missing > 0 ? ' · ' + missing + ' missing' : '');
-		conditionsValuesBadge.hidden = count === 0;
+		conditionsValuesBadge.textContent = conditionBadgeText(counts);
+		conditionsValuesBadge.hidden = counts.count === 0;
 	}
 }
 
 export function renderConditionEntries(entries: unknown): void {
-	if (!conditionsList) {
-		return;
-	}
-	if (editingConditionRow) {
+	if (!canReplaceConditionRows()) {
 		// A host entries push cannot replace a local draft; Save/Cancel owns it.
 		return;
 	}
 	conditionsList.textContent = '';
+	appendConditionEntries(entries);
+	ensureDiscoveredConditionRows();
+	updateConditionsChrome();
+}
+
+function canReplaceConditionRows(): boolean {
+	return !!conditionsList && !editingConditionRow;
+}
+
+function appendConditionEntries(entries: unknown): void {
 	const list = Array.isArray(entries) ? entries : [];
 	for (let at = 0; at < list.length; at++) {
 		conditionsList.appendChild(conditionRowElement(list[at], { auto: false }));
 	}
-	ensureDiscoveredConditionRows();
-	updateConditionsChrome();
 }
 
 function sendConditions(): void {
 	onConditionsChange(readConditionEntries());
 }
 
+function conditionEditorInput(row: HTMLElement): HTMLInputElement | null {
+	return row.dataset.new === 'true'
+		? row.querySelector<HTMLInputElement>('.condition-name')
+		: row.querySelector<HTMLInputElement>('.condition-value');
+}
+
 function focusConditionEditor(row: any): void {
 	if (!row) {
 		return;
 	}
-	const input =
-		row.dataset.new === 'true' ? row.querySelector('.condition-name') : row.querySelector('.condition-value');
+	focusAndSelect(conditionEditorInput(row));
+}
+
+function focusAndSelect(input: HTMLInputElement | null): void {
 	if (input && input.focus) {
 		input.focus();
 		if (input.select) {
@@ -437,18 +600,18 @@ function focusConditionEditor(row: any): void {
 	}
 }
 
-function beginConditionEdit(row: any): void {
-	if (!row) {
-		return;
-	}
-	if (editingConditionRow === row && row.dataset.editing === 'true') {
-		focusConditionEditor(row);
-		return;
-	}
+function isEditingConditionRow(row: HTMLElement): boolean {
+	return editingConditionRow === row && row.dataset.editing === 'true';
+}
+
+function cancelOtherConditionEdit(row: HTMLElement): void {
+	// One draft at a time: cancel the previous row before opening this one.
 	if (editingConditionRow && editingConditionRow !== row) {
-		// One draft at a time: cancel the previous row before opening this one.
 		cancelConditionEdit(editingConditionRow);
 	}
+}
+
+function openConditionEdit(row: HTMLElement): void {
 	editingConditionRow = row;
 	row.dataset.editing = 'true';
 	renderConditionRow(row);
@@ -456,41 +619,97 @@ function beginConditionEdit(row: any): void {
 	updateConditionsChrome();
 }
 
-function saveConditionEdit(row: any): void {
+function beginConditionEdit(row: any): void {
 	if (!row) {
 		return;
 	}
-	const isNew = row.dataset.new === 'true';
-	const nameInput = isNew ? row.querySelector('.condition-name') : null;
-	const valueInput = row.querySelector('.condition-value');
-	const name = isNew ? (nameInput ? nameInput.value.trim() : '') : (row.dataset.name || '').trim();
-	const value = valueInput ? valueInput.value : row.dataset.value || '';
-	const error = isNew ? conditionEntryError(name, conditionOtherNames(row)) : '';
-	if (error !== '') {
-		if (nameInput) {
-			nameInput.setAttribute('aria-invalid', 'true');
-		}
-		if (conditionsStatus) {
-			conditionsStatus.textContent = error;
-		}
+	if (isEditingConditionRow(row)) {
+		focusConditionEditor(row);
 		return;
 	}
+	cancelOtherConditionEdit(row);
+	openConditionEdit(row);
+}
+
+function conditionNameDraftInput(row: HTMLElement, isNew: boolean): HTMLInputElement | null {
+	return isNew ? row.querySelector<HTMLInputElement>('.condition-name') : null;
+}
+
+function conditionDraftName(row: HTMLElement, isNew: boolean, nameInput: HTMLInputElement | null): string {
+	if (!isNew) {
+		return (row.dataset.name || '').trim();
+	}
+	return nameInput ? nameInput.value.trim() : '';
+}
+
+function conditionDraftValue(row: HTMLElement, valueInput: HTMLInputElement | null): string {
+	return valueInput ? valueInput.value : row.dataset.value || '';
+}
+
+function conditionDraftError(row: HTMLElement, isNew: boolean, name: string): string {
+	return isNew ? conditionEntryError(name, conditionOtherNames(row)) : '';
+}
+
+function showConditionsStatus(text: string): void {
+	if (conditionsStatus) {
+		conditionsStatus.textContent = text;
+	}
+}
+
+function showConditionEditError(error: string, nameInput: HTMLInputElement | null): void {
+	if (nameInput) {
+		nameInput.setAttribute('aria-invalid', 'true');
+	}
+	showConditionsStatus(error);
+}
+
+function focusConditionEditAction(row: HTMLElement): void {
+	const edit = row.querySelector<HTMLElement>('.condition-edit');
+	if (edit && edit.focus) {
+		edit.focus();
+	}
+}
+
+function commitConditionEdit(row: HTMLElement, name: string, value: string): void {
 	row.dataset.name = name;
 	row.dataset.value = value;
 	row.dataset.new = 'false';
 	row.dataset.editing = 'false';
 	editingConditionRow = null;
-	if (conditionsStatus) {
-		conditionsStatus.textContent = '';
-	}
+	showConditionsStatus('');
 	renderConditionRow(row);
-	const edit = row.querySelector('.condition-edit');
-	if (edit && edit.focus) {
-		edit.focus();
-	}
+	focusConditionEditAction(row);
 	syncConditionRowAutoFlags();
 	updateConditionsChrome();
 	sendConditions();
+}
+
+function saveConditionEdit(row: any): void {
+	if (!row) {
+		return;
+	}
+	const isNew = row.dataset.new === 'true';
+	const nameInput = conditionNameDraftInput(row, isNew);
+	const name = conditionDraftName(row, isNew, nameInput);
+	const value = conditionDraftValue(row, row.querySelector('.condition-value'));
+	const error = conditionDraftError(row, isNew, name);
+	if (error !== '') {
+		showConditionEditError(error, nameInput);
+		return;
+	}
+	commitConditionEdit(row, name, value);
+}
+
+function detachConditionRow(row: HTMLElement): void {
+	if (row.parentNode) {
+		row.parentNode.removeChild(row);
+	}
+}
+
+function restoreConditionRow(row: HTMLElement): void {
+	row.dataset.editing = 'false';
+	renderConditionRow(row);
+	focusConditionEditAction(row);
 }
 
 function cancelConditionEdit(row: any): void {
@@ -501,20 +720,31 @@ function cancelConditionEdit(row: any): void {
 		editingConditionRow = null;
 	}
 	if (row.dataset.new === 'true') {
-		if (row.parentNode) {
-			row.parentNode.removeChild(row);
-		}
+		detachConditionRow(row);
 	} else {
-		row.dataset.editing = 'false';
-		renderConditionRow(row);
-		const edit = row.querySelector('.condition-edit');
-		if (edit && edit.focus) {
-			edit.focus();
-		}
+		restoreConditionRow(row);
 	}
-	if (conditionsStatus) {
-		conditionsStatus.textContent = '';
+	showConditionsStatus('');
+	updateConditionsChrome();
+}
+
+function focusExistingConditionDraft(): boolean {
+	if (!editingConditionRow) {
+		return false;
 	}
+	if (editingConditionRow.dataset.new === 'true') {
+		focusConditionEditor(editingConditionRow);
+		return true;
+	}
+	cancelConditionEdit(editingConditionRow);
+	return false;
+}
+
+function openNewConditionRow(): void {
+	const row = conditionRowElement({ name: '', value: '' }, { auto: false, isNew: true, editing: true });
+	conditionsList.appendChild(row);
+	showConditionsStatus('');
+	beginConditionEdit(row);
 	updateConditionsChrome();
 }
 
@@ -522,39 +752,22 @@ function addConditionEntry(): void {
 	if (!conditionsList) {
 		return;
 	}
-	if (editingConditionRow) {
-		if (editingConditionRow.dataset.new === 'true') {
-			focusConditionEditor(editingConditionRow);
-			return;
-		}
-		cancelConditionEdit(editingConditionRow);
+	if (focusExistingConditionDraft()) {
+		return;
 	}
-	const row = conditionRowElement({ name: '', value: '' }, { auto: false, isNew: true, editing: true });
-	conditionsList.appendChild(row);
-	if (conditionsStatus) {
-		conditionsStatus.textContent = '';
-	}
-	beginConditionEdit(row);
-	updateConditionsChrome();
+	openNewConditionRow();
 }
 
 function removeConditionRow(row: any): void {
-	if (!row) {
-		return;
-	}
-	if (row.dataset.auto === 'true') {
+	if (!row || row.dataset.auto === 'true') {
 		// Scanned rows are owned by the document and have no Remove control.
 		return;
 	}
 	if (editingConditionRow === row) {
 		editingConditionRow = null;
 	}
-	if (row.parentNode) {
-		row.parentNode.removeChild(row);
-	}
-	if (conditionsStatus) {
-		conditionsStatus.textContent = '';
-	}
+	detachConditionRow(row);
+	showConditionsStatus('');
 	updateConditionsChrome();
 	sendConditions();
 }
@@ -580,18 +793,106 @@ export function setConditionsStatus(message: string): void {
 	}
 }
 
-export function applyDisabledCount(): void {
-	if (!conditionsCount) {
-		return;
-	}
+function countDisabledConditionRows(): number {
 	let disabled = 0;
 	for (let at = 0; at < conditionsRows.length; at++) {
 		if (conditionsRows[at].disabled) {
 			disabled++;
 		}
 	}
+	return disabled;
+}
+
+export function applyDisabledCount(): void {
+	if (!conditionsCount) {
+		return;
+	}
+	const disabled = countDisabledConditionRows();
 	conditionsCount.textContent = disabled > 0 ? disabled + ' disabled' : '';
 	conditionsCount.hidden = disabled === 0;
+}
+
+function handleConditionPanelClick(event: MouseEvent): void {
+	if (!(event.target instanceof Element)) {
+		return;
+	}
+	const row = event.target.closest('.condition-row');
+	if (!(row instanceof HTMLElement)) {
+		return;
+	}
+	dispatchConditionRowAction(event.target, row);
+}
+
+function dispatchConditionRowAction(target: Element, row: HTMLElement): void {
+	if (dispatchConditionEditAction(target, row)) {
+		return;
+	}
+	dispatchConditionRemoveAction(target, row);
+}
+
+function dispatchConditionEditAction(target: Element, row: HTMLElement): boolean {
+	if (target.closest('.condition-edit')) {
+		beginConditionEdit(row);
+		return true;
+	}
+	if (target.closest('.condition-save')) {
+		saveConditionEdit(row);
+		return true;
+	}
+	return false;
+}
+
+function dispatchConditionRemoveAction(target: Element, row: HTMLElement): void {
+	if (target.closest('.condition-cancel')) {
+		cancelConditionEdit(row);
+	} else if (target.closest('.condition-remove')) {
+		removeConditionRow(row);
+	}
+}
+
+function isConditionNameInput(target: EventTarget | null): target is Element {
+	return target instanceof Element && target.classList.contains('condition-name');
+}
+
+function handleConditionPanelInput(event: Event): void {
+	const target = event.target;
+	if (!isConditionNameInput(target)) {
+		return;
+	}
+	target.setAttribute('aria-invalid', 'false');
+	showConditionsStatus('');
+}
+
+function conditionEditorRow(target: Element): HTMLElement | null {
+	const row = target.closest('.condition-row');
+	if (!(row instanceof HTMLElement)) {
+		return null;
+	}
+	return row.dataset.editing === 'true' ? row : null;
+}
+
+function handleConditionEditorKey(event: KeyboardEvent, row: HTMLElement): void {
+	if (event.key === 'Enter') {
+		event.preventDefault();
+		event.stopPropagation();
+		saveConditionEdit(row);
+	} else if (event.key === 'Escape') {
+		event.preventDefault();
+		event.stopPropagation();
+		cancelConditionEdit(row);
+	}
+}
+
+function handleConditionPanelKeydown(event: KeyboardEvent): void {
+	const target = event.target;
+	if (!(target instanceof Element) || target.tagName !== 'INPUT') {
+		return;
+	}
+	const row = conditionEditorRow(target);
+	if (!row) {
+		return;
+	}
+	handleConditionEditorKey(event, row);
 }
 
 export function mountConditionsPanel(): void {
@@ -612,51 +913,9 @@ export function mountConditionsPanel(): void {
 		conditionsClear.addEventListener('click', clearConditionEntries);
 	}
 	if (conditionsPanel) {
-		conditionsPanel.addEventListener('click', function (event: any) {
-			if (!(event.target instanceof Element)) {
-				return;
-			}
-			const row = event.target.closest('.condition-row');
-			if (!row) {
-				return;
-			}
-			if (event.target.closest('.condition-edit')) {
-				beginConditionEdit(row);
-			} else if (event.target.closest('.condition-save')) {
-				saveConditionEdit(row);
-			} else if (event.target.closest('.condition-cancel')) {
-				cancelConditionEdit(row);
-			} else if (event.target.closest('.condition-remove')) {
-				removeConditionRow(row);
-			}
-		});
-		conditionsPanel.addEventListener('input', function (event: any) {
-			const target = event.target;
-			if (target && target.classList && target.classList.contains('condition-name')) {
-				target.setAttribute('aria-invalid', 'false');
-				if (conditionsStatus) {
-					conditionsStatus.textContent = '';
-				}
-			}
-		});
-		conditionsPanel.addEventListener('keydown', function (event: any) {
-			if (!(event.target instanceof Element) || event.target.tagName !== 'INPUT') {
-				return;
-			}
-			const row = event.target.closest('.condition-row');
-			if (!row || row.dataset.editing !== 'true') {
-				return;
-			}
-			if (event.key === 'Enter') {
-				event.preventDefault();
-				event.stopPropagation();
-				saveConditionEdit(row);
-			} else if (event.key === 'Escape') {
-				event.preventDefault();
-				event.stopPropagation();
-				cancelConditionEdit(row);
-			}
-		});
+		conditionsPanel.addEventListener('click', handleConditionPanelClick);
+		conditionsPanel.addEventListener('input', handleConditionPanelInput);
+		conditionsPanel.addEventListener('keydown', handleConditionPanelKeydown);
 	}
 	renderConditionEntries([]);
 }
