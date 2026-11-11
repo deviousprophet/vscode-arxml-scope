@@ -1897,6 +1897,141 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('Arrow keys move the selection and Home/End jump to the ends', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			const row = (key: string): HTMLElement =>
+				dom.document.querySelector(`#diff-pane-left .diff-row[data-key="${key}"]`) as HTMLElement;
+			const selected = (): string | undefined =>
+				dom.document.querySelector('#diff-pane-left .diff-row[data-selected="true"]')?.getAttribute('data-key') ?? undefined;
+			const press = (key: string, target: HTMLElement): KeyboardEvent => {
+				const event = new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+				target.dispatchEvent(event);
+				return event;
+			};
+
+			assert.strictEqual(press('ArrowDown', row('m')).defaultPrevented, true);
+			assert.strictEqual(selected(), 'm', 'ArrowDown starts at the first node');
+			press('ArrowDown', row('m'));
+			assert.strictEqual(selected(), 'c1');
+			press('ArrowUp', row('c1'));
+			assert.strictEqual(selected(), 'm');
+			press('Home', row('m'));
+			assert.strictEqual(selected(), 'm', 'Home stops at the first node');
+			press('End', row('m'));
+			assert.strictEqual(selected(), 'p2', 'End stops at the last node');
+			press('Home', row('p2'));
+			assert.strictEqual(selected(), 'm');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('ArrowRight enters or expands and ArrowLeft collapses or returns to the parent', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			const row = (key: string): HTMLElement =>
+				dom.document.querySelector(`#diff-pane-left .diff-row[data-key="${key}"]`) as HTMLElement;
+			const selected = (): string | undefined =>
+				dom.document.querySelector('#diff-pane-left .diff-row[data-selected="true"]')?.getAttribute('data-key') ?? undefined;
+			const press = (key: string, target: HTMLElement): void => {
+				target.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+			};
+
+			row('m').querySelector('.row')!.dispatchEvent(
+				new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })
+			);
+			press('ArrowRight', row('m'));
+			assert.strictEqual(selected(), 'c1', 'a right arrow enters the first child');
+			press('ArrowRight', row('c1'));
+			assert.strictEqual(selected(), 'p1');
+			press('ArrowLeft', row('p1'));
+			assert.strictEqual(selected(), 'c1', 'a left arrow returns to the parent');
+			press('ArrowLeft', row('c1'));
+			assert.strictEqual(selected(), 'c1', 'the expanded container stays selected');
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p1"]'), null);
+			press('ArrowRight', row('c1'));
+			assert.strictEqual(selected(), 'c1', 'a collapsed container stays selected');
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p1"]'), 'right expands it');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Space selects a row and Ctrl+F focuses Search', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			const p2 = dom.document.querySelector('#diff-pane-left .diff-row[data-key="p2"]') as HTMLElement;
+			const space = new dom.window.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+			p2.dispatchEvent(space);
+			assert.strictEqual(space.defaultPrevented, true);
+			assert.strictEqual(
+				(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p2"]') as HTMLElement).dataset.selected,
+				'true',
+				'Space selects the row'
+			);
+
+			const shortcut = new dom.window.KeyboardEvent('keydown', {
+				key: 'f',
+				ctrlKey: true,
+				bubbles: true,
+				cancelable: true,
+			});
+			dom.document.body.dispatchEvent(shortcut);
+			assert.strictEqual(shortcut.defaultPrevented, true);
+			assert.strictEqual(dom.document.activeElement, dom.document.getElementById('diff-search-input'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Enter steps through search matches and wraps in both directions', async () => {
+		const rows = ['alpha one', 'alpha two'].map((haystack, at) =>
+			wordRow({
+				key: `a${at + 1}`,
+				posinset: at + 1,
+				setsize: 2,
+				haystack,
+				left: wordCell({ label: `A${at + 1}` }),
+				right: wordCell({ label: `A${at + 1}` }),
+			})
+		);
+		const { dom } = mount(wordDocument(rows));
+		try {
+			await runDiffSearch(dom, 'alpha');
+			const input = dom.document.getElementById('diff-search-input') as HTMLInputElement;
+			const count = (): string => dom.document.getElementById('diff-search-count')!.textContent ?? '';
+			const step = (shiftKey = false): void => {
+				input.dispatchEvent(
+					new dom.window.KeyboardEvent('keydown', { key: 'Enter', shiftKey, bubbles: true, cancelable: true })
+				);
+			};
+			assert.strictEqual(count(), '1 / 2');
+			step();
+			assert.strictEqual(count(), '2 / 2');
+			step();
+			assert.strictEqual(count(), '1 / 2', 'Enter wraps forward');
+			step(true);
+			assert.strictEqual(count(), '2 / 2', 'Shift+Enter wraps backward');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('clicking a header row focuses it without selecting a row', () => {
+		const { dom } = mount(documentOf());
+		try {
+			const header = dom.document.querySelector('#diff-pane-left .diff-header-row') as HTMLElement;
+			header.click();
+			assert.strictEqual(header.tabIndex, 0, 'the header becomes the roving focus target');
+			assert.strictEqual(dom.document.activeElement, header);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-selected="true"]'), null);
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 0);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('module rows use the base row height in the virtual content', () => {
 		const rows = Array.from({ length: 100 }, (_, at) =>
 			wordRow({
