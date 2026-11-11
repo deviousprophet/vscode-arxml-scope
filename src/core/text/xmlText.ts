@@ -6,32 +6,39 @@
  * an entity-aware reader needs. A custom or unknown entity is left verbatim.
  */
 
+const NAMED_ENTITIES = new Map<string, string>([
+	['amp', '&'],
+	['lt', '<'],
+	['gt', '>'],
+	['quot', '"'],
+	['apos', "'"],
+]);
+
+/** True when a numeric reference body uses the hexadecimal form. */
+function isHexCharRef(body: string): boolean {
+	return body.startsWith('#x') || body.startsWith('#X');
+}
+
+/** Decodes one numeric reference, or leaves it verbatim when the digits are not a number. */
+function decodeCodePoint(match: string, digits: string, radix: number): string {
+	const code = Number.parseInt(digits, radix);
+	return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+}
+
+/** Decodes one entity-reference match; unknown names stay verbatim. */
+function decodeEntity(match: string, body: string): string {
+	if (isHexCharRef(body)) {
+		return decodeCodePoint(match, body.slice(2), 16);
+	}
+	if (body.startsWith('#')) {
+		return decodeCodePoint(match, body.slice(1), 10);
+	}
+	return NAMED_ENTITIES.get(body) ?? match;
+}
+
 /** Decodes the predefined and numeric XML entity references in `raw`. */
 export function decodeXml(raw: string): string {
-	return raw.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/g, (match, body: string) => {
-		if (body.startsWith('#x') || body.startsWith('#X')) {
-			const code = Number.parseInt(body.slice(2), 16);
-			return Number.isFinite(code) ? String.fromCodePoint(code) : match;
-		}
-		if (body.startsWith('#')) {
-			const code = Number.parseInt(body.slice(1), 10);
-			return Number.isFinite(code) ? String.fromCodePoint(code) : match;
-		}
-		switch (body) {
-			case 'amp':
-				return '&';
-			case 'lt':
-				return '<';
-			case 'gt':
-				return '>';
-			case 'quot':
-				return '"';
-			case 'apos':
-				return "'";
-			default:
-				return match;
-		}
-	});
+	return raw.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/g, decodeEntity);
 }
 
 /** True for the four XML whitespace characters. */
@@ -45,28 +52,72 @@ export function stripXmlPrefix(name: string): string {
 	return colon < 0 ? name : name.slice(colon + 1);
 }
 
+/** The mutable state of one declaration scan. */
+interface DeclarationScan {
+	quote: string | undefined;
+	depth: number;
+}
+
+/** True for the two characters that open a quoted literal. */
+function isQuoteCharacter(character: string): boolean {
+	return character === '"' || character === "'";
+}
+
+/** True for the two internal-subset bracket characters. */
+function isBracketCharacter(character: string): boolean {
+	return character === '[' || character === ']';
+}
+
+/** Applies one bracket to the internal-subset depth. */
+function adjustDepth(state: DeclarationScan, character: string): void {
+	state.depth += character === '[' ? 1 : -1;
+}
+
+/** True when the character closes the declaration at the current depth. */
+function isDeclarationTerminator(state: DeclarationScan, character: string): boolean {
+	return character === '>' && state.depth <= 0;
+}
+
+/** A character inside a quoted literal only watches for its closing quote. */
+function quotedStep(state: DeclarationScan, character: string): undefined {
+	if (state.quote === character) {
+		state.quote = undefined;
+	}
+	return undefined;
+}
+
+/** A character outside a literal opens a quote or bracket, or ends the declaration. */
+function unquotedStep(state: DeclarationScan, character: string, at: number): number | undefined {
+	if (isQuoteCharacter(character)) {
+		state.quote = character;
+		return undefined;
+	}
+	if (isBracketCharacter(character)) {
+		adjustDepth(state, character);
+		return undefined;
+	}
+	return isDeclarationTerminator(state, character) ? at + 1 : undefined;
+}
+
+/** One scan step; the declaration end offset, or `undefined` while it continues. */
+function declarationStep(state: DeclarationScan, character: string, at: number): number | undefined {
+	if (state.quote !== undefined) {
+		return quotedStep(state, character);
+	}
+	return unquotedStep(state, character, at);
+}
+
 /**
  * The offset just past a `<!DOCTYPE …>` declaration, including an internal
  * subset in brackets, or `-1` when the declaration is not complete yet.
  * Shared by the whole-text scanner and the chunk-fed stream parser.
  */
 export function markupDeclarationEnd(source: string, at: number): number {
-	let depth = 0;
-	let quote: string | undefined;
-	for (let j = at + 2; j < source.length; j++) {
-		const c = source[j];
-		if (quote !== undefined) {
-			if (c === quote) {
-				quote = undefined;
-			}
-		} else if (c === '"' || c === "'") {
-			quote = c;
-		} else if (c === '[') {
-			depth++;
-		} else if (c === ']') {
-			depth--;
-		} else if (c === '>' && depth <= 0) {
-			return j + 1;
+	const state: DeclarationScan = { quote: undefined, depth: 0 };
+	for (let index = at + 2; index < source.length; index++) {
+		const end = declarationStep(state, source[index], index);
+		if (end !== undefined) {
+			return end;
 		}
 	}
 	return -1;

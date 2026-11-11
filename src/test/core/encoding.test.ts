@@ -43,5 +43,31 @@ suite('encoding detection', () => {
 
 	test('refuses UTF-32LE even when the first bytes mimic a BOM', () => {
 		assert.strictEqual(detectEncoding(bytes(0xff, 0xfe, 0x00, 0x00, 0x3c)), undefined);
+		assert.strictEqual(detectEncoding(bytes(0xff, 0xfe, 0x00, 0x00)), undefined);
+	});
+
+	test('a truncated BOM falls back to the declaration scan', () => {
+		assert.deepStrictEqual(detectEncoding(bytes(0xef, 0xbb)), { label: 'utf-8', bomBytes: 0 });
+		assert.deepStrictEqual(detectEncoding(bytes(0xff)), { label: 'utf-8', bomBytes: 0 });
+		assert.deepStrictEqual(detectEncoding(bytes(0xfe)), { label: 'utf-8', bomBytes: 0 });
+		assert.deepStrictEqual(detectEncoding(bytes()), { label: 'utf-8', bomBytes: 0 });
+	});
+
+	test('normalises aliases, padded labels and single quotes', () => {
+		const label = (encoding: string): string | undefined =>
+			detectEncoding(Buffer.from(`<?xml version='1.0' encoding='${encoding}'?>`))?.label;
+		assert.strictEqual(label(' UTF8 '), 'utf-8');
+		assert.strictEqual(label('utf-16'), 'utf-16le');
+		assert.strictEqual(label('UTF-16BE'), 'utf-16be');
+		assert.strictEqual(label(' LaTiN1 '), 'iso-8859-1');
+		assert.strictEqual(label('us-ascii'), 'windows-1252');
+		assert.strictEqual(label('CP1252'), 'windows-1252');
+	});
+
+	test('the declaration scan stops at 256 bytes', () => {
+		const text = 'x'.repeat(250) + '<?xml version="1.0" encoding="latin1"?>';
+		assert.deepStrictEqual(detectEncoding(Buffer.from(text)), { label: 'utf-8', bomBytes: 0 });
+		const early = '<?xml version="1.0" encoding="latin1"?>' + 'x'.repeat(400);
+		assert.deepStrictEqual(detectEncoding(Buffer.from(early)), { label: 'iso-8859-1', bomBytes: 0 });
 	});
 });

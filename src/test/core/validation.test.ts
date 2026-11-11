@@ -307,6 +307,199 @@ suite('ECUC validation (core)', () => {
 		assert.ok(rules(workspace(variantValues(['', '(A==1)']), VARIANT_DEFINITIONS)).includes('multiplicity'));
 	});
 
+	test('integer, float and string problems name the broken rule', () => {
+		const valueOf = (value: string): string => CLEAN.replace('<VALUE>42</VALUE>', `<VALUE>${value}</VALUE>`);
+		const messages = (text: string, definitions = DEFINITIONS): string[] =>
+			validateWorkspace(workspace(text, definitions), DEFAULT_SEVERITIES)
+				.filter((diagnostic) => diagnostic.rule === 'valueOutOfRange')
+				.map((diagnostic) => diagnostic.message);
+
+		assert.deepStrictEqual(messages(valueOf('abc')), ['Value "abc" is not a valid integer.']);
+		assert.deepStrictEqual(messages(valueOf('-1')), ['Value "-1" is below the lower limit 0.']);
+		assert.deepStrictEqual(messages(valueOf('70000')), ['Value "70000" is above the upper limit 65535.']);
+
+		const float = (value: string): string =>
+			CLEAN.replace(
+				'<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Synthetic/SampleModuleDef/Main/TimeoutSeconds</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE>',
+				`<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-FLOAT-PARAM-DEF">/Synthetic/SampleModuleDef/Main/SampleRate</DEFINITION-REF><VALUE>${value}</VALUE></ECUC-NUMERICAL-PARAM-VALUE>`
+			);
+		assert.deepStrictEqual(messages(float('abc')), ['Value "abc" is not a valid float.']);
+		assert.deepStrictEqual(messages(float('0.1')), ['Value "0.1" is below the minimum 0.5.']);
+		assert.deepStrictEqual(messages(float('101')), ['Value "101" is above the maximum 100.']);
+
+		const text = (value: string): string =>
+			CLEAN.replace(
+				'<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Synthetic/SampleModuleDef/Main/TimeoutSeconds</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE>',
+				`<ECUC-TEXTUAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/Synthetic/SampleModuleDef/Main/Greeting</DEFINITION-REF><VALUE>${value}</VALUE></ECUC-TEXTUAL-PARAM-VALUE>`
+			);
+		assert.deepStrictEqual(
+			messages(text('a'), DEFINITIONS.replace('<MIN-LENGTH>1</MIN-LENGTH>', '<MIN-LENGTH>2</MIN-LENGTH>')),
+			['Value "a" is shorter than 2 characters.']
+		);
+		assert.deepStrictEqual(messages(text('x'.repeat(40))), [
+			'Value "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" is longer than 32 characters.',
+		]);
+	});
+
+	test('unknown definition kinds and literal-less enumerations accept any value', () => {
+		const functionValue = CLEAN.replace(
+			'<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Synthetic/SampleModuleDef/Main/TimeoutSeconds</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE>',
+			'<ECUC-TEXTUAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-FUNCTION-NAME-DEF">/Synthetic/SampleModuleDef/Main/EntryPoint</DEFINITION-REF><VALUE>anything</VALUE></ECUC-TEXTUAL-PARAM-VALUE>'
+		);
+		assert.ok(!rules(workspace(functionValue)).includes('valueOutOfRange'));
+
+		const enumeration = (definitions: string): string =>
+			CLEAN.replace(
+				'<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Synthetic/SampleModuleDef/Main/TimeoutSeconds</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE>',
+				'<ECUC-TEXTUAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-ENUMERATION-PARAM-DEF">/Synthetic/SampleModuleDef/Main/Mode</DEFINITION-REF><VALUE>TURBO</VALUE></ECUC-TEXTUAL-PARAM-VALUE>'
+			);
+		const withoutLiterals = DEFINITIONS.replace(/<LITERALS>[\s\S]*<\/LITERALS>/, '');
+		assert.ok(!rules(workspace(enumeration(withoutLiterals), withoutLiterals)).includes('valueOutOfRange'));
+	});
+
+	test('multiplicity messages cover equal bounds, ranges, infinities and guards', () => {
+		const definitions = (multiplicity: string): string =>
+			`<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-DEF><SHORT-NAME>MDef</SHORT-NAME><CONTAINERS><ECUC-PARAM-CONF-CONTAINER-DEF><SHORT-NAME>C</SHORT-NAME>${multiplicity}</ECUC-PARAM-CONF-CONTAINER-DEF></CONTAINERS></ECUC-MODULE-DEF></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const containers = (count: number, guard?: string): string =>
+			`<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/MDef</DEFINITION-REF><CONTAINERS>${Array.from(
+				{ length: count },
+				() =>
+					`<ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/MDef/C</DEFINITION-REF>${
+						guard === undefined ? '' : `<VARIATION-POINT><SW-SYSCOND>${guard}</SW-SYSCOND></VARIATION-POINT>`
+					}</ECUC-CONTAINER-VALUE>`
+			).join('')}</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const message = (count: number, multiplicity: string, guard?: string): string | undefined =>
+			validateWorkspace(workspace(containers(count, guard), definitions(multiplicity)), DEFAULT_SEVERITIES).find(
+				(diagnostic) => diagnostic.rule === 'multiplicity'
+			)?.message;
+
+		assert.strictEqual(
+			message(1, '<LOWER-MULTIPLICITY>2</LOWER-MULTIPLICITY><UPPER-MULTIPLICITY>2</UPPER-MULTIPLICITY>'),
+			'"C" occurs 1 times in this file; the definition allows 2.'
+		);
+		assert.strictEqual(
+			message(3, '<LOWER-MULTIPLICITY>1</LOWER-MULTIPLICITY><UPPER-MULTIPLICITY>2</UPPER-MULTIPLICITY>'),
+			'"C" occurs 3 times in this file; the definition allows 1..2.'
+		);
+		assert.strictEqual(
+			message(
+				1,
+				'<LOWER-MULTIPLICITY>2</LOWER-MULTIPLICITY><UPPER-MULTIPLICITY-INFINITE>true</UPPER-MULTIPLICITY-INFINITE>'
+			),
+			'"C" occurs 1 times in this file; the definition allows 2..*.'
+		);
+		assert.strictEqual(
+			message(
+				2,
+				'<LOWER-MULTIPLICITY>0</LOWER-MULTIPLICITY><UPPER-MULTIPLICITY>1</UPPER-MULTIPLICITY>',
+				'(A==1)'
+			),
+			'"C" occurs 2 times under one condition in this file; the definition allows 0..1.'
+		);
+	});
+
+	test('broken reference messages name the resolution reason', () => {
+		const withReference = (target: string): string =>
+			CLEAN.replace(
+				'<VALUE>42</VALUE>',
+				`<VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE><ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/Synthetic/SampleModuleDef/Main/PeerRef</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">${target}</VALUE-REF></ECUC-REFERENCE-VALUE><ECUC-NUMERICAL-PARAM-VALUE><VALUE>1</VALUE>`
+			);
+		const broken = (text: string): string[] =>
+			validateWorkspace(workspace(text), DEFAULT_SEVERITIES).map((diagnostic) => diagnostic.message);
+
+		assert.deepStrictEqual(broken(withReference('/No/Such/Target')), [
+			'Reference target "/No/Such/Target" is not found in the workspace.',
+		]);
+		assert.deepStrictEqual(broken(withReference('')), ['Reference target "" is missing in the workspace.']);
+
+		const ambiguous = CLEAN.replace(
+			'</CONTAINERS>',
+			'<ECUC-CONTAINER-VALUE><SHORT-NAME>Main</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Synthetic/OtherDef/Main</DEFINITION-REF></ECUC-CONTAINER-VALUE></CONTAINERS>'
+		).replace(
+			'<VALUE>42</VALUE>',
+			'<VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE><ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/Synthetic/SampleModuleDef/Main/PeerRef</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">/Synthetic/SampleModule/Main</VALUE-REF></ECUC-REFERENCE-VALUE><ECUC-NUMERICAL-PARAM-VALUE><VALUE>1</VALUE>'
+		);
+		assert.ok(
+			broken(ambiguous).includes('Reference target "/Synthetic/SampleModule/Main" is ambiguous in the workspace.')
+		);
+
+		const mismatch = withReference('/Synthetic/SampleModule/Main').replace(
+			'<VALUE-REF DEST="ECUC-CONTAINER-VALUE">',
+			'<VALUE-REF DEST="ECUC-MODULE-CONFIGURATION-VALUES">'
+		);
+		assert.ok(
+			broken(mismatch).includes(
+				'Reference target "/Synthetic/SampleModule/Main" is a container, not the declared DEST.'
+			)
+		);
+	});
+
+	test('missing definitions anchor at the highest missing non-module ancestor', () => {
+		const values = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/D/M</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/X/Y/Z</DEFINITION-REF><PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/X/Y/Z/W</DEFINITION-REF><VALUE>1</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const missing = validateWorkspace(workspace(values, '<AUTOSAR/>'), DEFAULT_SEVERITIES)
+			.filter((diagnostic) => diagnostic.rule === 'missingDefinition')
+			.map((diagnostic) => diagnostic.message);
+		assert.deepStrictEqual(missing, [
+			'Definition "/X/Y/Z" is not in the workspace index (2 instances).',
+			'Definition "/D/M" is not in the workspace index (1 instance).',
+		]);
+	});
+
+	test('a missing required reference is reported, a present one is not', () => {
+		const definitions = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-DEF><SHORT-NAME>MDef</SHORT-NAME><CONTAINERS><ECUC-PARAM-CONF-CONTAINER-DEF><SHORT-NAME>C</SHORT-NAME><LOWER-MULTIPLICITY>1</LOWER-MULTIPLICITY><REFERENCES><ECUC-REFERENCE-DEF><SHORT-NAME>R</SHORT-NAME><LOWER-MULTIPLICITY>1</LOWER-MULTIPLICITY></ECUC-REFERENCE-DEF></REFERENCES></ECUC-PARAM-CONF-CONTAINER-DEF></CONTAINERS></ECUC-MODULE-DEF></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const values = (reference: string): string =>
+			`<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/MDef</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/MDef/C</DEFINITION-REF>${reference}</ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const missing = (reference: string): string[] =>
+			validateWorkspace(workspace(values(reference), definitions), DEFAULT_SEVERITIES)
+				.filter((diagnostic) => diagnostic.rule === 'missingRequired')
+				.map((diagnostic) => diagnostic.message);
+
+		assert.deepStrictEqual(missing(''), ['Missing required reference "R" (lower multiplicity 1).']);
+		assert.deepStrictEqual(
+			missing(
+				'<REFERENCE-VALUES><ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/P/MDef/C/R</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">/P/M/C</VALUE-REF></ECUC-REFERENCE-VALUE></REFERENCE-VALUES>'
+			),
+			[]
+		);
+	});
+
+	test('a duplicate message counts files and the override beats an off rule', () => {
+		const sameFile = CLEAN.replace(
+			'</CONTAINERS>',
+			'<ECUC-CONTAINER-VALUE><SHORT-NAME>Main</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Synthetic/SampleModuleDef/Main</DEFINITION-REF></ECUC-CONTAINER-VALUE></CONTAINERS>'
+		);
+		const duplicates = (index: WorkspaceIndex): string[] =>
+			validateWorkspace(index, DEFAULT_SEVERITIES)
+				.filter((diagnostic) => diagnostic.rule === 'duplicateShortName' && diagnostic.message.includes('/Synthetic/SampleModule/Main'))
+				.map((diagnostic) => diagnostic.message);
+		assert.deepStrictEqual(duplicates(workspace(sameFile)), [
+			'SHORT-NAME "Main" is declared 2 times for /Synthetic/SampleModule/Main (1 file).',
+		]);
+
+		const cross = workspace(CLEAN);
+		cross.upsert(buildFileIndex('file:///duplicate.arxml', CLEAN));
+		assert.deepStrictEqual(duplicates(cross), [
+			'SHORT-NAME "Main" is declared 2 times for /Synthetic/SampleModule/Main (2 files).',
+		]);
+
+		const off = validateWorkspace(cross, { ...DEFAULT_SEVERITIES, duplicateShortName: 'off' });
+		assert.ok(
+			off.some((diagnostic) => diagnostic.rule === 'duplicateShortName' && diagnostic.severity === 'information'),
+			'the cross-file information override applies even when the rule is off'
+		);
+	});
+
+	test('severity normalization rejects arrays, nulls and accepts every level', () => {
+		assert.deepStrictEqual(normalizeSeverities([]), DEFAULT_SEVERITIES);
+		assert.deepStrictEqual(normalizeSeverities(null), DEFAULT_SEVERITIES);
+		assert.deepStrictEqual(normalizeSeverities(42), DEFAULT_SEVERITIES);
+		assert.deepStrictEqual(normalizeSeverities({ multiplicity: 'information', missingRequired: 'off' }), {
+			...DEFAULT_SEVERITIES,
+			multiplicity: 'information',
+			missingRequired: 'off',
+		});
+	});
+
 	test('WITH-AUTO parameters are not missing but still parsed', () => {
 		const definitions = (marker: string) =>
 			`<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-DEF><SHORT-NAME>MDef</SHORT-NAME><CONTAINERS><ECUC-PARAM-CONF-CONTAINER-DEF><SHORT-NAME>C</SHORT-NAME><LOWER-MULTIPLICITY>1</LOWER-MULTIPLICITY><PARAMETERS><ECUC-INTEGER-PARAM-DEF><SHORT-NAME>P1</SHORT-NAME><LOWER-MULTIPLICITY>1</LOWER-MULTIPLICITY>${marker}</ECUC-INTEGER-PARAM-DEF></PARAMETERS></ECUC-PARAM-CONF-CONTAINER-DEF></CONTAINERS></ECUC-MODULE-DEF></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;

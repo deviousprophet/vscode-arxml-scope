@@ -51,23 +51,44 @@ export class LineStartBuilder {
 
 	write(chunk: string): void {
 		for (let at = 0; at < chunk.length; at++) {
-			const character = chunk[at];
-			if (this.pendingCR >= 0) {
-				if (character === '\n') {
-					this.starts.push(this.offset + at + 1);
-					this.pendingCR = -1;
-					continue;
-				}
-				this.starts.push(this.pendingCR + 1);
-				this.pendingCR = -1;
-			}
-			if (character === '\r') {
-				this.pendingCR = this.offset + at;
-			} else if (character === '\n') {
-				this.starts.push(this.offset + at + 1);
-			}
+			this.writeCharacter(chunk[at], at);
 		}
 		this.offset += chunk.length;
+	}
+
+	/** Consumes a pending CR first, then records the current line break. */
+	private writeCharacter(character: string, at: number): void {
+		if (this.consumePendingCR(character, at)) {
+			return;
+		}
+		this.recordBreak(character, at);
+	}
+
+	/**
+	 * Resolves a CR held from the previous character. Returns true when the
+	 * current character completed a CRLF and must not be recorded again.
+	 */
+	private consumePendingCR(character: string, at: number): boolean {
+		if (this.pendingCR < 0) {
+			return false;
+		}
+		if (character === '\n') {
+			this.starts.push(this.offset + at + 1);
+			this.pendingCR = -1;
+			return true;
+		}
+		this.starts.push(this.pendingCR + 1);
+		this.pendingCR = -1;
+		return false;
+	}
+
+	/** Holds a CR until the next character, or records an LF line start. */
+	private recordBreak(character: string, at: number): void {
+		if (character === '\r') {
+			this.pendingCR = this.offset + at;
+		} else if (character === '\n') {
+			this.starts.push(this.offset + at + 1);
+		}
 	}
 
 	/** Flushes a trailing lone CR and returns the complete table. */
@@ -80,32 +101,34 @@ export class LineStartBuilder {
 	}
 }
 
+/** The offset just past the line break at `at`, or undefined for a plain character. */
+function lineBreakEnd(text: string, at: number): number | undefined {
+	const code = text.charCodeAt(at);
+	if (code === 13 /* \r */) {
+		return text.charCodeAt(at + 1) === 10 /* \n */ ? at + 2 : at + 1;
+	}
+	return code === 10 /* \n */ ? at + 1 : undefined;
+}
+
 function lineStartsFromText(text: string): number[] {
 	const starts: number[] = [0];
 	for (let i = 0; i < text.length; i++) {
-		const c = text.charCodeAt(i);
-		if (c === 13 /* \r */) {
-			if (text.charCodeAt(i + 1) === 10 /* \n */) {
-				i++;
-			}
-			starts.push(i + 1);
-		} else if (c === 10 /* \n */) {
-			starts.push(i + 1);
+		const end = lineBreakEnd(text, i);
+		if (end !== undefined) {
+			starts.push(end);
+			i = end - 1;
 		}
 	}
 	return starts;
 }
 
-/** Line/character for an offset against a line-start table. */
-export function positionAtLineStarts(
-	lineStarts: readonly number[] | undefined,
-	offset: number,
-	length = Number.MAX_SAFE_INTEGER
-): Position {
-	if (lineStarts === undefined || lineStarts.length === 0) {
-		return { line: 0, character: Math.max(0, Math.min(offset, length)) };
-	}
-	const at = Math.max(0, Math.min(offset, length));
+/** Clamps a UTF-16 offset into the document. */
+function clampOffset(offset: number, length: number): number {
+	return Math.max(0, Math.min(offset, length));
+}
+
+/** The last line start at or before `at`, via binary search. */
+function lineAt(lineStarts: readonly number[], at: number): number {
 	let low = 0;
 	let high = lineStarts.length - 1;
 	while (low <= high) {
@@ -116,6 +139,19 @@ export function positionAtLineStarts(
 			high = mid - 1;
 		}
 	}
-	const line = Math.max(0, high);
+	return Math.max(0, high);
+}
+
+/** Line/character for an offset against a line-start table. */
+export function positionAtLineStarts(
+	lineStarts: readonly number[] | undefined,
+	offset: number,
+	length = Number.MAX_SAFE_INTEGER
+): Position {
+	if (lineStarts === undefined || lineStarts.length === 0) {
+		return { line: 0, character: clampOffset(offset, length) };
+	}
+	const at = clampOffset(offset, length);
+	const line = lineAt(lineStarts, at);
 	return { line, character: Math.max(0, at - lineStarts[line]) };
 }

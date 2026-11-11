@@ -34,29 +34,51 @@ export interface SymbolData {
 	children: SymbolData[];
 }
 
+/** The token's visible text, present only when both a value and a range exist. */
+function tokenText(rawPath: string | undefined, range: Range | undefined): { rawPath: string; range: Range } | undefined {
+	if (rawPath === undefined || rawPath === '' || range === undefined) {
+		return undefined;
+	}
+	return { rawPath, range };
+}
+
+/** One token, with `dest` present only when the model supplied it. */
+function tokenOf(kind: RefTokenKind, text: { rawPath: string; range: Range }, dest: string | undefined): RefToken {
+	return dest === undefined ? { kind, ...text } : { kind, ...text, dest };
+}
+
+/** Appends a token unless the model omitted its text or range. */
+function pushRefToken(
+	out: RefToken[],
+	kind: RefTokenKind,
+	rawPath: string | undefined,
+	range: Range | undefined,
+	dest?: string
+): void {
+	const text = tokenText(rawPath, range);
+	if (text !== undefined) {
+		out.push(tokenOf(kind, text, dest));
+	}
+}
+
 /** Every `DEFINITION-REF` and reference target in declaration order. */
 export function refTokens(model: EcucDocumentModel): RefToken[] {
 	const out: RefToken[] = [];
-	const push = (kind: RefTokenKind, rawPath: string | undefined, range: Range | undefined, dest?: string): void => {
-		if (rawPath !== undefined && rawPath !== '' && range !== undefined) {
-			out.push({ kind, rawPath, ...(dest === undefined ? {} : { dest }), range });
-		}
-	};
 	const container = (node: ContainerNode): void => {
-		push('definition', node.definitionRef, node.definitionRefRange);
+		pushRefToken(out, 'definition', node.definitionRef, node.definitionRefRange);
 		for (const parameter of node.parameters) {
-			push('definition', parameter.definitionRef, parameter.definitionRefRange, parameter.definitionDest);
+			pushRefToken(out, 'definition', parameter.definitionRef, parameter.definitionRefRange, parameter.definitionDest);
 		}
 		for (const reference of node.references) {
-			push('definition', reference.definitionRef, reference.definitionRefRange);
-			push('target', reference.targetRawPath, reference.targetRange, reference.targetDest);
+			pushRefToken(out, 'definition', reference.definitionRef, reference.definitionRefRange);
+			pushRefToken(out, 'target', reference.targetRawPath, reference.targetRange, reference.targetDest);
 		}
 		for (const child of node.containers) {
 			container(child);
 		}
 	};
 	for (const module of model.modules) {
-		push('definition', module.definitionRef, module.definitionRefRange);
+		pushRefToken(out, 'definition', module.definitionRef, module.definitionRefRange);
 		for (const child of module.containers) {
 			container(child);
 		}
@@ -64,14 +86,27 @@ export function refTokens(model: EcucDocumentModel): RefToken[] {
 	return out;
 }
 
+/** True when the offset falls inside the token's inclusive range. */
+function containsOffset(token: RefToken, offset: number): boolean {
+	return token.range.start <= offset && offset <= token.range.end;
+}
+
+/** The character width of a token's range. */
+function spanOf(token: RefToken): number {
+	return token.range.end - token.range.start;
+}
+
+/** True when `token` is a smaller match than the current best. */
+function isInnermost(token: RefToken, best: RefToken | undefined): boolean {
+	return best === undefined || spanOf(token) < spanOf(best);
+}
+
 /** The token whose range contains `offset`, preferring the innermost match. */
 export function refTokenAt(model: EcucDocumentModel, offset: number): RefToken | undefined {
 	let best: RefToken | undefined;
 	for (const token of refTokens(model)) {
-		if (token.range.start <= offset && offset <= token.range.end) {
-			if (best === undefined || token.range.end - token.range.start < best.range.end - best.range.start) {
-				best = token;
-			}
+		if (containsOffset(token, offset) && isInnermost(token, best)) {
+			best = token;
 		}
 	}
 	return best;
@@ -93,24 +128,28 @@ function moduleSymbol(module: ModuleNode): SymbolData {
 	};
 }
 
+/** A container's display name: its SHORT-NAME, or the definition's tail. */
+function containerName(container: ContainerNode): string {
+	return container.shortName || tail(container.definitionRef);
+}
+
+/** A container's children in declaration order: parameters, references, containers. */
+function containerChildren(container: ContainerNode): SymbolData[] {
+	return [
+		...container.parameters.map(parameterSymbol),
+		...container.references.map(referenceSymbol),
+		...container.containers.map(containerSymbol),
+	];
+}
+
 function containerSymbol(container: ContainerNode): SymbolData {
-	const children: SymbolData[] = [];
-	for (const parameter of container.parameters) {
-		children.push(parameterSymbol(parameter));
-	}
-	for (const reference of container.references) {
-		children.push(referenceSymbol(reference));
-	}
-	for (const child of container.containers) {
-		children.push(containerSymbol(child));
-	}
 	return {
-		name: container.shortName || tail(container.definitionRef),
+		name: containerName(container),
 		detail: container.definitionRef,
 		kind: 'container',
 		range: container.range,
 		selectionRange: container.shortNameRange ?? container.range,
-		children,
+		children: containerChildren(container),
 	};
 }
 
