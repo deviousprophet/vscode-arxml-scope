@@ -32,25 +32,34 @@ function isWhitespace(character: string): boolean {
 	return WHITESPACE.test(character);
 }
 
+function runEnd(text: string, at: number, accept: (character: string) => boolean): number {
+	let end = at;
+	while (end < text.length && accept(text[end])) {
+		end++;
+	}
+	return end;
+}
+
+/** The end of the token that starts at `at`: a whitespace run, an identifier or one character. */
+function tokenEnd(text: string, at: number): number {
+	const character = text[at];
+	if (isWhitespace(character)) {
+		return runEnd(text, at, isWhitespace);
+	}
+	if (isIdentifier(character)) {
+		return runEnd(text, at, isIdentifier);
+	}
+	return at + 1;
+}
+
 /** Splits one field into whitespace, identifier and single-punctuation tokens. */
 function tokenize(text: string): string[] {
 	const tokens: string[] = [];
 	let at = 0;
 	while (at < text.length) {
-		const character = text[at];
-		const start = at;
-		if (isWhitespace(character)) {
-			while (at < text.length && isWhitespace(text[at])) {
-				at++;
-			}
-		} else if (isIdentifier(character)) {
-			while (at < text.length && isIdentifier(text[at])) {
-				at++;
-			}
-		} else {
-			at++;
-		}
-		tokens.push(text.slice(start, at));
+		const end = tokenEnd(text, at);
+		tokens.push(text.slice(at, end));
+		at = end;
 	}
 	return tokens;
 }
@@ -60,39 +69,73 @@ interface TokenMatch {
 	right: boolean[];
 }
 
-/** Marks the tokens that belong to one longest common subsequence. */
-function longestCommon(left: readonly string[], right: readonly string[]): TokenMatch {
+interface MatchStep {
+	row: number;
+	column: number;
+}
+
+/**
+ * Suffix lengths let the forward walk match the earliest equal token, which
+ * keeps a repeated separator (whitespace) on the segment a reader expects.
+ */
+function suffixTable(left: readonly string[], right: readonly string[]): number[][] {
 	const rows = left.length;
 	const columns = right.length;
-	// Suffix lengths let the forward walk match the earliest equal token, which
-	// keeps a repeated separator (whitespace) on the segment a reader expects.
 	const table: number[][] = [];
 	for (let row = 0; row <= rows; row++) {
 		table.push(new Array<number>(columns + 1).fill(0));
 	}
 	for (let row = rows - 1; row >= 0; row--) {
 		for (let column = columns - 1; column >= 0; column--) {
-			table[row][column] =
-				left[row] === right[column]
-					? table[row + 1][column + 1] + 1
-					: Math.max(table[row + 1][column], table[row][column + 1]);
+			table[row][column] = suffixLength(table, left[row], right[column], row, column);
 		}
 	}
-	const matchedLeft = new Array<boolean>(rows).fill(false);
-	const matchedRight = new Array<boolean>(columns).fill(false);
+	return table;
+}
+
+function suffixLength(
+	table: number[][],
+	leftToken: string,
+	rightToken: string,
+	row: number,
+	column: number
+): number {
+	return leftToken === rightToken
+		? table[row + 1][column + 1] + 1
+		: Math.max(table[row + 1][column], table[row][column + 1]);
+}
+
+/** Consumes one token pair, marking a match and choosing the branch to walk. */
+function stepMatch(
+	left: readonly string[],
+	right: readonly string[],
+	table: number[][],
+	row: number,
+	column: number,
+	matchedLeft: boolean[],
+	matchedRight: boolean[]
+): MatchStep {
+	if (left[row] === right[column]) {
+		matchedLeft[row] = true;
+		matchedRight[column] = true;
+		return { row: row + 1, column: column + 1 };
+	}
+	return table[row + 1][column] >= table[row][column + 1]
+		? { row: row + 1, column }
+		: { row, column: column + 1 };
+}
+
+/** Marks the tokens that belong to one longest common subsequence. */
+function longestCommon(left: readonly string[], right: readonly string[]): TokenMatch {
+	const table = suffixTable(left, right);
+	const matchedLeft = new Array<boolean>(left.length).fill(false);
+	const matchedRight = new Array<boolean>(right.length).fill(false);
 	let row = 0;
 	let column = 0;
-	while (row < rows && column < columns) {
-		if (left[row] === right[column]) {
-			matchedLeft[row] = true;
-			matchedRight[column] = true;
-			row++;
-			column++;
-		} else if (table[row + 1][column] >= table[row][column + 1]) {
-			row++;
-		} else {
-			column++;
-		}
+	while (row < left.length && column < right.length) {
+		const next = stepMatch(left, right, table, row, column, matchedLeft, matchedRight);
+		row = next.row;
+		column = next.column;
 	}
 	return { left: matchedLeft, right: matchedRight };
 }
@@ -112,17 +155,21 @@ function segmentsOf(tokens: readonly string[], matched: readonly boolean[]): Wor
 	return segments;
 }
 
+function unchangedPair(text: string): WordPair {
+	const unchanged: WordSegment[] = text === '' ? [] : [{ text, changed: false }];
+	return {
+		left: unchanged.map((segment) => ({ ...segment })),
+		right: unchanged.map((segment) => ({ ...segment })),
+	};
+}
+
 /**
  * Compares two displayed strings by token. An identical pair is one unchanged
  * segment per side; an empty side leaves the other side entirely changed.
  */
 export function diffWords(left: string, right: string): WordPair {
 	if (left === right) {
-		const unchanged: WordSegment[] = left === '' ? [] : [{ text: left, changed: false }];
-		return {
-			left: unchanged.map((segment) => ({ ...segment })),
-			right: unchanged.map((segment) => ({ ...segment })),
-		};
+		return unchangedPair(left);
 	}
 	if (left === '') {
 		return { left: [], right: [{ text: right, changed: true }] };

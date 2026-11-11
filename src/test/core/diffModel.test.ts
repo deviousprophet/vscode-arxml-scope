@@ -669,6 +669,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.ok(changed >= 0);
 		const none = diffVisibility(rows, true, 0);
 		assert.strictEqual(none[changed - 1], false, 'no context hides the previous row');
+		assert.deepStrictEqual(diffVisibility(rows, true, -2), none, 'a negative context is clamped to none');
 		const context = diffVisibility(rows, true, 5);
 		for (let offset = -5; offset <= 5; offset++) {
 			assert.ok(context[changed + offset], `row ${offset} is inside the context`);
@@ -851,6 +852,11 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.strictEqual(changeIndexes.length, 2);
 
 		assert.strictEqual(nextChangeIndex(rows, undefined, -1, 1), changeIndexes[0], 'forward starts at the first change');
+		assert.strictEqual(
+			nextChangeIndex(rows, undefined, rows.length + 3, 1),
+			changeIndexes[0],
+			'an out-of-range from starts at the first change'
+		);
 		assert.strictEqual(nextChangeIndex(rows, undefined, changeIndexes[0], 1), changeIndexes[1]);
 		assert.strictEqual(nextChangeIndex(rows, undefined, changeIndexes[1], 1), changeIndexes[0], 'forward wraps');
 		assert.strictEqual(nextChangeIndex(rows, undefined, changeIndexes[0], -1), changeIndexes[1], 'backward wraps');
@@ -970,6 +976,15 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.strictEqual(document.summary.added + document.summary.removed, 0);
 	});
 
+	test('renamed containers with no children pair on the empty-child score', () => {
+		const left = arxml(module('M1', container('NMH_EMPTY_01', { definitionRef: '/D/Empty' })));
+		const right = arxml(module('M1', container('NM_EMPTY_01', { definitionRef: '/D/Empty' })));
+		const { document } = diffOf(left, right, true);
+		assert.strictEqual(document.summary.renamed, 1, 'two childless containers still pair');
+		assert.strictEqual(document.summary.added, 0);
+		assert.strictEqual(document.summary.removed, 0);
+	});
+
 	test('identical-child siblings pair by name and position', () => {
 		const make = (prefix: string): string =>
 			arxml(
@@ -1011,6 +1026,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const { document } = diffOf(left, right, true);
 		assert.strictEqual(document.summary.renamed, 0);
 		assert.strictEqual(document.semanticSkipped, 1002);
+		assert.strictEqual(document.semanticLimitReason, 'fallback', 'the fallback has its own limit reason');
 	});
 
 	test('semantic matching pairs a renamed module and aligns its children', () => {
