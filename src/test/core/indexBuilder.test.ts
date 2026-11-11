@@ -128,6 +128,17 @@ suite('indexBuilder (core)', () => {
 		);
 	});
 
+	test('records TARGET-REF and every CONTEXT-ELEMENT-REF on a reference value', () => {
+		const text = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><REFERENCE-VALUES><ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/P/MDef/C/Ref</DEFINITION-REF><TARGET-REF DEST="ECUC-CONTAINER-VALUE">/P/M/C</TARGET-REF><CONTEXT-ELEMENT-REF DEST="ECUC-CONTAINER-VALUE">/P/M</CONTEXT-ELEMENT-REF><CONTEXT-ELEMENT-REF DEST="ECUC-CONTAINER-VALUE">/P/Ctx</CONTEXT-ELEMENT-REF></ECUC-REFERENCE-VALUE></REFERENCE-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const file = buildFileIndex('file:///target-ref.arxml', text);
+		assert.strictEqual(file.references.length, 1);
+		const peer = file.references[0];
+		assert.strictEqual(peer.targetRawPath, '/P/M/C');
+		assert.strictEqual(peer.targetDest, 'ECUC-CONTAINER-VALUE');
+		assert.deepStrictEqual(peer.contextPaths, ['/P/M', '/P/Ctx']);
+		assert.strictEqual(peer.sourcePath, '/P/M/C');
+	});
+
 	test('captures UUID as an attribute and as an element', () => {
 		const text = `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES UUID="attr-uuid"><SHORT-NAME>M</SHORT-NAME><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><UUID>element-uuid</UUID></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
 		const file = buildFileIndex('file:///uuid.arxml', text);

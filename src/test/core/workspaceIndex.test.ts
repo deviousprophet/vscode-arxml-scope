@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 
 import { buildFileIndex } from '../../core/index/indexBuilder';
-import type { FileIndex, IndexDefinition, IndexElement } from '../../core/index/indexModel';
+import type { FileIndex, IndexDefinition, IndexElement, IndexReference } from '../../core/index/indexModel';
 import { WorkspaceIndex, type ElementResolution } from '../../core/index/workspaceIndex';
 import { fixtureText } from './modelTestUtils';
 
@@ -308,6 +308,38 @@ suite('workspaceIndex (core)', () => {
 		different.upsert(module('file:///b.arxml', '/D/Other'));
 		const mismatch = different.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE', 'file:///c.arxml');
 		assert.strictEqual(mismatch.ok, false);
+	});
+
+	test('definitionUsers lists elements then references whose definition ref resolves', () => {
+		const definition: IndexDefinition = {
+			path: '/P/D/C/P1',
+			kind: 'ECUC-INTEGER-PARAM-DEF',
+			shortName: 'P1',
+			file: 'file:///defs.arxml',
+			range: { start: 0, end: 1 },
+		};
+		const element: IndexElement = {
+			kind: 'parameter',
+			definitionRef: '/P/D/C/P1',
+			file: 'file:///a.arxml',
+			range: { start: 2, end: 3 },
+		};
+		const reference: IndexReference = {
+			kind: 'reference',
+			definitionRef: '/P/D/C/P1',
+			targetRawPath: '/P/M/C',
+			contextPaths: [],
+			file: 'file:///b.arxml',
+			range: { start: 4, end: 5 },
+		};
+		const index = new WorkspaceIndex();
+		index.upsert({ uri: 'file:///defs.arxml', packages: [], elements: [], references: [], definitions: [definition] });
+		index.upsert({ uri: 'file:///a.arxml', packages: [], elements: [element], references: [], definitions: [] });
+		index.upsert({ uri: 'file:///b.arxml', packages: [], elements: [], references: [reference], definitions: [] });
+
+		assert.deepStrictEqual(index.definitionUsers('/P/D/C/P1'), [element, reference]);
+		assert.deepStrictEqual(index.definitionUsers('/C/P1'), [element, reference], 'a unique suffix finds the definition');
+		assert.deepStrictEqual(index.definitionUsers('/Missing'), []);
 	});
 
 	test('builds lookups for a 200k-element file without a spread crash', () => {

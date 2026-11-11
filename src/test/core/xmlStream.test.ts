@@ -87,6 +87,17 @@ suite('xmlStream (core)', () => {
 		assert.deepStrictEqual(autosar.attrs, { a: '1 > 0' });
 	});
 
+	test('reads quoted, unquoted, empty and valueless attributes', () => {
+		const events = collect([`<A one=1 two="2 2" three='3 "4"' spaced = "5" empty="" bare/>`]);
+		const open = events[0];
+		assert.deepStrictEqual(open.attrs, { one: '1', two: '2 2', three: '3 "4"', spaced: '5', empty: '', bare: '' });
+		assert.deepStrictEqual(
+			events.map((event) => `${event.kind}:${event.name}`.trim()),
+			['open:A', 'close:A'],
+			'a self-closing tag still closes after its attributes'
+		);
+	});
+
 	test('a self-closing tag emits open then close at the same offset', () => {
 		const events = collect(['<A><B x="1"/><C></C></A>']);
 		assert.deepStrictEqual(

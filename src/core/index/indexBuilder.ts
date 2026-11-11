@@ -99,6 +99,12 @@ interface Frame {
 	value?: string;
 }
 
+/** Applies one text-tag body to the frames that own it. */
+type TextAttacher = (frame: Frame, text: string, ancestors: Frame[]) => void;
+
+/** One `DEFINITION-*` metadata field setter. */
+type DefinitionFieldSetter = (definition: Partial<IndexDefinition>, text: string) => void;
+
 /** Builds one `FileIndex` from chunk writes or one complete string. */
 export class IndexBuilder implements XmlStreamHandlers {
 	private readonly parser: XmlStreamParser;
@@ -137,44 +143,46 @@ export class IndexBuilder implements XmlStreamHandlers {
 	}
 
 	open(name: string, attrs: ReadonlyMap<string, string>, offset: number): void {
-		const frame: Frame = {
-			name,
-			start: offset,
-			text: '',
-			hash: hashText(hashText(FNV_OFFSET, '<' + name), attributeSignature(attrs)),
-		};
-		if (name === 'DEFINITION-REF' || name === 'VALUE-REF' || name === 'TARGET-REF' || name === 'DESTINATION-REF') {
-			frame.attrs = attrs;
+		this.stack.push(newFrame(name, attrs, offset));
+		this.recordDocumentAttributes(name, attrs);
+	}
+
+	/** Reads the document-level facts an opening tag carries. */
+	private recordDocumentAttributes(name: string, attrs: ReadonlyMap<string, string>): void {
+		if (name !== 'AUTOSAR') {
+			return;
 		}
-		const uuid = attrs.get('UUID');
-		if (uuid !== undefined && uuid !== '' && canOwnUuid(name)) {
-			frame.uuid = uuid;
-		}
-		this.stack.push(frame);
-		if (name === 'AUTOSAR') {
-			const release = schemaReleaseFrom(attrs.get('schemaLocation') ?? '');
-			if (release !== undefined) {
-				this.file.schemaRelease = release;
-			}
+		const release = schemaReleaseFrom(attrs.get('schemaLocation') ?? '');
+		if (release !== undefined) {
+			this.file.schemaRelease = release;
 		}
 	}
 
 	close(name: string, offset: number): void {
 		this.lastEnd = offset;
-		let at = -1;
-		for (let i = this.stack.length - 1; i >= 0; i--) {
-			if (this.stack[i].name === name) {
-				at = i;
-				break;
-			}
-		}
+		const at = this.frameIndex(name);
 		if (at < 0) {
 			return;
 		}
+		this.closeFrom(at, offset);
+	}
+
+	/** Finishes the frames from `at` upwards, innermost first. */
+	private closeFrom(at: number, offset: number): void {
 		const closing = this.stack.splice(at);
 		for (let i = closing.length - 1; i >= 0; i--) {
 			this.finishFrame(closing[i], offset, this.stack);
 		}
+	}
+
+	/** The index of the innermost open frame named `name`, or -1. */
+	private frameIndex(name: string): number {
+		for (let i = this.stack.length - 1; i >= 0; i--) {
+			if (this.stack[i].name === name) {
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	text(raw: string): void {
@@ -187,183 +195,74 @@ export class IndexBuilder implements XmlStreamHandlers {
 
 	private finishFrame(frame: Frame, end: number, ancestors: Frame[]): void {
 		if (TEXT_TAGS.has(frame.name)) {
-			const text = decodeXml(frame.text).trim();
-			const parent = ancestors[ancestors.length - 1];
-			if (parent !== undefined && frame.name !== 'UUID') {
-				parent.hash = hashText(parent.hash, '\u0001' + frame.name + '=' + normalizeSpace(text));
-			}
-			this.attachText(frame, text, ancestors);
+			this.finishTextFrame(frame, ancestors);
 			return;
 		}
-		const range: Range = { start: frame.start, end };
-		if (frame.name === 'AR-PACKAGE') {
-			const path = joinPath([...this.packageChain(ancestors), frame.shortName]);
-			if (path && !this.file.packages.includes(path)) {
-				this.file.packages.push(path);
-			}
-		} else if (frame.name === ENUM_LITERAL_DEF) {
-			const parent = nearest(ancestors, (f) => f.name === ENUM_DEF);
-			if (parent && frame.shortName) {
-				(parent.literals ??= []).push(frame.shortName);
-			}
-		} else if (isDefinitionKind(frame.name)) {
-			this.pushDefinition(frame, range, ancestors);
-		} else if (frame.name === MODULE_VALUES || frame.name === CONTAINER_VALUE) {
-			this.pushElement(frame, range, ancestors);
-		} else if (PARAMETER_VALUES.has(frame.name)) {
-			const sourcePath = this.containerPath(ancestors);
-			this.file.elements.push({
-				kind: 'parameter',
-				definitionRef: frame.definitionRef,
-				definitionDest: frame.definitionDest,
-				...(sourcePath === undefined ? {} : { sourcePath }),
-				...(frame.uuid === undefined ? {} : { uuid: frame.uuid }),
-				...(frame.value === undefined ? {} : { value: frame.value }),
-				...(frame.syscond === undefined ? {} : { syscond: frame.syscond }),
-				file: this.file.uri,
-				range,
-			});
-		} else if (REFERENCE_VALUES.has(frame.name)) {
-			const reference: IndexReference = {
-				kind: 'reference',
-				definitionRef: frame.definitionRef,
-				definitionDest: frame.definitionDest,
-				...(frame.shortName === undefined ? {} : { shortName: frame.shortName }),
-				...(frame.uuid === undefined ? {} : { uuid: frame.uuid }),
-				targetRawPath: frame.targetRawPath,
-				targetDest: frame.targetDest,
-				contextPaths: frame.contextPaths ?? [],
-				...(frame.syscond === undefined ? {} : { syscond: frame.syscond }),
-				file: this.file.uri,
-				range,
-			};
-			const sourcePath = this.containerPath(ancestors);
-			if (sourcePath) {
-				reference.sourcePath = sourcePath;
-			}
-			this.file.references.push(reference);
-		}
+		this.recordFrame(frame, { start: frame.start, end }, ancestors);
+		inheritHash(frame, ancestors);
+	}
+
+	/** Decodes a text tag's body, folds it into the parent hash and attaches it. */
+	private finishTextFrame(frame: Frame, ancestors: Frame[]): void {
+		const text = decodeXml(frame.text).trim();
 		const parent = ancestors[ancestors.length - 1];
-		if (parent !== undefined) {
-			parent.hash = hashText(parent.hash, '\u0002' + frame.hash.toString(36));
+		if (parent !== undefined && frame.name !== 'UUID') {
+			parent.hash = hashText(parent.hash, '\u0001' + frame.name + '=' + normalizeSpace(text));
+		}
+		this.attachText(frame, text, ancestors);
+	}
+
+	private recordFrame(frame: Frame, range: Range, ancestors: Frame[]): void {
+		if (this.recordDefinitionFrame(frame, range, ancestors)) {
+			return;
+		}
+		this.recordValueFrame(frame, range, ancestors);
+	}
+
+	/** Records package/definition frames; false when the frame is a value element. */
+	private recordDefinitionFrame(frame: Frame, range: Range, ancestors: Frame[]): boolean {
+		if (frame.name === 'AR-PACKAGE') {
+			this.recordPackage(frame, ancestors);
+			return true;
+		}
+		if (frame.name === ENUM_LITERAL_DEF) {
+			recordEnumLiteral(frame, ancestors);
+			return true;
+		}
+		if (isDefinitionKind(frame.name)) {
+			this.pushDefinition(frame, range, ancestors);
+			return true;
+		}
+		return false;
+	}
+
+	private recordPackage(frame: Frame, ancestors: Frame[]): void {
+		const path = joinPath([...this.packageChain(ancestors), frame.shortName]);
+		if (path && !this.file.packages.includes(path)) {
+			this.file.packages.push(path);
+		}
+	}
+
+	private recordValueFrame(frame: Frame, range: Range, ancestors: Frame[]): void {
+		if (isContainerValues(frame.name)) {
+			this.pushElement(frame, range, ancestors);
+			return;
+		}
+		if (PARAMETER_VALUES.has(frame.name)) {
+			this.pushParameterValue(frame, range, ancestors);
+			return;
+		}
+		if (REFERENCE_VALUES.has(frame.name)) {
+			this.pushReferenceValue(frame, range, ancestors);
 		}
 	}
 
 	private attachText(frame: Frame, text: string, ancestors: Frame[]): void {
-		switch (frame.name) {
-			case 'SHORT-NAME': {
-				const parent = ancestors[ancestors.length - 1];
-				if (parent && knowsShortName(parent.name)) {
-					parent.shortName = text;
-				}
-				return;
-			}
-			case 'DEFINITION-REF': {
-				const parent = ancestors[ancestors.length - 1];
-				if (!parent || !(knowsDefinition(parent.name) || isDefinitionKind(parent.name))) {
-					return;
-				}
-				parent.definitionRef = text;
-				const dest = frame.attrs?.get('DEST');
-				if (dest !== undefined && dest !== '') {
-					parent.definitionDest = dest;
-				}
-				return;
-			}
-			case 'UUID': {
-				const parent = ancestors[ancestors.length - 1];
-				if (parent && (knowsDefinition(parent.name) || isDefinitionKind(parent.name))) {
-					parent.uuid = text;
-				}
-				return;
-			}
-			case 'VALUE-REF':
-			case 'TARGET-REF': {
-				const parent = nearest(ancestors, (f) => REFERENCE_VALUES.has(f.name));
-				if (parent) {
-					parent.targetRawPath = text;
-					parent.targetDest = frame.attrs?.get('DEST');
-				}
-				return;
-			}
-			case 'CONTEXT-ELEMENT-REF': {
-				const parent = nearest(ancestors, (f) => REFERENCE_VALUES.has(f.name));
-				if (parent) {
-					(parent.contextPaths ??= []).push(text);
-				}
-				return;
-			}
-			case 'DESTINATION-REF': {
-				const parent = nearest(ancestors, (f) => isDefinitionKind(f.name));
-				if (parent) {
-					setDefinitionField(parent, frame.name, text);
-					const dest = frame.attrs?.get('DEST');
-					if (dest !== undefined && dest !== '') {
-						(parent.definition ??= {}).destinationDest = dest;
-					}
-				}
-				return;
-			}
-			case 'VALUE': {
-				const parent = ancestors[ancestors.length - 1];
-				if (parent && PARAMETER_VALUES.has(parent.name)) {
-					parent.value = text;
-				}
-				return;
-			}
-			case 'SW-SYSCOND': {
-				// The guard belongs to the nearest value element, not to VARIATION-POINT.
-				const owner = nearest(
-					ancestors,
-					(candidate) =>
-						candidate.name === MODULE_VALUES ||
-						candidate.name === CONTAINER_VALUE ||
-						PARAMETER_VALUES.has(candidate.name) ||
-						REFERENCE_VALUES.has(candidate.name)
-				);
-				if (owner !== undefined) {
-					const guard = normalizeSpace(text);
-					owner.syscond = owner.syscond === undefined ? guard : owner.syscond + ' && ' + guard;
-				}
-				return;
-			}
-			case 'WITH-AUTO': {
-				const parent = ancestors[ancestors.length - 1];
-				if (parent !== undefined && isDefinitionKind(parent.name)) {
-					(parent.definition ??= {}).withAuto = /^true$/i.test(text);
-				}
-				return;
-			}
-			case 'L-2': {
-				// A literal's description belongs to the literal, not to the enclosing
-				// enumeration definition; a literal is not a definition record of its own,
-				// so its description is dropped rather than stolen.
-				const owner = nearest(ancestors, (f) => isDefinitionKind(f.name) || f.name === ENUM_LITERAL_DEF);
-				if (owner && !isDefinitionKind(owner.name)) {
-					return;
-				}
-				if (owner) {
-					setDefinitionField(owner, frame.name, text);
-				}
-				return;
-			}
-			case 'LOWER-LIMIT':
-			case 'UPPER-LIMIT':
-			case 'MIN':
-			case 'MAX':
-			case 'MIN-LENGTH':
-			case 'MAX-LENGTH':
-			case 'DEFAULT-VALUE':
-			case 'LOWER-MULTIPLICITY':
-			case 'UPPER-MULTIPLICITY':
-			case 'UPPER-MULTIPLICITY-INFINITE': {
-				const parent = nearest(ancestors, (f) => isDefinitionKind(f.name));
-				if (parent) {
-					setDefinitionField(parent, frame.name, text);
-				}
-				return;
-			}
+		const attach = TEXT_ATTACHERS.get(frame.name);
+		if (attach === undefined) {
+			return;
 		}
+		attach(frame, text, ancestors);
 	}
 
 	/** `attrs` are read on the text element itself, so the parent carries them. */
@@ -373,48 +272,26 @@ export class IndexBuilder implements XmlStreamHandlers {
 			file: this.file.uri,
 			range,
 		};
-		const path = this.pathFor(frame, ancestors);
-		if (path) {
-			element.path = path;
-		}
-		if (frame.shortName !== undefined) {
-			element.shortName = frame.shortName;
-		}
-		if (frame.definitionRef !== undefined) {
-			element.definitionRef = frame.definitionRef;
-		}
-		if (frame.definitionDest !== undefined) {
-			element.definitionDest = frame.definitionDest;
-		}
-		if (frame.uuid !== undefined) {
-			element.uuid = frame.uuid;
-		}
-		if (element.kind === 'module' || element.kind === 'container') {
-			element.contentHash = frame.hash;
-		}
-		if (frame.syscond !== undefined) {
-			element.syscond = frame.syscond;
-		}
+		withElementPath(element, frame, this.pathFor(frame, ancestors));
+		withElementMetadata(element, frame);
 		this.file.elements.push(element);
+	}
+
+	private pushParameterValue(frame: Frame, range: Range, ancestors: Frame[]): void {
+		this.file.elements.push(parameterElement(this.file.uri, frame, range, this.containerPath(ancestors)));
+	}
+
+	private pushReferenceValue(frame: Frame, range: Range, ancestors: Frame[]): void {
+		this.file.references.push(referenceRecord(this.file.uri, frame, range, this.containerPath(ancestors)));
 	}
 
 	private pushDefinition(frame: Frame, range: Range, ancestors: Frame[]): void {
 		const path = this.definitionPath(frame, ancestors);
-		if (!path || !frame.shortName) {
+		const shortName = frame.shortName;
+		if (!path || !shortName) {
 			return;
 		}
-		const definition: IndexDefinition = {
-			path,
-			kind: frame.name,
-			shortName: frame.shortName,
-			file: this.file.uri,
-			range,
-			...(frame.definition ?? {}),
-		};
-		if (frame.literals && frame.literals.length > 0) {
-			definition.literals = frame.literals;
-		}
-		this.file.definitions.push(definition);
+		this.file.definitions.push(definitionRecord(this.file.uri, frame, path, shortName, range));
 	}
 
 	private pathFor(frame: Frame, ancestors: Frame[]): string | undefined {
@@ -477,15 +354,316 @@ export function buildFileIndexChunked(uri: string, chunks: readonly string[]): F
 	return builder.finish();
 }
 
+/** One new frame, with the attributes and UUID the index keeps for this tag. */
+function newFrame(name: string, attrs: ReadonlyMap<string, string>, offset: number): Frame {
+	const frame: Frame = {
+		name,
+		start: offset,
+		text: '',
+		hash: hashText(hashText(FNV_OFFSET, '<' + name), attributeSignature(attrs)),
+	};
+	if (keepsAttributes(name)) {
+		frame.attrs = attrs;
+	}
+	const uuid = ownedUuid(name, attrs);
+	if (uuid !== undefined) {
+		frame.uuid = uuid;
+	}
+	return frame;
+}
+
+/** The text tags whose own attributes matter: `DEST` is read from them later. */
+function keepsAttributes(name: string): boolean {
+	return name === 'DEFINITION-REF' || name === 'VALUE-REF' || name === 'TARGET-REF' || name === 'DESTINATION-REF';
+}
+
+/** The `UUID` attribute when this tag may own one, else `undefined`. */
+function ownedUuid(name: string, attrs: ReadonlyMap<string, string>): string | undefined {
+	const uuid = attrs.get('UUID');
+	if (uuid === undefined || uuid === '') {
+		return undefined;
+	}
+	return canOwnUuid(name) ? uuid : undefined;
+}
+
+/** The `DEST` attribute of a text tag, when it carries a non-empty one. */
+function destAttribute(frame: Frame): string | undefined {
+	const dest = frame.attrs?.get('DEST');
+	return dest === undefined || dest === '' ? undefined : dest;
+}
+
+/** Folds a closing child's hash into its immediate parent. */
+function inheritHash(frame: Frame, ancestors: Frame[]): void {
+	const parent = ancestors[ancestors.length - 1];
+	if (parent !== undefined) {
+		parent.hash = hashText(parent.hash, '\u0002' + frame.hash.toString(36));
+	}
+}
+
+/** The parameter value record for one closed value frame. */
+function parameterElement(file: string, frame: Frame, range: Range, sourcePath: string | undefined): IndexElement {
+	const element: IndexElement = {
+		kind: 'parameter',
+		definitionRef: frame.definitionRef,
+		definitionDest: frame.definitionDest,
+		file,
+		range,
+	};
+	withSourcePath(element, sourcePath);
+	return withParameterText(element, frame);
+}
+
+function withSourcePath(element: IndexElement, sourcePath: string | undefined): IndexElement {
+	if (sourcePath !== undefined) {
+		element.sourcePath = sourcePath;
+	}
+	return element;
+}
+
+function withParameterText(element: IndexElement, frame: Frame): IndexElement {
+	if (frame.uuid !== undefined) {
+		element.uuid = frame.uuid;
+	}
+	if (frame.value !== undefined) {
+		element.value = frame.value;
+	}
+	if (frame.syscond !== undefined) {
+		element.syscond = frame.syscond;
+	}
+	return element;
+}
+
+/** The reference value record for one closed reference frame. */
+function referenceRecord(file: string, frame: Frame, range: Range, sourcePath: string | undefined): IndexReference {
+	const reference: IndexReference = {
+		kind: 'reference',
+		definitionRef: frame.definitionRef,
+		definitionDest: frame.definitionDest,
+		targetRawPath: frame.targetRawPath,
+		targetDest: frame.targetDest,
+		contextPaths: frame.contextPaths ?? [],
+		file,
+		range,
+	};
+	withReferenceIdentity(reference, frame);
+	return withReferenceContext(reference, frame, sourcePath);
+}
+
+function withReferenceIdentity(reference: IndexReference, frame: Frame): IndexReference {
+	if (frame.shortName !== undefined) {
+		reference.shortName = frame.shortName;
+	}
+	if (frame.uuid !== undefined) {
+		reference.uuid = frame.uuid;
+	}
+	return reference;
+}
+
+function withReferenceContext(reference: IndexReference, frame: Frame, sourcePath: string | undefined): IndexReference {
+	if (frame.syscond !== undefined) {
+		reference.syscond = frame.syscond;
+	}
+	if (sourcePath) {
+		reference.sourcePath = sourcePath;
+	}
+	return reference;
+}
+
+/** The definition record for one closed definition frame. */
+function definitionRecord(
+	file: string,
+	frame: Frame,
+	path: string,
+	shortName: string,
+	range: Range
+): IndexDefinition {
+	const definition: IndexDefinition = {
+		path,
+		kind: frame.name,
+		shortName,
+		file,
+		range,
+		...(frame.definition ?? {}),
+	};
+	return withDefinitionLiterals(definition, frame.literals);
+}
+
+function withDefinitionLiterals(definition: IndexDefinition, literals: string[] | undefined): IndexDefinition {
+	if (literals !== undefined && literals.length > 0) {
+		definition.literals = literals;
+	}
+	return definition;
+}
+
+function withElementPath(element: IndexElement, frame: Frame, path: string | undefined): IndexElement {
+	if (path) {
+		element.path = path;
+	}
+	if (frame.shortName !== undefined) {
+		element.shortName = frame.shortName;
+	}
+	if (frame.definitionRef !== undefined) {
+		element.definitionRef = frame.definitionRef;
+	}
+	return element;
+}
+
+function withElementMetadata(element: IndexElement, frame: Frame): IndexElement {
+	if (frame.definitionDest !== undefined) {
+		element.definitionDest = frame.definitionDest;
+	}
+	if (frame.uuid !== undefined) {
+		element.uuid = frame.uuid;
+	}
+	return withElementHash(element, frame);
+}
+
+function withElementHash(element: IndexElement, frame: Frame): IndexElement {
+	if (isPathElement(element.kind)) {
+		element.contentHash = frame.hash;
+	}
+	if (frame.syscond !== undefined) {
+		element.syscond = frame.syscond;
+	}
+	return element;
+}
+
+/** True for the elements that carry an AR path and a content hash. */
+function isPathElement(kind: IndexElement['kind']): boolean {
+	return kind === 'module' || kind === 'container';
+}
+
+function recordEnumLiteral(frame: Frame, ancestors: Frame[]): void {
+	const parent = nearest(ancestors, isEnumDefinition);
+	if (parent !== undefined && frame.shortName) {
+		(parent.literals ??= []).push(frame.shortName);
+	}
+}
+
+function attachShortName(frame: Frame, text: string, ancestors: Frame[]): void {
+	const parent = ancestors[ancestors.length - 1];
+	if (parent !== undefined && knowsShortName(parent.name)) {
+		parent.shortName = text;
+	}
+}
+
+function attachDefinitionRef(frame: Frame, text: string, ancestors: Frame[]): void {
+	const parent = ancestors[ancestors.length - 1];
+	if (parent === undefined || !isDefinitionOwner(parent.name)) {
+		return;
+	}
+	parent.definitionRef = text;
+	const dest = destAttribute(frame);
+	if (dest !== undefined) {
+		parent.definitionDest = dest;
+	}
+}
+
+function attachUuid(frame: Frame, text: string, ancestors: Frame[]): void {
+	const parent = ancestors[ancestors.length - 1];
+	if (parent !== undefined && isDefinitionOwner(parent.name)) {
+		parent.uuid = text;
+	}
+}
+
+function attachTargetRef(frame: Frame, text: string, ancestors: Frame[]): void {
+	const parent = nearest(ancestors, isReferenceValue);
+	if (parent !== undefined) {
+		parent.targetRawPath = text;
+		parent.targetDest = frame.attrs?.get('DEST');
+	}
+}
+
+function attachContextElementRef(frame: Frame, text: string, ancestors: Frame[]): void {
+	const parent = nearest(ancestors, isReferenceValue);
+	if (parent !== undefined) {
+		(parent.contextPaths ??= []).push(text);
+	}
+}
+
+function attachDestinationRef(frame: Frame, text: string, ancestors: Frame[]): void {
+	const parent = nearest(ancestors, isDefinitionFrame);
+	if (parent === undefined) {
+		return;
+	}
+	setDefinitionField(parent, frame.name, text);
+	const dest = destAttribute(frame);
+	if (dest !== undefined) {
+		(parent.definition ??= {}).destinationDest = dest;
+	}
+}
+
+function attachParameterValue(frame: Frame, text: string, ancestors: Frame[]): void {
+	const parent = ancestors[ancestors.length - 1];
+	if (parent !== undefined && PARAMETER_VALUES.has(parent.name)) {
+		parent.value = text;
+	}
+}
+
+function attachSyscond(frame: Frame, text: string, ancestors: Frame[]): void {
+	const owner = nearest(ancestors, ownsSyscond);
+	if (owner !== undefined) {
+		owner.syscond = appendSyscond(owner.syscond, normalizeSpace(text));
+	}
+}
+
+function appendSyscond(current: string | undefined, guard: string): string {
+	return current === undefined ? guard : current + ' && ' + guard;
+}
+
+function attachWithAuto(frame: Frame, text: string, ancestors: Frame[]): void {
+	const parent = ancestors[ancestors.length - 1];
+	if (parent !== undefined && isDefinitionKind(parent.name)) {
+		(parent.definition ??= {}).withAuto = /^true$/i.test(text);
+	}
+}
+
+function attachLiteralDescription(frame: Frame, text: string, ancestors: Frame[]): void {
+	const owner = nearest(ancestors, isDescriptionOwner);
+	if (owner === undefined || !isDefinitionKind(owner.name)) {
+		return;
+	}
+	setDefinitionField(owner, frame.name, text);
+}
+
+function attachDefinitionField(frame: Frame, text: string, ancestors: Frame[]): void {
+	const parent = nearest(ancestors, isDefinitionFrame);
+	if (parent !== undefined) {
+		setDefinitionField(parent, frame.name, text);
+	}
+}
+
+const TEXT_ATTACHERS = new Map<string, TextAttacher>([
+	['SHORT-NAME', attachShortName],
+	['DEFINITION-REF', attachDefinitionRef],
+	['UUID', attachUuid],
+	['VALUE-REF', attachTargetRef],
+	['TARGET-REF', attachTargetRef],
+	['CONTEXT-ELEMENT-REF', attachContextElementRef],
+	['DESTINATION-REF', attachDestinationRef],
+	['VALUE', attachParameterValue],
+	['SW-SYSCOND', attachSyscond],
+	['WITH-AUTO', attachWithAuto],
+	['L-2', attachLiteralDescription],
+	['LOWER-LIMIT', attachDefinitionField],
+	['UPPER-LIMIT', attachDefinitionField],
+	['MIN', attachDefinitionField],
+	['MAX', attachDefinitionField],
+	['MIN-LENGTH', attachDefinitionField],
+	['MAX-LENGTH', attachDefinitionField],
+	['DEFAULT-VALUE', attachDefinitionField],
+	['LOWER-MULTIPLICITY', attachDefinitionField],
+	['UPPER-MULTIPLICITY', attachDefinitionField],
+	['UPPER-MULTIPLICITY-INFINITE', attachDefinitionField],
+]);
+
 function knowsShortName(name: string): boolean {
-	return (
-		name === 'AR-PACKAGE' ||
-		name === MODULE_VALUES ||
-		name === CONTAINER_VALUE ||
-		name === ENUM_LITERAL_DEF ||
-		knowsDefinition(name) ||
-		isDefinitionKind(name)
-	);
+	return isValueElement(name) || name === ENUM_LITERAL_DEF || knowsDefinition(name) || isDefinitionKind(name);
+}
+
+/** Elements that open a value subtree under a package. */
+function isValueElement(name: string): boolean {
+	return name === 'AR-PACKAGE' || name === MODULE_VALUES || name === CONTAINER_VALUE;
 }
 
 /** Elements that can carry an AUTOSAR `UUID` attribute or child. */
@@ -498,9 +676,15 @@ function knowsDefinition(name: string): boolean {
 }
 
 /** True for any ECUC definition element that can carry a SHORT-NAME and be referenced. */
-function isDefinitionKind(name: string): boolean {	if (name === MODULE_DEF || isContainerDef(name)) {
-		return true;
-	}
+function isDefinitionKind(name: string): boolean {
+	return isStructuralDefinition(name) || isParamDefinition(name);
+}
+
+function isStructuralDefinition(name: string): boolean {
+	return name === MODULE_DEF || isContainerDef(name);
+}
+
+function isParamDefinition(name: string): boolean {
 	return (
 		/^ECUC-[A-Z0-9-]+-PARAM-DEF$/.test(name) ||
 		/-REFERENCE-DEF$/.test(name) ||
@@ -514,6 +698,43 @@ function isContainerDef(name: string): boolean {
 	return name.endsWith('-CONTAINER-DEF');
 }
 
+/** True for a value element that a parameter or reference can live under. */
+function isContainerValues(name: string): boolean {
+	return name === MODULE_VALUES || name === CONTAINER_VALUE;
+}
+
+/** True for the parents that own a `DEFINITION-REF`/`UUID` text body. */
+function isDefinitionOwner(name: string): boolean {
+	return knowsDefinition(name) || isDefinitionKind(name);
+}
+
+function isDefinitionFrame(frame: Frame): boolean {
+	return isDefinitionKind(frame.name);
+}
+
+function isReferenceValue(frame: Frame): boolean {
+	return REFERENCE_VALUES.has(frame.name);
+}
+
+function isEnumDefinition(frame: Frame): boolean {
+	return frame.name === ENUM_DEF;
+}
+
+/** The nearest value element that owns its own `SW-SYSCOND` guard. */
+function ownsSyscond(frame: Frame): boolean {
+	return (
+		frame.name === MODULE_VALUES ||
+		frame.name === CONTAINER_VALUE ||
+		PARAMETER_VALUES.has(frame.name) ||
+		REFERENCE_VALUES.has(frame.name)
+	);
+}
+
+/** A `DESC/L-2` may belong to a definition or to one enumeration literal. */
+function isDescriptionOwner(frame: Frame): boolean {
+	return isDefinitionKind(frame.name) || frame.name === ENUM_LITERAL_DEF;
+}
+
 function nearest(frames: readonly Frame[], predicate: (frame: Frame) => boolean): Frame | undefined {
 	for (let i = frames.length - 1; i >= 0; i--) {
 		if (predicate(frames[i])) {
@@ -525,45 +746,32 @@ function nearest(frames: readonly Frame[], predicate: (frame: Frame) => boolean)
 
 function setDefinitionField(frame: Frame, tag: string, text: string): void {
 	const definition = (frame.definition ??= {});
-	switch (tag) {
-		case 'LOWER-LIMIT':
-			definition.lowerLimit = text;
-			return;
-		case 'UPPER-LIMIT':
-			definition.upperLimit = text;
-			return;
-		case 'MIN':
-			definition.minValue = text;
-			return;
-		case 'MAX':
-			definition.maxValue = text;
-			return;
-		case 'MIN-LENGTH':
-			definition.minLength = text;
-			return;
-		case 'MAX-LENGTH':
-			definition.maxLength = text;
-			return;
-		case 'DEFAULT-VALUE':
-			definition.defaultValue = text;
-			return;
-		case 'DESTINATION-REF':
-			definition.destinationRef = text;
-			return;
-		case 'LOWER-MULTIPLICITY':
-			definition.lowerMultiplicity = text;
-			return;
-		case 'UPPER-MULTIPLICITY':
-			definition.upperMultiplicity = text;
-			return;
-		case 'UPPER-MULTIPLICITY-INFINITE':
-			definition.upperMultiplicityInfinite = /^true$/i.test(text);
-			return;
-		case 'L-2':
-			if (definition.description === undefined) {
-				definition.description = text;
-			}
-			return;
+	const set = DEFINITION_FIELDS.get(tag);
+	if (set === undefined) {
+		return;
+	}
+	set(definition, text);
+}
+
+const DEFINITION_FIELDS = new Map<string, DefinitionFieldSetter>([
+	['LOWER-LIMIT', (definition, text) => { definition.lowerLimit = text; }],
+	['UPPER-LIMIT', (definition, text) => { definition.upperLimit = text; }],
+	['MIN', (definition, text) => { definition.minValue = text; }],
+	['MAX', (definition, text) => { definition.maxValue = text; }],
+	['MIN-LENGTH', (definition, text) => { definition.minLength = text; }],
+	['MAX-LENGTH', (definition, text) => { definition.maxLength = text; }],
+	['DEFAULT-VALUE', (definition, text) => { definition.defaultValue = text; }],
+	['DESTINATION-REF', (definition, text) => { definition.destinationRef = text; }],
+	['LOWER-MULTIPLICITY', (definition, text) => { definition.lowerMultiplicity = text; }],
+	['UPPER-MULTIPLICITY', (definition, text) => { definition.upperMultiplicity = text; }],
+	['UPPER-MULTIPLICITY-INFINITE', (definition, text) => { definition.upperMultiplicityInfinite = /^true$/i.test(text); }],
+	['L-2', setDescription],
+]);
+
+/** The first `L-2` wins; a literal description never overwrites a definition's. */
+function setDescription(definition: Partial<IndexDefinition>, text: string): void {
+	if (definition.description === undefined) {
+		definition.description = text;
 	}
 }
 

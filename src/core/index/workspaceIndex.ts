@@ -178,24 +178,7 @@ export class WorkspaceIndex {
 		if (resolved.status !== 'found') {
 			return { ok: false, reason: resolved.status, path: rawPath };
 		}
-		const expected = expectedKind(dest);
-		const candidates =
-			expected === undefined ? resolved.candidates : resolved.candidates.filter((candidate) => candidate.kind === expected);
-		if (candidates.length === 0) {
-			const first = resolved.candidates[0];
-			return {
-				ok: false,
-				reason: 'dest-mismatch',
-				path: rawPath,
-				element: first,
-				actualKind: first.kind,
-			};
-		}
-		const copies = copiesFor(candidates, sourceFile);
-		if (copies === undefined) {
-			return { ok: false, reason: 'ambiguous', path: rawPath };
-		}
-		return { ok: true, element: copies[0], copies };
+		return narrowTarget(resolved.candidates, rawPath, dest, sourceFile);
 	}
 
 	/** Resolves one indexed reference through the workspace index. */
@@ -208,13 +191,7 @@ export class WorkspaceIndex {
 		if (resolution.ok) {
 			return { ok: true, element: resolution.element, copies: resolution.copies, reference };
 		}
-		return {
-			ok: false,
-			reason: resolution.reason,
-			reference,
-			target: raw,
-			...(resolution.reason === 'dest-mismatch' ? { actualKind: resolution.actualKind } : {}),
-		};
+		return failedReference(resolution, reference, raw);
 	}
 
 	/** Every reference that resolves to the same element, in file/start order. */
@@ -239,26 +216,22 @@ export class WorkspaceIndex {
 			return [];
 		}
 		const out: Array<IndexElement | IndexReference> = [];
+		const pathOf = this.canonicalPaths();
+		for (const file of this.files.values()) {
+			collectDefinitionUsers(out, file, target.path, pathOf);
+		}
+		return out;
+	}
+
+	/** A memoized `definitionRef` → canonical definition path resolver. */
+	private canonicalPaths(): (reference: string) => string | undefined {
 		const canonical = new Map<string, string | undefined>();
-		const pathOf = (reference: string): string | undefined => {
+		return (reference: string): string | undefined => {
 			if (!canonical.has(reference)) {
 				canonical.set(reference, this.definitionEntry(reference)?.path);
 			}
 			return canonical.get(reference);
 		};
-		for (const file of this.files.values()) {
-			for (const element of file.elements) {
-				if (element.definitionRef !== undefined && pathOf(element.definitionRef) === target.path) {
-					out.push(element);
-				}
-			}
-			for (const reference of file.references) {
-				if (reference.definitionRef !== undefined && pathOf(reference.definitionRef) === target.path) {
-					out.push(reference);
-				}
-			}
-		}
-		return out;
 	}
 
 	/** How many definition bodies share this path (0, 1 or N); navigation never picks one. */
@@ -406,17 +379,37 @@ export class WorkspaceIndex {
 			this.invalidateLookups();
 			return;
 		}
-		if (!this.lookupsValid || this.elements === undefined || this.definitions === undefined) {
+		if (!this.lookupsReady()) {
 			return;
 		}
-		if (previous !== undefined) {
-			removeLookupItems(this.elements, previous.elements, (element) => element.path);
-			removeLookupItems(this.definitions, previous.definitions, (definition) => definition.path);
+		this.removeContribution(previous);
+		this.addContribution(next);
+	}
+
+	private lookupsReady(): boolean {
+		return this.lookupsValid && this.elements !== undefined && this.definitions !== undefined;
+	}
+
+	/** Removes one file's items from the live maps, when both maps and the file exist. */
+	private removeContribution(file: FileIndex | undefined): void {
+		const elements = this.elements;
+		const definitions = this.definitions;
+		if (file === undefined || elements === undefined || definitions === undefined) {
+			return;
 		}
-		if (next !== undefined) {
-			addLookupItems(this.elements, next.elements, (element) => element.path);
-			addLookupItems(this.definitions, next.definitions, (definition) => definition.path);
+		removeLookupItems(elements, file.elements, (element) => element.path);
+		removeLookupItems(definitions, file.definitions, (definition) => definition.path);
+	}
+
+	/** Adds one file's items to the live maps, when both maps and the file exist. */
+	private addContribution(file: FileIndex | undefined): void {
+		const elements = this.elements;
+		const definitions = this.definitions;
+		if (file === undefined || elements === undefined || definitions === undefined) {
+			return;
 		}
+		addLookupItems(elements, file.elements, (element) => element.path);
+		addLookupItems(definitions, file.definitions, (definition) => definition.path);
 	}
 
 	private invalidateLookups(): void {
@@ -431,21 +424,13 @@ export class WorkspaceIndex {
 		if (this.lookupsValid && this.elements !== undefined && this.definitions !== undefined) {
 			return;
 		}
+		this.buildLookups();
+	}
+
+	/** Builds both candidate maps, degrading to empty ones after a failure. */
+	private buildLookups(): void {
 		try {
-			const elements: IndexElement[] = [];
-			const definitions: IndexDefinition[] = [];
-			for (const file of this.files.values()) {
-				// Never use spread here: a large file can exceed the engine's argument
-				// limit and throw `RangeError` inside the editor's row build.
-				for (const element of file.elements) {
-					elements.push(element);
-				}
-				for (const definition of file.definitions) {
-					definitions.push(definition);
-				}
-			}
-			this.elements = buildLookup(elements, (element) => element.path);
-			this.definitions = buildLookup(definitions, (definition) => definition.path);
+			this.installLookups();
 		} catch {
 			// A lookup failure must not make every later call rethrow. Definitions are
 			// optional data; degrading to "no lookup" keeps the editor usable.
@@ -454,6 +439,17 @@ export class WorkspaceIndex {
 			this.lookupsHealthy = false;
 		}
 		this.lookupsValid = true;
+	}
+
+	private installLookups(): void {
+		const elements: IndexElement[] = [];
+		const definitions: IndexDefinition[] = [];
+		for (const file of this.files.values()) {
+			appendAll(elements, file.elements);
+			appendAll(definitions, file.definitions);
+		}
+		this.elements = buildLookup(elements, (element) => element.path);
+		this.definitions = buildLookup(definitions, (definition) => definition.path);
 	}
 
 	private ensureReferenceMap(): void {
@@ -512,6 +508,13 @@ interface PathLookup<T> {
 
 function emptyLookup<T>(): PathLookup<T> {
 	return { exact: new Map(), suffix: new Map() };
+}
+
+/** Appends every item by index: a spread here can exceed the engine's argument limit. */
+function appendAll<T>(target: T[], items: readonly T[]): void {
+	for (const item of items) {
+		target.push(item);
+	}
 }
 
 /**
@@ -739,6 +742,44 @@ function resolve<T>(lookup: PathLookup<T>, rawPath: string): T | undefined {
 
 type Resolved<T> = { status: 'found'; candidates: T[] } | { status: 'absent' };
 
+/** One element lookup that did not find a usable target. */
+type FailedElementResolution = Exclude<ElementResolution, { ok: true }>;
+
+/** Narrows the candidates to the `DEST` kind and applies the copy rule. */
+function narrowTarget(
+	candidates: readonly IndexElement[],
+	rawPath: string,
+	dest: string | undefined,
+	sourceFile: string | undefined
+): ElementResolution {
+	const matching = filterByDest(candidates, dest);
+	if (matching.length === 0) {
+		const first = candidates[0];
+		return { ok: false, reason: 'dest-mismatch', path: rawPath, element: first, actualKind: first.kind };
+	}
+	const copies = copiesFor(matching, sourceFile);
+	if (copies === undefined) {
+		return { ok: false, reason: 'ambiguous', path: rawPath };
+	}
+	return { ok: true, element: copies[0], copies };
+}
+
+/** The candidates whose kind matches the path-bearing `DEST`, when it names one. */
+function filterByDest(candidates: readonly IndexElement[], dest: string | undefined): readonly IndexElement[] {
+	const expected = expectedKind(dest);
+	return expected === undefined ? candidates : candidates.filter((candidate) => candidate.kind === expected);
+}
+
+/** The refused reference, carrying the target and the mismatching kind when known. */
+function failedReference(
+	resolution: FailedElementResolution,
+	reference: IndexReference,
+	raw: string
+): ReferenceResolution {
+	const actual = resolution.reason === 'dest-mismatch' ? { actualKind: resolution.actualKind } : {};
+	return { ok: false, reason: resolution.reason, reference, target: raw, ...actual };
+}
+
 function resolveDetailed<T>(lookup: PathLookup<T>, rawPath: string): Resolved<T> {
 	const segments = splitPath(rawPath);
 	for (let start = 0; start < segments.length; start++) {
@@ -763,6 +804,11 @@ function copiesFor(candidates: readonly IndexElement[], sourceFile: string | und
 	if (!copiesOfOneIdentity(candidates)) {
 		return undefined;
 	}
+	return orderedCopies(candidates, sourceFile);
+}
+
+/** The agreed copies, with the source file's own copy first. */
+function orderedCopies(candidates: readonly IndexElement[], sourceFile: string | undefined): IndexElement[] {
 	const local = candidates.filter((candidate) => candidate.file === sourceFile);
 	if (local.length > 1) {
 		return [...sortCopies(local), ...sortCopies(candidates.filter((candidate) => candidate.file !== sourceFile))];
@@ -804,4 +850,49 @@ function splitPath(path: string): string[] {
 		.trim()
 		.split('/')
 		.filter((segment) => segment.length > 0);
+}
+
+/** Appends every element then every reference in one file that uses the definition. */
+function collectDefinitionUsers(
+	out: Array<IndexElement | IndexReference>,
+	file: FileIndex,
+	path: string,
+	pathOf: (reference: string) => string | undefined
+): void {
+	collectElementUsers(out, file, path, pathOf);
+	collectReferenceUsers(out, file, path, pathOf);
+}
+
+function collectElementUsers(
+	out: Array<IndexElement | IndexReference>,
+	file: FileIndex,
+	path: string,
+	pathOf: (reference: string) => string | undefined
+): void {
+	for (const element of file.elements) {
+		if (isDefinitionUser(element, path, pathOf)) {
+			out.push(element);
+		}
+	}
+}
+
+function collectReferenceUsers(
+	out: Array<IndexElement | IndexReference>,
+	file: FileIndex,
+	path: string,
+	pathOf: (reference: string) => string | undefined
+): void {
+	for (const reference of file.references) {
+		if (isDefinitionUser(reference, path, pathOf)) {
+			out.push(reference);
+		}
+	}
+}
+
+function isDefinitionUser(
+	record: IndexElement | IndexReference,
+	path: string,
+	pathOf: (reference: string) => string | undefined
+): boolean {
+	return record.definitionRef !== undefined && pathOf(record.definitionRef) === path;
 }
