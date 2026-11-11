@@ -17,6 +17,9 @@ const MAX_500_MS = 3_000;
 const MAX_700_MS = 6_000;
 const MAX_RETAINED_BYTES = 128 * 1024 * 1024;
 
+/** The document shape the rename-scale assertions read. */
+type SemanticDocument = ReturnType<typeof measureSemanticDiff>['document'];
+
 /** One root and `count` containers under one definition; child values embed the name. */
 function rows(prefix: string, count: number): EcucRow[] {
 	const out: EcucRow[] = [];
@@ -61,20 +64,43 @@ function measure(renames: number, maxMs: number): void {
 			retainedMiB,
 		})
 	);
-	if (document.summary.renamed !== renames) {
-		throw new Error(`paired ${document.summary.renamed} of ${renames} renamed containers`);
+	requireRenameSummary(document, renames);
+	requireRenameTiming(elapsedMs, maxMs, renames);
+	requireRenameRetention(retainedMiB);
+}
+
+/** The matcher paired every rename, limited nothing and changed nothing else. */
+function requireRenameSummary(document: SemanticDocument, renames: number): void {
+	requirePairedRenames(document.summary.renamed, renames);
+	requireNothingLimited(document.semanticSkipped, renames);
+	requireNoAddedOrRemoved(document.summary, renames);
+}
+
+function requirePairedRenames(renamed: number, renames: number): void {
+	if (renamed !== renames) {
+		throw new Error(`paired ${renamed} of ${renames} renamed containers`);
 	}
-	if (document.semanticSkipped !== 0) {
-		throw new Error(`${document.semanticSkipped} containers were limited at ${renames} renames`);
+}
+
+function requireNothingLimited(limited: number, renames: number): void {
+	if (limited !== 0) {
+		throw new Error(`${limited} containers were limited at ${renames} renames`);
 	}
-	if (document.summary.added !== 0 || document.summary.removed !== 0) {
-		throw new Error(
-			`${document.summary.added} added and ${document.summary.removed} removed at ${renames} renames`
-		);
+}
+
+function requireNoAddedOrRemoved(summary: SemanticDocument['summary'], renames: number): void {
+	if (summary.added !== 0 || summary.removed !== 0) {
+		throw new Error(`${summary.added} added and ${summary.removed} removed at ${renames} renames`);
 	}
+}
+
+function requireRenameTiming(elapsedMs: number, maxMs: number, renames: number): void {
 	if (elapsedMs > maxMs) {
 		throw new Error(`${renames} renames took ${elapsedMs} ms; limit is ${maxMs} ms`);
 	}
+}
+
+function requireRenameRetention(retainedMiB: number): void {
 	if (retainedMiB * 1048576 > MAX_RETAINED_BYTES) {
 		throw new Error(`retained ${retainedMiB} MiB; limit is ${MAX_RETAINED_BYTES / 1048576} MiB`);
 	}

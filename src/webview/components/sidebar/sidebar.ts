@@ -303,36 +303,58 @@ function applySidebarWidth(width: number, persist: boolean): void {
 	}
 }
 
+/** Arrow/Home/End movement across the vertical tab strip. */
+const TAB_MOVES: ReadonlyMap<string, number> = new Map([
+	['ArrowUp', -1],
+	['ArrowLeft', -1],
+	['ArrowDown', 1],
+	['ArrowRight', 1],
+]);
+
 function onTabKeydown(event: any, button: any): void {
 	const tabs = document.getElementById('side-tabs');
 	if (!tabs) {
 		return;
 	}
 	const buttons = tabs.querySelectorAll('.stab') as unknown as any[];
+	const index = tabButtonIndex(buttons, button);
+	if (index < 0) {
+		return;
+	}
+	const next = nextTabIndex(event.key, index, buttons.length);
+	if (!isTabIndex(next, buttons)) {
+		return;
+	}
+	event.preventDefault();
+	activateSidebarTab(sidebarTabName(buttons[next]), true);
+}
+
+/** The pressed button's position, or -1 when it is not in the strip. */
+function tabButtonIndex(buttons: readonly unknown[], button: unknown): number {
 	let index = -1;
 	for (let at = 0; at < buttons.length; at++) {
 		if (buttons[at] === button) {
 			index = at;
 		}
 	}
-	if (index < 0) {
-		return;
+	return index;
+}
+
+/** Wraps the arrow steps and maps Home/End; -1 means no movement. */
+function nextTabIndex(key: string, index: number, count: number): number {
+	if (key === 'Home') {
+		return 0;
 	}
-	let next = -1;
-	if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-		next = index === 0 ? buttons.length - 1 : index - 1;
-	} else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-		next = index === buttons.length - 1 ? 0 : index + 1;
-	} else if (event.key === 'Home') {
-		next = 0;
-	} else if (event.key === 'End') {
-		next = buttons.length - 1;
+	if (key === 'End') {
+		return count - 1;
 	}
-	if (next < 0 || !buttons[next]) {
-		return;
-	}
-	event.preventDefault();
-	activateSidebarTab(sidebarTabName(buttons[next]), true);
+	const step = TAB_MOVES.get(key);
+	return step === undefined ? -1 : (index + step + count) % count;
+}
+
+/** True for a real position in the tab strip. */
+function isTabIndex(index: number, buttons: readonly unknown[]): boolean {
+	return index >= 0 && buttons[index] !== undefined;
 }
 
 /**

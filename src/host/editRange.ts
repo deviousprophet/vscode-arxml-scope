@@ -18,7 +18,7 @@ import type { Range } from '../core/ecuc/model';
  */
 export function touchesCdata(text: string, range: Range): boolean {
 	const bytes = text.slice(range.start, range.end);
-	if (bytes.includes('<![CDATA[') || bytes.includes(']]>')) {
+	if (hasCdataMarker(bytes)) {
 		return true;
 	}
 	const open = text.lastIndexOf('<![CDATA[', range.start);
@@ -26,5 +26,15 @@ export function touchesCdata(text: string, range: Range): boolean {
 		return false;
 	}
 	const close = text.indexOf(']]>', open + 9);
-	return close < 0 || close > range.start;
+	return crossesCdataStart(close, range.start);
+}
+
+/** The range itself carries a CDATA marker. */
+function hasCdataMarker(bytes: string): boolean {
+	return bytes.includes('<![CDATA[') || bytes.includes(']]>');
+}
+
+/** True when the section that opened before the range is still open at its start. */
+function crossesCdataStart(close: number, start: number): boolean {
+	return close < 0 || close > start;
 }

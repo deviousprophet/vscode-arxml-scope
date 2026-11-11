@@ -46,7 +46,16 @@ function rowAtOffsetFromOffsets(offsets: RowOffsets, offset: number): number {
 	if (rowCount === 0) {
 		return 0;
 	}
-	const target = Number.isFinite(offset) && offset > 0 ? offset : 0;
+	return searchRowAt(offsets, clampOffset(offset), rowCount);
+}
+
+/** A finite non-negative offset; anything else reads as the top. */
+function clampOffset(offset: number): number {
+	return Number.isFinite(offset) && offset > 0 ? offset : 0;
+}
+
+/** Binary search for the row whose range contains `target`. */
+function searchRowAt(offsets: RowOffsets, target: number, rowCount: number): number {
 	let lo = 0;
 	let hi = rowCount - 1;
 	while (lo < hi) {

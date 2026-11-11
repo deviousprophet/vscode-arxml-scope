@@ -7,6 +7,7 @@
  */
 import { performance } from 'node:perf_hooks';
 import { buildFileIndex } from '../../core/index/indexBuilder';
+import type { FileIndex } from '../../core/index/indexModel';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
 import { DEFAULT_SEVERITIES } from '../../core/validation/types';
 import { validateWorkspace, validateWorkspaceSlices } from '../../core/validation/validate';
@@ -17,6 +18,14 @@ const CONTAINERS_PER_FILE = 1000;
 const PARAMETERS_PER_CONTAINER = 20;
 const MAX_STEP_MS = 5_000;
 const MAX_RETAINED_BYTES = 512 * 1024 * 1024;
+
+/** One generator pass's shape and timing, before the assertions. */
+interface SlicedResult {
+	slices: number;
+	maxSliceMs: number;
+	diagnostics: number;
+	elapsedMs: number;
+}
 
 function definitionsText(): string {
 	const parameters: string[] = [];
@@ -64,18 +73,34 @@ function valuesText(fileIndex: number): string {
 
 function run(): void {
 	const definitions = buildFileIndex('file:///defs.arxml', definitionsText());
-	const files = [];
+	const files = buildValueFiles();
+	const index = buildWorkspace(definitions, files);
+	const sourceMiB = Math.round(files.reduce((total, file) => total + file.elements.length * 180, 0) / 1048576);
+	const records = files.reduce((total, file) => total + file.elements.length + file.references.length, 0) + definitions.definitions.length;
+
+	const diagnosticCount = checkFullPass(index, sourceMiB, records);
+	checkSlicedPass(index, diagnosticCount);
+}
+
+function buildValueFiles(): FileIndex[] {
+	const files: FileIndex[] = [];
 	for (let file = 0; file < FILE_COUNT; file++) {
 		files.push(buildFileIndex(`file:///values${file}.arxml`, valuesText(file)));
 	}
+	return files;
+}
+
+function buildWorkspace(definitions: FileIndex, files: readonly FileIndex[]): WorkspaceIndex {
 	const index = new WorkspaceIndex();
 	index.upsert(definitions);
 	for (const file of files) {
 		index.upsert(file);
 	}
-	const sourceMiB = Math.round(files.reduce((total, file) => total + file.elements.length * 180, 0) / 1048576);
-	const records = files.reduce((total, file) => total + file.elements.length + file.references.length, 0) + definitions.definitions.length;
+	return index;
+}
 
+/** Measures the one-shot pass and returns its diagnostic count. */
+function checkFullPass(index: WorkspaceIndex, sourceMiB: number, records: number): number {
 	const { value: diagnostics, elapsedMs, retainedMiB } = measureStage(() =>
 		validateWorkspace(index, DEFAULT_SEVERITIES)
 	);
@@ -95,39 +120,48 @@ function run(): void {
 	if (retainedMiB * 1048576 > MAX_RETAINED_BYTES) {
 		throw new Error(`validation retained ${retainedMiB} MiB; limit is ${MAX_RETAINED_BYTES / 1048576} MiB`);
 	}
+	return diagnostics.length;
+}
 
-	// The host consumes the generator in slices. Measure the longest slice; this
-	// run does not await between yields, so the number is the work upper bound.
+/**
+ * The host consumes the generator in slices. Measure the longest slice; this
+ * run does not await between yields, so the number is the work upper bound.
+ */
+function collectSlices(index: WorkspaceIndex): SlicedResult {
 	const iterator = validateWorkspaceSlices(index, DEFAULT_SEVERITIES);
 	let slices = 0;
 	let maxSliceMs = 0;
-	let slicedCount = 0;
+	let diagnostics = 0;
 	const slicedStarted = performance.now();
 	while (true) {
 		const stepStarted = performance.now();
 		const step = iterator.next();
 		maxSliceMs = Math.max(maxSliceMs, performance.now() - stepStarted);
 		if (step.done) {
-			slicedCount = step.value.length;
+			diagnostics = step.value.length;
 			break;
 		}
 		slices++;
 	}
-	const slicedElapsedMs = Math.round(performance.now() - slicedStarted);
+	return { slices, maxSliceMs, diagnostics, elapsedMs: Math.round(performance.now() - slicedStarted) };
+}
+
+function checkSlicedPass(index: WorkspaceIndex, expected: number): void {
+	const result = collectSlices(index);
 	console.log(
 		JSON.stringify({
 			_type: 'validation-slices',
-			slices,
-			maxSliceMs: Math.round(maxSliceMs),
-			diagnostics: slicedCount,
-			elapsedMs: slicedElapsedMs,
+			slices: result.slices,
+			maxSliceMs: Math.round(result.maxSliceMs),
+			diagnostics: result.diagnostics,
+			elapsedMs: result.elapsedMs,
 		})
 	);
-	if (slicedCount !== diagnostics.length) {
-		throw new Error(`the sliced pass returned ${slicedCount} of ${diagnostics.length} diagnostics`);
+	if (result.diagnostics !== expected) {
+		throw new Error(`the sliced pass returned ${result.diagnostics} of ${expected} diagnostics`);
 	}
-	if (maxSliceMs > 50) {
-		throw new Error(`the longest validation slice took ${Math.round(maxSliceMs)} ms; limit is 50 ms`);
+	if (result.maxSliceMs > 50) {
+		throw new Error(`the longest validation slice took ${Math.round(result.maxSliceMs)} ms; limit is 50 ms`);
 	}
 }
 

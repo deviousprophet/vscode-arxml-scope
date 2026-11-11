@@ -2,7 +2,7 @@ import * as assert from 'assert';
 
 import { buildFileIndex } from '../../core/index/indexBuilder';
 import type { FileIndex, IndexDefinition, IndexElement } from '../../core/index/indexModel';
-import { WorkspaceIndex } from '../../core/index/workspaceIndex';
+import { WorkspaceIndex, type ElementResolution } from '../../core/index/workspaceIndex';
 import { fixtureText } from './modelTestUtils';
 
 function values(uri: string): ReturnType<typeof buildFileIndex> {
@@ -79,6 +79,37 @@ function referenceOnlyFile(
 
 function referencePositions(references: readonly { file: string; range: { start: number } }[]): string[] {
 	return references.map((reference) => `${reference.file}@${reference.range.start}`);
+}
+
+/** The copies of a successful resolution, or none when it failed. */
+function copiesOf(resolution: ElementResolution): readonly IndexElement[] {
+	return resolution.ok ? resolution.copies : [];
+}
+
+/** The first copy's reference count; a failed resolution has none. */
+function firstCopyReferenceCount(index: WorkspaceIndex, resolution: ElementResolution): number {
+	const copies = copiesOf(resolution);
+	return copies.length === 0 ? 0 : index.referencesFor(copies[0]).length;
+}
+
+/** Compares each copy's references with a fresh index's copy; returns the total count. */
+function assertCopyReferencesMatch(
+	index: WorkspaceIndex,
+	copies: readonly IndexElement[],
+	fresh: WorkspaceIndex,
+	freshCopies: readonly IndexElement[]
+): number {
+	let total = 0;
+	for (let at = 0; at < copies.length; at++) {
+		assert.strictEqual(copies[at].file, freshCopies[at].file);
+		const incrementalRefs = index.referencesFor(copies[at]);
+		total += incrementalRefs.length;
+		assert.deepStrictEqual(
+			referencePositions(incrementalRefs),
+			referencePositions(fresh.referencesFor(freshCopies[at]))
+		);
+	}
+	return total;
 }
 
 suite('workspaceIndex (core)', () => {
@@ -515,7 +546,7 @@ suite('workspaceIndex (core)', () => {
 		index.upsert(makeRefs());
 		const single = index.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE');
 		assert.ok(single.ok);
-		assert.strictEqual(single.ok && index.referencesFor(single.element).length, 1);
+		assert.strictEqual(firstCopyReferenceCount(index, single), 1);
 		assert.strictEqual(index.referenceMapBuildCount, 1);
 
 		index.upsert(makeB());
@@ -529,23 +560,15 @@ suite('workspaceIndex (core)', () => {
 		const freshCopies = fresh.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE');
 		assert.ok(freshCopies.ok);
 
-		const copyList = copied.ok ? copied.copies : [];
-		const freshCopyList = freshCopies.ok ? freshCopies.copies : [];
+		const copyList = copiesOf(copied);
+		const freshCopyList = copiesOf(freshCopies);
 		assert.strictEqual(copyList.length, 2);
 		assert.strictEqual(freshCopyList.length, 2);
-		let total = 0;
-		for (let at = 0; at < copyList.length; at++) {
-			const copy: IndexElement = copyList[at];
-			const freshCopy: IndexElement = freshCopyList[at];
-			assert.strictEqual(copy.file, freshCopy.file);
-			const incrementalRefs = index.referencesFor(copy);
-			total += incrementalRefs.length;
-			assert.deepStrictEqual(
-				referencePositions(incrementalRefs),
-				referencePositions(fresh.referencesFor(freshCopy))
-			);
-		}
-		assert.strictEqual(total, 1, 'one copy owns the reference');
+		assert.strictEqual(
+			assertCopyReferencesMatch(index, copyList, fresh, freshCopyList),
+			1,
+			'one copy owns the reference'
+		);
 		assert.strictEqual(index.referenceMapBuildCount, 2, 'the duplicate add did not invalidate');
 	});
 
@@ -570,7 +593,7 @@ suite('workspaceIndex (core)', () => {
 		index.upsert(referenceOnlyFile('file:///refs.arxml', '/P/M/C', [4]));
 		const before = index.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE');
 		assert.ok(before.ok);
-		assert.strictEqual(before.ok ? index.referencesFor(before.copies[0]).length : 0, 1);
+		assert.strictEqual(firstCopyReferenceCount(index, before), 1);
 		assert.strictEqual(index.referenceMapBuildCount, 1);
 
 		// The path/kind sequence is identical; only the declaration order of the
@@ -586,15 +609,10 @@ suite('workspaceIndex (core)', () => {
 		const freshAfter = fresh.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE');
 		assert.ok(freshAfter.ok);
 
-		const copies = after.ok ? after.copies : [];
-		const freshCopies = freshAfter.ok ? freshAfter.copies : [];
+		const copies = copiesOf(after);
+		const freshCopies = copiesOf(freshAfter);
 		assert.strictEqual(copies.length, 2);
-		for (let at = 0; at < copies.length; at++) {
-			assert.deepStrictEqual(
-				referencePositions(index.referencesFor(copies[at])),
-				referencePositions(fresh.referencesFor(freshCopies[at]))
-			);
-		}
+		assertCopyReferencesMatch(index, copies, fresh, freshCopies);
 		assert.strictEqual(index.referenceMapBuildCount, 2, 'the duplicate reorder did not invalidate');
 
 		// The reverse direction: an out-of-order previous file must not take the
@@ -607,14 +625,9 @@ suite('workspaceIndex (core)', () => {
 		freshBack.upsert(referenceOnlyFile('file:///refs.arxml', '/P/M/C', [4]));
 		const freshBackTarget = freshBack.resolveTarget('/P/M/C', 'ECUC-CONTAINER-VALUE');
 		assert.ok(freshBackTarget.ok);
-		const backCopies = back.ok ? back.copies : [];
-		const freshBackCopies = freshBackTarget.ok ? freshBackTarget.copies : [];
-		for (let at = 0; at < backCopies.length; at++) {
-			assert.deepStrictEqual(
-				referencePositions(index.referencesFor(backCopies[at])),
-				referencePositions(freshBack.referencesFor(freshBackCopies[at]))
-			);
-		}
+		const backCopies = copiesOf(back);
+		const freshBackCopies = copiesOf(freshBackTarget);
+		assertCopyReferencesMatch(index, backCopies, freshBack, freshBackCopies);
 		assert.strictEqual(index.referenceMapBuildCount, 3, 'the reverse reorder did not invalidate');
 	});
 

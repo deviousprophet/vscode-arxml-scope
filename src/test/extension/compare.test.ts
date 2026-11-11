@@ -30,6 +30,43 @@ function readManifest(): Manifest {
 	return JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as Manifest;
 }
 
+/** Every compare command is contributed by the manifest. */
+function assertContributedCommands(manifest: Manifest): void {
+	const commands = manifest.contributes?.commands ?? [];
+	for (const command of [SELECT_AS_FIRST, COMPARE_TO_STAGED, COMPARE_SELECTED]) {
+		assert.ok(commands.some((entry) => entry.command === command), `${command} is contributed`);
+	}
+}
+
+/** The three commands carry exactly the documented `when` clauses. */
+function assertActionMenuWhen(manifest: Manifest): void {
+	assert.strictEqual(
+		actionMenuWhen(manifest, SELECT_AS_FIRST),
+		'resourceExtname == .arxml && !listMultiSelection && explorerViewletFocus'
+	);
+	assert.strictEqual(
+		actionMenuWhen(manifest, COMPARE_TO_STAGED),
+		'resourceExtname == .arxml && !listMultiSelection && explorerViewletFocus && arxmlScope.hasCompareSelection'
+	);
+	assert.strictEqual(
+		actionMenuWhen(manifest, COMPARE_SELECTED),
+		'resourceExtname == .arxml && listDoubleSelection && explorerViewletFocus'
+	);
+}
+
+function actionMenuWhen(manifest: Manifest, command: string): string | undefined {
+	const items = manifest.contributes?.menus?.['arxmlScope.actions'] ?? [];
+	return items.find((item) => item.command === command)?.when;
+}
+
+/** No diff command is a flat editor/context entry. */
+function assertNoFlatEditorCommands(manifest: Manifest): void {
+	const flatEditor = (manifest.contributes?.menus?.['editor/context'] ?? []).filter(
+		(item) => item.command !== undefined && [SELECT_AS_FIRST, COMPARE_TO_STAGED, COMPARE_SELECTED].includes(item.command)
+	);
+	assert.deepStrictEqual(flatEditor, [], 'no diff command is a flat editor/context entry');
+}
+
 function diffTabs(): vscode.Tab[] {
 	const tabs: vscode.Tab[] = [];
 	for (const group of vscode.window.tabGroups.all) {
@@ -91,29 +128,11 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 
 	test('AC13: the manifest adds the commands to the existing ARXML Scope submenu only', () => {
 		const manifest = readManifest();
-		const commands = manifest.contributes?.commands ?? [];
-		for (const command of [SELECT_AS_FIRST, COMPARE_TO_STAGED, COMPARE_SELECTED]) {
-			assert.ok(commands.some((entry) => entry.command === command), `${command} is contributed`);
-		}
+		assertContributedCommands(manifest);
 		const submenus = (manifest.contributes?.submenus ?? []).filter((entry) => entry.id === 'arxmlScope.actions');
 		assert.strictEqual(submenus.length, 1, 'there is still exactly one ARXML Scope submenu');
-
-		const items = manifest.contributes?.menus?.['arxmlScope.actions'] ?? [];
-		const whenOf = (command: string): string | undefined => items.find((item) => item.command === command)?.when;
-		assert.strictEqual(whenOf(SELECT_AS_FIRST), 'resourceExtname == .arxml && !listMultiSelection && explorerViewletFocus');
-		assert.strictEqual(
-			whenOf(COMPARE_TO_STAGED),
-			'resourceExtname == .arxml && !listMultiSelection && explorerViewletFocus && arxmlScope.hasCompareSelection'
-		);
-		assert.strictEqual(
-			whenOf(COMPARE_SELECTED),
-			'resourceExtname == .arxml && listDoubleSelection && explorerViewletFocus'
-		);
-
-		const flatEditor = (manifest.contributes?.menus?.['editor/context'] ?? []).filter(
-			(item) => item.command !== undefined && [SELECT_AS_FIRST, COMPARE_TO_STAGED, COMPARE_SELECTED].includes(item.command)
-		);
-		assert.deepStrictEqual(flatEditor, [], 'no diff command is a flat editor/context entry');
+		assertActionMenuWhen(manifest);
+		assertNoFlatEditorCommands(manifest);
 	});
 
 	test('the session-only selection store keeps a URI and clears it', () => {

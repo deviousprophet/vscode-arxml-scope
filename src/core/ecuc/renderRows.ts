@@ -384,22 +384,36 @@ function containerRow(
 	const members = orderMembers(container.parameters, container.references, ctx.sort, ctx.except);
 	const nested = orderContainers(container.containers, ctx.sort, ctx.except);
 	const total = members.parameters.length + members.references.length + nested.length;
-	let child = 1;
-	for (const parameter of members.parameters) {
-		parameterRow(ctx, rows, parameter, level + 1, child, total, row.id, disabled);
-		child++;
-	}
-	for (const reference of members.references) {
-		referenceRow(ctx, rows, reference, level + 1, child, total, row.id, disabled);
-		child++;
-	}
-	for (const container of nested) {
-		containerRow(ctx, rows, container, level + 1, child, total, row.id, disabled);
-		child++;
-	}
+	appendChildRows(ctx, rows, members, nested, level + 1, total, row.id, disabled);
 	row.hasChildren = total > 0;
 	row.empty = !row.hasChildren;
 	row.subtreeSize = rows.length - at - 1;
+}
+
+/** Appends the container's parameters, references and nested containers in order. */
+function appendChildRows(
+	ctx: BuildContext,
+	rows: EcucRow[],
+	members: { parameters: ParameterNode[]; references: ReferenceNode[] },
+	nested: readonly ContainerNode[],
+	level: number,
+	total: number,
+	parentId: string | null,
+	disabledByAncestor: boolean
+): void {
+	let child = 1;
+	for (const parameter of members.parameters) {
+		parameterRow(ctx, rows, parameter, level, child, total, parentId, disabledByAncestor);
+		child++;
+	}
+	for (const reference of members.references) {
+		referenceRow(ctx, rows, reference, level, child, total, parentId, disabledByAncestor);
+		child++;
+	}
+	for (const container of nested) {
+		containerRow(ctx, rows, container, level, child, total, parentId, disabledByAncestor);
+		child++;
+	}
 }
 
 function parameterRow(
@@ -415,7 +429,7 @@ function parameterRow(
 	const value = parameter.displayValue ?? '';
 	// The legacy form quotes a textual value and leaves a numerical one bare.
 	const shown = parameter.numeric ? value : `"${value}"`;
-	const valueKind = parameter.numeric ? (/^(true|false)$/i.test(value) ? 'boolean' : 'numeric') : 'textual';
+	const valueKind = parameterValueKind(parameter, value);
 	const type = parameterType(parameter.definitionDest, valueKind);
 	const condition = ownCondition(parameter, ctx);
 	const definition = definitionFor(ctx, parameter.definitionRef);
@@ -447,6 +461,14 @@ function parameterRow(
 	appendRow(rows, row, condition, disabledByAncestor);
 }
 
+/** The value kind the type column reads: a numeric value may still be a boolean. */
+function parameterValueKind(parameter: ParameterNode, value: string): EcucRow['valueKind'] {
+	if (!parameter.numeric) {
+		return 'textual';
+	}
+	return /^(true|false)$/i.test(value) ? 'boolean' : 'numeric';
+}
+
 function referenceRow(
 	ctx: BuildContext,
 	rows: EcucRow[],
@@ -457,24 +479,11 @@ function referenceRow(
 	parentId: string | null,
 	disabledByAncestor: boolean
 ): void {
-	const target = reference.targetPath ?? reference.targetRawPath ?? '';
-	const rawTarget = reference.targetRawPath ?? target;
-	const sameFile = rawTarget !== '' && resolvePath(ctx.pathIndex, rawTarget) !== undefined;
-	const crossFile =
-		!sameFile && rawTarget !== '' && ctx.referenceResolver !== undefined
-			? ctx.referenceResolver(rawTarget, reference.targetDest)
-			: undefined;
-	const followable = sameFile || crossFile?.followable === true;
-	const followReason = sameFile ? undefined : crossFile?.reason;
+	const target = referenceTarget(reference, ctx);
 	const condition = ownCondition(reference, ctx);
 	const definition = definitionFor(ctx, reference.definitionRef);
 	const definitionCount = definitionCountFor(ctx, reference.definitionRef, definition);
-	const meta: MetaPart[] = [
-		...(reference.instance && reference.contextPaths.length > 0
-			? [contextPart(reference.contextPaths)]
-			: []),
-		...suffixParts(reference, condition),
-	];
+	const meta: MetaPart[] = referenceMeta(reference, condition);
 	const row: EcucRow = {
 		id: ctx.index.idOf(reference) ?? '',
 		kind: 'reference',
@@ -486,21 +495,85 @@ function referenceRow(
 		hasChildren: false,
 		label: reference.name,
 		definitionRef: reference.definitionRef,
-		value: target,
-		shownValue: target,
-		target: rawTarget,
-		followable,
-		...(followReason === undefined ? {} : { followReason }),
-		...(reference.instance && reference.contextPaths.length > 0
-			? { contextPaths: reference.contextPaths.slice() }
-			: {}),
+		value: target.value,
+		shownValue: target.value,
+		target: target.raw,
+		followable: target.followable,
+		...(target.reason === undefined ? {} : { followReason: target.reason }),
+		...contextPathsField(reference),
 		title: reference.definitionRef,
 		meta,
 		comments: commentLines(meta),
-		haystack: haystack({ label: reference.name, value: target, meta }),
+		haystack: haystack({ label: reference.name, value: target.value, meta }),
 		...definitionFields(definition, definitionCount),
 	};
 	appendRow(rows, row, condition, disabledByAncestor);
+}
+
+/** The reference's display value, raw target, and whether/how it can be followed. */
+interface ReferenceTarget {
+	value: string;
+	raw: string;
+	followable: boolean;
+	reason?: string;
+}
+
+function referenceTarget(reference: ReferenceNode, ctx: BuildContext): ReferenceTarget {
+	const value = referenceValue(reference);
+	const raw = reference.targetRawPath ?? value;
+	const sameFile = resolvesInFile(ctx.pathIndex, raw);
+	const crossFile = sameFile ? undefined : crossFileResolution(ctx, raw, reference.targetDest);
+	return targetView(value, raw, sameFile, crossFile);
+}
+
+/** A reference's display path: the resolved target first, then its raw form. */
+function referenceValue(reference: ReferenceNode): string {
+	return reference.targetPath ?? reference.targetRawPath ?? '';
+}
+
+function targetView(
+	value: string,
+	raw: string,
+	sameFile: boolean,
+	crossFile: { followable: boolean; reason?: string } | undefined
+): ReferenceTarget {
+	if (sameFile) {
+		return { value, raw, followable: true };
+	}
+	return { value, raw, followable: crossFile?.followable === true, reason: crossFile?.reason };
+}
+
+function resolvesInFile(pathIndex: Map<string, Range>, raw: string): boolean {
+	return raw !== '' && resolvePath(pathIndex, raw) !== undefined;
+}
+
+function crossFileResolution(
+	ctx: BuildContext,
+	raw: string,
+	targetDest: string | undefined
+): { followable: boolean; reason?: string } | undefined {
+	if (raw === '' || ctx.referenceResolver === undefined) {
+		return undefined;
+	}
+	return ctx.referenceResolver(raw, targetDest);
+}
+
+/** The instance's context-path chip, then the usual suffix meta. */
+function referenceMeta(reference: ReferenceNode, condition: RowCondition | undefined): MetaPart[] {
+	const parts: MetaPart[] = [];
+	if (hasContextPaths(reference)) {
+		parts.push(contextPart(reference.contextPaths));
+	}
+	parts.push(...suffixParts(reference, condition));
+	return parts;
+}
+
+function hasContextPaths(reference: ReferenceNode): boolean {
+	return Boolean(reference.instance) && reference.contextPaths.length > 0;
+}
+
+function contextPathsField(reference: ReferenceNode): { contextPaths?: string[] } {
+	return hasContextPaths(reference) ? { contextPaths: reference.contextPaths.slice() } : {};
 }
 
 /** Evaluates a node's own condition, or `undefined` when it has none. */

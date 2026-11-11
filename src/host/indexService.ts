@@ -7,6 +7,7 @@
  * index is rebuilt from the workspace on activation.
  */
 import { createReadStream, promises as fs } from 'fs';
+import type { Stats } from 'fs';
 import * as vscode from 'vscode';
 import { IndexBuilder } from '../core/index/indexBuilder';
 import { compileExcludes } from '../core/index/glob';
@@ -69,39 +70,66 @@ function statusBarText(stats: IndexStats, building: boolean, modeLabel?: string)
 	return `$(database) ARXML Scope: ${fileCountText(stats.files)} indexed${suffix}`;
 }
 
+/** The streaming decoder state for one file read. */
+interface FileDecoding {
+	decoder?: TextDecoder;
+	head: Buffer;
+}
+
 /** Reads one ARXML file and returns its index contribution. */
 async function readFileIndex(uri: vscode.Uri, maxBytes: number): Promise<FileIndex | undefined> {
 	const stat = await fs.stat(uri.fsPath);
-	if (!stat.isFile() || stat.size > maxBytes) {
+	if (!isIndexableFile(stat, maxBytes)) {
 		return undefined;
 	}
 	const builder = new IndexBuilder(uri.toString());
-	const stream = createReadStream(uri.fsPath, { highWaterMark: CHUNK_BYTES });
-	let decoder: TextDecoder | undefined;
-	let head = Buffer.alloc(0);
-	for await (const chunk of stream) {
-		if (!Buffer.isBuffer(chunk)) {
-			continue;
+	const decoding: FileDecoding = { head: Buffer.alloc(0) };
+	for await (const chunk of createReadStream(uri.fsPath, { highWaterMark: CHUNK_BYTES })) {
+		if (!writeChunk(builder, decoding, chunk)) {
+			return undefined;
 		}
-		if (decoder === undefined) {
-			head = Buffer.concat([head, chunk]);
-			if (head.length < 3) {
-				continue;
-			}
-			const detected = detectEncoding(head);
-			if (detected === undefined) {
-				return undefined;
-			}
-			decoder = new TextDecoder(detected.label);
-			builder.write(decoder.decode(head.subarray(detected.bomBytes), { stream: true }));
-			continue;
-		}
-		builder.write(decoder.decode(chunk, { stream: true }));
 	}
-	if (decoder !== undefined) {
-		builder.write(decoder.decode());
-	}
+	finishDecoding(builder, decoding);
 	return builder.finish();
+}
+
+/** The file still has to exist, be a file and fit the size cap. */
+function isIndexableFile(stat: Stats, maxBytes: number): boolean {
+	return stat.isFile() && stat.size <= maxBytes;
+}
+
+/** Feeds one stream chunk through the decoder, detecting the encoding on the head. */
+function writeChunk(builder: IndexBuilder, decoding: FileDecoding, chunk: Buffer): boolean {
+	if (!Buffer.isBuffer(chunk)) {
+		return true;
+	}
+	if (decoding.decoder !== undefined) {
+		builder.write(decoding.decoder.decode(chunk, { stream: true }));
+		return true;
+	}
+	decoding.head = Buffer.concat([decoding.head, chunk]);
+	if (decoding.head.length < 3) {
+		return true;
+	}
+	return startDecoding(builder, decoding);
+}
+
+/** Creates the decoder once the first bytes identify the encoding; false on failure. */
+function startDecoding(builder: IndexBuilder, decoding: FileDecoding): boolean {
+	const detected = detectEncoding(decoding.head);
+	if (detected === undefined) {
+		return false;
+	}
+	decoding.decoder = new TextDecoder(detected.label);
+	builder.write(decoding.decoder.decode(decoding.head.subarray(detected.bomBytes), { stream: true }));
+	return true;
+}
+
+/** Flushes the decoder's pending bytes at end of stream. */
+function finishDecoding(builder: IndexBuilder, decoding: FileDecoding): void {
+	if (decoding.decoder !== undefined) {
+		builder.write(decoding.decoder.decode());
+	}
 }
 
 export class IndexService implements vscode.Disposable, DefinitionSource {

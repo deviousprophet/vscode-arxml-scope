@@ -223,22 +223,40 @@ function detailsDraft(
 	if (previous) {
 		input.value = previous.input.value;
 	}
+	const restored = restoredDetailsDraft(previous, original);
 	const edit: DetailsEdit = {
 		rowId: row.id,
 		field: field,
 		input: input,
 		error: error,
-		pending: previous ? previous.pending : false,
+		pending: restored.pending,
 		...(type === undefined ? {} : { type }),
-		original: previous ? previous.original : original
+		original: restored.original
 	};
 	detailsEdits[field] = edit;
-	if (previous && previous.error && previous.error.textContent) {
-		edit.error.textContent = previous.error.textContent;
-		edit.input.setAttribute('aria-invalid', 'true');
-	}
+	restoreDetailsError(edit, previous);
 	detailsRegisterKeydown(input, edit);
 	return edit;
+}
+
+/** The draft fields a re-scan keeps from the previous control. */
+function restoredDetailsDraft(
+	previous: DetailsEdit | null,
+	original: string
+): { pending: boolean; original: string } {
+	if (previous === null) {
+		return { pending: false, original };
+	}
+	return { pending: previous.pending, original: previous.original };
+}
+
+/** Carries a refusal that survived the re-scan onto the new control. */
+function restoreDetailsError(edit: DetailsEdit, previous: DetailsEdit | null): void {
+	if (previous === null || !previous.error || !previous.error.textContent) {
+		return;
+	}
+	edit.error.textContent = previous.error.textContent;
+	edit.input.setAttribute('aria-invalid', 'true');
 }
 
 /** The details value control for one parameter row (input or Boolean select). */
@@ -246,27 +264,15 @@ export function detailsValueInput(row: any, data: any): any {
 	const rowElement = document.createElement('div');
 	rowElement.className = 'inspector-row';
 	rowElement.appendChild(inspectorElement('span', 'inspector-key', 'Value'));
-	const type = row.parameterType || data.type || '';
-	const boolean = type === 'Boolean' && /^(true|false)$/i.test(String(row.value ?? ''));
+	const type = detailsValueType(row, data);
+	const boolean = isBooleanValueInput(type, row.value);
 	const input: any = document.createElement(boolean ? 'select' : 'input');
-	input.id = 'details-value';
-	input.className = 'details-value';
-	input.setAttribute('data-node-id', row.id);
-	input.setAttribute('data-field', 'value');
-	input.setAttribute('data-value-type', type || row.valueKind || '');
-	input.setAttribute('aria-label', 'Value of ' + (row.label || data.label || 'parameter'));
-	const original = boolean ? (String(row.value ?? '').toLowerCase() === 'false' ? 'false' : 'true') : row.value ?? '';
+	detailsValueAttributes(input, row, data, type);
+	const original = detailsValueOriginal(row.value, boolean);
 	if (boolean) {
-		for (const option of ['true', 'false']) {
-			const element = document.createElement('option');
-			element.value = option;
-			element.textContent = option;
-			input.appendChild(element);
-		}
+		appendBooleanOptions(input);
 	} else {
-		input.type = 'text';
-		input.spellcheck = false;
-		input.inputMode = type === 'Integer' ? 'numeric' : type === 'Float' ? 'decimal' : 'text';
+		applyValueInputMode(input, type);
 	}
 	input.value = original;
 	const error = detailsErrorSpan();
@@ -279,6 +285,60 @@ export function detailsValueInput(row: any, data: any): any {
 		}
 	});
 	return rowElement;
+}
+
+function isBooleanValueInput(type: string, value: string | undefined): boolean {
+	return type === 'Boolean' && /^(true|false)$/i.test(String(value ?? ''));
+}
+
+function detailsValueType(row: { parameterType?: string }, data: { type?: string }): string {
+	return row.parameterType || data.type || '';
+}
+
+function detailsValueAttributes(
+	input: HTMLInputElement | HTMLSelectElement,
+	row: { id: string; valueKind?: string; label?: string },
+	data: { label?: string },
+	type: string
+): void {
+	input.id = 'details-value';
+	input.className = 'details-value';
+	input.setAttribute('data-node-id', row.id);
+	input.setAttribute('data-field', 'value');
+	input.setAttribute('data-value-type', detailsValueTypeName(type, row));
+	input.setAttribute('aria-label', 'Value of ' + detailsValueLabel(row, data));
+}
+
+function detailsValueTypeName(type: string, row: { valueKind?: string }): string {
+	return type || row.valueKind || '';
+}
+
+function detailsValueLabel(row: { label?: string }, data: { label?: string }): string {
+	return row.label || data.label || 'parameter';
+}
+
+function detailsValueOriginal(value: string | undefined, boolean: boolean): string {
+	const text = value ?? '';
+	return boolean ? booleanText(String(text)) : text;
+}
+
+function booleanText(text: string): string {
+	return text.toLowerCase() === 'false' ? 'false' : 'true';
+}
+
+function appendBooleanOptions(input: HTMLSelectElement): void {
+	for (const option of ['true', 'false']) {
+		const element = document.createElement('option');
+		element.value = option;
+		element.textContent = option;
+		input.appendChild(element);
+	}
+}
+
+function applyValueInputMode(input: HTMLInputElement, type: string): void {
+	input.type = 'text';
+	input.spellcheck = false;
+	input.inputMode = type === 'Integer' ? 'numeric' : type === 'Float' ? 'decimal' : 'text';
 }
 
 function detailsFieldInput(row: any, field: string, label: string, value: string): any {

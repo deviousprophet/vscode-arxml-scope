@@ -955,14 +955,20 @@ function renderKeepingAnchor(swap: () => void): void {
 	const scrollTop = views ? views.getScrollTop() : 0;
 	swap();
 	renderWindow(true);
-	if (anchor && virtualIndexForKey(anchor.key) !== undefined) {
-		restoreAnchor(anchor);
-	} else if (views) {
-		views.setScrollTop(scrollTop);
-	}
+	restoreViewport(anchor, scrollTop);
 	renderWindow(true);
 	updateSelection();
 	updateEmptyState();
+}
+/** Restores the captured line, or the raw scroll offset when that line is gone. */
+function restoreViewport(anchor: ReturnType<typeof captureAnchor>, scrollTop: number): void {
+	if (anchor && virtualIndexForKey(anchor.key) !== undefined) {
+		restoreAnchor(anchor);
+		return;
+	}
+	if (views) {
+		views.setScrollTop(scrollTop);
+	}
 }
 function updateSelection() {
 	if (!views) {
@@ -1544,11 +1550,23 @@ export function handleDiffMessage(message: DiffProviderToWebview): void {
 		return;
 	}
 	if (message.type === 'document') {
-		notice.textContent = '';
-		delete notice.dataset.kind;
-		semanticMatching = message.semantic !== false;
-		renderKeepingAnchor(function () { setDocument(message.document); });
-	} else if (message.type === 'matchModeState') {
+		applyDiffDocument(message);
+		return;
+	}
+	handleDiffStatusMessage(message);
+}
+
+/** Installs a new document without dropping the visible line. */
+function applyDiffDocument(message: Extract<DiffProviderToWebview, { type: 'document' }>): void {
+	notice.textContent = '';
+	delete notice.dataset.kind;
+	semanticMatching = message.semantic !== false;
+	renderKeepingAnchor(function () { setDocument(message.document); });
+}
+
+/** Mode and error updates keep the current document on screen. */
+function handleDiffStatusMessage(message: DiffProviderToWebview): void {
+	if (message.type === 'matchModeState') {
 		semanticMatching = message.semantic !== false;
 		updateViewButtons();
 	} else if (message.type === 'error') {

@@ -10,7 +10,7 @@
  */
 import { performance } from 'node:perf_hooks';
 import { IndexBuilder } from '../../core/index/indexBuilder';
-import type { FileIndex, IndexDefinition, IndexReference } from '../../core/index/indexModel';
+import type { FileIndex, IndexDefinition, IndexElement, IndexReference } from '../../core/index/indexModel';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
 import { arxmlDocument, arxmlPreamble, indent, measureStage, retainedBytes } from './benchmarkUtils';
 
@@ -19,6 +19,13 @@ const PARAMETERS_PER_CONTAINER = 120;
 const MAX_STEP_MS = 60_000;
 const MAX_RETAINED_BYTES = 1024 * 1024 * 1024;
 const MAX_FIND_REFERENCES_MS = 5_000;
+const REFERENCE_SAVE_COUNT = 20_000;
+
+/** The container's element and the references that currently resolve to it. */
+interface ContainerReferences {
+	container: IndexElement | undefined;
+	references: readonly IndexReference[];
+}
 
 function withShiftedRanges(file: FileIndex, shift: number): FileIndex {
 	return {
@@ -95,14 +102,44 @@ function measure<T>(name: string, sourceMiB: number, action: () => T, records: (
 }
 
 function run(): void {
-	if (typeof global.gc !== 'function') {
-		throw new Error('Run with --expose-gc');
-	}
+	requireGc();
 	const baseline = retainedBytes();
 	const text = buildEcucText();
 	const sourceMiB = Math.round(text.length / 1048576);
+	const file = buildLargeIndex(text, sourceMiB);
 
-	const file: FileIndex = measure(
+	const index = new WorkspaceIndex();
+	index.upsert(file);
+	index.upsert(definitionFile());
+	const container = lookupLargeIndex(index, sourceMiB);
+
+	checkIncrementalUpsert(index);
+
+	const refs = referenceFixtures(5000, 'file:///refs.arxml', 1);
+	index.upsert({ uri: 'file:///refs.arxml', packages: [], elements: [], references: refs, definitions: [] });
+	checkWarmReferences(index, container, refs.length);
+
+	// Save-then-Find-References. A value or reference save must use the incremental
+	// reverse map; a structural save pays the lazy full rebuild. The build count is
+	// the fast-path proof; the elapsed bound is deliberately generous.
+	checkReferenceOnlySave(index, container, refs.length + REFERENCE_SAVE_COUNT);
+
+	// A value edit rebuilds the file's elements but leaves its target shape intact.
+	const valueEdited = checkValueEditedSave(index, file, refs.length);
+	// A path change is structural: the map is invalidated and the query rebuilds it.
+	checkStructuralSave(index, valueEdited, refs.length);
+
+	reportRetention(baseline, file, sourceMiB);
+}
+
+function requireGc(): void {
+	if (typeof global.gc !== 'function') {
+		throw new Error('Run with --expose-gc');
+	}
+}
+
+function buildLargeIndex(text: string, sourceMiB: number): FileIndex {
+	return measure(
 		'index-build',
 		sourceMiB,
 		() => {
@@ -112,9 +149,9 @@ function run(): void {
 		},
 		(index) => index.elements.length + index.references.length + index.definitions.length
 	);
+}
 
-	const index = new WorkspaceIndex();
-	index.upsert(file);
+function definitionFile(): FileIndex {
 	const definition: IndexDefinition = {
 		path: '/SyntheticPkg/ModuleDef/Container0/Parameter0',
 		kind: 'ECUC-INTEGER-PARAM-DEF',
@@ -122,14 +159,17 @@ function run(): void {
 		file: 'file:///module-def.arxml',
 		range: { start: 0, end: 1 },
 	};
-	index.upsert({
+	return {
 		uri: 'file:///module-def.arxml',
 		packages: [],
 		elements: [],
 		references: [],
 		definitions: [definition],
-	});
+	};
+}
 
+/** Measures both lookups and returns the container the later stages query. */
+function lookupLargeIndex(index: WorkspaceIndex, sourceMiB: number): IndexElement {
 	const found = measure(
 		'index-lookup',
 		sourceMiB,
@@ -142,9 +182,11 @@ function run(): void {
 	if (found.container === undefined || found.definition === undefined) {
 		throw new Error('index lookup did not resolve the large file');
 	}
+	return found.container;
+}
 
-	// A single-file change must update the live maps, not rebuild the 216k-element
-	// workspace. This is the G8 guard.
+/** A single-file change must update the live maps, not rebuild the workspace (G8 guard). */
+function checkIncrementalUpsert(index: WorkspaceIndex): void {
 	const extra: FileIndex = {
 		uri: 'file:///extra.arxml',
 		packages: [],
@@ -179,23 +221,30 @@ function run(): void {
 		throw new Error(`upsert-one-file took ${upsertElapsedMs} ms; limit is 50 ms`);
 	}
 	index.remove('file:///extra.arxml');
+}
 
-	// Find References must answer from the reverse map after the first build.
+/** References that all target the large-file container; `stride` spreads the ranges. */
+function referenceFixtures(count: number, file: string, stride: number): IndexReference[] {
 	const refs: IndexReference[] = [];
-	for (let at = 0; at < 5000; at++) {
+	for (let at = 0; at < count; at++) {
+		const start = at * stride;
 		refs.push({
 			kind: 'reference',
 			targetRawPath: '/SyntheticPkg/Module0/Container0',
 			targetDest: 'ECUC-CONTAINER-VALUE',
 			contextPaths: [],
-			file: 'file:///refs.arxml',
-			range: { start: at, end: at + 1 },
+			file,
+			range: { start, end: start + 1 },
 		});
 	}
-	index.upsert({ uri: 'file:///refs.arxml', packages: [], elements: [], references: refs, definitions: [] });
-	index.referencesFor(found.container);
+	return refs;
+}
+
+/** Find References must answer from the reverse map after the first build. */
+function checkWarmReferences(index: WorkspaceIndex, container: IndexElement, expected: number): void {
+	index.referencesFor(container);
 	const referencesStarted = performance.now();
-	const references = index.referencesFor(found.container);
+	const references = index.referencesFor(container);
 	const referencesElapsedMs = Math.round(performance.now() - referencesStarted);
 	console.log(
 		JSON.stringify({
@@ -205,27 +254,28 @@ function run(): void {
 			elapsedMs: referencesElapsedMs,
 		})
 	);
-	if (references.length !== refs.length) {
-		throw new Error(`referencesFor returned ${references.length} of ${refs.length} references`);
+	if (references.length !== expected) {
+		throw new Error(`referencesFor returned ${references.length} of ${expected} references`);
 	}
 	if (referencesElapsedMs > 100) {
 		throw new Error(`references-warm took ${referencesElapsedMs} ms; limit is 100 ms`);
 	}
+}
 
-	// Save-then-Find-References. A value or reference save must use the incremental
-	// reverse map; a structural save pays the lazy full rebuild. The build count is
-	// the fast-path proof; the elapsed bound is deliberately generous.
-	const referenceSave: IndexReference[] = [];
-	for (let at = 0; at < 20_000; at++) {
-		referenceSave.push({
-			kind: 'reference',
-			targetRawPath: '/SyntheticPkg/Module0/Container0',
-			targetDest: 'ECUC-CONTAINER-VALUE',
-			contextPaths: [],
-			file: 'file:///refs-extra.arxml',
-			range: { start: at * 2, end: at * 2 + 1 },
-		});
+/** True when the container and its reference count match what the stage expects. */
+function containerReferences(index: WorkspaceIndex): ContainerReferences {
+	const container = index.element('/SyntheticPkg/Module0/Container0');
+	return { container, references: container === undefined ? [] : index.referencesFor(container) };
+}
+
+function requireReferences(result: ContainerReferences, expected: number, label: string): void {
+	if (result.container === undefined || result.references.length !== expected) {
+		throw new Error(`${label} returned ${result.references.length} references`);
 	}
+}
+
+function checkReferenceOnlySave(index: WorkspaceIndex, container: IndexElement, expected: number): void {
+	const referenceSave = referenceFixtures(REFERENCE_SAVE_COUNT, 'file:///refs-extra.arxml', 2);
 	const referenceSaveStarted = performance.now();
 	index.upsert({
 		uri: 'file:///refs-extra.arxml',
@@ -234,7 +284,7 @@ function run(): void {
 		references: referenceSave,
 		definitions: [],
 	});
-	const savedReferences = index.referencesFor(found.container);
+	const savedReferences = index.referencesFor(container);
 	const referenceSaveElapsedMs = Math.round(performance.now() - referenceSaveStarted);
 	const referenceSaveBuilds = index.referenceMapBuildCount;
 	console.log(
@@ -246,7 +296,7 @@ function run(): void {
 			elapsedMs: referenceSaveElapsedMs,
 		})
 	);
-	if (savedReferences.length !== refs.length + referenceSave.length) {
+	if (savedReferences.length !== expected) {
 		throw new Error(`reference-only save returned ${savedReferences.length} references`);
 	}
 	if (referenceSaveBuilds !== 1) {
@@ -256,65 +306,64 @@ function run(): void {
 		throw new Error(`reference-only save took ${referenceSaveElapsedMs} ms; limit is ${MAX_FIND_REFERENCES_MS} ms`);
 	}
 	index.remove('file:///refs-extra.arxml');
+}
 
-	// A value edit rebuilds the file's elements but leaves its target shape intact.
+function checkValueEditedSave(index: WorkspaceIndex, file: FileIndex, expected: number): FileIndex {
 	const valueEdited = withShiftedRanges(file, 1);
 	const valueSaveStarted = performance.now();
 	index.upsert(valueEdited);
-	const editedContainer = index.element('/SyntheticPkg/Module0/Container0');
-	const editedReferences = editedContainer === undefined ? [] : index.referencesFor(editedContainer);
+	const result = containerReferences(index);
 	const valueSaveElapsedMs = Math.round(performance.now() - valueSaveStarted);
 	const valueSaveBuilds = index.referenceMapBuildCount;
 	console.log(
 		JSON.stringify({
 			_type: 'index-find-references',
 			name: 'value-edited-target-save',
-			references: editedReferences.length,
+			references: result.references.length,
 			builds: valueSaveBuilds,
 			elapsedMs: valueSaveElapsedMs,
 		})
 	);
-	if (editedContainer === undefined || editedReferences.length !== refs.length) {
-		throw new Error(`value-edited target save returned ${editedReferences.length} references`);
-	}
+	requireReferences(result, expected, 'value-edited target save');
 	if (valueSaveBuilds !== 1) {
 		throw new Error(`value-edited target save rebuilt the map ${valueSaveBuilds} times`);
 	}
 	if (valueSaveElapsedMs > MAX_FIND_REFERENCES_MS) {
 		throw new Error(`value-edited target save took ${valueSaveElapsedMs} ms; limit is ${MAX_FIND_REFERENCES_MS} ms`);
 	}
+	return valueEdited;
+}
 
-	// A path change is structural: the map is invalidated and the query rebuilds it.
+function checkStructuralSave(index: WorkspaceIndex, file: FileIndex, expected: number): void {
 	const structural = withPathChange(
-		valueEdited,
+		file,
 		'/SyntheticPkg/Module0/Container1799',
 		'/SyntheticPkg/Module0/Container1799X'
 	);
 	const structuralStarted = performance.now();
 	index.upsert(structural);
-	const structuralContainer = index.element('/SyntheticPkg/Module0/Container0');
-	const structuralReferences = structuralContainer === undefined ? [] : index.referencesFor(structuralContainer);
+	const result = containerReferences(index);
 	const structuralElapsedMs = Math.round(performance.now() - structuralStarted);
 	const structuralBuilds = index.referenceMapBuildCount;
 	console.log(
 		JSON.stringify({
 			_type: 'index-find-references',
 			name: 'structural-save-fallback',
-			references: structuralReferences.length,
+			references: result.references.length,
 			builds: structuralBuilds,
 			elapsedMs: structuralElapsedMs,
 		})
 	);
-	if (structuralContainer === undefined || structuralReferences.length !== refs.length) {
-		throw new Error(`structural save returned ${structuralReferences.length} references`);
-	}
+	requireReferences(result, expected, 'structural save');
 	if (structuralBuilds !== 2) {
 		throw new Error(`structural save did not rebuild the map (${structuralBuilds} builds)`);
 	}
 	if (structuralElapsedMs > MAX_FIND_REFERENCES_MS) {
 		throw new Error(`structural save took ${structuralElapsedMs} ms; limit is ${MAX_FIND_REFERENCES_MS} ms`);
 	}
+}
 
+function reportRetention(baseline: number, file: FileIndex, sourceMiB: number): void {
 	const total = Math.max(0, retainedBytes() - baseline);
 	const totalMiB = Math.round(total / 1048576);
 	console.log(

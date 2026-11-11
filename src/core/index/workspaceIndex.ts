@@ -55,22 +55,11 @@ export class WorkspaceIndex {
 	upsert(file: FileIndex): void {
 		const previous = this.files.get(file.uri);
 		const incremental = this.canUpdateIncrementally(previous, file);
-		if (incremental && previous !== undefined) {
-			// Resolve the old references against the lookup that produced them.
-			this.removeReferenceContribution(previous);
-			this.removeElementKeys(previous);
-		}
+		this.dropReplacedContribution(previous, incremental);
 		this.files.set(file.uri, file);
 		this.applyLookupDelta(previous, file);
-		if (incremental) {
-			this.addReferenceContribution(file);
-		} else {
-			this.invalidateReferenceMap();
-		}
-		this.generation++;
-		if (incremental && this.referencesByTarget !== undefined) {
-			this.referencesAt = this.generation;
-		}
+		this.installNextContribution(file, incremental);
+		this.bumpGeneration(incremental);
 		this.notify();
 	}
 
@@ -81,21 +70,44 @@ export class WorkspaceIndex {
 			return false;
 		}
 		const incremental = this.canRemoveIncrementally(previous);
-		if (incremental) {
-			this.removeReferenceContribution(previous);
-			this.removeElementKeys(previous);
-		}
+		this.dropReplacedContribution(previous, incremental);
 		this.files.delete(uri);
 		this.applyLookupDelta(previous, undefined);
 		if (!incremental) {
 			this.invalidateReferenceMap();
 		}
+		this.bumpGeneration(incremental);
+		this.notify();
+		return true;
+	}
+
+	/**
+	 * Drops the old references and keys before an incremental replacement, using
+	 * the lookup state that produced them.
+	 */
+	private dropReplacedContribution(previous: FileIndex | undefined, incremental: boolean): void {
+		if (!incremental || previous === undefined) {
+			return;
+		}
+		this.removeReferenceContribution(previous);
+		this.removeElementKeys(previous);
+	}
+
+	/** Adds the new references on the fast path, or invalidates the map otherwise. */
+	private installNextContribution(file: FileIndex, incremental: boolean): void {
+		if (incremental) {
+			this.addReferenceContribution(file);
+			return;
+		}
+		this.invalidateReferenceMap();
+	}
+
+	/** Advances the mutation counter and keeps a live reverse map current. */
+	private bumpGeneration(incremental: boolean): void {
 		this.generation++;
 		if (incremental && this.referencesByTarget !== undefined) {
 			this.referencesAt = this.generation;
 		}
-		this.notify();
-		return true;
 	}
 
 	/** Replaces the whole index in one notification (a full rebuild). */
@@ -302,11 +314,7 @@ export class WorkspaceIndex {
 		// Duplicates of one identity resolve through their range order, while the
 		// stable key uses declaration order. Only canonical order on both sides keeps
 		// those the same element after a shape-preserving update.
-		return (
-			targetShape(previous) === targetShape(next) &&
-			hasCanonicalDuplicateOrder(previous) &&
-			hasCanonicalDuplicateOrder(next)
-		);
+		return keepsCanonicalOrder(previous, next);
 	}
 
 	/** True when removing the file cannot change another file's resolution. */
@@ -316,10 +324,15 @@ export class WorkspaceIndex {
 
 	/** The reverse map is current only while it matches the live lookups and generation. */
 	private referenceMapCurrent(): boolean {
+		return this.referenceMapsLive() && this.lookupsLive() && this.referencesAt === this.generation;
+	}
+
+	private referenceMapsLive(): boolean {
+		return this.referencesByTarget !== undefined && this.elementKeys !== undefined;
+	}
+
+	private lookupsLive(): boolean {
 		return (
-			this.referencesByTarget !== undefined &&
-			this.elementKeys !== undefined &&
-			this.referencesAt === this.generation &&
 			this.lookupsValid &&
 			this.lookupsHealthy &&
 			this.elements !== undefined &&
@@ -444,9 +457,17 @@ export class WorkspaceIndex {
 	}
 
 	private ensureReferenceMap(): void {
-		if (this.referencesAt === this.generation && this.referencesByTarget !== undefined) {
+		if (this.referenceMapFresh()) {
 			return;
 		}
+		this.buildReferenceMap();
+	}
+
+	private referenceMapFresh(): boolean {
+		return this.referencesAt === this.generation && this.referencesByTarget !== undefined;
+	}
+
+	private buildReferenceMap(): void {
 		const map = new Map<string, IndexReference[]>();
 		const keys = new WeakMap<IndexElement, string>();
 		// Every target identity must exist before any reference is resolved: a
@@ -473,29 +494,14 @@ export class WorkspaceIndex {
 		if (cached !== undefined) {
 			return cached;
 		}
-		if (target.path === undefined) {
+		if (!isKeyableTarget(target)) {
 			return undefined;
 		}
 		const file = this.files.get(target.file);
 		if (file === undefined) {
 			return undefined;
 		}
-		const ordinals = new Map<string, number>();
-		for (const element of file.elements) {
-			const key = elementKey(element, ordinals);
-			if (key === undefined) {
-				continue;
-			}
-			if (
-				element.path === target.path &&
-				element.kind === target.kind &&
-				element.range.start === target.range.start &&
-				element.range.end === target.range.end
-			) {
-				return key;
-			}
-		}
-		return undefined;
+		return keyForRangeMatch(file, target);
 	}
 }
 
@@ -527,17 +533,26 @@ function updateLookupItems<T>(
 ): void {
 	for (const item of items) {
 		const path = pathOf(item);
-		if (path === undefined) {
-			continue;
+		if (path !== undefined) {
+			updateItemPaths(lookup, path, item, update);
 		}
-		const segments = splitPath(path);
-		if (segments.length === 0) {
-			continue;
-		}
-		update(lookup.exact, '/' + segments.join('/'), item);
-		for (let start = 0; start < segments.length; start++) {
-			update(lookup.suffix, '/' + segments.slice(start).join('/'), item);
-		}
+	}
+}
+
+/** Applies one item's exact and suffix keys to the lookup maps. */
+function updateItemPaths<T>(
+	lookup: PathLookup<T>,
+	path: string,
+	item: T,
+	update: (map: Map<string, T[]>, key: string, item: T) => void
+): void {
+	const segments = splitPath(path);
+	if (segments.length === 0) {
+		return;
+	}
+	update(lookup.exact, '/' + segments.join('/'), item);
+	for (let start = 0; start < segments.length; start++) {
+		update(lookup.suffix, '/' + segments.slice(start).join('/'), item);
 	}
 }
 
@@ -611,6 +626,32 @@ function addElementKeys(keys: WeakMap<IndexElement, string>, file: FileIndex): v
 	}
 }
 
+/** Elements without an AR path are not targets and have no stable key. */
+function isKeyableTarget(target: IndexElement): boolean {
+	return target.path !== undefined;
+}
+
+/** The key of the indexed element at the target's own range, in declaration order. */
+function keyForRangeMatch(file: FileIndex, target: IndexElement): string | undefined {
+	const ordinals = new Map<string, number>();
+	for (const element of file.elements) {
+		const key = elementKey(element, ordinals);
+		if (key !== undefined && sameTargetIdentity(element, target)) {
+			return key;
+		}
+	}
+	return undefined;
+}
+
+/** Path, kind and range all agree, so the element is the one the host asked about. */
+function sameTargetIdentity(element: IndexElement, target: IndexElement): boolean {
+	return element.path === target.path && element.kind === target.kind && sameRange(element.range, target.range);
+}
+
+function sameRange(left: { start: number; end: number }, right: { start: number; end: number }): boolean {
+	return left.start === right.start && left.end === right.end;
+}
+
 /**
  * The ordered target-bearing sequence that the stable keys depend on. Value,
  * condition, comment, range, `contentHash`, `uuid` and reference changes leave
@@ -644,23 +685,40 @@ function definitionRefPart(element: IndexElement): string {
 function hasCanonicalDuplicateOrder(file: FileIndex): boolean {
 	const last = new Map<string, IndexElement>();
 	for (const element of file.elements) {
-		const path = element.path;
-		if (path === undefined) {
-			continue;
+		if (!recordInDeclarationOrder(last, element)) {
+			return false;
 		}
-		const identity = `${path}\u0001${element.kind}\u0001${definitionRefPart(element)}`;
-		const before = last.get(identity);
-		if (before !== undefined) {
-			if (before.range.start > element.range.start) {
-				return false;
-			}
-			if (before.range.start === element.range.start && before.range.end > element.range.end) {
-				return false;
-			}
-		}
-		last.set(identity, element);
 	}
 	return true;
+}
+
+/** Records one element and reports whether it followed its identity's previous copy. */
+function recordInDeclarationOrder(last: Map<string, IndexElement>, element: IndexElement): boolean {
+	const path = element.path;
+	if (path === undefined) {
+		return true;
+	}
+	const identity = `${path}\u0001${element.kind}\u0001${definitionRefPart(element)}`;
+	const before = last.get(identity);
+	const inOrder = before === undefined || !outOfDeclarationOrder(before, element);
+	last.set(identity, element);
+	return inOrder;
+}
+
+function outOfDeclarationOrder(before: IndexElement, element: IndexElement): boolean {
+	return (
+		before.range.start > element.range.start ||
+		(before.range.start === element.range.start && before.range.end > element.range.end)
+	);
+}
+
+/** True when a shape-preserving update keeps the duplicate order canonical on both sides. */
+function keepsCanonicalOrder(previous: FileIndex, next: FileIndex): boolean {
+	return (
+		targetShape(previous) === targetShape(next) &&
+		hasCanonicalDuplicateOrder(previous) &&
+		hasCanonicalDuplicateOrder(next)
+	);
 }
 
 /** `referencesFor` order: file URI, then start (and end as a stable tiebreak). */

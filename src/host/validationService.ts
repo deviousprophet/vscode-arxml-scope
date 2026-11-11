@@ -26,9 +26,17 @@ function validationCaps(): { perFile: number; total: number } {
 	const perFile = config.get<number>('maxDiagnosticsPerFile', 500);
 	const total = config.get<number>('maxDiagnostics', 5000);
 	return {
-		perFile: Number.isFinite(perFile) && perFile >= 0 ? Math.floor(perFile) : 500,
-		total: Number.isFinite(total) && total >= 0 ? Math.floor(total) : 5000,
+		perFile: nonNegativeCount(perFile, 500),
+		total: nonNegativeCount(total, 5000),
 	};
+}
+
+/** A finite, non-negative integer, or the fallback for a missing/negative setting. */
+function nonNegativeCount(value: number, fallback: number): number {
+	if (!Number.isFinite(value) || value < 0) {
+		return fallback;
+	}
+	return Math.floor(value);
 }
 
 /** The cross-file rule mode; `auto` needs at least one indexed definition. */

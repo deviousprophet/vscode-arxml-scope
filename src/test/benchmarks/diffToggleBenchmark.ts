@@ -73,18 +73,38 @@ function run(): void {
 			retainedMiB,
 		})
 	);
-	if (semantic.document.summary.renamed === 0) {
+	requireRenamedFixture(semantic.document.summary.renamed);
+	requireNoSecondDocument(equivalentStrict.changed);
+	requireFirstBuilds(semanticFirstMs, strictFirstMs, equivalentFirstMs);
+	requireCachedSwitch(cachedMs, equivalentCachedMs);
+	requireToggleRetention(retainedMiB);
+}
+
+function requireRenamedFixture(renamed: number): void {
+	if (renamed === 0) {
 		throw new Error('the renamed fixture paired no containers');
 	}
-	if (equivalentStrict.changed) {
+}
+
+function requireNoSecondDocument(changed: boolean): void {
+	if (changed) {
 		throw new Error('a no-rename pair posted a second document');
 	}
+}
+
+function requireFirstBuilds(semanticFirstMs: number, strictFirstMs: number, equivalentFirstMs: number): void {
 	if (semanticFirstMs > MAX_FIRST_MS || strictFirstMs > MAX_FIRST_MS || equivalentFirstMs > MAX_FIRST_MS) {
 		throw new Error(`a first build exceeded ${MAX_FIRST_MS} ms`);
 	}
+}
+
+function requireCachedSwitch(cachedMs: number, equivalentCachedMs: number): void {
 	if (cachedMs > MAX_CACHED_MS || equivalentCachedMs > MAX_CACHED_MS) {
 		throw new Error(`a cached switch exceeded ${MAX_CACHED_MS} ms`);
 	}
+}
+
+function requireToggleRetention(retainedMiB: number): void {
 	if (retainedMiB * 1048576 > MAX_RETAINED_BYTES) {
 		throw new Error(`the toggle benchmark retained ${retainedMiB} MiB; limit is ${MAX_RETAINED_BYTES / 1048576} MiB`);
 	}
