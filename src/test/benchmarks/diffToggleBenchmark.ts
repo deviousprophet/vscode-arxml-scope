@@ -9,6 +9,7 @@ import { performance } from 'node:perf_hooks';
 import type { EcucRow } from '../../core/ecuc/renderRows';
 import { DiffSession } from '../../core/diff/diffSession';
 import type { DiffPreparedSide } from '../../core/diff/diffSession';
+import { containerRows, retainedBytes, retainedDelta } from './benchmarkUtils';
 
 const MAX_FIRST_MS = 1_500;
 const MAX_CACHED_MS = 50;
@@ -16,59 +17,9 @@ const MAX_RETAINED_BYTES = 512 * 1024 * 1024;
 const PARENTS = 11;
 const CHILDREN = 100;
 
-function containerRow(id: string, parentId: string | null, shortName: string, definitionRef: string, children: number): EcucRow {
-	return {
-		id,
-		kind: 'container',
-		level: parentId === null ? 1 : 2,
-		parentId,
-		subtreeSize: children,
-		posinset: 1,
-		setsize: 1,
-		hasChildren: children > 0,
-		label: shortName,
-		shortName,
-		definitionRef,
-		title: definitionRef,
-		meta: [],
-		haystack: shortName.toLowerCase(),
-	};
-}
-
-function parameterRow(id: string, parentId: string, value: string): EcucRow {
-	return {
-		id,
-		kind: 'parameter',
-		level: 3,
-		parentId,
-		subtreeSize: 0,
-		posinset: 1,
-		setsize: 1,
-		hasChildren: false,
-		label: 'P',
-		definitionRef: '/D/Child/P',
-		parameterType: 'Integer',
-		value,
-		valueKind: 'numeric',
-		shownValue: value,
-		title: '/D/Child/P',
-		meta: [],
-		haystack: `p ${value}`,
-	};
-}
-
+/** `PARENTS` buckets of `CHILDREN` children each. */
 function rows(prefix: string): EcucRow[] {
-	const out: EcucRow[] = [];
-	for (let parent = 0; parent < PARENTS; parent++) {
-		const parentId = `container:Root/Parent${parent}#0`;
-		out.push(containerRow(parentId, null, `Parent${parent}`, '/D/Parent', CHILDREN * 2));
-		for (let child = 0; child < CHILDREN; child++) {
-			const childId = `${parentId}/${prefix}_MO_${parent}_${child}#0`;
-			out.push(containerRow(childId, parentId, `${prefix}_MO_${parent}_${child}`, '/D/Child', 1));
-			out.push(parameterRow(`${childId}/param:P#0`, childId, String(child)));
-		}
-	}
-	return out;
+	return containerRows(prefix, Array.from({ length: PARENTS }, () => CHILDREN));
 }
 
 function prepared(source: readonly EcucRow[]): DiffPreparedSide {
@@ -77,15 +28,6 @@ function prepared(source: readonly EcucRow[]): DiffPreparedSide {
 		rangeOf: () => undefined,
 		header: { schema: '00048', packages: ['Pkg'] },
 	};
-}
-
-function retainedBytes(): number {
-	if (typeof global.gc !== 'function') {
-		throw new Error('Run with --expose-gc');
-	}
-	global.gc();
-	const memory = process.memoryUsage();
-	return memory.heapUsed + memory.arrayBuffers;
 }
 
 function run(): void {
@@ -115,7 +57,7 @@ function run(): void {
 	const equivalentStrict = identical.document(false);
 	const equivalentCachedMs = Math.round(performance.now() - started);
 
-	const retainedMiB = Math.round(Math.max(0, retainedBytes() - before) / 1048576);
+	const retainedMiB = retainedDelta(before).retainedMiB;
 	console.log(
 		JSON.stringify({
 			_type: 'diff-toggle',

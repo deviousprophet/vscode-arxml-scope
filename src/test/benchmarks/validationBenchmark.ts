@@ -10,6 +10,7 @@ import { buildFileIndex } from '../../core/index/indexBuilder';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
 import { DEFAULT_SEVERITIES } from '../../core/validation/types';
 import { validateWorkspace, validateWorkspaceSlices } from '../../core/validation/validate';
+import { measureStage } from './benchmarkUtils';
 
 const FILE_COUNT = 10;
 const CONTAINERS_PER_FILE = 1000;
@@ -61,15 +62,6 @@ function valuesText(fileIndex: number): string {
 	return lines.join('');
 }
 
-function retainedBytes(): number {
-	if (typeof global.gc !== 'function') {
-		throw new Error('Run with --expose-gc');
-	}
-	global.gc();
-	const memory = process.memoryUsage();
-	return memory.heapUsed + memory.arrayBuffers;
-}
-
 function run(): void {
 	const definitions = buildFileIndex('file:///defs.arxml', definitionsText());
 	const files = [];
@@ -84,11 +76,9 @@ function run(): void {
 	const sourceMiB = Math.round(files.reduce((total, file) => total + file.elements.length * 180, 0) / 1048576);
 	const records = files.reduce((total, file) => total + file.elements.length + file.references.length, 0) + definitions.definitions.length;
 
-	const before = retainedBytes();
-	const started = performance.now();
-	const diagnostics = validateWorkspace(index, DEFAULT_SEVERITIES);
-	const elapsedMs = Math.round(performance.now() - started);
-	const retainedMiB = Math.round(Math.max(0, retainedBytes() - before) / 1048576);
+	const { value: diagnostics, elapsedMs, retainedMiB } = measureStage(() =>
+		validateWorkspace(index, DEFAULT_SEVERITIES)
+	);
 	console.log(
 		JSON.stringify({
 			_type: 'validation',

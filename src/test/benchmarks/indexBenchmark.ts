@@ -12,6 +12,7 @@ import { performance } from 'node:perf_hooks';
 import { IndexBuilder } from '../../core/index/indexBuilder';
 import type { FileIndex, IndexDefinition, IndexReference } from '../../core/index/indexModel';
 import { WorkspaceIndex } from '../../core/index/workspaceIndex';
+import { arxmlDocument, arxmlPreamble, indent, measureStage, retainedBytes } from './benchmarkUtils';
 
 const CONTAINERS = 1800;
 const PARAMETERS_PER_CONTAINER = 120;
@@ -37,10 +38,6 @@ function withPathChange(file: FileIndex, from: string, to: string): FileIndex {
 	};
 }
 
-function indent(depth: number): string {
-	return '  '.repeat(depth);
-}
-
 function parameterBlock(lines: string[], depth: number, container: number, parameter: number): void {
 	lines.push(`${indent(depth)}<ECUC-NUMERICAL-PARAM-VALUE>`);
 	lines.push(
@@ -51,15 +48,7 @@ function parameterBlock(lines: string[], depth: number, container: number, param
 }
 
 function buildEcucText(): string {
-	const lines: string[] = [];
-	lines.push('<?xml version="1.0" encoding="UTF-8"?>');
-	lines.push(
-		'<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">'
-	);
-	lines.push(`${indent(1)}<AR-PACKAGES>`);
-	lines.push(`${indent(2)}<AR-PACKAGE>`);
-	lines.push(`${indent(3)}<SHORT-NAME>SyntheticPkg</SHORT-NAME>`);
-	lines.push(`${indent(3)}<ELEMENTS>`);
+	const lines = arxmlPreamble(indent);
 	lines.push(`${indent(4)}<ECUC-MODULE-CONFIGURATION-VALUES>`);
 	lines.push(`${indent(5)}<SHORT-NAME>Module0</SHORT-NAME>`);
 	lines.push(
@@ -81,28 +70,11 @@ function buildEcucText(): string {
 	}
 	lines.push(`${indent(5)}</CONTAINERS>`);
 	lines.push(`${indent(4)}</ECUC-MODULE-CONFIGURATION-VALUES>`);
-	lines.push(`${indent(3)}</ELEMENTS>`);
-	lines.push(`${indent(2)}</AR-PACKAGE>`);
-	lines.push(`${indent(1)}</AR-PACKAGES>`);
-	lines.push('</AUTOSAR>');
-	return lines.join('\n');
-}
-
-function retainedBytes(): number {
-	if (typeof global.gc !== 'function') {
-		throw new Error('Run with --expose-gc');
-	}
-	global.gc();
-	const memory = process.memoryUsage();
-	return memory.heapUsed + memory.arrayBuffers;
+	return arxmlDocument(lines, indent);
 }
 
 function measure<T>(name: string, sourceMiB: number, action: () => T, records: (value: T) => number): T {
-	const before = retainedBytes();
-	const started = performance.now();
-	const value = action();
-	const elapsedMs = Math.round(performance.now() - started);
-	const retainedMiB = Math.round(Math.max(0, retainedBytes() - before) / 1048576);
+	const { value, elapsedMs, retainedMiB } = measureStage(action);
 	console.log(
 		JSON.stringify({
 			_type: 'large-file-load',

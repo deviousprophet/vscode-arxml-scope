@@ -12,12 +12,12 @@
  * without turning ordinary machine variance into a red run. Raise them only with
  * a measured reason.
  */
-import { performance } from 'node:perf_hooks';
 import { buildDiffDocument } from '../../core/diff/diffModel';
 import type { EcucDocumentModel } from '../../core/ecuc/model';
 import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { buildRows } from '../../core/ecuc/renderRows';
 import { scanEcucValues } from '../../core/ecuc/scanner';
+import { arxmlDocument, arxmlPreamble, indent as indentBy, measureStage, retainedBytes } from './benchmarkUtils';
 
 /** Synthetic document shape: 12 modules x 36 containers x 3 containers x 56 parameters. */
 const MODULE_COUNT = 12;
@@ -34,8 +34,9 @@ const MAX_STEP_MS = 60_000;
 
 type Side = 'left' | 'right';
 
+/** This fixture indents with four spaces per level. */
 function indent(depth: number): string {
-	return '    '.repeat(depth);
+	return indentBy(depth, 4);
 }
 
 function parameterIndex(moduleIndex: number, containerIndex: number, slot: number, parameter: number): number {
@@ -92,13 +93,7 @@ function containerBlock(
 
 /** Builds the synthetic ECUC-Values ARXML for one side of the comparison. */
 function buildEcucArxml(side: Side): string {
-	const lines: string[] = [];
-	lines.push('<?xml version="1.0" encoding="UTF-8"?>');
-	lines.push('<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">');
-	lines.push(`${indent(1)}<AR-PACKAGES>`);
-	lines.push(`${indent(2)}<AR-PACKAGE>`);
-	lines.push(`${indent(3)}<SHORT-NAME>SyntheticPkg</SHORT-NAME>`);
-	lines.push(`${indent(3)}<ELEMENTS>`);
+	const lines = arxmlPreamble(indent);
 	for (let module = 0; module < MODULE_COUNT; module++) {
 		lines.push(`${indent(4)}<ECUC-MODULE-CONFIGURATION-VALUES>`);
 		lines.push(`${indent(5)}<SHORT-NAME>Module${module}</SHORT-NAME>`);
@@ -111,11 +106,7 @@ function buildEcucArxml(side: Side): string {
 		lines.push(`${indent(5)}</CONTAINERS>`);
 		lines.push(`${indent(4)}</ECUC-MODULE-CONFIGURATION-VALUES>`);
 	}
-	lines.push(`${indent(3)}</ELEMENTS>`);
-	lines.push(`${indent(2)}</AR-PACKAGE>`);
-	lines.push(`${indent(1)}</AR-PACKAGES>`);
-	lines.push('</AUTOSAR>');
-	return lines.join('\n');
+	return arxmlDocument(lines, indent);
 }
 
 interface NodeCounts {
@@ -150,15 +141,6 @@ function countNodes(model: EcucDocumentModel): NodeCounts {
 	return counts;
 }
 
-function retainedBytes(): number {
-	if (typeof global.gc !== 'function') {
-		throw new Error('Run with --expose-gc');
-	}
-	global.gc();
-	const memory = process.memoryUsage();
-	return memory.heapUsed + memory.arrayBuffers;
-}
-
 interface Sample {
 	records: number;
 	extra?: Record<string, number>;
@@ -166,13 +148,8 @@ interface Sample {
 
 /** Runs one stage, prints its JSON line and enforces the hard limits. */
 function measure<T>(name: string, sourceMiB: number, action: () => T, describe: (value: T) => Sample): T {
-	const before = retainedBytes();
-	const started = performance.now();
-	const value = action();
-	const elapsedMs = Math.round(performance.now() - started);
-	const retained = Math.max(0, retainedBytes() - before);
+	const { value, elapsedMs, retained, retainedMiB } = measureStage(action);
 	const { records, extra } = describe(value);
-	const retainedMiB = Math.round(retained / 1048576);
 	console.log(JSON.stringify({
 		_type: 'large-file-load',
 		name,
