@@ -22,7 +22,7 @@ import { editorShell } from '../../../host/webviewShell';
 import { fixtureText } from '../../core/modelTestUtils';
 import { repoRoot } from '../../extension/testUtils';
 import { webviewCss } from '../cssTestUtils';
-import { installDom, installMarkup, loadModule, messagesOf, treeRows } from '../pageTestUtils';
+import { installDom, installMarkup, loadModule, messagesOf, settleSearch, treeRows } from '../pageTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 /** Longer than the page's 500 ms multi-click guard, with headroom for a loaded CI host. */
@@ -37,8 +37,12 @@ function shell(): string {
 	});
 }
 
+function rowsOf(fixture: string) {
+	return buildRows(scanEcucValues(fixtureText(fixture)), { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows;
+}
+
 function rows() {
-	return buildRows(scanEcucValues(fixtureText(FIXTURE)), { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows;
+	return rowsOf(FIXTURE);
 }
 
 /** The value span of a rendered parameter row. */
@@ -46,11 +50,54 @@ function valueTextOf(item: HTMLElement): HTMLElement {
 	return item.querySelector<HTMLElement>('.value-text')!;
 }
 
-function mount() {
+function mountFixture(fixture: string) {
 	const dom = installDom('editor');
 	loadModule<typeof import('../../../webview/editorViewer')>('../../webview/editorViewer').mountEditor();
-	dom.post({ type: 'document', document: { rows: rows() } });
+	dom.post({ type: 'document', document: { rows: rowsOf(fixture) } });
 	return dom;
+}
+
+function mount() {
+	return mountFixture(FIXTURE);
+}
+
+/** Dispatch the page's own copy listener with a recorder for `text/plain`. */
+function dispatchCopy(
+	dom: ReturnType<typeof installDom>,
+	target: EventTarget = dom.document
+): { copied: string | undefined; prevented: boolean } {
+	const event = new dom.window.Event('copy', { bubbles: true, cancelable: true });
+	let copied: string | undefined;
+	Object.defineProperty(event, 'clipboardData', {
+		value: {
+			setData(_type: string, text: string) {
+				copied = text;
+			},
+		},
+	});
+	target.dispatchEvent(event);
+	return { copied, prevented: event.defaultPrevented };
+}
+
+/** Select from the first node to the last character of another node's label. */
+function selectBetween(dom: ReturnType<typeof installDom>, first: Node, last: Node): void {
+	const range = dom.document.createRange();
+	range.setStart(first, 0);
+	range.setEnd(last, (last.textContent || '').length);
+	const selection = dom.window.getSelection()!;
+	selection.removeAllRanges();
+	selection.addRange(range);
+}
+
+/** The on-screen top of a Document row from the uniform row height and the scroller. */
+function documentRowTop(dom: ReturnType<typeof installDom>, row: HTMLElement): number {
+	const scroller = dom.document.querySelector('#tree > .virtual-scroll-vscroll') as HTMLElement;
+	return Number(row.dataset.documentIndex) * 20 - scroller.scrollTop;
+}
+
+/** Whether a row's on-screen top sits inside the page test's 600px viewport. */
+function inViewport(top: number): boolean {
+	return top >= 0 && top < 560;
 }
 
 function mountWithState(saved: unknown) {
@@ -341,6 +388,139 @@ suite('editor Document interactions', () => {
 			assert.ok(!copied.includes('Conditions'), 'sidebar text is never copied');
 		} finally {
 			dom.window.getSelection()?.removeAllRanges();
+			dom.restore();
+		}
+	});
+
+	test('a multi-row copy keeps the 4-space tree indent and drops gutter and sidebar text', () => {
+		const dom = mount();
+		try {
+			const labelOf = (text: string): Node =>
+				treeRows(dom.document)
+					.find((row) => row.querySelector('.label')?.textContent === text)!
+					.querySelector('.label')!.firstChild!;
+			selectBetween(dom, labelOf('IniValue'), labelOf('Title'));
+			const { copied, prevented } = dispatchCopy(dom);
+			assert.strictEqual(prevented, true, 'the page owns the multi-row copy');
+			assert.strictEqual(
+				copied,
+				'        IniValue = 63\n        Title = "hello"',
+				'each row is one line with 4 spaces per level',
+			);
+			assert.ok(!copied.includes('\n1'), 'taken from the labels, not the line-number gutter');
+			assert.ok(!copied.includes('Conditions'), 'no sidebar chrome');
+		} finally {
+			dom.window.getSelection()?.removeAllRanges();
+			dom.restore();
+		}
+	});
+
+	test('a partial selection inside one row stays on the native copy path', () => {
+		const dom = mount();
+		try {
+			const item = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
+			const label = item.querySelector('.label')!.firstChild!;
+			const range = dom.document.createRange();
+			range.setStart(label, 1);
+			range.setEnd(label, 4);
+			const selection = dom.window.getSelection()!;
+			selection.removeAllRanges();
+			selection.addRange(range);
+			const { copied, prevented } = dispatchCopy(dom);
+			assert.strictEqual(prevented, false, 'the native copy keeps the exact substring');
+			assert.strictEqual(copied, undefined, 'the page writes nothing');
+		} finally {
+			dom.window.getSelection()?.removeAllRanges();
+			dom.restore();
+		}
+	});
+
+	test('copying inside an input is not overridden by a stale tree selection', () => {
+		const dom = mount();
+		try {
+			const labelOf = (text: string): Node =>
+				treeRows(dom.document)
+					.find((row) => row.querySelector('.label')?.textContent === text)!
+					.querySelector('.label')!.firstChild!;
+			selectBetween(dom, labelOf('IniValue'), labelOf('Title'));
+			const input = dom.document.getElementById('search-input') as HTMLInputElement;
+			input.focus();
+			input.value = 'abc';
+			input.setSelectionRange(0, 3);
+			const { copied, prevented } = dispatchCopy(dom, input);
+			assert.strictEqual(prevented, false, 'the native input copy survives');
+			assert.strictEqual(copied, undefined, 'the page does not replace the input text');
+		} finally {
+			dom.window.getSelection()?.removeAllRanges();
+			dom.restore();
+		}
+	});
+
+	test('Collapse all anchors to the nearest visible ancestor and Expand all restores the selected row', async () => {
+		const dom = mountFixture('editor/large.arxml');
+		try {
+			const scroller = dom.document.querySelector('#tree > .virtual-scroll-vscroll') as HTMLElement;
+			scroller.scrollTop = 800;
+			scroller.dispatchEvent(new dom.window.Event('scroll'));
+			await settleSearch();
+			const selected = treeRows(dom.document).find((row) => {
+				const top = documentRowTop(dom, row);
+				return top >= 0 && top < 560 && row.querySelector('.label')?.textContent === 'Epsilon';
+			});
+			assert.ok(selected, 'a parameter row is on screen');
+			const selectedId = selected.dataset.nodeId;
+			selected.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			(dom.document.getElementById('collapse-all') as HTMLElement).click();
+			const visible = treeRows(dom.document);
+			assert.strictEqual(visible.length, 1, 'Collapse all leaves the root module');
+			assert.ok(visible[0].querySelector('.label')?.textContent?.includes('LargeMod'), 'nearest visible ancestor');
+			assert.ok(
+				inViewport(documentRowTop(dom, visible[0])),
+				'the nearest visible ancestor stays on screen instead of jumping away',
+			);
+			assert.strictEqual(
+				dom.document.querySelector(`#tree [data-node-id="${selectedId}"]`),
+				null,
+				'the selected row is hidden while collapsed',
+			);
+			(dom.document.getElementById('expand-all') as HTMLElement).click();
+			const restored = dom.document.querySelector(`#tree [data-node-id="${selectedId}"]`) as HTMLElement | null;
+			assert.ok(restored, 'Expand all restores the selected row');
+			assert.strictEqual(restored.getAttribute('data-selected'), 'true', 'the selection itself is unchanged');
+			assert.ok(
+				inViewport(documentRowTop(dom, restored)),
+				'the restored selection is scrolled back into view',
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Collapse all then Expand all keeps the current search match visible', async () => {
+		const dom = mountFixture('editor/large.arxml');
+		try {
+			const input = dom.document.getElementById('search-input') as HTMLInputElement;
+			input.value = 'Cont08';
+			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			await settleSearch();
+			const match = (): HTMLElement | null =>
+				dom.document.querySelector('#tree .node[data-search-current="true"]') as HTMLElement | null;
+			assert.ok(match(), 'the search match is current');
+			assert.strictEqual(match()!.getAttribute('data-selected'), 'true', 'the jump selects the match');
+			(dom.document.getElementById('collapse-all') as HTMLElement).click();
+			assert.strictEqual(match(), null, 'the match is hidden by Collapse all');
+			const collapsedRows = treeRows(dom.document);
+			assert.strictEqual(collapsedRows.length, 1, 'the nearest visible ancestor is anchored');
+			assert.ok(
+				inViewport(documentRowTop(dom, collapsedRows[0])),
+				'the nearest visible ancestor stays on screen instead of jumping away',
+			);
+			(dom.document.getElementById('expand-all') as HTMLElement).click();
+			assert.ok(match(), 'Expand all shows the current match again');
+			assert.strictEqual(match()!.getAttribute('data-selected'), 'true', 'the match stays selected');
+			assert.ok(inViewport(documentRowTop(dom, match()!)), 'the current match is scrolled back into view');
+		} finally {
 			dom.restore();
 		}
 	});

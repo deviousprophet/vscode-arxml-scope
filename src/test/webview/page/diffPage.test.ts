@@ -130,6 +130,44 @@ function wordRow(overrides: Partial<DiffRow> = {}): DiffRow {
 	};
 }
 
+/** 60 containers with one child each: a diff tall enough to scroll and anchor. */
+function tallRows(count = 60): DiffRow[] {
+	const rows: DiffRow[] = [];
+	for (let at = 0; at < count; at++) {
+		const container = (): NonNullable<DiffRow['left']> => containerCell(`C${at}`);
+		rows.push(
+			wordRow({
+				key: `c${at}`,
+				kind: 'container',
+				level: 1,
+				posinset: at + 1,
+				setsize: count,
+				hasChildren: true,
+				subtreeSize: 1,
+				status: 'changed',
+				left: container(),
+				right: container(),
+				haystack: `c${at}`,
+			})
+		);
+		const parameter = (): NonNullable<DiffRow['left']> =>
+			wordCell({ label: `P${at}`, shownValue: '1', value: '1' });
+		rows.push(
+			wordRow({
+				key: `p${at}`,
+				parentKey: `c${at}`,
+				kind: 'parameter',
+				level: 2,
+				status: 'changed',
+				left: parameter(),
+				right: parameter(),
+				haystack: `p${at}`,
+			})
+		);
+	}
+	return rows;
+}
+
 function wordDocument(rows: DiffRow[]): DiffDocument {
 	const summary = { changed: 0, added: 0, removed: 0, unchanged: 0, renamed: 0 };
 	for (const row of rows) {
@@ -1943,6 +1981,46 @@ suite('semantic diff page', () => {
 			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="c1"]'), null);
 			(dom.document.getElementById('diff-expand-all') as HTMLElement).click();
 			assert.ok(dom.document.querySelector('#diff-pane-left .diff-row[data-key="c1"]'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Collapse all and Expand all keep the selected row at the same viewport position', async () => {
+		const { dom } = mount(wordDocument(tallRows()));
+		try {
+			const scroll = dom.document.querySelector('#diff-list > .virtual-scroll-vscroll') as HTMLElement;
+			scroll.scrollTop = 1800;
+			scroll.dispatchEvent(new dom.window.Event('scroll'));
+			await settleSearch();
+			const row = dom.document.querySelector('#diff-pane-left .diff-row[data-key="c25"]') as HTMLElement;
+			assert.ok(row, 'the target container is rendered');
+			(row.querySelector('.row') as HTMLElement).click();
+			const indexOf = (key: string): number =>
+				Number(
+					(dom.document.querySelector(`#diff-pane-left .diff-row[data-key="${key}"]`) as HTMLElement).dataset
+						.documentIndex
+				);
+			const topOf = (key: string): number => indexOf(key) * 20 - scroll.scrollTop;
+			const before = topOf('c25');
+			(dom.document.getElementById('diff-collapse-all') as HTMLElement).click();
+			assert.strictEqual(
+				dom.document.querySelector('#diff-pane-left .diff-row[data-key="p25"]'),
+				null,
+				'Collapse all hides the child rows',
+			);
+			assert.strictEqual(
+				dom.document.querySelector('#diff-pane-left .diff-row[data-key="c25"]')?.getAttribute('data-selected'),
+				'true',
+				'the selection is unchanged'
+			);
+			assert.strictEqual(topOf('c25'), before, 'the selected row keeps its viewport position while collapsed');
+			(dom.document.getElementById('diff-expand-all') as HTMLElement).click();
+			assert.ok(
+				dom.document.querySelector('#diff-pane-left .diff-row[data-key="p25"]'),
+				'Expand all restores the child rows'
+			);
+			assert.strictEqual(topOf('c25'), before, 'the selected row keeps its viewport position after expanding');
 		} finally {
 			dom.restore();
 		}

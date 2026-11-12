@@ -85,7 +85,18 @@ class DocumentTreeView {
 - Guides nested by ancestor level; closing brace rows carry ancestors only.
 - Status tint is a diff-only render input applied by the host callback.
 - Node, brace and comment rows inside a selected subtree carry `data-subtree`; the selected row itself uses selection state.
-- Row text is natively selectable: the Document tree and its `.row`s declare `user-select: text`, so drag/double-click and the webview copy shortcut copy labels, values, meta and comments. The gutter, twisty, guides, header/module gaps and sidebar chrome stay `user-select: none`; there is no custom copy handler. A double-click is a text gesture and never posts `reveal`; a single click on `.value-text` defers its Details editor by a short multi-click guard that `dblclick`, a second click, a key press, an external selection or a document re-scan cancels. A click that ends a drag selection is not a row action, so it neither moves focus nor opens Details.
+- Row text is natively selectable: the Document tree and its `.row`s declare `user-select: text`, so
+  drag/double-click and the webview copy shortcut copy labels, values, meta and comments. A page-level
+  `copy` handler writes a replacement only when a non-collapsed selection lies fully inside `#tree` and
+  intersects at least two `.row`s: one line per selected row, prefixed by `4 * (level - 1)` spaces, built
+  from the row's `.label`, `.value`, `.row-meta` parts, disabled suffix, header keyword/package
+  cells and brace/comment text, joined with single spaces. Gutter, twisty, guides, gaps and sidebar
+  chrome contribute nothing. A collapsed
+  selection, a selection outside the tree or one inside a single row stays on the native copy path, so
+  a partial word/substring copy remains exact. A double-click is a text gesture and never posts `reveal`;
+  a single click on `.value-text` defers its Details editor by a short multi-click guard that `dblclick`, a
+  second click, a key press, an external selection or a document re-scan cancels. A click that ends a drag
+  selection is not a row action, so it neither moves focus nor opens Details.
 - A comment node carries `rowId` for hover/guide lookups and `data-subtree` when its owning row is inside the selection; it stays `aria-hidden`, has no tab stop and a click does nothing.
 
 ## Validation & Error Matrix
@@ -129,6 +140,11 @@ the same virtual row in both panes, numbered on both sides, with no key/status/c
 the first visible module or a module hidden by Show diff/Context; each pane numbers its own
 lines with blank padded/missing sides, hidden runs unnumbered, renumbering after Show diff/Context/swap/
 collapse, the active number and a fixed horizontal gutter; the diff content width includes header lines.
+
+`src/test/webview/page/uxDocumentInteractions.test.ts`: a multi-row copy is one line per row with the
+4-space-per-level indent and no gutter/sidebar text; a partial single-row selection stays native;
+Collapse all anchors to the nearest visible ancestor and Expand all restores the selected row or current
+search match in view.
 
 ## Anti-patterns
 

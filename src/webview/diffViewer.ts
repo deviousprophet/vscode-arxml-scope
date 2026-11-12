@@ -1485,6 +1485,50 @@ function restoreViewport(anchor: ReturnType<typeof captureAnchor>, scrollTop: nu
 		views.setScrollTop(scrollTop);
 	}
 }
+
+interface DiffKeyAnchor {
+	key: string;
+	/** The anchor row's distance from the viewport top when it was captured. */
+	delta: number;
+}
+
+/** Focused row, else the selected row, else the current search match. */
+function diffAnchorKey(): string | undefined {
+	return focusedKey() || selectedKey || currentMatchKey();
+}
+
+function keyAnchorAt(key: string | undefined): DiffKeyAnchor | undefined {
+	if (key === undefined) {
+		return undefined;
+	}
+	const index = virtualIndexForKey(key);
+	if (index === undefined) {
+		return undefined;
+	}
+	const top = views ? views.getScrollTop() : 0;
+	return { key: key, delta: top - anchorOffset(index) };
+}
+
+function anchorIndexOrAncestor(key: string): number | undefined {
+	const index = virtualIndexForKey(key);
+	return index === undefined ? virtualIndexForKey(visibleAncestorKey(key)) : index;
+}
+
+/** Re-show the anchor at its captured viewport offset, using its nearest visible ancestor. */
+function restoreKeyAnchor(anchor: DiffKeyAnchor, scrollTop: number): void {
+	const index = anchorIndexOrAncestor(anchor.key);
+	if (index === undefined) {
+		if (views) {
+			views.setScrollTop(scrollTop);
+		}
+		return;
+	}
+	if (views) {
+		views.setScrollTop(Math.max(0, anchorOffset(index) + anchor.delta));
+		ensureVisible(index);
+	}
+}
+
 function setSelectedState(item: HTMLElement, on: boolean): void {
 	if (on) {
 		item.dataset.selected = 'true';
@@ -1907,15 +1951,26 @@ function visibleAncestorKey(key: string): string | undefined {
 	}
 	return undefined;
 }
-function collapseChanged(reconcileSelection: boolean): void {
-	const previousSelection = selectedKey;
-	rebuildDisplay();
-	if (reconcileSelection && previousSelection !== undefined && !displayIndexByKey.has(previousSelection)) {
-		const ancestor = visibleAncestorKey(previousSelection);
-		selectedKey = ancestor;
-		focusKey = ancestor;
+/** Collapse-all moves a hidden selection to its nearest visible ancestor. */
+function reconcileCollapsedSelection(reconcileSelection: boolean): void {
+	if (!reconcileSelection || selectedKey === undefined || displayIndexByKey.has(selectedKey)) {
+		return;
 	}
+	const ancestor = visibleAncestorKey(selectedKey);
+	selectedKey = ancestor;
+	focusKey = ancestor;
+}
+
+function collapseChanged(reconcileSelection: boolean): void {
+	const anchor = keyAnchorAt(diffAnchorKey());
+	const scrollTop = views ? views.getScrollTop() : 0;
+	rebuildDisplay();
+	reconcileCollapsedSelection(reconcileSelection);
 	applyModels();
+	renderWindow(true);
+	if (anchor !== undefined) {
+		restoreKeyAnchor(anchor, scrollTop);
+	}
 	renderWindow(true);
 	updateSelection();
 	applyRoving(selectedKey);

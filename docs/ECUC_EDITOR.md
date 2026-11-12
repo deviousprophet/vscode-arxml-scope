@@ -49,6 +49,10 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
   one changes nothing.
 - Containers draw `{` and `}` brace rows. An empty container shows `{ }`.
 - Collapsed containers show a ` { … }` hint and stay collapsible from the fixed 26px fold gutter.
+- **Collapse** and **Expand** in the toolbar rebuild the display around the current point: the focused
+  row, else the selected row, else the current search match stays at its viewport offset. When
+  **Collapse** hides that row, its nearest visible ancestor stays in view instead, and **Expand** brings
+  the row back without moving the selection, focus or current search match.
 - Bracket guides follow the open ancestor containers. They fade at rest and activate on hover.
 - Selecting a container tints its visible subtree; syntax tokens keep their colours.
 - The selected row background, its 2px rail and the selected-subtree tint span a stable width: at least
@@ -57,8 +61,13 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
   reaches the pane's right edge.
 - Long labels, values and metadata stay on one line and scroll horizontally.
 - Row text is selectable: drag or double-click to select labels, values, meta and comments, then use the
-  native webview copy shortcut. The line-number gutter, fold control, indent guides, blank separator
-  lines and sidebar chrome stay non-selectable, and a double-click never opens the source editor.
+  native webview copy shortcut. A selection spanning two or more rendered rows copies one line per row,
+  indented by `4 * (level - 1)` spaces like the tree, built from the visible label, value, meta chips,
+  disabled suffix, header keyword/package text and brace/comment text. A collapsed selection, one inside
+  a single row or one outside
+  the Document tree stays on the native path, so a partial word or substring copy remains exact. The
+  line-number gutter, fold control, indent guides, blank separator lines and sidebar chrome stay
+  non-selectable, and a double-click never opens the source editor.
 
 Only the visible window is rendered. The page precomputes the row offsets, including the header rows,
 the header gap and the module gaps, so the scrollbar thumb and drag match the content; a scroll frame

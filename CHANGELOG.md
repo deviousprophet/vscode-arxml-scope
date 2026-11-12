@@ -13,10 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VS Code-style line-number gutters in the Document view and both diff panes, numbered by display row with a per-pane diff status tint
 - A small change dot on collapsed diff containers whose hidden subtree contains a change
 - A sidebar visibility toggle that hides or shows the whole sidebar and restores its last active tab
-- Native text selection and copy in the Document view, without line numbers or sidebar chrome
+- Native text selection and copy in the Document view, without line numbers or sidebar chrome; a multi-row selection copies one line per row at the tree's 4-space-per-level indent
 
 ### Changed
 
+- Document **Collapse**/**Expand** and diff **Collapse all**/**Expand all** keep the focused, selected or current search row at its viewport position instead of jumping; a row hidden by a collapse anchors to its nearest visible ancestor, and Expand restores it without moving the selection or current match
 - **Find References** no longer rebuilds the full reverse-reference map after a value-only save; a structural change (an added, removed or renamed module/container, or a changed `DEFINITION-REF`) keeps the lazy full rebuild as the correctness fallback
 - One numbered blank module gap separates module groups in the Document and both diff panes; it is inert and never a change row
 - The schema/package header is separated from the module content by one blank line instead of a horizontal rule in the Document and diff views

@@ -1130,16 +1130,96 @@ function onTreeKeydown(event: KeyboardEvent): void {
 	dispatchTreeAction(event, target);
 }
 
-function collapseAll() {
-	collapsed = new Set(collapsedIdsFor(rows));
-	rebuildDisplay();
+interface DocumentAnchor {
+	id: string;
+	/** The anchor row's distance from the viewport top when it was captured. */
+	delta: number;
+}
+
+function headerIndexForId(id: string): number | undefined {
+	for (let at = 0; at < headerRows.length; at++) {
+		if (headerRows[at].id === id) {
+			return at;
+		}
+	}
+	return undefined;
+}
+
+function documentAnchorIndex(id: string | undefined): number | undefined {
+	if (id === undefined) {
+		return undefined;
+	}
+	if (id.startsWith('header:')) {
+		return headerIndexForId(id);
+	}
+	return displayIndexById.get(id);
+}
+
+/** The nearest ancestor that the rebuilt display still shows, nearest parent first. */
+function visibleAncestorId(id: string): string | undefined {
+	for (const ancestor of ancestorIds(rows, id)) {
+		if (displayIndexById.has(ancestor)) {
+			return ancestor;
+		}
+	}
+	return undefined;
+}
+
+function documentAnchorIndexOrAncestor(id: string): number | undefined {
+	const index = documentAnchorIndex(id);
+	return index === undefined ? documentAnchorIndex(visibleAncestorId(id)) : index;
+}
+
+/** Focused row, else the selected row, else the current search match. */
+function documentAnchorId(): string | undefined {
+	return documentFocusId() || selectedId || currentMatchId();
+}
+
+function documentAnchorAt(id: string | undefined): DocumentAnchor | undefined {
+	if (id === undefined) {
+		return undefined;
+	}
+	const index = documentAnchorIndexOrAncestor(id);
+	if (index === undefined) {
+		return undefined;
+	}
+	return { id: id, delta: storedScrollTop() - (offsets[index] ?? 0) };
+}
+
+/** Re-show the anchor at its captured viewport offset, using its nearest visible ancestor. */
+function restoreDocumentAnchor(anchor: DocumentAnchor): void {
+	const index = documentAnchorIndexOrAncestor(anchor.id);
+	if (index === undefined) {
+		return;
+	}
+	if (virtualScroll) {
+		virtualScroll.setScrollTop(Math.max(0, (offsets[index] ?? 0) + anchor.delta));
+	}
+	ensureVisible(index);
+}
+
+/** Collapse/Expand rebuilds the display; the anchor keeps the user's point in place. */
+function withDocumentAnchor(change: () => void): void {
+	const anchor = documentAnchorAt(documentAnchorId());
+	change();
+	if (anchor !== undefined) {
+		restoreDocumentAnchor(anchor);
+	}
 	renderWindow(true);
 }
 
+function collapseAll() {
+	withDocumentAnchor(function () {
+		collapsed = new Set(collapsedIdsFor(rows));
+		rebuildDisplay();
+	});
+}
+
 function expandAll() {
-	collapsed = new Set();
-	rebuildDisplay();
-	renderWindow(true);
+	withDocumentAnchor(function () {
+		collapsed = new Set();
+		rebuildDisplay();
+	});
 }
 
 /** The toolbar toggle: flip the shell visibility; state values stay untouched. */
@@ -1688,9 +1768,143 @@ function onDocumentKeydown(event: KeyboardEvent): void {
 	}
 }
 
+/** The row pieces a copied line reconstructs; guides, twisties and gaps contribute nothing. */
+const COPY_PART_CLASSES = new Set([
+	'label',
+	'value',
+	'sr-only',
+	'brace-mark',
+	'comment-text',
+	'comment-mark',
+	'keyword',
+	'number',
+	'package'
+]);
+
+function elementText(element: Element): string {
+	return (element.textContent || '').trim();
+}
+
+function isCopyPart(element: Element): boolean {
+	for (const name of Array.from(element.classList)) {
+		if (COPY_PART_CLASSES.has(name)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/** One row child's visible text; a meta chip is one part each, like the rendered gaps. */
+function rowPartTexts(element: Element): string[] {
+	if (element.classList.contains('row-meta')) {
+		return Array.from(element.children).map(elementText);
+	}
+	return isCopyPart(element) ? [elementText(element)] : [];
+}
+
+function rowCopyText(row: Element): string {
+	const parts: string[] = [];
+	for (const child of Array.from(row.children)) {
+		parts.push(...rowPartTexts(child));
+	}
+	return parts.filter(isNonEmptyText).join(' ');
+}
+
+function isNonEmptyText(text: string): boolean {
+	return text !== '';
+}
+
+/** One copied document line: the row's text at the tree's visual 4-space depth. */
+function copyLine(row: Element): string {
+	const text = rowCopyText(row);
+	if (text === '') {
+		return '';
+	}
+	const level = Number(row.getAttribute('data-level')) || 1;
+	return ' '.repeat(4 * Math.max(0, level - 1)) + text;
+}
+
+/** The selection's single live range, or undefined when there is none. */
+function selectionRange(selection: Selection): Range | undefined {
+	return selection.rangeCount === 0 ? undefined : selection.getRangeAt(0);
+}
+
+function selectionIntersectsRow(range: Range | undefined, row: Element): boolean {
+	return range !== undefined && range.intersectsNode(row);
+}
+
+/** The rendered `.row`s the selection intersects, in display order. */
+function selectedTreeRows(selection: Selection): Element[] {
+	const out: Element[] = [];
+	const range = selectionRange(selection);
+	if (!tree) {
+		return out;
+	}
+	for (const row of tree.querySelectorAll('.row')) {
+		if (selectionIntersectsRow(range, row)) {
+			out.push(row);
+		}
+	}
+	return out;
+}
+
+function treeSelectionInside(selection: Selection): boolean {
+	return isTreeSelectionNode(selection.anchorNode) && isTreeSelectionNode(selection.focusNode);
+}
+
+function documentSelection(): Selection | undefined {
+	if (typeof document === 'undefined') {
+		return undefined;
+	}
+	const selection = document.getSelection();
+	return selection === null ? undefined : selection;
+}
+
+/** At least two rendered rows fully inside the tree, else the native copy path. */
+function treeCopyRows(selection: Selection): Element[] | undefined {
+	if (selection.isCollapsed || !treeSelectionInside(selection)) {
+		return undefined;
+	}
+	const rows = selectedTreeRows(selection);
+	return rows.length < 2 ? undefined : rows;
+}
+
+function treeSelectionText(): string | undefined {
+	const selection = documentSelection();
+	if (selection === undefined) {
+		return undefined;
+	}
+	const rows = treeCopyRows(selection);
+	return rows === undefined ? undefined : rows.map(copyLine).filter(isNonEmptyText).join('\n');
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+	return target instanceof Element && target.closest('input, textarea, [contenteditable="true"]') !== null;
+}
+
+function isEditableCopy(event: ClipboardEvent): boolean {
+	return isEditableTarget(event.target) || isEditableTarget(document.activeElement);
+}
+
+/** Keep a multi-row Document selection indented; every other copy stays native. */
+function onDocumentCopy(event: ClipboardEvent): void {
+	if (isEditableCopy(event)) {
+		return;
+	}
+	const text = treeSelectionText();
+	if (text === undefined || !event.clipboardData) {
+		return;
+	}
+	event.clipboardData.setData('text/plain', text);
+	event.preventDefault();
+}
+
 /** Bind the document-level gestures once the page refs exist. */
 function mountEditorDomListeners(): void {
 document.addEventListener('click', onRowClick);
+// Multi-row copies keep the tree's visual indent; a single-row or partial
+// selection stays on the native path so the exact slice is copied.
+document.addEventListener('copy', onDocumentCopy);
 // Double-click is a native text-selection gesture (word/line); it must never
 // reveal source, and it cancels a deferred single-click Details edit.
 document.addEventListener('dblclick', cancelPendingDetailsEdit);
