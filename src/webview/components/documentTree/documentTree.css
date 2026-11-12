@@ -11,6 +11,10 @@
 	padding: 0 0 0 var(--content-pad);
 	position: relative;
 }
+/* Document row text is selectable; diff rows keep their own interaction model. */
+#tree .row {
+	user-select: text;
+}
 .row:hover {
 	background-color: var(--hover-bg);
 }
@@ -26,6 +30,7 @@
 	color: var(--vscode-icon-foreground, var(--vscode-foreground));
 	opacity: 0;
 	transition: opacity 0.5s;
+	user-select: none;
 }
 .twisty svg {
 	transition: transform 120ms ease;
@@ -190,6 +195,7 @@ mark {
 	tab-size: 4;
 	white-space: pre;
 	color: var(--vscode-editor-foreground);
+	user-select: text;
 }
 .document-tree-window {
 	position: absolute;
@@ -256,6 +262,7 @@ body[data-view="document"] .document-tree-line-number[data-focused="true"] {
 	box-sizing: border-box;
 	display: flex;
 	align-items: center;
+	user-select: none;
 }
 body[data-view="document"] .row {
 	background-color: transparent;
@@ -268,6 +275,7 @@ body[data-view="document"] .guide {
 	background: var(--vscode-tree-indentGuidesStroke, var(--vscode-panel-border, #80808040));
 	opacity: 0.28;
 	pointer-events: none;
+	user-select: none;
 }
 body[data-view="document"] .guide.guide-active {
 	opacity: 0.85;

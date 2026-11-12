@@ -25,6 +25,8 @@ import { webviewCss } from '../cssTestUtils';
 import { installDom, installMarkup, loadModule, messagesOf, treeRows } from '../pageTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
+/** Longer than the page's 500 ms multi-click guard, with headroom for a loaded CI host. */
+const DETAILS_GUARD_SETTLE_MS = 700;
 
 function shell(): string {
 	return editorShell({
@@ -37,6 +39,11 @@ function shell(): string {
 
 function rows() {
 	return buildRows(scanEcucValues(fixtureText(FIXTURE)), { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows;
+}
+
+/** The value span of a rendered parameter row. */
+function valueTextOf(item: HTMLElement): HTMLElement {
+	return item.querySelector<HTMLElement>('.value-text')!;
 }
 
 function mount() {
@@ -157,16 +164,174 @@ suite('editor Document interactions', () => {
 			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 0, 'a click never reveals');
 			assert.strictEqual(messagesOf(dom.api, 'select').length, 1);
 			item.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 1);
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 0, 'a double click is a text gesture');
 			item.dispatchEvent(
 				new dom.window.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true })
 			);
-			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 2, 'Ctrl+Enter is deliberate');
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 1, 'Ctrl+Enter is deliberate');
 			item.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
-			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 2, 'Space only selects');
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 1, 'Space only selects');
 		} finally {
 			dom.restore();
 		}
+	});
+
+	test('a double click never reveals or opens the deferred value editor', async () => {
+		const dom = mount();
+		try {
+			const item = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
+			const valueText = valueTextOf(item);
+			valueText.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+			valueText.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 2 }));
+			valueText.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true, cancelable: true, detail: 2 }));
+			await new Promise((resolve) => setTimeout(resolve, DETAILS_GUARD_SETTLE_MS));
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 0, 'selection never reveals');
+			assert.strictEqual(dom.document.activeElement, item, 'focus stays in the Document');
+		} finally {
+			dom.document.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true }));
+			dom.restore();
+		}
+	});
+
+	test('a single click on a value still opens the Details editor after the guard', async () => {
+		const dom = mount();
+		try {
+			const item = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
+			const valueText = valueTextOf(item);
+			valueText.dispatchEvent(
+				new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })
+			);
+			assert.notStrictEqual(
+				dom.document.activeElement,
+				dom.document.getElementById('details-value'),
+				'the editor waits for a possible second click'
+			);
+			await new Promise((resolve) => setTimeout(resolve, DETAILS_GUARD_SETTLE_MS));
+			assert.strictEqual(
+				dom.document.activeElement,
+				dom.document.getElementById('details-value'),
+				'the single click still opens the value editor'
+			);
+		} finally {
+			dom.document.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true }));
+			dom.restore();
+		}
+	});
+
+	test('a click that ends a text drag keeps the selection and opens no editor', async () => {
+		const dom = mount();
+		try {
+			const item = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
+			const labelText = item.querySelector('.label')!.firstChild!;
+			const range = dom.document.createRange();
+			range.setStart(labelText, 0);
+			range.setEnd(labelText, labelText.textContent!.length);
+			const selection = dom.window.getSelection()!;
+			selection.removeAllRanges();
+			selection.addRange(range);
+			const valueText = valueTextOf(item);
+			valueText.dispatchEvent(
+				new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })
+			);
+			await new Promise((resolve) => setTimeout(resolve, DETAILS_GUARD_SETTLE_MS));
+			assert.strictEqual(dom.window.getSelection()!.isCollapsed, false, 'the drag selection survives the click');
+			assert.notStrictEqual(
+				dom.document.activeElement,
+				dom.document.getElementById('details-value'),
+				'a click after a drag never opens the value editor'
+			);
+		} finally {
+			dom.window.getSelection()?.removeAllRanges();
+			dom.restore();
+		}
+	});
+
+	test('a document refresh cancels a deferred value editor', async () => {
+		const dom = mount();
+		try {
+			const item = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
+			const valueText = valueTextOf(item);
+			valueText.dispatchEvent(
+				new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })
+			);
+			dom.post({ type: 'document', document: { rows: rows() } });
+			await new Promise((resolve) => setTimeout(resolve, DETAILS_GUARD_SETTLE_MS));
+			assert.notStrictEqual(
+				dom.document.activeElement,
+				dom.document.getElementById('details-value'),
+				'a re-scan drops the pending edit instead of opening it later'
+			);
+		} finally {
+			dom.document.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true }));
+			dom.restore();
+		}
+	});
+
+	test('a key press cancels a deferred value editor', async () => {
+		const dom = mount();
+		try {
+			const item = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
+			const valueText = valueTextOf(item);
+			valueText.dispatchEvent(
+				new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })
+			);
+			dom.document.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'F3', bubbles: true, cancelable: true })
+			);
+			await new Promise((resolve) => setTimeout(resolve, DETAILS_GUARD_SETTLE_MS));
+			assert.notStrictEqual(
+				dom.document.activeElement,
+				dom.document.getElementById('details-value'),
+				'a key press drops the pending edit instead of stealing focus later'
+			);
+		} finally {
+			dom.document.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true }));
+			dom.restore();
+		}
+	});
+
+	test('a native range over two rendered rows copies only row text', () => {
+		const dom = mount();
+		try {
+			const items = treeRows(dom.document);
+			const firstLabel = items[0].querySelector('.label')!.firstChild!;
+			const secondLabel = items[1].querySelector('.label')!.firstChild!;
+			const range = dom.document.createRange();
+			range.setStart(firstLabel, 0);
+			range.setEnd(secondLabel, secondLabel.textContent!.length);
+			const selection = dom.window.getSelection()!;
+			selection.removeAllRanges();
+			selection.addRange(range);
+			const copied = selection.toString();
+			assert.ok(copied.includes(items[0].querySelector('.label')!.textContent!), 'the first row is selected');
+			assert.ok(copied.includes(items[1].querySelector('.label')!.textContent!), 'the second row is selected');
+			assert.strictEqual(
+				range.intersectsNode(dom.document.querySelector('.document-tree-lines')!),
+				false,
+				'line numbers are outside the selection'
+			);
+			assert.strictEqual(
+				range.intersectsNode(dom.document.getElementById('sidebar')!),
+				false,
+				'sidebar chrome is outside the selection'
+			);
+			assert.ok(!copied.includes('Conditions'), 'sidebar text is never copied');
+		} finally {
+			dom.window.getSelection()?.removeAllRanges();
+			dom.restore();
+		}
+	});
+
+	test('row text is selectable while gutter, twisty, guides and gaps are not', () => {
+		const css = webviewCss('components', 'documentTree', 'documentTree.css');
+		assert.ok(/\.document-tree-pane\s*\{[^}]*user-select:\s*text/.test(css));
+		assert.ok(/\.row\s*\{[^}]*user-select:\s*text/.test(css));
+		assert.ok(/\.document-tree-lines\s*\{[^}]*user-select:\s*none/.test(css));
+		assert.ok(/\.twisty\s*\{[^}]*user-select:\s*none/.test(css));
+		assert.ok(/body\[data-view="document"\] \.guide\s*\{[^}]*user-select:\s*none/.test(css));
+		assert.ok(
+			/\.document-tree-header-gap,\s*\.document-tree-module-gap\s*\{[^}]*user-select:\s*none/.test(css)
+		);
 	});
 
 	test('a toggle is built only where the row has children, with no glyph or inline hint', () => {

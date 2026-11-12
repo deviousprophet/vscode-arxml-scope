@@ -56,6 +56,9 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
   rendered window does not change that width, and the highlight starts after the fixed gutter and
   reaches the pane's right edge.
 - Long labels, values and metadata stay on one line and scroll horizontally.
+- Row text is selectable: drag or double-click to select labels, values, meta and comments, then use the
+  native webview copy shortcut. The line-number gutter, fold control, indent guides, blank separator
+  lines and sidebar chrome stay non-selectable, and a double-click never opens the source editor.
 
 Only the visible window is rendered. The page precomputes the row offsets, including the header rows,
 the header gap and the module gaps, so the scrollbar thumb and drag match the content; a scroll frame

@@ -85,6 +85,7 @@ class DocumentTreeView {
 - Guides nested by ancestor level; closing brace rows carry ancestors only.
 - Status tint is a diff-only render input applied by the host callback.
 - Node, brace and comment rows inside a selected subtree carry `data-subtree`; the selected row itself uses selection state.
+- Row text is natively selectable: the Document tree and its `.row`s declare `user-select: text`, so drag/double-click and the webview copy shortcut copy labels, values, meta and comments. The gutter, twisty, guides, header/module gaps and sidebar chrome stay `user-select: none`; there is no custom copy handler. A double-click is a text gesture and never posts `reveal`; a single click on `.value-text` defers its Details editor by a short multi-click guard that `dblclick`, a second click, a key press, an external selection or a document re-scan cancels. A click that ends a drag selection is not a row action, so it neither moves focus nor opens Details.
 - A comment node carries `rowId` for hover/guide lookups and `data-subtree` when its owning row is inside the selection; it stays `aria-hidden`, has no tab stop and a click does nothing.
 
 ## Validation & Error Matrix

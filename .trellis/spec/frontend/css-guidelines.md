@@ -100,6 +100,10 @@ Rules:
   at least the pane, at least the full content estimate. That single rule is what makes the selection and
   subtree fills span a stable width; never narrow it to the rendered slice or set these as a `style`
   attribute in the markup.
+- `.document-tree-pane` and `.row` declare `user-select: text` so row text supports native
+  selection and copy with no custom handler. `.document-tree-lines`, `.twisty`, `.guide`,
+  `.document-tree-header-gap`/`.document-tree-module-gap` and sidebar chrome declare
+  `user-select: none`; keep the gutter text out of copied output.
 - `.document-tree-lines` is a sibling after the window, inside the pane. It is absolutely positioned,
   full pane height, `width: var(--line-numbers-width)`, `overflow: hidden`, `z-index: 1`,
   `aria-hidden="true"` and `user-select: none`. One `.document-tree-line-number` cell per rendered row is

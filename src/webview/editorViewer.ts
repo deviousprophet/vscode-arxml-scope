@@ -143,6 +143,11 @@ let heights = { document: 20 };
 let chWidth = 0;
 let heightFn: (index: number) => number = function () { return heights.document; };
 let typeAhead = { text: '', at: 0 };
+// A value click opens Details, but a second click or a double-click is a text
+// selection gesture: defer the editor long enough for multi-click to win.
+const DETAILS_OPEN_DELAY_MS = 500;
+let pendingDetailsId: string | undefined;
+let pendingDetailsTimer: ReturnType<typeof setTimeout> | undefined;
 // VirtualScroll owns the scroll surface; this page owns the row model and state.
 let virtualScroll: VirtualScroll | undefined;
 let treeView: DocumentTreeView | undefined;
@@ -867,6 +872,60 @@ function focusHeaderRow(target: Element): void {
 	header.focus({ preventScroll: true });
 }
 
+/** Focus a header line only when the click is not finishing a text selection. */
+function focusHeaderRowUnlessSelecting(target: Element): void {
+	// Header rows are text lines: focus them, but never select or open Details.
+	// A drag can end on one too; focusing it would collapse the selection.
+	if (!hasTextSelection()) {
+		focusHeaderRow(target);
+	}
+}
+
+/** A click that ends a drag selection must not move focus or start Details. */
+function endsDragSelection(target: Element): boolean {
+	// A twisty click is chrome, so it still toggles.
+	return !target.closest('.twisty') && hasTextSelection();
+}
+
+/** Whether a selection endpoint lives inside the Document tree. */
+function isTreeSelectionNode(node: Node | null): boolean {
+	return node !== null && tree !== undefined && tree.contains(node);
+}
+
+/** A live, non-collapsed selection inside the Document tree: a click that ends a drag must keep it. */
+function hasTextSelection(): boolean {
+	const selection = window.getSelection();
+	if (selection === null || selection.isCollapsed) {
+		return false;
+	}
+	return isTreeSelectionNode(selection.anchorNode);
+}
+
+/** Drop a Details edit that a single click scheduled but a selection gesture superseded. */
+function cancelPendingDetailsEdit(): void {
+	if (pendingDetailsTimer === undefined) {
+		return;
+	}
+	clearTimeout(pendingDetailsTimer);
+	pendingDetailsTimer = undefined;
+	pendingDetailsId = undefined;
+}
+
+function openPendingDetailsEdit(): void {
+	const id = pendingDetailsId;
+	pendingDetailsTimer = undefined;
+	pendingDetailsId = undefined;
+	if (id !== undefined) {
+		beginDetailsEdit(id);
+	}
+}
+
+function scheduleDetailsEdit(id: string): void {
+	cancelPendingDetailsEdit();
+	pendingDetailsId = id;
+	pendingDetailsTimer = setTimeout(openPendingDetailsEdit, DETAILS_OPEN_DELAY_MS);
+}
+
 function handleTreeTargetAction(target: Element, item: HTMLElement, id: string): void {
 	// One interaction, one effect: the twisty toggles without moving the selection,
 	// everything else selects.
@@ -877,7 +936,7 @@ function handleTreeTargetAction(target: Element, item: HTMLElement, id: string):
 	selectItem(item);
 	syncSearchToSelection(id);
 	if (target.closest('.value-text') && item.dataset.kind === 'parameter') {
-		beginDetailsEdit(id);
+		scheduleDetailsEdit(id);
 	}
 }
 
@@ -894,29 +953,30 @@ function closestTreeItem(target: Element): HTMLElement | undefined {
 	return item instanceof HTMLElement ? item : undefined;
 }
 
+/** A single click on a concrete element; multi-clicks belong to text selection. */
+function isElementClick(event: MouseEvent): event is MouseEvent & { target: Element } {
+	return event.target instanceof Element && event.detail <= 1;
+}
+
 function onRowClick(event: MouseEvent): void {
-	if (!(event.target instanceof Element)) {
+	// Every click supersedes a pending value edit. The second click of a
+	// double-click (and every later click) only participates in text selection.
+	cancelPendingDetailsEdit();
+	if (!isElementClick(event)) {
 		return;
 	}
 	const item = closestTreeItem(event.target);
 	if (!item) {
-		// Header rows are text lines: focus them, but never select or open Details.
-		focusHeaderRow(event.target);
+		focusHeaderRowUnlessSelecting(event.target);
 		// Annotation rows are aria-hidden decoration: clicking one changes nothing.
 		return;
 	}
+	// The click that ends a drag selection is part of selecting text, not a row
+	// action: moving focus or opening Details would collapse the selection.
+	if (endsDragSelection(event.target)) {
+		return;
+	}
 	activateTreeTarget(event.target, item);
-}
-
-function onRowDoubleClick(event: MouseEvent): void {
-	if (!(event.target instanceof Element)) {
-		return;
-	}
-	const item = closestTreeItem(event.target);
-	if (!item || event.target.closest('.twisty')) {
-		return;
-	}
-	revealItem(item);
 }
 
 interface TreeKeyTarget {
@@ -1620,6 +1680,8 @@ function isSearchCycleKey(event: KeyboardEvent): boolean {
 }
 
 function onDocumentKeydown(event: KeyboardEvent): void {
+	// A keyboard gesture supersedes a deferred value click.
+	cancelPendingDetailsEdit();
 	if (isFindShortcut(event)) {
 		event.preventDefault();
 		searchBar.focus();
@@ -1634,7 +1696,9 @@ function onDocumentKeydown(event: KeyboardEvent): void {
 /** Bind the document-level gestures once the page refs exist. */
 function mountEditorDomListeners(): void {
 document.addEventListener('click', onRowClick);
-document.addEventListener('dblclick', onRowDoubleClick);
+// Double-click is a native text-selection gesture (word/line); it must never
+// reveal source, and it cancels a deferred single-click Details edit.
+document.addEventListener('dblclick', cancelPendingDetailsEdit);
 document.addEventListener('keydown', onTreeKeydown);
 mountContextMenu(tree, {
 	selectItem: selectItem,
@@ -1726,6 +1790,7 @@ function alignDocumentFocus(previousFocus: string | undefined): void {
 }
 
 function applyDocumentMessage(message: EditorDocumentMessage): void {
+	cancelPendingDetailsEdit();
 	clearDetailsStatus();
 	const scrollTop = storedScrollTop();
 	const previousFocus = documentFocusId();
@@ -1741,6 +1806,7 @@ function applyDocumentMessage(message: EditorDocumentMessage): void {
 }
 
 function applySelectMessage(nodeId: string): void {
+	cancelPendingDetailsEdit();
 	clearDetailsStatus();
 	if (expandAncestors(nodeId)) {
 		rebuildDisplay();
@@ -1902,6 +1968,7 @@ postToHost({ type: 'ready' });
 
 /** A page reload starts from the initial protocol state, exactly like a fresh bundle. */
 function resetEditorState(): void {
+	cancelPendingDetailsEdit();
 	rows = [];
 	rowById = new Map();
 	rowIndexById = new Map();
