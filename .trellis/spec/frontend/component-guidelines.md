@@ -125,7 +125,7 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   case-insensitive occurrence in `<mark>` in the label, value and every visible meta fragment
   (short name, variant, context, condition and annotation). `buildDocumentNodeRow` sets
   `data-search-current="true"` on the row that owns the current match. The page defines fixed
-  dark-theme tiers `--match-bg: rgba(234, 179, 8, 0.32)` and `--match-hi: rgba(234, 179, 8, 0.7)`;
+  dark-theme tiers `--match-bg: rgba(234, 179, 8, 0.18)` and `--match-hi: rgba(234, 179, 8, 0.36)`;
   all marks use the subtle tier and the current row uses the strong tier. Do not depend on
   `--vscode-editor-findMatch*`, which a theme may resolve to transparent. Clearing the search removes
   both marks. Do not add a second highlight implementation.
@@ -237,8 +237,9 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   outline. High contrast uses outlines, not fills: the subtree tint becomes a dotted outline in
   HC/forced colors.
 - **Search has two fixed highlight tiers.** All matches use the subtle `--match-bg`
-  (`rgba(234, 179, 8, 0.32)`); the current row's marks use the stronger `--match-hi`
-  (`rgba(234, 179, 8, 0.7)`). These are documented dark-theme literals, deliberately independent of
+  (`rgba(234, 179, 8, 0.18)`); the current row's marks use the stronger `--match-hi`
+  (`rgba(234, 179, 8, 0.36)`), keeping the current match clearly stronger while the text stays
+  readable. These are documented dark-theme literals, deliberately independent of
   theme find-match variables. The current row is identified by `data-search-current="true"`, never
   by a second mark type. High contrast/forced colors uses an outline instead of the fill.
 - The flat tree uses `role="tree"` with direct `role="treeitem"` children (window/spacers are

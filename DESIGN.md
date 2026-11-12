@@ -16,8 +16,8 @@ colors:
   selection: "#19252E"
   guide: "#80808040"
   reference: "#DCDCAA"
-  match: "rgba(234, 179, 8, 0.32)"
-  match-active: "rgba(234, 179, 8, 0.7)"
+  match: "rgba(234, 179, 8, 0.18)"
+  match-active: "rgba(234, 179, 8, 0.36)"
   added: "#81B88B"
   removed: "#C74E39"
   changed: "#E2C08D"
@@ -188,8 +188,8 @@ The palette has three jobs:
 | `selection` | 24% active-selection tint over `surface` | Rendered Dark Modern reference |
 | `guide` | `--vscode-tree-indentGuidesStroke` fallback | Fixed `#80808040` |
 | `reference` | `--vscode-symbolIcon-functionForeground` fallback | Fixed `#DCDCAA` |
-| `match` | `--match-bg` | Fixed `rgba(234, 179, 8, 0.32)` |
-| `match-active` | `--match-hi` | Fixed `rgba(234, 179, 8, 0.7)` |
+| `match` | `--match-bg` | Fixed `rgba(234, 179, 8, 0.18)` |
+| `match-active` | `--match-hi` | Fixed `rgba(234, 179, 8, 0.36)` |
 | `added` | `--vscode-gitDecoration-addedResourceForeground` | Rendered reference |
 | `removed` | `--vscode-gitDecoration-deletedResourceForeground` | Rendered reference |
 | `changed` | `--vscode-gitDecoration-modifiedResourceForeground` | Rendered reference |
@@ -280,7 +280,8 @@ button style. The sidebar is a 360px panel with a 28px vertical tab strip and a 
 ### Search
 
 The search field is a 26px input on `surface-input`. Match marks use the two fixed amber tiers:
-`match` for every hit and `match-active` for the current hit. Never use theme find-match colours,
+`match` at 18% alpha for every hit and `match-active` at 36% for the current hit, so the text stays
+readable while the current match remains clearly stronger. Never use theme find-match colours,
 because a theme may resolve them to transparent.
 
 ### Diff

@@ -690,6 +690,11 @@ suite('DocumentTreeView component', () => {
 			'the Document gutter repeats the selection and focus rail'
 		);
 		assert.ok(/\.twisty\s*\{[^}]*left:\s*calc\(var\(--line-numbers-width\) \+ 2px\)/.test(css));
+		assert.ok(/^mark\s*\{[^}]*background:\s*var\(--match-bg\)/m.test(css), 'every mark uses the base search tier');
+		assert.ok(
+			/\.node\[data-search-current="true"\] > \.row mark\s*\{[^}]*var\(--match-hi\)/.test(css),
+			'the current row uses the strong search tier'
+		);
 		assert.ok(
 			/\.document-tree-header-row\[data-search-current="true"\] mark\s*\{[^}]*var\(--match-hi\)/.test(css),
 			'the current header uses the strong search tier'

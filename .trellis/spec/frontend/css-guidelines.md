@@ -46,7 +46,7 @@ also sets `data-page="diff"`, which scopes its own surface tokens. Plain declara
 | Syntax | `--tok-keyword`, `--tok-string`, `--tok-number`, `--tok-meta`, `--tok-comment`, `--tok-key`, `--tok-punct`, `--tok-dim` | Every value resolves from a `--vscode-*` token, with the editor foreground as the fallback. |
 | Surfaces | `--hover-bg`, `--sel-bg`, `--sel-bg-focus`, `--subtree-bg`, `--sel-container-bg`, `--sel-outline`, `--rail` | Selection uses tint + rail; it never recolours syntax. |
 | Geometry | `--fold-gutter: 26px`, `--line-numbers-width: 0px`, `--doc-pad: 3ch`, `--indent: 4ch`, `--content-pad` | `--content-pad` is `calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad))`; depth is generated from it. `--line-numbers-width` is written per pane as `<chars>ch` and defaults to `0px`. |
-| Search | `--match-bg`, `--match-hi` | Fixed dark-theme yellow tiers (see the exception log). |
+| Search | `--match-bg`, `--match-hi` | Fixed amber tiers: 0.18 alpha for every hit, 0.36 for the current hit (see the exception log). |
 | Container accent | `--container-accent` | Fixed `#4EC9B0` (see the exception log). |
 
 Rules:
@@ -54,7 +54,9 @@ Rules:
 - Every colour is a `--vscode-*` variable, or one of the documented tokens. A literal colour may appear
   only as a fallback **inside** `var(...)`, never as a standalone declaration value.
 - Do not reach for `--vscode-editor-findMatch*` for search marks: a theme may resolve it to transparent.
-  The page has one highlight implementation and two fixed tiers (`--match-bg`, `--match-hi`).
+  The page has one highlight implementation and exactly two fixed amber tiers (`--match-bg` 0.18 for
+  every hit, `--match-hi` 0.36 for the current match); the current tier must stay visibly stronger
+  while the text remains readable.
 - Use the semantic token for the job: buttons use `--vscode-button-*`, borders use
   `--vscode-panel-border` / `--vscode-editorGroup-border`, focus uses `--vscode-focusBorder`, disabled
   text uses `--vscode-disabledForeground`.
@@ -174,8 +176,8 @@ Rules:
   `--vscode-diffEditor-removedTextBackground` (fallback `--diff-removed-bg`) with a 1px
   `--diff-removed-edge` outline; the right pane uses `--vscode-diffEditor-insertedTextBackground`
   (fallback `--diff-added-bg`) with a 1px `--diff-added-edge` outline. A search `<mark>` inside one
-  keeps `--match-bg` (or `--match-hi` when current); the word span's outline stays. Forced-colors and
-  high contrast replace both fills with a dotted outline.
+  keeps `--match-bg` (or `--match-hi` when current); the calmer fill never erases the word span's
+  outline. Forced-colors and high contrast replace both fills with a dotted outline.
 - Both panes share the same row height, offsets and text content width; each pane's horizontal extent
   adds its own number column (`diffContent + chars * chWidth`), so the last characters stay reachable.
   Header rows use the Document `.document-tree-header-row` geometry and the shorter header is padded so
@@ -213,7 +215,7 @@ Documented deviations from the token/fallback rules. Add an entry before introdu
 | Rule | Exception | Reason |
 |---|---|---|
 | No standalone literal colour | `tokens.css` `--container-accent: #4EC9B0` | Some themes resolve `--vscode-symbolIcon-*` to the regular foreground, which erases the container accent. High contrast/forced colours override it to the editor foreground. |
-| No standalone literal colour | `tokens.css` `--match-bg: rgba(234, 179, 8, 0.32)` and `--match-hi: rgba(234, 179, 8, 0.7)` | Fixed two-tier search highlight; theme find-match variables may resolve to transparent. The tiers are deliberately independent of the theme. |
+| No standalone literal colour | `tokens.css` `--match-bg: rgba(234, 179, 8, 0.18)` and `--match-hi: rgba(234, 179, 8, 0.36)` | Fixed two-tier search highlight; theme find-match variables may resolve to transparent. The tiers are deliberately independent of the theme, and the current tier stays stronger. |
 | Literal only inside `var(...)` | `documentTree.css` `.guide` fallback `#80808040` | `--vscode-tree-indentGuidesStroke` may be absent; the translucent grey keeps guides visible without inventing a theme colour. |
 | Literal only inside `var(...)` | `documentTree.css` reference target fallback `#DCDCAA` | `--vscode-symbolIcon-functionForeground` carries the reference yellow when the theme defines it; the fixed fallback preserves the distinction otherwise. |
 | No literal colour for diff status | `diffView.css` uses `--vscode-diffEditor-*` and `--vscode-gitDecoration-*` with `transparent` / `currentColor` fallbacks | Diff status is theme-owned; the fallbacks are non-colours, not a palette. |

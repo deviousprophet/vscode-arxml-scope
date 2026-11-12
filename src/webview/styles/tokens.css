@@ -21,9 +21,9 @@ body[data-view] {
 	--subtree-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
 	--sel-container-bg: var(--vscode-editor-selectionHighlightBackground, transparent);
 	--container-accent: #4EC9B0;
-	/* Search match tiers: fixed dark-theme yellow, matching the reference UI. */
-	--match-bg: rgba(234, 179, 8, 0.32);
-	--match-hi: rgba(234, 179, 8, 0.7);
+	/* Search match tiers: fixed amber. Every hit is subtle, the current hit stronger. */
+	--match-bg: rgba(234, 179, 8, 0.18);
+	--match-hi: rgba(234, 179, 8, 0.36);
 	--fold-gutter: 26px;
 	--line-numbers-width: 0px;
 	--doc-pad: 3ch;

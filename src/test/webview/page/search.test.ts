@@ -246,6 +246,55 @@ suite('search page', () => {
 		}
 	});
 
+	test('the two search tiers are calm, distinct and keep changed-word outlines', () => {
+		const tokens = webviewCss('styles', 'tokens.css');
+		const tree = webviewCss('components', 'documentTree', 'documentTree.css');
+		const diff = webviewCss('components', 'diffView', 'diffView.css');
+		const base = /--match-bg:\s*rgba\(234, 179, 8, 0\.18\);/.exec(tokens);
+		const current = /--match-hi:\s*rgba\(234, 179, 8, 0\.36\);/.exec(tokens);
+		assert.ok(base, 'every match uses the calmer 0.18 amber tier');
+		assert.ok(current, 'the current match uses the stronger 0.36 amber tier');
+		assert.notStrictEqual(base[0], current[0], 'the current tier stays distinct from every match');
+		assert.strictEqual(
+			(tokens.match(/--match-(?:bg|hi)\s*:/g) ?? []).length,
+			2,
+			'exactly two match tiers'
+		);
+		assert.ok(/^mark\s*\{[^}]*background:\s*var\(--match-bg\)/m.test(tree), 'every mark uses the base tier');
+		assert.ok(
+			/\.node\[data-search-current="true"\] > \.row mark\s*\{[^}]*var\(--match-hi\)/.test(tree),
+			'the current Document row uses the strong tier'
+		);
+		assert.ok(
+			/\.document-tree-header-row\[data-search-current="true"\] mark\s*\{[^}]*var\(--match-hi\)/.test(tree),
+			'the current header uses the strong tier'
+		);
+		assert.ok(
+			/\.diff-row\[data-search-current="true"\] \.diff-cell mark\s*\{[^}]*var\(--match-hi\)/.test(diff),
+			'the current diff row uses the strong tier'
+		);
+		assert.ok(
+			/\.diff-row \.word-changed\[data-word-side="left"\]\s*\{[^}]*outline:\s*1px solid var\(--diff-removed-edge\)/.test(
+				diff
+			),
+			'the removed-word outline survives a mark'
+		);
+		assert.ok(
+			/\.diff-row \.word-changed\[data-word-side="right"\]\s*\{[^}]*outline:\s*1px solid var\(--diff-added-edge\)/.test(
+				diff
+			),
+			'the added-word outline survives a mark'
+		);
+		assert.ok(
+			/@media \(forced-colors: active\)[\s\S]*body\[data-view\] mark\s*\{[^}]*outline:/.test(tree),
+			'forced colors keep marks visible as outlines'
+		);
+		assert.ok(
+			/body\.vscode-high-contrast\[data-view\] mark\s*\{[^}]*outline:/.test(tree),
+			'the high-contrast theme keeps marks visible as outlines'
+		);
+	});
+
 	test('the schema/package rows scroll out of the rendered window', async () => {
 		const dom = mountEditor();
 		try {
