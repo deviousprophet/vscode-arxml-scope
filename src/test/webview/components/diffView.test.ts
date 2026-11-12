@@ -62,6 +62,16 @@ suite('DiffView component', () => {
 		);
 	});
 
+	test('the hidden-change dot is a small token-coloured marker with no row tint', () => {
+		const css = webviewCss('components', 'diffView', 'diffView.css');
+		const rule = css.match(/\.diff-subtree-change-dot\s*\{[^}]*\}/)?.[0] ?? '';
+		assert.ok(/width:\s*6px/.test(rule), 'the dot is 6px wide');
+		assert.ok(/height:\s*6px/.test(rule), 'the dot is 6px high');
+		assert.ok(/background-color:\s*var\(--diff-changed-edge\)/.test(rule), 'the dot consumes the change token');
+		assert.ok(!/#[0-9a-fA-F]{3,8}/.test(rule), 'the dot has no literal colour');
+		assert.ok(!/\.diff-row\[data-subtree-changed="true"\]/.test(css), 'the marker never tints the whole row');
+	});
+
 	test('mount creates one shared scroll surface and two window panes', () => {
 		const dom = installMarkup(`<body>${renderDiffViewHtml()}</body>`);
 		try {

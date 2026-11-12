@@ -179,6 +179,8 @@ let rows: DiffRow[] = [];
 let semanticMatching = true;
 /** Unchanged rows kept above and below each change in Show diff. */
 const CONTEXT_LINES = 5;
+/** Accessible description for a collapsed container with hidden changes. */
+const SUBTREE_CHANGED_DESCRIPTION = 'Contains hidden changes';
 let contextActive = true;
 let expandedGaps = new Set<string>();
 let rowByKey = new Map<string, DiffRow>();
@@ -190,6 +192,8 @@ let rowsRevision = 0;
 let subtreeCache: { key: string | undefined; revision: number; ids: Set<string> } | undefined;
 let visibility: boolean[] = [];
 let displayRows: DiffDisplayRow[] = [];
+/** Per source row: does its subtree hold a changed row? Recomputed per display rebuild. */
+let descendantChanged: boolean[] = [];
 let displayIndexByKey = new Map<string, number>();
 let navigationVisible: boolean[] = [];
 let windowRange: [number, number] = [0, 0];
@@ -268,6 +272,7 @@ function clearEmptyDisplay(): void {
 }
 
 function rebuildDisplay() {
+	descendantChanged = buildDescendantChanged(rows);
 	displayRows = flattenDiffDocument(rows, {
 		collapsed: collapsed,
 		visible: visibility,
@@ -281,6 +286,34 @@ function rebuildDisplay() {
 		clearEmptyDisplay();
 	}
 	buildHeightFn();
+}
+/** Prefix counts of non-unchanged rows, so a subtree range is one subtraction. */
+function changedPrefix(source: readonly DiffRow[]): number[] {
+	const prefix: number[] = [0];
+	for (const row of source) {
+		prefix.push(prefix[prefix.length - 1] + (row.status === 'unchanged' ? 0 : 1));
+	}
+	return prefix;
+}
+function subtreeEnd(source: readonly DiffRow[], at: number): number {
+	return Math.min(source.length, at + 1 + Math.max(0, source[at].subtreeSize));
+}
+function subtreeHasChange(prefix: readonly number[], at: number, end: number): boolean {
+	return end > at + 1 && prefix[end] > prefix[at + 1];
+}
+/**
+ * Linear over the merged rows: a descendant changed when any row in
+ * `(at, at + subtreeSize]` is not `unchanged`. Added, removed, semantically
+ * matched and word-changed rows all carry a non-unchanged status, so this one
+ * predicate covers every change class.
+ */
+function buildDescendantChanged(source: readonly DiffRow[]): boolean[] {
+	const prefix = changedPrefix(source);
+	const flags: boolean[] = new Array(source.length).fill(false);
+	for (let at = 0; at < source.length; at++) {
+		flags[at] = subtreeHasChange(prefix, at, subtreeEnd(source, at));
+	}
+	return flags;
 }
 function headerLines(header: any): Array<{ keyword: string; text: string }> {
 	const value = headerOf(header);
@@ -670,7 +703,7 @@ function cachedSubtree(): Set<string> | undefined {
 
 function subtreeIdsFrom(at: number): Set<string> {
 	const ids = new Set<string>();
-	const end = Math.min(rows.length, at + 1 + Math.max(0, rows[at].subtreeSize));
+	const end = subtreeEnd(rows, at);
 	for (let index = at; index < end; index++) {
 		ids.add(rows[index].key);
 	}
@@ -980,6 +1013,48 @@ function markStructuralRow(element: HTMLElement): void {
 	element.setAttribute('aria-hidden', 'true');
 }
 
+function subtreeChangeDot(): HTMLElement {
+	const dot = document.createElement('span');
+	dot.className = 'diff-subtree-change-dot';
+	dot.setAttribute('aria-hidden', 'true');
+	dot.title = SUBTREE_CHANGED_DESCRIPTION;
+	return dot;
+}
+
+/** Place the dot in the fold gutter, immediately after the collapsed twisty. */
+function appendSubtreeChangeDot(node: Element): void {
+	const shell = node.firstElementChild;
+	if (!shell) {
+		return;
+	}
+	const twisty = shell.querySelector('.twisty');
+	if (twisty) {
+		twisty.insertAdjacentElement('afterend', subtreeChangeDot());
+		return;
+	}
+	shell.appendChild(subtreeChangeDot());
+}
+
+/**
+ * The row is a node row, currently collapsed, and its subtree holds changes.
+ * The dot is display-only: `data-status`, the tint, the gutter, search, F7 and
+ * selection keep using the row's own status.
+ */
+function isCollapsedChangedNode(flat: DiffDisplayRow, row: DiffRow): boolean {
+	return isNodeDisplay(flat) && row.hasChildren && !flat.expanded && descendantChanged[flat.rowIndex] === true;
+}
+
+function markSubtreeChanged(element: HTMLElement): void {
+	element.dataset.subtreeChanged = 'true';
+	element.setAttribute('aria-description', SUBTREE_CHANGED_DESCRIPTION);
+	const node = element.querySelector<HTMLElement>('.node');
+	if (!node) {
+		return;
+	}
+	node.dataset.subtreeChanged = 'true';
+	appendSubtreeChangeDot(node);
+}
+
 function markSelectedRow(element: HTMLElement, key: string): void {
 	if (key === selectedKey) {
 		element.dataset.selected = 'true';
@@ -1140,6 +1215,10 @@ function appendKindCell(
 	element.appendChild(cell);
 }
 
+function marksChangedSubtree(flat: DiffDisplayRow, row: DiffRow, side: 'left' | 'right'): boolean {
+	return isCollapsedChangedNode(flat, row) && displaySideRow(row, side) !== undefined;
+}
+
 function fillContentRow(
 	element: HTMLElement,
 	cell: HTMLElement,
@@ -1156,6 +1235,9 @@ function fillContentRow(
 		applyNodeRowState(element, flat, side, row, status);
 	}
 	appendKindCell(element, cell, flat, side, row);
+	if (marksChangedSubtree(flat, row, side)) {
+		markSubtreeChanged(element);
+	}
 }
 
 function renderContentRow(flat: DiffDisplayRow | undefined, pane: string): HTMLElement {
@@ -1403,6 +1485,50 @@ function restoreViewport(anchor: ReturnType<typeof captureAnchor>, scrollTop: nu
 		views.setScrollTop(scrollTop);
 	}
 }
+
+interface DiffKeyAnchor {
+	key: string;
+	/** The anchor row's distance from the viewport top when it was captured. */
+	delta: number;
+}
+
+/** Focused row, else the selected row, else the current search match. */
+function diffAnchorKey(): string | undefined {
+	return focusedKey() || selectedKey || currentMatchKey();
+}
+
+function keyAnchorAt(key: string | undefined): DiffKeyAnchor | undefined {
+	if (key === undefined) {
+		return undefined;
+	}
+	const index = virtualIndexForKey(key);
+	if (index === undefined) {
+		return undefined;
+	}
+	const top = views ? views.getScrollTop() : 0;
+	return { key: key, delta: top - anchorOffset(index) };
+}
+
+function anchorIndexOrAncestor(key: string): number | undefined {
+	const index = virtualIndexForKey(key);
+	return index === undefined ? virtualIndexForKey(visibleAncestorKey(key)) : index;
+}
+
+/** Re-show the anchor at its captured viewport offset, using its nearest visible ancestor. */
+function restoreKeyAnchor(anchor: DiffKeyAnchor, scrollTop: number): void {
+	const index = anchorIndexOrAncestor(anchor.key);
+	if (index === undefined) {
+		if (views) {
+			views.setScrollTop(scrollTop);
+		}
+		return;
+	}
+	if (views) {
+		views.setScrollTop(Math.max(0, anchorOffset(index) + anchor.delta));
+		ensureVisible(index);
+	}
+}
+
 function setSelectedState(item: HTMLElement, on: boolean): void {
 	if (on) {
 		item.dataset.selected = 'true';
@@ -1825,15 +1951,26 @@ function visibleAncestorKey(key: string): string | undefined {
 	}
 	return undefined;
 }
-function collapseChanged(reconcileSelection: boolean): void {
-	const previousSelection = selectedKey;
-	rebuildDisplay();
-	if (reconcileSelection && previousSelection !== undefined && !displayIndexByKey.has(previousSelection)) {
-		const ancestor = visibleAncestorKey(previousSelection);
-		selectedKey = ancestor;
-		focusKey = ancestor;
+/** Collapse-all moves a hidden selection to its nearest visible ancestor. */
+function reconcileCollapsedSelection(reconcileSelection: boolean): void {
+	if (!reconcileSelection || selectedKey === undefined || displayIndexByKey.has(selectedKey)) {
+		return;
 	}
+	const ancestor = visibleAncestorKey(selectedKey);
+	selectedKey = ancestor;
+	focusKey = ancestor;
+}
+
+function collapseChanged(reconcileSelection: boolean): void {
+	const anchor = keyAnchorAt(diffAnchorKey());
+	const scrollTop = views ? views.getScrollTop() : 0;
+	rebuildDisplay();
+	reconcileCollapsedSelection(reconcileSelection);
 	applyModels();
+	renderWindow(true);
+	if (anchor !== undefined) {
+		restoreKeyAnchor(anchor, scrollTop);
+	}
 	renderWindow(true);
 	updateSelection();
 	applyRoving(selectedKey);
@@ -2396,6 +2533,7 @@ function resetDiffState(): void {
 	focusKey = undefined;
 	visibility = [];
 	displayRows = [];
+	descendantChanged = [];
 	displayIndexByKey = new Map();
 	navigationVisible = [];
 	windowRange = [0, 0];

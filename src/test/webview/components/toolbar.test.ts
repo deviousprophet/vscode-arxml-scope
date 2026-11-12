@@ -13,18 +13,35 @@ import {
 import { installMarkup } from '../pageTestUtils';
 
 suite('Toolbar component', () => {
-	test('the editor strip is grow, Collapse, Expand, then the Search slot', () => {
+	test('the editor strip is grow, Collapse, Expand, Sidebar, then the Search slot', () => {
 		const html = renderEditorToolbarHtml('<div class="search-box"></div>');
 		assert.ok(html.startsWith('<div class="toolbar">'));
 		assert.ok(html.indexOf('class="grow"') < html.indexOf('id="collapse-all"'));
 		assert.ok(html.indexOf('id="collapse-all"') < html.indexOf('id="expand-all"'));
-		assert.ok(html.indexOf('id="expand-all"') < html.indexOf('class="search-box"'));
-		assert.ok(/id="collapse-all"[^>]*class="[^"]*sb-btn sb-btn-secondary/.test(html));
+		assert.ok(html.indexOf('id="expand-all"') < html.indexOf('id="toggle-sidebar"'));
+		assert.ok(html.indexOf('id="toggle-sidebar"') < html.indexOf('class="search-box"'));
+		const buttons = html.match(/<button[^>]*class="tool diff-tool"[\s\S]*?<\/button>/g) ?? [];
+		assert.strictEqual(buttons.length, 3, 'three icon-over-label actions');
+		for (const button of buttons) {
+			assert.ok(button.includes('<svg'), `icon missing: ${button}`);
+			assert.ok(button.includes('width="18"'), `18px icon missing: ${button}`);
+			assert.ok(button.includes('<span class="lbl">'), `label missing: ${button}`);
+			assert.ok(button.includes('title='), `title missing: ${button}`);
+		}
+		assert.ok(/id="toggle-sidebar"[^>]*aria-pressed="true"/.test(html));
+		assert.ok(/id="toggle-sidebar"[^>]*title="Hide sidebar"/.test(html));
+		assert.ok(/id="toggle-sidebar"[^>]*aria-label="Sidebar"/.test(html));
+		assert.ok(html.includes('<span class="lbl">Sidebar</span>'));
+		assert.ok(!/id="collapse-all"[^>]*aria-pressed/.test(html), 'Collapse is a one-shot action');
+		assert.ok(!/id="expand-all"[^>]*aria-pressed/.test(html), 'Expand is a one-shot action');
+		assert.ok(!html.includes('id="show-details"'), 'the duplicated Details action is gone');
+		assert.ok(!html.includes('<span class="lbl">Details</span>'), 'no Details toolbar label');
 		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"/.test(html));
 		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"/.test(html));
 		assert.ok(html.includes('<span class="lbl">Collapse</span>'));
 		assert.ok(html.includes('<span class="lbl">Expand</span>'));
 		assert.ok(!/style="/.test(html), 'no inline styles');
+		assert.ok(!/(?:#[0-9a-fA-F]{3,8}\b|rgba?\()/.test(html), 'icons use currentColor, not literal colours');
 	});
 
 	test('the diff strip groups view, context, matching and navigation with dividers', () => {
@@ -74,17 +91,45 @@ suite('Toolbar component', () => {
 		try {
 			let collapsed = 0;
 			let expanded = 0;
-			const toolbar = new EditorToolbar({ onCollapseAll: () => collapsed++, onExpandAll: () => expanded++ });
+			let toggled = 0;
+			const toolbar = new EditorToolbar({
+				onCollapseAll: () => collapsed++,
+				onExpandAll: () => expanded++,
+				onToggleSidebar: () => toggled++,
+			});
 			toolbar.mount();
 			toolbar.mount();
 			dom.document.getElementById('collapse-all').click();
 			dom.document.getElementById('expand-all').click();
+			dom.document.getElementById('toggle-sidebar').click();
 			assert.strictEqual(collapsed, 1);
 			assert.strictEqual(expanded, 1);
+			assert.strictEqual(toggled, 1);
 		} finally {
 			dom.restore();
 		}
 		assert.strictEqual(new DiffToolbar().mounted, false);
+	});
+
+	test('setSidebarHidden carries the pressed state, label and title both ways', () => {
+		const dom = installMarkup(`<body>${renderEditorToolbarHtml('<div class="search-box"></div>')}</body>`);
+		try {
+			const toolbar = new EditorToolbar();
+			const toggle = dom.document.getElementById('toggle-sidebar')!;
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
+			toolbar.setSidebarHidden(true);
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(toggle.title, 'Show sidebar');
+			assert.strictEqual(toggle.getAttribute('aria-label'), 'Sidebar');
+			toolbar.setSidebarHidden(false);
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(toggle.title, 'Hide sidebar');
+			assert.strictEqual(toggle.getAttribute('aria-label'), 'Sidebar');
+			toggle.remove();
+			toolbar.setSidebarHidden(true);
+		} finally {
+			dom.restore();
+		}
 	});
 
 	test('setViewMode writes the context disabled state, labels and titles both ways', () => {

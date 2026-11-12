@@ -45,11 +45,6 @@ body[data-page="diff"] .toolbar .view-switch {
 	flex: none;
 	gap: 2px;
 }
-.icon-tool[aria-pressed="true"],
-.diff-tool[aria-pressed="true"] {
-	color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
-	background: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
-}
 body[data-page="diff"] .search-input {
 	height: 22px;
 	color: var(--vscode-input-foreground, var(--vscode-foreground));
@@ -332,6 +327,18 @@ body[data-page="diff"] .nav-btn:disabled {
 	width: 1ch;
 	text-align: center;
 }
+/* A collapsed container with hidden changes: a small dot beside its twisty.
+ * Display-only: the row keeps its own status, tint, gutter and line number. */
+.diff-subtree-change-dot {
+	position: absolute;
+	left: calc(var(--line-numbers-width) + 2px + 16px + 1px);
+	top: 50%;
+	width: 6px;
+	height: 6px;
+	margin-top: -3px;
+	border-radius: 50%;
+	background-color: var(--diff-changed-edge);
+}
 .diff-row[data-search-current="true"] .diff-cell mark {
 	background: var(--match-hi);
 }
@@ -397,6 +404,11 @@ body[data-page="diff"] .nav-btn:disabled {
 		background: transparent;
 		outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
 	}
+	.diff-subtree-change-dot {
+		background: transparent;
+		outline: 1px solid var(--vscode-contrastBorder, var(--vscode-focusBorder));
+		outline-offset: 1px;
+	}
 }
 body.vscode-high-contrast .diff-row[data-status="changed"] > .diff-cell,
 body.vscode-high-contrast .diff-row[data-status="added"] > .diff-cell[data-side="right"],
@@ -404,6 +416,11 @@ body.vscode-high-contrast .diff-row[data-status="removed"] > .diff-cell[data-sid
 	background: transparent;
 	outline: 1px dotted var(--vscode-contrastBorder, var(--vscode-focusBorder));
 	outline-offset: -1px;
+}
+body.vscode-high-contrast .diff-subtree-change-dot {
+	background: transparent;
+	outline: 1px solid var(--vscode-contrastBorder, var(--vscode-focusBorder));
+	outline-offset: 1px;
 }
 body.vscode-high-contrast .diff-row:hover > .diff-cell {
 	background: transparent;
@@ -422,8 +439,7 @@ body.vscode-high-contrast .diff-row .word-changed[data-word-side] {
 	.search-field {
 		flex: 1 1 0;
 	}
-	.notice,
-	.icon-tool .lbl {
+	.notice {
 		display: none;
 	}
 	.tool {

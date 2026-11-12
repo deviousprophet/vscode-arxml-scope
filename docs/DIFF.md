@@ -62,6 +62,10 @@ compared, not just the bytes on disk.
   of descendant containers. An added or removed row highlights only the pane that owns its cell; the
   blank side stays blank. The highlight spans a stable width: at least the pane and the full content
   width, including header lines, so a short selected row does not shrink to the rendered slice.
+- A collapsed container whose subtree contains a change shows a small dot beside its fold marker in both
+  panes, with the accessible description `Contains hidden changes`. The row keeps its own status and
+  tint; expanding the container removes the dot. It is display-only: not a search candidate, F7 target,
+  selection target or gutter row.
 - One shared virtual-scroll surface owns the vertical scrollbar and the row offsets. Each pane has its
   own horizontal scrollbar; moving either bar scrolls both panes in sync, and the pane split stays
   fixed. The content height is precomputed, so the thumb and drag match the rendered lines, and only the
@@ -192,7 +196,7 @@ split line. The split line is a display control only; it never changes the compa
 | **Show all** | Show every row, including unchanged rows. |
 | **Show diff** | Keep changed/added/removed rows, five context rows above and below each change, and split lines for the hidden runs. |
 | **Prev diff** / **Next diff** | Move to the previous/next changed row, wrapping at the ends. |
-| **Collapse** / **Expand** | Collapse every container in both panes or restore the full tree. |
+| **Collapse** / **Expand** | Collapse every container in both panes or restore the full tree; the focused, selected or current search row keeps its viewport position (its nearest visible ancestor when Collapse hides it). |
 | `F7` / `Shift+F7` | Same as Next/Prev while focus is in the diff list. |
 | **Swap sides** | Mirror the displayed sides; display only, no re-comparison. |
 | **Semantic** / **Strict** | Two-button view group for renamed-container pairing. The group flips immediately and a spinner/status shows while the new view is prepared. |
@@ -207,7 +211,10 @@ split line. The split line is a display control only; it never changes the compa
 Search jumps and marks; it never hides rows. In **Show diff** the search candidates are the
 changed/added/removed rows; in **Show all** they are all rows. Switching the view restarts the committed query
 against the new candidate set and preserves the current key where possible. Swapping sides re-projects
-the same merged rows, so the search result set does not change.
+the same merged rows, so the search result set does not change. **Collapse** and **Expand** capture the
+focused row, else the selected row, else the current search match, then restore that key at its previous
+viewport offset; a key hidden by the collapse anchors to its nearest visible ancestor, and the
+selection, focus and current match themselves do not move.
 
 ## Refresh behaviour
 

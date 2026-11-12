@@ -26,6 +26,7 @@ import {
 	mountSidebarShell,
 	setSidebarPersistence,
 	setSidebarState,
+	setSidebarHidden,
 } from '../../../webview/components/sidebar/sidebar';
 import { webviewCss } from '../cssTestUtils';
 import { installDom, installMarkup } from '../pageTestUtils';
@@ -65,7 +66,7 @@ ${section('pane-b')}
 }
 
 function state(overrides: Partial<SidebarUiState> = {}): SidebarUiState {
-	return { tab: 'details', sidebarWidth: 360, panes: {}, collapsed: [], ...overrides };
+	return { tab: 'details', sidebarWidth: 360, panes: {}, collapsed: [], hidden: false, ...overrides };
 }
 
 suite('sidebar shell', () => {
@@ -89,13 +90,17 @@ suite('sidebar shell', () => {
 			sidebarWidth: 500,
 			panes: { a: 120 },
 			collapsed: ['x'],
+			hidden: false,
 		});
 		assert.deepStrictEqual(loadUiState({ tab: 'nope', sidebarWidth: 'wide', panes: [], collapsed: [1, 'x'] }), {
 			tab: 'details',
 			sidebarWidth: 360,
 			panes: {},
 			collapsed: ['x'],
+			hidden: false,
 		});
+		assert.strictEqual(loadUiState({ hidden: true }).hidden, true);
+		assert.strictEqual(loadUiState({ hidden: 'yes' }).hidden, false);
 	});
 
 	test('allocatePanes fills a lone pane, splits fresh panes and honours saved sizes', () => {
@@ -577,6 +582,60 @@ suite('sidebar shell', () => {
 		}
 	});
 
+	test('setSidebarHidden hides the shell and keeps the tab, width and panes', () => {
+		const dom = installDom('editor');
+		try {
+			let persisted = 0;
+			setSidebarState(state({ tab: 'conditions', sidebarWidth: 500, panes: { 'sb-details': 200 }, collapsed: ['x'] }));
+			setSidebarPersistence(() => persisted++);
+			mountSidebarShell();
+			const tab = dom.document.getElementById('stab-conditions') as HTMLElement;
+			tab.focus();
+			setSidebarHidden(true);
+			assert.ok(dom.document.body.classList.contains('sidebar-hidden'));
+			assert.strictEqual(getSidebarState().hidden, true);
+			assert.strictEqual(persisted, 1, 'a change is persisted');
+			assert.strictEqual(dom.document.activeElement!.id, 'toggle-sidebar', 'focus leaves the hidden shell');
+			for (const id of ['sidebar', 'sidebar-resizer', 'side-tabs']) {
+				assert.strictEqual(dom.document.getElementById(id)!.hasAttribute('inert'), true, `${id} is inert`);
+			}
+			assert.deepStrictEqual(getSidebarState(), state({
+				tab: 'conditions',
+				sidebarWidth: 500,
+				panes: { 'sb-details': 200 },
+				collapsed: ['x'],
+				hidden: true,
+			}), 'only hidden changed');
+			setSidebarHidden(false);
+			assert.strictEqual(dom.document.body.classList.contains('sidebar-hidden'), false);
+			assert.strictEqual(getSidebarState().hidden, false);
+			assert.strictEqual(persisted, 2);
+			for (const id of ['sidebar', 'sidebar-resizer', 'side-tabs']) {
+				assert.strictEqual(dom.document.getElementById(id)!.hasAttribute('inert'), false, `${id} is interactive`);
+			}
+			assert.deepStrictEqual(getSidebarState(), state({
+				tab: 'conditions',
+				sidebarWidth: 500,
+				panes: { 'sb-details': 200 },
+				collapsed: ['x'],
+			}), 'restoring keeps the prior layout');
+			setSidebarHidden(false);
+			assert.strictEqual(persisted, 2, 'an unchanged state is not persisted');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the hidden layout hides the panel, resizer and tab strip', () => {
+		const css = webviewCss('components', 'sidebar', 'sidebar.css');
+		assert.ok(
+			/body\.sidebar-hidden #sidebar,[\s\S]*?body\.sidebar-hidden #sidebar-resizer,[\s\S]*?body\.sidebar-hidden #side-tabs\s*\{[^}]*display:\s*none/.test(
+				css
+			),
+			'the whole shell collapses to the Document width'
+		);
+	});
+
 	test('mountSidebarShell does nothing without the shell elements', () => {
 		const dom = installMarkup('<body></body>');
 		try {
@@ -590,8 +649,9 @@ suite('sidebar shell', () => {
 
 	test('the editor actions use the shared classes and the old toggles are gone', () => {
 		const html = page();
-		assert.ok(/id="collapse-all" class="sb-btn sb-btn-secondary/.test(html));
-		assert.ok(/id="expand-all" class="sb-btn sb-btn-secondary/.test(html));
+		assert.ok(/id="collapse-all" class="tool diff-tool"/.test(html));
+		assert.ok(/id="expand-all" class="tool diff-tool"/.test(html));
+		assert.ok(/id="toggle-sidebar" class="tool diff-tool"/.test(html));
 		assert.ok(html.includes('class="search-input"'));
 		assert.ok(!html.includes('id="conditions-toggle"'));
 		assert.ok(!html.includes('id="details-toggle"'));

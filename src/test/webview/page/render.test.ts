@@ -721,7 +721,7 @@ suite('editor bundled page', () => {
 		}
 	});
 
-	test('a plain click selects, a double click reveals and Ctrl+Enter reveals', async () => {
+	test('a plain click selects, a double click selects text and Ctrl+Enter reveals', async () => {
 		const { dom, document } = mount();
 		try {
 			const item = clickRow(dom, 'IniValue');
@@ -729,13 +729,13 @@ suite('editor bundled page', () => {
 				{ type: 'select', nodeId: rowFor(document, 'IniValue').id },
 			]);
 			item.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-			assert.deepStrictEqual(messagesOf(dom.api, 'reveal'), [
-				{ type: 'reveal', nodeId: rowFor(document, 'IniValue').id },
-			]);
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 0, 'a double click is a text gesture');
 			item.dispatchEvent(
 				new dom.window.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true })
 			);
-			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 2, 'Ctrl+Enter is the deliberate reveal');
+			assert.deepStrictEqual(messagesOf(dom.api, 'reveal'), [
+				{ type: 'reveal', nodeId: rowFor(document, 'IniValue').id },
+			], 'Ctrl+Enter is the deliberate reveal');
 		} finally {
 			dom.restore();
 		}

@@ -1,14 +1,15 @@
 /*
- * Shared toolbar strip. One row, no wrapping. The editor uses the default flex
- * track; the diff page switches to its three-track grid in diffView.css.
+ * Shared toolbar strip. One row, no wrapping. Both pages use the tall
+ * icon-over-label track: 60x48 tools with the label under an 18px icon.
  */
 .toolbar {
 	display: flex;
 	flex-wrap: nowrap;
 	gap: 6px;
 	align-items: center;
-	height: 26px;
-	padding: 0 8px;
+	min-height: 54px;
+	height: auto;
+	padding: 3px 8px;
 	flex: none;
 	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif);
 	font-size: 12px;
@@ -63,6 +64,10 @@
 	color: var(--vscode-foreground);
 	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
 }
+.tool[aria-pressed="true"] {
+	color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+	background: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
+}
 .tool:focus-visible {
 	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
 	outline-offset: 1px;
@@ -101,13 +106,6 @@
 }
 .tool svg {
 	flex: none;
-}
-.icon-tool {
-	min-width: 28px;
-	gap: 4px;
-}
-.icon-tool .lbl {
-	white-space: nowrap;
 }
 .diff-tool {
 	flex: none;
@@ -158,8 +156,5 @@
 	}
 	.tool {
 		padding: 0 4px;
-	}
-	.icon-tool .lbl {
-		display: none;
 	}
 }

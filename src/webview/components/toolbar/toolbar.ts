@@ -10,14 +10,16 @@ import './toolbar.css';
 export interface EditorToolbarCallbacks {
 	onCollapseAll?(): void;
 	onExpandAll?(): void;
+	onToggleSidebar?(): void;
 }
 
-/** Editor strip: flexible slot (grow), Collapse, Expand, then the Search slot. */
+/** Editor strip: flexible slot, sidebar toggle, Collapse, Expand, Details, then Search. */
 export function renderEditorToolbarHtml(searchHtml: string): string {
 	return `<div class="toolbar">
 <span class="grow"></span>
-<button id="collapse-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Collapse every container" aria-label="Collapse every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/></svg><span class="lbl">Collapse</span></button>
-<button id="expand-all" class="sb-btn sb-btn-secondary icon-tool" type="button" title="Expand every container" aria-label="Expand every container"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/></svg><span class="lbl">Expand</span></button>
+<button id="collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
+<button id="expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
+<button id="toggle-sidebar" class="tool diff-tool" type="button" aria-pressed="true" title="Hide sidebar" aria-label="Sidebar">${ICON_SIDEBAR}<span class="lbl">Sidebar</span></button>
 ${searchHtml}
 </div>`;
 }
@@ -36,21 +38,25 @@ export class EditorToolbar {
 			return;
 		}
 		this.mounted = true;
-		const collapse = document.getElementById('collapse-all');
-		if (collapse) {
-			collapse.addEventListener('click', () => {
-				if (this.callbacks.onCollapseAll) {
-					this.callbacks.onCollapseAll();
-				}
-			});
+		this.bind('collapse-all', () => this.callbacks.onCollapseAll && this.callbacks.onCollapseAll());
+		this.bind('expand-all', () => this.callbacks.onExpandAll && this.callbacks.onExpandAll());
+		this.bind('toggle-sidebar', () => this.callbacks.onToggleSidebar && this.callbacks.onToggleSidebar());
+	}
+
+	/** Paint the stateful sidebar toggle: pressed means the sidebar is visible. */
+	setSidebarHidden(hidden: boolean): void {
+		const button = document.getElementById('toggle-sidebar');
+		if (!button) {
+			return;
 		}
-		const expand = document.getElementById('expand-all');
-		if (expand) {
-			expand.addEventListener('click', () => {
-				if (this.callbacks.onExpandAll) {
-					this.callbacks.onExpandAll();
-				}
-			});
+		button.setAttribute('aria-pressed', hidden ? 'false' : 'true');
+		button.title = hidden ? 'Show sidebar' : 'Hide sidebar';
+	}
+
+	private bind(id: string, action: () => void): void {
+		const button = document.getElementById(id);
+		if (button) {
+			button.addEventListener('click', action);
 		}
 	}
 }
@@ -91,6 +97,7 @@ const ICON_SWAP = diffIcon(
 const ICON_CONTEXT = diffIcon(
 	'<path d="M2 3.5h12M2 12.5h12M5 8h2M9 8h2"/><path d="M6.5 6.8l1.5 1.4 1.5-1.4"/>'
 );
+const ICON_SIDEBAR = diffIcon('<rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M10 2.5v11"/>');
 
 export function renderDiffToolbarHtml(searchHtml: string): string {
 	return `<div class="toolbar">

@@ -34,12 +34,14 @@ export interface SidebarUiState {
     sidebarWidth: number;
     panes: Record<string, number>;
     collapsed: string[];
+    hidden: boolean;
 }
 export function renderSidebarHtml(): string;
 export function mountSidebarShell(): void;
 export function setSidebarState(savedState: unknown): void;
 export function getSidebarState(): SidebarUiState;
 export function setSidebarPersistence(persist: () => void): void;
+export function setSidebarHidden(hidden: boolean): void;
 export function showSidebarTab(name: string): void;
 export function showSidebarSection(id: string): void;
 export class SidebarPaneView {
@@ -67,6 +69,12 @@ export class SidebarPaneView {
 - Section headers are 22px buttons with `aria-expanded`/`aria-controls`; the body is the only scroller.
   A rendered sash drags, supports ArrowUp/ArrowDown (±10px) and resets on double click.
 - `showSidebarSection(id)` expands the owning pane before focus moves to a Details field.
+- `setSidebarHidden(true)` hides `#sidebar`, `#sidebar-resizer` and `#side-tabs` and makes them inert;
+  the Document takes the full content width. Only `hidden` changes, so showing it again restores the
+  previous tab, width and panes. The hidden flag is persisted page state and is applied before the
+  first layout.
+- Hiding moves focus out of the shell to the toolbar toggle (or the tree) when a hidden control owned
+  it.
 
 ## Validation & Error Matrix
 

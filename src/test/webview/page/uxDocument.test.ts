@@ -186,17 +186,23 @@ suite('editor document view', () => {
 		);
 	});
 
-	test('the strip is compact and keeps Collapse/Expand with opposite glyphs', () => {
+	test('the strip is tall icon-over-label chrome and keeps Collapse/Expand with opposite glyphs', () => {
 		const html = shell();
 		const css = style();
-		assert.ok(/\.toolbar\s*\{[^}]*height:\s*26px/.test(css));
-		assert.ok(/\.toolbar\s*\{[^}]*padding:\s*0 8px/.test(css));
+		assert.ok(/\.toolbar\s*\{[^}]*min-height:\s*54px/.test(css), 'the Document strip is as tall as the diff strip');
+		assert.ok(/\.toolbar\s*\{[^}]*height:\s*auto/.test(css));
+		assert.ok(/\.toolbar\s*\{[^}]*padding:\s*3px 8px/.test(css));
 		assert.ok(/\.toolbar\s*\{[^}]*flex-wrap:\s*nowrap/.test(css));
 		assert.ok(/\.tool\s*\{[^}]*background:\s*transparent[^}]*border:\s*0/.test(css));
 		assert.ok(!css.includes('.view-switch'), 'no view switch');
 		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"/.test(html));
 		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"/.test(html));
-		assert.ok(/\.icon-tool\s*\{[^}]*min-width:\s*28px/.test(css));
+		assert.ok(/id="toggle-sidebar"[^>]*class="tool diff-tool"/.test(html));
+		assert.ok(!html.includes('id="show-details"'), 'the duplicated Details action is gone');
+		assert.ok(/\.diff-tool\s*\{[^}]*width:\s*60px[^}]*height:\s*48px/.test(css), 'the diff button box');
+		assert.ok(/\.diff-tool svg\s*\{[^}]*width:\s*18px[^}]*height:\s*18px/.test(css), '18px icons');
+		assert.ok(/@media \(max-width: 1040px\)[\s\S]*?\.diff-tool \.lbl\s*\{[^}]*display:\s*none/.test(css));
+		assert.ok(/@media \(max-width: 720px\)[\s\S]*?\.diff-tool\s*\{[^}]*width:\s*32px/.test(css));
 		assert.ok(/\.twisty\s*\{[^}]*opacity:\s*0;/.test(css), 'expanded folds start hidden');
 		assert.ok(
 			/\.twisty\s*\{[^}]*left:\s*calc\(var\(--line-numbers-width\) \+ 2px\)/.test(css),
@@ -296,12 +302,15 @@ suite('editor document view', () => {
 			sidebarWidth: 360,
 			panes: {},
 			collapsed: [],
+			hidden: false,
 		});
 		assert.deepStrictEqual(loadUiState({ inspectorHidden: true }), {
 			tab: 'details',
 			sidebarWidth: 360,
 			panes: {},
 			collapsed: [],
+			hidden: false,
 		});
+		assert.strictEqual(loadUiState({ hidden: true }).hidden, true);
 	});
 });

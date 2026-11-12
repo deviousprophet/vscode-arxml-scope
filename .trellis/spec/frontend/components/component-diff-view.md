@@ -70,7 +70,12 @@ class DiffView {
 - One `selectedKey` drives selection in both panes. The subtree key set is recomputed from the merged
   rows (the selected row's `subtreeSize` range) and passed to both panes, so node, brace and annotation
   rows highlight together. An added/removed row's blank side renders no cell and no phantom highlight.
+- A collapsed node whose subtree holds a change gets `data-subtree-changed="true"`, a
+  `.diff-subtree-change-dot` beside its twisty and an accessible `Contains hidden changes` description.
+  The dot is display-only; the row keeps its own status/tint and is not a search, F7, selection or
+  gutter target. A blank side of an added/removed row gets no marker.
 - `refreshActiveLine()` re-applies `data-active` on both gutters after a selection change; only the selected display row's numbered cells are active and a blank missing-side cell never is.
+- Collapse all and Expand all capture the anchor before the rebuild with this priority: focused row, selected row, current search match. After the rebuild the key is restored at its prior viewport offset; when the collapse hid it, its nearest visible ancestor is used. Selection, roving focus and the current search match are preserved, and the toolbar button keeps focus.
 
 ## Behaviour
 
@@ -96,6 +101,9 @@ class DiffView {
 | Short selected row | Both panes fill at least the pane or the published content width, including header lines |
 | Added/removed row | Full-cell tint, no word spans, tint and rail only on the owning side's gutter cell |
 | Search match inside a changed word | `<mark>` background inside the outlined word span |
+| Collapsed subtree with a change | Dot + `Contains hidden changes` on the owning pane(s); the row's own status/tint is unchanged |
+| Collapse all / Expand all | The focused, selected or current search row keeps its viewport offset; a hidden key anchors to its nearest visible ancestor |
+| Added/removed container | Blank side gets no dot or description; the owning side marks a collapsed subtree |
 
 ## Tests Required
 

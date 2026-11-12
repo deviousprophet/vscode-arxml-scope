@@ -46,7 +46,8 @@ body (column)
 
 - The right side is a VS Code-style sidebar: a 28px vertical tab strip (**Details**, **Conditions**)
   at the far right, a resizable panel area, and one visible tab panel at a time. Details is the
-  default. There is no toolbar Details/Conditions toggle and no second panel surface.
+  default. The sidebar's Details tab reveals this panel; there is no Details/Conditions toggle and no
+  second panel surface.
 - `#inspector` remains the Details panel root. It contains one stable `sb-details` section body;
   `updateInspector` clears and rewrites that body only, never the section header. Node, value/formats,
   reference, conditions, annotations and the Jump/Reveal actions share the one scrolling body. The
@@ -57,7 +58,7 @@ body (column)
   drag, ArrowUp/ArrowDown and double-click reset.
 - Pane sizing: `HEADER_H=22`, `MIN_PANE=82`, `SASH_H=6`; saved user sizes first, fresh sections
   share the remainder, the last absorbs rounding, a single expanded section fills the panel.
-- The layout state (`tab`, `sidebarWidth`, `panes`, `collapsed`) is persisted through
+- The layout state (`tab`, `sidebarWidth`, `panes`, `collapsed`, `hidden`) is persisted through
   `acquireVsCodeApi().getState()/setState()`. A re-scan never resets it. The old `inspectorHidden`
   state is ignored.
 - The shared control system is `.sb-btn-primary`, `.sb-btn-secondary`, `.sb-btn-add`,
@@ -83,9 +84,10 @@ page key handler      →  navigation / F2/Enter opens details / F3 while search
 
 The page's `onRowClick` handles the row interactions. One interaction, one effect: the twisty toggles
 without moving selection, a reference target is plain text in the Document, clicking `=`/label selects
-only, and clicking a parameter's `.value-text` selects and opens the details editor. Reference follow
-is the details **Jump to target** action. The inline chevron (`twistyIcon`) is one shared row primitive
-in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
+only, and clicking a parameter's `.value-text` selects it and defers the details editor briefly so a
+double-click word selection wins; a second click, `dblclick` or a key cancels the deferred edit.
+Reference follow is the details **Jump to target** action. The inline chevron (`twistyIcon`) is one
+shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
 
 ## Row context menu
 
@@ -119,12 +121,12 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   the match index and jump — they never rescan. A jump expands ancestors, scrolls and selects the
   row but keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or is empty for an
   unexecuted query, but it never leaves the flow: its fixed `14ch` slot and the always-present busy
-  slot stop the field from shifting. The Search control closes the toolbar, after Collapse/Expand.
+  slot stop the field from shifting. The Search control closes the toolbar, after Details.
 - **All matches are marked; the current match is stronger.** `appendHighlighted` wraps every
   case-insensitive occurrence in `<mark>` in the label, value and every visible meta fragment
   (short name, variant, context, condition and annotation). `buildDocumentNodeRow` sets
   `data-search-current="true"` on the row that owns the current match. The page defines fixed
-  dark-theme tiers `--match-bg: rgba(234, 179, 8, 0.32)` and `--match-hi: rgba(234, 179, 8, 0.7)`;
+  dark-theme tiers `--match-bg: rgba(234, 179, 8, 0.18)` and `--match-hi: rgba(234, 179, 8, 0.36)`;
   all marks use the subtle tier and the current row uses the strong tier. Do not depend on
   `--vscode-editor-findMatch*`, which a theme may resolve to transparent. Clearing the search removes
   both marks. Do not add a second highlight implementation.
@@ -207,9 +209,9 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   ancestors when needed, scrolls it into the rendered window and updates the inspector. `prepareFocus`
   only establishes the initial roving focus while the row store is still empty.
 - Only layout state is persisted through `acquireVsCodeApi().getState()/setState()`: `tab`,
-  `sidebarWidth`, `panes` and `collapsed`. A missing or invalid state falls back to Details, 360px
-  and default section heights; a legacy `inspectorHidden` is ignored and never written back. The
-  reload round trip is observed in the Extension Development Host.
+  `sidebarWidth`, `panes`, `collapsed` and `hidden`. A missing or invalid state falls back to Details,
+  360px and default section heights; a legacy `inspectorHidden` is ignored and never written back.
+  The reload round trip is observed in the Extension Development Host.
 - The pure state helpers (`pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`,
   `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` in `documentTreeState.ts`;
   `inspectorFields` in `detailsPanel.ts`) are ordinary exports imported by the page bundle and the
@@ -236,8 +238,9 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   outline. High contrast uses outlines, not fills: the subtree tint becomes a dotted outline in
   HC/forced colors.
 - **Search has two fixed highlight tiers.** All matches use the subtle `--match-bg`
-  (`rgba(234, 179, 8, 0.32)`); the current row's marks use the stronger `--match-hi`
-  (`rgba(234, 179, 8, 0.7)`). These are documented dark-theme literals, deliberately independent of
+  (`rgba(234, 179, 8, 0.18)`); the current row's marks use the stronger `--match-hi`
+  (`rgba(234, 179, 8, 0.36)`), keeping the current match clearly stronger while the text stays
+  readable. These are documented dark-theme literals, deliberately independent of
   theme find-match variables. The current row is identified by `data-search-current="true"`, never
   by a second mark type. High contrast/forced colors uses an outline instead of the fill.
 - The flat tree uses `role="tree"` with direct `role="treeitem"` children (window/spacers are
@@ -275,7 +278,7 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 | Leaking bracket guides outside their container | `guidesFor` and the `.guide` tests fail |
 | Tinting rows outside the selected subtree | `subtreeRowIds`/`data-subtree` tests fail |
 | Making every reference show a jump action | Unresolved targets must not get the details button; the followability test fails |
-| Hiding the Collapse/Expand labels at normal widths | The labelled-control test fails |
+| Hiding the Collapse/Expand labels above 1040px, or dropping the `.lbl`/18px icon markup | The labelled-control test fails |
 | Inserting an editor into `.value` | The Document is read-only; the `.value` direct-child/test contract and click semantics fail |
 | Adding a Source block or copy action | The details panel exposes Jump/Reveal only; provider copy code was deleted |
 | Reintroducing a page-local scroll container | The component owns the scroller; a second one desynchronizes the virtual range |

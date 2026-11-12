@@ -46,6 +46,7 @@ import { inspectorElement } from './render/dom';
 import {
 	getSidebarState,
 	mountSidebarShell,
+	setSidebarHidden,
 	setSidebarPersistence,
 	setSidebarState,
 	showSidebarSection,
@@ -88,6 +89,7 @@ export { documentHeader } from '../webviewProtocol';
 let tree: any;
 let inspector: any;
 let detailsStatus: any;
+let editorToolbar: EditorToolbar | undefined;
 let detailsBody: any;
 
 let rows: EcucRow[] = [];
@@ -141,6 +143,11 @@ let heights = { document: 20 };
 let chWidth = 0;
 let heightFn: (index: number) => number = function () { return heights.document; };
 let typeAhead = { text: '', at: 0 };
+// A value click opens Details, but a second click or a double-click is a text
+// selection gesture: defer the editor long enough for multi-click to win.
+const DETAILS_OPEN_DELAY_MS = 500;
+let pendingDetailsId: string | undefined;
+let pendingDetailsTimer: ReturnType<typeof setTimeout> | undefined;
 // VirtualScroll owns the scroll surface; this page owns the row model and state.
 let virtualScroll: VirtualScroll | undefined;
 let treeView: DocumentTreeView | undefined;
@@ -865,6 +872,60 @@ function focusHeaderRow(target: Element): void {
 	header.focus({ preventScroll: true });
 }
 
+/** Focus a header line only when the click is not finishing a text selection. */
+function focusHeaderRowUnlessSelecting(target: Element): void {
+	// Header rows are text lines: focus them, but never select or open Details.
+	// A drag can end on one too; focusing it would collapse the selection.
+	if (!hasTextSelection()) {
+		focusHeaderRow(target);
+	}
+}
+
+/** A click that ends a drag selection must not move focus or start Details. */
+function endsDragSelection(target: Element): boolean {
+	// A twisty click is chrome, so it still toggles.
+	return !target.closest('.twisty') && hasTextSelection();
+}
+
+/** Whether a selection endpoint lives inside the Document tree. */
+function isTreeSelectionNode(node: Node | null): boolean {
+	return node !== null && tree !== undefined && tree.contains(node);
+}
+
+/** A live, non-collapsed selection inside the Document tree: a click that ends a drag must keep it. */
+function hasTextSelection(): boolean {
+	const selection = window.getSelection();
+	if (selection === null || selection.isCollapsed) {
+		return false;
+	}
+	return isTreeSelectionNode(selection.anchorNode);
+}
+
+/** Drop a Details edit that a single click scheduled but a selection gesture superseded. */
+function cancelPendingDetailsEdit(): void {
+	if (pendingDetailsTimer === undefined) {
+		return;
+	}
+	clearTimeout(pendingDetailsTimer);
+	pendingDetailsTimer = undefined;
+	pendingDetailsId = undefined;
+}
+
+function openPendingDetailsEdit(): void {
+	const id = pendingDetailsId;
+	pendingDetailsTimer = undefined;
+	pendingDetailsId = undefined;
+	if (id !== undefined) {
+		beginDetailsEdit(id);
+	}
+}
+
+function scheduleDetailsEdit(id: string): void {
+	cancelPendingDetailsEdit();
+	pendingDetailsId = id;
+	pendingDetailsTimer = setTimeout(openPendingDetailsEdit, DETAILS_OPEN_DELAY_MS);
+}
+
 function handleTreeTargetAction(target: Element, item: HTMLElement, id: string): void {
 	// One interaction, one effect: the twisty toggles without moving the selection,
 	// everything else selects.
@@ -875,7 +936,7 @@ function handleTreeTargetAction(target: Element, item: HTMLElement, id: string):
 	selectItem(item);
 	syncSearchToSelection(id);
 	if (target.closest('.value-text') && item.dataset.kind === 'parameter') {
-		beginDetailsEdit(id);
+		scheduleDetailsEdit(id);
 	}
 }
 
@@ -892,29 +953,30 @@ function closestTreeItem(target: Element): HTMLElement | undefined {
 	return item instanceof HTMLElement ? item : undefined;
 }
 
+/** A single click on a concrete element; multi-clicks belong to text selection. */
+function isPrimaryElementClick(event: MouseEvent): event is MouseEvent & { target: Element } {
+	return event.target instanceof Element && event.detail <= 1;
+}
+
 function onRowClick(event: MouseEvent): void {
-	if (!(event.target instanceof Element)) {
+	// Every click supersedes a pending value edit. The second click of a
+	// double-click (and every later click) only participates in text selection.
+	cancelPendingDetailsEdit();
+	if (!isPrimaryElementClick(event)) {
 		return;
 	}
 	const item = closestTreeItem(event.target);
 	if (!item) {
-		// Header rows are text lines: focus them, but never select or open Details.
-		focusHeaderRow(event.target);
+		focusHeaderRowUnlessSelecting(event.target);
 		// Annotation rows are aria-hidden decoration: clicking one changes nothing.
 		return;
 	}
+	// The click that ends a drag selection is part of selecting text, not a row
+	// action: moving focus or opening Details would collapse the selection.
+	if (endsDragSelection(event.target)) {
+		return;
+	}
 	activateTreeTarget(event.target, item);
-}
-
-function onRowDoubleClick(event: MouseEvent): void {
-	if (!(event.target instanceof Element)) {
-		return;
-	}
-	const item = closestTreeItem(event.target);
-	if (!item || event.target.closest('.twisty')) {
-		return;
-	}
-	revealItem(item);
 }
 
 interface TreeKeyTarget {
@@ -1068,16 +1130,109 @@ function onTreeKeydown(event: KeyboardEvent): void {
 	dispatchTreeAction(event, target);
 }
 
-function collapseAll() {
-	collapsed = new Set(collapsedIdsFor(rows));
-	rebuildDisplay();
+interface DocumentAnchor {
+	id: string;
+	/** The anchor row's distance from the viewport top when it was captured. */
+	delta: number;
+}
+
+function headerIndexForId(id: string): number | undefined {
+	for (let at = 0; at < headerRows.length; at++) {
+		if (headerRows[at].id === id) {
+			return at;
+		}
+	}
+	return undefined;
+}
+
+function documentAnchorIndex(id: string | undefined): number | undefined {
+	if (id === undefined) {
+		return undefined;
+	}
+	if (id.startsWith('header:')) {
+		return headerIndexForId(id);
+	}
+	return displayIndexById.get(id);
+}
+
+/** The nearest ancestor that the rebuilt display still shows, nearest parent first. */
+function visibleAncestorId(id: string): string | undefined {
+	for (const ancestor of ancestorIds(rows, id)) {
+		if (displayIndexById.has(ancestor)) {
+			return ancestor;
+		}
+	}
+	return undefined;
+}
+
+function documentAnchorIndexOrAncestor(id: string): number | undefined {
+	const index = documentAnchorIndex(id);
+	return index === undefined ? documentAnchorIndex(visibleAncestorId(id)) : index;
+}
+
+/** Focused row, else the selected row, else the current search match. */
+function documentAnchorId(): string | undefined {
+	return documentFocusId() || selectedId || currentMatchId();
+}
+
+function documentAnchorAt(id: string | undefined): DocumentAnchor | undefined {
+	if (id === undefined) {
+		return undefined;
+	}
+	const index = documentAnchorIndexOrAncestor(id);
+	if (index === undefined) {
+		return undefined;
+	}
+	return { id: id, delta: storedScrollTop() - (offsets[index] ?? 0) };
+}
+
+/** Re-show the anchor at its captured viewport offset, using its nearest visible ancestor. */
+function restoreDocumentAnchor(anchor: DocumentAnchor): void {
+	const index = documentAnchorIndexOrAncestor(anchor.id);
+	if (index === undefined) {
+		return;
+	}
+	if (virtualScroll) {
+		virtualScroll.setScrollTop(Math.max(0, (offsets[index] ?? 0) + anchor.delta));
+	}
+	ensureVisible(index);
+}
+
+/** Collapse/Expand rebuilds the display; the anchor keeps the user's point in place. */
+function withDocumentAnchor(change: () => void): void {
+	const anchor = documentAnchorAt(documentAnchorId());
+	change();
+	if (anchor !== undefined) {
+		restoreDocumentAnchor(anchor);
+	}
 	renderWindow(true);
 }
 
+function collapseAll() {
+	withDocumentAnchor(function () {
+		collapsed = new Set(collapsedIdsFor(rows));
+		rebuildDisplay();
+	});
+}
+
 function expandAll() {
-	collapsed = new Set();
-	rebuildDisplay();
-	renderWindow(true);
+	withDocumentAnchor(function () {
+		collapsed = new Set();
+		rebuildDisplay();
+	});
+}
+
+/** The toolbar toggle: flip the shell visibility; state values stay untouched. */
+function applySidebarVisibility(hidden: boolean): void {
+	setSidebarHidden(hidden);
+	if (editorToolbar) {
+		editorToolbar.setSidebarHidden(hidden);
+	}
+}
+
+/** The toolbar toggle: flip the shell visibility; state values stay untouched. */
+function toggleSidebar(): void {
+	applySidebarVisibility(!getSidebarState().hidden);
 }
 
 function isParameterRowId(id: string): boolean {
@@ -1600,6 +1755,8 @@ function isSearchCycleKey(event: KeyboardEvent): boolean {
 }
 
 function onDocumentKeydown(event: KeyboardEvent): void {
+	// A keyboard gesture supersedes a deferred value click.
+	cancelPendingDetailsEdit();
 	if (isFindShortcut(event)) {
 		event.preventDefault();
 		searchBar.focus();
@@ -1611,10 +1768,146 @@ function onDocumentKeydown(event: KeyboardEvent): void {
 	}
 }
 
+/** The row pieces a copied line reconstructs; guides, twisties and gaps contribute nothing. */
+const COPY_PART_CLASSES = new Set([
+	'label',
+	'value',
+	'sr-only',
+	'brace-mark',
+	'comment-text',
+	'comment-mark',
+	'keyword',
+	'number',
+	'package'
+]);
+
+function elementText(element: Element): string {
+	return (element.textContent || '').trim();
+}
+
+function isCopyPart(element: Element): boolean {
+	for (const name of Array.from(element.classList)) {
+		if (COPY_PART_CLASSES.has(name)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/** One row child's visible text; a meta chip is one part each, like the rendered gaps. */
+function rowPartTexts(element: Element): string[] {
+	if (element.classList.contains('row-meta')) {
+		return Array.from(element.children).map(elementText);
+	}
+	return isCopyPart(element) ? [elementText(element)] : [];
+}
+
+function rowCopyText(row: Element): string {
+	const parts: string[] = [];
+	for (const child of Array.from(row.children)) {
+		parts.push(...rowPartTexts(child));
+	}
+	return parts.filter(isNonEmptyText).join(' ');
+}
+
+function isNonEmptyText(text: string): boolean {
+	return text !== '';
+}
+
+/** One copied document line: the row's text at the tree's visual 4-space depth. */
+function copyLine(row: Element): string {
+	const text = rowCopyText(row);
+	if (text === '') {
+		return '';
+	}
+	const level = Number(row.getAttribute('data-level')) || 1;
+	return ' '.repeat(4 * Math.max(0, level - 1)) + text;
+}
+
+/** The selection's single live range, or undefined when there is none. */
+function selectionRange(selection: Selection): Range | undefined {
+	return selection.rangeCount === 0 ? undefined : selection.getRangeAt(0);
+}
+
+function selectionIntersectsRow(range: Range | undefined, row: Element): boolean {
+	return range !== undefined && range.intersectsNode(row);
+}
+
+/** The rendered `.row`s the selection intersects, in display order. */
+function selectedTreeRows(selection: Selection): Element[] {
+	const out: Element[] = [];
+	const range = selectionRange(selection);
+	if (!tree) {
+		return out;
+	}
+	for (const row of tree.querySelectorAll('.row')) {
+		if (selectionIntersectsRow(range, row)) {
+			out.push(row);
+		}
+	}
+	return out;
+}
+
+function treeSelectionInside(selection: Selection): boolean {
+	return isTreeSelectionNode(selection.anchorNode) && isTreeSelectionNode(selection.focusNode);
+}
+
+function documentSelection(): Selection | undefined {
+	if (typeof document === 'undefined') {
+		return undefined;
+	}
+	const selection = document.getSelection();
+	return selection === null ? undefined : selection;
+}
+
+/** At least two rendered rows fully inside the tree, else the native copy path. */
+function treeCopyRows(selection: Selection): Element[] | undefined {
+	if (selection.isCollapsed || !treeSelectionInside(selection)) {
+		return undefined;
+	}
+	const rows = selectedTreeRows(selection);
+	return rows.length < 2 ? undefined : rows;
+}
+
+function treeSelectionText(): string | undefined {
+	const selection = documentSelection();
+	if (selection === undefined) {
+		return undefined;
+	}
+	const rows = treeCopyRows(selection);
+	return rows === undefined ? undefined : rows.map(copyLine).filter(isNonEmptyText).join('\n');
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+	return target instanceof Element && target.closest('input, textarea, [contenteditable="true"]') !== null;
+}
+
+function isEditableCopy(event: ClipboardEvent): boolean {
+	return isEditableTarget(event.target) || isEditableTarget(document.activeElement);
+}
+
+/** Keep a multi-row Document selection indented; every other copy stays native. */
+function onDocumentCopy(event: ClipboardEvent): void {
+	if (isEditableCopy(event)) {
+		return;
+	}
+	const text = treeSelectionText();
+	if (text === undefined || !event.clipboardData) {
+		return;
+	}
+	event.clipboardData.setData('text/plain', text);
+	event.preventDefault();
+}
+
 /** Bind the document-level gestures once the page refs exist. */
 function mountEditorDomListeners(): void {
 document.addEventListener('click', onRowClick);
-document.addEventListener('dblclick', onRowDoubleClick);
+// Multi-row copies keep the tree's visual indent; a single-row or partial
+// selection stays on the native path so the exact slice is copied.
+document.addEventListener('copy', onDocumentCopy);
+// Double-click is a native text-selection gesture (word/line); it must never
+// reveal source, and it cancels a deferred single-click Details edit.
+document.addEventListener('dblclick', cancelPendingDetailsEdit);
 document.addEventListener('keydown', onTreeKeydown);
 mountContextMenu(tree, {
 	selectItem: selectItem,
@@ -1706,6 +1999,7 @@ function alignDocumentFocus(previousFocus: string | undefined): void {
 }
 
 function applyDocumentMessage(message: EditorDocumentMessage): void {
+	cancelPendingDetailsEdit();
 	clearDetailsStatus();
 	const scrollTop = storedScrollTop();
 	const previousFocus = documentFocusId();
@@ -1721,6 +2015,7 @@ function applyDocumentMessage(message: EditorDocumentMessage): void {
 }
 
 function applySelectMessage(nodeId: string): void {
+	cancelPendingDetailsEdit();
 	clearDetailsStatus();
 	if (expandAncestors(nodeId)) {
 		rebuildDisplay();
@@ -1821,6 +2116,7 @@ setDetailsEditorHost({
 	getRow: function (id) { return rowById.get(id); },
 	getSelectedId: function () { return selectedId; },
 	isDetailsTab: function () { return getSidebarState().tab === 'details'; },
+	showSidebar: function () { applySidebarVisibility(false); },
 	showTab: showSidebarTab,
 	showSection: showSidebarSection,
 	renderedItem: renderedItemFor,
@@ -1834,8 +2130,14 @@ setDetailsEditorHost({
 });
 mountConditionsPanel();
 mountSidebarShell();
-const editorToolbar = new EditorToolbar({ onCollapseAll: collapseAll, onExpandAll: expandAll });
-editorToolbar.mount();
+const toolbar = new EditorToolbar({
+	onCollapseAll: collapseAll,
+	onExpandAll: expandAll,
+	onToggleSidebar: toggleSidebar,
+});
+editorToolbar = toolbar;
+toolbar.mount();
+toolbar.setSidebarHidden(getSidebarState().hidden);
 searchBar = mountSearchBar(
 	'',
 	() => searchQuery,
@@ -1875,6 +2177,7 @@ postToHost({ type: 'ready' });
 
 /** A page reload starts from the initial protocol state, exactly like a fresh bundle. */
 function resetEditorState(): void {
+	cancelPendingDetailsEdit();
 	rows = [];
 	rowById = new Map();
 	rowIndexById = new Map();
