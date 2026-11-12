@@ -16,10 +16,12 @@ import { isArxmlPath, isEcucValues } from '../core/ecuc/detect';
 import { ReferenceNode, SortMode } from '../core/ecuc/model';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
+import type { ConditionEntry } from '../core/ecuc/conditionEntry';
 import { ConditionValue } from '../core/ecuc/syscond';
-import { ConditionEntry, ConditionValueStore, parseConditionEntries } from './conditionValues';
+import { ConditionValueStore, parseConditionEntries } from './conditionValues';
 import { buildRows, RowBuildOptions } from '../core/ecuc/renderRows';
 import { buildNodeIndex } from '../core/ecuc/nodeId';
+import type { NodeEntry } from '../core/ecuc/nodeId';
 import { applyEdit, buildEdit, buildFieldEdit } from './ecucEdit';
 import {
 	applyStructureEdit,
@@ -27,8 +29,10 @@ import {
 	planDelete,
 	planDuplicate,
 } from './ecucStructureEdit';
+import type { StructureEditRecord } from './ecucStructureEdit';
 import { followReference, nodeIdForRange, revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
+import type { BootWatchdog } from './bootWatchdog';
 import { editorShell } from './webviewShell';
 import { editorMessageType, documentHeader } from '../webviewProtocol';
 import type { EditorWebviewToProvider } from '../webviewProtocol';
@@ -57,6 +61,27 @@ const BOOT_TIMEOUT_MS = 10_000;
 type EditField = 'value' | 'shortName' | 'definitionRef';
 
 const EDIT_FIELDS: readonly EditField[] = ['value', 'shortName', 'definitionRef'];
+
+/** The per-panel state one page message may read or update. */
+interface EditorSession {
+	document: vscode.TextDocument;
+	panel: vscode.WebviewPanel;
+	key: string;
+	boot: BootWatchdog;
+	model(): ReturnType<typeof scanEcucValues>;
+	push(): void;
+}
+
+/** A reference chosen in the Quick Pick plus the document it was opened from. */
+interface PickedReference {
+	document: vscode.TextDocument;
+	reference: IndexReference;
+}
+
+/** A resolved `referencesFor`, or `undefined` when the workspace index is absent. */
+type ReferenceLookup = (target: IndexElement) => IndexReference[];
+
+type NavigationMessage = Extract<EditorWebviewToProvider, { type: 'reveal' | 'follow' | 'references' }>;
 
 /**
  * Why a document cannot be rendered, or `undefined` when it can.
@@ -108,11 +133,8 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 
 	constructor(conditionStore?: ConditionValueStore, extensionUri?: vscode.Uri, definitionSource?: DefinitionSource) {
 		this.conditionStore = conditionStore;
-		this.conditionEntries = conditionStore?.load() ?? [];
-		this.extensionUri =
-			extensionUri ??
-			vscode.extensions.getExtension('deviousprophet.vscode-arxml-scope')?.extensionUri ??
-			vscode.Uri.file(path.join(__dirname, '..'));
+		this.conditionEntries = storedConditionEntries(conditionStore);
+		this.extensionUri = resolvedExtensionUri(extensionUri);
 		this.definitionSource = definitionSource;
 	}
 
@@ -136,6 +158,20 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		return parseConditionEntries(this.conditionEntries).values;
 	}
 
+	/** The row-build options for one panel: settings, conditions and the index when present. */
+	private rowOptions(key: string): RowBuildOptions {
+		const base: RowBuildOptions = { ...editorSettings(), conditions: this.conditionValues() };
+		const source = this.definitionSource;
+		if (source === undefined) {
+			return base;
+		}
+		return {
+			...base,
+			definitions: (ref: string) => source.definition(ref),
+			...definitionExtras(source, key),
+		};
+	}
+
 	public resolveCustomTextEditor(
 		document: vscode.TextDocument,
 		panel: vscode.WebviewPanel,
@@ -155,11 +191,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 
 		const disposables: vscode.Disposable[] = [];
-		const selectedId = this.pending.get(key) ?? this.selections.get(key);
-		this.pending.delete(key);
-		if (selectedId !== undefined) {
-			this.selections.set(key, selectedId);
-		}
+		this.resumeSelection(key);
 		let model = scanEcucValues(document.getText());
 
 		panel.webview.options = {
@@ -183,27 +215,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		// change, which re-renders the model that is already scanned.
 		const push = (): void => {
 			const current = this.selections.get(key);
-			const options: RowBuildOptions = {
-				...editorSettings(),
-				conditions: this.conditionValues(),
-				...(this.definitionSource === undefined
-					? {}
-					: { definitions: (ref: string) => this.definitionSource!.definition(ref) }),
-				...(this.definitionSource?.definitionCandidateCount === undefined
-					? {}
-					: { ambiguousDefinitions: (ref: string) => this.definitionSource!.definitionCandidateCount!(ref) }),
-				...(this.definitionSource?.resolveTarget === undefined
-					? {}
-					: {
-							referenceResolver: (targetPath: string, targetDest?: string) => {
-								const resolution = this.definitionSource!.resolveTarget!(targetPath, targetDest, key);
-								return resolution.ok
-									? { followable: true }
-									: { followable: false, reason: refusalReason(resolution, targetPath) };
-							},
-						}),
-			};
-			const rowDocument = buildRows(model, options);
+			const rowDocument = buildRows(model, this.rowOptions(key));
 			// The page owns the row store; a re-scan replaces it without markup.
 			void panel.webview.postMessage({
 				type: 'document',
@@ -242,70 +254,17 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			disposables.push(this.definitionSource.subscribe(() => push()));
 		}
 
+		const session: EditorSession = {
+			document,
+			panel,
+			key,
+			boot,
+			model: () => model,
+			push,
+		};
+
 		disposables.push(
-			panel.webview.onDidReceiveMessage((raw: unknown) => {
-				if (!editorMessageType(raw)) {
-					return;
-				}
-				const message = raw as EditorWebviewToProvider;
-				if (message.type === 'ready') {
-					boot.settle();
-					// The page can be reloaded without reopening the panel; re-post the
-					// host's current entries and the row document so a reload cannot show
-					// stale values or an empty tree.
-					void panel.webview.postMessage({ type: 'conditions', entries: this.conditionEntries });
-					push();
-					return;
-				}
-				if (message.type === 'conditions') {
-					// A non-array payload is ignored rather than treated as "clear all membership".
-					if (!Array.isArray(message.entries)) {
-						return;
-					}
-					const parsed = parseConditionEntries(message.entries);
-					this.conditionEntries = parsed.entries;
-					void this.conditionStore?.save(parsed.entries);
-					if (parsed.invalid.length > 0) {
-						const names = parsed.invalid.slice(0, 5).join(', ');
-						const more = parsed.invalid.length > 5 ? ` and ${parsed.invalid.length - 5} more` : '';
-						void panel.webview.postMessage({
-							type: 'notice',
-							message: `Ignored ${parsed.invalid.length} invalid condition name${parsed.invalid.length === 1 ? '' : 's'}: ${names}${more}.`,
-							kind: 'warn',
-							scope: 'conditions',
-						});
-					}
-					push();
-					return;
-				}
-				const nodeId =
-					'nodeId' in message && typeof message.nodeId === 'string' ? message.nodeId : undefined;
-				if (nodeId === undefined) {
-					return;
-				}
-				if (message.type === 'reveal') {
-					void this.revealNode(document, model, nodeId, panel);
-				} else if (message.type === 'follow') {
-					void this.followReference(document, model, nodeId, panel);
-				} else if (message.type === 'references') {
-					void this.findReferences(document, model, nodeId, panel);
-				} else if (message.type === 'edit' && typeof message.value === 'string') {
-					const field: EditField = message.field ?? 'value';
-					// An unknown field is ignored rather than guessed at.
-					if (EDIT_FIELDS.includes(field)) {
-						void this.editField(document, panel, nodeId, field, message.value);
-					}
-				} else if (message.type === 'delete') {
-					void this.deleteRow(document, panel, nodeId);
-				} else if (message.type === 'duplicate') {
-					void this.duplicateRow(document, panel, nodeId);
-				} else if (message.type === 'select') {
-					// A click in the tree is view state the host must know too: the re-scan
-					// payload carries the selection, so without this a document change would
-					// move the selection back.
-					this.selections.set(key, nodeId);
-				}
-			})
+			panel.webview.onDidReceiveMessage((raw: unknown) => this.handlePanelMessage(raw, session))
 		);
 
 		panel.onDidDispose(() => {
@@ -322,6 +281,160 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		this.panels.delete(key);
 		this.selections.delete(key);
 		this.pending.delete(key);
+	}
+
+	/** Consumes a pending selection for a panel that just opened, or restores the last one. */
+	private resumeSelection(key: string): void {
+		const selectedId = this.pending.get(key) ?? this.selections.get(key);
+		this.pending.delete(key);
+		if (selectedId !== undefined) {
+			this.selections.set(key, selectedId);
+		}
+	}
+
+	/** One page message: protocol guard, session messages, then node-id messages. */
+	private handlePanelMessage(raw: unknown, session: EditorSession): void {
+		if (!editorMessageType(raw)) {
+			return;
+		}
+		const message = raw as EditorWebviewToProvider;
+		if (this.handleSessionMessage(message, session)) {
+			return;
+		}
+		this.handleNodeMessage(message, session);
+	}
+
+	/** Handles the messages that carry no node id; true when one matched. */
+	private handleSessionMessage(message: EditorWebviewToProvider, session: EditorSession): boolean {
+		if (message.type === 'ready') {
+			this.handleReady(session);
+			return true;
+		}
+		if (message.type === 'conditions') {
+			this.handleConditions(message, session);
+			return true;
+		}
+		return false;
+	}
+
+	private handleReady(session: EditorSession): void {
+		session.boot.settle();
+		// The page can be reloaded without reopening the panel; re-post the
+		// host's current entries and the row document so a reload cannot show
+		// stale values or an empty tree.
+		void session.panel.webview.postMessage({ type: 'conditions', entries: this.conditionEntries });
+		session.push();
+	}
+
+	private handleConditions(
+		message: Extract<EditorWebviewToProvider, { type: 'conditions' }>,
+		session: EditorSession
+	): void {
+		// A non-array payload is ignored rather than treated as "clear all membership".
+		if (!Array.isArray(message.entries)) {
+			return;
+		}
+		const parsed = parseConditionEntries(message.entries);
+		this.conditionEntries = parsed.entries;
+		void this.conditionStore?.save(parsed.entries);
+		if (parsed.invalid.length > 0) {
+			void session.panel.webview.postMessage({
+				type: 'notice',
+				message: invalidConditionsText(parsed.invalid),
+				kind: 'warn',
+				scope: 'conditions',
+			});
+		}
+		session.push();
+	}
+
+	/** Dispatches one node-id message: navigation first, then edits and structure. */
+	private handleNodeMessage(message: EditorWebviewToProvider, session: EditorSession): void {
+		const nodeId = messageNodeId(message);
+		if (nodeId === undefined) {
+			return;
+		}
+		if (isNavigationMessage(message)) {
+			void this.handleNavigation(message, nodeId, session);
+			return;
+		}
+		if (message.type === 'edit') {
+			this.handleEditMessage(message, nodeId, session);
+			return;
+		}
+		this.handleStructureMessage(message, nodeId, session);
+	}
+
+	private async handleNavigation(
+		message: NavigationMessage,
+		nodeId: string,
+		session: EditorSession
+	): Promise<void> {
+		const model = session.model();
+		if (message.type === 'reveal') {
+			await this.revealEntry(model, nodeId, session);
+			return;
+		}
+		if (message.type === 'follow') {
+			await this.followEntry(model, nodeId, session);
+			return;
+		}
+		// A stale id keeps the old no-path notice instead of silently doing nothing.
+		await this.findReferences(session.document, this.nodeEntry(model, nodeId), session.panel);
+	}
+
+	private async revealEntry(
+		model: ReturnType<typeof scanEcucValues>,
+		nodeId: string,
+		session: EditorSession
+	): Promise<void> {
+		const entry = this.nodeEntry(model, nodeId);
+		if (entry !== undefined) {
+			await this.revealNode(session.document, entry, session.panel);
+		}
+	}
+
+	private async followEntry(
+		model: ReturnType<typeof scanEcucValues>,
+		nodeId: string,
+		session: EditorSession
+	): Promise<void> {
+		const entry = this.nodeEntry(model, nodeId);
+		if (entry !== undefined) {
+			await this.followReference(session.document, model, entry, session.panel);
+		}
+	}
+
+	private handleEditMessage(
+		message: Extract<EditorWebviewToProvider, { type: 'edit' }>,
+		nodeId: string,
+		session: EditorSession
+	): void {
+		if (typeof message.value !== 'string') {
+			return;
+		}
+		const field: EditField = message.field ?? 'value';
+		// An unknown field is ignored rather than guessed at.
+		if (EDIT_FIELDS.includes(field)) {
+			void this.editField(session.document, session.panel, nodeId, field, message.value);
+		}
+	}
+
+	private handleStructureMessage(
+		message: EditorWebviewToProvider,
+		nodeId: string,
+		session: EditorSession
+	): void {
+		if (message.type === 'delete') {
+			void this.deleteRow(session.document, session.panel, nodeId);
+		} else if (message.type === 'duplicate') {
+			void this.duplicateRow(session.document, session.panel, nodeId);
+		} else if (message.type === 'select') {
+			// A click in the tree is view state the host must know too: the re-scan
+			// payload carries the selection, so without this a document change would
+			// move the selection back.
+			this.selections.set(session.key, nodeId);
+		}
 	}
 
 	/**
@@ -341,6 +454,14 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
 	}
 
+	/** Resolves a page's node id against the current model; a stale id yields undefined. */
+	private nodeEntry(
+		model: ReturnType<typeof scanEcucValues>,
+		nodeId: string
+	): NodeEntry | undefined {
+		return buildNodeIndex(model).byId.get(nodeId);
+	}
+
 	/**
 	 * Reveals a node's range in the source without destroying the custom editor's tab.
 	 * The panel's own column is passed through so the source opens
@@ -348,75 +469,119 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	 */
 	private async revealNode(
 		document: vscode.TextDocument,
-		model: ReturnType<typeof scanEcucValues>,
-		nodeId: string,
+		entry: NodeEntry,
 		panel: vscode.WebviewPanel
 	): Promise<void> {
-		const entry = buildNodeIndex(model).byId.get(nodeId);
-		if (!entry) {
-			return;
-		}
 		await revealRangeInTextEditor(document, entry.range, { viewColumn: panel.viewColumn });
 	}
 
 	private async followReference(
 		document: vscode.TextDocument,
 		model: ReturnType<typeof scanEcucValues>,
-		nodeId: string,
+		entry: NodeEntry,
 		panel: vscode.WebviewPanel
 	): Promise<void> {
-		const entry = buildNodeIndex(model).byId.get(nodeId);
-		if (!entry || entry.kind !== 'reference') {
+		if (entry.kind !== 'reference') {
 			return;
 		}
 		const reference = entry.node as ReferenceNode;
 		const raw = reference.targetRawPath ?? '';
-		const workspace = this.definitionSource?.resolveTarget?.(raw, reference.targetDest, document.uri.toString());
-		if (workspace?.ok) {
-			let target = workspace.element;
-			if (workspace.copies.length > 1) {
-				const items: Array<vscode.QuickPickItem & { copy: IndexElement }> = [];
-				for (const copy of workspace.copies) {
-					const uri = vscode.Uri.parse(copy.file);
-					const copyDocument = await vscode.workspace.openTextDocument(uri);
-					items.push({
-						label: `${path.basename(uri.fsPath)}:${copyDocument.positionAt(copy.range.start).line + 1}`,
-						copy,
-					});
-				}
-				const picked = await vscode.window.showQuickPick(items, {
-					placeHolder: `Copies of "${raw}"`,
-				});
-				if (picked === undefined) {
-					return;
-				}
-				target = picked.copy;
-			}
-			if (target.file === document.uri.toString()) {
-				const targetId = nodeIdForRange(buildNodeIndex(model), target.range);
-				if (targetId) {
-					this.selections.set(document.uri.toString(), targetId);
-					panel.reveal();
-					await panel.webview.postMessage({ type: 'select', nodeId: targetId });
-					return;
-				}
-			} else {
-				await this.openElement(target, panel);
-				return;
-			}
-		}
-		if (workspace !== undefined && !workspace.ok) {
-			await this.postStructureNotice(panel, refusalReason(workspace, raw));
+		const workspace = this.resolveWorkspaceTarget(document, raw, reference.targetDest);
+		if (await this.followInWorkspace(document, model, raw, workspace, panel)) {
 			return;
 		}
-		// No workspace index: keep the same-file behaviour.
+		// No workspace index, or no row for the resolved range: keep the same-file behaviour.
+		await this.followSameFile(document, model, reference, panel);
+	}
+
+	/** The workspace resolution for one target, when the host supplies an index. */
+	private resolveWorkspaceTarget(
+		document: vscode.TextDocument,
+		raw: string,
+		targetDest: string | undefined
+	): ElementResolution | undefined {
+		return this.definitionSource?.resolveTarget?.(raw, targetDest, document.uri.toString());
+	}
+
+	/** True when the workspace resolution owns the outcome, including a refusal notice. */
+	private async followInWorkspace(
+		document: vscode.TextDocument,
+		model: ReturnType<typeof scanEcucValues>,
+		raw: string,
+		workspace: ElementResolution | undefined,
+		panel: vscode.WebviewPanel
+	): Promise<boolean> {
+		if (workspace === undefined) {
+			return false;
+		}
+		if (!workspace.ok) {
+			await this.postStructureNotice(panel, refusalReason(workspace, raw));
+			return true;
+		}
+		const target = await this.pickWorkspaceTarget(workspace, raw);
+		if (target === undefined) {
+			return true;
+		}
+		return this.revealWorkspaceTarget(document, model, target, panel);
+	}
+
+	/** The canonical element, or the copy the user picked from a multi-copy target. */
+	private async pickWorkspaceTarget(
+		resolution: Extract<ElementResolution, { ok: true }>,
+		raw: string
+	): Promise<IndexElement | undefined> {
+		if (resolution.copies.length <= 1) {
+			return resolution.element;
+		}
+		const items: Array<vscode.QuickPickItem & { copy: IndexElement }> = [];
+		for (const copy of resolution.copies) {
+			const uri = vscode.Uri.parse(copy.file);
+			const copyDocument = await vscode.workspace.openTextDocument(uri);
+			items.push({
+				label: `${path.basename(uri.fsPath)}:${copyDocument.positionAt(copy.range.start).line + 1}`,
+				copy,
+			});
+		}
+		const picked = await vscode.window.showQuickPick(items, {
+			placeHolder: `Copies of "${raw}"`,
+		});
+		return picked?.copy;
+	}
+
+	/** True when the target was selected in this panel or opened in another editor. */
+	private async revealWorkspaceTarget(
+		document: vscode.TextDocument,
+		model: ReturnType<typeof scanEcucValues>,
+		target: IndexElement,
+		panel: vscode.WebviewPanel
+	): Promise<boolean> {
+		if (target.file !== document.uri.toString()) {
+			await this.openElement(target, panel);
+			return true;
+		}
+		const targetId = nodeIdForRange(buildNodeIndex(model), target.range);
+		if (!targetId) {
+			return false;
+		}
+		this.selections.set(document.uri.toString(), targetId);
+		panel.reveal();
+		await panel.webview.postMessage({ type: 'select', nodeId: targetId });
+		return true;
+	}
+
+	/** The pre-index behaviour: resolve the reference inside this model. */
+	private async followSameFile(
+		document: vscode.TextDocument,
+		model: ReturnType<typeof scanEcucValues>,
+		reference: ReferenceNode,
+		panel: vscode.WebviewPanel
+	): Promise<void> {
 		const result = followReference(model, reference);
 		if (!result.ok) {
 			await panel.webview.postMessage({ type: 'notice', message: result.reason, kind: 'warn', scope: 'details' });
 			return;
 		}
-		const index = buildNodeIndex(model);
-		const targetId = nodeIdForRange(index, result.range);
+		const targetId = nodeIdForRange(buildNodeIndex(model), result.range);
 		if (!targetId) {
 			await panel.webview.postMessage({
 				type: 'notice',
@@ -452,57 +617,73 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	/** Lists every indexed reference that resolves to the selected module/container. */
 	private async findReferences(
 		document: vscode.TextDocument,
-		model: ReturnType<typeof scanEcucValues>,
-		nodeId: string,
+		entry: NodeEntry | undefined,
 		panel: vscode.WebviewPanel
 	): Promise<void> {
-		const entry = buildNodeIndex(model).byId.get(nodeId);
-		if (!entry || entry.path === undefined) {
-			await this.postStructureNotice(panel, 'Find references needs a module or container with an AR path.');
+		const targetEntry = await this.requireReferenceEntry(entry, panel);
+		if (targetEntry === undefined) {
 			return;
 		}
-		const source = this.definitionSource;
-		if (source?.referencesFor === undefined) {
+		const lookup = this.referenceLookup();
+		if (lookup === undefined) {
 			await this.postStructureNotice(panel, 'The workspace index is unavailable; no cross-file references to list.');
 			return;
 		}
-		const target: IndexElement = {
-			kind: entry.kind === 'module' ? 'module' : 'container',
-			path: entry.path,
-			file: document.uri.toString(),
-			range: entry.range,
-		};
-		const references = source.referencesFor(target);
-		if (references.length === 0) {
-			await this.postStructureNotice(panel, `No references found for "${entry.label}".`);
+		const references = lookup(indexedTarget(document, targetEntry));
+		const picked = await this.pickReferences(references, targetEntry.label, panel);
+		if (picked === undefined) {
 			return;
+		}
+		await revealRangeInTextEditor(picked.document, picked.reference.range, { viewColumn: panel.viewColumn });
+	}
+
+	/** The entry when it can carry references; otherwise the Details notice was posted. */
+	private async requireReferenceEntry(
+		entry: NodeEntry | undefined,
+		panel: vscode.WebviewPanel
+	): Promise<(NodeEntry & { path: string }) | undefined> {
+		if (!isReferenceTarget(entry)) {
+			await this.postStructureNotice(panel, 'Find references needs a module or container with an AR path.');
+			return undefined;
+		}
+		return entry;
+	}
+
+	/** The index's reference lookup bound to its service, or nothing when unavailable. */
+	private referenceLookup(): ReferenceLookup | undefined {
+		const source = this.definitionSource;
+		if (source === undefined || source.referencesFor === undefined) {
+			return undefined;
+		}
+		const lookup = source.referencesFor.bind(source);
+		return (target) => lookup(target);
+	}
+
+	/** Shows the reference list and opens the chosen range. */
+	private async pickReferences(
+		references: readonly IndexReference[],
+		label: string,
+		panel: vscode.WebviewPanel
+	): Promise<PickedReference | undefined> {
+		if (references.length === 0) {
+			await this.postStructureNotice(panel, `No references found for "${label}".`);
+			return undefined;
 		}
 		const documents = new Map<string, vscode.TextDocument>();
 		const items: Array<vscode.QuickPickItem & { reference: IndexReference }> = [];
 		for (const reference of references) {
-			let targetDocument = documents.get(reference.file);
-			if (targetDocument === undefined) {
-				targetDocument = await vscode.workspace.openTextDocument(vscode.Uri.parse(reference.file));
-				documents.set(reference.file, targetDocument);
-			}
-			const line = targetDocument.positionAt(reference.range.start).line + 1;
-			items.push({
-				label: `${path.basename(targetDocument.uri.fsPath)}:${line}`,
-				description: reference.definitionRef ?? reference.targetRawPath ?? '',
-				detail: reference.sourcePath,
-				reference,
-			});
+			const targetDocument = await referenceDocument(documents, reference.file);
+			items.push(referenceItem(targetDocument, reference));
 		}
 		const picked = await vscode.window.showQuickPick(items, {
-			placeHolder: `References to "${entry.label}"`,
+			placeHolder: `References to "${label}"`,
 			matchOnDescription: true,
 			matchOnDetail: true,
 		});
 		if (picked === undefined) {
-			return;
+			return undefined;
 		}
-		const targetDocument = documents.get(picked.reference.file)!;
-		await revealRangeInTextEditor(targetDocument, picked.reference.range, { viewColumn: panel.viewColumn });
+		return pickedReference(documents, picked);
 	}
 
 	/**
@@ -520,19 +701,19 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			await this.postStructureNotice(panel, plan.reason);
 			return;
 		}
-		const descendants =
-			plan.descendants > 0
-				? ` Its ${plan.descendants} descendant${plan.descendants === 1 ? '' : 's'} will also be deleted.`
-				: '';
-		const answer = await vscode.window.showWarningMessage(
-			`Delete "${plan.label}"?${descendants} You can undo with Ctrl+Z.`,
-			{ modal: true },
-			'Delete'
-		);
-		if (answer !== 'Delete') {
+		if (!(await confirmDelete(plan))) {
 			return;
 		}
-		const applied = await applyStructureEdit(document, plan.record);
+		await this.applyStructure(document, plan.record, panel);
+	}
+
+	/** Applies a structural record and reports a refusal in Details. */
+	private async applyStructure(
+		document: vscode.TextDocument,
+		record: StructureEditRecord,
+		panel: vscode.WebviewPanel
+	): Promise<void> {
+		const applied = await applyStructureEdit(document, record);
 		if (!applied.ok) {
 			await this.postStructureNotice(panel, applied.reason);
 		}
@@ -554,40 +735,47 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			await this.postStructureNotice(panel, initial.reason);
 			return;
 		}
-		let name = initial.record.duplicateName;
-		if (name !== undefined) {
-			const chosen = await vscode.window.showInputBox({
-				prompt: 'New short name for the duplicate',
-				value: name,
-				validateInput: (value) => duplicateNameRefusal(scanEcucValues(document.getText()), nodeId, value),
-			});
-			if (chosen === undefined) {
-				return;
-			}
-			name = chosen.trim();
+		const name = await this.duplicateNameFor(document, nodeId, initial.record.duplicateName);
+		if (name === null) {
+			return;
 		}
+		await this.confirmDuplicate(document, panel, nodeId, name);
+	}
+
+	/** The chosen duplicate name, `undefined` for a parameter, or `null` when cancelled. */
+	private async duplicateNameFor(
+		document: vscode.TextDocument,
+		nodeId: string,
+		suggested: string | undefined
+	): Promise<string | null | undefined> {
+		if (suggested === undefined) {
+			return undefined;
+		}
+		const chosen = await vscode.window.showInputBox({
+			prompt: 'New short name for the duplicate',
+			value: suggested,
+			validateInput: (value) => duplicateNameRefusal(scanEcucValues(document.getText()), nodeId, value),
+		});
+		return chosen === undefined ? null : chosen.trim();
+	}
+
+	/** Re-plans against the current bytes, confirms the modal, then writes. */
+	private async confirmDuplicate(
+		document: vscode.TextDocument,
+		panel: vscode.WebviewPanel,
+		nodeId: string,
+		name: string | undefined
+	): Promise<void> {
 		const text = document.getText();
 		const plan = planDuplicate(scanEcucValues(text), text, nodeId, name);
 		if (!plan.ok) {
 			await this.postStructureNotice(panel, plan.reason);
 			return;
 		}
-		const message =
-			name === undefined
-				? `Duplicate parameter "${plan.label}"?`
-				: `Duplicate "${plan.label}" as "${name}"?`;
-		const answer = await vscode.window.showWarningMessage(
-			`${message} You can undo with Ctrl+Z.`,
-			{ modal: true },
-			'Duplicate'
-		);
-		if (answer !== 'Duplicate') {
+		if (!(await confirmDuplicateWrite(plan.label, name))) {
 			return;
 		}
-		const applied = await applyStructureEdit(document, plan.record);
-		if (!applied.ok) {
-			await this.postStructureNotice(panel, applied.reason);
-		}
+		await this.applyStructure(document, plan.record, panel);
 	}
 
 	private async postStructureNotice(panel: vscode.WebviewPanel, message: string): Promise<void> {
@@ -628,23 +816,104 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		const plan =
 			field === 'value' ? buildEdit(model, text, nodeId, value) : buildFieldEdit(model, text, nodeId, field, value);
 		if (!plan.ok) {
-			await panel.webview.postMessage({ type: 'notice', message: plan.reason, kind: 'warn', inline: true, scope: 'details' });
+			await postInlineNotice(panel, plan.reason);
 			return;
 		}
 		const previous = this.selections.get(key);
-		if (plan.nextNodeId !== undefined && plan.nextNodeId !== nodeId) {
-			this.selections.set(key, plan.nextNodeId);
-		}
+		this.rememberPredictedId(key, nodeId, plan.nextNodeId);
 		const applied = await applyEdit(document, plan.record);
 		if (!applied.ok) {
-			if (previous === undefined) {
-				this.selections.delete(key);
-			} else {
-				this.selections.set(key, previous);
-			}
-			await panel.webview.postMessage({ type: 'notice', message: applied.reason, kind: 'warn', inline: true, scope: 'details' });
+			this.restoreSelection(key, previous);
+			await postInlineNotice(panel, applied.reason);
 		}
 	}
+
+	/** Stores the post-write id a rename predicts, so the panel stays on the node. */
+	private rememberPredictedId(key: string, nodeId: string, nextNodeId: string | undefined): void {
+		if (nextNodeId !== undefined && nextNodeId !== nodeId) {
+			this.selections.set(key, nextNodeId);
+		}
+	}
+
+	private restoreSelection(key: string, previous: string | undefined): void {
+		if (previous === undefined) {
+			this.selections.delete(key);
+		} else {
+			this.selections.set(key, previous);
+		}
+	}
+}
+
+/** The user-facing summary of ignored condition names, first five then a count. */
+function invalidConditionsText(invalid: readonly string[]): string {
+	const names = invalid.slice(0, 5).join(', ');
+	const more = invalid.length > 5 ? ` and ${invalid.length - 5} more` : '';
+	return `Ignored ${invalid.length} invalid condition name${invalid.length === 1 ? '' : 's'}: ${names}${more}.`;
+}
+
+/** The page's node id, when the message carries one. */
+function messageNodeId(message: EditorWebviewToProvider): string | undefined {
+	return 'nodeId' in message && typeof message.nodeId === 'string' ? message.nodeId : undefined;
+}
+
+/** The messages that navigate the source editor or the reference list. */
+function isNavigationMessage(message: EditorWebviewToProvider): message is NavigationMessage {
+	return message.type === 'reveal' || message.type === 'follow' || message.type === 'references';
+}
+
+/** True for a row that can carry an AR path and therefore have references. */
+function isReferenceTarget(entry: NodeEntry | undefined): entry is NodeEntry & { path: string } {
+	return entry !== undefined && entry.path !== undefined;
+}
+
+/** The index element shape a row contributes to `referencesFor`. */
+function indexedTarget(document: vscode.TextDocument, entry: NodeEntry & { path: string }): IndexElement {
+	return {
+		kind: entry.kind === 'module' ? 'module' : 'container',
+		path: entry.path,
+		file: document.uri.toString(),
+		range: entry.range,
+	};
+}
+
+/** The already-opened document for a URI, or a fresh open cached for the next reference. */
+async function referenceDocument(
+	documents: Map<string, vscode.TextDocument>,
+	file: string
+): Promise<vscode.TextDocument> {
+	const known = documents.get(file);
+	if (known !== undefined) {
+		return known;
+	}
+	const opened = await vscode.workspace.openTextDocument(vscode.Uri.parse(file));
+	documents.set(file, opened);
+	return opened;
+}
+
+/** One quick-pick item for a cross-file reference. */
+function referenceItem(
+	targetDocument: vscode.TextDocument,
+	reference: IndexReference
+): vscode.QuickPickItem & { reference: IndexReference } {
+	const line = targetDocument.positionAt(reference.range.start).line + 1;
+	return {
+		label: `${path.basename(targetDocument.uri.fsPath)}:${line}`,
+		description: reference.definitionRef ?? reference.targetRawPath ?? '',
+		detail: reference.sourcePath,
+		reference,
+	};
+}
+
+/** The picked item plus its already-opened document. */
+function pickedReference(
+	documents: Map<string, vscode.TextDocument>,
+	picked: vscode.QuickPickItem & { reference: IndexReference }
+): PickedReference | undefined {
+	const targetDocument = documents.get(picked.reference.file);
+	if (targetDocument === undefined) {
+		return undefined;
+	}
+	return { document: targetDocument, reference: picked.reference };
 }
 
 /** A follow refusal in the user's terms; never exposes an internal enum. */
@@ -657,4 +926,85 @@ function refusalReason(resolution: Extract<ElementResolution, { ok: false }>, ra
 		case 'dest-mismatch':
 			return `Target "${rawPath}" is a ${resolution.actualKind}, not the type the reference expects.`;
 	}
+}
+
+/** The condition entries a store holds, or none when the provider runs without one. */
+function storedConditionEntries(store?: ConditionValueStore): ConditionEntry[] {
+	return store?.load() ?? [];
+}
+
+/** The explicit extension root, the packaged one, or the built output's parent. */
+function resolvedExtensionUri(explicit?: vscode.Uri): vscode.Uri {
+	return explicit ?? packagedExtensionUri() ?? vscode.Uri.file(path.join(__dirname, '..'));
+}
+
+function packagedExtensionUri(): vscode.Uri | undefined {
+	return vscode.extensions.getExtension('deviousprophet.vscode-arxml-scope')?.extensionUri;
+}
+
+type ResolveTarget = NonNullable<DefinitionSource['resolveTarget']>;
+
+/** The optional definition count/resolver options, for a provider with an index. */
+function definitionExtras(source: DefinitionSource, key: string): Partial<RowBuildOptions> {
+	const candidateCount = source.definitionCandidateCount?.bind(source);
+	const resolveTarget = source.resolveTarget?.bind(source);
+	return { ...candidateCountOption(candidateCount), ...resolverOption(resolveTarget, key) };
+}
+
+function candidateCountOption(candidateCount: ((definitionRef: string) => number) | undefined): Partial<RowBuildOptions> {
+	if (candidateCount === undefined) {
+		return {};
+	}
+	return { ambiguousDefinitions: candidateCount };
+}
+
+function resolverOption(resolveTarget: ResolveTarget | undefined, key: string): Partial<RowBuildOptions> {
+	if (resolveTarget === undefined) {
+		return {};
+	}
+	return {
+		referenceResolver: (targetPath, targetDest) =>
+			followableTarget(resolveTarget(targetPath, targetDest, key), targetPath),
+	};
+}
+
+function followableTarget(
+	resolution: ElementResolution,
+	targetPath: string
+): { followable: boolean; reason?: string } {
+	if (resolution.ok) {
+		return { followable: true };
+	}
+	return { followable: false, reason: refusalReason(resolution, targetPath) };
+}
+
+/** A Details notice shown beside the edited field rather than only in the toolbar. */
+async function postInlineNotice(panel: vscode.WebviewPanel, message: string): Promise<void> {
+	await panel.webview.postMessage({ type: 'notice', message, kind: 'warn', inline: true, scope: 'details' });
+}
+
+async function confirmDelete(plan: { label: string; descendants: number }): Promise<boolean> {
+	const answer = await vscode.window.showWarningMessage(
+		`Delete "${plan.label}"?${deletedDescendants(plan.descendants)} You can undo with Ctrl+Z.`,
+		{ modal: true },
+		'Delete'
+	);
+	return answer === 'Delete';
+}
+
+function deletedDescendants(count: number): string {
+	if (count === 0) {
+		return '';
+	}
+	return ` Its ${count} descendant${count === 1 ? '' : 's'} will also be deleted.`;
+}
+
+async function confirmDuplicateWrite(label: string, name: string | undefined): Promise<boolean> {
+	const message = name === undefined ? `Duplicate parameter "${label}"?` : `Duplicate "${label}" as "${name}"?`;
+	const answer = await vscode.window.showWarningMessage(
+		`${message} You can undo with Ctrl+Z.`,
+		{ modal: true },
+		'Duplicate'
+	);
+	return answer === 'Duplicate';
 }

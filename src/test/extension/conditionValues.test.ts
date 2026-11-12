@@ -6,9 +6,9 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 
+import type { ConditionEntry } from '../../core/ecuc/conditionEntry';
 import {
 	CONDITION_VALUES_KEY,
-	ConditionEntry,
 	ConditionValueStore,
 	parseConditionEntries,
 } from '../../host/conditionValues';

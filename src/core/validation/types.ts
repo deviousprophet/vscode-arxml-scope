@@ -37,7 +37,7 @@ export interface EcucDiagnostic {
 
 export type SeveritySettings = Record<DiagnosticRule, DiagnosticSeverity>;
 
-export const DIAGNOSTIC_RULES: readonly DiagnosticRule[] = [
+const DIAGNOSTIC_RULES: readonly DiagnosticRule[] = [
 	'brokenReference',
 	'destMismatch',
 	'duplicateShortName',
@@ -57,16 +57,28 @@ export const DEFAULT_SEVERITIES: SeveritySettings = {
 	missingRequired: 'warning',
 };
 
+/** True for an object that can carry rule keys; arrays and null are not settings. */
+function isSettingsInput(input: unknown): input is Record<string, unknown> {
+	if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+		return false;
+	}
+	return true;
+}
+
+/** True for one of the four accepted severity values. */
+function isDiagnosticSeverity(value: unknown): value is DiagnosticSeverity {
+	return value === 'error' || value === 'warning' || value === 'information' || value === 'off';
+}
+
 /** Normalizes a settings object; unknown rules and values fall back to the default. */
 export function normalizeSeverities(input: unknown): SeveritySettings {
 	const out: SeveritySettings = { ...DEFAULT_SEVERITIES };
-	if (!input || typeof input !== 'object' || Array.isArray(input)) {
+	if (!isSettingsInput(input)) {
 		return out;
 	}
-	const source = input as Record<string, unknown>;
 	for (const rule of DIAGNOSTIC_RULES) {
-		const value = source[rule];
-		if (value === 'error' || value === 'warning' || value === 'information' || value === 'off') {
+		const value = input[rule];
+		if (isDiagnosticSeverity(value)) {
 			out[rule] = value;
 		}
 	}

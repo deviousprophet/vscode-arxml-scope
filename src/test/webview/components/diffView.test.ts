@@ -168,4 +168,66 @@ suite('DiffView component', () => {
 		assert.ok(!source.includes('vscode'), 'no provider messages');
 		assert.ok(!source.includes('diffDocument'), 'no host diff document');
 	});
+
+	test('render mirrors the single left offset to both panes and reports the viewport', () => {
+		const dom = installMarkup(`<body>${renderDiffViewHtml()}</body>`);
+		try {
+			const seen: unknown[] = [];
+			const view = new DiffView({ onViewportChange: (viewport) => seen.push(viewport) });
+			view.mount();
+			const rendered: unknown[][] = [];
+			view.left.render = (pane: any, force: boolean) => rendered.push(['left', pane.top, pane.left, force]);
+			view.right.render = (pane: any, force: boolean) => rendered.push(['right', pane.top, pane.left, force]);
+			const viewport = { top: 5, left: 9, height: 40, width: 80 };
+			view.render(viewport, true);
+			assert.deepStrictEqual(rendered, [
+				['left', 5, 9, true],
+				['right', 5, 9, true],
+			]);
+			assert.strictEqual(seen[0], viewport, 'the host receives the same viewport object');
+			view.render({ top: 1, left: 2, height: 3, width: 4, lefts: [7, 6] }, false);
+			assert.deepStrictEqual(rendered.slice(2), [
+				['left', 1, 7, false],
+				['right', 1, 6, false],
+			]);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('an empty title hides its strip and the tooltip falls back to the text', () => {
+		const dom = installMarkup(`<body>${renderDiffViewHtml()}</body>`);
+		try {
+			const view = new DiffView();
+			view.mount();
+			const left = dom.document.getElementById('diff-title-left');
+			const right = dom.document.getElementById('diff-title-right');
+			view.setHeader({ left: {}, right: { title: 'right.arxml' } });
+			assert.strictEqual(left.textContent, '');
+			assert.strictEqual(left.title, '');
+			assert.strictEqual(left.hidden, true);
+			assert.strictEqual(right.textContent, 'right.arxml');
+			assert.strictEqual(right.title, 'right.arxml');
+			assert.strictEqual(right.hidden, false);
+			view.setHeader({ left: { title: 'left.arxml' }, right: { title: 'right.arxml', titleTitle: '/r.arxml' } });
+			assert.strictEqual(left.title, 'left.arxml', 'the title text is its own tooltip');
+			assert.strictEqual(right.title, '/r.arxml');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('an unmounted view still publishes a zero scrollbar gutter', () => {
+		const dom = installMarkup(`<body>${renderDiffViewHtml()}</body>`);
+		try {
+			const view = new DiffView();
+			view.syncScrollbarWidth();
+			assert.strictEqual(
+				(dom.document.getElementById('diff-body') as HTMLElement).style.getPropertyValue('--diff-scrollbar-width'),
+				'0px'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
 });

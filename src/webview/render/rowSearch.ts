@@ -31,6 +31,28 @@ export const SEARCH_CHUNK_BUDGET_MS = 24;
 export const SEARCH_PROGRESS_THROTTLE_MS = 150;
 export const SEARCH_ROW_BATCH = 512;
 
+/** A numeric option, or the engine's default when the caller omitted it. */
+function numberOption(value: number | undefined, fallback: number): number {
+	return typeof value === 'number' ? value : fallback;
+}
+
+/** The per-run state the chunked scanner closes over. */
+interface ChunkRun {
+	readonly rows: readonly { haystack: string }[];
+	readonly needle: string;
+	readonly handlers: RowSearchHandlers;
+	readonly token: number;
+	readonly total: number;
+	readonly matches: number[];
+	scanned: number;
+	lastProgress: number;
+}
+
+/** The completion percentage, with an empty store reported as complete. */
+function progressPercent(scanned: number, total: number): number {
+	return total === 0 ? 100 : Math.min(100, Math.floor((scanned / total) * 100));
+}
+
 export class RowSearchEngine {
 	private token = 0;
 	private debounceHandle: unknown = null;
@@ -44,10 +66,10 @@ export class RowSearchEngine {
 	private clearTimer: (handle: unknown) => void;
 
 	constructor(options: RowSearchOptions = {}) {
-		this.debounceMs = typeof options.debounceMs === 'number' ? options.debounceMs : 120;
-		this.budgetMs = typeof options.budgetMs === 'number' ? options.budgetMs : 24;
-		this.progressMs = typeof options.progressMs === 'number' ? options.progressMs : 150;
-		this.batchSize = Math.max(1, typeof options.batchSize === 'number' ? options.batchSize : 512);
+		this.debounceMs = numberOption(options.debounceMs, SEARCH_DEBOUNCE_MS);
+		this.budgetMs = numberOption(options.budgetMs, SEARCH_CHUNK_BUDGET_MS);
+		this.progressMs = numberOption(options.progressMs, SEARCH_PROGRESS_THROTTLE_MS);
+		this.batchSize = Math.max(1, numberOption(options.batchSize, SEARCH_ROW_BATCH));
 		this.now = options.now ?? (() => performance.now());
 		this.setTimer =
 			options.setTimer ?? ((callback, ms) => setTimeout(callback, ms));
@@ -113,43 +135,66 @@ export class RowSearchEngine {
 		handlers: RowSearchHandlers,
 		token: number
 	): void {
-		const total = rows.length;
-		const matches: number[] = [];
-		let scanned = 0;
-		let lastProgress = this.now();
+		const run: ChunkRun = {
+			rows,
+			needle,
+			handlers,
+			token,
+			total: rows.length,
+			matches: [],
+			scanned: 0,
+			lastProgress: this.now(),
+		};
 
 		const step = (): void => {
 			if (token !== this.token) {
 				return;
 			}
-			const deadline = this.now() + this.budgetMs;
-			do {
-				const end = Math.min(total, scanned + this.batchSize);
-				for (; scanned < end; scanned++) {
-					if (rows[scanned].haystack.includes(needle)) {
-						matches.push(scanned);
-					}
-				}
-				if (scanned >= total) {
-					break;
-				}
-			} while (this.now() < deadline);
-
-			const complete = scanned >= total;
-			const now = this.now();
-			if (complete || now - lastProgress >= this.progressMs) {
-				const percent = total === 0 ? 100 : Math.min(100, Math.floor((scanned / total) * 100));
-				handlers.onProgressUpdate?.(matches.slice(), percent);
-				lastProgress = now;
-			}
-
+			this.scanSlice(run);
+			const complete = run.scanned >= run.total;
+			this.reportChunk(run, complete);
 			if (complete) {
-				handlers.onComplete(matches.slice());
+				handlers.onComplete(run.matches.slice());
 				return;
 			}
 			this.chunkHandle = this.setTimer(step, 0);
 		};
 
 		step();
+	}
+
+	/** Scan batches until the chunk budget is spent or the store is exhausted. */
+	private scanSlice(run: ChunkRun): void {
+		const deadline = this.now() + this.budgetMs;
+		do {
+			this.scanBatch(run);
+			if (run.scanned >= run.total) {
+				return;
+			}
+		} while (this.now() < deadline);
+	}
+
+	/** Scan one bounded batch, batching rows between clock checks. */
+	private scanBatch(run: ChunkRun): void {
+		const end = Math.min(run.total, run.scanned + this.batchSize);
+		for (; run.scanned < end; run.scanned++) {
+			if (run.rows[run.scanned].haystack.includes(run.needle)) {
+				run.matches.push(run.scanned);
+			}
+		}
+	}
+
+	/** Publish a progress snapshot when the throttle allows it or the run finished. */
+	private reportChunk(run: ChunkRun, complete: boolean): void {
+		const now = this.now();
+		if (!this.progressDue(complete, now, run.lastProgress)) {
+			return;
+		}
+		run.handlers.onProgressUpdate?.(run.matches.slice(), progressPercent(run.scanned, run.total));
+		run.lastProgress = now;
+	}
+
+	private progressDue(complete: boolean, now: number, lastProgress: number): boolean {
+		return complete || now - lastProgress >= this.progressMs;
 	}
 }

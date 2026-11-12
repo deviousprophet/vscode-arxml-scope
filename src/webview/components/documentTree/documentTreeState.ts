@@ -39,26 +39,20 @@ export function moveTarget(key: string, from: number, count: number, page: numbe
 	if (count === 0) {
 		return undefined;
 	}
-	if (key === 'ArrowDown') {
-		return Math.min(from + 1, count - 1);
-	}
-	if (key === 'ArrowUp') {
-		return Math.max(from - 1, 0);
-	}
-	if (key === 'Home') {
-		return 0;
-	}
-	if (key === 'End') {
-		return count - 1;
-	}
-	if (key === 'PageUp') {
-		return Math.max(from - page, 0);
-	}
-	if (key === 'PageDown') {
-		return Math.min(from + page, count - 1);
-	}
-	return undefined;
+	const move = MOVE_TARGETS.get(key);
+	return move ? move(from, count, page) : undefined;
 }
+
+type MoveTarget = (from: number, count: number, page: number) => number;
+
+const MOVE_TARGETS: ReadonlyMap<string, MoveTarget> = new Map<string, MoveTarget>([
+	['ArrowDown', (from, count) => Math.min(from + 1, count - 1)],
+	['ArrowUp', (from) => Math.max(from - 1, 0)],
+	['Home', () => 0],
+	['End', (_from, count) => count - 1],
+	['PageUp', (from, _count, page) => Math.max(from - page, 0)],
+	['PageDown', (from, count, page) => Math.min(from + page, count - 1)]
+]);
 
 /**
  * Keeps the selection when its row survived and prunes collapse ids that are gone.
@@ -83,13 +77,12 @@ export function resolveFocusId(
 	renderedIds: readonly string[],
 	preferredId?: string
 ): string | undefined {
-	if (previousFocusId !== undefined && renderedIds.includes(previousFocusId)) {
-		return previousFocusId;
-	}
-	if (preferredId !== undefined && renderedIds.includes(preferredId)) {
-		return preferredId;
-	}
-	return renderedIds.length > 0 ? renderedIds[0] : undefined;
+	return firstRendered(renderedIds, [previousFocusId, preferredId]) ?? renderedIds[0];
+}
+
+/** The first candidate that is still rendered, in the given order. */
+function firstRendered(renderedIds: readonly string[], candidates: readonly (string | undefined)[]): string | undefined {
+	return candidates.find((id) => id !== undefined && renderedIds.includes(id));
 }
 
 /** The selected row plus every descendant, in display order. */
@@ -126,18 +119,28 @@ export function guidesFor(
 	const guides: GuideSegment[][] = [];
 	const open: GuideSegment[] = [];
 	for (const flat of displayRows) {
-		if (flat.type === 'brace-close') {
-			const at = open.map((segment) => segment.level).lastIndexOf(flat.level);
-			if (at >= 0) {
-				open.splice(at, 1);
-			}
-			guides.push(open.slice());
-		} else if (flat.type === 'brace-open') {
-			guides.push(open.slice());
-			open.push({ level: flat.level, id: rows[flat.rowIndex].id });
-		} else {
-			guides.push(open.slice());
-		}
+		closeGuide(open, flat);
+		guides.push(open.slice());
+		openGuide(open, flat, rows);
 	}
 	return guides;
+}
+
+/** Ends the nearest open guide at a closing brace's level; other rows change nothing. */
+function closeGuide(open: GuideSegment[], flat: FlatRow): void {
+	if (flat.type !== 'brace-close') {
+		return;
+	}
+	const at = open.map((segment) => segment.level).lastIndexOf(flat.level);
+	if (at >= 0) {
+		open.splice(at, 1);
+	}
+}
+
+/** Starts a guide for a container's body after its opening brace row. */
+function openGuide(open: GuideSegment[], flat: FlatRow, rows: readonly { id: string }[]): void {
+	if (flat.type !== 'brace-open') {
+		return;
+	}
+	open.push({ level: flat.level, id: rows[flat.rowIndex].id });
 }

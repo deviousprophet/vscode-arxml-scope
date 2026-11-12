@@ -31,7 +31,6 @@ export function ensureDiscoveredConditionRows(): void;
 export function renderConditionEntries(entries: unknown): void;
 export function setConditionsStatus(message: string): void;
 export function applyDisabledCount(): void;
-export function applyConditionsMessage(message: unknown): boolean;
 export function mountConditionsPanel(): void;
 ```
 
@@ -57,7 +56,6 @@ export function mountConditionsPanel(): void;
 - Clear values empties every committed value but keeps the rows. Add creates an unsaved draft and sends
   nothing before Save.
 - `applyDisabledCount` updates the section badge; `setConditionsStatus` writes the status line.
-- `applyConditionsMessage` handles the host's condition envelope and returns whether it consumed it.
 
 ## Validation & Error Matrix
 

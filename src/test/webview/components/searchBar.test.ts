@@ -138,4 +138,52 @@ suite('SearchBar component', () => {
 			assert.ok(typeof (SearchBar.prototype as any)[name] === 'function', `${name} is part of the contract`);
 		}
 	});
+
+	test('F3 and Shift+F3 execute in both directions without touching the text', () => {
+		const input = fakeElement();
+		const calls: string[] = [];
+		withDocument({ 'search-input': input }, () => {
+			const bar = new SearchBar('', { onExecute: (direction) => calls.push(`execute:${direction}`) });
+			bar.mount();
+			input.value = 'keep';
+			const enter = (shiftKey: boolean): boolean => {
+				let prevented = false;
+				input.listeners.keydown({
+					key: 'F3',
+					shiftKey,
+					preventDefault() {
+						prevented = true;
+					},
+				});
+				return prevented;
+			};
+			assert.strictEqual(enter(false), true);
+			assert.strictEqual(enter(true), true);
+			assert.strictEqual(input.value, 'keep');
+		});
+		assert.deepStrictEqual(calls, ['execute:1', 'execute:-1']);
+	});
+
+	test('a page without controls and a bar without callbacks mount and key safely', () => {
+		withDocument({}, () => {
+			const bar = new SearchBar('missing-');
+			bar.mount();
+			bar.mount();
+			assert.strictEqual(bar.value(), '');
+		});
+		const input = fakeElement();
+		const prevented: number[] = [];
+		const key = { key: 'Enter', shiftKey: false, preventDefault: () => prevented.push(1) };
+		withDocument({ 'search-input': input }, () => {
+			const bar = new SearchBar('');
+			bar.mount();
+			input.value = 'abc';
+			input.listeners.input({});
+			input.listeners.keydown(key);
+			input.listeners.keydown({ key: 'Escape', preventDefault: () => prevented.push(1) });
+			assert.strictEqual(input.value, '');
+		});
+		assert.deepStrictEqual(prevented, [1, 1]);
+		assert.deepStrictEqual(input.focusOptions, [], 'Escape clears without moving focus');
+	});
 });

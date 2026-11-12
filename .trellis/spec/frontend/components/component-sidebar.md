@@ -42,7 +42,6 @@ export function getSidebarState(): SidebarUiState;
 export function setSidebarPersistence(persist: () => void): void;
 export function showSidebarTab(name: string): void;
 export function showSidebarSection(id: string): void;
-export function layoutSidebarPanes(): void;
 export class SidebarPaneView {
     constructor(root: Element);
     // section registration, layout, collapse and sash drag are internal

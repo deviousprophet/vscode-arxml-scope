@@ -42,6 +42,16 @@ export class DiffSession {
 		if (cached !== undefined) {
 			return this.remember(cached);
 		}
+		return this.build(semantic);
+	}
+
+	/** Drops every cached document; the next request rebuilds from the sides. */
+	invalidate(): void {
+		this.documents.clear();
+		this.last = undefined;
+	}
+
+	private build(semantic: boolean): DiffSessionResult {
 		const built = buildDiffDocument(
 			this.left,
 			this.right,
@@ -53,22 +63,26 @@ export class DiffSession {
 			{ semanticMatching: semantic }
 		);
 		if (semantic && built.summary.renamed === 0) {
-			// No semantic pair was added, so strict and semantic output are the same.
-			// Reuse the displayed document when it is also a no-rename document;
-			// otherwise the freshly built one becomes the shared document.
-			const shared = this.last !== undefined && this.last.summary.renamed === 0 ? this.last : built;
-			this.documents.set(true, shared);
-			this.documents.set(false, shared);
-			return this.remember(shared);
+			return this.share(built);
 		}
 		this.documents.set(semantic, built);
 		return this.remember(built);
 	}
 
-	/** Drops every cached document; the next request rebuilds from the sides. */
-	invalidate(): void {
-		this.documents.clear();
-		this.last = undefined;
+	/**
+	 * No semantic pair was added, so strict and semantic output are the same.
+	 * Reuse the displayed document when it is also a no-rename document;
+	 * otherwise the freshly built one becomes the shared document.
+	 */
+	private share(built: DiffDocument): DiffSessionResult {
+		const shared = this.reusableTwin(built);
+		this.documents.set(true, shared);
+		this.documents.set(false, shared);
+		return this.remember(shared);
+	}
+
+	private reusableTwin(built: DiffDocument): DiffDocument {
+		return this.last !== undefined && this.last.summary.renamed === 0 ? this.last : built;
 	}
 
 	private remember(document: DiffDocument): DiffSessionResult {

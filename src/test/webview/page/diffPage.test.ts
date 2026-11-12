@@ -188,6 +188,28 @@ function nestedRows(): DiffRow[] {
 	];
 }
 
+/** One parameter row of the 14-parameter container; index 6 is the change. */
+function contextRow(index: number): DiffRow {
+	const name = `P${String(index).padStart(2, '0')}`;
+	const changed = index === 6;
+	const value = changed ? '1' : '0';
+	const cell = (): NonNullable<DiffRow['left']> =>
+		wordCell({ label: name, definitionRef: `/P/${name}`, shownValue: value, value, valueKind: 'numeric' });
+	return wordRow({
+		key: `p${index}`,
+		parentKey: 'c',
+		level: 3,
+		posinset: index + 1,
+		setsize: 14,
+		kind: 'parameter',
+		status: changed ? 'changed' : 'unchanged',
+		left: cell(),
+		right: cell(),
+		changes: changed ? [{ field: 'value', left: '0', right: '1' }] : [],
+		haystack: name.toLowerCase(),
+	});
+}
+
 /** A 14-parameter container with one changed row, enough for a 5-line context window. */
 function contextRows(): DiffRow[] {
 	const moduleCell = (): NonNullable<DiffRow['left']> =>
@@ -216,26 +238,7 @@ function contextRows(): DiffRow[] {
 		}),
 	];
 	for (let index = 0; index < 14; index++) {
-		const name = `P${String(index).padStart(2, '0')}`;
-		const changed = index === 6;
-		const value = changed ? '1' : '0';
-		const cell = (): NonNullable<DiffRow['left']> =>
-			wordCell({ label: name, definitionRef: `/P/${name}`, shownValue: value, value, valueKind: 'numeric' });
-		rows.push(
-			wordRow({
-				key: `p${index}`,
-				parentKey: 'c',
-				level: 3,
-				posinset: index + 1,
-				setsize: 14,
-				kind: 'parameter',
-				status: changed ? 'changed' : 'unchanged',
-				left: cell(),
-				right: cell(),
-				changes: changed ? [{ field: 'value', left: '0', right: '1' }] : [],
-				haystack: name.toLowerCase(),
-			})
-		);
+		rows.push(contextRow(index));
 	}
 	return rows;
 }
@@ -286,6 +289,88 @@ async function runDiffSearch(dom: ReturnType<typeof installDom>, query: string):
 	input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
 	input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
 	await settleSearch();
+}
+
+function windowRowPositions(at: number): Pick<DiffRow, 'parentKey' | 'level' | 'posinset' | 'setsize'> {
+	if (at === 0) {
+		return { parentKey: null, level: 1, posinset: 1, setsize: 1 };
+	}
+	return { parentKey: 'row-0', level: 2, posinset: at, setsize: 1199 };
+}
+
+function windowDiffRow(at: number): DiffRow {
+	return {
+		key: `row-${at}`,
+		...windowRowPositions(at),
+		kind: 'parameter',
+		hasChildren: false,
+		subtreeSize: 0,
+		status: 'changed',
+		changes: [],
+		haystack: `row ${at}`,
+		left: { kind: 'parameter', label: `row-${at}`, definitionRef: '/P/row', meta: [], range: { start: 0, end: 1 } },
+	};
+}
+
+function isKeywordQuery(query: string): boolean {
+	return query === 'package' || query === 'pack' || query === 'schema' || query === 'sche';
+}
+
+function assertPaneHeaderMatch(dom: ReturnType<typeof installDom>, pane: 'left' | 'right', query: string): void {
+	const row = dom.document.querySelector(
+		`#diff-pane-${pane} .diff-header-row[data-search-current="true"]`
+	) as HTMLElement | null;
+	assert.ok(row, `${pane} ${query}: the header row is the current match`);
+	const mark = row.querySelector('mark');
+	assert.ok(mark, `${pane} ${query}: the matched text is marked`);
+	assert.ok(
+		(mark.textContent ?? '').toLowerCase().includes(query.toLowerCase()),
+		`${pane} ${query}: the mark covers the match`
+	);
+	if (isKeywordQuery(query)) {
+		assert.ok(row.querySelector('.keyword mark'), `${pane} ${query}: the keyword is marked`);
+	} else {
+		assert.ok(
+			row.querySelector('.package mark, .number mark'),
+			`${pane} ${query}: the value is marked`
+		);
+	}
+	assert.strictEqual(
+		dom.document.querySelectorAll(`#diff-pane-${pane} .diff-header-row[data-search-current="true"]`).length,
+		1
+	);
+}
+
+function assertHeaderSearch(dom: ReturnType<typeof installDom>, query: string): void {
+	assert.strictEqual(
+		dom.document.getElementById('diff-search-count')!.textContent,
+		'1 / 1',
+		`${query}: one aligned header line is one match`
+	);
+	for (const pane of ['left', 'right'] as const) {
+		assertPaneHeaderMatch(dom, pane, query);
+	}
+}
+
+function assertGapInBothPanes(dom: ReturnType<typeof installDom>, message: string): void {
+	const left = dom.document.querySelector('#diff-pane-left .diff-module-gap-row');
+	const right = dom.document.querySelector('#diff-pane-right .diff-module-gap-row');
+	assert.ok(left && right, message);
+}
+
+function isGapAfterFirstModule(left: Element): boolean | undefined {
+	return left.previousElementSibling?.classList.contains('diff-structural');
+}
+
+function isGapBeforeSecondModule(left: Element): boolean {
+	const next = left.nextElementSibling;
+	return next?.classList.contains('diff-row') === true && next?.getAttribute('data-key') === 'm2';
+}
+
+function assertGapPlacement(left: HTMLElement, right: HTMLElement): void {
+	assert.strictEqual(left.dataset.documentIndex, right.dataset.documentIndex);
+	assert.ok(isGapAfterFirstModule(left), 'the gap follows the first module subtree');
+	assert.ok(isGapBeforeSecondModule(left), 'the gap precedes the second module');
 }
 
 suite('semantic diff page', () => {
@@ -517,20 +602,7 @@ suite('semantic diff page', () => {
 	});
 
 	test('1200 rows are windowed by the shared virtual math', () => {
-		const rows: DiffRow[] = Array.from({ length: 1200 }, (_, at) => ({
-			key: `row-${at}`,
-			parentKey: at === 0 ? null : 'row-0',
-			level: at === 0 ? 1 : 2,
-			posinset: at === 0 ? 1 : at,
-			setsize: at === 0 ? 1 : 1199,
-			kind: 'parameter',
-			hasChildren: false,
-			subtreeSize: 0,
-			status: 'changed',
-			changes: [],
-			haystack: `row ${at}`,
-			left: { kind: 'parameter', label: `row-${at}`, definitionRef: '/P/row', meta: [], range: { start: 0, end: 1 } },
-		}));
+		const rows: DiffRow[] = Array.from({ length: 1200 }, (_, at) => windowDiffRow(at));
 		const { dom } = mount({
 			left: { name: 'left.arxml', path: '/work/left.arxml' },
 			right: { name: 'right.arxml', path: '/work/right.arxml' },
@@ -1234,35 +1306,7 @@ suite('semantic diff page', () => {
 		try {
 			for (const query of ['Head', 'HeaderPkg', 'package', 'pack', 'schema', 'sche', '00048']) {
 				await runDiffSearch(dom, query);
-				assert.strictEqual(
-					dom.document.getElementById('diff-search-count')!.textContent,
-					'1 / 1',
-					`${query}: one aligned header line is one match`
-				);
-				for (const pane of ['left', 'right'] as const) {
-					const row = dom.document.querySelector(
-						`#diff-pane-${pane} .diff-header-row[data-search-current="true"]`
-					) as HTMLElement | null;
-					assert.ok(row, `${pane} ${query}: the header row is the current match`);
-					const mark = row.querySelector('mark');
-					assert.ok(mark, `${pane} ${query}: the matched text is marked`);
-					assert.ok(
-						(mark.textContent ?? '').toLowerCase().includes(query.toLowerCase()),
-						`${pane} ${query}: the mark covers the match`
-					);
-					if (query === 'package' || query === 'pack' || query === 'schema' || query === 'sche') {
-						assert.ok(row.querySelector('.keyword mark'), `${pane} ${query}: the keyword is marked`);
-					} else {
-						assert.ok(
-							row.querySelector('.package mark, .number mark'),
-							`${pane} ${query}: the value is marked`
-						);
-					}
-					assert.strictEqual(
-						dom.document.querySelectorAll(`#diff-pane-${pane} .diff-header-row[data-search-current="true"]`).length,
-						1
-					);
-				}
+				assertHeaderSearch(dom, query);
 			}
 			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'a header search jump never selects');
 		} finally {
@@ -1788,35 +1832,18 @@ suite('semantic diff page', () => {
 			const left = dom.document.querySelector('#diff-pane-left .diff-module-gap-row') as HTMLElement;
 			const right = dom.document.querySelector('#diff-pane-right .diff-module-gap-row') as HTMLElement;
 			assert.ok(left && right, 'Show all restores the gap in both panes');
-			assert.strictEqual(left.dataset.documentIndex, right.dataset.documentIndex);
-			assert.ok(
-				left.previousElementSibling?.classList.contains('diff-structural'),
-				'the gap follows the first module subtree'
-			);
-			assert.ok(
-				left.nextElementSibling?.classList.contains('diff-row') &&
-					left.nextElementSibling?.getAttribute('data-key') === 'm2',
-				'the gap precedes the second module'
-			);
+			assertGapPlacement(left, right);
 			assert.strictEqual(
 				assertPaneNumbering(dom, 'left'),
 				9,
 				'both modules, their braces and the gap are numbered'
 			);
 			(dom.document.getElementById('diff-swap') as HTMLElement).click();
-			assert.ok(
-				dom.document.querySelector('#diff-pane-left .diff-module-gap-row') &&
-					dom.document.querySelector('#diff-pane-right .diff-module-gap-row'),
-				'a swap keeps the shared gap'
-			);
+			assertGapInBothPanes(dom, 'a swap keeps the shared gap');
 			assertPaneNumbering(dom, 'left');
 			assertPaneNumbering(dom, 'right');
 			dom.post({ type: 'document', semantic: false, document: comparison });
-			assert.ok(
-				dom.document.querySelector('#diff-pane-left .diff-module-gap-row') &&
-					dom.document.querySelector('#diff-pane-right .diff-module-gap-row'),
-				'a refresh rebuilds the shared gap'
-			);
+			assertGapInBothPanes(dom, 'a refresh rebuilds the shared gap');
 			assertPaneNumbering(dom, 'left');
 			assertPaneNumbering(dom, 'right');
 			(dom.document.getElementById('diff-collapse-all') as HTMLElement).click();
@@ -1892,6 +1919,141 @@ suite('semantic diff page', () => {
 				contentWidth,
 				'the window minimum covers the pane content extent, including the number column'
 			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Arrow keys move the selection and Home/End jump to the ends', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			const row = (key: string): HTMLElement =>
+				dom.document.querySelector(`#diff-pane-left .diff-row[data-key="${key}"]`) as HTMLElement;
+			const selected = (): string | undefined =>
+				dom.document.querySelector('#diff-pane-left .diff-row[data-selected="true"]')?.getAttribute('data-key') ?? undefined;
+			const press = (key: string, target: HTMLElement): KeyboardEvent => {
+				const event = new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+				target.dispatchEvent(event);
+				return event;
+			};
+
+			assert.strictEqual(press('ArrowDown', row('m')).defaultPrevented, true);
+			assert.strictEqual(selected(), 'm', 'ArrowDown starts at the first node');
+			press('ArrowDown', row('m'));
+			assert.strictEqual(selected(), 'c1');
+			press('ArrowUp', row('c1'));
+			assert.strictEqual(selected(), 'm');
+			press('Home', row('m'));
+			assert.strictEqual(selected(), 'm', 'Home stops at the first node');
+			press('End', row('m'));
+			assert.strictEqual(selected(), 'p2', 'End stops at the last node');
+			press('Home', row('p2'));
+			assert.strictEqual(selected(), 'm');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('ArrowRight enters or expands and ArrowLeft collapses or returns to the parent', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			const row = (key: string): HTMLElement =>
+				dom.document.querySelector(`#diff-pane-left .diff-row[data-key="${key}"]`) as HTMLElement;
+			const selected = (): string | undefined =>
+				dom.document.querySelector('#diff-pane-left .diff-row[data-selected="true"]')?.getAttribute('data-key') ?? undefined;
+			const press = (key: string, target: HTMLElement): void => {
+				target.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+			};
+
+			row('m').querySelector('.row')!.dispatchEvent(
+				new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })
+			);
+			press('ArrowRight', row('m'));
+			assert.strictEqual(selected(), 'c1', 'a right arrow enters the first child');
+			press('ArrowRight', row('c1'));
+			assert.strictEqual(selected(), 'p1');
+			press('ArrowLeft', row('p1'));
+			assert.strictEqual(selected(), 'c1', 'a left arrow returns to the parent');
+			press('ArrowLeft', row('c1'));
+			assert.strictEqual(selected(), 'c1', 'the expanded container stays selected');
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p1"]'), null);
+			press('ArrowRight', row('c1'));
+			assert.strictEqual(selected(), 'c1', 'a collapsed container stays selected');
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p1"]'), 'right expands it');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Space selects a row and Ctrl+F focuses Search', () => {
+		const { dom } = mount(wordDocument(nestedRows()));
+		try {
+			const p2 = dom.document.querySelector('#diff-pane-left .diff-row[data-key="p2"]') as HTMLElement;
+			const space = new dom.window.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+			p2.dispatchEvent(space);
+			assert.strictEqual(space.defaultPrevented, true);
+			assert.strictEqual(
+				(dom.document.querySelector('#diff-pane-left .diff-row[data-key="p2"]') as HTMLElement).dataset.selected,
+				'true',
+				'Space selects the row'
+			);
+
+			const shortcut = new dom.window.KeyboardEvent('keydown', {
+				key: 'f',
+				ctrlKey: true,
+				bubbles: true,
+				cancelable: true,
+			});
+			dom.document.body.dispatchEvent(shortcut);
+			assert.strictEqual(shortcut.defaultPrevented, true);
+			assert.strictEqual(dom.document.activeElement, dom.document.getElementById('diff-search-input'));
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Enter steps through search matches and wraps in both directions', async () => {
+		const rows = ['alpha one', 'alpha two'].map((haystack, at) =>
+			wordRow({
+				key: `a${at + 1}`,
+				posinset: at + 1,
+				setsize: 2,
+				haystack,
+				left: wordCell({ label: `A${at + 1}` }),
+				right: wordCell({ label: `A${at + 1}` }),
+			})
+		);
+		const { dom } = mount(wordDocument(rows));
+		try {
+			await runDiffSearch(dom, 'alpha');
+			const input = dom.document.getElementById('diff-search-input') as HTMLInputElement;
+			const count = (): string => dom.document.getElementById('diff-search-count')!.textContent ?? '';
+			const step = (shiftKey = false): void => {
+				input.dispatchEvent(
+					new dom.window.KeyboardEvent('keydown', { key: 'Enter', shiftKey, bubbles: true, cancelable: true })
+				);
+			};
+			assert.strictEqual(count(), '1 / 2');
+			step();
+			assert.strictEqual(count(), '2 / 2');
+			step();
+			assert.strictEqual(count(), '1 / 2', 'Enter wraps forward');
+			step(true);
+			assert.strictEqual(count(), '2 / 2', 'Shift+Enter wraps backward');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('clicking a header row focuses it without selecting a row', () => {
+		const { dom } = mount(documentOf());
+		try {
+			const header = dom.document.querySelector('#diff-pane-left .diff-header-row') as HTMLElement;
+			header.click();
+			assert.strictEqual(header.tabIndex, 0, 'the header becomes the roving focus target');
+			assert.strictEqual(dom.document.activeElement, header);
+			assert.strictEqual(dom.document.querySelector('#diff-pane-left .diff-row[data-selected="true"]'), null);
+			assert.strictEqual(messagesOf(dom.api, 'reveal').length, 0);
 		} finally {
 			dom.restore();
 		}

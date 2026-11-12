@@ -44,7 +44,7 @@ export function activate(context: vscode.ExtensionContext): ArxmlScopeApi {
 	context.subscriptions.push(indexService);
 	indexService.start();
 	const validationService = new ValidationService(indexService);
-	context.subscriptions.push(validationService);
+	context.subscriptions.push({ dispose: () => validationService.dispose() });
 	registerTextFeatures(context, indexService);
 	// The ECUC editor. `priority: "option"` in the manifest is what keeps a normally
 	// opened `.arxml` in the text editor: the view is reachable only

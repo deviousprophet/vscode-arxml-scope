@@ -3,7 +3,8 @@ import * as assert from 'assert';
 import { isArxmlPath, isEcucValues } from '../../core/ecuc/detect';
 import { EcucDocumentModel } from '../../core/ecuc/model';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { expectedModel, fixtureText, plain, scanFixture, slice, stripRanges } from './modelTestUtils';
+import { expectedModel, fixtureText, plain, scanFixture, slice } from './modelTestUtils';
+import { stripRanges } from './rangeTestUtils';
 
 /** Fixtures with a committed expected model. */
 const FIXTURES = [
@@ -17,6 +18,53 @@ const FIXTURES = [
 	'references.arxml',
 	'not-ecuc.arxml',
 ];
+
+/** Every `DEFINITION-REF` target in the fixture text, keyed by trimmed ref, with its DEST. */
+function destsByRef(text: string): Map<string, string> {
+	const dests = new Map<string, string>();
+	const re = /<(?:[A-Za-z_][\w.-]*:)?DEFINITION-REF\b([^>]*)>([^<]+)<\/[^>]*>/g;
+	let match: RegExpExecArray | null;
+	while ((match = re.exec(text)) !== null) {
+		const dest = /\bDEST="([^"]+)"/.exec(match[1]);
+		if (dest) {
+			dests.set(match[2].trim(), dest[1]);
+		}
+	}
+	return dests;
+}
+
+type Containers = EcucDocumentModel['modules'][number]['containers'];
+
+function assertContainerDests(containers: Containers, dests: Map<string, string>, fixture: string): void {
+	for (const container of containers) {
+		for (const parameter of container.parameters) {
+			assert.strictEqual(
+				parameter.definitionDest,
+				dests.get(parameter.definitionRef),
+				`${fixture} ${parameter.definitionRef}`
+			);
+		}
+		assertContainerDests(container.containers, dests, fixture);
+	}
+}
+
+function visitStrings(value: unknown, seen: string[]): void {
+	if (typeof value === 'string') {
+		seen.push(value);
+		return;
+	}
+	visitStringContainers(value, seen);
+}
+
+function visitStringContainers(value: unknown, seen: string[]): void {
+	if (Array.isArray(value)) {
+		value.forEach((entry) => visitStrings(entry, seen));
+		return;
+	}
+	if (value && typeof value === 'object') {
+		Object.values(value).forEach((entry) => visitStrings(entry, seen));
+	}
+}
 
 suite('scanner (core)', () => {
 	test('AC1: every fixture matches its committed expected model', () => {
@@ -102,30 +150,10 @@ suite('scanner (core)', () => {
 	test('AC1: every fixture parameter with a DEST carries it', () => {
 		for (const fixture of FIXTURES) {
 			const text = fixtureText(fixture);
-			const dests = new Map<string, string>();
-			const re = /<(?:[A-Za-z_][\w.-]*:)?DEFINITION-REF\b([^>]*)>([^<]+)<\/[^>]*>/g;
-			let match: RegExpExecArray | null;
-			while ((match = re.exec(text)) !== null) {
-				const dest = /\bDEST="([^"]+)"/.exec(match[1]);
-				if (dest) {
-					dests.set(match[2].trim(), dest[1]);
-				}
-			}
+			const dests = destsByRef(text);
 			const model = scanFixture(fixture);
-			const visit = (containers: EcucDocumentModel['modules'][number]['containers']): void => {
-				for (const container of containers) {
-					for (const parameter of container.parameters) {
-						assert.strictEqual(
-							parameter.definitionDest,
-							dests.get(parameter.definitionRef),
-							`${fixture} ${parameter.definitionRef}`
-						);
-					}
-					visit(container.containers);
-				}
-			};
 			for (const module of model.modules) {
-				visit(module.containers);
+				assertContainerDests(module.containers, dests, fixture);
 			}
 		}
 	});
@@ -196,21 +224,8 @@ suite('scanner (core)', () => {
 		const text = fixtureText('basic.arxml');
 		const model = scanFixture('basic.arxml');
 		assert.ok(JSON.stringify(plain(model)).length > 0);
-		const seen: unknown[] = [];
-		const visit = (value: unknown): void => {
-			if (typeof value === 'string') {
-				seen.push(value);
-				return;
-			}
-			if (Array.isArray(value)) {
-				value.forEach(visit);
-				return;
-			}
-			if (value && typeof value === 'object') {
-				Object.values(value).forEach(visit);
-			}
-		};
-		visit(plain(model));
+		const seen: string[] = [];
+		visitStrings(plain(model), seen);
 		assert.ok(!seen.some((v) => v === text));
 		assert.strictEqual(Object.prototype.hasOwnProperty.call(model, 'text'), false);
 	});
@@ -294,6 +309,21 @@ suite('scanner (core)', () => {
 		const rendered = JSON.stringify(formatting);
 		assert.strictEqual(rendered.includes('the module package'), false);
 		assert.strictEqual(rendered.includes('keepable'), false);
+	});
+
+	test('characterization: stray end tags and text outside the root are ignored', () => {
+		// The stray `</X>` sits before the module while `AR-PACKAGE` is open: if it
+		// closed anything, the module would lose its package chain and the package
+		// range could not be recorded.
+		const model = scanEcucValues(
+			'  <AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS></X>' +
+				'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>' +
+				'<DEFINITION-REF DEST="ECUC-MODULE-DEF">/D/M</DEFINITION-REF>' +
+				'</ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
+		);
+		assert.strictEqual(model.modules[0].shortName, 'M', 'a stray end tag closes nothing');
+		assert.deepStrictEqual(model.packages.map((pkg) => pkg.path), [['P']]);
+		assert.ok(model.pathIndex.has('/P/M'));
 	});
 
 	test('namespace prefixes are stripped from every tag, and the schema release is derived', () => {

@@ -32,37 +32,88 @@ export interface InspectorFields {
  * DOM. The test and the panel share one definition.
  */
 export function inspectorFields(row: EcucRow): InspectorFields {
-	const parts = (cls: MetaPart['cls']): string[] =>
-		row.meta.filter((part) => part.cls === cls).map((part) => part.text);
-	const contextText = parts('context')[0] ?? '';
-	const context =
-		row.contextPaths && row.contextPaths.length > 0
-			? row.contextPaths.join(', ')
-			: contextText.startsWith('context ')
-				? contextText.slice('context '.length)
-				: contextText;
-	const ownCondition = row.condition === undefined ? undefined : `[${row.condition.text}]`;
+	return {
+		...identityFields(row),
+		...variantFields(row),
+		...parameterFields(row),
+		...referenceFields(row),
+		...contextFields(row),
+		...optionalFields(row),
+	};
+}
+
+function identityFields(row: EcucRow): Pick<InspectorFields, 'kind' | 'label' | 'definitionRef' | 'shortName'> {
 	return {
 		kind: row.kind,
 		label: row.label,
 		definitionRef: row.definitionRef,
 		shortName: row.shortName ?? '',
-		variant: parts('variant')[0] ?? '',
+	};
+}
+
+function variantFields(row: EcucRow): Pick<InspectorFields, 'variant'> {
+	return { variant: firstMetaText(row, 'variant') };
+}
+
+function parameterFields(row: EcucRow): Pick<InspectorFields, 'type' | 'value' | 'formats'> {
+	return {
 		type: row.parameterType ?? '',
 		value: row.value ?? '',
 		formats: row.formats ?? [],
-		target: row.target ?? '',
-		context,
+	};
+}
+
+function referenceFields(row: EcucRow): Pick<InspectorFields, 'target'> {
+	return { target: row.target ?? '' };
+}
+
+function contextFields(row: EcucRow): Pick<InspectorFields, 'context' | 'conditions' | 'annotations'> {
+	return {
+		context: inspectorContext(row),
 		// The own syscond has its own Condition rows; this one keeps the post-build
 		// conditions so the same text is never shown twice.
-		conditions: parts('condition')
-			.filter((text) => text !== ownCondition)
-			.join('\n'),
-		annotations: parts('annotation').join('\n'),
+		conditions: inspectorConditions(row),
+		annotations: metaTexts(row, 'annotation').join('\n'),
+	};
+}
+
+function optionalFields(row: EcucRow): Pick<InspectorFields, 'condition' | 'definition' | 'definitionCount'> {
+	return {
 		...(row.condition === undefined ? {} : { condition: row.condition }),
 		...(row.definition === undefined ? {} : { definition: row.definition }),
 		...(row.definitionCount === undefined ? {} : { definitionCount: row.definitionCount }),
 	};
+}
+
+/** Every meta part text of one class, in display order. */
+function metaTexts(row: EcucRow, cls: MetaPart['cls']): string[] {
+	return row.meta.filter((part) => part.cls === cls).map((part) => part.text);
+}
+
+function firstMetaText(row: EcucRow, cls: MetaPart['cls']): string {
+	return metaTexts(row, cls)[0] ?? '';
+}
+
+function inspectorContext(row: EcucRow): string {
+	return contextValue(row.contextPaths, firstMetaText(row, 'context'));
+}
+
+function contextValue(paths: readonly string[] | undefined, text: string): string {
+	if (paths && paths.length > 0) {
+		return paths.join(', ');
+	}
+	return stripContextPrefix(text);
+}
+
+function stripContextPrefix(text: string): string {
+	return text.startsWith('context ') ? text.slice('context '.length) : text;
+}
+
+function inspectorConditions(row: EcucRow): string {
+	const ownCondition = row.condition === undefined ? undefined : `[${row.condition.text}]`;
+	return metaTexts(row, 'condition')
+		.filter((text) => text !== ownCondition)
+		.join('\n');
 }
 
 /**
@@ -87,26 +138,31 @@ export interface InspectorField {
  */
 export function definitionRows(definition: DefinitionInfo): InspectorField[] {
 	const rows: InspectorField[] = [{ label: 'Definition type', value: definition.type }];
-	if (definition.range !== undefined) {
-		rows.push({ label: 'Range', value: definition.range });
+	appendOptionalDefinitionRows(rows, definition);
+	// The file row is always last so provenance never reads as a declaration detail.
+	rows.push({ label: 'Definition file', value: definition.fileName });
+	return rows;
+}
+
+function appendOptionalDefinitionRows(rows: InspectorField[], definition: DefinitionInfo): void {
+	appendField(rows, 'Range', definition.range);
+	appendField(rows, 'Default', definition.defaultValue);
+	appendField(rows, 'Multiplicity', definition.multiplicity);
+	appendLiterals(rows, definition);
+	appendField(rows, 'Destination', definition.destination);
+	appendField(rows, 'Definition description', definition.description);
+}
+
+function appendField(rows: InspectorField[], label: string, value: string | undefined): void {
+	if (value !== undefined) {
+		rows.push({ label, value });
 	}
-	if (definition.defaultValue !== undefined) {
-		rows.push({ label: 'Default', value: definition.defaultValue });
-	}
-	if (definition.multiplicity !== undefined) {
-		rows.push({ label: 'Multiplicity', value: definition.multiplicity });
-	}
+}
+
+function appendLiterals(rows: InspectorField[], definition: DefinitionInfo): void {
 	if (definition.literals !== undefined && definition.literals.length > 0) {
 		rows.push({ label: 'Values', value: definition.literals.join(', ') });
 	}
-	if (definition.destination !== undefined) {
-		rows.push({ label: 'Destination', value: definition.destination });
-	}
-	if (definition.description !== undefined) {
-		rows.push({ label: 'Definition description', value: definition.description });
-	}
-	rows.push({ label: 'Definition file', value: definition.fileName });
-	return rows;
 }
 
 /** The Details tab panel: one stable section header and body. */

@@ -31,24 +31,60 @@ function conditionPart(row: EcucRow): EcucRow['meta'][number] | undefined {
 	return row.meta.find((part) => part.cls === 'condition' && part.text === `[${row.condition?.text}]`);
 }
 
+function assertFalseSelf(all: readonly EcucRow[]): EcucRow {
+	const selfOff = rowNamed(all, 'SelfOff');
+	assert.strictEqual(selfOff.condition?.text, '(CANIPCORETYPE_SC==0)');
+	assert.strictEqual(selfOff.condition?.state, 'false');
+	assert.strictEqual(selfOff.disabled, true);
+	assert.strictEqual(selfOff.disabledBy, 'self');
+	return selfOff;
+}
+
+function assertSelfSymbols(all: readonly EcucRow[], selfOff: EcucRow): void {
+	const sibling = rowNamed(all, 'Sibling');
+	assert.strictEqual(sibling.disabled, undefined, 'an unconditioned sibling stays normal');
+	assert.strictEqual(rowNamed(all, 'ContA').disabled, undefined, 'the parent container stays normal');
+	assert.deepStrictEqual(selfOff.condition?.symbols, ['CANIPCORETYPE_SC'], 'the evaluator symbols travel on the row');
+	assert.deepStrictEqual(
+		rowNamed(rows({}), 'LiteralOff').condition?.symbols,
+		[],
+		'a literal-only condition has no symbols'
+	);
+}
+
+function assertMissingState(row: EcucRow): void {
+	assert.strictEqual(row.condition?.state, 'unknown');
+	assert.deepStrictEqual(row.condition?.missing, ['MISSING_SC']);
+}
+
+function assertMissingReason(row: EcucRow): void {
+	const reason = row.condition?.reason;
+	assert.ok(reason?.includes('MISSING_SC'), reason);
+	assert.notStrictEqual(row.disabled, true, 'unknown never dims');
+	assert.strictEqual(conditionPart(row)?.state, 'unknown');
+}
+
+function assertPartState(row: EcucRow, state: string): void {
+	assert.strictEqual(conditionPart(row)?.state, state);
+}
+
+function assertPartTitle(row: EcucRow, title: string): void {
+	assert.strictEqual(conditionPart(row)?.title, title);
+}
+
+function assertPartText(row: EcucRow, text: string): void {
+	assert.strictEqual(conditionPart(row)?.text, text);
+}
+
+function assertPartTitleIncludes(row: EcucRow, fragment: string): void {
+	const title = conditionPart(row)?.title;
+	assert.ok(title?.includes(fragment), title);
+}
+
 suite('condition rows (design §4)', () => {
 	test('AC1: a false parameter condition disables only that parameter', () => {
 		const all = rows({ CANIPCORETYPE_SC: 1 });
-		const selfOff = rowNamed(all, 'SelfOff');
-		assert.strictEqual(selfOff.condition?.text, '(CANIPCORETYPE_SC==0)');
-		assert.strictEqual(selfOff.condition?.state, 'false');
-		assert.strictEqual(selfOff.disabled, true);
-		assert.strictEqual(selfOff.disabledBy, 'self');
-
-		const sibling = rowNamed(all, 'Sibling');
-		assert.strictEqual(sibling.disabled, undefined, 'an unconditioned sibling stays normal');
-		assert.strictEqual(rowNamed(all, 'ContA').disabled, undefined, 'the parent container stays normal');
-		assert.deepStrictEqual(selfOff.condition?.symbols, ['CANIPCORETYPE_SC'], 'the evaluator symbols travel on the row');
-		assert.deepStrictEqual(
-			rowNamed(rows({}), 'LiteralOff').condition?.symbols,
-			[],
-			'a literal-only condition has no symbols'
-		);
+		assertSelfSymbols(all, assertFalseSelf(all));
 	});
 
 	test('AC1: the same condition is true (and not disabled) with 0', () => {
@@ -122,11 +158,8 @@ suite('condition rows (design §4)', () => {
 	test('AC4: a missing constant is unknown, lists every missing symbol and dims nothing', () => {
 		const all = rows({});
 		const missing = rowNamed(all, 'Missing');
-		assert.strictEqual(missing.condition?.state, 'unknown');
-		assert.deepStrictEqual(missing.condition?.missing, ['MISSING_SC']);
-		assert.ok(missing.condition?.reason?.includes('MISSING_SC'), missing.condition?.reason);
-		assert.notStrictEqual(missing.disabled, true, 'unknown never dims');
-		assert.strictEqual(conditionPart(missing)?.state, 'unknown');
+		assertMissingState(missing);
+		assertMissingReason(missing);
 	});
 
 	test('AC5: a malformed condition is unknown with a syntax reason and dims nothing', () => {
@@ -183,19 +216,19 @@ suite('condition rows (design §4)', () => {
 
 	test('the condition chip carries the evaluated state and its input values as the title', () => {
 		const trueRow = rowNamed(rows({ CANIPCORETYPE_SC: 0 }), 'SelfOff');
-		assert.strictEqual(conditionPart(trueRow)?.state, 'true');
-		assert.strictEqual(conditionPart(trueRow)?.text, '[(CANIPCORETYPE_SC==0)]');
-		assert.strictEqual(conditionPart(trueRow)?.title, 'CANIPCORETYPE_SC = 0');
+		assertPartState(trueRow, 'true');
+		assertPartText(trueRow, '[(CANIPCORETYPE_SC==0)]');
+		assertPartTitle(trueRow, 'CANIPCORETYPE_SC = 0');
 
 		const falseRow = rowNamed(rows({ CANIPCORETYPE_SC: 1 }), 'SelfOff');
-		assert.strictEqual(conditionPart(falseRow)?.state, 'false');
-		assert.strictEqual(conditionPart(falseRow)?.title, 'CANIPCORETYPE_SC = 1');
+		assertPartState(falseRow, 'false');
+		assertPartTitle(falseRow, 'CANIPCORETYPE_SC = 1');
 
 		const unknownRow = rowNamed(rows({}), 'Missing');
-		assert.strictEqual(conditionPart(unknownRow)?.title, 'MISSING_SC = (not set)');
+		assertPartTitle(unknownRow, 'MISSING_SC = (not set)');
 
 		const malformed = rowNamed(rows({}), 'Malformed');
-		assert.ok(conditionPart(malformed)?.title.includes('A = (not set)'), conditionPart(malformed)?.title);
+		assertPartTitleIncludes(malformed, 'A = (not set)');
 	});
 
 	test('AC1: the fixture reports the manual CANIPCORETYPE_SC case the design names', () => {

@@ -22,15 +22,51 @@ export type RowHeight = (index: number) => number;
 /** A cumulative row-offset table: `offsets[i]` is the top of row `i`. */
 export type RowOffsets = readonly number[];
 
+/** A non-negative row count; fractional input is floored. */
+function countOf(value: number): number {
+	return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+/** A height is used only when it is a finite, non-negative number. */
+function safeHeight(height: number): number {
+	return Number.isFinite(height) && height > 0 ? height : 0;
+}
+
+/** A finite positive viewport height, else 0. */
+function viewportHeight(value: number): number {
+	return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/** A non-negative integer row buffer, else 0. */
+function bufferRows(value: number): number {
+	return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+/** The content-relative scroll offset, clamped to `[0, total - 1]`. */
+function clampedTop(value: number, total: number): number {
+	const top = Number.isFinite(value) && value > 0 ? value : 0;
+	return Math.min(top, Math.max(0, total - 1));
+}
+
+/** The render range with the buffer applied to both visible edges. */
+function visibleRangeOf(
+	rowCount: number,
+	firstVisible: number,
+	lastVisible: number,
+	buffer: number
+): [number, number] {
+	const start = Math.max(0, firstVisible - buffer);
+	const end = Math.min(rowCount, Math.max(firstVisible + 1, lastVisible + 1 + buffer));
+	return [start, end];
+}
+
 /** Builds the cumulative offsets for `rowCount` rows. */
 export function buildOffsets(rowCount: number, rowHeight: RowHeight): number[] {
-	const count = Number.isFinite(rowCount) && rowCount > 0 ? Math.floor(rowCount) : 0;
+	const count = countOf(rowCount);
 	const offsets = new Array<number>(count + 1);
 	offsets[0] = 0;
 	for (let at = 0; at < count; at++) {
-		const height = rowHeight(at);
-		const safe = Number.isFinite(height) && height > 0 ? height : 0;
-		offsets[at + 1] = offsets[at] + safe;
+		offsets[at + 1] = offsets[at] + safeHeight(rowHeight(at));
 	}
 	return offsets;
 }
@@ -41,12 +77,21 @@ export function totalHeightOf(offsets: RowOffsets): number {
 }
 
 /** The first row whose `[offset, offset + height)` range contains `offset`. */
-export function rowAtOffsetFromOffsets(offsets: RowOffsets, offset: number): number {
+function rowAtOffsetFromOffsets(offsets: RowOffsets, offset: number): number {
 	const rowCount = Math.max(0, offsets.length - 1);
 	if (rowCount === 0) {
 		return 0;
 	}
-	const target = Number.isFinite(offset) && offset > 0 ? offset : 0;
+	return searchRowAt(offsets, clampOffset(offset), rowCount);
+}
+
+/** A finite non-negative offset; anything else reads as the top. */
+function clampOffset(offset: number): number {
+	return Number.isFinite(offset) && offset > 0 ? offset : 0;
+}
+
+/** Binary search for the row whose range contains `target`. */
+function searchRowAt(offsets: RowOffsets, target: number, rowCount: number): number {
 	let lo = 0;
 	let hi = rowCount - 1;
 	while (lo < hi) {
@@ -75,21 +120,14 @@ export function visibleRangeFromOffsets(
 		return [0, 0];
 	}
 	const total = totalHeightOf(offsets);
-	const viewport = Number.isFinite(containerHeight) && containerHeight > 0 ? containerHeight : 0;
-	const buffer = Number.isFinite(bufferSize) && bufferSize > 0 ? Math.floor(bufferSize) : 0;
 	if (total <= 0) {
-		return [0, Math.min(rowCount, 1 + buffer)];
+		return [0, Math.min(rowCount, 1 + bufferRows(bufferSize))];
 	}
-	const top = Math.min(
-		Number.isFinite(scrollTop) && scrollTop > 0 ? scrollTop : 0,
-		Math.max(0, total - 1)
-	);
-	const bottom = Math.min(top + viewport, total);
+	const top = clampedTop(scrollTop, total);
+	const bottom = Math.min(top + viewportHeight(containerHeight), total);
 	const firstVisible = rowAtOffsetFromOffsets(offsets, top);
 	const lastVisible = Math.max(firstVisible, rowAtOffsetFromOffsets(offsets, Math.max(0, bottom - 1)));
-	const start = Math.max(0, firstVisible - buffer);
-	const end = Math.min(rowCount, Math.max(firstVisible + 1, lastVisible + 1 + buffer));
-	return [start, end];
+	return visibleRangeOf(rowCount, firstVisible, lastVisible, bufferRows(bufferSize));
 }
 
 export interface VirtualState {
@@ -128,25 +166,40 @@ export function fixedRowHeight(height: number): RowHeight {
 
 /** The row count as a non-negative integer (defensive against fractional input). */
 function rowCountOf(state: VirtualState): number {
-	return Number.isFinite(state.rowCount) && state.rowCount > 0 ? Math.floor(state.rowCount) : 0;
+	return countOf(state.rowCount);
 }
 
 /** A height is used only when it is a finite, non-negative number. */
 function heightAt(state: VirtualState, index: number): number {
-	const height = state.rowHeight(index);
-	return Number.isFinite(height) && height > 0 ? height : 0;
+	return safeHeight(state.rowHeight(index));
+}
+
+/** Whether the cached table still matches this state's key and row count. */
+function cacheKeyMatches(current: HeightCache, state: VirtualState, rowCount: number): boolean {
+	return (
+		current.rowCount === rowCount &&
+		current.rowHeight === state.rowHeight &&
+		current.heightVersion === state.heightVersion
+	);
+}
+
+/** Whether the cache is reusable, narrowing an absent cache to a miss. */
+function cacheMatches(
+	current: HeightCache | undefined,
+	state: VirtualState,
+	rowCount: number
+): current is HeightCache {
+	return (
+		current !== undefined &&
+		cacheKeyMatches(current, state, rowCount) &&
+		current.cumulative.length === rowCount + 1
+	);
 }
 
 function cumulativeHeights(state: VirtualState): number[] {
 	const rowCount = rowCountOf(state);
 	const current = cache;
-	if (
-		current &&
-		current.rowCount === rowCount &&
-		current.rowHeight === state.rowHeight &&
-		current.heightVersion === state.heightVersion &&
-		current.cumulative.length === rowCount + 1
-	) {
+	if (cacheMatches(current, state, rowCount)) {
 		return current.cumulative;
 	}
 	const cumulative = new Array<number>(rowCount + 1);
@@ -213,20 +266,14 @@ export function calcVisibleRange(state: VirtualState): [number, number] {
 	}
 	const cumulative = cumulativeHeights(state);
 	const total = cumulative[rowCount];
-	const viewport = Number.isFinite(state.containerHeight) && state.containerHeight > 0 ? state.containerHeight : 0;
-	const buffer = Number.isFinite(state.bufferSize) && state.bufferSize > 0 ? Math.floor(state.bufferSize) : 0;
 	if (total <= 0) {
 		// Degenerate zero-height rows: render the first rows so a focus or reveal
 		// still has elements, rather than an empty window.
-		return [0, Math.min(rowCount, 1 + buffer)];
+		return [0, Math.min(rowCount, 1 + bufferRows(state.bufferSize))];
 	}
-	const scrollTop = Number.isFinite(state.scrollTop) && state.scrollTop > 0 ? state.scrollTop : 0;
-	const top = Math.min(scrollTop, Math.max(0, total - 1));
-	const bottom = Math.min(top + viewport, total);
-
+	const top = clampedTop(state.scrollTop, total);
+	const bottom = Math.min(top + viewportHeight(state.containerHeight), total);
 	const firstVisible = rowAtOffset(cumulative, rowCount, top);
 	const lastVisible = Math.max(firstVisible, rowAtOffset(cumulative, rowCount, Math.max(0, bottom - 1)));
-	const start = Math.max(0, firstVisible - buffer);
-	const end = Math.min(rowCount, Math.max(firstVisible + 1, lastVisible + 1 + buffer));
-	return [start, end];
+	return visibleRangeOf(rowCount, firstVisible, lastVisible, bufferRows(state.bufferSize));
 }

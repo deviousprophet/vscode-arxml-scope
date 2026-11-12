@@ -9,6 +9,7 @@ import { scanEcucValues } from './core/ecuc/scanner';
 import { ReferenceNode } from './core/ecuc/model';
 import { EcucEditorProvider, VIEW_TYPE, gateReason } from './host/ecucEditorProvider';
 import { buildNodeIndex } from './core/ecuc/nodeId';
+import type { NodeEntry } from './core/ecuc/nodeId';
 import { followReference, innermostNodeIdAt, revealRangeInTextEditor } from './host/navigation';
 import { CompareSelectionStore, fileName } from './host/compareSelection';
 import { DiffPanel } from './host/diffPanel';
@@ -73,7 +74,7 @@ async function cycleCrossFileRules(): Promise<void> {
  * tree (or swaps the tab in `replace` mode) instead of replacing the custom editor.
  */
 async function revealInSource(uri?: vscode.Uri, nodeId?: string, follow = false): Promise<vscode.Range | undefined> {
-	const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+	const target = targetUri(uri);
 	if (!target || !nodeId) {
 		void vscode.window.showInformationMessage('Reveal needs an .arxml file and a node.');
 		return undefined;
@@ -85,10 +86,33 @@ async function revealInSource(uri?: vscode.Uri, nodeId?: string, follow = false)
 		void vscode.window.showWarningMessage(`Unknown node "${nodeId}".`);
 		return undefined;
 	}
+	return revealEntry(document, model, entry, follow);
+}
+
+/** The clicked target, or the active editor's document. */
+function targetUri(uri?: vscode.Uri): vscode.Uri | undefined {
+	return uri ?? vscode.window.activeTextEditor?.document.uri;
+}
+
+/** Reveals the entry itself, or follows it when it is a reference and `follow` is set. */
+async function revealEntry(
+	document: vscode.TextDocument,
+	model: ReturnType<typeof scanEcucValues>,
+	entry: NodeEntry,
+	follow: boolean
+): Promise<vscode.Range | undefined> {
 	if (!follow || entry.kind !== 'reference') {
 		return revealRangeInTextEditor(document, entry.range);
 	}
-	const result = followReference(model, entry.node as ReferenceNode);
+	return revealFollowTarget(document, model, entry.node as ReferenceNode);
+}
+
+async function revealFollowTarget(
+	document: vscode.TextDocument,
+	model: ReturnType<typeof scanEcucValues>,
+	reference: ReferenceNode
+): Promise<vscode.Range | undefined> {
+	const result = followReference(model, reference);
 	if (!result.ok) {
 		void vscode.window.showWarningMessage(result.reason);
 		return undefined;
@@ -102,19 +126,36 @@ async function revealInSource(uri?: vscode.Uri, nodeId?: string, follow = false)
  */
 async function revealInEcucEditor(provider: EcucEditorProvider, uri?: vscode.Uri): Promise<string | undefined> {
 	const editor = vscode.window.activeTextEditor;
-	const target = uri ?? editor?.document.uri;
+	const target = targetUri(uri);
 	if (!target) {
 		void vscode.window.showInformationMessage('Place the cursor in an .arxml file first.');
 		return undefined;
 	}
-	const document = await vscode.workspace.openTextDocument(target);
-	const reason = gateReason(document.getText(), target.fsPath);
-	if (reason) {
-		void vscode.window.showWarningMessage(reason);
+	const document = await gatedDocumentAt(target);
+	if (document === undefined) {
 		return undefined;
 	}
-	const offset =
-		editor && editor.document.uri.toString() === target.toString() ? document.offsetAt(editor.selection.active) : 0;
+	return revealNodeAtCursor(provider, editor, document, target);
+}
+
+/** The opened document, or `undefined` with the gate's warning already shown. */
+async function gatedDocumentAt(target: vscode.Uri): Promise<vscode.TextDocument | undefined> {
+	const document = await vscode.workspace.openTextDocument(target);
+	const reason = gateReason(document.getText(), target.fsPath);
+	if (reason === undefined) {
+		return document;
+	}
+	void vscode.window.showWarningMessage(reason);
+	return undefined;
+}
+
+async function revealNodeAtCursor(
+	provider: EcucEditorProvider,
+	editor: vscode.TextEditor | undefined,
+	document: vscode.TextDocument,
+	target: vscode.Uri
+): Promise<string | undefined> {
+	const offset = cursorOffset(editor, document, target);
 	const nodeId = innermostNodeIdAt(buildNodeIndex(scanEcucValues(document.getText())), offset);
 	if (!nodeId) {
 		void vscode.window.showInformationMessage('No ECUC node at the cursor.');
@@ -124,22 +165,49 @@ async function revealInEcucEditor(provider: EcucEditorProvider, uri?: vscode.Uri
 	return nodeId;
 }
 
+/** The active editor's cursor when it shows `target`, otherwise the document start. */
+function cursorOffset(editor: vscode.TextEditor | undefined, document: vscode.TextDocument, target: vscode.Uri): number {
+	if (editor === undefined || editor.document.uri.toString() !== target.toString()) {
+		return 0;
+	}
+	return document.offsetAt(editor.selection.active);
+}
+
 /** Validates and stashes the clicked file as the left side of the next compare. */
 async function selectAsFirst(compare: CompareSelectionStore, uri?: vscode.Uri): Promise<void> {
-	const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+	const target = targetUri(uri);
 	if (!target) {
 		void vscode.window.showInformationMessage('Select an .arxml file first.');
 		return;
 	}
-	let document: vscode.TextDocument;
-	try {
-		document = await vscode.workspace.openTextDocument(target);
-	} catch (error) {
-		void vscode.window.showWarningMessage(
-			`Cannot read "${fileName(target)}" for comparison: ${error instanceof Error ? error.message : String(error)}`
-		);
+	const document = await openForCompare(target);
+	if (document === undefined) {
 		return;
 	}
+	stashFirstFile(compare, target, document);
+}
+
+/** Opens the file for comparison, or warns with the read error. */
+async function openForCompare(target: vscode.Uri): Promise<vscode.TextDocument | undefined> {
+	try {
+		return await vscode.workspace.openTextDocument(target);
+	} catch (error) {
+		void vscode.window.showWarningMessage(
+			`Cannot read "${fileName(target)}" for comparison: ${errorMessage(error)}`
+		);
+		return undefined;
+	}
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function stashFirstFile(
+	compare: CompareSelectionStore,
+	target: vscode.Uri,
+	document: vscode.TextDocument
+): void {
 	const reason = gateReason(document.getText(), target.fsPath);
 	if (reason) {
 		void vscode.window.showWarningMessage(reason);
@@ -164,14 +232,23 @@ async function compareToStaged(
 		);
 		return;
 	}
-	const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+	const target = targetUri(uri);
 	if (!target) {
 		void vscode.window.showWarningMessage('Select the second .arxml file to compare.');
 		return;
 	}
 	// The first-file stash is one-shot: a successful compare clears the context key
 	// so the Explorer item keeps telling the truth.
-	if (await DiffPanel.open(context, stashed, target)) {
+	await compareWithStashed(context, compare, stashed, target);
+}
+
+async function compareWithStashed(
+	context: vscode.ExtensionContext,
+	compare: CompareSelectionStore,
+	first: vscode.Uri,
+	second: vscode.Uri
+): Promise<void> {
+	if (await DiffPanel.open(context, first, second)) {
 		compare.clear();
 	}
 }
@@ -190,23 +267,35 @@ async function compareSelected(
 		await DiffPanel.open(context, pair[0], pair[1]);
 		return;
 	}
-	if (uri === undefined && (selectedUris === undefined || selectedUris.length === 0)) {
-		const picked = await vscode.window.showOpenDialog({
-			canSelectMany: true,
-			openLabel: 'Compare',
-			filters: { ARXML: ['arxml'] },
-		});
-		if (!picked) {
-			return;
-		}
-		if (picked.length !== 2) {
-			void vscode.window.showWarningMessage('Select exactly two .arxml files to compare.');
-			return;
-		}
-		await DiffPanel.open(context, picked[0], picked[1]);
+	if (!isPaletteInvocation(uri, selectedUris)) {
+		void vscode.window.showWarningMessage('Select exactly two .arxml files to compare.');
 		return;
 	}
-	void vscode.window.showWarningMessage('Select exactly two .arxml files to compare.');
+	await comparePickedFiles(context);
+}
+
+/** True when the command ran from the palette with no Explorer selection. */
+function isPaletteInvocation(uri?: vscode.Uri, selectedUris?: readonly vscode.Uri[]): boolean {
+	if (uri !== undefined) {
+		return false;
+	}
+	return (selectedUris ?? []).length === 0;
+}
+
+async function comparePickedFiles(context: vscode.ExtensionContext): Promise<void> {
+	const picked = await vscode.window.showOpenDialog({
+		canSelectMany: true,
+		openLabel: 'Compare',
+		filters: { ARXML: ['arxml'] },
+	});
+	if (!picked) {
+		return;
+	}
+	if (picked.length !== 2) {
+		void vscode.window.showWarningMessage('Select exactly two .arxml files to compare.');
+		return;
+	}
+	await DiffPanel.open(context, picked[0], picked[1]);
 }
 
 /** The clicked file plus exactly one other selected file, or undefined. */
@@ -217,15 +306,26 @@ function selectedComparePair(
 	if (!clicked) {
 		return undefined;
 	}
+	const others = otherSelectedUris(clicked, selected);
+	return others.length === 1 ? [clicked, others[0]] : undefined;
+}
+
+/** The selected files other than the clicked one, deduplicated. */
+function otherSelectedUris(clicked: vscode.Uri, selected: readonly vscode.Uri[] | undefined): vscode.Uri[] {
+	const clickedKey = clicked.toString();
 	const seen = new Set<string>();
 	const others: vscode.Uri[] = [];
 	for (const uri of selected ?? []) {
-		const key = uri.toString();
-		if (seen.has(key) || key === clicked.toString()) {
-			continue;
-		}
-		seen.add(key);
-		others.push(uri);
+		addOtherUri(uri, clickedKey, seen, others);
 	}
-	return others.length === 1 ? [clicked, others[0]] : undefined;
+	return others;
+}
+
+function addOtherUri(uri: vscode.Uri, clickedKey: string, seen: Set<string>, others: vscode.Uri[]): void {
+	const key = uri.toString();
+	if (seen.has(key) || key === clickedKey) {
+		return;
+	}
+	seen.add(key);
+	others.push(uri);
 }

@@ -5,7 +5,7 @@
  */
 import * as assert from 'assert';
 
-import { FlatRow, TreeRow, ancestorIds, flattenRows } from '../../../webview/render/treeQuery';
+import { FlatRow, TreeRow, ancestorIds, flattenRows, stepMatch } from '../../../webview/render/treeQuery';
 
 const ROWS: TreeRow[] = [
 	{ id: 'm', parentId: null, level: 1, subtreeSize: 5, hasChildren: true, haystack: 'pkga.pkgb.moddefs.modx modx' },
@@ -225,5 +225,19 @@ suite('tree query helpers', () => {
 			{ id: 'y', parentId: 'x', level: 2, subtreeSize: 0, hasChildren: false, haystack: 'y' },
 		];
 		assert.deepStrictEqual(ancestorIds(cyclic, 'x'), ['y'], 'a parent cycle stops instead of looping');
+	});
+
+	test('stepMatch walks match positions and wraps at both ends', () => {
+		const matches = [2, 5, 9];
+		assert.strictEqual(stepMatch([], -1, 1), -1, 'an empty list keeps the caller at -1');
+		assert.strictEqual(stepMatch([], 3, -1), -1);
+		assert.strictEqual(stepMatch(matches, -1, 1), 0, 'forward from nothing selects the first match');
+		assert.strictEqual(stepMatch(matches, -1, -1), 2, 'backward from nothing selects the last match');
+		assert.strictEqual(stepMatch(matches, 3, 1), 0, 'an out-of-range position restarts forward');
+		assert.strictEqual(stepMatch(matches, 3, -1), 2, 'an out-of-range position restarts backward');
+		assert.strictEqual(stepMatch(matches, 0, 1), 1);
+		assert.strictEqual(stepMatch(matches, 1, -1), 0);
+		assert.strictEqual(stepMatch(matches, 2, 1), 0, 'the last match wraps to the first');
+		assert.strictEqual(stepMatch(matches, 0, -1), 2, 'the first match wraps to the last');
 	});
 });

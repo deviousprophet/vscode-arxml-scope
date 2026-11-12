@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Find References** no longer rebuilds the full reverse-reference map after a value-only save; a structural change (an added, removed or renamed module/container, or a changed `DEFINITION-REF`) keeps the lazy full rebuild as the correctness fallback
 - One numbered blank module gap separates module groups in the Document and both diff panes; it is inert and never a change row
 - The schema/package header is separated from the module content by one blank line instead of a horizontal rule in the Document and diff views
 - Semantic diff now matches bulk renames of hundreds of containers quickly and reports when a comparison is limited by its work budget or a large definition group

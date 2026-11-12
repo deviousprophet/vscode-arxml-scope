@@ -12,12 +12,12 @@
  * without turning ordinary machine variance into a red run. Raise them only with
  * a measured reason.
  */
-import { performance } from 'node:perf_hooks';
 import { buildDiffDocument } from '../../core/diff/diffModel';
 import type { EcucDocumentModel } from '../../core/ecuc/model';
 import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { buildRows } from '../../core/ecuc/renderRows';
 import { scanEcucValues } from '../../core/ecuc/scanner';
+import { arxmlDocument, arxmlPreamble, indent as indentBy, measureStage, retainedBytes } from './benchmarkUtils';
 
 /** Synthetic document shape: 12 modules x 36 containers x 3 containers x 56 parameters. */
 const MODULE_COUNT = 12;
@@ -34,8 +34,9 @@ const MAX_STEP_MS = 60_000;
 
 type Side = 'left' | 'right';
 
+/** This fixture indents with four spaces per level. */
 function indent(depth: number): string {
-	return '    '.repeat(depth);
+	return indentBy(depth, 4);
 }
 
 function parameterIndex(moduleIndex: number, containerIndex: number, slot: number, parameter: number): number {
@@ -43,20 +44,76 @@ function parameterIndex(moduleIndex: number, containerIndex: number, slot: numbe
 	return containerId * PARAMETERS_PER_CONTAINER + parameter;
 }
 
+function isRemovedParameter(side: Side, index: number): boolean {
+	return side === 'right' && index % 313 === 0;
+}
+
+function isNumericParameter(index: number): boolean {
+	return index % 2 === 0;
+}
+
+function parameterValue(side: Side, index: number): number {
+	// Every 97th value differs on the right side, giving the diff a `changed` row.
+	return side === 'right' && index % 97 === 0 ? index + 1 : index % 100000;
+}
+
+function parameterTag(numeric: boolean): string {
+	return numeric ? 'ECUC-NUMERICAL-PARAM-VALUE' : 'ECUC-TEXTUAL-PARAM-VALUE';
+}
+
+function parameterDest(numeric: boolean): string {
+	return numeric ? 'ECUC-INTEGER-PARAM-DEF' : 'ECUC-STRING-PARAM-DEF';
+}
+
+function shownValue(numeric: boolean, value: number): string {
+	return numeric ? String(value) : `value_${value}`;
+}
+
 function parameterBlock(lines: string[], depth: number, path: string, index: number, side: Side): void {
 	// A removed parameter on the right side gives the diff a `removed` row.
-	if (side === 'right' && index % 313 === 0) {
+	if (isRemovedParameter(side, index)) {
 		return;
 	}
-	const numeric = index % 2 === 0;
-	// Every 97th value differs on the right side, giving the diff a `changed` row.
-	const value = side === 'right' && index % 97 === 0 ? index + 1 : index % 100000;
-	const tag = numeric ? 'ECUC-NUMERICAL-PARAM-VALUE' : 'ECUC-TEXTUAL-PARAM-VALUE';
-	const dest = numeric ? 'ECUC-INTEGER-PARAM-DEF' : 'ECUC-STRING-PARAM-DEF';
+	const numeric = isNumericParameter(index);
+	const value = parameterValue(side, index);
+	const tag = parameterTag(numeric);
+	const dest = parameterDest(numeric);
 	lines.push(`${indent(depth)}<${tag}>`);
 	lines.push(`${indent(depth + 1)}<DEFINITION-REF DEST="${dest}">${path}/Parameter${index}</DEFINITION-REF>`);
-	lines.push(`${indent(depth + 1)}<VALUE>${numeric ? value : `value_${value}`}</VALUE>`);
+	lines.push(`${indent(depth + 1)}<VALUE>${shownValue(numeric, value)}</VALUE>`);
 	lines.push(`${indent(depth)}</${tag}>`);
+}
+
+function containerShortName(moduleIndex: number, containerIndex: number, subIndex: number | null): string {
+	return subIndex === null
+		? `Container${moduleIndex}_${containerIndex}`
+		: `SubContainer${moduleIndex}_${containerIndex}_${subIndex}`;
+}
+
+function containerSlot(subIndex: number | null): number {
+	return subIndex === null ? 0 : subIndex + 1;
+}
+
+function pushParameters(
+	lines: string[],
+	depth: number,
+	path: string,
+	moduleIndex: number,
+	containerIndex: number,
+	slot: number,
+	side: Side
+): void {
+	for (let parameter = 0; parameter < PARAMETERS_PER_CONTAINER; parameter++) {
+		parameterBlock(lines, depth + 2, path, parameterIndex(moduleIndex, containerIndex, slot, parameter), side);
+	}
+}
+
+function pushSubContainers(lines: string[], depth: number, moduleIndex: number, containerIndex: number, side: Side): void {
+	lines.push(`${indent(depth + 1)}<SUB-CONTAINERS>`);
+	for (let sub = 0; sub < SUB_CONTAINERS_PER_CONTAINER; sub++) {
+		containerBlock(lines, depth + 2, moduleIndex, containerIndex, sub, side);
+	}
+	lines.push(`${indent(depth + 1)}</SUB-CONTAINERS>`);
 }
 
 function containerBlock(
@@ -67,38 +124,24 @@ function containerBlock(
 	subIndex: number | null,
 	side: Side
 ): void {
-	const shortName = subIndex === null
-		? `Container${moduleIndex}_${containerIndex}`
-		: `SubContainer${moduleIndex}_${containerIndex}_${subIndex}`;
+	const shortName = containerShortName(moduleIndex, containerIndex, subIndex);
 	const path = `/SyntheticPkg/ModuleDefs/Module${moduleIndex}/${shortName}`;
-	const slot = subIndex === null ? 0 : subIndex + 1;
+	const slot = containerSlot(subIndex);
 	lines.push(`${indent(depth)}<ECUC-CONTAINER-VALUE>`);
 	lines.push(`${indent(depth + 1)}<SHORT-NAME>${shortName}</SHORT-NAME>`);
 	lines.push(`${indent(depth + 1)}<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">${path}</DEFINITION-REF>`);
 	lines.push(`${indent(depth + 1)}<PARAMETER-VALUES>`);
-	for (let parameter = 0; parameter < PARAMETERS_PER_CONTAINER; parameter++) {
-		parameterBlock(lines, depth + 2, path, parameterIndex(moduleIndex, containerIndex, slot, parameter), side);
-	}
+	pushParameters(lines, depth, path, moduleIndex, containerIndex, slot, side);
 	lines.push(`${indent(depth + 1)}</PARAMETER-VALUES>`);
 	if (subIndex === null) {
-		lines.push(`${indent(depth + 1)}<SUB-CONTAINERS>`);
-		for (let sub = 0; sub < SUB_CONTAINERS_PER_CONTAINER; sub++) {
-			containerBlock(lines, depth + 2, moduleIndex, containerIndex, sub, side);
-		}
-		lines.push(`${indent(depth + 1)}</SUB-CONTAINERS>`);
+		pushSubContainers(lines, depth, moduleIndex, containerIndex, side);
 	}
 	lines.push(`${indent(depth)}</ECUC-CONTAINER-VALUE>`);
 }
 
 /** Builds the synthetic ECUC-Values ARXML for one side of the comparison. */
 function buildEcucArxml(side: Side): string {
-	const lines: string[] = [];
-	lines.push('<?xml version="1.0" encoding="UTF-8"?>');
-	lines.push('<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">');
-	lines.push(`${indent(1)}<AR-PACKAGES>`);
-	lines.push(`${indent(2)}<AR-PACKAGE>`);
-	lines.push(`${indent(3)}<SHORT-NAME>SyntheticPkg</SHORT-NAME>`);
-	lines.push(`${indent(3)}<ELEMENTS>`);
+	const lines = arxmlPreamble(indent);
 	for (let module = 0; module < MODULE_COUNT; module++) {
 		lines.push(`${indent(4)}<ECUC-MODULE-CONFIGURATION-VALUES>`);
 		lines.push(`${indent(5)}<SHORT-NAME>Module${module}</SHORT-NAME>`);
@@ -111,11 +154,7 @@ function buildEcucArxml(side: Side): string {
 		lines.push(`${indent(5)}</CONTAINERS>`);
 		lines.push(`${indent(4)}</ECUC-MODULE-CONFIGURATION-VALUES>`);
 	}
-	lines.push(`${indent(3)}</ELEMENTS>`);
-	lines.push(`${indent(2)}</AR-PACKAGE>`);
-	lines.push(`${indent(1)}</AR-PACKAGES>`);
-	lines.push('</AUTOSAR>');
-	return lines.join('\n');
+	return arxmlDocument(lines, indent);
 }
 
 interface NodeCounts {
@@ -150,15 +189,6 @@ function countNodes(model: EcucDocumentModel): NodeCounts {
 	return counts;
 }
 
-function retainedBytes(): number {
-	if (typeof global.gc !== 'function') {
-		throw new Error('Run with --expose-gc');
-	}
-	global.gc();
-	const memory = process.memoryUsage();
-	return memory.heapUsed + memory.arrayBuffers;
-}
-
 interface Sample {
 	records: number;
 	extra?: Record<string, number>;
@@ -166,13 +196,8 @@ interface Sample {
 
 /** Runs one stage, prints its JSON line and enforces the hard limits. */
 function measure<T>(name: string, sourceMiB: number, action: () => T, describe: (value: T) => Sample): T {
-	const before = retainedBytes();
-	const started = performance.now();
-	const value = action();
-	const elapsedMs = Math.round(performance.now() - started);
-	const retained = Math.max(0, retainedBytes() - before);
+	const { value, elapsedMs, retained, retainedMiB } = measureStage(action);
 	const { records, extra } = describe(value);
-	const retainedMiB = Math.round(retained / 1048576);
 	console.log(JSON.stringify({
 		_type: 'large-file-load',
 		name,

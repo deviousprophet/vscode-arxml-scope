@@ -38,7 +38,12 @@ function toVscodeRange(lineIndex: LineIndex, range: Range): vscode.Range {
  * count rather than by a scan of the whole model.
  */
 export function innermostNodeIdAt(index: NodeIndex, offset: number): string | undefined {
-	const entries = index.sorted;
+	const last = lastStartingAtOrBefore(index.sorted, offset);
+	return bestId(innermostFrom(index.sorted, last, offset));
+}
+
+/** The last entry whose range starts at or before `offset`. */
+function lastStartingAtOrBefore(entries: readonly NodeEntry[], offset: number): number {
 	let low = 0;
 	let high = entries.length - 1;
 	let last = -1;
@@ -51,18 +56,31 @@ export function innermostNodeIdAt(index: NodeIndex, offset: number): string | un
 			high = mid - 1;
 		}
 	}
+	return last;
+}
 
+/** The tightest entry containing `offset`, walking backwards from `last`. */
+function innermostFrom(entries: readonly NodeEntry[], last: number, offset: number): NodeEntry | undefined {
 	let best: NodeEntry | undefined;
 	for (let i = last; i >= 0; i--) {
 		const entry = entries[i];
 		if (entry.range.end < offset) {
 			continue;
 		}
-		if (!best || entry.range.end - entry.range.start < best.range.end - best.range.start) {
+		if (isTighter(entry, best)) {
 			best = entry;
 		}
 	}
-	return best?.id;
+	return best;
+}
+
+/** True when `entry` is narrower than the current best. */
+function isTighter(entry: NodeEntry, best: NodeEntry | undefined): boolean {
+	return best === undefined || entry.range.end - entry.range.start < best.range.end - best.range.start;
+}
+
+function bestId(entry: NodeEntry | undefined): string | undefined {
+	return entry === undefined ? undefined : entry.id;
 }
 
 export type FollowResult = { ok: true; range: Range } | { ok: false; reason: string };
@@ -74,18 +92,33 @@ export type FollowResult = { ok: true; range: Range } | { ok: false; reason: str
  * the text editor.
  */
 export function nodeIdForRange(index: NodeIndex, range: Range): string | undefined {
+	return nodeIdForEntries(index.byId.values(), range);
+}
+
+/** Exact range match first, else the tightest containing entry. */
+function nodeIdForEntries(entries: Iterable<NodeEntry>, range: Range): string | undefined {
 	let best: NodeEntry | undefined;
-	for (const entry of index.byId.values()) {
-		if (entry.range.start === range.start && entry.range.end === range.end) {
+	for (const entry of entries) {
+		if (isExactRange(entry, range)) {
 			return entry.id;
 		}
-		if (entry.range.start <= range.start && entry.range.end >= range.end) {
-			if (!best || entry.range.end - entry.range.start < best.range.end - best.range.start) {
-				best = entry;
-			}
+		if (isBetterContainment(entry, best, range)) {
+			best = entry;
 		}
 	}
-	return best?.id;
+	return bestId(best);
+}
+
+function isExactRange(entry: NodeEntry, range: Range): boolean {
+	return entry.range.start === range.start && entry.range.end === range.end;
+}
+
+function isBetterContainment(entry: NodeEntry, best: NodeEntry | undefined, range: Range): boolean {
+	return containsRange(entry, range) && isTighter(entry, best);
+}
+
+function containsRange(entry: NodeEntry, range: Range): boolean {
+	return entry.range.start <= range.start && entry.range.end >= range.end;
 }
 
 /**
@@ -149,28 +182,62 @@ export async function revealRangeInTextEditor(
 	const mode = options.mode ?? revealMode();
 
 	if (mode === 'replace') {
-		// The old behaviour, kept for anyone who wants the tab swapped.
-		await vscode.commands.executeCommand('vscode.openWith', document.uri, 'default', { selection });
-		const active = vscode.window.activeTextEditor;
-		if (active && active.document.uri.toString() === document.uri.toString()) {
-			active.selection = new vscode.Selection(selection.start, selection.end);
-			active.revealRange(selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-		}
-		return selection;
+		return replaceWithTextEditor(document, selection);
 	}
 
-	const existing = vscode.window.visibleTextEditors.find(
+	const editor = await textEditorBeside(document, mode, options.viewColumn);
+	applySelection(editor, selection);
+	return selection;
+}
+
+/** The old behaviour, kept for anyone who wants the tab swapped. */
+async function replaceWithTextEditor(
+	document: vscode.TextDocument,
+	selection: vscode.Range
+): Promise<vscode.Range> {
+	await vscode.commands.executeCommand('vscode.openWith', document.uri, 'default', { selection });
+	const active = vscode.window.activeTextEditor;
+	if (isEditorFor(active, document)) {
+		applySelection(active, selection);
+	}
+	return selection;
+}
+
+function isEditorFor(
+	editor: vscode.TextEditor | undefined,
+	document: vscode.TextDocument
+): editor is vscode.TextEditor {
+	return editor !== undefined && editor.document.uri.toString() === document.uri.toString();
+}
+
+/** Reuses a visible text editor for the file, else opens one beside. */
+async function textEditorBeside(
+	document: vscode.TextDocument,
+	mode: RevealMode,
+	viewColumn: vscode.ViewColumn | undefined
+): Promise<vscode.TextEditor> {
+	const existing = findVisibleEditor(document);
+	if (existing !== undefined) {
+		return existing;
+	}
+	return vscode.window.showTextDocument(document, {
+		viewColumn: targetColumn(viewColumn),
+		preserveFocus: mode === 'beside',
+		preview: true,
+	});
+}
+
+function findVisibleEditor(document: vscode.TextDocument): vscode.TextEditor | undefined {
+	return vscode.window.visibleTextEditors.find(
 		(editor) => editor.document.uri.toString() === document.uri.toString()
 	);
-	const editor =
-		existing ??
-		(await vscode.window.showTextDocument(document, {
-			viewColumn:
-				options.viewColumn !== undefined ? besideColumn(options.viewColumn) : vscode.ViewColumn.Beside,
-			preserveFocus: mode === 'beside',
-			preview: true,
-		}));
+}
+
+function targetColumn(column: vscode.ViewColumn | undefined): vscode.ViewColumn {
+	return column === undefined ? vscode.ViewColumn.Beside : besideColumn(column);
+}
+
+function applySelection(editor: vscode.TextEditor, selection: vscode.Range): void {
 	editor.selection = new vscode.Selection(selection.start, selection.end);
 	editor.revealRange(selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-	return selection;
 }

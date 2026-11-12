@@ -93,4 +93,93 @@ suite('row search engine', () => {
 		assert.deepStrictEqual(matches, [149_999]);
 		assert.ok(elapsed < 1500, `150k rows took ${Math.round(elapsed)} ms`);
 	});
+
+	test('the constructor applies the default debounce and accepts an override', () => {
+		const scheduled: Array<{ callback: () => void; ms: number }> = [];
+		const engine = new RowSearchEngine({
+			setTimer: (callback, ms) => {
+				scheduled.push({ callback, ms });
+				return scheduled.length;
+			},
+			clearTimer: () => undefined,
+		});
+		let completed: number[] | undefined;
+		engine.search([row(0, 'hit')], 'hit', {
+			onComplete: (matches) => {
+				completed = matches;
+			},
+		});
+		assert.deepStrictEqual(scheduled.map((entry) => entry.ms), [SEARCH_DEBOUNCE_MS]);
+		assert.strictEqual(completed, undefined, 'the debounce defers the scan');
+		scheduled[0].callback();
+		assert.deepStrictEqual(completed, [0]);
+
+		const custom: number[] = [];
+		new RowSearchEngine({
+			debounceMs: 5,
+			setTimer: (_callback, ms) => {
+				custom.push(ms);
+				return null;
+			},
+			clearTimer: () => undefined,
+		}).search([row(0, 'hit')], 'hit', { onComplete: () => undefined });
+		assert.deepStrictEqual(custom, [5]);
+	});
+
+	test('clear cancels the pending timer and invalidates its callback', () => {
+		const scheduled: Array<() => void> = [];
+		const cleared: unknown[] = [];
+		const engine = new RowSearchEngine({
+			setTimer: (callback) => {
+				scheduled.push(callback);
+				return 'handle';
+			},
+			clearTimer: (handle) => cleared.push(handle),
+		});
+		let completed = 0;
+		engine.search([row(0, 'hit')], 'hit', {
+			onComplete: () => {
+				completed++;
+			},
+		});
+		engine.clear();
+		assert.deepStrictEqual(cleared, ['handle']);
+		scheduled[0]();
+		assert.strictEqual(completed, 0, 'the cancelled run never completes');
+	});
+
+	test('batchSize is clamped to at least one row', async () => {
+		const rows = [row(0, 'row 0'), row(1, 'row 1'), row(2, 'row 2')];
+		const run = (batchSize: number, updates: number[]): Promise<number[]> =>
+			new Promise((resolve) => {
+				const engine = new RowSearchEngine({
+					batchSize,
+					budgetMs: 0,
+					progressMs: 0,
+					now: () => 0,
+					setTimer: (callback) => {
+						callback();
+						return null;
+					},
+					clearTimer: () => undefined,
+				});
+				engine.search(
+					rows,
+					'row',
+					{
+						onProgressUpdate: (_matches, percent) => updates.push(percent),
+						onComplete: resolve,
+					},
+					true
+				);
+			});
+
+		const clamped: number[] = [];
+		assert.deepStrictEqual(await run(0, clamped), [0, 1, 2]);
+		assert.deepStrictEqual(clamped, [33, 66, 100], 'a zero batch still scans one row per chunk');
+
+		const wide: number[] = [];
+		assert.deepStrictEqual(await run(SEARCH_ROW_BATCH, wide), [0, 1, 2]);
+		assert.deepStrictEqual(wide, [100], 'the default batch scans the short list in one slice');
+	});
 });

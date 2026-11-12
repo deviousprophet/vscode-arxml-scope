@@ -22,31 +22,59 @@ export function compileExcludes(patterns: readonly string[]): (relativePath: str
 
 function compilePattern(pattern: string): RegExp {
 	const trimmed = pattern.replace(/^\/+/, '');
-	if (!trimmed.includes('*') && !trimmed.includes('?') && /\/$/.test(trimmed)) {
-		return new RegExp(`^${escapeRegex(trimmed.slice(0, -1))}(?:/|$)`);
-	}
+	return isDirectoryPrefix(trimmed) ? compileDirectoryPrefix(trimmed) : compileWildcardPattern(trimmed);
+}
+
+/** A wildcard-free pattern with a trailing slash matches a directory and its contents. */
+function isDirectoryPrefix(trimmed: string): boolean {
+	return !hasWildcard(trimmed) && /\/$/.test(trimmed);
+}
+
+function hasWildcard(value: string): boolean {
+	return value.includes('*') || value.includes('?');
+}
+
+function compileDirectoryPrefix(trimmed: string): RegExp {
+	return new RegExp(`^${escapeRegex(trimmed.slice(0, -1))}(?:/|$)`);
+}
+
+function compileWildcardPattern(trimmed: string): RegExp {
+	return new RegExp(`^${wildcardSource(trimmed)}$`);
+}
+
+/** One loop step of the wildcard translation: the regex source and the last index used. */
+interface WildcardStep {
+	source: string;
+	next: number;
+}
+
+function wildcardSource(pattern: string): string {
 	let source = '';
-	for (let at = 0; at < trimmed.length; at++) {
-		const character = trimmed[at];
-		if (character === '*') {
-			if (trimmed[at + 1] === '*') {
-				at++;
-				if (trimmed[at + 1] === '/') {
-					at++;
-					source += '(?:.*/)?';
-				} else {
-					source += '.*';
-				}
-			} else {
-				source += '[^/]*';
-			}
-		} else if (character === '?') {
-			source += '[^/]';
-		} else {
-			source += escapeRegex(character);
-		}
+	for (let at = 0; at < pattern.length; at++) {
+		const step = wildcardStep(pattern, at);
+		source += step.source;
+		at = step.next;
 	}
-	return new RegExp(`^${source}$`);
+	return source;
+}
+
+function wildcardStep(pattern: string, at: number): WildcardStep {
+	const character = pattern[at];
+	if (character === '*') {
+		return starStep(pattern, at);
+	}
+	return { source: character === '?' ? '[^/]' : escapeRegex(character), next: at };
+}
+
+/** `**` spans segments, `*` stays within one. */
+function starStep(pattern: string, at: number): WildcardStep {
+	if (pattern[at + 1] !== '*') {
+		return { source: '[^/]*', next: at };
+	}
+	if (pattern[at + 2] === '/') {
+		return { source: '(?:.*/)?', next: at + 2 };
+	}
+	return { source: '.*', next: at + 1 };
 }
 
 function normalize(path: string): string {

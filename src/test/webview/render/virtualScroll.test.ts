@@ -8,10 +8,13 @@ import * as assert from 'assert';
 
 import {
 	VirtualState,
+	buildOffsets,
 	calcRowOffset,
 	calcTotalHeight,
 	calcVisibleRange,
 	fixedRowHeight,
+	totalHeightOf,
+	visibleRangeFromOffsets,
 } from '../../../webview/render/virtualScroll';
 
 function state(overrides: Partial<VirtualState> = {}): VirtualState {
@@ -124,5 +127,61 @@ suite('virtual scroll (design §5)', () => {
 		assert.strictEqual(calcRowOffset(2, view), 20, 'a zero-height row starts at the same offset');
 		assert.strictEqual(calcRowOffset(4, view), 20);
 		assert.strictEqual(calcRowOffset(5, view), 30);
+	});
+
+	test('buildOffsets floors the row count and clamps invalid heights', () => {
+		assert.deepStrictEqual(buildOffsets(3, (index) => [20, 30, 40][index]), [0, 20, 50, 90]);
+		assert.deepStrictEqual(buildOffsets(3.9, () => 20), [0, 20, 40, 60], 'a fractional count is floored');
+		assert.deepStrictEqual(buildOffsets(-1, () => 20), [0], 'a negative count is empty');
+		assert.deepStrictEqual(buildOffsets(Number.NaN, () => 20), [0], 'a NaN count is empty');
+		assert.deepStrictEqual(buildOffsets(2, () => Number.NaN), [0, 0, 0], 'a NaN height adds nothing');
+		assert.deepStrictEqual(buildOffsets(2, (index) => (index === 0 ? -5 : 0)), [0, 0, 0]);
+		assert.strictEqual(totalHeightOf([]), 0);
+		assert.strictEqual(totalHeightOf([0, 20, 50]), 50, 'the last offset is the total');
+	});
+
+	test('visibleRangeFromOffsets is the same range as calcVisibleRange', () => {
+		const cases: VirtualState[] = [
+			state({ scrollTop: 0 }),
+			state({ scrollTop: 50 }),
+			state({ scrollTop: 50, bufferSize: 0 }),
+			state({ scrollTop: 500 }),
+			state({ scrollTop: 5000 }),
+			state({ scrollTop: -200 }),
+			state({ scrollTop: 2000 }),
+			state({ rowCount: 0 }),
+			state({ rowCount: 1, containerHeight: 0, bufferSize: 0 }),
+			state({ scrollTop: 40, containerHeight: 0, bufferSize: 0 }),
+			state({ scrollTop: 40, containerHeight: Number.NaN, bufferSize: 0 }),
+			state({ rowCount: 4.9, rowHeight: fixedRowHeight(20), scrollTop: 50, bufferSize: 1 }),
+			state({ rowCount: 5, rowHeight: () => 0, scrollTop: 40, bufferSize: 2 }),
+			state({ rowCount: 5, rowHeight: () => 0, scrollTop: 0, bufferSize: 0 }),
+			{
+				...state(),
+				rowCount: 6,
+				rowHeight: (index) => [20, 0, -5, Number.NaN, 40, 10][index],
+				scrollTop: 35,
+				containerHeight: 60,
+				bufferSize: 1,
+			},
+		];
+		for (const view of cases) {
+			const offsets = buildOffsets(view.rowCount, view.rowHeight);
+			assert.deepStrictEqual(
+				visibleRangeFromOffsets(offsets, view.scrollTop, view.containerHeight, view.bufferSize),
+				calcVisibleRange(view),
+				`offsets and state agree for ${JSON.stringify({ ...view, rowHeight: 'fn' })}`
+			);
+		}
+	});
+
+	test('visibleRangeFromOffsets clamps the viewport and buffer inputs', () => {
+		const offsets = buildOffsets(100, () => 20);
+		assert.deepStrictEqual(visibleRangeFromOffsets(offsets, 50, 100, 2), [0, 10]);
+		assert.deepStrictEqual(visibleRangeFromOffsets(offsets, 5000, 100, 2), [97, 100]);
+		assert.deepStrictEqual(visibleRangeFromOffsets(offsets, 50, Number.NaN, 2), [0, 5]);
+		assert.deepStrictEqual(visibleRangeFromOffsets(offsets, 50, 100, -1), [2, 8]);
+		assert.deepStrictEqual(visibleRangeFromOffsets([], 10, 100, 2), [0, 0], 'no rows means no range');
+		assert.deepStrictEqual(visibleRangeFromOffsets([0, 0, 0], 10, 100, 1), [0, 2], 'zero-height rows still render');
 	});
 });

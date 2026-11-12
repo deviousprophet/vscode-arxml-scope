@@ -455,6 +455,199 @@ suite('DocumentTreeView component', () => {
 		}
 	});
 
+	test('an unmounted view ignores render, gutter click and keeps the focus-in state only', () => {
+		const root = element();
+		const view = new DocumentTreeView(root, 'document', {
+			onRowClick() {
+				throw new Error('an unmounted view must not report a row click');
+			}
+		});
+		view.render({ top: 500, left: 0, height: 100, width: 800 });
+		view.onClick({ target: { closest: () => ({ dataset: { documentIndex: '3' } }) } });
+		view.onLineClick({ target: { closest: () => ({ dataset: { documentIndex: '3' } }) } });
+		assert.strictEqual(view.focusedIndex(), undefined, 'no window has no focused row');
+		view.onFocusIn({ target: { closest: () => ({ dataset: { documentIndex: '3' } }) } });
+		assert.strictEqual(view.focusedLine, 3, 'focus-in still records the index without a window');
+	});
+
+	test('a moved viewport patches the window instead of rebuilding it', () => {
+		const h = harness(1000, (index) => ({ number: index + 1 }));
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const windowEl = h.view.getWindowElement();
+			const before = h.rendered.length;
+			h.view.render({ top: 520, left: 0, height: 100, width: 800 });
+			assert.deepStrictEqual(h.view.getVisibleRange(), [16, 41]);
+			assert.strictEqual(windowEl.children.length, 25, 'the patched window keeps the slice size');
+			assert.deepStrictEqual(h.rendered.slice(before), [40], 'only the appended row is built');
+			assert.strictEqual(windowEl.children[0].dataset.documentIndex, '16');
+			assert.strictEqual(windowEl.children[24].dataset.documentIndex, '40');
+			assert.deepStrictEqual(h.ranges[h.ranges.length - 1], [16, 41]);
+
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			assert.deepStrictEqual(h.view.getVisibleRange(), [15, 40]);
+			assert.deepStrictEqual(h.rendered.slice(before + 1), [15], 'only the prepended row is built');
+			assert.strictEqual(windowEl.children[0].dataset.documentIndex, '15');
+			assert.strictEqual(windowEl.children[24].dataset.documentIndex, '39');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('a non-overlapping jump rebuilds the window', () => {
+		const h = harness(1000);
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const before = h.rendered.length;
+			h.view.render({ top: 1500, left: 0, height: 100, width: 800 });
+			assert.strictEqual(h.rendered.length - before, 25, 'a disjoint slice builds every row');
+			assert.deepStrictEqual(h.view.getVisibleRange(), [65, 90]);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('render restores focus to the focused node row with preventScroll', () => {
+		const h = harness(1000, (index) => ({ number: index + 1 }));
+		try {
+			const fakeDocument = (globalThis as unknown as { document: { activeElement: unknown } }).document;
+			fakeDocument.activeElement = { closest: () => ({ dataset: { documentIndex: '20' } }) };
+			assert.strictEqual(h.view.focusedIndex(), 20);
+			let requested: number | undefined;
+			let received: unknown;
+			h.view.elementAt = (index: number) => {
+				requested = index;
+				return {
+					focus(options: unknown) {
+						received = options;
+					}
+				};
+			};
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			assert.strictEqual(requested, 20, 'the render restores the focused row, not just the range');
+			assert.deepStrictEqual(received, { preventScroll: true });
+
+			fakeDocument.activeElement = h.view.getWindowElement();
+			assert.strictEqual(h.view.focusedIndex(), undefined, 'the window itself is not a row');
+			fakeDocument.activeElement = { closest: () => ({ dataset: {} }) };
+			assert.strictEqual(h.view.focusedIndex(), undefined, 'a row without an index has no focus');
+			fakeDocument.activeElement = undefined;
+			assert.strictEqual(h.view.focusedIndex(), undefined, 'nothing focused has no row');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('a focus-in outside the window or with a bad index clears the focus rail', () => {
+		const h = harness(1000, (index) => ({ number: index + 1 }));
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const gutter = gutterOf(h.root);
+			h.view.onFocusIn({ target: { closest: () => ({ dataset: { documentIndex: 'abc' } }) } });
+			assert.strictEqual(
+				gutter.children.filter((cell) => cell.dataset.focused === 'true').length,
+				0,
+				'a non-numeric index never marks a cell'
+			);
+			h.view.onFocusIn({ target: { closest: () => ({ dataset: { documentIndex: '19' } }) } });
+			assert.strictEqual(gutter.children[4].dataset.focused, 'true');
+			h.view.getWindowElement().contains = () => false;
+			h.view.onFocusIn({ target: { closest: () => ({ dataset: { documentIndex: '19' } }) } });
+			assert.strictEqual(
+				gutter.children.filter((cell) => cell.dataset.focused === 'true').length,
+				0,
+				'a focus outside the window clears the rail'
+			);
+			h.view.onFocusIn(undefined);
+			assert.strictEqual(
+				gutter.children.filter((cell) => cell.dataset.focused === 'true').length,
+				0,
+				'a missing event clears the rail'
+			);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('a gutter click outside the gutter or without a numeric index does nothing', () => {
+		const h = harness(1000, (index) => ({ number: index + 1 }));
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const gutter = gutterOf(h.root);
+			let requested: number | undefined;
+			h.view.elementAt = (index: number) => {
+				requested = index;
+				return { click() {} };
+			};
+			gutter.contains = () => false;
+			h.view.onLineClick({ target: { closest: () => gutter.children[4] } });
+			assert.strictEqual(requested, undefined, 'a cell outside the gutter is ignored');
+			gutter.contains = () => true;
+			h.view.onLineClick({ target: { closest: () => ({ dataset: {} }) } });
+			assert.strictEqual(requested, undefined, 'a cell without an index is ignored');
+			h.view.onLineClick({ target: { closest: () => ({ dataset: { documentIndex: 'abc' } }) } });
+			assert.strictEqual(requested, undefined, 'a non-numeric cell index is ignored');
+			h.view.elementAt = () => ({});
+			h.view.onLineClick({ target: { closest: () => gutter.children[4] } });
+			h.view.onLineClick(undefined);
+			assert.strictEqual(requested, undefined);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('a row click outside the window or without a numeric index is not reported', () => {
+		const h = harness();
+		try {
+			const item = element();
+			item.dataset.documentIndex = '3';
+			h.view.getWindowElement().contains = () => false;
+			h.view.onClick({ target: { closest: () => item } });
+			assert.deepStrictEqual(h.clicked, [], 'an item outside the window is ignored');
+			h.view.getWindowElement().contains = () => true;
+			h.view.onClick({ target: { closest: () => ({ dataset: {} }) } });
+			h.view.onClick({ target: { closest: () => ({ dataset: { documentIndex: 'abc' } }) } });
+			h.view.onClick(undefined);
+			h.view.onClick({ target: {} });
+			assert.deepStrictEqual(h.clicked, [], 'only a numeric row index is reported');
+			h.view.callbacks = {};
+			h.view.onClick({ target: { closest: () => item } });
+			assert.deepStrictEqual(h.clicked, [], 'no row callback means no report');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('the gutter column ignores non-finite numbers and non-positive widths', () => {
+		const h = harness(10, () => ({ number: Number.POSITIVE_INFINITY }));
+		try {
+			assert.strictEqual(h.view.lineNumberChars(), 0, 'an infinite number is not a measurable digit');
+			h.view.setModel({ rowCount: 3, offsets: [0, 20, 40, 60], renderRow: () => element(), contentWidth: Number.NaN });
+			assert.strictEqual(h.view.getWindowElement().style.values['--document-tree-content-width'], '0px');
+			h.view.setModel({ rowCount: 3, offsets: [0, 20, 40, 60], renderRow: () => element(), contentWidth: -5 });
+			assert.strictEqual(h.view.getWindowElement().style.values['--document-tree-content-width'], '0px');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('an unchanged viewport refreshes the active number without rebuilding', () => {
+		let active: number | undefined = 15;
+		const h = harness(1000, (index) => ({ number: index + 1 }), () => active);
+		try {
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const before = h.rendered.length;
+			active = 20;
+			h.view.render({ top: 500, left: 0, height: 100, width: 800 });
+			const gutter = gutterOf(h.root);
+			assert.strictEqual(h.rendered.length, before, 'the skip path never rebuilds rows');
+			assert.strictEqual(gutter.children[0].dataset.active, undefined);
+			assert.strictEqual(gutter.children[5].dataset.active, 'true');
+		} finally {
+			h.restore();
+		}
+	});
+
 	test('the stylesheet owns the absolute window, the fixed gutter and no gap rule', () => {
 		const css = webviewCss('components', 'documentTree', 'documentTree.css');
 		assert.ok(/\.document-tree-window\s*\{[^}]*position:\s*absolute/.test(css));

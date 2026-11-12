@@ -1,6 +1,7 @@
 /**
- * Shared helpers for the pure-core tests. Test-only: no `vscode` import, no
- * expectations, so the tests stay runnable under plain Node as well.
+ * Shared fixture and model helpers for the pure-core tests. Test-only: no
+ * `vscode` import, no expectations, so the tests stay runnable under plain Node
+ * as well.
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -47,38 +48,6 @@ export function plain(model: EcucDocumentModel): unknown {
 			(key, value) => (key === 'definitionDest' || key === 'targetDest' || key === 'hexValue' ? undefined : value)
 		)
 	);
-}
-
-function isRange(value: unknown): boolean {
-	if (!value || typeof value !== 'object') {
-		return false;
-	}
-	const keys = Object.keys(value as object);
-	return (
-		keys.length === 2 &&
-		keys.includes('start') &&
-		keys.includes('end') &&
-		typeof (value as { start: unknown }).start === 'number' &&
-		typeof (value as { end: unknown }).end === 'number'
-	);
-}
-
-/** Recursively removes every range, for layout-independence comparisons. */
-export function stripRanges(value: unknown): unknown {
-	if (Array.isArray(value)) {
-		// A `[key, range]` pathIndex pair loses its range, so only keys are compared.
-		return value.filter((entry) => !isRange(entry)).map(stripRanges);
-	}
-	if (value && typeof value === 'object') {
-		const out: Record<string, unknown> = {};
-		for (const [key, inner] of Object.entries(value)) {
-			if (!isRange(inner)) {
-				out[key] = stripRanges(inner);
-			}
-		}
-		return out;
-	}
-	return value;
 }
 
 /** The text a range points at. */

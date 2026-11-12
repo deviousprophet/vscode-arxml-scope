@@ -65,6 +65,25 @@ const DEFINITION: DefinitionInfo = {
 	fileName: 'module-def.arxml',
 };
 
+function assertInitialRows(messages: readonly PushedDocument[]): void {
+	const first = messages.filter((message) => message.type === 'document').pop();
+	assert.ok(first?.document?.rows, 'the initial push carries rows');
+	const timeout = first!.document!.rows!.find((row) => row.label === 'TimeoutSeconds');
+	assert.ok(timeout, 'the parameter row is present');
+	assert.strictEqual(timeout!.definition?.type, 'Integer');
+	assert.strictEqual(timeout!.definition?.range, '0 .. 65535');
+}
+
+function assertRepushedDescription(messages: readonly PushedDocument[]): void {
+	const pushes = messages.filter((message) => message.type === 'document');
+	assert.ok(pushes.length >= 2, 'the index change re-pushed the document');
+	const last = pushes[pushes.length - 1];
+	assert.strictEqual(
+		last.document!.rows!.find((row) => row.label === 'TimeoutSeconds')?.definition?.description,
+		'Timeout in seconds.'
+	);
+}
+
 suite('provider definitions (extension)', () => {
 	test('a document push carries the resolved definition and an index change re-pushes', async () => {
 		let listener: (() => void) | undefined;
@@ -87,22 +106,11 @@ suite('provider definitions (extension)', () => {
 		stub.send({ type: 'ready' });
 		await sleep(50);
 
-		const first = stub.messages.filter((message) => message.type === 'document').pop();
-		assert.ok(first?.document?.rows, 'the initial push carries rows');
-		const timeout = first!.document!.rows!.find((row) => row.label === 'TimeoutSeconds');
-		assert.ok(timeout, 'the parameter row is present');
-		assert.strictEqual(timeout!.definition?.type, 'Integer');
-		assert.strictEqual(timeout!.definition?.range, '0 .. 65535');
+		assertInitialRows(stub.messages);
 
 		listener!();
 		await sleep(50);
-		const pushes = stub.messages.filter((message) => message.type === 'document');
-		assert.ok(pushes.length >= 2, 'the index change re-pushed the document');
-		const last = pushes[pushes.length - 1];
-		assert.strictEqual(
-			last.document!.rows!.find((row) => row.label === 'TimeoutSeconds')?.definition?.description,
-			'Timeout in seconds.'
-		);
+		assertRepushedDescription(stub.messages);
 
 		stub.dispose();
 		fs.rmSync(path.dirname(file), { recursive: true, force: true });

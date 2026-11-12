@@ -241,4 +241,132 @@ suite('VirtualScroll component', () => {
 			h.restore();
 		}
 	});
+
+	test('setContentWidth never shrinks a pane and ignores an invalid width', () => {
+		const h = harness();
+		try {
+			h.scroll.setContent({ rowCount: 1, offsets: [0, 20], totalHeight: 20, contentWidth: 100, contentWidths: [100, 200] });
+			h.scroll.setContentWidth(80);
+			h.scroll.setContentWidth(Number.NaN);
+			assert.deepStrictEqual(h.scroll.contentWidths, [100, 200]);
+			assert.strictEqual(h.scroll.contentWidth, 100);
+			assert.strictEqual(h.scroll.hspacer.style.values['width'], '100px');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('setContent normalizes empty offsets, a negative row count and invalid widths', () => {
+		const h = harness();
+		try {
+			h.scroll.setContent({
+				rowCount: -3.7,
+				offsets: [],
+				totalHeight: 999,
+				contentWidth: -5,
+				contentWidths: [Number.NaN, 0]
+			});
+			assert.deepStrictEqual(h.scroll.offsets, [0]);
+			assert.strictEqual(h.scroll.rowCount, 0);
+			assert.deepStrictEqual(h.scroll.contentWidths, [0, 0]);
+			assert.strictEqual(h.scroll.contentWidth, 0);
+			assert.strictEqual(h.scroll.getContentElement().style.values['height'], '0px');
+			assert.strictEqual(h.scroll.getHorizontalBar(0).hidden, true);
+			assert.strictEqual(h.scroll.getHorizontalBar(1).hidden, true);
+			assert.strictEqual(h.scroll.hbars.hidden, true);
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('a horizontal wheel scrolls the pane under the pointer and clamps at the maximum', () => {
+		const h = harness();
+		try {
+			h.scroll.setContent({
+				rowCount: 2,
+				offsets: [0, 20, 40],
+				totalHeight: 40,
+				contentWidth: 500,
+				contentWidths: [300, 500]
+			});
+			h.scroll.getHorizontalBar(0).clientWidth = 100;
+			h.scroll.getHorizontalBar(1).clientWidth = 100;
+			const prevented: number[] = [];
+			const wheel = (deltaX: number, deltaY: number, shiftKey: boolean, target: unknown): void => {
+				h.scroll.scroll.listeners['wheel']({
+					shiftKey,
+					deltaX,
+					deltaY,
+					target,
+					preventDefault: () => prevented.push(1)
+				});
+			};
+			const leftPane = h.scroll.getPane(0);
+			const rightPane = h.scroll.getPane(1);
+			wheel(120, 10, false, { closest: () => rightPane });
+			assert.strictEqual(h.scroll.getScrollLeft(1), 120, 'the pane under the pointer moves');
+			assert.strictEqual(h.scroll.getScrollLeft(0), 0, 'the other pane stays');
+			assert.strictEqual(prevented.length, 1);
+			wheel(0, 999, true, { closest: () => rightPane });
+			assert.strictEqual(h.scroll.getScrollLeft(1), 400, 'shift+wheel clamps to content minus viewport');
+			wheel(200, 10, false, { closest: () => leftPane });
+			assert.strictEqual(h.scroll.getScrollLeft(0), 200, 'deltaX wins when it is larger');
+			wheel(10, 120, false, { closest: () => leftPane });
+			assert.strictEqual(h.scroll.getScrollLeft(0), 200, 'a vertical wheel is untouched');
+			wheel(0, 0, true, { closest: () => leftPane });
+			assert.strictEqual(prevented.length, 3, 'a zero delta does not prevent the default');
+			h.scroll.getHorizontalBar(0).scrollLeft = 100;
+			wheel(50, 0, false, null);
+			assert.strictEqual(h.scroll.getScrollLeft(0), 150, 'no pane falls back to the first bar');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('a horizontal bar scroll mirrors only when diff sync is on and moves at least one pixel', () => {
+		const h = harness();
+		try {
+			h.scroll.setContent({ rowCount: 2, offsets: [0, 20, 40], totalHeight: 40, contentWidth: 500 });
+			h.scroll.getHorizontalBar(0).scrollLeft = 40;
+			h.scroll.getHorizontalBar(1).scrollLeft = 40.5;
+			h.scroll.getHorizontalBar(0).listeners['scroll']();
+			assert.strictEqual(h.scroll.getScrollLeft(1), 40.5, 'sync is off by default');
+			h.scroll.callbacks.syncHorizontal = true;
+			h.scroll.getHorizontalBar(0).scrollLeft = 41;
+			h.scroll.getHorizontalBar(1).scrollLeft = 40.5;
+			h.scroll.getHorizontalBar(0).listeners['scroll']();
+			assert.strictEqual(h.scroll.getScrollLeft(1), 40.5, 'a sub-pixel difference is left alone');
+			h.scroll.getHorizontalBar(0).scrollLeft = 42;
+			h.scroll.getHorizontalBar(1).scrollLeft = 40;
+			h.scroll.getHorizontalBar(0).listeners['scroll']();
+			assert.strictEqual(h.scroll.getScrollLeft(1), 42, 'a whole-pixel difference mirrors');
+		} finally {
+			h.restore();
+		}
+	});
+
+	test('scrollToIndex honours start, end and auto alignment and guards an empty model', () => {
+		const h = harness();
+		try {
+			h.scroll.scroll.clientHeight = 40;
+			h.scroll.setContent({ rowCount: 5, offsets: [0, 20, 40, 60, 80, 100], totalHeight: 100, contentWidth: 100 });
+			h.scroll.setScrollTop(20);
+			h.scroll.scrollToIndex(0, 'auto');
+			assert.strictEqual(h.scroll.getScrollTop(), 0, 'a row above the viewport scrolls to its top');
+			h.scroll.scrollToIndex(1, 'auto');
+			assert.strictEqual(h.scroll.getScrollTop(), 0, 'a fully visible row does not move');
+			h.scroll.scrollToIndex(4, 'end');
+			assert.strictEqual(h.scroll.getScrollTop(), 60, 'end alignment puts the row bottom at the viewport bottom');
+			h.scroll.scrollToIndex(0, 'start');
+			assert.strictEqual(h.scroll.getScrollTop(), 0);
+			h.scroll.scrollToIndex(999, 'start');
+			assert.strictEqual(h.scroll.getScrollTop(), 80, 'the index clamps to the last row');
+			h.scroll.setContent({ rowCount: 0, offsets: [0], totalHeight: 0, contentWidth: 0 });
+			h.scroll.setScrollTop(10);
+			h.scroll.scrollToIndex(0, 'start');
+			assert.strictEqual(h.scroll.getScrollTop(), 10, 'an empty model is left alone');
+		} finally {
+			h.restore();
+		}
+	});
 });

@@ -123,6 +123,50 @@ ${searchHtml}
 </div>`;
 }
 
+function setPressed(id: string, pressed: boolean): void {
+	const button = document.getElementById(id);
+	if (button) {
+		button.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+	}
+}
+
+function applyContextState(context: HTMLElement, changesOnly: boolean): void {
+	if (changesOnly) {
+		context.removeAttribute('disabled');
+	} else {
+		context.setAttribute('disabled', '');
+	}
+	context.title = changesOnly
+		? 'Show 5 unchanged lines above and below each difference'
+		: 'Context applies to Show diff';
+	context.setAttribute('aria-label', changesOnly ? 'Show 5 lines of context' : 'Context applies to Show diff');
+}
+
+function setMatchButton(id: string, active: boolean, pending: boolean): void {
+	const button = document.getElementById(id);
+	if (!button) {
+		return;
+	}
+	button.setAttribute('aria-pressed', active ? 'true' : 'false');
+	button.setAttribute('aria-busy', pendingValue(active, pending));
+}
+
+function pendingValue(active: boolean, pending: boolean): string {
+	return pending && active ? 'true' : 'false';
+}
+
+function setMatchStatus(semantic: boolean, pending: boolean): void {
+	const status = document.getElementById('diff-match-status');
+	if (!status) {
+		return;
+	}
+	status.textContent = matchStatusText(semantic, pending);
+}
+
+function matchStatusText(semantic: boolean, pending: boolean): string {
+	return pending ? `Switching to ${semantic ? 'Semantic' : 'Strict'}…` : '';
+}
+
 export class DiffToolbar {
 	private callbacks: DiffToolbarCallbacks;
 	mounted: boolean;
@@ -159,26 +203,13 @@ export class DiffToolbar {
 	}
 
 	setViewMode(changesOnly: boolean): void {
-		const all = document.getElementById('diff-view-all');
-		if (all) {
-			all.setAttribute('aria-pressed', changesOnly ? 'false' : 'true');
-		}
-		const diff = document.getElementById('diff-view-diff');
-		if (diff) {
-			diff.setAttribute('aria-pressed', changesOnly ? 'true' : 'false');
-		}
+		setPressed('diff-view-all', !changesOnly);
+		setPressed('diff-view-diff', changesOnly);
 		const context = document.getElementById('diff-context');
-		if (context) {
-			if (changesOnly) {
-				context.removeAttribute('disabled');
-			} else {
-				context.setAttribute('disabled', '');
-			}
-			context.title = changesOnly
-				? 'Show 5 unchanged lines above and below each difference'
-				: 'Context applies to Show diff';
-			context.setAttribute('aria-label', changesOnly ? 'Show 5 lines of context' : 'Context applies to Show diff');
+		if (!context) {
+			return;
 		}
+		applyContextState(context, changesOnly);
 	}
 
 	setSwapped(swapped: boolean): void {
@@ -189,20 +220,9 @@ export class DiffToolbar {
 	}
 
 	setMatchMode(semantic: boolean, pending = false): void {
-		const semanticButton = document.getElementById('diff-mode-semantic');
-		if (semanticButton) {
-			semanticButton.setAttribute('aria-pressed', semantic ? 'true' : 'false');
-			semanticButton.setAttribute('aria-busy', pending && semantic ? 'true' : 'false');
-		}
-		const strictButton = document.getElementById('diff-mode-strict');
-		if (strictButton) {
-			strictButton.setAttribute('aria-pressed', semantic ? 'false' : 'true');
-			strictButton.setAttribute('aria-busy', pending && !semantic ? 'true' : 'false');
-		}
-		const status = document.getElementById('diff-match-status');
-		if (status) {
-			status.textContent = pending ? `Switching to ${semantic ? 'Semantic' : 'Strict'}…` : '';
-		}
+		setMatchButton('diff-mode-semantic', semantic, pending);
+		setMatchButton('diff-mode-strict', !semantic, pending);
+		setMatchStatus(semantic, pending);
 	}
 
 	setContext(active: boolean): void {

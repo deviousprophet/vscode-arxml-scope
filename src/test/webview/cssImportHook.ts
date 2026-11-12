@@ -19,17 +19,24 @@ if (!nodeRequire.extensions['.css']) {
 const srcWebview = path.resolve(__dirname, '..', '..', '..', 'src', 'webview');
 const outWebview = path.resolve(__dirname, '..', '..', 'webview');
 
+function mirrorFile(full: string): void {
+	if (!full.endsWith('.css')) {
+		return;
+	}
+	const target = path.join(outWebview, path.relative(srcWebview, full));
+	fs.mkdirSync(path.dirname(target), { recursive: true });
+	if (!fs.existsSync(target)) {
+		fs.writeFileSync(target, '');
+	}
+}
+
 function mirrorCss(dir: string): void {
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		const full = path.join(dir, entry.name);
 		if (entry.isDirectory()) {
 			mirrorCss(full);
-		} else if (entry.isFile() && full.endsWith('.css')) {
-			const target = path.join(outWebview, path.relative(srcWebview, full));
-			fs.mkdirSync(path.dirname(target), { recursive: true });
-			if (!fs.existsSync(target)) {
-				fs.writeFileSync(target, '');
-			}
+		} else if (entry.isFile()) {
+			mirrorFile(full);
 		}
 	}
 }

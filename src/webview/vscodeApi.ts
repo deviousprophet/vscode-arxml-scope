@@ -5,7 +5,7 @@
  * page module can be imported by a test without a webview until it actually
  * mounts. `acquireVsCodeApi` is supplied by VS Code before the bundle runs.
  */
-export interface WebviewApi<State = unknown> {
+interface WebviewApi<State = unknown> {
 	postMessage(message: unknown): void;
 	getState(): State | undefined;
 	setState(state: State): void;
@@ -16,7 +16,7 @@ declare function acquireVsCodeApi<State = unknown>(): WebviewApi<State>;
 let cached: WebviewApi<unknown> | undefined;
 
 /** The API singleton, acquired on first use. */
-export function vscodeApi(): WebviewApi<unknown> {
+function vscodeApi(): WebviewApi<unknown> {
 	if (!cached) {
 		cached = acquireVsCodeApi<unknown>();
 	}

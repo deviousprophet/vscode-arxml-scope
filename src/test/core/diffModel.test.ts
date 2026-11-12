@@ -93,6 +93,14 @@ function reference(name: string, target: string): string {
 </ECUC-REFERENCE-VALUE>`;
 }
 
+function optionalElement(tag: string, pieces: string[] | undefined): string {
+	return pieces && pieces.length > 0 ? `<${tag}>${pieces.join('')}</${tag}>` : '';
+}
+
+function conditionElement(condition: string | undefined): string {
+	return condition ? `<SW-SYSCOND>${condition}</SW-SYSCOND>` : '';
+}
+
 function container(
 	shortName: string,
 	options: {
@@ -103,16 +111,14 @@ function container(
 		condition?: string;
 	} = {}
 ): string {
-	const parameters = options.parameters ?? [];
-	const references = options.references ?? [];
-	const containers = options.containers ?? [];
+	const definitionRef = options.definitionRef ?? `/P/${shortName}`;
 	return `<ECUC-CONTAINER-VALUE>
 	<SHORT-NAME>${shortName}</SHORT-NAME>
-	<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">${options.definitionRef ?? `/P/${shortName}`}</DEFINITION-REF>
-	${options.condition ? `<SW-SYSCOND>${options.condition}</SW-SYSCOND>` : ''}
-	${parameters.length > 0 ? `<PARAMETER-VALUES>${parameters.join('')}</PARAMETER-VALUES>` : ''}
-	${references.length > 0 ? `<REFERENCE-VALUES>${references.join('')}</REFERENCE-VALUES>` : ''}
-	${containers.length > 0 ? `<SUB-CONTAINERS>${containers.join('')}</SUB-CONTAINERS>` : ''}
+	<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">${definitionRef}</DEFINITION-REF>
+	${conditionElement(options.condition)}
+	${optionalElement('PARAMETER-VALUES', options.parameters)}
+	${optionalElement('REFERENCE-VALUES', options.references)}
+	${optionalElement('SUB-CONTAINERS', options.containers)}
 </ECUC-CONTAINER-VALUE>`;
 }
 
@@ -128,6 +134,25 @@ function cell(overrides: Partial<DiffCell> = {}): DiffCell {
 		range: { start: 0, end: 10 },
 		...overrides,
 	};
+}
+
+function isChangedRow(row: DiffRow): boolean {
+	return row.status !== 'unchanged';
+}
+
+function isHiddenLeaf(row: DiffRow): boolean {
+	return row.status === 'unchanged' && !row.hasChildren;
+}
+
+function assertChangesOnlyVisibility(rows: readonly DiffRow[], changesOnly: readonly boolean[]): void {
+	for (let i = 0; i < rows.length; i++) {
+		if (isChangedRow(rows[i])) {
+			assert.ok(changesOnly[i], `change ${rows[i].key} is visible`);
+		}
+		if (isHiddenLeaf(rows[i])) {
+			assert.strictEqual(changesOnly[i], false, `unchanged leaf ${rows[i].key} is hidden`);
+		}
+	}
 }
 
 suite('semantic diff model (design §2, §3.3)', () => {
@@ -631,14 +656,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.ok(all.every(Boolean), 'every row is visible in Show all');
 
 		const changesOnly = diffVisibility(rows, true);
-		for (let i = 0; i < rows.length; i++) {
-			if (rows[i].status !== 'unchanged') {
-				assert.ok(changesOnly[i], `change ${rows[i].key} is visible`);
-			}
-			if (rows[i].status === 'unchanged' && !rows[i].hasChildren) {
-				assert.strictEqual(changesOnly[i], false, `unchanged leaf ${rows[i].key} is hidden`);
-			}
-		}
+		assertChangesOnlyVisibility(rows, changesOnly);
 		assert.ok(changesOnly[0], 'the module ancestor stays visible');
 		assert.ok(changesOnly[1], 'the container ancestor stays visible');
 		const keepIndex = rows.findIndex((row) => (row.left ?? row.right)?.label === 'Keep');
@@ -669,6 +687,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.ok(changed >= 0);
 		const none = diffVisibility(rows, true, 0);
 		assert.strictEqual(none[changed - 1], false, 'no context hides the previous row');
+		assert.deepStrictEqual(diffVisibility(rows, true, -2), none, 'a negative context is clamped to none');
 		const context = diffVisibility(rows, true, 5);
 		for (let offset = -5; offset <= 5; offset++) {
 			assert.ok(context[changed + offset], `row ${offset} is inside the context`);
@@ -851,6 +870,11 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.strictEqual(changeIndexes.length, 2);
 
 		assert.strictEqual(nextChangeIndex(rows, undefined, -1, 1), changeIndexes[0], 'forward starts at the first change');
+		assert.strictEqual(
+			nextChangeIndex(rows, undefined, rows.length + 3, 1),
+			changeIndexes[0],
+			'an out-of-range from starts at the first change'
+		);
 		assert.strictEqual(nextChangeIndex(rows, undefined, changeIndexes[0], 1), changeIndexes[1]);
 		assert.strictEqual(nextChangeIndex(rows, undefined, changeIndexes[1], 1), changeIndexes[0], 'forward wraps');
 		assert.strictEqual(nextChangeIndex(rows, undefined, changeIndexes[0], -1), changeIndexes[1], 'backward wraps');
@@ -970,6 +994,15 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.strictEqual(document.summary.added + document.summary.removed, 0);
 	});
 
+	test('renamed containers with no children pair on the empty-child score', () => {
+		const left = arxml(module('M1', container('NMH_EMPTY_01', { definitionRef: '/D/Empty' })));
+		const right = arxml(module('M1', container('NM_EMPTY_01', { definitionRef: '/D/Empty' })));
+		const { document } = diffOf(left, right, true);
+		assert.strictEqual(document.summary.renamed, 1, 'two childless containers still pair');
+		assert.strictEqual(document.summary.added, 0);
+		assert.strictEqual(document.summary.removed, 0);
+	});
+
 	test('identical-child siblings pair by name and position', () => {
 		const make = (prefix: string): string =>
 			arxml(
@@ -1011,6 +1044,7 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		const { document } = diffOf(left, right, true);
 		assert.strictEqual(document.summary.renamed, 0);
 		assert.strictEqual(document.semanticSkipped, 1002);
+		assert.strictEqual(document.semanticLimitReason, 'fallback', 'the fallback has its own limit reason');
 	});
 
 	test('semantic matching pairs a renamed module and aligns its children', () => {

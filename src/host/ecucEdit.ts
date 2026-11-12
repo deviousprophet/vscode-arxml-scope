@@ -12,12 +12,13 @@
  * One record becomes exactly one `WorkspaceEdit`.
  */
 import * as vscode from 'vscode';
-import { EcucDocumentModel, ParameterNode, Range, lastShortName } from '../core/ecuc/model';
+import { ContainerNode, EcucDocumentModel, ParameterNode, Range, lastShortName } from '../core/ecuc/model';
 import { scanEcucValues } from '../core/ecuc/scanner';
-import { validateDefinitionRef, validateShortName, validateValue } from '../core/ecuc/validate';
+import { ValidationResult, validateDefinitionRef, validateShortName, validateValue } from '../core/ecuc/validate';
 import { LineIndex } from '../core/text/offsets';
 import { EcucNode, buildNodeIndex } from '../core/ecuc/nodeId';
 import { nodeIdForRange } from './navigation';
+import { touchesCdata } from './editRange';
 
 /**
  * `value` is the text content inside `<VALUE>…</VALUE>`; `element` is the whole element.
@@ -96,29 +97,8 @@ export function regionOf(
 	text: string,
 	region: EditRegion
 ): { range: Range; oldText: string } | undefined {
-	let range: Range | undefined;
-	if (region === 'value' || region === 'element') {
-		if (node.kind !== 'parameter' || !node.valueRange) {
-			return undefined;
-		}
-		const valueRange = node.valueRange;
-		if (region === 'value') {
-			if (text[valueRange.start] === '<') {
-				return undefined; // the range covers the element, not its text content
-			}
-			range = valueRange;
-		} else {
-			range = elementSpan(text, valueRange);
-		}
-	} else if (region === 'shortName') {
-		if (node.kind !== 'module' && node.kind !== 'container') {
-			return undefined;
-		}
-		range = node.shortNameRange;
-	} else {
-		range = node.definitionRefRange;
-	}
-	if (!range) {
+	const range = regionRange(node, text, region);
+	if (range === undefined) {
 		return undefined;
 	}
 	if (touchesCdata(text, range)) {
@@ -127,30 +107,39 @@ export function regionOf(
 	return { range, oldText: text.slice(range.start, range.end) };
 }
 
-/**
- * True when `range` is inside, or straddles, a `<![CDATA[…]]>` section.
- *
- * The scanner points a value's range at the *inside* of a CDATA section, and the bytes
- * there are not interchangeable with escaped text content. Writing escaped text into one
- * changes what a conforming XML parser reads (`&amp;` is the literal four characters
- * inside CDATA); a section whose content begins with `<` is mistaken for an element by the
- * byte rule above, and gets that markup written back into the value; and a range that
- * crosses a marker deletes the `]]>` and leaves the section unterminated, which is not
- * well-formed XML at all. Every one of those is a refusal rather than a write; editing a
- * CDATA-backed value is out of scope (`implement.md`, decision 5), and this is what makes
- * that a refusal instead of silent damage.
- */
-function touchesCdata(text: string, range: Range): boolean {
-	const bytes = text.slice(range.start, range.end);
-	if (bytes.includes('<![CDATA[') || bytes.includes(']]>')) {
-		return true;
+function regionRange(node: EcucNode, text: string, region: EditRegion): Range | undefined {
+	if (region === 'shortName') {
+		return namedRange(node);
 	}
-	const open = text.lastIndexOf('<![CDATA[', range.start);
-	if (open < 0) {
-		return false;
+	if (region === 'definitionRef') {
+		return node.definitionRefRange;
 	}
-	const close = text.indexOf(']]>', open + 9);
-	return close < 0 || close > range.start;
+	return valueRegion(node, text, region);
+}
+
+function namedRange(node: EcucNode): Range | undefined {
+	if (node.kind !== 'module' && node.kind !== 'container') {
+		return undefined;
+	}
+	return node.shortNameRange;
+}
+
+function valueRegion(node: EcucNode, text: string, region: EditRegion): Range | undefined {
+	if (node.kind !== 'parameter' || node.valueRange === undefined) {
+		return undefined;
+	}
+	const valueRange = node.valueRange;
+	if (region === 'value') {
+		return valueTextRange(text, valueRange);
+	}
+	return elementSpan(text, valueRange);
+}
+
+function valueTextRange(text: string, valueRange: Range): Range | undefined {
+	if (text[valueRange.start] === '<') {
+		return undefined; // the range covers the element, not its text content
+	}
+	return valueRange;
 }
 
 /**
@@ -189,18 +178,32 @@ function elementSpan(text: string, valueRange: Range): Range {
 function tagEnd(text: string, start: number): number {
 	let quote = '';
 	for (let i = start + 1; i < text.length; i++) {
-		const c = text[i];
-		if (quote !== '') {
-			if (c === quote) {
-				quote = '';
-			}
-		} else if (c === '"' || c === "'") {
-			quote = c;
-		} else if (c === '>') {
+		quote = quoteStateAfter(text[i], quote);
+		if (quote === '>') {
 			return i + 1;
 		}
 	}
 	return -1;
+}
+
+const QUOTE_CHARS = new Set(['"', "'"]);
+
+/**
+ * The scan state after `char`: the quote that is open, `''` for unquoted text, or `'>'`
+ * when this character is the unquoted `>` that ends the tag. Inside a quote, `>` is text.
+ */
+function quoteStateAfter(char: string, quote: string): string {
+	if (quote !== '') {
+		return char === quote ? '' : quote;
+	}
+	return unquotedState(char);
+}
+
+function unquotedState(char: string): string {
+	if (char === '>') {
+		return '>';
+	}
+	return QUOTE_CHARS.has(char) ? char : '';
 }
 
 /**
@@ -210,10 +213,36 @@ function tagEnd(text: string, start: number): number {
  */
 export function wrapElement(slice: string, escaped: string): string {
 	const gt = tagEnd(slice, 0);
-	const open = (gt < 0 ? slice : slice.slice(0, gt)).replace(/[\s/]+>$/, '>');
+	const open = openTag(slice, gt);
+	return open + escaped + closingTag(slice, open, gt);
+}
+
+/** The element's own open tag, kept verbatim apart from a dropped self-closing slash. */
+function openTag(slice: string, gt: number): string {
+	const tag = gt < 0 ? slice : slice.slice(0, gt);
+	return tag.replace(/[\s/]+>$/, '>');
+}
+
+/** The element's existing close tag, or one synthesized from the open tag's name. */
+function closingTag(slice: string, open: string, gt: number): string {
 	const lt = slice.lastIndexOf('<');
-	const closing = gt >= 0 && lt >= gt && slice[lt + 1] === '/' ? slice.slice(lt) : `</${tagName(open)}>`;
-	return open + escaped + closing;
+	if (!hasCloseTagAt(slice, lt, gt)) {
+		return `</${tagName(open)}>`;
+	}
+	return slice.slice(lt);
+}
+
+function hasCloseTagAt(slice: string, lt: number, gt: number): boolean {
+	if (lt < 0) {
+		return false;
+	}
+	if (gt < 0) {
+		return false;
+	}
+	if (lt < gt) {
+		return false;
+	}
+	return slice[lt + 1] === '/';
 }
 
 function tagName(open: string): string {
@@ -235,6 +264,11 @@ export function buildEdit(
 	if (!parameter) {
 		return { ok: false, reason: 'the node is no longer in the file' };
 	}
+	return planValueEdit(text, nodeId, parameter, value);
+}
+
+/** The value-write stages after the node lookup: range, CDATA, validation, record. */
+function planValueEdit(text: string, nodeId: string, parameter: ParameterNode, value: string): EditPlan {
 	const valueRange = parameter.valueRange;
 	if (!valueRange) {
 		return { ok: false, reason: `"${parameter.name}" has no <VALUE> element to edit` };
@@ -246,7 +280,17 @@ export function buildEdit(
 	if (!validation.ok) {
 		return validation;
 	}
-	const region: EditRegion = text[valueRange.start] === '<' ? 'element' : 'value';
+	return valueEditPlan(text, nodeId, parameter, valueRange, validation.text);
+}
+
+function valueEditPlan(
+	text: string,
+	nodeId: string,
+	parameter: ParameterNode,
+	valueRange: Range,
+	newText: string
+): EditPlan {
+	const region = editRegionAt(text, valueRange);
 	const described = regionOf(parameter, text, region);
 	if (!described) {
 		return { ok: false, reason: `"${parameter.name}" has no <VALUE> element to edit` };
@@ -257,9 +301,18 @@ export function buildEdit(
 			nodeId,
 			region,
 			oldText: described.oldText,
-			newText: region === 'element' ? wrapElement(described.oldText, validation.text) : validation.text,
+			newText: replacementText(region, described.oldText, newText),
 		},
 	};
+}
+
+/** `element` when the stored span covers the tags, `value` when it covers the text. */
+function editRegionAt(text: string, range: Range): EditRegion {
+	return text[range.start] === '<' ? 'element' : 'value';
+}
+
+function replacementText(region: EditRegion, oldText: string, newText: string): string {
+	return region === 'element' ? wrapElement(oldText, newText) : newText;
 }
 
 /**
@@ -286,7 +339,18 @@ export function buildFieldEdit(
 	if (node.kind !== 'container') {
 		return { ok: false, reason: 'the node is not a container' };
 	}
-	const validation = field === 'shortName' ? validateShortName(value) : validateDefinitionRef(value);
+	return planFieldEdit(text, nodeId, node, field, value);
+}
+
+/** The field-write stages after the container lookup: validation, span, record. */
+function planFieldEdit(
+	text: string,
+	nodeId: string,
+	node: ContainerNode,
+	field: EditableField,
+	value: string
+): EditPlan {
+	const validation = validateField(field, value);
 	if (!validation.ok) {
 		return validation;
 	}
@@ -294,17 +358,34 @@ export function buildFieldEdit(
 	if (!described) {
 		// No text span: the element is absent, empty or CDATA-backed. Creating or
 		// re-shaping the element is out of scope, so the write is refused.
-		return {
-			ok: false,
-			reason:
-				field === 'shortName'
-					? `"${nodeLabel(node)}" has no <SHORT-NAME> text to edit (absent, empty or CDATA-backed)`
-					: `"${nodeLabel(node)}" has no <DEFINITION-REF> text to edit (absent, empty or CDATA-backed)`,
-		};
+		return { ok: false, reason: missingFieldReason(node, field) };
 	}
-	const current = field === 'shortName' ? node.shortName : node.definitionRef;
-	if (value.trim() === current) {
-		return { ok: false, reason: field === 'shortName' ? 'the short name is unchanged' : 'the definition ref is unchanged' };
+	return fieldEditRecord(text, nodeId, node, field, value, described, validation.text);
+}
+
+function validateField(field: EditableField, value: string): ValidationResult {
+	return field === 'shortName' ? validateShortName(value) : validateDefinitionRef(value);
+}
+
+function missingFieldReason(node: ContainerNode, field: EditableField): string {
+	const label = `"${nodeLabel(node)}"`;
+	return field === 'shortName'
+		? `${label} has no <SHORT-NAME> text to edit (absent, empty or CDATA-backed)`
+		: `${label} has no <DEFINITION-REF> text to edit (absent, empty or CDATA-backed)`;
+}
+
+function fieldEditRecord(
+	text: string,
+	nodeId: string,
+	node: ContainerNode,
+	field: EditableField,
+	value: string,
+	described: { range: Range; oldText: string },
+	newText: string
+): EditPlan {
+	const unchanged = unchangedFieldReason(field, value, currentFieldText(node, field));
+	if (unchanged !== undefined) {
+		return { ok: false, reason: unchanged };
 	}
 	return {
 		ok: true,
@@ -312,10 +393,21 @@ export function buildFieldEdit(
 			nodeId,
 			region: field,
 			oldText: described.oldText,
-			newText: validation.text,
+			newText,
 		},
-		nextNodeId: predictNodeId(text, described.range, validation.text),
+		nextNodeId: predictNodeId(text, described.range, newText),
 	};
+}
+
+function currentFieldText(node: ContainerNode, field: EditableField): string {
+	return field === 'shortName' ? node.shortName : node.definitionRef;
+}
+
+function unchangedFieldReason(field: EditableField, value: string, current: string): string | undefined {
+	if (value.trim() !== current) {
+		return undefined;
+	}
+	return field === 'shortName' ? 'the short name is unchanged' : 'the definition ref is unchanged';
 }
 
 /**
@@ -353,15 +445,28 @@ export async function applyEdit(
 		// replace text the user never saw.
 		return { ok: false, reason: 'the file changed since the value was read; try again' };
 	}
-	const lineIndex = new LineIndex(text);
-	const start = lineIndex.positionAt(described.range.start);
-	const end = lineIndex.positionAt(described.range.end);
+	return writeEdit(document, text, described.range, record.newText);
+}
+
+/** Applies one replacement through a `WorkspaceEdit`, in document positions. */
+async function writeEdit(
+	document: vscode.TextDocument,
+	text: string,
+	range: Range,
+	newText: string
+): Promise<ApplyResult> {
 	const edit = new vscode.WorkspaceEdit();
-	edit.replace(
-		document.uri,
-		new vscode.Range(start.line, start.character, end.line, end.character),
-		record.newText
-	);
+	edit.replace(document.uri, rangeIn(new LineIndex(text), range), newText);
+	return applyWorkspaceEdit(edit);
+}
+
+function rangeIn(lineIndex: LineIndex, range: Range): vscode.Range {
+	const start = lineIndex.positionAt(range.start);
+	const end = lineIndex.positionAt(range.end);
+	return new vscode.Range(start.line, start.character, end.line, end.character);
+}
+
+async function applyWorkspaceEdit(edit: vscode.WorkspaceEdit): Promise<ApplyResult> {
 	if (!(await vscode.workspace.applyEdit(edit))) {
 		return { ok: false, reason: 'VS Code refused the edit' };
 	}

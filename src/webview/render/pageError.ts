@@ -18,6 +18,33 @@ interface ConsoleLike {
 	error(text: string): void;
 }
 
+/** The fields the guarded listeners read from an ErrorEvent. */
+interface PageErrorEvent {
+	message?: unknown;
+	lineno?: unknown;
+}
+
+/** The field the guarded listeners read from an unhandled rejection. */
+interface PageRejectionEvent {
+	reason?: unknown;
+}
+
+/** The ` (line N)` suffix an error event carries, when it has a line. */
+function lineSuffix(event: PageErrorEvent | null | undefined): string {
+	return event && event.lineno ? ` (line ${event.lineno})` : '';
+}
+
+/** The message and source line an error event reports. */
+function errorEventText(event: PageErrorEvent | null | undefined): string {
+	const message = event && event.message ? String(event.message) : 'unknown error';
+	return message + lineSuffix(event);
+}
+
+/** The reason an unhandled rejection reports; a missing event reads as `undefined`. */
+function rejectionEventText(event: PageRejectionEvent | null | undefined): string {
+	return String(event && event.reason);
+}
+
 export interface EditorErrorSurface {
 	/** Report a message through the same path an uncaught error uses. */
 	report(text: string): void;
@@ -35,14 +62,11 @@ export function installConsoleErrors(
 	const report = (text: string): void => {
 		consoleLike.error(`${label}: ${text}`);
 	};
-	windowLike.addEventListener('error', (event: any) => {
-		report(
-			(event && event.message ? String(event.message) : 'unknown error') +
-				(event && event.lineno ? ` (line ${event.lineno})` : '')
-		);
+	windowLike.addEventListener('error', (event: PageErrorEvent | null | undefined) => {
+		report(errorEventText(event));
 	});
-	windowLike.addEventListener('unhandledrejection', (event: any) => {
-		report(String(event && event.reason));
+	windowLike.addEventListener('unhandledrejection', (event: PageRejectionEvent | null | undefined) => {
+		report(rejectionEventText(event));
 	});
 	return { report };
 }
@@ -74,15 +98,12 @@ export function installNoticeErrors(
 		}
 	};
 	const hint = '. Open Developer: Open Webview Developer Tools for the stack.';
-	windowLike.addEventListener('error', (event: any) => {
-		show(
-			`${options.label}: ${event && event.message ? String(event.message) : 'unknown error'}` +
-				(event && event.lineno ? ` (line ${event.lineno})` : '') +
-				hint
-		);
+	const noticeText = (text: string): string => `${options.label}: ${text}${hint}`;
+	windowLike.addEventListener('error', (event: PageErrorEvent | null | undefined) => {
+		show(noticeText(errorEventText(event)));
 	});
-	windowLike.addEventListener('unhandledrejection', (event: any) => {
-		show(`${options.label}: ${String(event && event.reason)}${hint}`);
+	windowLike.addEventListener('unhandledrejection', (event: PageRejectionEvent | null | undefined) => {
+		show(noticeText(rejectionEventText(event)));
 	});
 	return { report: (text: string) => show(text) };
 }

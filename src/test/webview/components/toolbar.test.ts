@@ -87,6 +87,44 @@ suite('Toolbar component', () => {
 		assert.strictEqual(new DiffToolbar().mounted, false);
 	});
 
+	test('setViewMode writes the context disabled state, labels and titles both ways', () => {
+		const dom = installMarkup(`<body>${renderDiffToolbarHtml('<div class="search-box"></div>')}</body>`);
+		try {
+			const toolbar = new DiffToolbar();
+			const context = dom.document.getElementById('diff-context')!;
+			toolbar.setViewMode(true);
+			assert.strictEqual(context.hasAttribute('disabled'), false);
+			assert.strictEqual(context.title, 'Show 5 unchanged lines above and below each difference');
+			assert.strictEqual(context.getAttribute('aria-label'), 'Show 5 lines of context');
+			toolbar.setViewMode(false);
+			assert.strictEqual(context.getAttribute('disabled'), '');
+			assert.strictEqual(context.title, 'Context applies to Show diff');
+			assert.strictEqual(context.getAttribute('aria-label'), 'Context applies to Show diff');
+			assert.strictEqual(dom.document.getElementById('diff-view-all')!.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(dom.document.getElementById('diff-view-diff')!.getAttribute('aria-pressed'), 'false');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('setMatchMode carries the semantic pending state and tolerates missing buttons', () => {
+		const dom = installMarkup(`<body>${renderDiffToolbarHtml('<div class="search-box"></div>')}</body>`);
+		try {
+			const toolbar = new DiffToolbar();
+			toolbar.setMatchMode(true, true);
+			assert.strictEqual(dom.document.getElementById('diff-mode-semantic')!.getAttribute('aria-busy'), 'true');
+			assert.strictEqual(dom.document.getElementById('diff-mode-strict')!.getAttribute('aria-busy'), 'false');
+			assert.strictEqual(dom.document.getElementById('diff-match-status')!.textContent, 'Switching to Semantic…');
+			dom.document.getElementById('diff-mode-semantic')!.remove();
+			dom.document.getElementById('diff-mode-strict')!.remove();
+			dom.document.getElementById('diff-match-status')!.remove();
+			toolbar.setMatchMode(false);
+			toolbar.setViewMode(false);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('the diff toolbar reports view, mode, navigation, swap and context state', () => {
 		const dom = installMarkup(`<body>${renderDiffToolbarHtml('<div class="search-box"></div>')}</body>`);
 		try {

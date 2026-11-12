@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { LineIndex, LineStartBuilder } from '../../core/text/offsets';
+import { LineIndex, LineStartBuilder, positionAtLineStarts } from '../../core/text/offsets';
 
 suite('offsets (core)', () => {
 	test('LF document: first line, boundaries, last line', () => {
@@ -71,5 +71,40 @@ suite('offsets (core)', () => {
 			}
 			assert.deepStrictEqual(builder.finish(), expected, JSON.stringify(chunks));
 		}
+	});
+
+	test('astral characters count as two UTF-16 units', () => {
+		const text = '😀x\n😀';
+		assert.strictEqual(text.length, 6);
+		const index = new LineIndex(text);
+		assert.strictEqual(index.lineCount, 2);
+		assert.deepStrictEqual(index.positionAt(0), { line: 0, character: 0 });
+		// Between the surrogate halves, as VS Code reports it.
+		assert.deepStrictEqual(index.positionAt(1), { line: 0, character: 1 });
+		assert.deepStrictEqual(index.positionAt(2), { line: 0, character: 2 });
+		assert.deepStrictEqual(index.positionAt(4), { line: 1, character: 0 });
+		assert.deepStrictEqual(index.positionAt(6), { line: 1, character: 2 });
+	});
+
+	test('a trailing CR at a chunk boundary is flushed by finish', () => {
+		const split = new LineStartBuilder();
+		split.write('a\r');
+		split.write('\nb');
+		assert.deepStrictEqual(split.finish(), [0, 3]);
+
+		const trailing = new LineStartBuilder();
+		trailing.write('a\r');
+		assert.deepStrictEqual(trailing.finish(), [0, 2]);
+
+		const pendingOnly = new LineStartBuilder();
+		pendingOnly.write('\r');
+		assert.deepStrictEqual(pendingOnly.finish(), [0, 1]);
+	});
+
+	test('a missing or empty line table degrades to line zero', () => {
+		assert.deepStrictEqual(positionAtLineStarts(undefined, 5), { line: 0, character: 5 });
+		assert.deepStrictEqual(positionAtLineStarts(undefined, -5, 10), { line: 0, character: 0 });
+		assert.deepStrictEqual(positionAtLineStarts([], 999, 6), { line: 0, character: 6 });
+		assert.deepStrictEqual(positionAtLineStarts([0, 4], 999, 6), { line: 1, character: 2 });
 	});
 });

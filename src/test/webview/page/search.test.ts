@@ -41,6 +41,32 @@ async function runSearch(dom: ReturnType<typeof installDom>, query: string, key 
 	await settleSearch();
 }
 
+function isKeywordQuery(query: string): boolean {
+	return query === 'package' || query === 'pack' || query === 'schema' || query === 'sche';
+}
+
+function assertHeaderMatch(dom: ReturnType<typeof installDom>, query: string): void {
+	const headerRow = dom.document.querySelector(
+		'#tree .document-tree-header-row[data-search-current="true"]'
+	) as HTMLElement | null;
+	assert.ok(headerRow, `${query}: the header row is the current match`);
+	const mark = headerRow.querySelector('mark');
+	assert.ok(mark, `${query}: the matched header text is marked`);
+	assert.ok(
+		(mark.textContent ?? '').toLowerCase().includes(query.toLowerCase()),
+		`${query}: the mark covers the match`
+	);
+	if (isKeywordQuery(query)) {
+		assert.ok(headerRow.querySelector('.keyword mark'), `${query}: the keyword is marked`);
+	} else {
+		assert.ok(
+			headerRow.querySelector('.package mark, .number mark'),
+			`${query}: the value is marked`
+		);
+	}
+	assert.strictEqual(messagesOf(dom.api, 'select').length, 0, `${query}: a header jump never selects`);
+}
+
 async function settleFrame(): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, 10));
 }
@@ -208,25 +234,7 @@ suite('search page', () => {
 					'1 / 1',
 					`${query}: the header line is one match`
 				);
-				const headerRow = dom.document.querySelector(
-					'#tree .document-tree-header-row[data-search-current="true"]'
-				) as HTMLElement | null;
-				assert.ok(headerRow, `${query}: the header row is the current match`);
-				const mark = headerRow.querySelector('mark');
-				assert.ok(mark, `${query}: the matched header text is marked`);
-				assert.ok(
-					(mark.textContent ?? '').toLowerCase().includes(query.toLowerCase()),
-					`${query}: the mark covers the match`
-				);
-				if (query === 'package' || query === 'pack' || query === 'schema' || query === 'sche') {
-					assert.ok(headerRow.querySelector('.keyword mark'), `${query}: the keyword is marked`);
-				} else {
-					assert.ok(
-						headerRow.querySelector('.package mark, .number mark'),
-						`${query}: the value is marked`
-					);
-				}
-				assert.strictEqual(messagesOf(dom.api, 'select').length, 0, `${query}: a header jump never selects`);
+				assertHeaderMatch(dom, query);
 			}
 			const css = webviewCss('components', 'documentTree', 'documentTree.css');
 			assert.ok(

@@ -70,6 +70,8 @@ type Token =
 	| { kind: 'left' }
 	| { kind: 'right' };
 
+type LiteralToken = Extract<Token, { kind: 'number' | 'string' | 'boolean' }>;
+
 interface Tokenized {
 	tokens: Token[];
 }
@@ -77,6 +79,27 @@ interface Tokenized {
 interface TokenizedError {
 	error: string;
 }
+
+interface TokenStep {
+	token?: Token;
+	end: number;
+}
+
+const EQUALITY_OPERATORS: ReadonlySet<string> = new Set(['==', '!=']);
+const RELATIONAL_OPERATORS: ReadonlySet<string> = new Set(['<', '<=', '>', '>=']);
+const TWO_CHAR_OPERATORS: ReadonlyMap<string, BinaryOperator> = new Map([
+	['==', '=='],
+	['!=', '!='],
+	['<=', '<='],
+	['>=', '>='],
+	['&&', '&&'],
+	['||', '||'],
+]);
+const SINGLE_CHAR_OPERATORS: ReadonlyMap<string, '!' | '<' | '>'> = new Map([
+	['!', '!'],
+	['<', '<'],
+	['>', '>'],
+]);
 
 function isWhitespace(character: string): boolean {
 	return character === ' ' || character === '\t' || character === '\r' || character === '\n';
@@ -86,39 +109,61 @@ function isDigit(character: string): boolean {
 	return character >= '0' && character <= '9';
 }
 
+function isLowerHexLetter(character: string): boolean {
+	return character >= 'a' && character <= 'f';
+}
+
+function isUpperHexLetter(character: string): boolean {
+	return character >= 'A' && character <= 'F';
+}
+
 function isHexDigit(character: string): boolean {
-	return isDigit(character) || (character >= 'a' && character <= 'f') || (character >= 'A' && character <= 'F');
+	return isDigit(character) || isLowerHexLetter(character) || isUpperHexLetter(character);
+}
+
+function isUpperLetter(character: string): boolean {
+	return character >= 'A' && character <= 'Z';
+}
+
+function isLowerLetter(character: string): boolean {
+	return character >= 'a' && character <= 'z';
 }
 
 function isIdentifierStart(character: string): boolean {
-	return (
-		(character >= 'A' && character <= 'Z') ||
-		(character >= 'a' && character <= 'z') ||
-		character === '_'
-	);
+	return isUpperLetter(character) || isLowerLetter(character) || character === '_';
+}
+
+function isIdentifierPunctuation(character: string): boolean {
+	return character === '.' || character === '-' || character === '/';
 }
 
 function isIdentifierPart(character: string): boolean {
-	return isIdentifierStart(character) || isDigit(character) || character === '.' || character === '-' || character === '/';
+	return isIdentifierStart(character) || isDigit(character) || isIdentifierPunctuation(character);
+}
+
+function isSign(character: string): boolean {
+	return character === '+' || character === '-';
+}
+
+function isQuote(character: string): boolean {
+	return character === '"' || character === "'";
 }
 
 /** True when a number literal starts at `at` (sign included). */
 function startsNumber(text: string, at: number): boolean {
-	const character = text[at];
-	if (isDigit(character)) {
+	if (isSign(text[at])) {
+		return startsUnsignedNumber(text, at + 1);
+	}
+	return startsUnsignedNumber(text, at);
+}
+
+/** True for digits, or a `.` followed by a digit. */
+function startsUnsignedNumber(text: string, at: number): boolean {
+	if (isDigit(text[at])) {
 		return true;
 	}
-	if (character === '.') {
-		return isDigit(text[at + 1] ?? '');
-	}
-	if (character === '+' || character === '-') {
-		const next = text[at + 1] ?? '';
-		if (isDigit(next)) {
-			return true;
-		}
-		return next === '.' && isDigit(text[at + 2] ?? '');
-	}
-	return false;
+	const next = text[at + 1] ?? '';
+	return text[at] === '.' && isDigit(next);
 }
 
 interface ScannedNumber {
@@ -126,44 +171,80 @@ interface ScannedNumber {
 	end: number;
 }
 
-/** Scans `[+-]?0x…` or `[+-]?(digits[.digits]|.digits)` at `at`. */
-function scanNumber(text: string, at: number): ScannedNumber | TokenizedError {
-	let cursor = at;
-	let sign = 1;
-	if (text[cursor] === '+' || text[cursor] === '-') {
-		if (text[cursor] === '-') {
-			sign = -1;
-		}
-		cursor++;
+interface SignedNumber {
+	value: number;
+	end: number;
+}
+
+/** The literal's sign and the offset just past it. */
+function numberSign(text: string, at: number): SignedNumber {
+	if (isSign(text[at])) {
+		return { value: text[at] === '-' ? -1 : 1, end: at + 1 };
 	}
-	if (text[cursor] === '0' && (text[cursor + 1] === 'x' || text[cursor + 1] === 'X')) {
-		cursor += 2;
-		const digitsStart = cursor;
-		while (cursor < text.length && isHexDigit(text[cursor])) {
-			cursor++;
-		}
-		if (cursor === digitsStart) {
-			return { error: `invalid hexadecimal number at ${at + 1}` };
-		}
-		return { value: sign * parseInt(text.slice(digitsStart, cursor), 16), end: cursor };
-	}
-	const integerStart = cursor;
+	return { value: 1, end: at };
+}
+
+function isHexPrefix(text: string, at: number): boolean {
+	return text[at] === '0' && (text[at + 1] === 'x' || text[at + 1] === 'X');
+}
+
+function scanDecimalDigits(text: string, from: number): number {
+	let cursor = from;
 	while (cursor < text.length && isDigit(text[cursor])) {
 		cursor++;
 	}
-	let hasDigits = cursor > integerStart;
-	if (text[cursor] === '.') {
+	return cursor;
+}
+
+function scanHexDigits(text: string, from: number): number {
+	let cursor = from;
+	while (cursor < text.length && isHexDigit(text[cursor])) {
 		cursor++;
-		const fractionStart = cursor;
-		while (cursor < text.length && isDigit(text[cursor])) {
-			cursor++;
-		}
-		hasDigits = hasDigits || cursor > fractionStart;
 	}
-	if (!hasDigits) {
+	return cursor;
+}
+
+/** Scans `[+-]?0x…` at `at`. */
+function scanHexNumber(text: string, at: number, sign: SignedNumber): ScannedNumber | TokenizedError {
+	const digitsStart = sign.end + 2;
+	const end = scanHexDigits(text, digitsStart);
+	if (end === digitsStart) {
+		return { error: `invalid hexadecimal number at ${at + 1}` };
+	}
+	return { value: sign.value * parseInt(text.slice(digitsStart, end), 16), end };
+}
+
+interface ScannedFraction {
+	end: number;
+	hasDigits: boolean;
+}
+
+/** The optional `.digits` part of a decimal literal. */
+function scanFraction(text: string, at: number): ScannedFraction {
+	if (text[at] !== '.') {
+		return { end: at, hasDigits: false };
+	}
+	const end = scanDecimalDigits(text, at + 1);
+	return { end, hasDigits: end > at + 1 };
+}
+
+/** Scans `[+-]?(digits[.digits]|.digits)` at `at`. */
+function scanDecimalNumber(text: string, at: number, sign: SignedNumber): ScannedNumber | TokenizedError {
+	const integerStart = sign.end;
+	const integerEnd = scanDecimalDigits(text, integerStart);
+	const fraction = scanFraction(text, integerEnd);
+	if (integerEnd === integerStart && !fraction.hasDigits) {
 		return { error: `invalid number at ${at + 1}` };
 	}
-	return { value: sign * Number(text.slice(integerStart, cursor)), end: cursor };
+	return { value: sign.value * Number(text.slice(integerStart, fraction.end)), end: fraction.end };
+}
+
+/** Scans `[+-]?0x…` or `[+-]?(digits[.digits]|.digits)` at `at`. */
+function scanNumber(text: string, at: number): ScannedNumber | TokenizedError {
+	const sign = numberSign(text, at);
+	return isHexPrefix(text, sign.end)
+		? scanHexNumber(text, at, sign)
+		: scanDecimalNumber(text, at, sign);
 }
 
 interface ScannedString {
@@ -171,33 +252,123 @@ interface ScannedString {
 	end: number;
 }
 
-/** The escaped character itself: `\\` -> `\`, `\'` -> `'`, `\n` -> `n`. */
-function unescapeCharacter(character: string): string {
-	return character;
+/** The index of the closing quote, or -1 when the escape run swallows it. */
+function closingQuote(text: string, from: number, quote: string): number {
+	let cursor = from;
+	while (cursor < text.length) {
+		if (text[cursor] === '\\') {
+			cursor += 2;
+			continue;
+		}
+		if (text[cursor] === quote) {
+			return cursor;
+		}
+		cursor++;
+	}
+	return -1;
 }
 
 /** Scans a single- or double-quoted string, honouring backslash escapes. */
 function scanString(text: string, at: number): ScannedString | TokenizedError {
 	const quote = text[at];
-	let cursor = at + 1;
-	let value = '';
-	while (cursor < text.length) {
-		const character = text[cursor];
-		if (character === '\\') {
-			if (cursor + 1 >= text.length) {
-				return { error: 'unterminated string' };
-			}
-			value += unescapeCharacter(text[cursor + 1]);
-			cursor += 2;
-			continue;
-		}
-		if (character === quote) {
-			return { value, end: cursor + 1 };
-		}
-		value += character;
-		cursor++;
+	const close = closingQuote(text, at + 1, quote);
+	if (close < 0) {
+		return { error: 'unterminated string' };
 	}
-	return { error: 'unterminated string' };
+	return { value: unescapeBody(text.slice(at + 1, close)), end: close + 1 };
+}
+
+function bracketStep(character: string, at: number): TokenStep | undefined {
+	if (character === '(') {
+		return { token: { kind: 'left' }, end: at + 1 };
+	}
+	if (character === ')') {
+		return { token: { kind: 'right' }, end: at + 1 };
+	}
+	return undefined;
+}
+
+function stringStep(text: string, at: number): TokenStep | TokenizedError {
+	const scanned = scanString(text, at);
+	return 'error' in scanned
+		? scanned
+		: { token: { kind: 'string', value: scanned.value }, end: scanned.end };
+}
+
+function numberStep(text: string, at: number): TokenStep | TokenizedError {
+	const scanned = scanNumber(text, at);
+	return 'error' in scanned
+		? scanned
+		: { token: { kind: 'number', value: scanned.value }, end: scanned.end };
+}
+
+/** Whitespace and bracket tokens, which never depend on the following text. */
+function simpleStep(text: string, at: number): TokenStep | TokenizedError | undefined {
+	if (isWhitespace(text[at])) {
+		return { end: at + 1 };
+	}
+	const bracket = bracketStep(text[at], at);
+	if (bracket !== undefined) {
+		return bracket;
+	}
+	return isQuote(text[at]) ? stringStep(text, at) : undefined;
+}
+
+/** A `true`/`false` identifier is a boolean token, case-insensitively. */
+function booleanToken(lower: string): Token | undefined {
+	return lower === 'true' || lower === 'false'
+		? { kind: 'boolean', value: lower === 'true' }
+		: undefined;
+}
+
+function startsIdentifier(text: string, at: number): boolean {
+	if (isIdentifierStart(text[at])) {
+		return true;
+	}
+	return text[at] === '/' && isIdentifierStart(text[at + 1] ?? '');
+}
+
+function identifierStep(text: string, at: number): TokenStep {
+	let end = at + 1;
+	while (end < text.length && isIdentifierPart(text[end])) {
+		end++;
+	}
+	const name = text.slice(at, end);
+	const lower = name.toLowerCase();
+	return { token: booleanToken(lower) ?? { kind: 'identifier', value: name }, end };
+}
+
+/** Numbers and identifiers, which consume a variable-length run. */
+function wordStep(text: string, at: number): TokenStep | TokenizedError | undefined {
+	if (startsNumber(text, at)) {
+		return numberStep(text, at);
+	}
+	if (startsIdentifier(text, at)) {
+		return identifierStep(text, at);
+	}
+	return undefined;
+}
+
+function operatorStep(text: string, at: number): TokenStep | TokenizedError {
+	const twoChar = TWO_CHAR_OPERATORS.get(text.slice(at, at + 2));
+	if (twoChar !== undefined) {
+		return { token: { kind: 'operator', value: twoChar }, end: at + 2 };
+	}
+	const single = SINGLE_CHAR_OPERATORS.get(text[at]);
+	if (single !== undefined) {
+		return { token: { kind: 'operator', value: single }, end: at + 1 };
+	}
+	return { error: `unexpected character "${text[at]}" at ${at + 1}` };
+}
+
+/** The next token at `at`, or the first unrecognised character's error. */
+function nextToken(text: string, at: number): TokenStep | TokenizedError {
+	const simple = simpleStep(text, at);
+	if (simple !== undefined) {
+		return simple;
+	}
+	const word = wordStep(text, at);
+	return word ?? operatorStep(text, at);
 }
 
 /** Splits a condition into tokens; any unrecognised character is an error. */
@@ -205,65 +376,14 @@ function tokenize(text: string): Tokenized | TokenizedError {
 	const tokens: Token[] = [];
 	let at = 0;
 	while (at < text.length) {
-		const character = text[at];
-		if (isWhitespace(character)) {
-			at++;
-			continue;
+		const step = nextToken(text, at);
+		if ('error' in step) {
+			return step;
 		}
-		if (character === '(') {
-			tokens.push({ kind: 'left' });
-			at++;
-			continue;
+		if (step.token !== undefined) {
+			tokens.push(step.token);
 		}
-		if (character === ')') {
-			tokens.push({ kind: 'right' });
-			at++;
-			continue;
-		}
-		if (character === '"' || character === "'") {
-			const scanned = scanString(text, at);
-			if ('error' in scanned) {
-				return scanned;
-			}
-			tokens.push({ kind: 'string', value: scanned.value });
-			at = scanned.end;
-			continue;
-		}
-		if (startsNumber(text, at)) {
-			const scanned = scanNumber(text, at);
-			if ('error' in scanned) {
-				return scanned;
-			}
-			tokens.push({ kind: 'number', value: scanned.value });
-			at = scanned.end;
-			continue;
-		}
-		if (isIdentifierStart(character) || (character === '/' && isIdentifierStart(text[at + 1] ?? ''))) {
-			let end = at + 1;
-			while (end < text.length && isIdentifierPart(text[end])) {
-				end++;
-			}
-			const name = text.slice(at, end);
-			if (name.toLowerCase() === 'true' || name.toLowerCase() === 'false') {
-				tokens.push({ kind: 'boolean', value: name.toLowerCase() === 'true' });
-			} else {
-				tokens.push({ kind: 'identifier', value: name });
-			}
-			at = end;
-			continue;
-		}
-		const pair = text.slice(at, at + 2);
-		if (pair === '==' || pair === '!=' || pair === '<=' || pair === '>=' || pair === '&&' || pair === '||') {
-			tokens.push({ kind: 'operator', value: pair });
-			at += 2;
-			continue;
-		}
-		if (character === '!' || character === '<' || character === '>') {
-			tokens.push({ kind: 'operator', value: character });
-			at++;
-			continue;
-		}
-		return { error: `unexpected character "${character}" at ${at + 1}` };
+		at = step.end;
 	}
 	return { tokens };
 }
@@ -279,6 +399,20 @@ function identifiersOf(tokens: readonly Token[]): string[] {
 		}
 	}
 	return out;
+}
+
+function isLiteralToken(token: Token): token is LiteralToken {
+	return token.kind === 'number' || token.kind === 'string' || token.kind === 'boolean';
+}
+
+function isEqualityOperator(operator: BinaryOperator | '!' | undefined): operator is '==' | '!=' {
+	return operator !== undefined && EQUALITY_OPERATORS.has(operator);
+}
+
+function isRelationalOperator(
+	operator: BinaryOperator | '!' | undefined
+): operator is '<' | '<=' | '>' | '>=' {
+	return operator !== undefined && RELATIONAL_OPERATORS.has(operator);
 }
 
 class Parser {
@@ -361,18 +495,22 @@ class Parser {
 		if (left === undefined) {
 			return undefined;
 		}
-		for (;;) {
-			const operator = this.peekOperator();
-			if (operator !== '==' && operator !== '!=') {
-				return left;
-			}
+		let operator = this.equalityOperator();
+		while (operator !== undefined) {
 			this.at++;
 			const right = this.parseRelational();
 			if (right === undefined) {
 				return undefined;
 			}
 			left = { kind: 'binary', operator, left, right };
+			operator = this.equalityOperator();
 		}
+		return left;
+	}
+
+	private equalityOperator(): '==' | '!=' | undefined {
+		const operator = this.peekOperator();
+		return isEqualityOperator(operator) ? operator : undefined;
 	}
 
 	private parseRelational(): Expression | undefined {
@@ -380,18 +518,22 @@ class Parser {
 		if (left === undefined) {
 			return undefined;
 		}
-		for (;;) {
-			const operator = this.peekOperator();
-			if (operator !== '<' && operator !== '<=' && operator !== '>' && operator !== '>=') {
-				return left;
-			}
+		let operator = this.relationalOperator();
+		while (operator !== undefined) {
 			this.at++;
 			const right = this.parseUnary();
 			if (right === undefined) {
 				return undefined;
 			}
 			left = { kind: 'binary', operator, left, right };
+			operator = this.relationalOperator();
 		}
+		return left;
+	}
+
+	private relationalOperator(): '<' | '<=' | '>' | '>=' | undefined {
+		const operator = this.peekOperator();
+		return isRelationalOperator(operator) ? operator : undefined;
 	}
 
 	private parseUnary(): Expression | undefined {
@@ -407,28 +549,40 @@ class Parser {
 		if (token === undefined) {
 			return this.fail('unexpected end of the expression');
 		}
-		if (token.kind === 'number' || token.kind === 'string' || token.kind === 'boolean') {
-			this.at++;
-			return { kind: 'literal', value: token.value };
-		}
+		return this.parseToken(token);
+	}
+
+	private parseToken(token: Token): Expression | undefined {
 		if (token.kind === 'identifier') {
 			this.at++;
 			return { kind: 'identifier', name: token.value };
 		}
+		if (isLiteralToken(token)) {
+			this.at++;
+			return { kind: 'literal', value: token.value };
+		}
 		if (token.kind === 'left') {
-			this.at++;
-			const inner = this.parseOr();
-			if (inner === undefined) {
-				return undefined;
-			}
-			const close = this.peek();
-			if (close === undefined || close.kind !== 'right') {
-				return this.fail('missing closing parenthesis');
-			}
-			this.at++;
-			return inner;
+			return this.parseGroup();
 		}
 		return this.fail('unexpected token');
+	}
+
+	private parseGroup(): Expression | undefined {
+		this.at++;
+		const inner = this.parseOr();
+		if (inner === undefined) {
+			return undefined;
+		}
+		return this.consumeClose(inner);
+	}
+
+	private consumeClose(inner: Expression): Expression | undefined {
+		const close = this.peek();
+		if (close === undefined || close.kind !== 'right') {
+			return this.fail('missing closing parenthesis');
+		}
+		this.at++;
+		return inner;
 	}
 }
 
@@ -451,6 +605,31 @@ function recordMissing(state: EvalState, name: string): void {
 	}
 }
 
+/** The last `/`-separated segment of a name. */
+function tailOf(name: string): string {
+	return name.slice(name.lastIndexOf('/') + 1);
+}
+
+/** All supplied values whose key has the requested tail, in map order. */
+function tailMatches(values: ReadonlyMap<string, ConditionValue>, tail: string): ConditionValue[] {
+	const matches: ConditionValue[] = [];
+	for (const [key, value] of values) {
+		if (tailOf(key) === tail) {
+			matches.push(value);
+		}
+	}
+	return matches;
+}
+
+/** The value for a tail only when exactly one supplied key has it. */
+function uniqueTailValue(
+	values: ReadonlyMap<string, ConditionValue>,
+	tail: string
+): ConditionValue | undefined {
+	const matches = tailMatches(values, tail);
+	return matches.length === 1 ? matches[0] : undefined;
+}
+
 /**
  * Exact key first, then the last `/` segment. A value entered as
  * `CANIPCORETYPE_SC` therefore matches a condition that uses a pasted full
@@ -466,25 +645,12 @@ function resolveValue(
 	if (exact !== undefined) {
 		return exact;
 	}
-	const tail = name.slice(name.lastIndexOf('/') + 1);
-	if (tail !== name) {
-		const byTail = values.get(tail);
-		if (byTail !== undefined) {
-			return byTail;
-		}
+	const tail = tailOf(name);
+	const byTail = tail === name ? undefined : values.get(tail);
+	if (byTail !== undefined) {
+		return byTail;
 	}
-	let found: ConditionValue | undefined;
-	let matches = 0;
-	for (const [key, value] of values) {
-		if (key.slice(key.lastIndexOf('/') + 1) === tail) {
-			found = value;
-			matches++;
-			if (matches > 1) {
-				break;
-			}
-		}
-	}
-	return matches === 1 ? found : undefined;
+	return uniqueTailValue(values, tail);
 }
 
 function lookup(state: EvalState, name: string): ConditionValue | undefined {
@@ -500,77 +666,192 @@ function describe(value: ConditionValue): string {
 	return typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'string';
 }
 
-function evaluate(expression: Expression, state: EvalState): ConditionValue | undefined {
-	switch (expression.kind) {
-		case 'literal':
-			return expression.value;
-		case 'identifier':
-			return lookup(state, expression.name);
-		case 'not': {
-			const operand = evaluate(expression.operand, state);
-			if (operand === undefined) {
-				return undefined;
-			}
-			if (typeof operand !== 'boolean') {
-				state.reasons.push(`operator ! requires a boolean, not a ${describe(operand)}`);
-				return undefined;
-			}
-			return !operand;
-		}
-		case 'binary': {
-			const left = evaluate(expression.left, state);
-			const right = evaluate(expression.right, state);
-			const operator = expression.operator;
-			if (operator === '&&' || operator === '||') {
-				if (left !== undefined && typeof left !== 'boolean') {
-					state.reasons.push(`operator ${operator} requires booleans`);
-					return undefined;
-				}
-				if (right !== undefined && typeof right !== 'boolean') {
-					state.reasons.push(`operator ${operator} requires booleans`);
-					return undefined;
-				}
-				if (operator === '&&') {
-					if (left === false || right === false) {
-						return false;
-					}
-					return left === undefined || right === undefined ? undefined : true;
-				}
-				if (left === true || right === true) {
-					return true;
-				}
-				return left === undefined || right === undefined ? undefined : false;
-			}
-			if (operator === '==' || operator === '!=') {
-				if (left === undefined || right === undefined) {
-					return undefined;
-				}
-				if (typeof left !== typeof right) {
-					state.reasons.push(`cannot compare ${describe(left)} with ${describe(right)} using ${operator}`);
-					return undefined;
-				}
-				const equal = left === right;
-				return operator === '==' ? equal : !equal;
-			}
-			if (left === undefined || right === undefined) {
-				return undefined;
-			}
-			if (typeof left !== 'number' || typeof right !== 'number') {
-				state.reasons.push(`operator ${operator} requires numbers`);
-				return undefined;
-			}
-			if (operator === '<') {
-				return left < right;
-			}
-			if (operator === '<=') {
-				return left <= right;
-			}
-			if (operator === '>') {
-				return left > right;
-			}
-			return left >= right;
-		}
+function isNumber(value: ConditionValue | undefined): value is number {
+	return typeof value === 'number';
+}
+
+function isBooleanOrUndefined(value: ConditionValue | undefined): boolean {
+	return value === undefined || typeof value === 'boolean';
+}
+
+function eitherUndefined(
+	left: ConditionValue | undefined,
+	right: ConditionValue | undefined
+): boolean {
+	return left === undefined || right === undefined;
+}
+
+function eitherFalse(left: ConditionValue | undefined, right: ConditionValue | undefined): boolean {
+	return left === false || right === false;
+}
+
+function eitherTrue(left: ConditionValue | undefined, right: ConditionValue | undefined): boolean {
+	return left === true || right === true;
+}
+
+function isLogicalOperator(operator: BinaryOperator): operator is '&&' | '||' {
+	return operator === '&&' || operator === '||';
+}
+
+function andResult(
+	left: ConditionValue | undefined,
+	right: ConditionValue | undefined
+): boolean | undefined {
+	if (eitherFalse(left, right)) {
+		return false;
 	}
+	if (eitherUndefined(left, right)) {
+		return undefined;
+	}
+	return true;
+}
+
+function orResult(
+	left: ConditionValue | undefined,
+	right: ConditionValue | undefined
+): boolean | undefined {
+	if (eitherTrue(left, right)) {
+		return true;
+	}
+	if (eitherUndefined(left, right)) {
+		return undefined;
+	}
+	return false;
+}
+
+function rejectBooleans(
+	state: EvalState,
+	operator: '&&' | '||'
+): undefined {
+	state.reasons.push(`operator ${operator} requires booleans`);
+	return undefined;
+}
+
+function evaluateLogical(
+	operator: '&&' | '||',
+	left: ConditionValue | undefined,
+	right: ConditionValue | undefined,
+	state: EvalState
+): ConditionValue | undefined {
+	if (!isBooleanOrUndefined(left)) {
+		return rejectBooleans(state, operator);
+	}
+	if (!isBooleanOrUndefined(right)) {
+		return rejectBooleans(state, operator);
+	}
+	return operator === '&&' ? andResult(left, right) : orResult(left, right);
+}
+
+function compareEquality(
+	operator: '==' | '!=',
+	left: ConditionValue,
+	right: ConditionValue,
+	state: EvalState
+): ConditionValue | undefined {
+	if (typeof left !== typeof right) {
+		state.reasons.push(
+			`cannot compare ${describe(left)} with ${describe(right)} using ${operator}`
+		);
+		return undefined;
+	}
+	const equal = left === right;
+	return operator === '==' ? equal : !equal;
+}
+
+function evaluateEquality(
+	operator: '==' | '!=',
+	left: ConditionValue | undefined,
+	right: ConditionValue | undefined,
+	state: EvalState
+): ConditionValue | undefined {
+	if (left === undefined || right === undefined) {
+		return undefined;
+	}
+	return compareEquality(operator, left, right, state);
+}
+
+function rejectNumbers(
+	operator: '<' | '<=' | '>' | '>=',
+	state: EvalState
+): undefined {
+	state.reasons.push(`operator ${operator} requires numbers`);
+	return undefined;
+}
+
+function compareOrdering(
+	operator: '<' | '<=' | '>' | '>=',
+	left: number,
+	right: number
+): boolean {
+	if (operator === '<') {
+		return left < right;
+	}
+	if (operator === '<=') {
+		return left <= right;
+	}
+	if (operator === '>') {
+		return left > right;
+	}
+	return left >= right;
+}
+
+function evaluateOrdering(
+	operator: '<' | '<=' | '>' | '>=',
+	left: ConditionValue | undefined,
+	right: ConditionValue | undefined,
+	state: EvalState
+): ConditionValue | undefined {
+	if (eitherUndefined(left, right)) {
+		return undefined;
+	}
+	if (!isNumber(left)) {
+		return rejectNumbers(operator, state);
+	}
+	if (!isNumber(right)) {
+		return rejectNumbers(operator, state);
+	}
+	return compareOrdering(operator, left, right);
+}
+
+function evaluateNot(operand: Expression, state: EvalState): ConditionValue | undefined {
+	const value = evaluate(operand, state);
+	if (value === undefined) {
+		return undefined;
+	}
+	if (typeof value !== 'boolean') {
+		state.reasons.push(`operator ! requires a boolean, not a ${describe(value)}`);
+		return undefined;
+	}
+	return !value;
+}
+
+function evaluateBinary(
+	expression: Extract<Expression, { kind: 'binary' }>,
+	state: EvalState
+): ConditionValue | undefined {
+	const left = evaluate(expression.left, state);
+	const right = evaluate(expression.right, state);
+	const operator = expression.operator;
+	if (isLogicalOperator(operator)) {
+		return evaluateLogical(operator, left, right, state);
+	}
+	if (isEqualityOperator(operator)) {
+		return evaluateEquality(operator, left, right, state);
+	}
+	return evaluateOrdering(operator, left, right, state);
+}
+
+function evaluate(expression: Expression, state: EvalState): ConditionValue | undefined {
+	if (expression.kind === 'literal') {
+		return expression.value;
+	}
+	if (expression.kind === 'identifier') {
+		return lookup(state, expression.name);
+	}
+	if (expression.kind === 'not') {
+		return evaluateNot(expression.operand, state);
+	}
+	return evaluateBinary(expression, state);
 }
 
 /** The supplied value for every referenced name that has one, keyed by name. */
@@ -588,37 +869,33 @@ function valuesOf(
 	return out;
 }
 
-/** Evaluates one condition against the supplied constant values. */
-export function evaluateSyscond(text: string, values: ReadonlyMap<string, ConditionValue>): ConditionResult {
-	const tokenized = tokenize(text);
-	if ('error' in tokenized) {
-		return { state: 'unknown', symbols: [], missing: [], values: {}, error: tokenized.error };
+/** The three-valued result of an evaluated expression. */
+function conditionStateOf(value: ConditionValue | undefined, state: EvalState): ConditionState {
+	if (value === true) {
+		return 'true';
 	}
-	const parser = new Parser(tokenized.tokens);
-	const expression = parser.parse();
-	if (expression === undefined) {
-		const symbols = identifiersOf(tokenized.tokens);
-		return {
-			state: 'unknown',
-			symbols,
-			missing: [],
-			values: valuesOf(symbols, values),
-			error: parser.failureMessage() ?? 'invalid expression',
-		};
+	if (value === false) {
+		return 'false';
 	}
+	recordNonBoolean(value, state);
+	return 'unknown';
+}
+
+/** A defined non-boolean result is itself a reason for `unknown`. */
+function recordNonBoolean(value: ConditionValue | undefined, state: EvalState): void {
+	if (value !== undefined && state.reasons.length === 0) {
+		state.reasons.push(`condition evaluates to a ${describe(value)}, not a boolean`);
+	}
+}
+
+/** Evaluates one parsed expression and builds its result. */
+function evaluateExpression(
+	expression: Expression,
+	values: ReadonlyMap<string, ConditionValue>
+): ConditionResult {
 	const state: EvalState = { values, symbols: [], missing: [], reasons: [] };
 	const value = evaluate(expression, state);
-	let conditionState: ConditionState;
-	if (value === true) {
-		conditionState = 'true';
-	} else if (value === false) {
-		conditionState = 'false';
-	} else {
-		conditionState = 'unknown';
-		if (value !== undefined && state.reasons.length === 0) {
-			state.reasons.push(`condition evaluates to a ${describe(value)}, not a boolean`);
-		}
-	}
+	const conditionState = conditionStateOf(value, state);
 	const result: ConditionResult = {
 		state: conditionState,
 		symbols: state.symbols,
@@ -629,6 +906,40 @@ export function evaluateSyscond(text: string, values: ReadonlyMap<string, Condit
 		result.error = state.reasons[0];
 	}
 	return result;
+}
+
+function tokenizeFailure(error: string): ConditionResult {
+	return { state: 'unknown', symbols: [], missing: [], values: {}, error };
+}
+
+/** A parse failure still reports every identifier the tokens referenced. */
+function parseFailure(
+	parser: Parser,
+	tokens: readonly Token[],
+	values: ReadonlyMap<string, ConditionValue>
+): ConditionResult {
+	const symbols = identifiersOf(tokens);
+	return {
+		state: 'unknown',
+		symbols,
+		missing: [],
+		values: valuesOf(symbols, values),
+		error: parser.failureMessage() ?? 'invalid expression',
+	};
+}
+
+/** Evaluates one condition against the supplied constant values. */
+export function evaluateSyscond(text: string, values: ReadonlyMap<string, ConditionValue>): ConditionResult {
+	const tokenized = tokenize(text);
+	if ('error' in tokenized) {
+		return tokenizeFailure(tokenized.error);
+	}
+	const parser = new Parser(tokenized.tokens);
+	const expression = parser.parse();
+	if (expression === undefined) {
+		return parseFailure(parser, tokenized.tokens, values);
+	}
+	return evaluateExpression(expression, values);
 }
 
 /** Removes one level of backslash escapes from a quoted string body. */
@@ -645,6 +956,35 @@ function unescapeBody(body: string): string {
 	return out;
 }
 
+const BOOLEAN_VALUE = /^(true|false)$/i;
+const HEX_VALUE = /^[+-]?0[xX][0-9a-fA-F]+$/;
+const DECIMAL_VALUE = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
+
+/** A hexadecimal literal's value, or `undefined` when the text is not one. */
+function hexValue(text: string): number | undefined {
+	if (!HEX_VALUE.test(text)) {
+		return undefined;
+	}
+	const negative = text.startsWith('-');
+	const body = text.replace(/^[+-]/, '');
+	const parsed = parseInt(body.slice(2), 16);
+	return negative ? -parsed : parsed;
+}
+
+/** True when the text is wrapped in matching single or double quotes. */
+function isQuoted(text: string): boolean {
+	if (text.length < 2) {
+		return false;
+	}
+	const quote = text[0];
+	return (quote === '"' || quote === "'") && text[text.length - 1] === quote;
+}
+
+/** A quoted literal without its quotes, otherwise the text itself. */
+function quotedOrText(text: string): string {
+	return isQuoted(text) ? unescapeBody(text.slice(1, -1)) : text;
+}
+
 /**
  * Classifies one raw value the user typed: boolean, number
  * (decimal or `0x` hexadecimal), quoted string, or the trimmed string itself.
@@ -652,23 +992,15 @@ function unescapeBody(body: string): string {
  */
 export function parseConditionValue(raw: string): ConditionValue {
 	const text = raw.trim();
-	if (/^(true|false)$/i.test(text)) {
+	if (BOOLEAN_VALUE.test(text)) {
 		return text.toLowerCase() === 'true';
 	}
-	if (/^[+-]?0[xX][0-9a-fA-F]+$/.test(text)) {
-		const negative = text.startsWith('-');
-		const body = text.replace(/^[+-]/, '');
-		const parsed = parseInt(body.slice(2), 16);
-		return negative ? -parsed : parsed;
+	const hex = hexValue(text);
+	if (hex !== undefined) {
+		return hex;
 	}
-	if (/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(text)) {
+	if (DECIMAL_VALUE.test(text)) {
 		return Number(text);
 	}
-	if (text.length >= 2) {
-		const quote = text[0];
-		if ((quote === '"' || quote === "'") && text[text.length - 1] === quote) {
-			return unescapeBody(text.slice(1, -1));
-		}
-	}
-	return text;
+	return quotedOrText(text);
 }

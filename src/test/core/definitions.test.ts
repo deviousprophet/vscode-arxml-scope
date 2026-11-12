@@ -88,6 +88,7 @@ suite('definitions (core)', () => {
 		assert.strictEqual(multiplicityText(0, 1), '0..1');
 		assert.strictEqual(multiplicityText(0, -1), '0..*');
 		assert.strictEqual(multiplicityText(2, undefined), '2..');
+		assert.strictEqual(multiplicityText(undefined, 1), '0..1', 'the lower bound defaults to zero');
 		assert.strictEqual(multiplicityText(undefined, undefined), undefined);
 	});
 

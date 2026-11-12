@@ -109,4 +109,121 @@ suite('editor row context menu', () => {
 		const item = /\.row-menu-item \{[\s\S]*?\n\}/.exec(style);
 		assert.ok(item && item[0].includes('var(--vscode-menu-foreground'));
 	});
+
+	test('ArrowDown and ArrowUp cycle focus and other keys are left alone', () => {
+		const dom = installMarkup(menuPage());
+		try {
+			mountContextMenu(dom.document.getElementById('tree'), {
+				selectItem: () => undefined,
+				rowElement: () => undefined,
+				onAction: () => undefined,
+			});
+			dom.document.getElementById('node-a').dispatchEvent(
+				new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+			);
+			const menu = dom.document.getElementById('row-menu');
+			const items = menu.querySelectorAll('.row-menu-item');
+			assert.strictEqual(dom.document.activeElement, items[0], 'the first item owns focus on open');
+			const down = new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+			menu.dispatchEvent(down);
+			assert.strictEqual(down.defaultPrevented, true);
+			assert.strictEqual(dom.document.activeElement, items[1]);
+			menu.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+			assert.strictEqual(dom.document.activeElement, items[0], 'the last item wraps to the first');
+			menu.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+			assert.strictEqual(dom.document.activeElement, items[1], 'the first item wraps to the last');
+			const other = new dom.window.KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true });
+			menu.dispatchEvent(other);
+			assert.strictEqual(other.defaultPrevented, false);
+			assert.strictEqual(dom.document.activeElement, items[1]);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('an outside pointerdown, scroll, resize and blur dismiss the menu', () => {
+		const dom = installMarkup(menuPage());
+		try {
+			mountContextMenu(dom.document.getElementById('tree'), {
+				selectItem: () => undefined,
+				rowElement: () => undefined,
+				onAction: () => undefined,
+			});
+			const menu = dom.document.getElementById('row-menu');
+			const open = (): void => {
+				dom.document.getElementById('node-a').dispatchEvent(
+					new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+				);
+			};
+			open();
+			dom.document.body.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true }));
+			assert.strictEqual(menu.hidden, true, 'an outside press dismisses the menu');
+			open();
+			menu.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true }));
+			assert.strictEqual(menu.hidden, false, 'a press inside the menu keeps it open');
+			dom.window.dispatchEvent(new dom.window.Event('scroll'));
+			assert.strictEqual(menu.hidden, true, 'a scroll dismisses the menu');
+			open();
+			dom.window.dispatchEvent(new dom.window.Event('resize'));
+			assert.strictEqual(menu.hidden, true, 'a resize dismisses the menu');
+			open();
+			dom.window.dispatchEvent(new dom.window.Event('blur'));
+			assert.strictEqual(menu.hidden, true, 'a window blur dismisses the menu');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a click outside an item or with an unknown action closes without reporting', () => {
+		const dom = installMarkup(menuPage());
+		try {
+			const actions: string[] = [];
+			mountContextMenu(dom.document.getElementById('tree'), {
+				selectItem: () => undefined,
+				rowElement: () => undefined,
+				onAction: (action: string, nodeId: string) => actions.push(`${action}:${nodeId}`),
+			});
+			dom.document.getElementById('node-a').dispatchEvent(
+				new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+			);
+			const menu = dom.document.getElementById('row-menu');
+			menu.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+			assert.strictEqual(menu.hidden, false, 'a click on the menu itself is not an item');
+			const extra = dom.document.createElement('button');
+			extra.className = 'row-menu-item';
+			extra.dataset.action = 'rename';
+			menu.appendChild(extra);
+			extra.click();
+			assert.strictEqual(menu.hidden, true, 'any item click closes the menu');
+			assert.deepStrictEqual(actions, [], 'an unknown action reaches no host callback');
+			extra.click();
+			assert.deepStrictEqual(actions, [], 'a hidden menu has already forgotten its node');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a hidden menu ignores Escape and scroll dismissal does not restore focus', () => {
+		const dom = installMarkup(menuPage());
+		try {
+			let focused = 0;
+			mountContextMenu(dom.document.getElementById('tree'), {
+				selectItem: () => undefined,
+				rowElement: () => ({ focus: () => focused++ }),
+				onAction: () => undefined,
+			});
+			const menu = dom.document.getElementById('row-menu');
+			const escape = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+			menu.dispatchEvent(escape);
+			assert.strictEqual(escape.defaultPrevented, false, 'a hidden menu handles no Escape');
+			dom.document.getElementById('node-a').dispatchEvent(
+				new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+			);
+			dom.window.dispatchEvent(new dom.window.Event('scroll'));
+			assert.strictEqual(menu.hidden, true);
+			assert.strictEqual(focused, 0, 'dismissal without a click does not restore row focus');
+		} finally {
+			dom.restore();
+		}
+	});
 });

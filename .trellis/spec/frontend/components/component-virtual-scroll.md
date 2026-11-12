@@ -45,7 +45,6 @@ class VirtualScroll {
     mount(): void;
     setContent(content: VirtualScrollContent): void;
     setContentWidth(width: number): void;
-    setPaneContentWidth(index: number, width: number): void;
     getContentElement(): HTMLElement;
     getPane(index: number): HTMLElement | undefined;
     getHorizontalBar(index: number): HTMLElement | undefined;
@@ -61,7 +60,6 @@ class VirtualScroll {
     clientWidth(): number;
     scrollToIndex(index: number, align?: 'auto' | 'start' | 'end'): void;
     render(): void;
-    destroy(): void;
 }
 ```
 

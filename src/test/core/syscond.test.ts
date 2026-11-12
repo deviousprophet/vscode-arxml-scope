@@ -167,6 +167,34 @@ suite('SW-SYSCOND evaluator (design §2)', () => {
 		assert.ok(empty.error);
 	});
 
+	test('characterization: scanner and evaluator error branches', () => {
+		const invalidHex = evaluateSyscond('(0x == 1)', values({}));
+		assert.strictEqual(invalidHex.state, 'unknown');
+		assert.strictEqual(invalidHex.error, 'invalid hexadecimal number at 2');
+
+		const trailingEscape = evaluateSyscond('("a\\', values({}));
+		assert.strictEqual(trailingEscape.state, 'unknown');
+		assert.strictEqual(trailingEscape.error, 'unterminated string');
+		assert.deepStrictEqual(trailingEscape.symbols, []);
+
+		const badCharacter = evaluateSyscond('A = 1', values({ A: 1 }));
+		assert.strictEqual(badCharacter.state, 'unknown');
+		assert.strictEqual(badCharacter.error, 'unexpected character "=" at 3');
+
+		const notBoolean = evaluateSyscond('!1', values({}));
+		assert.strictEqual(notBoolean.error, 'operator ! requires a boolean, not a number');
+
+		const logicalBoolean = evaluateSyscond('1 && true', values({}));
+		assert.strictEqual(logicalBoolean.error, 'operator && requires booleans');
+
+		const nonBoolean = evaluateSyscond('1', values({}));
+		assert.strictEqual(nonBoolean.state, 'unknown');
+		assert.strictEqual(nonBoolean.error, 'condition evaluates to a number, not a boolean');
+
+		assert.strictEqual(parseConditionValue('0x'), '0x', 'a bare prefix is not a number');
+		assert.strictEqual(parseConditionValue('+42'), 42);
+	});
+
 	test('design §2.4: parseConditionValue classifies one raw value', () => {
 		assert.strictEqual(parseConditionValue('true'), true);
 		assert.strictEqual(parseConditionValue('TRUE'), true);

@@ -94,41 +94,84 @@ export function allocatePanes(free: number, panes: readonly PaneSpec[]): Map<str
 		out.set(expanded[0].id, pool);
 		return out;
 	}
+	const remaining = claimSavedPanes(expanded, pool, minPane, out, n);
+	distributeFreshPanes(expanded.filter(isFreshPane), remaining, out);
+	scalePanesToFill(out, pool);
+	return out;
+}
+
+function hasUserPaneSize(pane: PaneSpec): pane is PaneSpec & { saved: number } {
+	return pane.user && pane.saved !== null;
+}
+
+function isFreshPane(pane: PaneSpec): boolean {
+	return !hasUserPaneSize(pane);
+}
+
+function claimSavedPanes(
+	expanded: readonly PaneSpec[],
+	pool: number,
+	minPane: number,
+	out: Map<string, number>,
+	count: number
+): number {
 	let remaining = pool;
 	for (const pane of expanded) {
-		if (!pane.user || pane.saved === null) {
+		if (!hasUserPaneSize(pane)) {
 			continue;
 		}
-		const others = n - out.size - 1;
-		const max = Math.max(minPane, remaining - others * minPane);
-		const want = Math.max(minPane, Math.min(pane.saved, max));
-		out.set(pane.id, want);
-		remaining -= want;
+		const others = count - out.size - 1;
+		const claimed = claimedPaneSize(pane.saved, remaining, others, minPane);
+		out.set(pane.id, claimed);
+		remaining -= claimed;
 	}
-	const fresh = expanded.filter((pane) => !(pane.user && pane.saved !== null));
+	return remaining;
+}
+
+function claimedPaneSize(saved: number, remaining: number, others: number, minPane: number): number {
+	const max = Math.max(minPane, remaining - others * minPane);
+	return Math.max(minPane, Math.min(saved, max));
+}
+
+function distributeFreshPanes(
+	fresh: readonly PaneSpec[],
+	remaining: number,
+	out: Map<string, number>
+): void {
 	const equal = fresh.length > 0 ? Math.floor(remaining / fresh.length) : 0;
 	for (let at = 0; at < fresh.length; at++) {
 		const want = at === fresh.length - 1 ? remaining : equal;
 		out.set(fresh[at].id, want);
 		remaining -= want;
 	}
+}
+
+function sumPaneSizes(out: Map<string, number>): number {
 	let sum = 0;
 	for (const px of out.values()) {
 		sum += px;
 	}
+	return sum;
+}
+
+function scalePaneSizes(out: Map<string, number>, pool: number, sum: number): void {
+	const scale = pool / sum;
+	const entries = [...out.entries()];
+	let used = 0;
+	for (let at = 0; at < entries.length; at++) {
+		const want = at === entries.length - 1 ? pool - used : Math.floor(entries[at][1] * scale);
+		out.set(entries[at][0], want);
+		used += want;
+	}
+}
+
+function scalePanesToFill(out: Map<string, number>, pool: number): void {
+	const sum = sumPaneSizes(out);
 	if (sum > 0 && sum < pool) {
 		// Every pane was user-set and their saved sizes under-fill the pool.
 		// Scale up proportionally; the last pane absorbs the rounding remainder.
-		const scale = pool / sum;
-		const entries = [...out.entries()];
-		let used = 0;
-		for (let at = 0; at < entries.length; at++) {
-			const want = at === entries.length - 1 ? pool - used : Math.floor(entries[at][1] * scale);
-			out.set(entries[at][0], want);
-			used += want;
-		}
+		scalePaneSizes(out, pool, sum);
 	}
-	return out;
 }
 
 /**
@@ -137,38 +180,67 @@ export function allocatePanes(free: number, panes: readonly PaneSpec[]): Map<str
  * `inspectorHidden` flag is ignored (not carried forward, not written back).
  */
 export function loadUiState(saved: unknown): SidebarUiState {
+	if (!isRecord(saved)) {
+		return defaultSidebarUiState();
+	}
+	return {
+		tab: readSavedTab(saved),
+		sidebarWidth: readSavedWidth(saved.sidebarWidth),
+		panes: collectSavedPanes(saved),
+		collapsed: readSavedCollapsed(saved.collapsed),
+	};
+}
+
+function defaultSidebarUiState(): SidebarUiState {
 	// The default width is a literal; DEFAULT_SIDEBAR_WIDTH is asserted to match
 	// in the tests.
-	const defaultWidth = 360;
-	const minWidth = 260;
-	const maxWidth = 900;
-	const state: SidebarUiState = {
+	return {
 		tab: 'details',
-		sidebarWidth: defaultWidth,
+		sidebarWidth: 360,
 		panes: {},
 		collapsed: [],
 	};
-	if (!saved || typeof saved !== 'object' || Array.isArray(saved)) {
-		return state;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readSavedTab(source: Record<string, unknown>): SidebarTab {
+	return source.tab === 'conditions' ? 'conditions' : 'details';
+}
+
+function readSavedWidth(value: unknown): number {
+	if (typeof value !== 'number' || !Number.isFinite(value)) {
+		return 360;
 	}
-	const source = saved as Record<string, unknown>;
-	if (source.tab === 'conditions') {
-		state.tab = 'conditions';
+	return Math.max(260, Math.min(900, Math.round(value)));
+}
+
+function savedPaneSize(value: unknown): number | null {
+	return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function collectSavedPanes(source: Record<string, unknown>): Record<string, number> {
+	const panes: Record<string, number> = {};
+	if (!isRecord(source.panes)) {
+		return panes;
 	}
-	if (typeof source.sidebarWidth === 'number' && Number.isFinite(source.sidebarWidth)) {
-		state.sidebarWidth = Math.max(minWidth, Math.min(maxWidth, Math.round(source.sidebarWidth)));
-	}
-	if (source.panes && typeof source.panes === 'object' && !Array.isArray(source.panes)) {
-		for (const [id, value] of Object.entries(source.panes as Record<string, unknown>)) {
-			if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-				state.panes[id] = value;
-			}
+	const entries = Object.entries(source.panes);
+	for (let at = 0; at < entries.length; at++) {
+		const size = savedPaneSize(entries[at][1]);
+		if (size !== null) {
+			panes[entries[at][0]] = size;
 		}
 	}
-	if (Array.isArray(source.collapsed)) {
-		state.collapsed = source.collapsed.filter((id): id is string => typeof id === 'string');
+	return panes;
+}
+
+function readSavedCollapsed(value: unknown): string[] {
+	if (!Array.isArray(value)) {
+		return [];
 	}
-	return state;
+	return value.filter((id): id is string => typeof id === 'string');
 }
 
 /**
@@ -188,7 +260,7 @@ let persistUiState: () => void = function () {};
 
 
 
-export function sidebarTabName(button: any): SidebarTab {
+function sidebarTabName(button: any): SidebarTab {
 	const controls = button.getAttribute('aria-controls');
 	return controls === 'sbp-conditions' ? 'conditions' : 'details';
 }
@@ -201,7 +273,7 @@ export function setSidebarPersistence(persist: () => void): void {
 	persistUiState = persist;
 }
 
-export function layoutSidebarPanes(): void {
+function layoutSidebarPanes(): void {
 	for (let at = 0; at < sidebarPaneViews.length; at++) {
 		sidebarPaneViews[at].layout();
 	}
@@ -211,36 +283,58 @@ export function getSidebarState(): SidebarUiState {
 	return uiState;
 }
 
-/** Show one tab panel and move the roving focus when a key asked for it. */
-export function activateSidebarTab(name: string, focusTab?: boolean): void {
-	const next = name === 'conditions' ? 'conditions' : 'details';
-	const changed = uiState.tab !== next;
-	uiState.tab = next;
-	const tabs = document.getElementById('side-tabs');
-	if (tabs) {
-		const buttons = tabs.querySelectorAll('.stab') as unknown as any[];
-		for (let at = 0; at < buttons.length; at++) {
-			const button = buttons[at];
-			const active = sidebarTabName(button) === next;
-			button.classList.toggle('active', active);
-			button.setAttribute('aria-selected', active ? 'true' : 'false');
-			button.tabIndex = active ? 0 : -1;
-			if (active && focusTab) {
-				button.focus();
-			}
-		}
+function normalizeSidebarTab(name: string): SidebarTab {
+	return name === 'conditions' ? 'conditions' : 'details';
+}
+
+function setTabButtonState(button: HTMLElement, active: boolean, focusTab?: boolean): void {
+	button.classList.toggle('active', active);
+	button.setAttribute('aria-selected', active ? 'true' : 'false');
+	button.tabIndex = active ? 0 : -1;
+	focusActiveTabButton(button, active, focusTab);
+}
+
+function focusActiveTabButton(button: HTMLElement, active: boolean, focusTab?: boolean): void {
+	if (active && focusTab) {
+		button.focus();
 	}
+}
+
+function activateTabButtons(next: SidebarTab, focusTab?: boolean): void {
+	const tabs = document.getElementById('side-tabs');
+	if (!tabs) {
+		return;
+	}
+	const buttons = tabs.querySelectorAll('.stab') as unknown as any[];
+	for (let at = 0; at < buttons.length; at++) {
+		setTabButtonState(buttons[at], sidebarTabName(buttons[at]) === next, focusTab);
+	}
+}
+
+function setTabPanelState(panel: HTMLElement, next: SidebarTab): void {
+	const active = panel.id === 'sbp-' + next;
+	panel.classList.toggle('active', active);
+	if (active) {
+		panel.removeAttribute('hidden');
+	} else {
+		panel.setAttribute('hidden', '');
+	}
+}
+
+function activateTabPanels(next: SidebarTab): void {
 	const panels = document.querySelectorAll('.sb-tab-panel') as unknown as any[];
 	for (let at = 0; at < panels.length; at++) {
-		const panel = panels[at];
-		const active = panel.id === 'sbp-' + next;
-		panel.classList.toggle('active', active);
-		if (active) {
-			panel.removeAttribute('hidden');
-		} else {
-			panel.setAttribute('hidden', '');
-		}
+		setTabPanelState(panels[at], next);
 	}
+}
+
+/** Show one tab panel and move the roving focus when a key asked for it. */
+export function activateSidebarTab(name: string, focusTab?: boolean): void {
+	const next = normalizeSidebarTab(name);
+	const changed = uiState.tab !== next;
+	uiState.tab = next;
+	activateTabButtons(next, focusTab);
+	activateTabPanels(next);
 	if (changed) {
 		persistUiState();
 	}
@@ -283,56 +377,161 @@ function displayedSidebarWidth(): number {
  * preference; mount/resize apply a clamped display width and leave the
  * preference alone.
  */
+function sidebarResizerVisible(resizer: HTMLElement | null): boolean {
+	return !resizer || resizer.offsetParent !== null;
+}
+
+function persistClampedSidebarWidth(width: number): void {
+	uiState.sidebarWidth = width;
+	persistUiState();
+}
+
 function applySidebarWidth(width: number, persist: boolean): void {
 	const sidebar = document.getElementById('sidebar');
 	const resizer = document.getElementById('sidebar-resizer');
-	if (!sidebar) {
-		return;
-	}
 	// At <=720px the layout stacks, #sidebar fills the width and the resizer is
 	// hidden. Leave the saved preference alone so widening the window restores it
 	// instead of baking in the strip-clamped width.
-	if (resizer && resizer.offsetParent === null) {
+	if (!sidebar || !sidebarResizerVisible(resizer)) {
 		return;
 	}
 	const clamped = clampSidebarWidth(width, window.innerWidth, sidebarTabsWidth());
 	sidebar.style.setProperty('--sidebar-w', clamped + 'px');
 	if (persist) {
-		uiState.sidebarWidth = clamped;
-		persistUiState();
+		persistClampedSidebarWidth(clamped);
 	}
 }
 
-export function onTabKeydown(event: any, button: any): void {
+/** Arrow/Home/End movement across the vertical tab strip. */
+const TAB_MOVES: ReadonlyMap<string, number> = new Map([
+	['ArrowUp', -1],
+	['ArrowLeft', -1],
+	['ArrowDown', 1],
+	['ArrowRight', 1],
+]);
+
+function onTabKeydown(event: any, button: any): void {
 	const tabs = document.getElementById('side-tabs');
 	if (!tabs) {
 		return;
 	}
 	const buttons = tabs.querySelectorAll('.stab') as unknown as any[];
+	const index = tabButtonIndex(buttons, button);
+	if (index < 0) {
+		return;
+	}
+	const next = nextTabIndex(event.key, index, buttons.length);
+	if (!isTabIndex(next, buttons)) {
+		return;
+	}
+	event.preventDefault();
+	activateSidebarTab(sidebarTabName(buttons[next]), true);
+}
+
+/** The pressed button's position, or -1 when it is not in the strip. */
+function tabButtonIndex(buttons: readonly unknown[], button: unknown): number {
 	let index = -1;
 	for (let at = 0; at < buttons.length; at++) {
 		if (buttons[at] === button) {
 			index = at;
 		}
 	}
-	if (index < 0) {
+	return index;
+}
+
+/** Wraps the arrow steps and maps Home/End; -1 means no movement. */
+function nextTabIndex(key: string, index: number, count: number): number {
+	if (key === 'Home') {
+		return 0;
+	}
+	if (key === 'End') {
+		return count - 1;
+	}
+	const step = TAB_MOVES.get(key);
+	return step === undefined ? -1 : (index + step + count) % count;
+}
+
+/** True for a real position in the tab strip. */
+function isTabIndex(index: number, buttons: readonly unknown[]): boolean {
+	return index >= 0 && buttons[index] !== undefined;
+}
+
+function sectionPaneId(section: HTMLElement): string | undefined {
+	return section.dataset ? section.dataset.paneId : undefined;
+}
+
+function sectionParts(section: HTMLElement): { head: HTMLElement; body: HTMLElement } | null {
+	const head = section.querySelector<HTMLElement>('.sb-section-head');
+	const body = section.querySelector<HTMLElement>('.sb-body');
+	return head && body ? { head: head, body: body } : null;
+}
+
+type HeadKeyAction = 'toggle' | 'collapse' | 'expand';
+
+function isHeadToggleKey(key: string): boolean {
+	return key === 'Enter' || key === ' ';
+}
+
+function headArrowAction(key: string): 'collapse' | 'expand' | null {
+	if (key === 'ArrowLeft') {
+		return 'collapse';
+	}
+	if (key === 'ArrowRight') {
+		return 'expand';
+	}
+	return null;
+}
+
+function headKeyAction(key: string): HeadKeyAction | null {
+	if (isHeadToggleKey(key)) {
+		return 'toggle';
+	}
+	return headArrowAction(key);
+}
+
+function applyHeadKeyAction(view: SidebarPaneView, id: string, action: HeadKeyAction): void {
+	if (action === 'toggle') {
+		view.setCollapsed(id, !view.isCollapsed(id), true);
 		return;
 	}
-	let next = -1;
-	if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-		next = index === 0 ? buttons.length - 1 : index - 1;
-	} else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-		next = index === buttons.length - 1 ? 0 : index + 1;
-	} else if (event.key === 'Home') {
-		next = 0;
-	} else if (event.key === 'End') {
-		next = buttons.length - 1;
+	view.setCollapsed(id, action === 'collapse', true);
+}
+
+function isSidebarSection(node: Element | null): node is Element & { dataset: DOMStringMap } {
+	return !!node && node.classList.contains('sb-section');
+}
+
+function siblingPaneId(node: Element | null): string | undefined {
+	if (!isSidebarSection(node)) {
+		return undefined;
 	}
-	if (next < 0 || !buttons[next]) {
-		return;
+	return node.dataset.paneId;
+}
+
+function siblingPanePair(sash: HTMLElement): { aboveId: string; belowId: string } | null {
+	const aboveId = siblingPaneId(sash.previousElementSibling);
+	const belowId = siblingPaneId(sash.nextElementSibling);
+	return aboveId && belowId ? { aboveId: aboveId, belowId: belowId } : null;
+}
+
+function bothPanesExpanded(view: SidebarPaneView, pair: { aboveId: string; belowId: string }): boolean {
+	return !view.isCollapsed(pair.aboveId) && !view.isCollapsed(pair.belowId);
+}
+
+function sashKeyboardDelta(key: string): number {
+	if (key === 'ArrowUp') {
+		return -SASH_STEP;
 	}
-	event.preventDefault();
-	activateSidebarTab(sidebarTabName(buttons[next]), true);
+	if (key === 'ArrowDown') {
+		return SASH_STEP;
+	}
+	return 0;
+}
+
+function persistSashPair(view: SidebarPaneView, aboveId: string, belowId: string): void {
+	view.persistPane(aboveId);
+	view.persistPane(belowId);
+	persistUiState();
 }
 
 /**
@@ -355,30 +554,45 @@ export class SidebarPaneView {
 		this.collapsed = new Map();
 		this.collapseAnimating = false;
 		this.observer = null;
-		const nodes = root.querySelectorAll('.sb-section') as unknown as any[];
-		for (let at = 0; at < nodes.length; at++) {
-			const section = nodes[at];
-			const id = section.dataset ? section.dataset.paneId : undefined;
-			const head = section.querySelector('.sb-section-head');
-			const body = section.querySelector('.sb-body');
-			if (!id || !head || !body) {
-				continue;
-			}
-			const saved = this.savedPane(id);
-			const collapsed = uiState.collapsed.indexOf(id) >= 0;
-			this.sections.push({ id: id, section: section, head: head, body: body });
-			this.sizing.set(id, { saved: saved, px: HEADER_H, user: saved !== null });
-			this.collapsed.set(id, collapsed);
-			section.classList.toggle('collapsed', collapsed);
-			head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-			this.bindHead(section, head, id);
-		}
+		this.bindSections();
 		this.bindSashes();
-		if (typeof ResizeObserver !== 'undefined') {
-			this.observer = new ResizeObserver(() => this.layout());
-			this.observer.observe(root);
-		}
+		this.observeResize();
 		this.layout();
+	}
+
+	bindSections(): void {
+		const nodes = this.root.querySelectorAll('.sb-section') as unknown as any[];
+		for (let at = 0; at < nodes.length; at++) {
+			this.bindSection(nodes[at]);
+		}
+	}
+
+	bindSection(section: HTMLElement): void {
+		const id = sectionPaneId(section);
+		const parts = sectionParts(section);
+		if (!id || !parts) {
+			return;
+		}
+		this.registerSection(id, section, parts.head, parts.body);
+	}
+
+	registerSection(id: string, section: HTMLElement, head: HTMLElement, body: HTMLElement): void {
+		const saved = this.savedPane(id);
+		const collapsed = uiState.collapsed.indexOf(id) >= 0;
+		this.sections.push({ id: id, section: section, head: head, body: body });
+		this.sizing.set(id, { saved: saved, px: HEADER_H, user: saved !== null });
+		this.collapsed.set(id, collapsed);
+		section.classList.toggle('collapsed', collapsed);
+		head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+		this.bindHead(section, head, id);
+	}
+
+	observeResize(): void {
+		if (typeof ResizeObserver === 'undefined') {
+			return;
+		}
+		this.observer = new ResizeObserver(() => this.layout());
+		this.observer.observe(this.root);
 	}
 
 	savedPane(id: string): number | null {
@@ -421,7 +635,7 @@ export class SidebarPaneView {
 	}
 
 	bindHead(section: any, head: any, id: string): void {
-		const view = this;
+		const view: SidebarPaneView = this;
 		head.addEventListener('click', function (event: any) {
 			if (event.target instanceof Element && event.target.closest('.sb-section-actions')) {
 				return;
@@ -432,16 +646,12 @@ export class SidebarPaneView {
 			if (event.target !== head) {
 				return;
 			}
-			if (event.key === 'Enter' || event.key === ' ') {
-				event.preventDefault();
-				view.setCollapsed(id, !view.isCollapsed(id), true);
-			} else if (event.key === 'ArrowLeft') {
-				event.preventDefault();
-				view.setCollapsed(id, true, true);
-			} else if (event.key === 'ArrowRight') {
-				event.preventDefault();
-				view.setCollapsed(id, false, true);
+			const action = headKeyAction(event.key);
+			if (!action) {
+				return;
 			}
+			event.preventDefault();
+			applyHeadKeyAction(view, id, action);
 		});
 	}
 
@@ -450,41 +660,40 @@ export class SidebarPaneView {
 		if (!entry) {
 			return;
 		}
-		const was = this.isCollapsed(id);
-		if (was !== collapsed) {
-			this.collapsed.set(id, collapsed);
-			entry.section.classList.toggle('collapsed', collapsed);
-			entry.head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-			// Drop a stale no-transition class from the previous layout so a
-			// collapse/expand always animates; other layout passes stay instant.
-			this.root.classList.remove('no-transition');
-			this.collapseAnimating = true;
-			this.layout();
-			this.collapseAnimating = false;
-			if (persist) {
-				this.persistCollapsed(id, collapsed);
-			}
-		} else if (persist) {
+		if (this.isCollapsed(id) !== collapsed) {
+			this.applyCollapsed(id, entry, collapsed);
+		}
+		if (persist) {
 			this.persistCollapsed(id, collapsed);
 		}
 	}
 
+	applyCollapsed(
+		id: string,
+		entry: { section: HTMLElement; head: HTMLElement; body: HTMLElement },
+		collapsed: boolean
+	): void {
+		this.collapsed.set(id, collapsed);
+		entry.section.classList.toggle('collapsed', collapsed);
+		entry.head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+		// Drop a stale no-transition class from the previous layout so a
+		// collapse/expand always animates; other layout passes stay instant.
+		this.root.classList.remove('no-transition');
+		this.collapseAnimating = true;
+		this.layout();
+		this.collapseAnimating = false;
+	}
+
 	neighbors(sash: any): { aboveId: string; belowId: string } | null {
-		const above = sash.previousElementSibling;
-		const below = sash.nextElementSibling;
-		const aboveId = above && above.classList && above.classList.contains('sb-section') ? above.dataset.paneId : undefined;
-		const belowId = below && below.classList && below.classList.contains('sb-section') ? below.dataset.paneId : undefined;
-		if (!aboveId || !belowId || this.isCollapsed(aboveId) || this.isCollapsed(belowId)) {
-			return null;
-		}
-		return { aboveId: aboveId, belowId: belowId };
+		const pair = siblingPanePair(sash);
+		return pair && bothPanesExpanded(this, pair) ? pair : null;
 	}
 
 	bindSashes(): void {
 		const sashes = this.root.querySelectorAll('.sb-pane-sash') as unknown as any[];
 		for (let at = 0; at < sashes.length; at++) {
 			const sash = sashes[at];
-			const view = this;
+			const view: SidebarPaneView = this;
 			sash.addEventListener('mousedown', function (event: any) {
 				if (event.button !== 0) {
 					return;
@@ -529,15 +738,13 @@ export class SidebarPaneView {
 				}
 				// Arrow keys move the separator itself (the WAI-ARIA window-splitter
 				// convention): ArrowUp moves the sash up, so the pane above shrinks.
-				const delta = event.key === 'ArrowUp' ? -SASH_STEP : event.key === 'ArrowDown' ? SASH_STEP : 0;
+				const delta = sashKeyboardDelta(event.key);
 				if (delta === 0) {
 					return;
 				}
 				event.preventDefault();
 				view.shiftPane(pair.aboveId, pair.belowId, delta);
-				view.persistPane(pair.aboveId);
-				view.persistPane(pair.belowId);
-				persistUiState();
+				persistSashPair(view, pair.aboveId, pair.belowId);
 			});
 			sash.addEventListener('dblclick', function () {
 				const pair = view.neighbors(sash);
@@ -609,41 +816,56 @@ export class SidebarPaneView {
 			// their bases and are laid out when the tab is shown.
 			return;
 		}
-		if (!this.collapseAnimating) {
+		const instant = !this.collapseAnimating;
+		if (instant) {
 			this.root.classList.add('no-transition');
 		}
-		const ids = [];
-		const specs = [];
-		let collapsedCount = 0;
-		for (let at = 0; at < this.sections.length; at++) {
-			const id = this.sections[at].id;
-			const sizing = this.sizing.get(id);
-			const collapsed = this.collapsed.get(id) === true;
-			ids.push(id);
-			if (collapsed) {
-				collapsedCount++;
-			}
-			specs.push({ id: id, saved: sizing.saved, collapsed: collapsed, user: sizing.user });
-		}
+		const plan = layoutSpecs(this);
 		const sashCount = this.root.querySelectorAll('.sb-pane-sash').length;
-		const free = Math.max(0, height - collapsedCount * HEADER_H - sashCount * SASH_H);
-		const allocated = allocatePanes(free, specs);
-		for (let at = 0; at < ids.length; at++) {
-			const id = ids[at];
-			const entry = this.sections[at];
-			const collapsed = this.collapsed.get(id) === true;
-			const px = collapsed ? HEADER_H : allocated.get(id) || HEADER_H;
-			this.sizing.get(id).px = px;
-			entry.section.style.setProperty('--sb-pane-h', px + 'px');
-		}
+		const free = Math.max(0, height - plan.collapsedCount * HEADER_H - sashCount * SASH_H);
+		applyPaneAllocation(this, plan.ids, allocatePanes(free, plan.specs));
 		this.paintSashStates();
-		if (!this.collapseAnimating) {
-			const root = this.root;
-			requestAnimationFrame(function () {
-				root.classList.remove('no-transition');
-			});
+		if (instant) {
+			removeNoTransitionNextFrame(this.root);
 		}
 	}
+}
+
+function layoutSpecs(view: SidebarPaneView): { ids: string[]; specs: PaneSpec[]; collapsedCount: number } {
+	const ids: string[] = [];
+	const specs: PaneSpec[] = [];
+	let collapsedCount = 0;
+	for (let at = 0; at < view.sections.length; at++) {
+		const spec = paneLayoutSpec(view, view.sections[at]);
+		ids.push(spec.id);
+		if (spec.collapsed) {
+			collapsedCount++;
+		}
+		specs.push(spec);
+	}
+	return { ids: ids, specs: specs, collapsedCount: collapsedCount };
+}
+
+function paneLayoutSpec(view: SidebarPaneView, section: HTMLElement): PaneSpec {
+	const sizing = view.sizing.get(section.id);
+	const collapsed = view.collapsed.get(section.id) === true;
+	return { id: section.id, saved: sizing.saved, collapsed: collapsed, user: sizing.user };
+}
+
+function applyPaneAllocation(view: SidebarPaneView, ids: readonly string[], allocated: Map<string, number>): void {
+	for (let at = 0; at < ids.length; at++) {
+		const id = ids[at];
+		const collapsed = view.collapsed.get(id) === true;
+		const px = collapsed ? HEADER_H : allocated.get(id) || HEADER_H;
+		view.sizing.get(id).px = px;
+		view.sections[at].section.style.setProperty('--sb-pane-h', px + 'px');
+	}
+}
+
+function removeNoTransitionNextFrame(root: HTMLElement): void {
+	requestAnimationFrame(function () {
+		root.classList.remove('no-transition');
+	});
 }
 
 function bindSidebarResizer(resizer: any): void {
@@ -692,36 +914,54 @@ function bindSidebarResizer(resizer: any): void {
 	});
 }
 
-/** Bind the static shell and apply the saved tab, width, panes and sections. */
-export function mountSidebarShell(): void {
+function sidebarShellTargets(): { resizer: HTMLElement; tabs: HTMLElement } | null {
 	const sidebar = document.getElementById('sidebar');
 	const resizer = document.getElementById('sidebar-resizer');
 	const tabs = document.getElementById('side-tabs');
-	if (!sidebar || !resizer || !tabs) {
-		return;
-	}
+	return sidebar && resizer && tabs ? { resizer: resizer, tabs: tabs } : null;
+}
+
+function mountSidebarPaneViews(): void {
 	sidebarPaneViews = [];
 	const views = document.querySelectorAll('.sb-pane-view') as unknown as any[];
 	for (let at = 0; at < views.length; at++) {
 		sidebarPaneViews.push(new SidebarPaneView(views[at]));
 	}
-	applySidebarWidth(uiState.sidebarWidth, false);
+}
+
+function bindSidebarTabButton(button: HTMLElement): void {
+	button.addEventListener('click', function () {
+		activateSidebarTab(sidebarTabName(button), false);
+	});
+	button.addEventListener('keydown', function (event: KeyboardEvent) {
+		onTabKeydown(event, button);
+	});
+}
+
+function bindSidebarTabButtons(tabs: HTMLElement): void {
 	const buttons = tabs.querySelectorAll('.stab') as unknown as any[];
 	for (let at = 0; at < buttons.length; at++) {
-		const button = buttons[at];
-		button.addEventListener('click', function () {
-			activateSidebarTab(sidebarTabName(button), false);
-		});
-		button.addEventListener('keydown', function (event: any) {
-			onTabKeydown(event, button);
-		});
+		bindSidebarTabButton(buttons[at]);
 	}
+}
+
+function onSidebarWindowResize(): void {
+	applySidebarWidth(uiState.sidebarWidth, false);
+	layoutSidebarPanes();
+}
+
+/** Bind the static shell and apply the saved tab, width, panes and sections. */
+export function mountSidebarShell(): void {
+	const targets = sidebarShellTargets();
+	if (!targets) {
+		return;
+	}
+	mountSidebarPaneViews();
+	applySidebarWidth(uiState.sidebarWidth, false);
+	bindSidebarTabButtons(targets.tabs);
 	activateSidebarTab(uiState.tab, false);
-	bindSidebarResizer(resizer);
+	bindSidebarResizer(targets.resizer);
 	// A window resize can make a saved width too wide for the remaining room;
 	// re-clamp it (without a write) and re-lay the panes out.
-	window.addEventListener('resize', function () {
-		applySidebarWidth(uiState.sidebarWidth, false);
-		layoutSidebarPanes();
-	});
+	window.addEventListener('resize', onSidebarWindowResize);
 }

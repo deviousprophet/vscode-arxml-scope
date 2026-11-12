@@ -129,9 +129,13 @@ export class DiffView {
 	}
 
 	render(viewport: DocumentTreeViewport, force: boolean): void {
-		const lefts = viewport.lefts && viewport.lefts.length > 0 ? viewport.lefts : [viewport.left, viewport.left];
+		const lefts = viewportOffsets(viewport);
 		this.left.render({ ...viewport, left: lefts[0] ?? 0 }, force);
-		this.right.render({ ...viewport, left: lefts[1] ?? lefts[0] ?? 0 }, force);
+		this.right.render({ ...viewport, left: rightPaneOffset(lefts) }, force);
+		this.emitViewport(viewport);
+	}
+
+	private emitViewport(viewport: DocumentTreeViewport): void {
 		if (this.callbacks.onViewportChange) {
 			this.callbacks.onViewportChange(viewport);
 		}
@@ -157,30 +161,21 @@ export class DiffView {
 		return this.scroll ? this.scroll.getVisibleRange() : [0, 0];
 	}
 
-	clientHeight(): number {
-		return this.scroll ? this.scroll.clientHeight() : 0;
-	}
-
-	clientWidth(): number {
-		return this.scroll ? this.scroll.clientWidth() : 0;
-	}
-
 	scrollToIndex(index: number, align?: 'auto' | 'start' | 'end'): void {
 		this.scroll?.scrollToIndex(index, align);
 	}
 
-	getWindowElement(): any {
-		return this.left ? this.left.getWindowElement() : undefined;
-	}
-
 	/** Match the fixed title strip's width to the vertical scrollbar's gutter. */
 	syncScrollbarWidth(): void {
-		const body = typeof document === 'undefined' ? undefined : document.getElementById('diff-body');
+		const body = diffBodyElement();
 		if (!body || !body.style) {
 			return;
 		}
-		const width = this.scroll ? this.scroll.verticalScrollbarWidth() : 0;
-		body.style.setProperty('--diff-scrollbar-width', width + 'px');
+		body.style.setProperty('--diff-scrollbar-width', this.scrollbarWidth() + 'px');
+	}
+
+	private scrollbarWidth(): number {
+		return this.scroll ? this.scroll.verticalScrollbarWidth() : 0;
 	}
 
 	/** Swap resets horizontal only; the vertical position is preserved. */
@@ -195,9 +190,34 @@ export class DiffView {
 		if (!element) {
 			return;
 		}
-		const text = header && header.title ? header.title : '';
+		const text = headerTitle(header);
 		element.textContent = text;
-		element.title = header && header.titleTitle ? header.titleTitle : text;
+		element.title = headerTitleTooltip(header, text);
 		element.hidden = text === '';
 	}
+}
+
+/** The title text of a pane header. */
+function headerTitle(header: DocumentTreeHeader): string {
+	return header && header.title ? header.title : '';
+}
+
+/** The tooltip of a pane header; the title text is the fallback. */
+function headerTitleTooltip(header: DocumentTreeHeader, text: string): string {
+	return header && header.titleTitle ? header.titleTitle : text;
+}
+
+/** The two pane offsets; a single offset mirrors to both panes. */
+function viewportOffsets(viewport: DocumentTreeViewport): readonly number[] {
+	return viewport.lefts && viewport.lefts.length > 0 ? viewport.lefts : [viewport.left, viewport.left];
+}
+
+/** The right pane offset, falling back to the left pane's. */
+function rightPaneOffset(lefts: readonly number[]): number {
+	return lefts[1] ?? lefts[0] ?? 0;
+}
+
+/** The fixed chrome body whose width token follows the scrollbar gutter. */
+function diffBodyElement(): HTMLElement | null | undefined {
+	return typeof document === 'undefined' ? undefined : document.getElementById('diff-body');
 }

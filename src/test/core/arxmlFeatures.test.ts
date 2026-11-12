@@ -37,6 +37,17 @@ suite('ARXML text features (core)', () => {
 		assert.ok(first.range.end >= first.selectionRange.end);
 	});
 
+	test('a token match includes both range ends and misses outside them', () => {
+		const model = scanFixture('basic.arxml');
+		const target = refTokens(model).find((token) => token.kind === 'target');
+		assert.ok(target);
+		assert.strictEqual(refTokenAt(model, target!.range.start)?.rawPath, target!.rawPath);
+		assert.strictEqual(refTokenAt(model, target!.range.end)?.rawPath, target!.rawPath);
+		assert.strictEqual(refTokenAt(model, target!.range.start - 1), undefined);
+		assert.strictEqual(refTokenAt(model, -1), undefined);
+		assert.strictEqual(refTokenAt(model, Number.MAX_SAFE_INTEGER), undefined);
+	});
+
 	test('the node index carries the AR path of a nested container', () => {
 		const model = scanFixture('index/values.arxml');
 		const index = buildNodeIndex(model);

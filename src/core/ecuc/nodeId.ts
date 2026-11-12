@@ -51,13 +51,7 @@ export function buildNodeIndex(model: EcucDocumentModel): NodeIndex {
 	const byId = new Map<string, NodeEntry>();
 	const ids = new WeakMap<EcucNode, string>();
 	const ordinals = new Map<string, number>();
-	const pathByRange = new Map<string, string>();
-	for (const [path, range] of model.pathIndex) {
-		const key = `${range.start}:${range.end}`;
-		if (!pathByRange.has(key)) {
-			pathByRange.set(key, path);
-		}
-	}
+	const pathByRange = pathRangesOf(model.pathIndex);
 
 	const add = (node: EcucNode, id: string, label: string, range: Range): void => {
 		const path = pathByRange.get(`${range.start}:${range.end}`);
@@ -90,11 +84,7 @@ export function buildNodeIndex(model: EcucDocumentModel): NodeIndex {
 	};
 
 	for (const module of model.modules) {
-		const id = `module:${module.definitionRef}|${module.shortName}#${ordinal(
-			'',
-			'module',
-			`${module.definitionRef}|${module.shortName}`
-		)}`;
+		const id = moduleId(module, ordinal);
 		add(module, id, module.shortName, module.range);
 		for (const container of module.containers) {
 			visitContainer(container);
@@ -103,7 +93,32 @@ export function buildNodeIndex(model: EcucDocumentModel): NodeIndex {
 
 	return {
 		byId,
-		sorted: [...byId.values()].sort((a, b) => a.range.start - b.range.start || b.range.end - a.range.end),
+		sorted: sortedEntries(byId),
 		idOf: (node) => ids.get(node),
 	};
+}
+
+/** First path that indexed a range; later duplicate ranges are ignored. */
+function pathRangesOf(pathIndex: Map<string, Range>): Map<string, string> {
+	const pathByRange = new Map<string, string>();
+	for (const [path, range] of pathIndex) {
+		const key = `${range.start}:${range.end}`;
+		if (!pathByRange.has(key)) {
+			pathByRange.set(key, path);
+		}
+	}
+	return pathByRange;
+}
+
+/** The module's id: its definition and short name, plus a declaration ordinal. */
+function moduleId(module: ModuleNode, ordinal: (owner: string, kind: string, name: string) => number): string {
+	const name = `${module.definitionRef}|${module.shortName}`;
+	return `module:${name}#${ordinal('', 'module', name)}`;
+}
+
+/** Entries by range start, then the widest range first. */
+function sortedEntries(byId: Map<string, NodeEntry>): NodeEntry[] {
+	return [...byId.values()].sort(
+		(a, b) => a.range.start - b.range.start || b.range.end - a.range.end
+	);
 }

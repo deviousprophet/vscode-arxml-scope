@@ -274,10 +274,8 @@ export function buildDiffDocument(
   headers?: { left: DiffHeader; right: DiffHeader },
   options?: { semanticMatching?: boolean }
 ): DiffDocument;
-export function diffRows(leftRows: readonly EcucRow[], rightRows: readonly EcucRow[], leftRanges?: RangeLookup, rightRanges?: RangeLookup): DiffRow[];
 export function diffVisibility(rows: readonly DiffRow[], changesOnly: boolean, contextLines?: number): boolean[];
 export function flattenDiffDocument(rows: readonly DiffRow[], options?: { collapsed?: ReadonlySet<string>; visible?: readonly boolean[]; expandedGaps?: ReadonlySet<string>; moduleGaps?: boolean }): DiffDisplayRow[];
-export function summarizeDiff(rows: readonly DiffRow[]): DiffSummary;
 export function nextChangeIndex(rows: readonly DiffRow[], visible: readonly boolean[] | undefined, from: number, direction: 1 | -1): number;
 export function disambiguatedLabels(a: FileLabel, b: FileLabel): [string, string];
 export function compareTitle(left: FileLabel, right: FileLabel): string;

@@ -22,23 +22,44 @@ function row(rows: readonly EcucRow[], label: string): EcucRow {
 	return found;
 }
 
+function assertTypeAndRange(candidate: EcucRow, type: string, range: string): void {
+	assert.strictEqual(candidate.definition?.type, type);
+	assert.strictEqual(candidate.definition?.range, range);
+}
+
+function assertDefaultAndDescription(candidate: EcucRow, defaultValue: string, description: string): void {
+	assert.strictEqual(candidate.definition?.defaultValue, defaultValue);
+	assert.strictEqual(candidate.definition?.description, description);
+}
+
+function assertTypeAndMultiplicity(candidate: EcucRow, type: string, multiplicity: string): void {
+	assert.strictEqual(candidate.definition?.type, type);
+	assert.strictEqual(candidate.definition?.multiplicity, multiplicity);
+}
+
+function assertParameterRows(rows: readonly EcucRow[]): void {
+	const timeout = row(rows, 'TimeoutSeconds');
+	assertTypeAndRange(timeout, 'Integer', '0 .. 65535');
+	assertDefaultAndDescription(timeout, '30', 'Timeout in seconds.');
+}
+
+function assertContainerRow(rows: readonly EcucRow[]): void {
+	const main = row(rows, 'Main');
+	assertTypeAndMultiplicity(main, 'Container', '1');
+}
+
+function assertModuleRow(rows: readonly EcucRow[]): void {
+	const module = rows.find((candidate) => candidate.kind === 'module');
+	assert.ok(module);
+	assertTypeAndMultiplicity(module, 'Module', '0..1');
+}
+
 suite('definition rows (core)', () => {
 	test('a resolved definition enriches parameter, container and module rows', () => {
 		const { rows } = buildRows(model, { definitions: lookup });
-		const timeout = row(rows, 'TimeoutSeconds');
-		assert.strictEqual(timeout.definition?.type, 'Integer');
-		assert.strictEqual(timeout.definition?.range, '0 .. 65535');
-		assert.strictEqual(timeout.definition?.defaultValue, '30');
-		assert.strictEqual(timeout.definition?.description, 'Timeout in seconds.');
-
-		const main = row(rows, 'Main');
-		assert.strictEqual(main.definition?.type, 'Container');
-		assert.strictEqual(main.definition?.multiplicity, '1');
-
-		const module = rows.find((candidate) => candidate.kind === 'module');
-		assert.ok(module);
-		assert.strictEqual(module.definition?.type, 'Module');
-		assert.strictEqual(module.definition?.multiplicity, '0..1');
+		assertParameterRows(rows);
+		assertContainerRow(rows);
+		assertModuleRow(rows);
 	});
 
 	test('a resolved reference definition adds its destination and multiplicity', () => {

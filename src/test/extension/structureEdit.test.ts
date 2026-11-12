@@ -19,6 +19,7 @@ import {
 	structureNodeFor,
 } from '../../host/ecucStructureEdit';
 import { buildNodeIndex } from '../../core/ecuc/nodeId';
+import type { NodeEntry } from '../../core/ecuc/nodeId';
 import { fixtureText } from '../core/modelTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
@@ -28,17 +29,25 @@ function modelOf(text = fixtureText(FIXTURE)) {
 	return { model, index: buildNodeIndex(model) };
 }
 
+function shortNameLabel(node: NodeEntry['node']): string | undefined {
+	return node.kind === 'module' || node.kind === 'container' ? node.shortName : undefined;
+}
+
+function nameLabel(node: NodeEntry['node']): string | undefined {
+	return node.kind === 'parameter' || node.kind === 'reference' ? node.name : undefined;
+}
+
+function primaryLabel(node: NodeEntry['node']): string | undefined {
+	return shortNameLabel(node) ?? nameLabel(node);
+}
+
+function matchesLabel(candidate: NodeEntry, kind: string, label: string): boolean {
+	return candidate.kind === kind && primaryLabel(candidate.node) === label;
+}
+
 function idFor(kind: 'module' | 'container' | 'parameter' | 'reference', label: string): string {
 	const { index } = modelOf();
-	const entry = Array.from(index.byId.values()).find(
-		(candidate) =>
-			candidate.kind === kind &&
-			(candidate.node.kind === 'module' || candidate.node.kind === 'container'
-				? candidate.node.shortName === label
-				: candidate.node.kind === 'parameter' || candidate.node.kind === 'reference'
-					? candidate.node.name === label
-					: false)
-	);
+	const entry = Array.from(index.byId.values()).find((candidate) => matchesLabel(candidate, kind, label));
 	assert.ok(entry, `${kind} ${label} exists`);
 	return entry.id;
 }

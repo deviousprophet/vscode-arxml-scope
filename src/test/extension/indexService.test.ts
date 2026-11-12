@@ -30,6 +30,23 @@ function fileOf(uri: string, label: string): FileIndex {
 	};
 }
 
+async function waitForRelease(current: () => (() => void) | undefined): Promise<() => void> {
+	while (true) {
+		const release = current();
+		if (release) {
+			return release;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+}
+
+async function waitForNewElement(service: IndexService): Promise<void> {
+	const deadline = Date.now() + 5000;
+	while (Date.now() < deadline && service.workspaceIndex.element('/Race/NEW') === undefined) {
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+}
+
 suite('index service rebuild race (extension)', function () {
 	this.timeout(20000);
 
@@ -39,7 +56,7 @@ suite('index service rebuild race (extension)', function () {
 		const uri = vscode.Uri.joinPath(folder!.uri, `index-race-${Date.now()}.arxml`);
 		fs.writeFileSync(uri.fsPath, '<AUTOSAR/>');
 		let calls = 0;
-		let release: (() => void) | undefined;
+		let pendingRelease: (() => void) | undefined;
 		const service = new IndexService(async (readUri) => {
 			if (readUri.toString() !== uri.toString()) {
 				return undefined;
@@ -47,7 +64,7 @@ suite('index service rebuild race (extension)', function () {
 			calls++;
 			if (calls === 1) {
 				await new Promise<void>((resolve) => {
-					release = resolve;
+					pendingRelease = resolve;
 				});
 				return fileOf(readUri.toString(), 'OLD');
 			}
@@ -55,17 +72,12 @@ suite('index service rebuild race (extension)', function () {
 		});
 		try {
 			const first = service.reindexFile(uri, false);
-			while (release === undefined) {
-				await new Promise((resolve) => setTimeout(resolve, 0));
-			}
+			const release = await waitForRelease(() => pendingRelease);
 			await service.rebuild();
 			release();
 			await first;
 			// The stale read schedules its own retry; wait for the new content.
-			const deadline = Date.now() + 5000;
-			while (Date.now() < deadline && service.workspaceIndex.element('/Race/NEW') === undefined) {
-				await new Promise((resolve) => setTimeout(resolve, 20));
-			}
+			await waitForNewElement(service);
 			assert.strictEqual(service.workspaceIndex.element('/Race/OLD'), undefined);
 			assert.strictEqual(service.workspaceIndex.element('/Race/NEW')?.shortName, 'NEW');
 		} finally {

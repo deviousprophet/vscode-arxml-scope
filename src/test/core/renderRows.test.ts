@@ -11,14 +11,56 @@ import * as assert from 'assert';
 
 import { ContainerNode, EcucDocumentModel, ModuleNode, ParameterNode, ReferenceNode } from '../../core/ecuc/model';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { RowCondition, buildRows, conditionTooltip, parameterFormats, parameterType } from '../../core/ecuc/renderRows';
+import { EcucRow, RowCondition, buildRows, conditionTooltip, parameterFormats, parameterType } from '../../core/ecuc/renderRows';
 import { searchRows } from '../../webview/render/treeQuery';
 import { fixtureText } from '../core/modelTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
+/** The synthetic large model's shape; the row count and assertions derive from it. */
+const SYNTHETIC = {
+	modules: 80,
+	containersPerModule: 10,
+	parametersPerContainer: 5,
+	nestedPerContainer: 2,
+	parametersPerNested: 3,
+} as const;
+
 function fixtureRows(): ReturnType<typeof buildRows> {
 	return buildRows(scanEcucValues(fixtureText(FIXTURE)));
+}
+
+function assertAnnotationComments(rows: readonly EcucRow[]): void {
+	const moduleRow = rows.find((row) => row.kind === 'module');
+	assert.ok(moduleRow);
+	assert.deepStrictEqual(moduleRow.comments, ['[Note] module note'], 'each annotation is one comment line');
+	assert.strictEqual(
+		rows.find((row) => row.label === 'ContA')?.comments?.[0],
+		'container note',
+		'an unlabelled annotation keeps its text'
+	);
+}
+
+function assertConditionTitle(moduleRow: EcucRow): void {
+	const conditionPart = moduleRow.meta.find(
+		(part) => part.cls === 'condition' && part.text === '[(A == B)]'
+	);
+	assert.strictEqual(
+		conditionPart?.title,
+		'A = (not set)\nB = (not set)',
+		'missing values are listed one per line'
+	);
+}
+
+function assertEvaluatedConditionTitles(rows: readonly EcucRow[]): void {
+	const evaluated = rows.find((row) => row.kind === 'module');
+	assert.ok(evaluated);
+	assert.deepStrictEqual(evaluated.condition?.values, { A: 1, B: 2 });
+	assert.strictEqual(
+		evaluated.meta.find((part) => part.cls === 'condition' && part.text === '[(A == B)]')?.title,
+		'A = 1\nB = 2',
+		'the tooltip lists values in source order, separated by newlines'
+	);
 }
 
 suite('editor row model (design §2)', () => {
@@ -160,34 +202,16 @@ suite('editor row model (design §2)', () => {
 
 	test('annotations are comment lines and condition titles explain their inputs', () => {
 		const plain = fixtureRows();
-		const moduleRow = plain.rows.find((row) => row.kind === 'module')!;
-		assert.deepStrictEqual(moduleRow.comments, ['[Note] module note'], 'each annotation is one comment line');
-		assert.strictEqual(
-			plain.rows.find((row) => row.label === 'ContA')?.comments?.[0],
-			'container note',
-			'an unlabelled annotation keeps its text'
-		);
-		const conditionPart = moduleRow.meta.find(
-			(part) => part.cls === 'condition' && part.text === '[(A == B)]'
-		);
-		assert.strictEqual(
-			conditionPart?.title,
-			'A = (not set)\nB = (not set)',
-			'missing values are listed one per line'
-		);
+		assertAnnotationComments(plain.rows);
+		assertConditionTitle(plain.rows.find((row) => row.kind === 'module')!);
 
 		const evaluated = buildRows(scanEcucValues(fixtureText(FIXTURE)), {
 			conditions: new Map([
 				['A', 1],
 				['B', 2],
 			]),
-		}).rows.find((row) => row.kind === 'module')!;
-		assert.deepStrictEqual(evaluated.condition?.values, { A: 1, B: 2 });
-		assert.strictEqual(
-			evaluated.meta.find((part) => part.cls === 'condition' && part.text === '[(A == B)]')?.title,
-			'A = 1\nB = 2',
-			'the tooltip lists values in source order, separated by newlines'
-		);
+		}).rows;
+		assertEvaluatedConditionTitles(evaluated);
 	});
 
 	test('condition tooltip quotes strings, marks missing values and keeps a literal fallback', () => {
@@ -219,6 +243,11 @@ suite('editor row model (design §2)', () => {
 			conditionTooltip(condition({ text: '(A==1)', state: 'unknown', reason: 'missing: A', symbols: ['A'] })),
 			'A = (not set)',
 			'a missing reason is not repeated after the not-set lines'
+		);
+		assert.strictEqual(
+			conditionTooltip(condition({ text: 'x', state: 'unknown', reason: 'bad syntax' })),
+			'bad syntax',
+			'a reason without symbols is the whole tooltip'
 		);
 	});
 
@@ -272,6 +301,19 @@ suite('editor row model (design §2)', () => {
 			{ label: 'Hexadecimal', value: '0x00' },
 			{ label: 'Binary', value: '0b00000000' },
 		]);
+		assert.deepStrictEqual(parameterFormats('1.5', 'Numeric'), [{ label: 'Decimal', value: '1.5' }]);
+		assert.deepStrictEqual(parameterFormats('abc', 'Numeric'), [{ label: 'Decimal', value: 'abc' }]);
+		assert.deepStrictEqual(parameterFormats('abc', 'Integer'), []);
+		assert.deepStrictEqual(parameterFormats('  ', 'Integer'), []);
+		assert.deepStrictEqual(
+			parameterFormats('+15', 'Integer'),
+			[
+				{ label: 'Decimal', value: '15' },
+				{ label: 'Hexadecimal', value: '0x0F' },
+				{ label: 'Binary', value: '0b00001111' },
+			],
+			'a leading plus is parsed, not displayed'
+		);
 		assert.deepStrictEqual(parameterFormats('1.5', 'Float'), [{ label: 'Decimal', value: '1.5' }]);
 		assert.deepStrictEqual(parameterFormats('5', 'Float'), [{ label: 'Decimal', value: '5' }]);
 		assert.deepStrictEqual(parameterFormats('hello', 'Add info'), []);
@@ -357,53 +399,76 @@ suite('editor row model (design §2)', () => {
 	});
 
 	test('design §2: a large synthetic model builds in DFS order without HTML', () => {
-		const modules: ModuleNode[] = [];
-		const CONTAINERS_PER_MODULE = 10;
-		const PARAMETERS_PER_CONTAINER = 5;
-		const NESTED_PER_CONTAINER = 2;
-		const PARAMETERS_PER_NESTED = 3;
-		for (let m = 0; m < 80; m++) {
-			const containers: ContainerNode[] = [];
-			for (let c = 0; c < CONTAINERS_PER_MODULE; c++) {
-				const parameters: ParameterNode[] = [];
-				for (let p = 0; p < PARAMETERS_PER_CONTAINER; p++) {
-					parameters.push(syntheticParameter(`/D/M${m}/C${c}/P${p}`, String(p)));
-				}
-				const nested: ContainerNode[] = [];
-				for (let n = 0; n < NESTED_PER_CONTAINER; n++) {
-					const nestedParameters: ParameterNode[] = [];
-					for (let p = 0; p < PARAMETERS_PER_NESTED; p++) {
-						nestedParameters.push(syntheticParameter(`/D/M${m}/C${c}/N${n}/P${p}`, String(p)));
-					}
-					nested.push(syntheticContainer(`N${n}`, `/D/M${m}/C${c}/N${n}`, nestedParameters));
-				}
-				containers.push(syntheticContainer(`C${c}`, `/D/M${m}/C${c}`, parameters, nested));
-			}
-			modules.push(syntheticModule(`M${m}`, `/D/M${m}`, containers));
-		}
+		const modules = syntheticModules();
 		const model: EcucDocumentModel = { packages: [], modules, pathIndex: new Map() };
 		const doc = buildRows(model);
-		const expected = modules.length * (1 + CONTAINERS_PER_MODULE * (1 + PARAMETERS_PER_CONTAINER + NESTED_PER_CONTAINER * (1 + PARAMETERS_PER_NESTED)));
-		assert.strictEqual(doc.rows.length, expected, 'every module/container/parameter is a row');
+		assert.strictEqual(doc.rows.length, syntheticRowCount(), 'every module/container/parameter is a row');
 		assert.ok(doc.rows.length > 10000, 'the synthetic set is huge-file sized');
-
-		const lastIndex = doc.rows.length - 1;
-		for (let i = 0; i <= lastIndex; i++) {
-			const row = doc.rows[i];
-			const end = i + row.subtreeSize;
-			assert.ok(end <= lastIndex, `${row.label}'s subtree fits in the row set`);
-			assert.strictEqual(row.hasChildren, row.subtreeSize > 0, `${row.label}'s hasChildren agrees with subtreeSize`);
-			assert.strictEqual(row.posinset >= 1 && row.posinset <= row.setsize, true, row.label);
-			for (let child = i + 1; child <= end; child++) {
-				assert.ok(doc.rows[child].level > row.level, `${row.label}'s subtree only contains deeper rows`);
-			}
-			if (end < lastIndex) {
-				assert.ok(doc.rows[end + 1].level <= row.level, `${row.label}'s subtree is contiguous`);
-			}
-		}
+		assertSubtreeInvariants(doc.rows);
 		assert.ok(!JSON.stringify(doc).includes('<span'), 'the row data carries no markup');
 	});
 });
+
+/** The module tree the large-model test builds, in the same order and shape. */
+function syntheticModules(): ModuleNode[] {
+	const modules: ModuleNode[] = [];
+	for (let m = 0; m < SYNTHETIC.modules; m++) {
+		const containers: ContainerNode[] = [];
+		for (let c = 0; c < SYNTHETIC.containersPerModule; c++) {
+			const parameters = syntheticParameters(`/D/M${m}/C${c}/P`, SYNTHETIC.parametersPerContainer);
+			const nested = syntheticNestedContainers(m, c);
+			containers.push(syntheticContainer(`C${c}`, `/D/M${m}/C${c}`, parameters, nested));
+		}
+		modules.push(syntheticModule(`M${m}`, `/D/M${m}`, containers));
+	}
+	return modules;
+}
+
+function syntheticParameters(prefix: string, count: number): ParameterNode[] {
+	const parameters: ParameterNode[] = [];
+	for (let p = 0; p < count; p++) {
+		parameters.push(syntheticParameter(`${prefix}${p}`, String(p)));
+	}
+	return parameters;
+}
+
+function syntheticNestedContainers(module: number, container: number): ContainerNode[] {
+	const nested: ContainerNode[] = [];
+	for (let n = 0; n < SYNTHETIC.nestedPerContainer; n++) {
+		const path = `/D/M${module}/C${container}/N${n}`;
+		nested.push(syntheticContainer(`N${n}`, path, syntheticParameters(`${path}/P`, SYNTHETIC.parametersPerNested)));
+	}
+	return nested;
+}
+
+/** One row per module, container, parameter and nested container. */
+function syntheticRowCount(): number {
+	const perContainer =
+		1 + SYNTHETIC.parametersPerContainer + SYNTHETIC.nestedPerContainer * (1 + SYNTHETIC.parametersPerNested);
+	return SYNTHETIC.modules * (1 + SYNTHETIC.containersPerModule * perContainer);
+}
+
+/** Every row's subtree is contiguous, fits the row set and only contains deeper rows. */
+function assertSubtreeInvariants(rows: readonly EcucRow[]): void {
+	const lastIndex = rows.length - 1;
+	for (let i = 0; i <= lastIndex; i++) {
+		const row = rows[i];
+		const end = i + row.subtreeSize;
+		assert.ok(end <= lastIndex, `${row.label}'s subtree fits in the row set`);
+		assert.strictEqual(row.hasChildren, row.subtreeSize > 0, `${row.label}'s hasChildren agrees with subtreeSize`);
+		assert.strictEqual(isPosinsetInRange(row), true, row.label);
+		for (let child = i + 1; child <= end; child++) {
+			assert.ok(rows[child].level > row.level, `${row.label}'s subtree only contains deeper rows`);
+		}
+		if (end < lastIndex) {
+			assert.ok(rows[end + 1].level <= row.level, `${row.label}'s subtree is contiguous`);
+		}
+	}
+}
+
+function isPosinsetInRange(row: EcucRow): boolean {
+	return row.posinset >= 1 && row.posinset <= row.setsize;
+}
 
 function syntheticParameter(definitionRef: string, value: string): ParameterNode {
 	return {

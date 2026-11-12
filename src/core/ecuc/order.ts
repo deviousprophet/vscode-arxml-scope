@@ -51,16 +51,16 @@ function keyed<T>(
 }
 
 function compareKeys(a: Keyed<unknown>, b: Keyed<unknown>): number {
-	if (a.definitionRef < b.definitionRef) {
+	const byDefinition = compareText(a.definitionRef, b.definitionRef);
+	return byDefinition === 0 ? compareText(a.identity, b.identity) : byDefinition;
+}
+
+/** The legacy string comparison of one key component. */
+function compareText(a: string, b: string): number {
+	if (a < b) {
 		return -1;
 	}
-	if (a.definitionRef > b.definitionRef) {
-		return 1;
-	}
-	if (a.identity < b.identity) {
-		return -1;
-	}
-	if (a.identity > b.identity) {
+	if (a > b) {
 		return 1;
 	}
 	return 0;

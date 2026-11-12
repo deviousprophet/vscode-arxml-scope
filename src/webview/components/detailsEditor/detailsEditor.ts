@@ -65,6 +65,24 @@ interface PendingFieldFocus {
 	dir: 'prev' | 'next';
 }
 
+/** The fields the container edit target reads. */
+interface DetailsRowFields {
+	id: string;
+	kind?: string;
+	shortName?: string;
+	definitionRef?: string;
+}
+
+/** The key event the inline controls forward. */
+interface DetailsKeyEvent {
+	key?: string;
+	shiftKey?: boolean;
+	preventDefault(): void;
+	stopPropagation(): void;
+}
+
+type DetailsNotice = Extract<EditorProviderToWebview, { type: 'notice' }>;
+
 let detailsEdits: Record<string, DetailsEdit> = {};
 let pendingMove: PendingMove | null = null;
 let pendingFieldFocus: PendingFieldFocus | null = null;
@@ -146,50 +164,21 @@ function detailsErrorSpan(): any {
 	return error;
 }
 
+/** The two container fields in Tab order. */
+const detailsFieldOrder = ['shortName', 'definitionRef'];
+
 /** The container field a Tab moves to, or undefined at either end of the pair. */
 function detailsFieldSibling(field: string, dir: string): string | undefined {
-	if (field === 'shortName') {
-		return dir === 'prev' ? undefined : 'definitionRef';
+	const at = detailsFieldOrder.indexOf(field);
+	if (at < 0) {
+		return undefined;
 	}
-	if (field === 'definitionRef') {
-		return dir === 'prev' ? 'shortName' : undefined;
-	}
-	return undefined;
+	return dir === 'prev' ? detailsFieldOrder[at - 1] : detailsFieldOrder[at + 1];
 }
 
 function detailsRegisterKeydown(input: any, edit: DetailsEdit): void {
 	input.addEventListener('keydown', function (event: any) {
-		if (event.key === 'Enter') {
-			event.preventDefault();
-			event.stopPropagation();
-			commitDetailsEdit(edit.field);
-		} else if (event.key === 'Escape') {
-			event.preventDefault();
-			event.stopPropagation();
-			cancelDetailsEdit(edit.field);
-		} else if (event.key === 'Tab') {
-			const current = detailsEdits[edit.field];
-			if (!current || current.pending) {
-				return;
-			}
-			const dir = event.shiftKey ? 'prev' : 'next';
-			const sibling = edit.field === 'value' ? undefined : detailsFieldSibling(edit.field, dir);
-			if (edit.field !== 'value' && (!sibling || !document.getElementById(detailsFieldId(sibling)))) {
-				// There is no other container field to move to. Commit, but let Tab move
-				// focus out of the panel instead of trapping it in a control the re-scan
-				// is about to replace.
-				commitDetailsEdit(edit.field);
-				return;
-			}
-			event.preventDefault();
-			event.stopPropagation();
-			if (edit.field === 'value') {
-				pendingMove = { dir: dir as 'prev' | 'next', from: edit.rowId };
-			} else {
-				pendingFieldFocus = { rowId: edit.rowId, field: edit.field, dir: dir as 'prev' | 'next' };
-			}
-			commitDetailsEdit(edit.field);
-		}
+		detailsKeydown(edit, event);
 	});
 	input.addEventListener('input', function () {
 		clearDetailsError(edit);
@@ -197,6 +186,71 @@ function detailsRegisterKeydown(input: any, edit: DetailsEdit): void {
 	input.addEventListener('change', function () {
 		clearDetailsError(edit);
 	});
+}
+
+function detailsKeydown(edit: DetailsEdit, event: DetailsKeyEvent): void {
+	if (event.key === 'Enter') {
+		detailsCommitKey(edit, event);
+	} else if (event.key === 'Escape') {
+		detailsCancelKey(edit, event);
+	} else if (event.key === 'Tab') {
+		detailsTabKey(edit, event);
+	}
+}
+
+function detailsCommitKey(edit: DetailsEdit, event: DetailsKeyEvent): void {
+	event.preventDefault();
+	event.stopPropagation();
+	commitDetailsEdit(edit.field);
+}
+
+function detailsCancelKey(edit: DetailsEdit, event: DetailsKeyEvent): void {
+	event.preventDefault();
+	event.stopPropagation();
+	cancelDetailsEdit(edit.field);
+}
+
+function detailsTabKey(edit: DetailsEdit, event: DetailsKeyEvent): void {
+	const current = detailsEdits[edit.field];
+	if (!isPendingDetailsEdit(current)) {
+		return;
+	}
+	const dir = event.shiftKey ? 'prev' : 'next';
+	const sibling = detailsTabSibling(edit.field, dir);
+	if (detailsTabLeavesPanel(edit, sibling)) {
+		// There is no other container field to move to. Commit, but let Tab move
+		// focus out of the panel instead of trapping it in a control the re-scan
+		// is about to replace.
+		commitDetailsEdit(edit.field);
+		return;
+	}
+	event.preventDefault();
+	event.stopPropagation();
+	detailsQueueTabMove(edit, dir);
+	commitDetailsEdit(edit.field);
+}
+
+function isPendingDetailsEdit(edit: DetailsEdit | undefined): edit is DetailsEdit {
+	return !!edit && !edit.pending;
+}
+
+function detailsTabSibling(field: string, dir: 'prev' | 'next'): string | undefined {
+	return field === 'value' ? undefined : detailsFieldSibling(field, dir);
+}
+
+function detailsTabLeavesPanel(edit: DetailsEdit, sibling: string | undefined): boolean {
+	if (edit.field === 'value') {
+		return false;
+	}
+	return !sibling || !document.getElementById(detailsFieldId(sibling));
+}
+
+function detailsQueueTabMove(edit: DetailsEdit, dir: 'prev' | 'next'): void {
+	if (edit.field === 'value') {
+		pendingMove = { dir: dir, from: edit.rowId };
+	} else {
+		pendingFieldFocus = { rowId: edit.rowId, field: edit.field, dir: dir };
+	}
 }
 
 /** A page reload starts from a clean draft state. */
@@ -207,62 +261,138 @@ export function resetDetailsEditorState(): void {
 	flashId = null;
 }
 
+/**
+ * Stores one field's draft, restores a draft that survived a re-scan, and wires
+ * the shared key handling.
+ */
+function detailsDraft(
+	row: { id: string },
+	field: string,
+	input: HTMLInputElement | HTMLSelectElement,
+	error: HTMLSpanElement,
+	original: string,
+	type?: string
+): DetailsEdit {
+	const previous = detailsStoredEdit(row, field);
+	if (previous) {
+		input.value = previous.input.value;
+	}
+	const restored = restoredDetailsDraft(previous, original);
+	const edit: DetailsEdit = {
+		rowId: row.id,
+		field: field,
+		input: input,
+		error: error,
+		pending: restored.pending,
+		...(type === undefined ? {} : { type }),
+		original: restored.original
+	};
+	detailsEdits[field] = edit;
+	restoreDetailsError(edit, previous);
+	detailsRegisterKeydown(input, edit);
+	return edit;
+}
+
+/** The draft fields a re-scan keeps from the previous control. */
+function restoredDetailsDraft(
+	previous: DetailsEdit | null,
+	original: string
+): { pending: boolean; original: string } {
+	if (previous === null) {
+		return { pending: false, original };
+	}
+	return { pending: previous.pending, original: previous.original };
+}
+
+/** Carries a refusal that survived the re-scan onto the new control. */
+function restoreDetailsError(edit: DetailsEdit, previous: DetailsEdit | null): void {
+	if (previous === null || !previous.error || !previous.error.textContent) {
+		return;
+	}
+	edit.error.textContent = previous.error.textContent;
+	edit.input.setAttribute('aria-invalid', 'true');
+}
+
 /** The details value control for one parameter row (input or Boolean select). */
 export function detailsValueInput(row: any, data: any): any {
 	const rowElement = document.createElement('div');
 	rowElement.className = 'inspector-row';
 	rowElement.appendChild(inspectorElement('span', 'inspector-key', 'Value'));
-	const type = row.parameterType || data.type || '';
-	const boolean = type === 'Boolean' && /^(true|false)$/i.test(String(row.value ?? ''));
+	const type = detailsValueType(row, data);
+	const boolean = isBooleanValueInput(type, row.value);
 	const input: any = document.createElement(boolean ? 'select' : 'input');
-	input.id = 'details-value';
-	input.className = 'details-value';
-	input.setAttribute('data-node-id', row.id);
-	input.setAttribute('data-field', 'value');
-	input.setAttribute('data-value-type', type || row.valueKind || '');
-	input.setAttribute('aria-label', 'Value of ' + (row.label || data.label || 'parameter'));
-	const original = boolean ? (String(row.value ?? '').toLowerCase() === 'false' ? 'false' : 'true') : row.value ?? '';
+	detailsValueAttributes(input, row, data, type);
+	const original = detailsValueOriginal(row.value, boolean);
 	if (boolean) {
-		for (const option of ['true', 'false']) {
-			const element = document.createElement('option');
-			element.value = option;
-			element.textContent = option;
-			input.appendChild(element);
-		}
+		appendBooleanOptions(input);
 	} else {
-		input.type = 'text';
-		input.spellcheck = false;
-		input.inputMode = type === 'Integer' ? 'numeric' : type === 'Float' ? 'decimal' : 'text';
+		applyValueInputMode(input, type);
 	}
 	input.value = original;
-	const previous = detailsStoredEdit(row, 'value');
-	if (previous) {
-		input.value = previous.input.value;
-	}
 	const error = detailsErrorSpan();
 	rowElement.appendChild(input);
 	rowElement.appendChild(error);
-	const edit: DetailsEdit = {
-		rowId: row.id,
-		field: 'value',
-		input: input,
-		error: error,
-		pending: previous ? previous.pending : false,
-		type: type,
-		original: previous ? previous.original : original
-	};
-	detailsEdits.value = edit;
-	if (previous && previous.error && previous.error.textContent) {
-		edit.error.textContent = previous.error.textContent;
-		edit.input.setAttribute('aria-invalid', 'true');
-	}
-	detailsRegisterKeydown(input, edit);
+	detailsDraft(row, 'value', input, error, original, type);
 	input.addEventListener('beforeinput', function (event: any) {
 		if (event.data && !detailsInputAllowed(type, event.data)) {
 			event.preventDefault();
 		}
 	});
 	return rowElement;
+}
+
+function isBooleanValueInput(type: string, value: string | undefined): boolean {
+	return type === 'Boolean' && /^(true|false)$/i.test(String(value ?? ''));
+}
+
+function detailsValueType(row: { parameterType?: string }, data: { type?: string }): string {
+	return row.parameterType || data.type || '';
+}
+
+function detailsValueAttributes(
+	input: HTMLInputElement | HTMLSelectElement,
+	row: { id: string; valueKind?: string; label?: string },
+	data: { label?: string },
+	type: string
+): void {
+	input.id = 'details-value';
+	input.className = 'details-value';
+	input.setAttribute('data-node-id', row.id);
+	input.setAttribute('data-field', 'value');
+	input.setAttribute('data-value-type', detailsValueTypeName(type, row));
+	input.setAttribute('aria-label', 'Value of ' + detailsValueLabel(row, data));
+}
+
+function detailsValueTypeName(type: string, row: { valueKind?: string }): string {
+	return type || row.valueKind || '';
+}
+
+function detailsValueLabel(row: { label?: string }, data: { label?: string }): string {
+	return row.label || data.label || 'parameter';
+}
+
+function detailsValueOriginal(value: string | undefined, boolean: boolean): string {
+	const text = value ?? '';
+	return boolean ? booleanText(String(text)) : text;
+}
+
+function booleanText(text: string): string {
+	return text.toLowerCase() === 'false' ? 'false' : 'true';
+}
+
+function appendBooleanOptions(input: HTMLSelectElement): void {
+	for (const option of ['true', 'false']) {
+		const element = document.createElement('option');
+		element.value = option;
+		element.textContent = option;
+		input.appendChild(element);
+	}
+}
+
+function applyValueInputMode(input: HTMLInputElement, type: string): void {
+	input.type = 'text';
+	input.spellcheck = false;
+	input.inputMode = type === 'Integer' ? 'numeric' : type === 'Float' ? 'decimal' : 'text';
 }
 
 function detailsFieldInput(row: any, field: string, label: string, value: string): any {
@@ -278,27 +408,10 @@ function detailsFieldInput(row: any, field: string, label: string, value: string
 	input.setAttribute('data-field', field);
 	input.setAttribute('aria-label', label + ' of ' + (row.label || 'container'));
 	input.value = value;
-	const previous = detailsStoredEdit(row, field);
-	if (previous) {
-		input.value = previous.input.value;
-	}
 	const error = detailsErrorSpan();
 	rowElement.appendChild(input);
 	rowElement.appendChild(error);
-	const edit: DetailsEdit = {
-		rowId: row.id,
-		field: field,
-		input: input,
-		error: error,
-		pending: previous ? previous.pending : false,
-		original: previous ? previous.original : value
-	};
-	detailsEdits[field] = edit;
-	if (previous && previous.error && previous.error.textContent) {
-		edit.error.textContent = previous.error.textContent;
-		edit.input.setAttribute('aria-invalid', 'true');
-	}
-	detailsRegisterKeydown(input, edit);
+	detailsDraft(row, field, input, error, value);
 	return rowElement;
 }
 
@@ -342,15 +455,16 @@ function focusDetailsField(field: string): boolean {
 
 function detailsFirstField(row: any): string | undefined {
 	if (row.kind === 'container') {
-		if (row.shortName) {
-			return 'shortName';
-		}
-		return row.definitionRef ? 'definitionRef' : undefined;
+		return detailsFirstContainerField(row);
 	}
-	if (row.kind === 'parameter') {
-		return 'value';
+	return row.kind === 'parameter' ? 'value' : undefined;
+}
+
+function detailsFirstContainerField(row: DetailsRowFields): string | undefined {
+	if (row.shortName) {
+		return 'shortName';
 	}
-	return undefined;
+	return row.definitionRef ? 'definitionRef' : undefined;
 }
 
 /** Open the first field of a row (or one named field) in the Details panel. */
@@ -359,10 +473,20 @@ export function beginDetailsEdit(rowId: string, field?: string): boolean {
 	if (!row) {
 		return false;
 	}
-	const target = field || detailsFirstField(row);
+	const target = detailsEditTarget(row, field);
 	if (!target) {
 		return false;
 	}
+	detailsRevealEditor();
+	detailsSelectRow(rowId);
+	return focusDetailsField(target);
+}
+
+function detailsEditTarget(row: DetailsRowFields, field?: string): string | undefined {
+	return field || detailsFirstField(row);
+}
+
+function detailsRevealEditor(): void {
 	if (!detailsEditorHost.isDetailsTab()) {
 		// An edit always happens in the Details panel; the Conditions tab must not
 		// silently swallow it.
@@ -370,19 +494,25 @@ export function beginDetailsEdit(rowId: string, field?: string): boolean {
 	}
 	// The Details section may be collapsed; reveal it before focus.
 	detailsEditorHost.showSection('sb-details');
-	if (detailsEditorHost.getSelectedId() !== rowId) {
-		const item = detailsEditorHost.renderedItem(rowId);
-		if (item) {
-			detailsEditorHost.selectItem(item);
-		} else {
-			detailsEditorHost.setSelection(rowId);
-			detailsEditorHost.postSelect(rowId);
-			detailsEditorHost.focusRow(rowId);
-		}
-	} else {
+}
+
+function detailsSelectRow(rowId: string): void {
+	if (detailsEditorHost.getSelectedId() === rowId) {
 		detailsEditorHost.updateInspector();
+		return;
 	}
-	return focusDetailsField(target);
+	detailsSelectUnselectedRow(rowId);
+}
+
+function detailsSelectUnselectedRow(rowId: string): void {
+	const item = detailsEditorHost.renderedItem(rowId);
+	if (item) {
+		detailsEditorHost.selectItem(item);
+		return;
+	}
+	detailsEditorHost.setSelection(rowId);
+	detailsEditorHost.postSelect(rowId);
+	detailsEditorHost.focusRow(rowId);
 }
 
 function cancelDetailsEdit(field: string): void {
@@ -431,18 +561,26 @@ function beginFieldDetailsEdit(focus: PendingFieldFocus): void {
 	if (!next) {
 		return;
 	}
-	// A committed rename renumbers the row, so the row the field was left from may be
-	// gone; the host keeps the renamed container selected under its new id.
-	const selectedId = detailsEditorHost.getSelectedId();
-	const rowId = detailsEditorHost.getRow(focus.rowId) ? focus.rowId : selectedId;
-	const row = rowId === undefined ? undefined : detailsEditorHost.getRow(rowId);
-	if (!row || row.kind !== 'container') {
-		return;
-	}
-	if (next === 'shortName' ? !row.shortName : !row.definitionRef) {
+	const row = detailsFocusRow(focus.rowId);
+	if (!detailsContainerHasField(row, next)) {
 		return;
 	}
 	beginDetailsEdit(row.id, next);
+}
+
+function detailsFocusRow(fromId: string): DetailsRowFields | undefined {
+	// A committed rename renumbers the row, so the row the field was left from may be
+	// gone; the host keeps the renamed container selected under its new id.
+	const selectedId = detailsEditorHost.getSelectedId();
+	const rowId = detailsEditorHost.getRow(fromId) ? fromId : selectedId;
+	return rowId === undefined ? undefined : detailsEditorHost.getRow(rowId);
+}
+
+function detailsContainerHasField(row: DetailsRowFields | undefined, field: string): row is DetailsRowFields {
+	if (!row || row.kind !== 'container') {
+		return false;
+	}
+	return field === 'shortName' ? !!row.shortName : !!row.definitionRef;
 }
 
 /**
@@ -455,42 +593,75 @@ export function handleDetailsEditorMessage(message: EditorProviderToWebview): vo
 		return;
 	}
 	if (message.type === 'document') {
-		const flash = flashId;
-		const move = pendingMove;
-		const focus = pendingFieldFocus;
-		flashId = null;
-		pendingMove = null;
-		pendingFieldFocus = null;
-		detailsEdits = {};
-		if (flash) {
-			// A renamed container has a new id, so the row to flash follows the selection.
-			setTimeout(() => flashRow(detailsEditorHost.getRow(flash) ? flash : detailsEditorHost.getSelectedId()), 0);
-		}
-		if (move) {
-			setTimeout(() => beginAdjacentDetailsEdit(move), 0);
-		}
-		if (focus) {
-			setTimeout(() => beginFieldDetailsEdit(focus), 0);
-		}
+		applyDetailsDocumentMessage();
 	} else if (message.type === 'notice') {
-		if (message.kind !== 'warn') {
-			return;
-		}
-		for (const field of Object.keys(detailsEdits)) {
-			const edit = detailsEdits[field];
-			if (!edit || !edit.pending) {
-				continue;
-			}
-			edit.pending = false;
-			pendingMove = null;
-			pendingFieldFocus = null;
-			flashId = null;
-			const reason = typeof message.message === 'string' && message.message !== '' ? message.message : 'The value was refused.';
-			setDetailsError(edit, reason);
-			edit.input.focus();
-			return;
+		applyDetailsNotice(message);
+	}
+}
+
+interface PendingDetailsRun {
+	flash: string | null;
+	move: PendingMove | null;
+	focus: PendingFieldFocus | null;
+}
+
+function takePendingDetailsRun(): PendingDetailsRun {
+	const flash = flashId;
+	const move = pendingMove;
+	const focus = pendingFieldFocus;
+	flashId = null;
+	pendingMove = null;
+	pendingFieldFocus = null;
+	detailsEdits = {};
+	return { flash: flash, move: move, focus: focus };
+}
+
+function applyDetailsDocumentMessage(): void {
+	const pending = takePendingDetailsRun();
+	const flash = pending.flash;
+	if (flash) {
+		// A renamed container has a new id, so the row to flash follows the selection.
+		setTimeout(() => flashRow(detailsEditorHost.getRow(flash) ? flash : detailsEditorHost.getSelectedId()), 0);
+	}
+	const move = pending.move;
+	if (move) {
+		setTimeout(() => beginAdjacentDetailsEdit(move), 0);
+	}
+	const focus = pending.focus;
+	if (focus) {
+		setTimeout(() => beginFieldDetailsEdit(focus), 0);
+	}
+}
+
+function applyDetailsNotice(message: DetailsNotice): void {
+	if (message.kind !== 'warn') {
+		return;
+	}
+	const edit = pendingDetailsEdit();
+	if (!edit) {
+		return;
+	}
+	rejectDetailsEdit(edit, message.message);
+}
+
+function pendingDetailsEdit(): DetailsEdit | undefined {
+	for (const field of Object.keys(detailsEdits)) {
+		const edit = detailsEdits[field];
+		if (edit && edit.pending) {
+			return edit;
 		}
 	}
+	return undefined;
+}
+
+function rejectDetailsEdit(edit: DetailsEdit, messageText: string): void {
+	edit.pending = false;
+	pendingMove = null;
+	pendingFieldFocus = null;
+	flashId = null;
+	const reason = typeof messageText === 'string' && messageText !== '' ? messageText : 'The value was refused.';
+	setDetailsError(edit, reason);
+	edit.input.focus();
 }
 
 /** Clear the stored draft when the selection moves to another row. */
