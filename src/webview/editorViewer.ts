@@ -46,6 +46,7 @@ import { inspectorElement } from './render/dom';
 import {
 	getSidebarState,
 	mountSidebarShell,
+	setSidebarHidden,
 	setSidebarPersistence,
 	setSidebarState,
 	showSidebarSection,
@@ -88,6 +89,7 @@ export { documentHeader } from '../webviewProtocol';
 let tree: any;
 let inspector: any;
 let detailsStatus: any;
+let editorToolbar: EditorToolbar | undefined;
 let detailsBody: any;
 
 let rows: EcucRow[] = [];
@@ -1080,6 +1082,24 @@ function expandAll() {
 	renderWindow(true);
 }
 
+/** The toolbar toggle: flip the shell visibility; state values stay untouched. */
+function toggleSidebar(): void {
+	const hidden = !getSidebarState().hidden;
+	setSidebarHidden(hidden);
+	if (editorToolbar) {
+		editorToolbar.setSidebarHidden(hidden);
+	}
+}
+
+/** The one-shot Details action: show the sidebar on its Details tab. */
+function showDetails(): void {
+	setSidebarHidden(false);
+	showSidebarTab('details');
+	if (editorToolbar) {
+		editorToolbar.setSidebarHidden(false);
+	}
+}
+
 function isParameterRowId(id: string): boolean {
 	const row = rowById.get(id);
 	return !!row && row.kind === 'parameter';
@@ -1834,8 +1854,15 @@ setDetailsEditorHost({
 });
 mountConditionsPanel();
 mountSidebarShell();
-const editorToolbar = new EditorToolbar({ onCollapseAll: collapseAll, onExpandAll: expandAll });
-editorToolbar.mount();
+const toolbar = new EditorToolbar({
+	onCollapseAll: collapseAll,
+	onExpandAll: expandAll,
+	onToggleSidebar: toggleSidebar,
+	onDetails: showDetails,
+});
+editorToolbar = toolbar;
+toolbar.mount();
+toolbar.setSidebarHidden(getSidebarState().hidden);
 searchBar = mountSearchBar(
 	'',
 	() => searchQuery,

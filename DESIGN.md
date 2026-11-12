@@ -221,9 +221,8 @@ Rules:
 - Source geometry: a line-number column of `max(digits, 5)` characters, a 26px fold gutter,
   `3ch` document padding and `4ch` indent per level. `--content-pad` is the number column plus
   the fold gutter plus the document padding, and depth is generated from it.
-- Chrome: 26px toolbar, 26px search input, 28px sidebar tab strip, 6px resizer and pane sashes.
-  The sidebar defaults to 360px. The diff toolbar grows to a 54px minimum so icon-over-label groups
-  fit.
+- Chrome: 54px toolbar, 26px search input, 28px sidebar tab strip, 6px resizer and pane sashes.
+  The sidebar defaults to 360px. Both toolbars use the 54px minimum so icon-over-label groups fit.
 - One vertical scroller owns each surface. Horizontal bars are per pane and mirrored in the diff, so
   both panes pan together while the split stays fixed.
 - One blank display row separates consecutive module groups in both views. It is a numbered line and
@@ -272,10 +271,11 @@ subtree fills keep one stable width while rows scroll horizontally.
 
 ### Chrome
 
-The toolbar is a 26px strip with divider-separated groups and 20px-tall tools. The diff toolbar keeps
-the icon-over-label variant. Use the shared sidebar button primitives for actions; do not invent a
-second button style. The sidebar is a 360px panel with a 28px vertical tab strip and a 22px section
-header.
+The toolbar is a 54px strip with divider-separated groups and icon-over-label tools: a 60x48 box with
+an 18px icon above a 10px label. Labels hide at 1040px and the boxes compact to 32px at 720px. The
+Document strip carries the Sidebar toggle, Collapse, Expand and Details actions in the same variant as
+the diff toolbar. Use the shared sidebar button primitives for other actions; do not invent a second
+button style. The sidebar is a 360px panel with a 28px vertical tab strip and a 22px section header.
 
 ### Search
 

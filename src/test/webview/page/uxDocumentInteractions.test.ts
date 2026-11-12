@@ -15,6 +15,7 @@ import {
 	pruneCollapsed,
 	toggleCollapsed,
 } from '../../../webview/components/documentTree/documentTreeState';
+import { getSidebarState } from '../../../webview/components/sidebar/sidebar';
 import { buildDocumentNodeRow } from '../../../webview/components/documentTree/documentRows';
 import { detailsInputAllowed } from '../../../webview/components/detailsEditor/detailsEditor';
 import { editorShell } from '../../../host/webviewShell';
@@ -45,11 +46,107 @@ function mount() {
 	return dom;
 }
 
+function mountWithState(saved: unknown) {
+	const dom = installDom('editor');
+	// jsdom has no layout: make the resizer report visible so the saved width
+	// can be applied, the same shim the sidebar component tests use.
+	Object.defineProperty(dom.window.HTMLElement.prototype, 'offsetParent', {
+		configurable: true,
+		get(this: any) {
+			return this.parentElement;
+		},
+	});
+	dom.api.state = saved;
+	loadModule<typeof import('../../../webview/editorViewer')>('../../webview/editorViewer').mountEditor();
+	dom.post({ type: 'document', document: { rows: rows() } });
+	return dom;
+}
+
 suite('editor Document interactions', () => {
 	test('bracket guides fade at rest and activate on container hover', () => {
 		const css = webviewCss('components', 'documentTree', 'documentTree.css');
 		assert.ok(/\.guide\s*\{[^}]*opacity:\s*0\.28/.test(css));
 		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(css));
+	});
+
+	test('the toolbar hides and shows the sidebar without losing its layout state', () => {
+		const dom = mount();
+		try {
+			const toggle = dom.document.getElementById('toggle-sidebar') as HTMLElement;
+			const detailsTab = dom.document.getElementById('stab-details') as HTMLElement;
+			detailsTab.focus();
+			const before = { ...getSidebarState() };
+			toggle.click();
+			assert.ok(dom.document.body.classList.contains('sidebar-hidden'));
+			assert.strictEqual(getSidebarState().hidden, true);
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(toggle.title, 'Show sidebar');
+			assert.strictEqual(toggle.getAttribute('aria-label'), 'Show sidebar');
+			assert.strictEqual(dom.document.activeElement, toggle, 'focus leaves the hidden shell');
+			for (const id of ['sidebar', 'sidebar-resizer', 'side-tabs']) {
+				assert.strictEqual(dom.document.getElementById(id)!.hasAttribute('inert'), true, `${id} is inert`);
+			}
+			assert.deepStrictEqual(getSidebarState(), { ...before, hidden: true }, 'tab, width and panes survive hiding');
+			assert.deepStrictEqual(dom.api.state, { ...before, hidden: true }, 'the hidden flag is persisted');
+			toggle.click();
+			assert.strictEqual(dom.document.body.classList.contains('sidebar-hidden'), false);
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
+			assert.strictEqual(toggle.title, 'Hide sidebar');
+			assert.deepStrictEqual(getSidebarState(), before, 'showing restores the previous layout');
+			for (const id of ['sidebar', 'sidebar-resizer', 'side-tabs']) {
+				assert.strictEqual(dom.document.getElementById(id)!.hasAttribute('inert'), false, `${id} is interactive`);
+			}
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Details reveals the sidebar on the Details tab and keeps the selection', () => {
+		const dom = mount();
+		try {
+			const ini = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
+			ini.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+			const inspectorBefore = dom.document.getElementById('inspector')!.textContent;
+			(dom.document.getElementById('stab-conditions') as HTMLElement).click();
+			assert.strictEqual(getSidebarState().tab, 'conditions');
+			(dom.document.getElementById('toggle-sidebar') as HTMLElement).click();
+			assert.strictEqual(getSidebarState().hidden, true);
+			(dom.document.getElementById('show-details') as HTMLElement).click();
+			assert.strictEqual(getSidebarState().hidden, false);
+			assert.strictEqual(getSidebarState().tab, 'details');
+			assert.strictEqual(dom.document.getElementById('stab-details')!.getAttribute('aria-selected'), 'true');
+			assert.strictEqual(dom.document.getElementById('stab-conditions')!.getAttribute('aria-selected'), 'false');
+			assert.ok(dom.document.getElementById('sbp-details')!.classList.contains('active'));
+			assert.strictEqual(dom.document.getElementById('sbp-conditions')!.hasAttribute('hidden'), true);
+			assert.strictEqual(
+				dom.document.querySelector('#tree .node[data-selected="true"] .label')!.textContent,
+				'IniValue',
+				'the selection is untouched'
+			);
+			assert.strictEqual(dom.document.getElementById('inspector')!.textContent, inspectorBefore, 'the content is untouched');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a reload restores a hidden sidebar with its prior tab, width and panes', () => {
+		const saved = { tab: 'conditions', sidebarWidth: 500, panes: { 'sb-details': 200 }, collapsed: [], hidden: true };
+		const dom = mountWithState(saved);
+		try {
+			assert.ok(dom.document.body.classList.contains('sidebar-hidden'));
+			assert.deepStrictEqual(getSidebarState(), saved);
+			const toggle = dom.document.getElementById('toggle-sidebar') as HTMLElement;
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(toggle.title, 'Show sidebar');
+			assert.strictEqual(dom.document.getElementById('stab-conditions')!.getAttribute('aria-selected'), 'true');
+			assert.strictEqual((dom.document.getElementById('sidebar') as HTMLElement).style.getPropertyValue('--sidebar-w'), '500px');
+			toggle.click();
+			assert.strictEqual(dom.document.body.classList.contains('sidebar-hidden'), false);
+			assert.deepStrictEqual(getSidebarState(), { ...saved, hidden: false }, 'the prior tab, width and panes return');
+			assert.strictEqual(dom.document.getElementById('stab-conditions')!.getAttribute('aria-selected'), 'true');
+		} finally {
+			dom.restore();
+		}
 	});
 
 	test('a plain click selects and never reveals; the deliberate gestures reveal', () => {

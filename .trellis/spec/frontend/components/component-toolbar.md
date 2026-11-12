@@ -23,11 +23,14 @@ src/test/webview/components/toolbar.test.ts
 export interface EditorToolbarCallbacks {
     onCollapseAll?(): void;
     onExpandAll?(): void;
+    onToggleSidebar?(): void;
+    onDetails?(): void;
 }
 export function renderEditorToolbarHtml(searchHtml: string): string;
 export class EditorToolbar {
     constructor(callbacks?: EditorToolbarCallbacks);
     mount(): void;
+    setSidebarHidden(hidden: boolean): void;
 }
 
 export interface DiffToolbarCallbacks {
@@ -54,8 +57,9 @@ export class DiffToolbar {
 
 ## Rules
 
-- One row; no wrapping. Diff buttons use `.tool.diff-tool` with a large icon over a small label.
-- Editor order: flexible slot, Collapse, Expand, Search.
+- One row; no wrapping. Every Document action and every diff button uses `.tool.diff-tool` with an
+  18px icon over a small label.
+- Editor order: flexible slot, Sidebar toggle, Collapse, Expand, Details, Search.
 - Diff order: left `Show all / Show diff`, divider, Context, divider, `Semantic / Strict`, divider,
   Prev, Next, divider, Collapse, Expand; centre Swap; right status + Search.
 - The Context toggle is disabled while Show all is active.
@@ -64,16 +68,22 @@ export class DiffToolbar {
 
 ## Behaviour
 
-- Editor strip: `#collapse-all`, `#expand-all`, then the Search slot. The search field is always the
-  last control.
+- Editor strip: `#toggle-sidebar`, `#collapse-all`, `#expand-all`, `#show-details`, then the Search
+  slot. The search field is always the last control. `#toggle-sidebar` is stateful (`aria-pressed`
+  true when the sidebar is visible, dynamic `Hide sidebar` / `Show sidebar` title and accessible name);
+  the other three are one-shot actions with no pressed state. `setSidebarHidden(hidden)` repaints the
+  toggle after the host flips the page state.
+- `#show-details` is a one-shot action: the host shows the sidebar, selects the Details tab and keeps
+  the current selection and content.
 - Diff strip: `#diff-view-all` / `#diff-view-diff` and `#diff-mode-semantic` / `#diff-mode-strict`
   are two-button view groups. The left order is view group, divider, `#diff-context`, divider, mode
   group, divider, `#diff-prev`, `#diff-next`, divider, `#diff-collapse-all`, `#diff-expand-all`.
   `#diff-swap` is the centered control over the pane divider; `#diff-match-status` and Search are on
   the right. `aria-pressed` reflects the active view, match mode, swap and context state; the buttons
   do not own the state. Collapse/Expand are ordinary action buttons and do not use `aria-pressed`.
-- Every main diff button has an 18px inline SVG, an `aria-label`, and a `.lbl` underneath. Labels hide
-  at <=1040px while the accessible name remains; at <=720px the icon buttons compact further.
+- Every main button has an 18px inline SVG, an `aria-label`, and a `.lbl` underneath. Labels hide
+  at <=1040px while the accessible name remains; at <=720px the icon buttons compact further. The
+  Document strip uses the same treatment and shares the diff strip's 54px track.
 - `setMatchMode(semantic, pending)` paints both mode buttons, sets `aria-busy` on the target and writes
   `Switching to Semantic/Strict…` into `#diff-match-status` while pending. The pending state is
   cleared by the page when the document or a `matchModeState` acknowledgement arrives.
@@ -96,7 +106,9 @@ export class DiffToolbar {
 ## Tests Required
 
 `src/test/webview/components/toolbar.test.ts`: order, classes, aria-labels, no inline styles, 10 diff
-buttons, 4 dividers and the Collapse/Expand callbacks.
+buttons, 4 dividers, the Collapse/Expand callbacks, the four Document action buttons and the sidebar
+toggle's pressed/title state. `src/test/webview/page/uxDocumentInteractions.test.ts` covers the
+hide/show round trip, reload persistence and the Details action.
 
 ## Anti-patterns
 

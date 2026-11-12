@@ -51,6 +51,8 @@ export interface SidebarUiState {
 	sidebarWidth: number;
 	panes: Record<string, number>;
 	collapsed: string[];
+	/** The whole sidebar shell is hidden; the state values above are kept. */
+	hidden: boolean;
 }
 
 /**
@@ -188,6 +190,7 @@ export function loadUiState(saved: unknown): SidebarUiState {
 		sidebarWidth: readSavedWidth(saved.sidebarWidth),
 		panes: collectSavedPanes(saved),
 		collapsed: readSavedCollapsed(saved.collapsed),
+		hidden: saved.hidden === true,
 	};
 }
 
@@ -199,6 +202,7 @@ function defaultSidebarUiState(): SidebarUiState {
 		sidebarWidth: 360,
 		panes: {},
 		collapsed: [],
+		hidden: false,
 	};
 }
 
@@ -271,6 +275,80 @@ export function setSidebarState(savedState: unknown): void {
 
 export function setSidebarPersistence(persist: () => void): void {
 	persistUiState = persist;
+}
+
+/** The three shell elements hidden together; the state values stay untouched. */
+const SIDEBAR_SHELL_IDS = ['sidebar', 'sidebar-resizer', 'side-tabs'];
+
+function sidebarShellElements(): HTMLElement[] {
+	const elements: HTMLElement[] = [];
+	for (let at = 0; at < SIDEBAR_SHELL_IDS.length; at++) {
+		const element = document.getElementById(SIDEBAR_SHELL_IDS[at]);
+		if (element) {
+			elements.push(element);
+		}
+	}
+	return elements;
+}
+
+function setSidebarShellInert(hidden: boolean): void {
+	const elements = sidebarShellElements();
+	for (let at = 0; at < elements.length; at++) {
+		elements[at].toggleAttribute('inert', hidden);
+	}
+}
+
+function isInsideSidebarShell(element: Element | null): boolean {
+	if (!element) {
+		return false;
+	}
+	const elements = sidebarShellElements();
+	for (let at = 0; at < elements.length; at++) {
+		if (elements[at].contains(element)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/** A control that is about to disappear must not keep keyboard focus. */
+function moveFocusOutOfSidebar(): void {
+	if (!isInsideSidebarShell(document.activeElement)) {
+		return;
+	}
+	const target = document.getElementById('toggle-sidebar') ?? document.getElementById('tree');
+	if (target) {
+		target.focus();
+	}
+}
+
+function applySidebarHidden(hidden: boolean): void {
+	// Move focus before the shell becomes inert or display:none: Chromium drops
+	// focus to the body as soon as the focused control stops being rendered.
+	if (hidden) {
+		moveFocusOutOfSidebar();
+	}
+	document.body.classList.toggle('sidebar-hidden', hidden);
+	setSidebarShellInert(hidden);
+}
+
+/**
+ * Hide or show the whole sidebar shell. Only `hidden` changes: the active tab,
+ * width and pane sizes keep their values, so showing it again restores the
+ * previous layout. A change is persisted; the mount-time apply is not.
+ */
+export function setSidebarHidden(hidden: boolean): void {
+	const changed = uiState.hidden !== hidden;
+	uiState.hidden = hidden;
+	applySidebarHidden(hidden);
+	if (!hidden) {
+		// A hidden sidebar skipped the width/layout pass; re-apply both now.
+		applySidebarWidth(uiState.sidebarWidth, false);
+		requestAnimationFrame(layoutSidebarPanes);
+	}
+	if (changed) {
+		persistUiState();
+	}
 }
 
 function layoutSidebarPanes(): void {
@@ -956,6 +1034,8 @@ export function mountSidebarShell(): void {
 	if (!targets) {
 		return;
 	}
+	// Apply visibility first so the first paint never flashes a hidden sidebar.
+	applySidebarHidden(uiState.hidden);
 	mountSidebarPaneViews();
 	applySidebarWidth(uiState.sidebarWidth, false);
 	bindSidebarTabButtons(targets.tabs);

@@ -175,7 +175,9 @@ structural change (a module/container added, removed or renamed, or a changed `D
 invalidates it, and the next **Find References** rebuilds it lazily.
 
 The right edge also has a **Conditions** tab. Both tabs share the panel; only one is visible at a time.
-The sidebar width, active tab, section sizes and collapsed sections persist across a webview reload.
+The toolbar's **Sidebar** toggle hides the whole shell and gives the Document the full width; the
+**Details** action shows it again on the Details tab. The sidebar width, active tab, section sizes,
+collapsed sections and visibility persist across a webview reload.
 
 ## Editing rules
 

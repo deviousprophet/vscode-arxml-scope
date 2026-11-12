@@ -46,7 +46,8 @@ body (column)
 
 - The right side is a VS Code-style sidebar: a 28px vertical tab strip (**Details**, **Conditions**)
   at the far right, a resizable panel area, and one visible tab panel at a time. Details is the
-  default. There is no toolbar Details/Conditions toggle and no second panel surface.
+  default. The toolbar's one-shot Details action reveals this tab; there is no Details/Conditions
+  toggle and no second panel surface.
 - `#inspector` remains the Details panel root. It contains one stable `sb-details` section body;
   `updateInspector` clears and rewrites that body only, never the section header. Node, value/formats,
   reference, conditions, annotations and the Jump/Reveal actions share the one scrolling body. The
@@ -57,7 +58,7 @@ body (column)
   drag, ArrowUp/ArrowDown and double-click reset.
 - Pane sizing: `HEADER_H=22`, `MIN_PANE=82`, `SASH_H=6`; saved user sizes first, fresh sections
   share the remainder, the last absorbs rounding, a single expanded section fills the panel.
-- The layout state (`tab`, `sidebarWidth`, `panes`, `collapsed`) is persisted through
+- The layout state (`tab`, `sidebarWidth`, `panes`, `collapsed`, `hidden`) is persisted through
   `acquireVsCodeApi().getState()/setState()`. A re-scan never resets it. The old `inspectorHidden`
   state is ignored.
 - The shared control system is `.sb-btn-primary`, `.sb-btn-secondary`, `.sb-btn-add`,
@@ -119,7 +120,7 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   the match index and jump — they never rescan. A jump expands ancestors, scrolls and selects the
   row but keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or is empty for an
   unexecuted query, but it never leaves the flow: its fixed `14ch` slot and the always-present busy
-  slot stop the field from shifting. The Search control closes the toolbar, after Collapse/Expand.
+  slot stop the field from shifting. The Search control closes the toolbar, after Details.
 - **All matches are marked; the current match is stronger.** `appendHighlighted` wraps every
   case-insensitive occurrence in `<mark>` in the label, value and every visible meta fragment
   (short name, variant, context, condition and annotation). `buildDocumentNodeRow` sets
@@ -207,9 +208,9 @@ in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
   ancestors when needed, scrolls it into the rendered window and updates the inspector. `prepareFocus`
   only establishes the initial roving focus while the row store is still empty.
 - Only layout state is persisted through `acquireVsCodeApi().getState()/setState()`: `tab`,
-  `sidebarWidth`, `panes` and `collapsed`. A missing or invalid state falls back to Details, 360px
-  and default section heights; a legacy `inspectorHidden` is ignored and never written back. The
-  reload round trip is observed in the Extension Development Host.
+  `sidebarWidth`, `panes`, `collapsed` and `hidden`. A missing or invalid state falls back to Details,
+  360px and default section heights; a legacy `inspectorHidden` is ignored and never written back.
+  The reload round trip is observed in the Extension Development Host.
 - The pure state helpers (`pruneCollapsed`, `toggleCollapsed`, `collapsedIdsFor`, `moveTarget`,
   `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` in `documentTreeState.ts`;
   `inspectorFields` in `detailsPanel.ts`) are ordinary exports imported by the page bundle and the
@@ -275,7 +276,7 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 | Leaking bracket guides outside their container | `guidesFor` and the `.guide` tests fail |
 | Tinting rows outside the selected subtree | `subtreeRowIds`/`data-subtree` tests fail |
 | Making every reference show a jump action | Unresolved targets must not get the details button; the followability test fails |
-| Hiding the Collapse/Expand labels at normal widths | The labelled-control test fails |
+| Hiding the Collapse/Expand labels above 1040px, or dropping the `.lbl`/18px icon markup | The labelled-control test fails |
 | Inserting an editor into `.value` | The Document is read-only; the `.value` direct-child/test contract and click semantics fail |
 | Adding a Source block or copy action | The details panel exposes Jump/Reveal only; provider copy code was deleted |
 | Reintroducing a page-local scroll container | The component owns the scroller; a second one desynchronizes the virtual range |

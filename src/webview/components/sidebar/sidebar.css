@@ -185,6 +185,12 @@ body.sb-row-resizing {
 	outline: 1px solid var(--vscode-focusBorder);
 	outline-offset: -1px;
 }
+/* The sidebar toggle hides the shell; #main then fills the content width. */
+body.sidebar-hidden #sidebar,
+body.sidebar-hidden #sidebar-resizer,
+body.sidebar-hidden #side-tabs {
+	display: none;
+}
 .sb-tab-panel {
 	display: none;
 	flex: 1 1 auto;

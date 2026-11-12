@@ -36,7 +36,7 @@ re-scans and refuses if the bytes moved.
 | `displayRows`, `expandedIds`, `subtreeIds`, `guideLevels` | page script | derived from the rows, collapsed set and selected subtree |
 | type-ahead buffer | page script | yes; it is a transient 2 s window |
 | `detailsEdits` / `pendingMove` / `pendingFieldFocus` / `flashId` | details editor | no; the re-scan message clears stale state and rebuilds the details inputs |
-| `uiState.tab / sidebarWidth / panes / collapsed` | page + host state | yes, through `getState()/setState()` |
+| `uiState.tab / sidebarWidth / panes / collapsed / hidden` | page + host state | yes, through `getState()/setState()` |
 
 The collapsed set is the only state that must not be re-derived from the rendered order. Node ids
 are path-based and include a declaration-order ordinal (see `nodeId.ts`); pruning only drops ids the
@@ -68,10 +68,11 @@ import rather than a claim. Do not add a second host-side implementation of a vi
   is no innerHTML swap.
 - **Across a webview reload:** the sidebar uses `acquireVsCodeApi().getState()/setState()` with one
   validated object: `tab` (`details`/`conditions`), `sidebarWidth` (clamped 260–900),
-  `panes` (section id → saved px), `collapsed` (section ids). A missing/invalid field falls
-  back to Details, 360px and default heights; a non-array object is ignored. The legacy
-  `inspectorHidden` field is ignored and never written back. Only user actions (tab click, resizer
-  release, sash release/reset when a pane pair exists, section toggle) write the preference; transient
+  `panes` (section id → saved px), `collapsed` (section ids), `hidden` (the whole shell is hidden).
+  A missing/invalid field falls back to Details, 360px and default heights; a non-array object is
+  ignored. The legacy `inspectorHidden` field is ignored and never written back. Only user actions (tab
+  click, resizer release, sash release/reset when a pane pair exists, section toggle, sidebar toggle)
+  write the preference; transient
   viewport clamping does not overwrite the saved width. The reload round trip is observed in the
   Extension Development Host, which is the only place the state API exists.
 

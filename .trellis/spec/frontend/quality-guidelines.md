@@ -83,9 +83,9 @@ that is not obvious from the code.
   indent gradient is forbidden.
 - **Defaults are Document and the Details tab.** `editorShell` writes `data-view="document"` and the
   sidebar mounts with Details selected by default; Conditions starts hidden. The tab, sidebar width,
-  section panes and collapsed sections persist through `getState()/setState()`. A legacy
-  `inspectorHidden` is ignored; there is no toolbar Details/Conditions toggle and no second panel
-  surface.
+  section panes, collapsed sections and sidebar visibility persist through `getState()/setState()`. A
+  legacy `inspectorHidden` is ignored; the toolbar's one-shot Details action reveals the tab, there is
+  no Details/Conditions toggle and no second panel surface.
 - **Details editing is the only field edit path, and structural edits are confirmed.** The panel
   edits a parameter's `<VALUE>` and a container's `<SHORT-NAME>` / `<DEFINITION-REF>` inner text.
   A container or parameter row may also be **deleted or duplicated** from the page context menu; the
@@ -181,9 +181,9 @@ that is not obvious from the code.
   rows; `flattenDiffDocument` turns the remaining hidden runs into `DiffGap` rows. A gap row is not a
   tree node: it must stay out of `displayIndexByKey`, `navigationVisible`, `F7` and search. The
   displayed left pane owns the toggle; the right pane draws the line only.
-- **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels at
-  normal widths; labels may hide only at <=720px. The fixed gutter keeps the row control at the far
-  left instead of indenting it with the label.
+- **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels above
+  1040px, matching the diff toolbar; labels hide only at <=1040px and the `aria-label` remains. The
+  fixed gutter keeps the row control at the far left instead of indenting it with the label.
 - **A re-scan keeps state, not markup.** The host posts `{ type: 'document', document: { rows, selectedId, header } }`; the
   page reconciles selection, collapse, search and scroll, rebuilds the display list and renders the
   window. There is no `innerHTML` tree swap and no second refresh path.
