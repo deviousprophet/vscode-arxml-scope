@@ -31,7 +31,7 @@ suite('Toolbar component', () => {
 		}
 		assert.ok(/id="toggle-sidebar"[^>]*aria-pressed="true"/.test(html));
 		assert.ok(/id="toggle-sidebar"[^>]*title="Hide sidebar"/.test(html));
-		assert.ok(/id="toggle-sidebar"[^>]*aria-label="Hide sidebar"/.test(html));
+		assert.ok(/id="toggle-sidebar"[^>]*aria-label="Sidebar"/.test(html));
 		assert.ok(html.includes('<span class="lbl">Sidebar</span>'));
 		assert.ok(!/id="collapse-all"[^>]*aria-pressed/.test(html), 'Collapse is a one-shot action');
 		assert.ok(!/id="expand-all"[^>]*aria-pressed/.test(html), 'Expand is a one-shot action');
@@ -126,11 +126,11 @@ suite('Toolbar component', () => {
 			toolbar.setSidebarHidden(true);
 			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
 			assert.strictEqual(toggle.title, 'Show sidebar');
-			assert.strictEqual(toggle.getAttribute('aria-label'), 'Show sidebar');
+			assert.strictEqual(toggle.getAttribute('aria-label'), 'Sidebar');
 			toolbar.setSidebarHidden(false);
 			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
 			assert.strictEqual(toggle.title, 'Hide sidebar');
-			assert.strictEqual(toggle.getAttribute('aria-label'), 'Hide sidebar');
+			assert.strictEqual(toggle.getAttribute('aria-label'), 'Sidebar');
 			toggle.remove();
 			toolbar.setSidebarHidden(true);
 		} finally {

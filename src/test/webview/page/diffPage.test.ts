@@ -1276,6 +1276,61 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('an added container marks only its owning pane', () => {
+		const added = wordRow({
+			key: 'added',
+			kind: 'container',
+			hasChildren: true,
+			subtreeSize: 1,
+			status: 'added',
+			right: containerCell('Added'),
+		});
+		const child = wordRow({
+			key: 'added-child',
+			parentKey: 'added',
+			level: 2,
+			status: 'added',
+			right: wordCell({ label: 'Child', shownValue: '1', value: '1' }),
+		});
+		const { dom } = mount(wordDocument([added, child, otherChangedRow()]));
+		try {
+			clickTwisty(dom, 'right', 'added');
+			const left = subtreeRow(dom, 'left', 'added');
+			assert.strictEqual(left.getAttribute('data-subtree-changed'), null, 'the blank side has no marker');
+			assert.strictEqual(left.getAttribute('aria-description'), null, 'the blank side has no description');
+			assert.strictEqual(left.querySelector('.diff-subtree-change-dot'), null, 'the blank side has no dot');
+			const right = subtreeRow(dom, 'right', 'added');
+			assert.strictEqual(right.getAttribute('data-subtree-changed'), 'true', 'the owning side is marked');
+			assert.ok(right.querySelector('.diff-subtree-change-dot'), 'the owning side has the dot');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('the hidden-change dot is not a search or F7 target', async () => {
+		const { dom } = mount(wordDocument(subtreeWithStatus('changed')));
+		try {
+			const pane = dom.document.getElementById('diff-pane-left')!;
+			pane.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'F7', bubbles: true, cancelable: true }));
+			const selected = dom.document.querySelector('#diff-pane-left [data-selected="true"]');
+			assert.ok(selected, 'F7 still selects a row');
+			assert.strictEqual(selected.getAttribute('data-key'), 'child', 'F7 selects the changed row');
+			clickTwisty(dom, 'left', 'parent');
+			assert.ok(
+				subtreeRow(dom, 'left', 'parent').querySelector('.diff-subtree-change-dot'),
+				'the collapsed container shows the dot'
+			);
+			await runDiffSearch(dom, 'Contains hidden changes');
+			assert.strictEqual(
+				dom.document.getElementById('diff-search-count')!.textContent,
+				'0 / 0',
+				'the dot description is not a search candidate'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('clicking either pane selects the row in both panes', () => {
 		const parent = wordRow({
 			key: 'parent',

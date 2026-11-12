@@ -102,10 +102,11 @@ Rules:
   at least the pane, at least the full content estimate. That single rule is what makes the selection and
   subtree fills span a stable width; never narrow it to the rendered slice or set these as a `style`
   attribute in the markup.
-- `.document-tree-pane` and `.row` declare `user-select: text` so row text supports native
-  selection and copy with no custom handler. `.document-tree-lines`, `.twisty`, `.guide`,
+- `#tree .row` declares `user-select: text` so Document row text supports native selection and copy
+  with no custom handler. `.document-tree-lines`, `.twisty`, `.guide`,
   `.document-tree-header-gap`/`.document-tree-module-gap` and sidebar chrome declare
-  `user-select: none`; keep the gutter text out of copied output.
+  `user-select: none`; keep the gutter text out of copied output. Diff rows keep their own interaction
+  model and are not covered by this rule.
 - `.document-tree-lines` is a sibling after the window, inside the pane. It is absolutely positioned,
   full pane height, `width: var(--line-numbers-width)`, `overflow: hidden`, `z-index: 1`,
   `aria-hidden="true"` and `user-select: none`. One `.document-tree-line-number` cell per rendered row is
@@ -123,7 +124,9 @@ Rules:
   padding-left: var(--content-pad); }`. `.value` is a direct child of `.row`.
 - The fold gutter is fixed at 26px. `.twisty` is absolutely positioned at
   `left: calc(var(--line-numbers-width) + 2px)`, spans the row height and holds a 16px chevron. Leaves
-  reserve the gutter but render no twisty.
+  reserve the gutter but render no twisty. The collapsed-subtree change dot sits immediately after the
+  chevron at `calc(var(--line-numbers-width) + 2px + 16px + 1px)`, so it uses the same gutter geometry
+  rather than a new magic offset.
 - Depth comes from `data-level` and the generated rules in `documentTree.css`:
   `padding-left: calc(var(--content-pad) + var(--indent) * (level - 1))` for levels 1–24. Guides use the
   matching `.guide[data-level]` left offset plus `0.5ch`. No style attribute, no inline depth.

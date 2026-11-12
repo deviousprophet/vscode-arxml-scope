@@ -62,6 +62,10 @@ compared, not just the bytes on disk.
   of descendant containers. An added or removed row highlights only the pane that owns its cell; the
   blank side stays blank. The highlight spans a stable width: at least the pane and the full content
   width, including header lines, so a short selected row does not shrink to the rendered slice.
+- A collapsed container whose subtree contains a change shows a small dot beside its fold marker in both
+  panes, with the accessible description `Contains hidden changes`. The row keeps its own status and
+  tint; expanding the container removes the dot. It is display-only: not a search candidate, F7 target,
+  selection target or gutter row.
 - One shared virtual-scroll surface owns the vertical scrollbar and the row offsets. Each pane has its
   own horizontal scrollbar; moving either bar scrolls both panes in sync, and the pane split stays
   fixed. The content height is precomputed, so the thumb and drag match the rendered lines, and only the

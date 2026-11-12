@@ -88,7 +88,7 @@ suite('editor Document interactions', () => {
 			assert.strictEqual(getSidebarState().hidden, true);
 			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
 			assert.strictEqual(toggle.title, 'Show sidebar');
-			assert.strictEqual(toggle.getAttribute('aria-label'), 'Show sidebar');
+			assert.strictEqual(toggle.getAttribute('aria-label'), 'Sidebar');
 			assert.strictEqual(dom.document.activeElement, toggle, 'focus leaves the hidden shell');
 			for (const id of ['sidebar', 'sidebar-resizer', 'side-tabs']) {
 				assert.strictEqual(dom.document.getElementById(id)!.hasAttribute('inert'), true, `${id} is inert`);
@@ -211,6 +211,30 @@ suite('editor Document interactions', () => {
 				dom.document.activeElement,
 				dom.document.getElementById('details-value'),
 				'the single click still opens the value editor'
+			);
+		} finally {
+			dom.document.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true }));
+			dom.restore();
+		}
+	});
+
+	test('a value edit reveals the sidebar when it is hidden', async () => {
+		const dom = mount();
+		try {
+			(dom.document.getElementById('toggle-sidebar') as HTMLElement).click();
+			assert.strictEqual(getSidebarState().hidden, true);
+			const item = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
+			valueTextOf(item).dispatchEvent(
+				new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })
+			);
+			await new Promise((resolve) => setTimeout(resolve, DETAILS_GUARD_SETTLE_MS));
+			assert.strictEqual(getSidebarState().hidden, false, 'the edit reveals the sidebar');
+			assert.strictEqual(getSidebarState().tab, 'details', 'the edit selects Details');
+			assert.strictEqual(dom.document.body.classList.contains('sidebar-hidden'), false);
+			assert.strictEqual(
+				dom.document.activeElement,
+				dom.document.getElementById('details-value'),
+				'the value editor receives focus'
 			);
 		} finally {
 			dom.document.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true }));

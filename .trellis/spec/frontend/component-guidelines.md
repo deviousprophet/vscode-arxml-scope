@@ -84,9 +84,10 @@ page key handler      →  navigation / F2/Enter opens details / F3 while search
 
 The page's `onRowClick` handles the row interactions. One interaction, one effect: the twisty toggles
 without moving selection, a reference target is plain text in the Document, clicking `=`/label selects
-only, and clicking a parameter's `.value-text` selects and opens the details editor. Reference follow
-is the details **Jump to target** action. The inline chevron (`twistyIcon`) is one shared row primitive
-in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
+only, and clicking a parameter's `.value-text` selects it and defers the details editor briefly so a
+double-click word selection wins; a second click, `dblclick` or a key cancels the deferred edit.
+Reference follow is the details **Jump to target** action. The inline chevron (`twistyIcon`) is one
+shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pages must not fork it.
 
 ## Row context menu
 

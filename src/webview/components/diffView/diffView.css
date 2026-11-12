@@ -331,7 +331,7 @@ body[data-page="diff"] .nav-btn:disabled {
  * Display-only: the row keeps its own status, tint, gutter and line number. */
 .diff-subtree-change-dot {
 	position: absolute;
-	left: calc(var(--line-numbers-width) + 19px);
+	left: calc(var(--line-numbers-width) + 2px + 16px + 1px);
 	top: 50%;
 	width: 6px;
 	height: 6px;

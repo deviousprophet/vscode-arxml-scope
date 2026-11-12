@@ -18,7 +18,7 @@ export interface EditorToolbarCallbacks {
 export function renderEditorToolbarHtml(searchHtml: string): string {
 	return `<div class="toolbar">
 <span class="grow"></span>
-<button id="toggle-sidebar" class="tool diff-tool" type="button" aria-pressed="true" title="Hide sidebar" aria-label="Hide sidebar">${ICON_SIDEBAR}<span class="lbl">Sidebar</span></button>
+<button id="toggle-sidebar" class="tool diff-tool" type="button" aria-pressed="true" title="Hide sidebar" aria-label="Sidebar">${ICON_SIDEBAR}<span class="lbl">Sidebar</span></button>
 <button id="collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
 <button id="expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
 <button id="show-details" class="tool diff-tool" type="button" title="Show the Details tab" aria-label="Show the Details tab">${ICON_DETAILS}<span class="lbl">Details</span></button>
@@ -53,9 +53,7 @@ export class EditorToolbar {
 			return;
 		}
 		button.setAttribute('aria-pressed', hidden ? 'false' : 'true');
-		const label = hidden ? 'Show sidebar' : 'Hide sidebar';
-		button.title = label;
-		button.setAttribute('aria-label', label);
+		button.title = hidden ? 'Show sidebar' : 'Hide sidebar';
 	}
 
 	private bind(id: string, action: () => void): void {

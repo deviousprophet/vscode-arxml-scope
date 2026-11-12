@@ -70,7 +70,8 @@ export class DiffToolbar {
 
 - Editor strip: `#toggle-sidebar`, `#collapse-all`, `#expand-all`, `#show-details`, then the Search
   slot. The search field is always the last control. `#toggle-sidebar` is stateful (`aria-pressed`
-  true when the sidebar is visible, dynamic `Hide sidebar` / `Show sidebar` title and accessible name);
+  true when the sidebar is visible, dynamic `Hide sidebar` / `Show sidebar` title, static accessible
+  name `Sidebar`);
   the other three are one-shot actions with no pressed state. `setSidebarHidden(hidden)` repaints the
   toggle after the host flips the page state.
 - `#show-details` is a one-shot action: the host shows the sidebar, selects the Details tab and keeps

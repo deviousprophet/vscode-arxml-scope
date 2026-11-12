@@ -32,6 +32,7 @@ export interface DetailsEditorHost {
 	getRow(id: string): any;
 	getSelectedId(): string | undefined;
 	isDetailsTab(): boolean;
+	showSidebar?(): void;
 	showTab(name: string): void;
 	showSection(id: string): void;
 	renderedItem(id: string): any;
@@ -91,6 +92,7 @@ let detailsEditorHost: DetailsEditorHost = {
 	getRow: function () { return undefined; },
 	getSelectedId: function () { return undefined; },
 	isDetailsTab: function () { return true; },
+	showSidebar: function () {},
 	showTab: function () {},
 	showSection: function () {},
 	renderedItem: function () { return undefined; },
@@ -487,6 +489,7 @@ function detailsEditTarget(row: DetailsRowFields, field?: string): string | unde
 }
 
 function detailsRevealEditor(): void {
+	detailsEditorHost.showSidebar?.();
 	if (!detailsEditorHost.isDetailsTab()) {
 		// An edit always happens in the Details panel; the Conditions tab must not
 		// silently swallow it.

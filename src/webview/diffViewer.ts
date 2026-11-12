@@ -703,7 +703,7 @@ function cachedSubtree(): Set<string> | undefined {
 
 function subtreeIdsFrom(at: number): Set<string> {
 	const ids = new Set<string>();
-	const end = Math.min(rows.length, at + 1 + Math.max(0, rows[at].subtreeSize));
+	const end = subtreeEnd(rows, at);
 	for (let index = at; index < end; index++) {
 		ids.add(rows[index].key);
 	}
@@ -1215,6 +1215,10 @@ function appendKindCell(
 	element.appendChild(cell);
 }
 
+function marksChangedSubtree(flat: DiffDisplayRow, row: DiffRow, side: 'left' | 'right'): boolean {
+	return isCollapsedChangedNode(flat, row) && displaySideRow(row, side) !== undefined;
+}
+
 function fillContentRow(
 	element: HTMLElement,
 	cell: HTMLElement,
@@ -1231,7 +1235,7 @@ function fillContentRow(
 		applyNodeRowState(element, flat, side, row, status);
 	}
 	appendKindCell(element, cell, flat, side, row);
-	if (isCollapsedChangedNode(flat, row)) {
+	if (marksChangedSubtree(flat, row, side)) {
 		markSubtreeChanged(element);
 	}
 }

@@ -954,7 +954,7 @@ function closestTreeItem(target: Element): HTMLElement | undefined {
 }
 
 /** A single click on a concrete element; multi-clicks belong to text selection. */
-function isElementClick(event: MouseEvent): event is MouseEvent & { target: Element } {
+function isPrimaryElementClick(event: MouseEvent): event is MouseEvent & { target: Element } {
 	return event.target instanceof Element && event.detail <= 1;
 }
 
@@ -962,7 +962,7 @@ function onRowClick(event: MouseEvent): void {
 	// Every click supersedes a pending value edit. The second click of a
 	// double-click (and every later click) only participates in text selection.
 	cancelPendingDetailsEdit();
-	if (!isElementClick(event)) {
+	if (!isPrimaryElementClick(event)) {
 		return;
 	}
 	const item = closestTreeItem(event.target);
@@ -1143,21 +1143,22 @@ function expandAll() {
 }
 
 /** The toolbar toggle: flip the shell visibility; state values stay untouched. */
-function toggleSidebar(): void {
-	const hidden = !getSidebarState().hidden;
+function applySidebarVisibility(hidden: boolean): void {
 	setSidebarHidden(hidden);
 	if (editorToolbar) {
 		editorToolbar.setSidebarHidden(hidden);
 	}
 }
 
+/** The toolbar toggle: flip the shell visibility; state values stay untouched. */
+function toggleSidebar(): void {
+	applySidebarVisibility(!getSidebarState().hidden);
+}
+
 /** The one-shot Details action: show the sidebar on its Details tab. */
 function showDetails(): void {
-	setSidebarHidden(false);
+	applySidebarVisibility(false);
 	showSidebarTab('details');
-	if (editorToolbar) {
-		editorToolbar.setSidebarHidden(false);
-	}
 }
 
 function isParameterRowId(id: string): boolean {
@@ -1907,6 +1908,7 @@ setDetailsEditorHost({
 	getRow: function (id) { return rowById.get(id); },
 	getSelectedId: function () { return selectedId; },
 	isDetailsTab: function () { return getSidebarState().tab === 'details'; },
+	showSidebar: function () { applySidebarVisibility(false); },
 	showTab: showSidebarTab,
 	showSection: showSidebarSection,
 	renderedItem: renderedItemFor,
