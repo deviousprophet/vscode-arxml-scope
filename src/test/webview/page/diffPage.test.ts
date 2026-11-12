@@ -188,6 +188,76 @@ function nestedRows(): DiffRow[] {
 	];
 }
 
+/** An unchanged container whose only child carries `childStatus`. */
+function subtreeWithStatus(childStatus: DiffRow['status']): DiffRow[] {
+	const parent = wordRow({
+		key: 'parent',
+		kind: 'container',
+		hasChildren: true,
+		subtreeSize: 1,
+		status: 'unchanged',
+		left: containerCell('Parent'),
+		right: containerCell('Parent'),
+	});
+	return [parent, subtreeChildRow(childStatus)];
+}
+
+function subtreeChildValue(status: DiffRow['status']): string {
+	return status === 'changed' ? '2' : '1';
+}
+
+function subtreeChildRow(status: DiffRow['status']): DiffRow {
+	const value = subtreeChildValue(status);
+	const left = wordCell({ label: 'Child', shownValue: '1', value: '1' });
+	const right = wordCell({ label: 'Child', shownValue: value, value });
+	return wordRow({
+		key: 'child',
+		parentKey: 'parent',
+		level: 2,
+		status,
+		left: status === 'added' ? undefined : left,
+		right: status === 'removed' ? undefined : right,
+	});
+}
+
+/** A changed root row, so an all-unchanged subtree still has a visible diff. */
+function otherChangedRow(): DiffRow {
+	return wordRow({
+		key: 'other',
+		status: 'changed',
+		posinset: 2,
+		left: wordCell({ label: 'Other', shownValue: '1', value: '1' }),
+		right: wordCell({ label: 'Other', shownValue: '2', value: '2' }),
+	});
+}
+
+function subtreeRow(dom: ReturnType<typeof installDom>, pane: 'left' | 'right', key: string): HTMLElement {
+	const row = dom.document.querySelector(`#diff-pane-${pane} .diff-row[data-key="${key}"]`) as HTMLElement | null;
+	assert.ok(row, `${pane}: row ${key} is rendered`);
+	return row;
+}
+
+function clickTwisty(dom: ReturnType<typeof installDom>, pane: 'left' | 'right', key: string): void {
+	const twisty = subtreeRow(dom, pane, key).querySelector('.twisty');
+	assert.ok(twisty, `${pane}: row ${key} has a fold marker`);
+	twisty!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+}
+
+function assertSubtreeChanged(dom: ReturnType<typeof installDom>, key: string, expected: boolean): void {
+	for (const pane of ['left', 'right'] as const) {
+		const row = subtreeRow(dom, pane, key);
+		assert.strictEqual(
+			row.getAttribute('data-subtree-changed'),
+			expected ? 'true' : null,
+			`${pane}: ${key} subtree-changed state`
+		);
+		if (!expected) {
+			assert.strictEqual(row.getAttribute('aria-description'), null, `${pane}: ${key} has no description`);
+			assert.strictEqual(row.querySelector('.diff-subtree-change-dot'), null, `${pane}: ${key} has no dot`);
+		}
+	}
+}
+
 /** One parameter row of the 14-parameter container; index 6 is the change. */
 function contextRow(index: number): DiffRow {
 	const name = `P${String(index).padStart(2, '0')}`;
@@ -1019,6 +1089,186 @@ suite('semantic diff page', () => {
 					dom.document.querySelector(`#diff-pane-${pane} .diff-row[data-key="parent"] .node`)?.getAttribute('aria-expanded'),
 					'false',
 					`${pane}: collapsed`
+				);
+			}
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a collapsed container with a changed descendant shows the hidden-change dot in both panes', () => {
+		const { dom } = mount(wordDocument(subtreeWithStatus('changed')));
+		try {
+			assertSubtreeChanged(dom, 'parent', false);
+			assert.strictEqual(
+				dom.document.querySelector('.diff-subtree-change-dot'),
+				null,
+				'an expanded container shows no dot'
+			);
+			clickTwisty(dom, 'left', 'parent');
+			for (const pane of ['left', 'right'] as const) {
+				const row = subtreeRow(dom, pane, 'parent');
+				assert.strictEqual(row.getAttribute('data-subtree-changed'), 'true', `${pane}: row is marked`);
+				assert.strictEqual(row.getAttribute('aria-description'), 'Contains hidden changes', `${pane}: description`);
+				assert.strictEqual(row.dataset.status, 'unchanged', `${pane}: the parent keeps its own status`);
+				assert.strictEqual(
+					row.querySelector('.node')?.getAttribute('data-subtree-changed'),
+					'true',
+					`${pane}: the node shell is marked`
+				);
+				const dot = row.querySelector('.diff-subtree-change-dot');
+				assert.ok(dot, `${pane}: the dot is rendered`);
+				assert.strictEqual(dot.getAttribute('aria-hidden'), 'true');
+				assert.strictEqual(dot.getAttribute('title'), 'Contains hidden changes');
+				assert.strictEqual(dot.hasAttribute('data-key'), false, 'the dot is not a row key');
+				assert.strictEqual(
+					dot.previousElementSibling?.classList.contains('twisty'),
+					true,
+					'the dot sits next to the fold marker'
+				);
+			}
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a collapsed all-unchanged subtree shows no hidden-change dot', () => {
+		const { dom } = mount(wordDocument([...subtreeWithStatus('unchanged'), otherChangedRow()]));
+		try {
+			clickTwisty(dom, 'left', 'parent');
+			assertSubtreeChanged(dom, 'parent', false);
+			for (const pane of ['left', 'right'] as const) {
+				const row = subtreeRow(dom, pane, 'parent');
+				assert.strictEqual(row.dataset.status, 'unchanged', `${pane}: the parent stays unchanged`);
+				assert.strictEqual(row.querySelector('.diff-subtree-change-dot'), null, `${pane}: no dot`);
+			}
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('expanding a container removes the dot and collapsing restores it', () => {
+		const { dom } = mount(wordDocument(subtreeWithStatus('changed')));
+		try {
+			clickTwisty(dom, 'left', 'parent');
+			assertSubtreeChanged(dom, 'parent', true);
+			clickTwisty(dom, 'left', 'parent');
+			assertSubtreeChanged(dom, 'parent', false);
+			clickTwisty(dom, 'left', 'parent');
+			assertSubtreeChanged(dom, 'parent', true);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Show diff, Context, Swap and Expand all keep the dot on the collapsed container', () => {
+		const { dom } = mount(wordDocument(contextRows()));
+		try {
+			clickTwisty(dom, 'left', 'c');
+			assertSubtreeChanged(dom, 'c', true);
+			(dom.document.getElementById('diff-view-diff') as HTMLElement).click();
+			assertSubtreeChanged(dom, 'c', true);
+			(dom.document.getElementById('diff-context') as HTMLElement).click();
+			assertSubtreeChanged(dom, 'c', true);
+			(dom.document.getElementById('diff-swap') as HTMLElement).click();
+			assertSubtreeChanged(dom, 'c', true);
+			(dom.document.getElementById('diff-expand-all') as HTMLElement).click();
+			assertSubtreeChanged(dom, 'c', false);
+			assert.strictEqual(
+				dom.document.querySelector('.diff-subtree-change-dot'),
+				null,
+				'Expand all clears every dot'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Collapse all marks only containers whose subtree still holds changes', () => {
+		const { dom } = mount(wordDocument(subtreeWithStatus('changed')));
+		try {
+			(dom.document.getElementById('diff-collapse-all') as HTMLElement).click();
+			assertSubtreeChanged(dom, 'parent', true);
+			(dom.document.getElementById('diff-expand-all') as HTMLElement).click();
+			assertSubtreeChanged(dom, 'parent', false);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a document refresh recomputes the dot from the new rows', () => {
+		const { dom } = mount(wordDocument([...subtreeWithStatus('changed'), otherChangedRow()]));
+		try {
+			clickTwisty(dom, 'left', 'parent');
+			assertSubtreeChanged(dom, 'parent', true);
+			dom.post({
+				type: 'document',
+				semantic: false,
+				document: wordDocument([...subtreeWithStatus('unchanged'), otherChangedRow()]),
+			});
+			assertSubtreeChanged(dom, 'parent', false);
+			dom.post({
+				type: 'document',
+				semantic: false,
+				document: wordDocument([...subtreeWithStatus('changed'), otherChangedRow()]),
+			});
+			assertSubtreeChanged(dom, 'parent', true);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('nested containers and added/removed descendants mark each collapsed ancestor', () => {
+		const outer = wordRow({
+			key: 'outer',
+			kind: 'module',
+			hasChildren: true,
+			subtreeSize: 3,
+			status: 'unchanged',
+			left: containerCell('Outer'),
+			right: containerCell('Outer'),
+		});
+		const inner = wordRow({
+			key: 'inner',
+			parentKey: 'outer',
+			kind: 'container',
+			level: 2,
+			hasChildren: true,
+			subtreeSize: 2,
+			status: 'unchanged',
+			left: containerCell('Inner'),
+			right: containerCell('Inner'),
+		});
+		const added = wordRow({
+			key: 'added',
+			parentKey: 'inner',
+			level: 3,
+			status: 'added',
+			left: undefined,
+			right: wordCell({ label: 'Added' }),
+		});
+		const removed = wordRow({
+			key: 'removed',
+			parentKey: 'inner',
+			level: 3,
+			status: 'removed',
+			posinset: 2,
+			left: wordCell({ label: 'Removed' }),
+			right: undefined,
+		});
+		const { dom } = mount(wordDocument([outer, inner, added, removed]));
+		try {
+			clickTwisty(dom, 'left', 'outer');
+			assertSubtreeChanged(dom, 'outer', true);
+			clickTwisty(dom, 'left', 'outer');
+			clickTwisty(dom, 'left', 'inner');
+			assertSubtreeChanged(dom, 'inner', true);
+			assertSubtreeChanged(dom, 'outer', false);
+			for (const pane of ['left', 'right'] as const) {
+				assert.strictEqual(subtreeRow(dom, pane, 'inner').dataset.status, 'unchanged');
+				assert.ok(
+					subtreeRow(dom, pane, 'inner').querySelector('.diff-subtree-change-dot'),
+					`${pane}: the inner container carries the dot`
 				);
 			}
 		} finally {
