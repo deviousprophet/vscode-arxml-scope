@@ -3,7 +3,8 @@ import * as assert from 'assert';
 import { isArxmlPath, isEcucValues } from '../../core/ecuc/detect';
 import { EcucDocumentModel } from '../../core/ecuc/model';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { expectedModel, fixtureText, plain, scanFixture, slice, stripRanges } from './modelTestUtils';
+import { expectedModel, fixtureText, plain, scanFixture, slice } from './modelTestUtils';
+import { stripRanges } from './rangeTestUtils';
 
 /** Fixtures with a committed expected model. */
 const FIXTURES = [
