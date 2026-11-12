@@ -27,6 +27,37 @@ function reasonOf(result: ValidationResult): string {
 	return result.ok ? '' : result.reason;
 }
 
+function assertIntegerLiterals(candidate: ParameterNode): void {
+	for (const value of ['0', '63', '-7', '0x3F', '0b00111111', '-0b10']) {
+		assert.strictEqual(validateValue(candidate, value).ok, true, value);
+	}
+	for (const value of ['1.5', '1e5', 'true', 'abc', '0x']) {
+		assert.strictEqual(validateValue(candidate, value).ok, false, value);
+	}
+}
+
+function assertFloatLiterals(candidate: ParameterNode): void {
+	for (const value of ['0', '1', '1.5', '-3.5', '1e5', '3.5e10']) {
+		assert.strictEqual(validateValue(candidate, value).ok, true, value);
+	}
+	for (const value of ['0x3F', '0b11', 'true', 'abc']) {
+		assert.strictEqual(validateValue(candidate, value).ok, false, value);
+	}
+}
+
+function assertBooleanLiterals(candidate: ParameterNode): void {
+	assert.strictEqual(validateValue(candidate, 'true').ok, true);
+	assert.strictEqual(validateValue(candidate, 'false').ok, true);
+	for (const value of ['TRUE', 'False', '1', '0x1', 'yes']) {
+		assert.strictEqual(validateValue(candidate, value).ok, false, value);
+	}
+}
+
+function assertTextLiterals(candidate: ParameterNode): void {
+	assert.strictEqual(validateValue(candidate, 'anything at all').ok, true);
+	assert.strictEqual(validateValue(candidate, '1.5.2').ok, true);
+}
+
 suite('validate (core)', () => {
 	test('AC8: numerical literals are accepted', () => {
 		const accepted = ['true', 'false', '0', '63', '-7', '0x3F', '0Xff', '3.5', '-3.5', '3.5e10', '1.0E-3'];
@@ -57,32 +88,10 @@ suite('validate (core)', () => {
 	});
 
 	test('AC8: AUTOSAR DEST types narrow the accepted literals', () => {
-		const integer = parameter(true, 'unrelated', 'ECUC-INTEGER-PARAM-DEF');
-		for (const value of ['0', '63', '-7', '0x3F', '0b00111111', '-0b10']) {
-			assert.strictEqual(validateValue(integer, value).ok, true, value);
-		}
-		for (const value of ['1.5', '1e5', 'true', 'abc', '0x']) {
-			assert.strictEqual(validateValue(integer, value).ok, false, value);
-		}
-
-		const float = parameter(true, 'unrelated', 'ECUC-FLOAT-PARAM-DEF');
-		for (const value of ['0', '1', '1.5', '-3.5', '1e5', '3.5e10']) {
-			assert.strictEqual(validateValue(float, value).ok, true, value);
-		}
-		for (const value of ['0x3F', '0b11', 'true', 'abc']) {
-			assert.strictEqual(validateValue(float, value).ok, false, value);
-		}
-
-		const boolean = parameter(true, 'unrelated', 'ECUC-BOOLEAN-PARAM-DEF');
-		assert.strictEqual(validateValue(boolean, 'true').ok, true);
-		assert.strictEqual(validateValue(boolean, 'false').ok, true);
-		for (const value of ['TRUE', 'False', '1', '0x1', 'yes']) {
-			assert.strictEqual(validateValue(boolean, value).ok, false, value);
-		}
-
-		const text = parameter(false, 'unrelated', 'ECUC-STRING-PARAM-DEF');
-		assert.strictEqual(validateValue(text, 'anything at all').ok, true);
-		assert.strictEqual(validateValue(text, '1.5.2').ok, true);
+		assertIntegerLiterals(parameter(true, 'unrelated', 'ECUC-INTEGER-PARAM-DEF'));
+		assertFloatLiterals(parameter(true, 'unrelated', 'ECUC-FLOAT-PARAM-DEF'));
+		assertBooleanLiterals(parameter(true, 'unrelated', 'ECUC-BOOLEAN-PARAM-DEF'));
+		assertTextLiterals(parameter(false, 'unrelated', 'ECUC-STRING-PARAM-DEF'));
 	});
 
 	test('AC8: an unchanged value is refused', () => {

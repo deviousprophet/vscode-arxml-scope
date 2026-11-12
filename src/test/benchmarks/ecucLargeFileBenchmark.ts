@@ -44,20 +44,76 @@ function parameterIndex(moduleIndex: number, containerIndex: number, slot: numbe
 	return containerId * PARAMETERS_PER_CONTAINER + parameter;
 }
 
+function isRemovedParameter(side: Side, index: number): boolean {
+	return side === 'right' && index % 313 === 0;
+}
+
+function isNumericParameter(index: number): boolean {
+	return index % 2 === 0;
+}
+
+function parameterValue(side: Side, index: number): number {
+	// Every 97th value differs on the right side, giving the diff a `changed` row.
+	return side === 'right' && index % 97 === 0 ? index + 1 : index % 100000;
+}
+
+function parameterTag(numeric: boolean): string {
+	return numeric ? 'ECUC-NUMERICAL-PARAM-VALUE' : 'ECUC-TEXTUAL-PARAM-VALUE';
+}
+
+function parameterDest(numeric: boolean): string {
+	return numeric ? 'ECUC-INTEGER-PARAM-DEF' : 'ECUC-STRING-PARAM-DEF';
+}
+
+function shownValue(numeric: boolean, value: number): string {
+	return numeric ? String(value) : `value_${value}`;
+}
+
 function parameterBlock(lines: string[], depth: number, path: string, index: number, side: Side): void {
 	// A removed parameter on the right side gives the diff a `removed` row.
-	if (side === 'right' && index % 313 === 0) {
+	if (isRemovedParameter(side, index)) {
 		return;
 	}
-	const numeric = index % 2 === 0;
-	// Every 97th value differs on the right side, giving the diff a `changed` row.
-	const value = side === 'right' && index % 97 === 0 ? index + 1 : index % 100000;
-	const tag = numeric ? 'ECUC-NUMERICAL-PARAM-VALUE' : 'ECUC-TEXTUAL-PARAM-VALUE';
-	const dest = numeric ? 'ECUC-INTEGER-PARAM-DEF' : 'ECUC-STRING-PARAM-DEF';
+	const numeric = isNumericParameter(index);
+	const value = parameterValue(side, index);
+	const tag = parameterTag(numeric);
+	const dest = parameterDest(numeric);
 	lines.push(`${indent(depth)}<${tag}>`);
 	lines.push(`${indent(depth + 1)}<DEFINITION-REF DEST="${dest}">${path}/Parameter${index}</DEFINITION-REF>`);
-	lines.push(`${indent(depth + 1)}<VALUE>${numeric ? value : `value_${value}`}</VALUE>`);
+	lines.push(`${indent(depth + 1)}<VALUE>${shownValue(numeric, value)}</VALUE>`);
 	lines.push(`${indent(depth)}</${tag}>`);
+}
+
+function containerShortName(moduleIndex: number, containerIndex: number, subIndex: number | null): string {
+	return subIndex === null
+		? `Container${moduleIndex}_${containerIndex}`
+		: `SubContainer${moduleIndex}_${containerIndex}_${subIndex}`;
+}
+
+function containerSlot(subIndex: number | null): number {
+	return subIndex === null ? 0 : subIndex + 1;
+}
+
+function pushParameters(
+	lines: string[],
+	depth: number,
+	path: string,
+	moduleIndex: number,
+	containerIndex: number,
+	slot: number,
+	side: Side
+): void {
+	for (let parameter = 0; parameter < PARAMETERS_PER_CONTAINER; parameter++) {
+		parameterBlock(lines, depth + 2, path, parameterIndex(moduleIndex, containerIndex, slot, parameter), side);
+	}
+}
+
+function pushSubContainers(lines: string[], depth: number, moduleIndex: number, containerIndex: number, side: Side): void {
+	lines.push(`${indent(depth + 1)}<SUB-CONTAINERS>`);
+	for (let sub = 0; sub < SUB_CONTAINERS_PER_CONTAINER; sub++) {
+		containerBlock(lines, depth + 2, moduleIndex, containerIndex, sub, side);
+	}
+	lines.push(`${indent(depth + 1)}</SUB-CONTAINERS>`);
 }
 
 function containerBlock(
@@ -68,25 +124,17 @@ function containerBlock(
 	subIndex: number | null,
 	side: Side
 ): void {
-	const shortName = subIndex === null
-		? `Container${moduleIndex}_${containerIndex}`
-		: `SubContainer${moduleIndex}_${containerIndex}_${subIndex}`;
+	const shortName = containerShortName(moduleIndex, containerIndex, subIndex);
 	const path = `/SyntheticPkg/ModuleDefs/Module${moduleIndex}/${shortName}`;
-	const slot = subIndex === null ? 0 : subIndex + 1;
+	const slot = containerSlot(subIndex);
 	lines.push(`${indent(depth)}<ECUC-CONTAINER-VALUE>`);
 	lines.push(`${indent(depth + 1)}<SHORT-NAME>${shortName}</SHORT-NAME>`);
 	lines.push(`${indent(depth + 1)}<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">${path}</DEFINITION-REF>`);
 	lines.push(`${indent(depth + 1)}<PARAMETER-VALUES>`);
-	for (let parameter = 0; parameter < PARAMETERS_PER_CONTAINER; parameter++) {
-		parameterBlock(lines, depth + 2, path, parameterIndex(moduleIndex, containerIndex, slot, parameter), side);
-	}
+	pushParameters(lines, depth, path, moduleIndex, containerIndex, slot, side);
 	lines.push(`${indent(depth + 1)}</PARAMETER-VALUES>`);
 	if (subIndex === null) {
-		lines.push(`${indent(depth + 1)}<SUB-CONTAINERS>`);
-		for (let sub = 0; sub < SUB_CONTAINERS_PER_CONTAINER; sub++) {
-			containerBlock(lines, depth + 2, moduleIndex, containerIndex, sub, side);
-		}
-		lines.push(`${indent(depth + 1)}</SUB-CONTAINERS>`);
+		pushSubContainers(lines, depth, moduleIndex, containerIndex, side);
 	}
 	lines.push(`${indent(depth)}</ECUC-CONTAINER-VALUE>`);
 }

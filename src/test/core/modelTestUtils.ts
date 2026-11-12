@@ -49,18 +49,34 @@ export function plain(model: EcucDocumentModel): unknown {
 	);
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === 'object';
+}
+
+function hasRangeKeys(keys: readonly string[]): boolean {
+	return keys.length === 2 && keys.includes('start') && keys.includes('end');
+}
+
 function isRange(value: unknown): boolean {
-	if (!value || typeof value !== 'object') {
-		return false;
+	return isObject(value) && hasRangeKeys(Object.keys(value)) && isNumberPair(value);
+}
+
+function isNumberPair(value: Record<string, unknown>): boolean {
+	return typeof value.start === 'number' && typeof value.end === 'number';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return isObject(value) && !Array.isArray(value);
+}
+
+function stripObject(value: Record<string, unknown>): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const [key, inner] of Object.entries(value)) {
+		if (!isRange(inner)) {
+			out[key] = stripRanges(inner);
+		}
 	}
-	const keys = Object.keys(value as object);
-	return (
-		keys.length === 2 &&
-		keys.includes('start') &&
-		keys.includes('end') &&
-		typeof (value as { start: unknown }).start === 'number' &&
-		typeof (value as { end: unknown }).end === 'number'
-	);
+	return out;
 }
 
 /** Recursively removes every range, for layout-independence comparisons. */
@@ -69,14 +85,8 @@ export function stripRanges(value: unknown): unknown {
 		// A `[key, range]` pathIndex pair loses its range, so only keys are compared.
 		return value.filter((entry) => !isRange(entry)).map(stripRanges);
 	}
-	if (value && typeof value === 'object') {
-		const out: Record<string, unknown> = {};
-		for (const [key, inner] of Object.entries(value)) {
-			if (!isRange(inner)) {
-				out[key] = stripRanges(inner);
-			}
-		}
-		return out;
+	if (isRecord(value)) {
+		return stripObject(value);
 	}
 	return value;
 }

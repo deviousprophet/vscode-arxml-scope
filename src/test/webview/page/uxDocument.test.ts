@@ -43,6 +43,10 @@ function rows() {
 	return buildRows(scanEcucValues(fixtureText(FIXTURE)), { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows;
 }
 
+function svgFor(html: string, id: string): string {
+	return new RegExp(`id="${id}"[\\s\\S]*?<\\/svg>`).exec(html)?.[0] ?? '';
+}
+
 suite('editor document view', () => {
 	test('Document is the only view; the sidebar shell and details exist', () => {
 		const html = shell();
@@ -209,8 +213,8 @@ suite('editor document view', () => {
 			'an empty container is marked at rest'
 		);
 		assert.ok(/\.guide\.guide-active\s*\{[^}]*opacity:\s*0\.85/.test(css));
-		const collapse = html.match(/id="collapse-all"[\s\S]*?<\/svg>/)?.[0] ?? '';
-		const expand = html.match(/id="expand-all"[\s\S]*?<\/svg>/)?.[0] ?? '';
+		const collapse = svgFor(html, 'collapse-all');
+		const expand = svgFor(html, 'expand-all');
 		assert.ok(collapse.includes('M4 2.25l4 4 4-4'), 'Collapse points inward');
 		assert.ok(expand.includes('M4 6.25 8 2.25l4 4'), 'Expand points outward');
 	});

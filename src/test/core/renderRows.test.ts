@@ -30,6 +30,39 @@ function fixtureRows(): ReturnType<typeof buildRows> {
 	return buildRows(scanEcucValues(fixtureText(FIXTURE)));
 }
 
+function assertAnnotationComments(rows: readonly EcucRow[]): void {
+	const moduleRow = rows.find((row) => row.kind === 'module');
+	assert.ok(moduleRow);
+	assert.deepStrictEqual(moduleRow.comments, ['[Note] module note'], 'each annotation is one comment line');
+	assert.strictEqual(
+		rows.find((row) => row.label === 'ContA')?.comments?.[0],
+		'container note',
+		'an unlabelled annotation keeps its text'
+	);
+}
+
+function assertConditionTitle(moduleRow: EcucRow): void {
+	const conditionPart = moduleRow.meta.find(
+		(part) => part.cls === 'condition' && part.text === '[(A == B)]'
+	);
+	assert.strictEqual(
+		conditionPart?.title,
+		'A = (not set)\nB = (not set)',
+		'missing values are listed one per line'
+	);
+}
+
+function assertEvaluatedConditionTitles(rows: readonly EcucRow[]): void {
+	const evaluated = rows.find((row) => row.kind === 'module');
+	assert.ok(evaluated);
+	assert.deepStrictEqual(evaluated.condition?.values, { A: 1, B: 2 });
+	assert.strictEqual(
+		evaluated.meta.find((part) => part.cls === 'condition' && part.text === '[(A == B)]')?.title,
+		'A = 1\nB = 2',
+		'the tooltip lists values in source order, separated by newlines'
+	);
+}
+
 suite('editor row model (design §2)', () => {
 	test('design §2: rows are in display order with levels and contiguous subtrees', () => {
 		const doc = fixtureRows();
@@ -169,34 +202,16 @@ suite('editor row model (design §2)', () => {
 
 	test('annotations are comment lines and condition titles explain their inputs', () => {
 		const plain = fixtureRows();
-		const moduleRow = plain.rows.find((row) => row.kind === 'module')!;
-		assert.deepStrictEqual(moduleRow.comments, ['[Note] module note'], 'each annotation is one comment line');
-		assert.strictEqual(
-			plain.rows.find((row) => row.label === 'ContA')?.comments?.[0],
-			'container note',
-			'an unlabelled annotation keeps its text'
-		);
-		const conditionPart = moduleRow.meta.find(
-			(part) => part.cls === 'condition' && part.text === '[(A == B)]'
-		);
-		assert.strictEqual(
-			conditionPart?.title,
-			'A = (not set)\nB = (not set)',
-			'missing values are listed one per line'
-		);
+		assertAnnotationComments(plain.rows);
+		assertConditionTitle(plain.rows.find((row) => row.kind === 'module')!);
 
 		const evaluated = buildRows(scanEcucValues(fixtureText(FIXTURE)), {
 			conditions: new Map([
 				['A', 1],
 				['B', 2],
 			]),
-		}).rows.find((row) => row.kind === 'module')!;
-		assert.deepStrictEqual(evaluated.condition?.values, { A: 1, B: 2 });
-		assert.strictEqual(
-			evaluated.meta.find((part) => part.cls === 'condition' && part.text === '[(A == B)]')?.title,
-			'A = 1\nB = 2',
-			'the tooltip lists values in source order, separated by newlines'
-		);
+		}).rows;
+		assertEvaluatedConditionTitles(evaluated);
 	});
 
 	test('condition tooltip quotes strings, marks missing values and keeps a literal fallback', () => {

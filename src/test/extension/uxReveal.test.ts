@@ -98,21 +98,30 @@ function customTabOpen(uri: vscode.Uri): boolean {
 	);
 }
 
+function isCustomTabFor(tab: vscode.Tab, uri: vscode.Uri): boolean {
+	const input = tab.input;
+	return (
+		input instanceof vscode.TabInputCustom &&
+		input.viewType === VIEW_TYPE &&
+		input.uri.toString() === uri.toString()
+	);
+}
+
+function isTextTabFor(tab: vscode.Tab, uri: vscode.Uri): boolean {
+	const input = tab.input;
+	return input instanceof vscode.TabInputText && input.uri.toString() === uri.toString();
+}
+
+function tabMatches(tab: vscode.Tab, uri: vscode.Uri, custom: boolean): boolean {
+	return custom ? isCustomTabFor(tab, uri) : isTextTabFor(tab, uri);
+}
+
 /** The index of the group holding `uri`'s custom editor tab (or its text tab), or -1. */
 function groupIndexFor(uri: vscode.Uri, custom: boolean): number {
 	const groups = vscode.window.tabGroups.all;
 	for (let at = 0; at < groups.length; at++) {
 		for (const tab of groups[at].tabs) {
-			const input = tab.input;
-			if (custom) {
-				if (
-					input instanceof vscode.TabInputCustom &&
-					input.viewType === VIEW_TYPE &&
-					input.uri.toString() === uri.toString()
-				) {
-					return at;
-				}
-			} else if (input instanceof vscode.TabInputText && input.uri.toString() === uri.toString()) {
+			if (tabMatches(tab, uri, custom)) {
 				return at;
 			}
 		}

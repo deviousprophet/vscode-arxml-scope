@@ -37,6 +37,44 @@ function definitionsText(): string {
 	return `<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-DEF><SHORT-NAME>MDef</SHORT-NAME><CONTAINERS><ECUC-PARAM-CONF-CONTAINER-DEF><SHORT-NAME>C</SHORT-NAME><LOWER-MULTIPLICITY>0</LOWER-MULTIPLICITY><UPPER-MULTIPLICITY>1</UPPER-MULTIPLICITY><PARAMETERS>${parameters.join('')}</PARAMETERS></ECUC-PARAM-CONF-CONTAINER-DEF></CONTAINERS></ECUC-MODULE-DEF></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
 }
 
+function parameterValue(parameter: number): string {
+	if (parameter === 0) {
+		return '100000';
+	}
+	return parameter === 1 ? '' : String(parameter);
+}
+
+function parameterLine(parameter: number): string {
+	const value = parameterValue(parameter);
+	return `<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/MDef/C/P${parameter}</DEFINITION-REF><VALUE>${value}</VALUE></ECUC-NUMERICAL-PARAM-VALUE>`;
+}
+
+function referenceLine(): string {
+	return `<ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/P/MDef/C/R</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">/P/M/C0</VALUE-REF></ECUC-REFERENCE-VALUE>`;
+}
+
+function missingDefinitionLine(fileIndex: number): string {
+	return `<PARAMETER-VALUES><ECUC-TEXTUAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/P/Missing/Def</DEFINITION-REF><VALUE>${fileIndex}</VALUE></ECUC-TEXTUAL-PARAM-VALUE></PARAMETER-VALUES>`;
+}
+
+function containerLines(container: number, fileIndex: number): string[] {
+	const name = `C${container}`;
+	const lines: string[] = [
+		`<ECUC-CONTAINER-VALUE><SHORT-NAME>${name}</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/MDef/C</DEFINITION-REF><PARAMETER-VALUES>`,
+	];
+	for (let parameter = 0; parameter < PARAMETERS_PER_CONTAINER; parameter++) {
+		lines.push(parameterLine(parameter));
+	}
+	lines.push('</PARAMETER-VALUES><REFERENCE-VALUES>');
+	lines.push(referenceLine());
+	lines.push('</REFERENCE-VALUES>');
+	if (container === 0) {
+		lines.push(missingDefinitionLine(fileIndex));
+	}
+	lines.push('</ECUC-CONTAINER-VALUE>');
+	return lines;
+}
+
 function valuesText(fileIndex: number): string {
 	const lines: string[] = [];
 	lines.push('<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>');
@@ -44,27 +82,7 @@ function valuesText(fileIndex: number): string {
 		`<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/MDef</DEFINITION-REF><CONTAINERS>`
 	);
 	for (let container = 0; container < CONTAINERS_PER_FILE; container++) {
-		const name = `C${container}`;
-		lines.push(
-			`<ECUC-CONTAINER-VALUE><SHORT-NAME>${name}</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/MDef/C</DEFINITION-REF><PARAMETER-VALUES>`
-		);
-		for (let parameter = 0; parameter < PARAMETERS_PER_CONTAINER; parameter++) {
-			const value = parameter === 0 ? '100000' : parameter === 1 ? '' : String(parameter);
-			lines.push(
-				`<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/MDef/C/P${parameter}</DEFINITION-REF><VALUE>${value}</VALUE></ECUC-NUMERICAL-PARAM-VALUE>`
-			);
-		}
-		lines.push('</PARAMETER-VALUES><REFERENCE-VALUES>');
-		lines.push(
-			`<ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/P/MDef/C/R</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">/P/M/C0</VALUE-REF></ECUC-REFERENCE-VALUE>`
-		);
-		lines.push('</REFERENCE-VALUES>');
-		if (container === 0) {
-			lines.push(
-				`<PARAMETER-VALUES><ECUC-TEXTUAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/P/Missing/Def</DEFINITION-REF><VALUE>${fileIndex}</VALUE></ECUC-TEXTUAL-PARAM-VALUE></PARAMETER-VALUES>`
-			);
-		}
-		lines.push('</ECUC-CONTAINER-VALUE>');
+		lines.push(...containerLines(container, fileIndex));
 	}
 	lines.push('</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES>');
 	lines.push('</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>');

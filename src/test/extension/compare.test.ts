@@ -67,15 +67,19 @@ function assertNoFlatEditorCommands(manifest: Manifest): void {
 	assert.deepStrictEqual(flatEditor, [], 'no diff command is a flat editor/context entry');
 }
 
+function isDiffTab(tab: vscode.Tab): boolean {
+	const input = tab.input;
+	// The test host reports the workbench's internal type
+	// (`mainThreadWebview-vscode-arxml-scope.diff`); the panel's own
+	// viewType remains the suffix.
+	return input instanceof vscode.TabInputWebview && input.viewType.endsWith(DiffPanel.viewType);
+}
+
 function diffTabs(): vscode.Tab[] {
 	const tabs: vscode.Tab[] = [];
 	for (const group of vscode.window.tabGroups.all) {
 		for (const tab of group.tabs) {
-			const input = tab.input;
-			// The test host reports the workbench's internal type
-			// (`mainThreadWebview-vscode-arxml-scope.diff`); the panel's own
-			// viewType remains the suffix.
-			if (input instanceof vscode.TabInputWebview && input.viewType.endsWith(DiffPanel.viewType)) {
+			if (isDiffTab(tab)) {
 				tabs.push(tab);
 			}
 		}

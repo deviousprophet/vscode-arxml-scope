@@ -213,6 +213,72 @@ function open(document: vscode.TextDocument): { provider: EcucEditorProvider; st
 	return { provider, stub };
 }
 
+function positionMismatches(text: string, document: vscode.TextDocument): number[] {
+	const index = new LineIndex(text);
+	const mismatches: number[] = [];
+	for (let offset = 0; offset <= text.length; offset++) {
+		const mine = index.positionAt(offset);
+		const theirs = document.positionAt(offset);
+		if (mine.line !== theirs.line || mine.character !== theirs.character) {
+			mismatches.push(offset);
+		}
+	}
+	return mismatches;
+}
+
+function assertOnlyEolMismatches(text: string, mismatches: readonly number[]): void {
+	// VS Code reports the `\r` for an offset that falls on the `\n` of a CRLF;
+	// `LineIndex` reports the offset literally. That is the only divergence, and a
+	// region never begins or ends inside an EOL — the value's bytes are trimmed of
+	// their surrounding whitespace first — so the write is unaffected.
+	for (const offset of mismatches) {
+		assert.strictEqual(text.slice(offset - 1, offset + 1), '\r\n', `offset ${offset} is not an EOL interior`);
+	}
+	assert.ok(mismatches.length > 0, 'the CRLF fixture exercises the divergence');
+}
+
+function assertRegionSelection(
+	text: string,
+	index: LineIndex,
+	document: vscode.TextDocument
+): void {
+	// What the write actually depends on: the `Range` built from `LineIndex` selects
+	// exactly the bytes of the region it was computed for.
+	const model = scanEcucValues(text);
+	for (const parameter of model.modules[0].containers[0].parameters) {
+		for (const region of ['value', 'element'] as const) {
+			const described = regionOf(parameter, text, region);
+			if (!described) {
+				continue;
+			}
+			const start = index.positionAt(described.range.start);
+			const end = index.positionAt(described.range.end);
+			assert.strictEqual(
+				document.getText(new vscode.Range(start.line, start.character, end.line, end.character)),
+				described.oldText,
+				`${parameter.name} ${region}`
+			);
+		}
+	}
+}
+
+function assertShortNameRefusals(
+	model: ReturnType<typeof scanEcucValues>,
+	text: string,
+	id: string,
+	values: readonly string[]
+): void {
+	for (const value of values) {
+		const plan = buildFieldEdit(model, text, id, 'shortName', value);
+		assert.ok(plan.ok === false, JSON.stringify(value));
+		assert.ok(plan.ok === false && plan.reason.length > 0, JSON.stringify(value));
+	}
+}
+
+function assertFieldRefused(plan: ReturnType<typeof buildFieldEdit>, fragment: string): void {
+	assert.ok(plan.ok === false && plan.reason.includes(fragment), String(plan));
+}
+
 suite('editor value editing (AC1–AC9)', () => {
 	test('AC1: a numerical edit changes exactly that value, byte for byte', async () => {
 		await withEditingFixture('numeric.arxml', async (uri, document, dir) => {
@@ -565,41 +631,9 @@ suite('editor value editing (AC1–AC9)', () => {
 		await withEditingFixture('crlf.arxml', async (_uri, document) => {
 			const text = document.getText();
 			const index = new LineIndex(text);
-			const mismatches: number[] = [];
-			for (let offset = 0; offset <= text.length; offset++) {
-				const mine = index.positionAt(offset);
-				const theirs = document.positionAt(offset);
-				if (mine.line !== theirs.line || mine.character !== theirs.character) {
-					mismatches.push(offset);
-				}
-			}
-			// VS Code reports the `\r` for an offset that falls on the `\n` of a CRLF;
-			// `LineIndex` reports the offset literally. That is the only divergence, and a
-			// region never begins or ends inside an EOL — the value's bytes are trimmed of
-			// their surrounding whitespace first — so the write is unaffected.
-			for (const offset of mismatches) {
-				assert.strictEqual(text.slice(offset - 1, offset + 1), '\r\n', `offset ${offset} is not an EOL interior`);
-			}
-			assert.ok(mismatches.length > 0, 'the CRLF fixture exercises the divergence');
-
-			// What the write actually depends on: the `Range` built from `LineIndex` selects
-			// exactly the bytes of the region it was computed for.
-			const model = scanEcucValues(text);
-			for (const parameter of model.modules[0].containers[0].parameters) {
-				for (const region of ['value', 'element'] as const) {
-					const described = regionOf(parameter, text, region);
-					if (!described) {
-						continue;
-					}
-					const start = index.positionAt(described.range.start);
-					const end = index.positionAt(described.range.end);
-					assert.strictEqual(
-						document.getText(new vscode.Range(start.line, start.character, end.line, end.character)),
-						described.oldText,
-						`${parameter.name} ${region}`
-					);
-				}
-			}
+			const mismatches = positionMismatches(text, document);
+			assertOnlyEolMismatches(text, mismatches);
+			assertRegionSelection(text, index, document);
 		});
 	});
 
@@ -814,11 +848,7 @@ suite('editor container field editing (R1–R5)', () => {
 		const model = scanEcucValues(text);
 		const id = containerId(text, 'FirstCont');
 
-		for (const value of ['', 'First Cont', 'First/Cont', 'First&Cont', '1First']) {
-			const plan = buildFieldEdit(model, text, id, 'shortName', value);
-			assert.ok(plan.ok === false, JSON.stringify(value));
-			assert.ok(plan.ok === false && plan.reason.length > 0, JSON.stringify(value));
-		}
+		assertShortNameRefusals(model, text, id, ['', 'First Cont', 'First/Cont', 'First&Cont', '1First']);
 		const relative = buildFieldEdit(model, text, id, 'definitionRef', 'PkgF/ContDefs/ContMod/FirstCont');
 		assert.ok(relative.ok === false && relative.reason.includes('absolute /-separated path'), String(relative));
 
@@ -984,17 +1014,17 @@ suite('editor container field editing (R1–R5)', () => {
 		assert.strictEqual(model.modules[0].containers.length, 3);
 
 		const missing = buildFieldEdit(model, text, index.idOf(noName)!, 'shortName', 'NowNamed');
-		assert.ok(missing.ok === false && missing.reason.includes('no <SHORT-NAME> text'), String(missing));
+		assertFieldRefused(missing, 'no <SHORT-NAME> text');
 
 		const empty = buildFieldEdit(model, text, index.idOf(emptyName)!, 'shortName', 'NowNamed');
-		assert.ok(empty.ok === false && empty.reason.includes('no <SHORT-NAME> text'), String(empty));
+		assertFieldRefused(empty, 'no <SHORT-NAME> text');
 
 		assert.strictEqual(cdataName.shortName, 'CdataCont', 'the CDATA text is read');
 		const cdata = buildFieldEdit(model, text, index.idOf(cdataName)!, 'shortName', 'CdataRenamed');
-		assert.ok(cdata.ok === false && cdata.reason.includes('no <SHORT-NAME> text'), String(cdata));
+		assertFieldRefused(cdata, 'no <SHORT-NAME> text');
 
 		const noRef = buildFieldEdit(model, text, index.idOf(cdataName)!, 'definitionRef', '/PkgS/SparseMod/CdataCont');
-		assert.ok(noRef.ok === false && noRef.reason.includes('no <DEFINITION-REF> text'), String(noRef));
+		assertFieldRefused(noRef, 'no <DEFINITION-REF> text');
 	});
 
 	test('R5: a stale container region is refused instead of rewriting moved bytes', async () => {

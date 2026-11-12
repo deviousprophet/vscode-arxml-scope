@@ -42,6 +42,43 @@ function shell(kind: 'editor' | 'diff'): string {
 	return kind === 'editor' ? editorShell(assets) : diffShell(assets);
 }
 
+function isTreeElement(element: any): boolean {
+	return element.id === 'tree';
+}
+
+function hasScrollClass(element: any): boolean {
+	return (
+		element.classList?.contains('document-tree-scroll') ||
+		element.classList?.contains('virtual-scroll-vscroll')
+	);
+}
+
+function isViewportElement(element: any): boolean {
+	return isTreeElement(element) || hasScrollClass(element);
+}
+
+function elementHeight(element: any): number {
+	if (isViewportElement(element)) {
+		return VIEW_PORT_HEIGHT;
+	}
+	return Number(element.dataset?.testClientHeight ?? 0);
+}
+
+function elementWidth(element: any): number {
+	if (isViewportElement(element)) {
+		return VIEW_PORT_WIDTH;
+	}
+	return Number(element.dataset?.testClientWidth ?? 0);
+}
+
+function boundingHeight(element: any): number {
+	return element.clientHeight || Number(element.dataset?.testRectHeight ?? 20);
+}
+
+function boundingWidth(element: any): number {
+	return element.clientWidth || Number(element.dataset?.testRectWidth ?? 100);
+}
+
 /** Install jsdom globals and the VS Code API stub for one page. */
 export function installDom(kind: 'editor' | 'diff'): InstalledDom {
 	return installMarkup(shell(kind));
@@ -88,35 +125,20 @@ export function installMarkup(html: string): InstalledDom {
 	Object.defineProperty(window.HTMLElement.prototype, 'clientHeight', {
 		configurable: true,
 		get(this: any) {
-			if (
-				this.id === 'tree' ||
-				this.classList?.contains('document-tree-scroll') ||
-				this.classList?.contains('virtual-scroll-vscroll')
-			) {
-				return VIEW_PORT_HEIGHT;
-			}
-			return Number(this.dataset?.testClientHeight ?? 0);
+			return elementHeight(this);
 		},
 	});
 	Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', {
 		configurable: true,
 		get(this: any) {
-			if (
-				this.id === 'tree' ||
-				this.classList?.contains('document-tree-scroll') ||
-				this.classList?.contains('virtual-scroll-vscroll')
-			) {
-				return VIEW_PORT_WIDTH;
-			}
-			return Number(this.dataset?.testClientWidth ?? 0);
+			return elementWidth(this);
 		},
 	});
 	window.HTMLElement.prototype.getBoundingClientRect = function (this: any) {
-		const height = this.clientHeight || Number(this.dataset?.testRectHeight ?? 20);
-		const width = this.clientWidth || Number(this.dataset?.testRectWidth ?? 100);
+		const height = boundingHeight(this);
+		const width = boundingWidth(this);
 		return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height };
 	};
-
 	const api: HostMessageRecorder = {
 		messages: [],
 		state: undefined,

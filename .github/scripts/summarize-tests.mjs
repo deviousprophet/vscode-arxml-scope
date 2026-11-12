@@ -139,6 +139,14 @@ ${tailLines(logText, 30)}
 `);
 }
 
+function onlyBenchmarkOutput(logText) {
+  return groupByType(logText).size > 0 && !hasMochaOutput(logText);
+}
+
+function emptySuccessfulRun(stats) {
+  return stats.total === 0 && !testsDidNotRun(0);
+}
+
 function summarizeMocha() {
   const logText = readLog();
 
@@ -146,7 +154,7 @@ function summarizeMocha() {
   // summary below renders it, so an empty Mocha header would only be noise.
   // A test log that failed before Mocha printed anything still renders the
   // "tests were not executed" header and its tail below.
-  if (groupByType(logText).size > 0 && !hasMochaOutput(logText)) {
+  if (onlyBenchmarkOutput(logText)) {
     return;
   }
 
@@ -154,7 +162,7 @@ function summarizeMocha() {
 
   // A successful run with no tests is not expected for this repository, but
   // avoid an empty summary if it happens.
-  if (stats.total === 0 && !testsDidNotRun(0)) {
+  if (emptySuccessfulRun(stats)) {
     return;
   }
 
