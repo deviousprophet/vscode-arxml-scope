@@ -108,19 +108,18 @@ suite('editor Document interactions', () => {
 		}
 	});
 
-	test('Details reveals the sidebar on the Details tab and keeps the selection', () => {
+	test('showing the sidebar restores the prior Details tab and keeps the selection', () => {
 		const dom = mount();
 		try {
 			const ini = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
 			ini.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
 			const inspectorBefore = dom.document.getElementById('inspector')!.textContent;
-			(dom.document.getElementById('stab-conditions') as HTMLElement).click();
-			assert.strictEqual(getSidebarState().tab, 'conditions');
+			assert.strictEqual(getSidebarState().tab, 'details');
 			(dom.document.getElementById('toggle-sidebar') as HTMLElement).click();
 			assert.strictEqual(getSidebarState().hidden, true);
-			(dom.document.getElementById('show-details') as HTMLElement).click();
+			(dom.document.getElementById('toggle-sidebar') as HTMLElement).click();
 			assert.strictEqual(getSidebarState().hidden, false);
-			assert.strictEqual(getSidebarState().tab, 'details');
+			assert.strictEqual(getSidebarState().tab, 'details', 'the prior Details tab is restored');
 			assert.strictEqual(dom.document.getElementById('stab-details')!.getAttribute('aria-selected'), 'true');
 			assert.strictEqual(dom.document.getElementById('stab-conditions')!.getAttribute('aria-selected'), 'false');
 			assert.ok(dom.document.getElementById('sbp-details')!.classList.contains('active'));

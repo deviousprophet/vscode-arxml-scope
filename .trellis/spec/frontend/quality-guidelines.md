@@ -84,7 +84,7 @@ that is not obvious from the code.
 - **Defaults are Document and the Details tab.** `editorShell` writes `data-view="document"` and the
   sidebar mounts with Details selected by default; Conditions starts hidden. The tab, sidebar width,
   section panes, collapsed sections and sidebar visibility persist through `getState()/setState()`. A
-  legacy `inspectorHidden` is ignored; the toolbar's one-shot Details action reveals the tab, there is
+  legacy `inspectorHidden` is ignored; the sidebar's Details tab owns the panel, there is
   no Details/Conditions toggle and no second panel surface.
 - **Details editing is the only field edit path, and structural edits are confirmed.** The panel
   edits a parameter's `<VALUE>` and a container's `<SHORT-NAME>` / `<DEFINITION-REF>` inner text.

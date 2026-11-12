@@ -12,8 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Collapse all and Expand all controls in the semantic diff toolbar
 - VS Code-style line-number gutters in the Document view and both diff panes, numbered by display row with a per-pane diff status tint
 - A small change dot on collapsed diff containers whose hidden subtree contains a change
-- A sidebar visibility toggle that hides or shows the whole sidebar and remembers the choice
-- A Details toolbar button that restores the sidebar on the Details tab
+- A sidebar visibility toggle that hides or shows the whole sidebar and restores its last active tab
 - Native text selection and copy in the Document view, without line numbers or sidebar chrome
 
 ### Changed
@@ -24,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Semantic diff now matches bulk renames of hundreds of containers quickly and reports when a comparison is limited by its work budget or a large definition group
 - Contributors install with Node 24 and npm 11 or newer; an older npm fails with a clear version message instead of a lockfile error
 - Releases now require the native Rust core addon and include builds for Linux x64, Windows x64 and macOS x64/arm64
-- The Document Collapse, Expand and Details controls use the same icon-over-label style as the diff toolbar
+- The Document Collapse, Expand and Sidebar controls use the same icon-over-label style as the diff toolbar
 - Double-clicking Document text selects it instead of revealing the source; a single click on a value still opens Details after a short multi-click guard
 - Search matches use a calmer amber fill while the current match stays clearly stronger
 

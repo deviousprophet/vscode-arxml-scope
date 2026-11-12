@@ -11,17 +11,15 @@ export interface EditorToolbarCallbacks {
 	onCollapseAll?(): void;
 	onExpandAll?(): void;
 	onToggleSidebar?(): void;
-	onDetails?(): void;
 }
 
 /** Editor strip: flexible slot, sidebar toggle, Collapse, Expand, Details, then Search. */
 export function renderEditorToolbarHtml(searchHtml: string): string {
 	return `<div class="toolbar">
 <span class="grow"></span>
-<button id="toggle-sidebar" class="tool diff-tool" type="button" aria-pressed="true" title="Hide sidebar" aria-label="Sidebar">${ICON_SIDEBAR}<span class="lbl">Sidebar</span></button>
 <button id="collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
 <button id="expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
-<button id="show-details" class="tool diff-tool" type="button" title="Show the Details tab" aria-label="Show the Details tab">${ICON_DETAILS}<span class="lbl">Details</span></button>
+<button id="toggle-sidebar" class="tool diff-tool" type="button" aria-pressed="true" title="Hide sidebar" aria-label="Sidebar">${ICON_SIDEBAR}<span class="lbl">Sidebar</span></button>
 ${searchHtml}
 </div>`;
 }
@@ -43,7 +41,6 @@ export class EditorToolbar {
 		this.bind('collapse-all', () => this.callbacks.onCollapseAll && this.callbacks.onCollapseAll());
 		this.bind('expand-all', () => this.callbacks.onExpandAll && this.callbacks.onExpandAll());
 		this.bind('toggle-sidebar', () => this.callbacks.onToggleSidebar && this.callbacks.onToggleSidebar());
-		this.bind('show-details', () => this.callbacks.onDetails && this.callbacks.onDetails());
 	}
 
 	/** Paint the stateful sidebar toggle: pressed means the sidebar is visible. */
@@ -101,7 +98,6 @@ const ICON_CONTEXT = diffIcon(
 	'<path d="M2 3.5h12M2 12.5h12M5 8h2M9 8h2"/><path d="M6.5 6.8l1.5 1.4 1.5-1.4"/>'
 );
 const ICON_SIDEBAR = diffIcon('<rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M10 2.5v11"/>');
-const ICON_DETAILS = diffIcon('<circle cx="8" cy="8" r="6"/><path d="M8 7.2v4M8 4.6h.01"/>');
 
 export function renderDiffToolbarHtml(searchHtml: string): string {
 	return `<div class="toolbar">

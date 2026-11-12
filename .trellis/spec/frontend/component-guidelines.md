@@ -46,8 +46,8 @@ body (column)
 
 - The right side is a VS Code-style sidebar: a 28px vertical tab strip (**Details**, **Conditions**)
   at the far right, a resizable panel area, and one visible tab panel at a time. Details is the
-  default. The toolbar's one-shot Details action reveals this tab; there is no Details/Conditions
-  toggle and no second panel surface.
+  default. The sidebar's Details tab reveals this panel; there is no Details/Conditions toggle and no
+  second panel surface.
 - `#inspector` remains the Details panel root. It contains one stable `sb-details` section body;
   `updateInspector` clears and rewrites that body only, never the section header. Node, value/formats,
   reference, conditions, annotations and the Jump/Reveal actions share the one scrolling body. The

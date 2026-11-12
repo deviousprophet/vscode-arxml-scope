@@ -652,7 +652,6 @@ suite('sidebar shell', () => {
 		assert.ok(/id="collapse-all" class="tool diff-tool"/.test(html));
 		assert.ok(/id="expand-all" class="tool diff-tool"/.test(html));
 		assert.ok(/id="toggle-sidebar" class="tool diff-tool"/.test(html));
-		assert.ok(/id="show-details" class="tool diff-tool"/.test(html));
 		assert.ok(html.includes('class="search-input"'));
 		assert.ok(!html.includes('id="conditions-toggle"'));
 		assert.ok(!html.includes('id="details-toggle"'));

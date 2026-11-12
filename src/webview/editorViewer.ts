@@ -1155,12 +1155,6 @@ function toggleSidebar(): void {
 	applySidebarVisibility(!getSidebarState().hidden);
 }
 
-/** The one-shot Details action: show the sidebar on its Details tab. */
-function showDetails(): void {
-	applySidebarVisibility(false);
-	showSidebarTab('details');
-}
-
 function isParameterRowId(id: string): boolean {
 	const row = rowById.get(id);
 	return !!row && row.kind === 'parameter';
@@ -1926,7 +1920,6 @@ const toolbar = new EditorToolbar({
 	onCollapseAll: collapseAll,
 	onExpandAll: expandAll,
 	onToggleSidebar: toggleSidebar,
-	onDetails: showDetails,
 });
 editorToolbar = toolbar;
 toolbar.mount();

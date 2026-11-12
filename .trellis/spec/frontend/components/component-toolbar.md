@@ -24,7 +24,6 @@ export interface EditorToolbarCallbacks {
     onCollapseAll?(): void;
     onExpandAll?(): void;
     onToggleSidebar?(): void;
-    onDetails?(): void;
 }
 export function renderEditorToolbarHtml(searchHtml: string): string;
 export class EditorToolbar {
@@ -59,7 +58,7 @@ export class DiffToolbar {
 
 - One row; no wrapping. Every Document action and every diff button uses `.tool.diff-tool` with an
   18px icon over a small label.
-- Editor order: flexible slot, Sidebar toggle, Collapse, Expand, Details, Search.
+- Editor order: flexible slot, Collapse, Expand, Sidebar toggle, Search.
 - Diff order: left `Show all / Show diff`, divider, Context, divider, `Semantic / Strict`, divider,
   Prev, Next, divider, Collapse, Expand; centre Swap; right status + Search.
 - The Context toggle is disabled while Show all is active.
@@ -68,14 +67,14 @@ export class DiffToolbar {
 
 ## Behaviour
 
-- Editor strip: `#toggle-sidebar`, `#collapse-all`, `#expand-all`, `#show-details`, then the Search
-  slot. The search field is always the last control. `#toggle-sidebar` is stateful (`aria-pressed`
-  true when the sidebar is visible, dynamic `Hide sidebar` / `Show sidebar` title, static accessible
-  name `Sidebar`);
-  the other three are one-shot actions with no pressed state. `setSidebarHidden(hidden)` repaints the
-  toggle after the host flips the page state.
-- `#show-details` is a one-shot action: the host shows the sidebar, selects the Details tab and keeps
-  the current selection and content.
+- Editor strip: `#collapse-all`, `#expand-all`, `#toggle-sidebar`, then the Search slot. The search
+  field is always the last control. `#toggle-sidebar` is stateful (`aria-pressed` true when the
+  sidebar is visible, dynamic `Hide sidebar` / `Show sidebar` title, static accessible name
+  `Sidebar`); Collapse and Expand are one-shot actions with no pressed state.
+  `setSidebarHidden(hidden)` repaints the toggle after the host flips the page state.
+- The Sidebar toggle is the only visibility control. Showing the sidebar restores its previous tab;
+  there is no duplicate toolbar Details action because the sidebar tab strip already owns that
+  navigation.
 - Diff strip: `#diff-view-all` / `#diff-view-diff` and `#diff-mode-semantic` / `#diff-mode-strict`
   are two-button view groups. The left order is view group, divider, `#diff-context`, divider, mode
   group, divider, `#diff-prev`, `#diff-next`, divider, `#diff-collapse-all`, `#diff-expand-all`.
@@ -107,9 +106,9 @@ export class DiffToolbar {
 ## Tests Required
 
 `src/test/webview/components/toolbar.test.ts`: order, classes, aria-labels, no inline styles, 10 diff
-buttons, 4 dividers, the Collapse/Expand callbacks, the four Document action buttons and the sidebar
+buttons, 4 dividers, the Collapse/Expand callbacks, the three Document action buttons and the sidebar
 toggle's pressed/title state. `src/test/webview/page/uxDocumentInteractions.test.ts` covers the
-hide/show round trip, reload persistence and the Details action.
+hide/show round trip, reload persistence and the restored previous tab.
 
 ## Anti-patterns
 

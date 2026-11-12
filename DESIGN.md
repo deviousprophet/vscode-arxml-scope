@@ -273,8 +273,8 @@ subtree fills keep one stable width while rows scroll horizontally.
 
 The toolbar is a 54px strip with divider-separated groups and icon-over-label tools: a 60x48 box with
 an 18px icon above a 10px label. Labels hide at 1040px and the boxes compact to 32px at 720px. The
-Document strip carries the Sidebar toggle, Collapse, Expand and Details actions in the same variant as
-the diff toolbar. Use the shared sidebar button primitives for other actions; do not invent a second
+Document strip carries Collapse, Expand and the Sidebar toggle in the same variant as the diff
+toolbar. Use the shared sidebar button primitives for other actions; do not invent a second
 button style. The sidebar is a 360px panel with a 28px vertical tab strip and a 22px section header.
 
 ### Search

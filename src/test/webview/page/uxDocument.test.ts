@@ -198,7 +198,7 @@ suite('editor document view', () => {
 		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"/.test(html));
 		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"/.test(html));
 		assert.ok(/id="toggle-sidebar"[^>]*class="tool diff-tool"/.test(html));
-		assert.ok(/id="show-details"[^>]*class="tool diff-tool"/.test(html));
+		assert.ok(!html.includes('id="show-details"'), 'the duplicated Details action is gone');
 		assert.ok(/\.diff-tool\s*\{[^}]*width:\s*60px[^}]*height:\s*48px/.test(css), 'the diff button box');
 		assert.ok(/\.diff-tool svg\s*\{[^}]*width:\s*18px[^}]*height:\s*18px/.test(css), '18px icons');
 		assert.ok(/@media \(max-width: 1040px\)[\s\S]*?\.diff-tool \.lbl\s*\{[^}]*display:\s*none/.test(css));
