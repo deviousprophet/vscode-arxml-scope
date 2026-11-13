@@ -9,6 +9,7 @@
  *
  * Test-only. Nothing here runs at import time in the extension.
  */
+import { existsSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 
 import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
@@ -101,7 +102,7 @@ function median(values: number[]): number {
 interface Record {
 	_type: string;
 	sourceMiB: number;
-	status: 'ok' | 'failed';
+	status: 'ok' | 'failed' | 'skipped';
 	[stage: string]: unknown;
 }
 
@@ -113,6 +114,16 @@ async function main(): Promise<void> {
 	const text = buildEcucArxml();
 	const sourceMiB = Math.round(Buffer.byteLength(text) / 1048576);
 	const binary = engineBinaryPath(process.cwd());
+	if (!existsSync(binary)) {
+		// The benchmark job has no Rust toolchain; the binary is staged by engine:build.
+		report({
+			_type: 'edit-latency',
+			sourceMiB,
+			status: 'skipped',
+			reason: `engine not built at ${binary}; run npm run engine:build`
+		});
+		return;
+	}
 
 	// Baseline: what the host does today for one edit.
 	const scan = measureStage(() => scanEcucValues(text));

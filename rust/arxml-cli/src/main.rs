@@ -10,8 +10,23 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use arxml_core::ecuc::{build_rows, scan_ecuc_values, RowOptions};
+use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+
+/// One fixture entry. Field order is part of the parity contract with `scripts/parity.mjs`.
+#[derive(Serialize)]
+struct FixtureEntry {
+    path: String,
+    bytes: u64,
+    sha256: String,
+}
+
+/// The canonical fixture manifest, byte-identical to the TypeScript side.
+#[derive(Serialize)]
+struct FixtureManifest {
+    fixtures: Vec<FixtureEntry>,
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -110,18 +125,18 @@ fn fixture_manifest(args: &[String]) -> ExitCode {
         return ExitCode::from(2);
     }
     files.sort();
-    let fixtures: Vec<serde_json::Value> = files
+    let fixtures: Vec<FixtureEntry> = files
         .iter()
         .filter_map(|path| {
             let bytes = fs::read(path).ok()?;
-            Some(json!({
-                "path": relative(&root, path),
-                "bytes": bytes.len(),
-                "sha256": format!("{:x}", Sha256::digest(&bytes)),
-            }))
+            Some(FixtureEntry {
+                path: relative(&root, path),
+                bytes: bytes.len() as u64,
+                sha256: format!("{:x}", Sha256::digest(&bytes)),
+            })
         })
         .collect();
-    match serde_json::to_string_pretty(&json!({ "fixtures": fixtures })) {
+    match serde_json::to_string_pretty(&FixtureManifest { fixtures }) {
         Ok(text) => {
             println!("{text}");
             ExitCode::SUCCESS
