@@ -55,9 +55,9 @@ export class EngineDocument {
 			throw new Error('engine did not return a document id');
 		}
 		const document = new EngineDocument(client, docId, uri, [], {
-			modules: 0,
-			containers: 0,
-			parameters: 0
+			modules: Number(opened.header.modules ?? 0),
+			containers: Number(opened.header.containers ?? 0),
+			parameters: Number(opened.header.parameters ?? 0)
 		});
 		const rows = await document.loadRows(options);
 		document.rowStore = rows;

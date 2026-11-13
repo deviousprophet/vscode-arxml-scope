@@ -295,6 +295,8 @@ fn open_tag(slice: &str, gt: usize) -> String {
     } else {
         &slice[..gt]
     };
+    let tag = tag.trim_end();
+    let tag = tag.strip_suffix('>').unwrap_or(tag);
     let body = tag.trim_end_matches(|ch: char| ch.is_whitespace() || ch == '/');
     format!("{body}>")
 }

@@ -173,3 +173,121 @@ fn same_identity(left: &Row, right: &Row) -> bool {
         && left.has_children == right.has_children
         && left.disabled == right.disabled
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DOC: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>Pkg</SHORT-NAME>
+      <ELEMENTS>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>Mod</SHORT-NAME>
+          <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/Mod</DEFINITION-REF>
+          <CONTAINERS>
+            <ECUC-CONTAINER-VALUE>
+              <SHORT-NAME>Cont</SHORT-NAME>
+              <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Mod/Cont</DEFINITION-REF>
+              <PARAMETER-VALUES>
+                <ECUC-NUMERICAL-PARAM-VALUE>
+                  <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/Mod/Cont/P</DEFINITION-REF>
+                  <VALUE>1</VALUE>
+                </ECUC-NUMERICAL-PARAM-VALUE>
+              </PARAMETER-VALUES>
+            </ECUC-CONTAINER-VALUE>
+          </CONTAINERS>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>
+"#;
+
+    #[test]
+    fn scans_a_minimal_document() {
+        let model = scan_ecuc_values(DOC.to_string());
+        assert_eq!(
+            model.schema.as_ref().map(|schema| schema.release.as_str()),
+            Some("00048")
+        );
+        assert_eq!(model.modules.len(), 1);
+        assert_eq!(model.modules[0].short_name, "Mod");
+        assert_eq!(model.modules[0].containers.len(), 1);
+        let container = &model.modules[0].containers[0];
+        assert_eq!(container.container_path, vec!["Pkg", "Mod"]);
+        assert_eq!(container.parameters.len(), 1);
+        let parameter = &container.parameters[0];
+        assert_eq!(parameter.name, "P");
+        assert_eq!(parameter.display_value.as_deref(), Some("1"));
+        assert!(parameter.numeric);
+        assert!(parameter.value_range.is_some());
+    }
+
+    #[test]
+    fn builds_path_ids_and_rows() {
+        let document = Document::new(DOC.to_string());
+        let rows = document.rows();
+        assert_eq!(rows.len(), 3, "module, container and parameter");
+        assert_eq!(rows[0].id, "module:/Pkg/Mod|Mod#0");
+        assert_eq!(rows[1].id, "container:Pkg/Mod/Cont#0");
+        assert_eq!(rows[2].id, "container:Pkg/Mod/Cont#0/param:P#0");
+        assert_eq!(rows[2].value.as_deref(), Some("1"));
+        assert_eq!(rows[2].shown_value.as_deref(), Some("1"));
+        assert_eq!(rows[2].parameter_type.as_deref(), Some("Integer"));
+        assert_eq!(rows[2].subtree_size, 0);
+        assert_eq!(rows[0].subtree_size, 2);
+    }
+
+    #[test]
+    fn plans_a_value_edit_and_refuses_the_same_value() {
+        let document = Document::new(DOC.to_string());
+        let rows = document.rows();
+        let parameter_id = rows[2].id.clone();
+        let plan = edit::plan_value_edit(
+            document.model(),
+            document.index(),
+            document.text(),
+            &parameter_id,
+            "2",
+        );
+        assert!(plan.ok, "{:?}", plan.reason);
+        assert_eq!(plan.record.as_ref().unwrap().old_text, "1");
+        let unchanged = edit::plan_value_edit(
+            document.model(),
+            document.index(),
+            document.text(),
+            &parameter_id,
+            "1",
+        );
+        assert!(!unchanged.ok);
+        assert_eq!(unchanged.reason.as_deref(), Some("the value is unchanged"));
+    }
+
+    #[test]
+    fn wraps_a_self_closing_element_without_keeping_the_slash() {
+        assert_eq!(edit::wrap_element("<VALUE/>", "x"), "<VALUE>x</VALUE>");
+        assert_eq!(edit::wrap_element("<VALUE />", "x"), "<VALUE>x</VALUE>");
+        assert_eq!(
+            edit::wrap_element("<VALUE a=\"1\">", "x"),
+            "<VALUE a=\"1\">x</VALUE>"
+        );
+    }
+
+    #[test]
+    fn applies_a_change_and_returns_a_one_row_patch() {
+        let mut document = Document::new(DOC.to_string());
+        let before = document.rows()[2].clone();
+        let start = document.text().len_utf16();
+        let _ = start;
+        let text = document.text().as_str();
+        let value_at = text.find("<VALUE>1</VALUE>").expect("value element") + 7;
+        let patch = document.apply_change(value_at, value_at + 1, "7");
+        assert_eq!(patch.remove, 1);
+        assert_eq!(patch.rows.len(), 1);
+        assert_eq!(patch.rows[0].id, before.id);
+        assert_eq!(patch.rows[0].value.as_deref(), Some("7"));
+    }
+}

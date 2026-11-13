@@ -15,6 +15,7 @@ import { buildSync } from 'esbuild';
 
 const root = process.cwd();
 const filter = process.argv[2] ?? '';
+const SORTS = ['all', 'declaration'];
 const fixturesDir = path.join(root, 'src', 'test', 'fixtures');
 const cli = path.join(root, 'rust', 'target', 'debug', process.platform === 'win32' ? 'arxml-cli.exe' : 'arxml-cli');
 
@@ -72,28 +73,33 @@ try {
 		const relative = path.relative(root, file).replaceAll('\\', '/');
 		if (filter && !relative.includes(filter)) continue;
 		checked++;
-		const expected = JSON.parse(
-			execFileSync(process.execPath, [outfile, file, 'all'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
-		);
-		let actual;
-		try {
-			actual = JSON.parse(
-				execFileSync(cli, ['rows', '--file', file, '--sort', 'all'], {
+		for (const sort of SORTS) {
+			const expected = JSON.parse(
+				execFileSync(process.execPath, [outfile, file, sort], {
 					encoding: 'utf8',
 					maxBuffer: 256 * 1024 * 1024,
 				})
 			);
-		} catch (error) {
-			console.log(`FAIL ${relative}: engine failed: ${error.message}`);
-			failures++;
-			continue;
-		}
-		const mismatch = compare(expected, actual);
-		if (mismatch) {
-			failures++;
-			console.log(`FAIL ${relative}: ${mismatch}`);
-		} else {
-			console.log(`ok   ${relative} (${actual.length} rows)`);
+			let actual;
+			try {
+				actual = JSON.parse(
+					execFileSync(cli, ['rows', '--file', file, '--sort', sort], {
+						encoding: 'utf8',
+						maxBuffer: 256 * 1024 * 1024,
+					})
+				);
+			} catch (error) {
+				console.log(`FAIL ${relative} [${sort}]: engine failed: ${error.message}`);
+				failures++;
+				continue;
+			}
+			const mismatch = compare(expected, actual);
+			if (mismatch) {
+				failures++;
+				console.log(`FAIL ${relative} [${sort}]: ${mismatch}`);
+			} else {
+				console.log(`ok   ${relative} [${sort}] (${actual.length} rows)`);
+			}
 		}
 	}
 } finally {

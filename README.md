@@ -39,7 +39,7 @@ npm run compile
 npm test
 ```
 
-`npm run compile` and `npm test` build the native addon first. `npm run benchmark` runs
+`npm run compile` and `npm test` build the Rust engine binary first (`npm run engine:build`). `npm run benchmark` runs
 the optional performance suite.
 
 ## Issues

@@ -204,7 +204,10 @@ export class EngineClient {
 	private deliver(header: EngineFrame, body: Buffer): void {
 		const id = typeof header.id === 'number' ? header.id : undefined;
 		if (id === undefined) {
-			return; // notification (log/fatal) without a correlation id
+			if (header.fatal !== undefined) {
+				this.fail(new EngineError(String(header.reason ?? 'engine fatal error'), 'fatal'));
+			}
+			return; // log notifications carry no action for the host
 		}
 		const entry = this.pending.get(id);
 		if (!entry) {
