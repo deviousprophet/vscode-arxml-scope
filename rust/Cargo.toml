@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["arxml-core", "arxml-node", "arxml-cli"]
+members = ["arxml-core", "arxml-engine", "arxml-cli"]
 
 [workspace.package]
 version = "0.0.0"

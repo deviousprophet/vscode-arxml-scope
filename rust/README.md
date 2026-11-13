@@ -1,26 +1,56 @@
 # Rust core engine
 
-The Rust workspace contains the native core required by the extension:
+The Rust workspace contains the extension's core engine, run as a **standalone
+process** — there is no N-API addon and no TypeScript fallback:
 
-- `arxml-core` — pure engine library; no Node or VS Code dependency.
-- `arxml-node` — N-API binding (`napi-rs`, N-API 8).
-- `arxml-cli` — debug probe and fixture-manifest parity helper.
+- `arxml-core` — the pure domain engine (no Node, no VS Code): ECUC scanner, model,
+  node ids, ordering, rows, conditions, validation, edit planning.
+- `arxml-engine` — the stdio process: framing, document handles, row streaming,
+  edit plans, panic guard.
+- `arxml-cli` — debug probe, `scan`/`rows` parity output and the fixture manifest.
 
 ## Build and test
 
 ```bash
 cargo test --manifest-path rust/Cargo.toml --workspace
 cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
-npm run rust:build
-npm run rust:smoke
-npm run parity
+cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+npm run engine:build        # writes dist/engine/<platform>-<arch>/arxml-engine[.exe]
+npm run engine:smoke        # spawn, handshake, open a fixture, plan an edit, shut down
+npm run parity              # fixture-manifest parity with the TypeScript side
+npm run parity:rows         # row-store parity against the TypeScript oracle
 ```
 
-`npm run rust:build` writes the platform addon to
-`dist/native/<platform>-<arch>/arxml_node.node`. The extension loader uses that path
-automatically. There is no TypeScript core fallback and no engine selection setting: a
-missing or incompatible addon is an activation error. The addon is required by
-`npm run compile`, `npm test`, `npm run package` and the release/CI workflows.
+`npm run engine:build` stages the release binary under `dist/engine/`. The host
+loads it from `enginePath()` in `src/host/engine/engineLoader.ts`; a missing binary
+or a protocol mismatch is an activation error. The binary is a release/CI artifact,
+not a source file.
 
-Built `.node` files and `rust/target/` are ignored; the native artifact is a release/CI
-artifact, not a source file.
+## Protocol
+
+One long-lived process per extension-host window, stdio only:
+
+```
+[u32 LE payload_len][u16 LE header_len][header JSON utf8][body bytes]
+```
+
+The header carries `id`, `op`, `ok` and small scalars; the body carries document
+text and row JSON raw, so a 26 MiB document is uploaded once and never escaped
+again. Requests are answered in order per `id`; operations that can exceed one
+frame stream chunks and mark the last with `"chunk":{"last":true}`.
+
+Operations: `hello`, `shutdown`, `doc.open`, `doc.close`, `doc.rows`,
+`doc.plan`, `doc.update`, `doc.resync`, `doc.node`, `doc.model`.
+
+`doc.update` answers with one contiguous row replacement
+(`{"at":n,"remove":m,"rows":[…]}`): a value edit is one row, a container rename is
+the renamed subtree. The engine never writes a file — the host applies the plan as
+one `WorkspaceEdit`, so undo, dirty state and save stay VS Code's.
+
+## Status
+
+The engine process is the required core at activation, and its scanner, rows,
+conditions and edit plans are at parity with the TypeScript oracle over the whole
+fixture corpus (`npm run parity:rows`). The ECUC editor's refresh path still builds
+its rows in TypeScript; moving it onto `doc.rows`/`doc.update` and trimming the
+per-update native work are the remaining steps (`.trellis/tasks/11-13-rust-edit-engine/implement.md`).

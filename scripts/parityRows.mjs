@@ -1,0 +1,103 @@
+/**
+ * Row/scan parity between the Rust engine and the TypeScript oracle.
+ *
+ * Test-only helper. Builds the oracle with esbuild, runs `arxml-cli rows` and
+ * compares the two row stores structurally, reporting the first mismatch per file.
+ *
+ *   node scripts/parityRows.mjs            # every fixture, sort=all
+ *   node scripts/parityRows.mjs basic      # fixtures whose path contains "basic"
+ */
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { buildSync } from 'esbuild';
+
+const root = process.cwd();
+const filter = process.argv[2] ?? '';
+const fixturesDir = path.join(root, 'src', 'test', 'fixtures');
+const cli = path.join(root, 'rust', 'target', 'debug', process.platform === 'win32' ? 'arxml-cli.exe' : 'arxml-cli');
+
+function fixtures() {
+	return readdirSync(fixturesDir, { recursive: true, withFileTypes: true })
+		.filter((entry) => entry.isFile() && entry.name.endsWith('.arxml'))
+		.map((entry) => path.join(entry.parentPath ?? fixturesDir, entry.name))
+		.sort();
+}
+
+function bundleOracle() {
+	const dir = mkdtempSync(path.join(tmpdir(), 'arxml-parity-'));
+	const outfile = path.join(dir, 'oracleRows.cjs');
+	buildSync({
+		entryPoints: [path.join(root, 'src', 'test', 'parity', 'oracleRows.ts')],
+		bundle: true,
+		platform: 'node',
+		format: 'cjs',
+		outfile,
+		logLevel: 'silent',
+	});
+	return { dir, outfile };
+}
+
+function compare(left, right, at = '') {
+	if (left === right) return undefined;
+	if (typeof left !== typeof right || left === null || right === null) {
+		return `${at || '<root>'}: ${JSON.stringify(left)} !== ${JSON.stringify(right)}`;
+	}
+	if (Array.isArray(left) || Array.isArray(right)) {
+		if (!Array.isArray(left) || !Array.isArray(right)) return `${at}: array mismatch`;
+		if (left.length !== right.length) return `${at}.length: ${left.length} !== ${right.length}`;
+		for (let index = 0; index < left.length; index++) {
+			const found = compare(left[index], right[index], `${at}[${index}]`);
+			if (found) return found;
+		}
+		return undefined;
+	}
+	if (typeof left === 'object') {
+		const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+		for (const key of keys) {
+			const found = compare(left[key], right[key], at ? `${at}.${key}` : key);
+			if (found) return found;
+		}
+		return undefined;
+	}
+	return `${at}: ${JSON.stringify(left)} !== ${JSON.stringify(right)}`;
+}
+
+const { dir, outfile } = bundleOracle();
+let failures = 0;
+let checked = 0;
+try {
+	for (const file of fixtures()) {
+		const relative = path.relative(root, file).replaceAll('\\', '/');
+		if (filter && !relative.includes(filter)) continue;
+		checked++;
+		const expected = JSON.parse(
+			execFileSync(process.execPath, [outfile, file, 'all'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+		);
+		let actual;
+		try {
+			actual = JSON.parse(
+				execFileSync(cli, ['rows', '--file', file, '--sort', 'all'], {
+					encoding: 'utf8',
+					maxBuffer: 256 * 1024 * 1024,
+				})
+			);
+		} catch (error) {
+			console.log(`FAIL ${relative}: engine failed: ${error.message}`);
+			failures++;
+			continue;
+		}
+		const mismatch = compare(expected, actual);
+		if (mismatch) {
+			failures++;
+			console.log(`FAIL ${relative}: ${mismatch}`);
+		} else {
+			console.log(`ok   ${relative} (${actual.length} rows)`);
+		}
+	}
+} finally {
+	rmSync(dir, { recursive: true, force: true });
+}
+console.log(`\n${checked - failures}/${checked} fixtures matched`);
+process.exit(failures === 0 ? 0 : 1);

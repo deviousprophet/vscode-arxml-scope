@@ -10,3 +10,5 @@ description = "Pure ARXML/ECUC core engine; no Node or VS Code dependencies."
 path = "src/lib.rs"
 
 [dependencies]
+serde.workspace = true
+serde_json.workspace = true

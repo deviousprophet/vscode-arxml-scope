@@ -8,7 +8,7 @@ import { CompareSelectionStore } from './host/compareSelection';
 import { IndexService } from './host/indexService';
 import { ValidationService } from './host/validationService';
 import { registerTextFeatures } from './host/textFeatures';
-import { resolveEngine } from './host/engine/nativeLoader';
+import { resolveEngine } from './host/engine/engineLoader';
 import type { CoreEngine } from './host/engine/coreEngine';
 import type { IndexStats } from './core/index/indexModel';
 
@@ -24,12 +24,12 @@ export interface ArxmlScopeApi {
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext): ArxmlScopeApi {
-	// Resolve the required engine before registering any service: a bad addon
-	// fails activation without leaving partial registrations behind.
+export async function activate(context: vscode.ExtensionContext): Promise<ArxmlScopeApi> {
+	// Resolve the required engine process before registering any service: a missing
+	// binary or a protocol mismatch fails activation without partial registrations.
 	let resolvedEngine: CoreEngine;
 	try {
-		resolvedEngine = resolveEngine(context.extensionPath);
+		resolvedEngine = await resolveEngine(context.extensionPath);
 	} catch (error) {
 		void vscode.window.showErrorMessage(
 			`ARXML Scope: ${error instanceof Error ? error.message : String(error)}`

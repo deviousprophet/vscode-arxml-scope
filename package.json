@@ -307,11 +307,11 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "npm run rust:build && npm run check-types && npm run lint && node esbuild.js",
+    "compile": "npm run engine:build && npm run check-types && npm run lint && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run rust:build && npm run check-types && npm run lint && node esbuild.js --production",
+    "package": "npm run engine:build && npm run check-types && npm run lint && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile",
@@ -321,11 +321,12 @@
     "test": "vscode-test",
     "benchmark": "node src/test/benchmarks/runBenchmark.ts",
     "parity": "node scripts/parity.mjs",
-    "rust:build": "node scripts/build-rust-native.mjs",
+    "parity:rows": "node scripts/parityRows.mjs",
+    "engine:build": "node scripts/build-engine.mjs",
     "rust:test": "cargo test --manifest-path rust/Cargo.toml --workspace",
     "rust:fmt": "cargo fmt --manifest-path rust/Cargo.toml --all -- --check",
     "rust:clippy": "cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings",
-    "rust:smoke": "node scripts/rust-smoke.mjs"
+    "engine:smoke": "node scripts/engine-smoke.mjs"
   },
   "devDependencies": {
     "@types/jsdom": "^30.0.0",

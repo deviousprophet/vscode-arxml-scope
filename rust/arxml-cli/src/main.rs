@@ -1,110 +1,154 @@
 //! Debug and parity helper for the Rust core.
 //!
-//! `info` prints the engine probe as JSON. `fixture-manifest` walks a directory
-//! and prints a canonical byte/SHA-256 manifest; the TypeScript parity harness
-//! computes the same manifest and compares it.
+//! `info` prints the engine probe as JSON, `fixture-manifest` walks a directory and
+//! prints a canonical byte/SHA-256 manifest (the TypeScript parity harness computes
+//! the same manifest), and `scan` / `rows` print the engine's model and row JSON so
+//! the parity suite can compare them against the TypeScript oracle.
 
-use serde::Serialize;
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-#[derive(Debug, Serialize)]
-struct Info {
-    hello: String,
-    version: String,
-    abi: u32,
+use arxml_core::ecuc::{build_rows, scan_ecuc_values, RowOptions};
+use serde_json::json;
+use sha2::{Digest, Sha256};
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let Some(command) = args.first().map(String::as_str) else {
+        eprintln!("usage: arxml-cli <info|fixture-manifest|scan|rows> [options]");
+        return ExitCode::from(2);
+    };
+    match command {
+        "info" => {
+            println!(
+                "{}",
+                json!({
+                    "engine": arxml_core::engine_hello(),
+                    "protocol": arxml_core::ENGINE_PROTOCOL,
+                })
+            );
+            ExitCode::SUCCESS
+        }
+        "fixture-manifest" => fixture_manifest(&args),
+        "scan" => scan_command(&args),
+        "rows" => rows_command(&args),
+        other => {
+            eprintln!("unknown command {other}");
+            ExitCode::from(2)
+        }
+    }
 }
 
-#[derive(Debug, Serialize)]
-struct FixtureEntry {
-    path: String,
-    bytes: u64,
-    sha256: String,
+fn option<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    args.iter()
+        .position(|arg| arg == name)
+        .and_then(|index| args.get(index + 1))
+        .map(String::as_str)
 }
 
-#[derive(Debug, Serialize)]
-struct FixtureManifest {
-    fixtures: Vec<FixtureEntry>,
+fn source(args: &[String]) -> Result<String, String> {
+    let path = option(args, "--file").ok_or("--file is required")?;
+    fs::read_to_string(path).map_err(|error| format!("{path}: {error}"))
 }
 
-fn collect_fixtures(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    let entries = fs::read_dir(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-    for entry in entries {
-        let entry = entry.map_err(|error| error.to_string())?;
+fn scan_command(args: &[String]) -> ExitCode {
+    let text = match source(args) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(2);
+        }
+    };
+    let model = scan_ecuc_values(text);
+    match serde_json::to_string(&model) {
+        Ok(json) => {
+            println!("{json}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn rows_command(args: &[String]) -> ExitCode {
+    let text = match source(args) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(2);
+        }
+    };
+    let mut options = RowOptions::default();
+    if let Some(sort) = option(args, "--sort") {
+        options.sort = Some(sort.to_string());
+    }
+    if let Some(sort_except) = option(args, "--sort-except") {
+        options.sort_except = Some(sort_except.split(',').map(str::to_string).collect());
+    }
+    let model = scan_ecuc_values(text);
+    let rows = build_rows(&model, &options);
+    match serde_json::to_string(&rows) {
+        Ok(json) => {
+            println!("{json}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn fixture_manifest(args: &[String]) -> ExitCode {
+    let dir = option(args, "--dir").unwrap_or("src/test/fixtures");
+    let root = PathBuf::from(dir);
+    let mut files = Vec::new();
+    if walk(&root, &mut files).is_err() {
+        return ExitCode::from(2);
+    }
+    files.sort();
+    let fixtures: Vec<serde_json::Value> = files
+        .iter()
+        .filter_map(|path| {
+            let bytes = fs::read(path).ok()?;
+            Some(json!({
+                "path": relative(&root, path),
+                "bytes": bytes.len(),
+                "sha256": format!("{:x}", Sha256::digest(&bytes)),
+            }))
+        })
+        .collect();
+    match serde_json::to_string_pretty(&json!({ "fixtures": fixtures })) {
+        Ok(text) => {
+            println!("{text}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn relative(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            collect_fixtures(&path, out)?;
-        } else if path.extension().and_then(|extension| extension.to_str()) == Some("arxml") {
+            walk(&path, out)?;
+        } else if path.extension().map(|ext| ext == "arxml").unwrap_or(false) {
             out.push(path);
         }
     }
     Ok(())
-}
-
-fn manifest(root: &Path) -> Result<FixtureManifest, String> {
-    let mut paths = Vec::new();
-    collect_fixtures(root, &mut paths)?;
-    paths.sort();
-
-    let mut fixtures = Vec::with_capacity(paths.len());
-    for path in paths {
-        let bytes = fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?;
-        let relative = path
-            .strip_prefix(root)
-            .map_err(|error| error.to_string())?
-            .to_string_lossy()
-            .replace('\\', "/");
-        fixtures.push(FixtureEntry {
-            path: relative,
-            bytes: bytes.len() as u64,
-            sha256: format!("{:x}", Sha256::digest(&bytes)),
-        });
-    }
-    Ok(FixtureManifest { fixtures })
-}
-
-fn print_info() -> Result<(), String> {
-    let info = Info {
-        hello: arxml_core::engine_hello(),
-        version: arxml_core::engine_version().to_string(),
-        abi: arxml_core::ENGINE_ABI,
-    };
-    let text = serde_json::to_string_pretty(&info).map_err(|error| error.to_string())?;
-    println!("{text}");
-    Ok(())
-}
-
-fn arg_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
-    args.windows(2)
-        .find(|pair| pair[0] == name)
-        .map(|pair| pair[1].as_str())
-}
-
-fn run() -> Result<(), String> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    match args.first().map(String::as_str) {
-        Some("info") => print_info(),
-        Some("fixture-manifest") => {
-            let dir = arg_value(&args, "--dir").ok_or("fixture-manifest requires --dir <path>")?;
-            let manifest = manifest(Path::new(dir))?;
-            let text =
-                serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?;
-            println!("{text}");
-            Ok(())
-        }
-        Some(other) => Err(format!("unknown command: {other}")),
-        None => Err("usage: arxml-cli <info|fixture-manifest --dir <path>>".to_string()),
-    }
-}
-
-fn main() -> ExitCode {
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("{error}");
-            ExitCode::FAILURE
-        }
-    }
 }

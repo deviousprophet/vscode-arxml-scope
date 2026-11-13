@@ -1,13 +1,16 @@
 //! Pure ARXML/ECUC core engine.
 //!
-//! This crate has no Node, N-API or VS Code dependency. The Node binding and the
-//! parity CLI live in sibling crates; later milestones move the parser, index,
-//! validation and semantic matcher here.
+//! This crate has no Node, N-API or VS Code dependency. The stdio process wrapper
+//! (`arxml-engine`), the parity CLI (`arxml-cli`) and the test oracle live in
+//! sibling crates; this crate owns the parser, ids, rows, conditions, validation
+//! and edit planning.
 
 #![forbid(unsafe_code)]
 
-/// The ABI expected by the TypeScript native loader.
-pub const ENGINE_ABI: u32 = 1;
+pub mod ecuc;
+
+/// The protocol version the TypeScript client expects from the engine process.
+pub const ENGINE_PROTOCOL: u32 = 1;
 
 /// The internal engine version. This is not a product release version.
 pub fn engine_version() -> &'static str {
@@ -29,7 +32,7 @@ mod tests {
     }
 
     #[test]
-    fn abi_is_stable_for_the_foundation() {
-        assert_eq!(ENGINE_ABI, 1);
+    fn protocol_is_stable_for_this_release() {
+        assert_eq!(ENGINE_PROTOCOL, 1);
     }
 }

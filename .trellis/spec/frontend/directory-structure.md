@@ -20,9 +20,10 @@ src/
     bootWatchdog.ts         the boot timeout
     webviewShell.ts         the static editor/diff HTML shells and CSP
     engine/
-      coreEngine.ts         pure CoreEngine contract, EngineKind, expected ABI
-      nativeLoader.ts       platform/arch addon path, require, ABI validation, activation error
-      rustEngine.ts         adapter from the validated native module to CoreEngine
+      coreEngine.ts         pure CoreEngine contract, EngineKind, expected protocol
+      engineClient.ts       spawn + frame codec + request correlation (no vscode)
+      engineLoader.ts       engine binary path, handshake, activation error
+      ecucDocument.ts       one document handle: rows, plan, close
   core/               pure logic. NO `vscode` imports and no DOM.
     ecuc/             detect.ts  scanner.ts  model.ts  conditionEntry.ts  order.ts  resolve.ts
                       validate.ts  syscond.ts  nodeId.ts  renderRows.ts  haystack.ts
@@ -99,9 +100,9 @@ testable without a running editor.
 | A VS Code text-editor provider | `src/host/textFeatures.ts` |
 | A diff matching/status/order rule | `src/core/diff/diffModel.ts` |
 | A document, panel, command or setting effect | `src/host/` or `src/commands.ts` |
-| A native engine load, ABI check or adapter operation | `src/host/engine/` |
+| An engine spawn, handshake, frame or document operation | `src/host/engine/` |
 | A Rust parser/index/validation/diff implementation | `rust/arxml-core/` |
-| A Node binding export for the Rust core | `rust/arxml-node/src/lib.rs` |
+| An engine-process operation or protocol frame | `rust/arxml-engine/src/main.rs` |
 | A parity/debug CLI command | `rust/arxml-cli/src/main.rs` |
 | A reusable UI unit with markup, input behaviour and styles | `src/webview/components/<Name>/` |
 | A page shell / provider bridge | `src/webview/editorViewer.ts` or `diffViewer.ts` |

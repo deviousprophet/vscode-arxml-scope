@@ -1,0 +1,105 @@
+/**
+ * Smoke test for the engine process: spawn, handshake, open a fixture, rows, plan.
+ *
+ * Replaces `rust-smoke.mjs`. Runs against the staged binary and fails loudly when
+ * the protocol version or an operation contract drifts.
+ */
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const target = `${process.platform}-${process.arch}`;
+const name = process.platform === 'win32' ? 'arxml-engine.exe' : 'arxml-engine';
+const binary = path.join(root, 'dist', 'engine', target, name);
+if (!existsSync(binary)) {
+	console.error(`Engine binary not found: ${binary}. Run "npm run engine:build" first.`);
+	process.exit(1);
+}
+
+// The protocol frame codec lives in TypeScript; this smoke test speaks it directly.
+const { spawn } = await import('node:child_process');
+const child = spawn(binary, ['--stdio'], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+let buffer = Buffer.alloc(0);
+const pending = new Map();
+let nextId = 1;
+
+child.stdout.on('data', (chunk) => {
+	buffer = buffer.length === 0 ? chunk : Buffer.concat([buffer, chunk]);
+	while (buffer.length >= 6) {
+		const length = buffer.readUInt32LE(0);
+		if (buffer.length < 4 + length) return;
+		const headerLength = buffer.readUInt16LE(4);
+		const header = JSON.parse(buffer.subarray(6, 6 + headerLength).toString('utf8'));
+		const body = buffer.subarray(6 + headerLength, 4 + length);
+		buffer = buffer.subarray(4 + length);
+		const entry = pending.get(header.id);
+		if (!entry) continue;
+		entry.chunks.push({ header, body: Buffer.from(body) });
+		if (header.chunk === undefined || header.chunk.last) {
+			pending.delete(header.id);
+			entry.resolve(entry.chunks);
+		}
+	}
+});
+
+function request(op, header = {}, body, timeout = 15000) {
+	const id = nextId++;
+	const frame = Buffer.from(JSON.stringify({ id, op, ...header }), 'utf8');
+	const payload = 2 + frame.length + (body === undefined ? 0 : Buffer.byteLength(body));
+	const prefix = Buffer.alloc(6);
+	prefix.writeUInt32LE(payload, 0);
+	prefix.writeUInt16LE(frame.length, 4);
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error(`${op} timed out`)), timeout);
+		pending.set(id, {
+			chunks: [],
+			resolve: (chunks) => {
+				clearTimeout(timer);
+				resolve(chunks);
+			}
+		});
+		child.stdin.write(Buffer.concat([prefix, frame, body === undefined ? Buffer.alloc(0) : Buffer.from(body)]));
+	});
+}
+
+const started = performance.now();
+const [hello] = await request('hello');
+const protocol = hello.header.protocol;
+if (protocol !== 1) {
+	console.error(`engine protocol ${protocol} does not match 1`);
+	process.exit(1);
+}
+
+const fixture = path.join(root, 'src', 'test', 'fixtures', 'basic.arxml');
+const text = (await import('node:fs')).readFileSync(fixture, 'utf8');
+const [opened] = await request('doc.open', { uri: fixture }, text);
+if (opened.header.ecuc !== true) {
+	console.error('engine did not recognise the ECUC fixture');
+	process.exit(1);
+}
+const docId = opened.header.docId;
+const rowChunks = await request('doc.rows', { docId, options: { sort: 'all' } });
+const rows = rowChunks.flatMap((chunk) => JSON.parse(chunk.body.toString('utf8')));
+
+const target_row = rows.find((row) => row.kind === 'parameter' && row.valueKind === 'numeric');
+let planned = 0;
+if (target_row) {
+	const [plan] = await request('doc.plan', { docId, kind: 'value', nodeId: target_row.id, value: '4242' });
+	planned = plan.header.ok === true ? 1 : 0;
+}
+
+await request('shutdown');
+const exitCode = await new Promise((resolve) => child.on('exit', resolve));
+console.log(
+	JSON.stringify({
+		_type: 'engine-smoke',
+		protocol,
+		engine: hello.header.engine,
+		rows: rows.length,
+		planned,
+		exitCode,
+		loadMs: Math.round(performance.now() - started)
+	})
+);
+process.exit(exitCode === 0 && planned === 1 ? 0 : 1);

@@ -115,10 +115,10 @@ jobs:
         run: npm run rust:test
 
       - name: Build Native Addon
-        run: npm run rust:build
+        run: npm run engine:build
 
       - name: Native Smoke Test
-        run: npm run rust:smoke
+        run: npm run engine:smoke
 
       - name: Cross-Language Parity
         run: npm run parity
