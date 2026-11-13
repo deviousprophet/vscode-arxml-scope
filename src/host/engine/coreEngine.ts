@@ -8,7 +8,6 @@
  * Pure: no `vscode` import and no DOM.
  */
 import { EXPECTED_PROTOCOL, type EngineClient } from './engineClient';
-import { EngineDocument, type DocumentOptions } from './ecucDocument';
 
 export type EngineKind = 'rust';
 
@@ -19,8 +18,6 @@ export interface CoreEngine {
 	readonly kind: EngineKind;
 	/** The protocol version the running engine reported during the handshake. */
 	readonly protocol: number;
-	/** Opens one document handle; the engine keeps the text and the model. */
-	openDocument(uri: string, text: string, options: DocumentOptions): Promise<EngineDocument>;
 	/** A side-effect-free probe used by diagnostics and tests. */
 	engineVersion(): string;
 	dispose(): void;
@@ -39,7 +36,6 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 	return {
 		kind: 'rust',
 		protocol: EXPECTED_PROTOCOL,
-		openDocument: (uri, text, options) => EngineDocument.open(client, uri, text, options),
 		engineVersion: () => version,
 		dispose: () => client.dispose()
 	};

@@ -6,7 +6,7 @@
  * document text and row JSON raw, so nothing is escaped twice.
  *
  * Pure Node: no `vscode` import. The host passes paths and text; the client owns
- * spawn, framing, correlation, streaming and restart.
+ * spawn, framing, correlation and streaming.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -26,10 +26,11 @@ export class EngineError extends Error {
 }
 
 export interface EngineFrame {
-	id: number;
+	id?: number;
 	ok?: boolean;
 	code?: string;
 	reason?: string;
+	fatal?: string;
 	chunk?: { seq: number; last: boolean; total: number };
 	[key: string]: unknown;
 }
@@ -40,7 +41,11 @@ export interface EngineChunk {
 }
 
 /** The packaged engine binary for one platform/architecture. */
-export function engineBinaryPath(root: string, platform: string = process.platform, arch: string = process.arch): string {
+export function engineBinaryPath(
+	root: string,
+	platform: string = process.platform,
+	arch: string = process.arch
+): string {
 	const name = platform === 'win32' ? 'arxml-engine.exe' : 'arxml-engine';
 	return path.join(root, 'dist', 'engine', `${platform}-${arch}`, name);
 }
@@ -61,6 +66,66 @@ interface Pending {
 }
 
 const MAX_FRAME = 64 * 1024 * 1024;
+const MAX_HEADER = 0xffff;
+
+function assertBuilt(binary: string): void {
+	if (!existsSync(binary)) {
+		throw new EngineError(`Rust engine is not built at ${binary}; run "npm run engine:build"`);
+	}
+}
+
+function spawnEngine(options: EngineClientOptions): ChildProcessWithoutNullStreams {
+	if (options.spawnProcess) {
+		return options.spawnProcess(options.binary);
+	}
+	const args = options.root ? ['--stdio', '--root', options.root] : ['--stdio'];
+	return spawn(options.binary, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+}
+
+function assertProtocol(header: EngineFrame): void {
+	if (header.protocol !== EXPECTED_PROTOCOL) {
+		throw new EngineError(
+			`engine protocol ${String(header.protocol)} does not match ${EXPECTED_PROTOCOL}`
+		);
+	}
+}
+
+/** The request frame, or the reason it cannot be sent. */
+function buildFrame(
+	id: number,
+	op: string,
+	header: Record<string, unknown>,
+	body: string | Buffer | undefined
+): Buffer | string {
+	const json = Buffer.from(JSON.stringify({ id, op, ...header }), 'utf8');
+	if (json.length > MAX_HEADER) {
+		return 'request header is too large';
+	}
+	const payloadLength = 2 + json.length + bodyLength(body);
+	if (payloadLength > MAX_FRAME) {
+		return 'request exceeds the frame limit';
+	}
+	const prefix = Buffer.alloc(6);
+	prefix.writeUInt32LE(payloadLength, 0);
+	prefix.writeUInt16LE(json.length, 4);
+	return Buffer.concat([prefix, json, bodyBuffer(body)]);
+}
+
+function bodyLength(body: string | Buffer | undefined): number {
+	return body === undefined ? 0 : Buffer.byteLength(body);
+}
+
+function bodyBuffer(body: string | Buffer | undefined): Buffer {
+	return body === undefined ? Buffer.alloc(0) : Buffer.from(body);
+}
+
+function isLastChunk(header: EngineFrame): boolean {
+	return header.chunk === undefined || header.chunk.last === true;
+}
+
+function isCorrelated(header: EngineFrame): header is EngineFrame & { id: number } {
+	return typeof header.id === 'number';
+}
 
 /**
  * A started engine process. Requests are correlated by id; a streaming request
@@ -83,31 +148,15 @@ export class EngineClient {
 
 	/** Spawns the engine and completes the handshake. */
 	public static async start(options: EngineClientOptions): Promise<EngineClient> {
-		if (!existsSync(options.binary)) {
-			throw new EngineError(
-				`Rust engine is not built at ${options.binary}; run "npm run engine:build"`
-			);
-		}
-		const child = options.spawnProcess
-			? options.spawnProcess(options.binary)
-			: spawn(options.binary, ['--stdio', ...(options.root ? ['--root', options.root] : [])], {
-					stdio: ['pipe', 'pipe', 'pipe'],
-					windowsHide: true
-				});
-		const client = new EngineClient(child);
-		const hello = await client.request('hello', {}, undefined, 5000);
-		const header = hello.header;
-		if (header.protocol !== EXPECTED_PROTOCOL) {
-			client.dispose();
-			throw new EngineError(
-				`engine protocol ${String(header.protocol)} does not match ${EXPECTED_PROTOCOL}`
-			);
-		}
+		assertBuilt(options.binary);
+		const client = new EngineClient(spawnEngine(options));
+		await client.handshake();
 		return client;
 	}
 
-	public get isClosed(): boolean {
-		return this.closed;
+	private async handshake(): Promise<void> {
+		const hello = await this.request('hello', {}, undefined, 5000);
+		assertProtocol(hello.header);
 	}
 
 	/** One request; a streaming answer is collected until its last chunk. */
@@ -118,7 +167,7 @@ export class EngineClient {
 		timeoutMs = 30_000
 	): Promise<EngineChunk> {
 		const chunks = await this.send(op, header, body, timeoutMs);
-		return chunks[chunks.length - 1] ?? { header: { id: 0, ok: false }, body: Buffer.alloc(0) };
+		return chunks[chunks.length - 1] ?? { header: { ok: false }, body: Buffer.alloc(0) };
 	}
 
 	/** A request whose answer may arrive in several chunks (rows, diff, diagnostics). */
@@ -141,19 +190,19 @@ export class EngineClient {
 			return Promise.reject(new EngineError('engine is not running', 'closed'));
 		}
 		const id = this.nextId++;
-		const frame = Buffer.from(JSON.stringify({ id, op, ...header }), 'utf8');
-		if (frame.length > 0xffff) {
-			return Promise.reject(new EngineError('request header is too large', 'protocol'));
+		const frame = buildFrame(id, op, header, body);
+		if (typeof frame === 'string') {
+			return Promise.reject(new EngineError(frame, 'protocol'));
 		}
-		const payloadLength = 2 + frame.length + (body === undefined ? 0 : Buffer.byteLength(body));
-		if (payloadLength > MAX_FRAME) {
-			return Promise.reject(new EngineError('request exceeds the frame limit', 'protocol'));
-		}
-		const prefix = Buffer.alloc(6);
-		prefix.writeUInt32LE(payloadLength, 0);
-		prefix.writeUInt16LE(frame.length, 4);
-		const parts = [prefix, frame, body === undefined ? Buffer.alloc(0) : Buffer.from(body)];
+		return this.awaitReply(id, op, timeoutMs, frame);
+	}
 
+	private awaitReply(
+		id: number,
+		op: string,
+		timeoutMs: number,
+		frame: Buffer
+	): Promise<EngineChunk[]> {
 		return new Promise<EngineChunk[]>((resolve, reject) => {
 			const timer = setTimeout(() => {
 				this.pending.delete(id);
@@ -170,56 +219,77 @@ export class EngineClient {
 					reject(error);
 				}
 			});
-			this.child.stdin.write(Buffer.concat(parts));
+			this.child.stdin.write(frame);
 		});
 	}
 
-	/** Parses every complete frame in the buffer. */
 	private receive(chunk: Buffer): void {
 		this.buffer = this.buffer.length === 0 ? chunk : Buffer.concat([this.buffer, chunk]);
+		this.drain();
+	}
+
+	/** Parses every complete frame in the buffer. */
+	private drain(): void {
 		while (this.buffer.length >= 6) {
-			const payloadLength = this.buffer.readUInt32LE(0);
-			if (payloadLength < 2 || payloadLength > MAX_FRAME) {
-				this.fail(new EngineError('engine sent an invalid frame', 'protocol'));
+			const frame = this.nextFrame();
+			if (frame === undefined) {
 				return;
 			}
-			if (this.buffer.length < 4 + payloadLength) {
-				return;
-			}
-			const headerLength = this.buffer.readUInt16LE(4);
-			const headerBytes = this.buffer.subarray(6, 6 + headerLength);
-			const body = this.buffer.subarray(6 + headerLength, 4 + payloadLength);
-			this.buffer = this.buffer.subarray(4 + payloadLength);
-			let header: EngineFrame;
-			try {
-				header = JSON.parse(headerBytes.toString('utf8')) as EngineFrame;
-			} catch {
-				this.fail(new EngineError('engine sent a malformed header', 'protocol'));
-				return;
-			}
-			this.deliver(header, Buffer.from(body));
+			this.deliver(frame.header, frame.body);
+		}
+	}
+
+	/** The next complete frame, or `undefined` while the buffer is short or bad. */
+	private nextFrame(): { header: EngineFrame; body: Buffer } | undefined {
+		const payloadLength = this.buffer.readUInt32LE(0);
+		if (!isValidPayload(payloadLength)) {
+			this.fail(new EngineError('engine sent an invalid frame', 'protocol'));
+			return undefined;
+		}
+		if (this.buffer.length < 4 + payloadLength) {
+			return undefined;
+		}
+		const headerLength = this.buffer.readUInt16LE(4);
+		const header = this.parseHeader(this.buffer.subarray(6, 6 + headerLength));
+		const body = Buffer.from(this.buffer.subarray(6 + headerLength, 4 + payloadLength));
+		this.buffer = this.buffer.subarray(4 + payloadLength);
+		return header === undefined ? undefined : { header, body };
+	}
+
+	private parseHeader(bytes: Buffer): EngineFrame | undefined {
+		try {
+			return JSON.parse(bytes.toString('utf8')) as EngineFrame;
+		} catch {
+			this.fail(new EngineError('engine sent a malformed header', 'protocol'));
+			return undefined;
 		}
 	}
 
 	private deliver(header: EngineFrame, body: Buffer): void {
-		const id = typeof header.id === 'number' ? header.id : undefined;
-		if (id === undefined) {
-			if (header.fatal !== undefined) {
-				this.fail(new EngineError(String(header.reason ?? 'engine fatal error'), 'fatal'));
-			}
-			return; // log notifications carry no action for the host
+		if (!isCorrelated(header)) {
+			this.deliverNotification(header);
+			return;
 		}
-		const entry = this.pending.get(id);
-		if (!entry) {
-			return; // cancelled or timed out
+		const entry = this.pending.get(header.id);
+		if (entry !== undefined) {
+			this.complete(header.id, entry, header, body);
 		}
+	}
+
+	private deliverNotification(header: EngineFrame): void {
+		if (header.fatal !== undefined) {
+			this.fail(new EngineError(String(header.reason ?? 'engine fatal error'), 'fatal'));
+		}
+	}
+
+	private complete(id: number, entry: Pending, header: EngineFrame, body: Buffer): void {
 		if (header.ok === false) {
 			this.pending.delete(id);
 			entry.reject(new EngineError(String(header.reason ?? 'engine request failed'), header.code));
 			return;
 		}
 		entry.streamed.push({ header, body });
-		if (header.chunk === undefined || header.chunk.last) {
+		if (isLastChunk(header)) {
 			this.pending.delete(id);
 			entry.resolve(entry.streamed);
 		}
@@ -246,4 +316,8 @@ export class EngineClient {
 		this.fail(new EngineError('engine disposed', 'disposed'));
 		this.child.kill();
 	}
+}
+
+function isValidPayload(payloadLength: number): boolean {
+	return payloadLength >= 2 && payloadLength <= MAX_FRAME;
 }

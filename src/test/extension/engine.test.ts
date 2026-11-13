@@ -9,6 +9,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { EXPECTED_PROTOCOL } from '../../host/engine/coreEngine';
+import { EngineClient } from '../../host/engine/engineClient';
+import { oracleRows } from '../parity/oracleRows';
 import { enginePath, resolveEngine, validateHandshake } from '../../host/engine/engineLoader';
 import { repoRoot } from './testUtils';
 
@@ -65,17 +67,45 @@ suite('core engine process', () => {
 
 			const fixture = path.join(repoRoot, 'src', 'test', 'fixtures', 'basic.arxml');
 			const text = fs.readFileSync(fixture, 'utf8');
-			const document = await engine.openDocument(fixture, text, { sort: 'all', sortExcept: [] });
-			const rows = document.rows();
-			assert.ok(rows.length > 0, 'the engine returns rows for an ECUC fixture');
-			assert.ok(document.counts().modules > 0, 'the engine counts modules');
+			const client = await EngineClient.start({ binary, root: repoRoot });
+			try {
+				const opened = await client.request('doc.open', { uri: fixture }, text);
+				const docId = opened.header.docId;
+				assert.ok(typeof docId === 'number', 'the engine returns a document id');
+				assert.ok(Number(opened.header.modules) > 0, 'the engine counts modules');
 
-			const parameter = rows.find((row) => row.kind === 'parameter');
-			assert.ok(parameter, 'the fixture has a parameter row');
-			const plan = await document.plan('value', parameter.id, '4242');
-			assert.strictEqual(plan.ok, true, plan.reason);
-			assert.ok(plan.record?.newText.includes('4242'));
-			await document.close();
+				const chunks = await client.requestStream('doc.rows', {
+					docId,
+					options: { sort: 'all', sortExcept: [] }
+				});
+				const rows: Array<{ id: string; kind: string }> = chunks.flatMap((chunk: { body: Buffer }) =>
+					chunk.body.length === 0 ? [] : (JSON.parse(chunk.body.toString('utf8')) as Array<{ id: string; kind: string }>)
+				);
+				assert.ok(rows.length > 0, 'the engine returns rows for an ECUC fixture');
+				assert.deepStrictEqual(
+					rows,
+					JSON.parse(oracleRows(fixture, 'all')),
+					'engine rows match the TypeScript oracle'
+				);
+				const parameter = rows.find((row) => row.kind === 'parameter');
+				assert.ok(parameter, 'the fixture has a parameter row');
+
+				const planned = await client.request('doc.plan', {
+					docId,
+					kind: 'value',
+					nodeId: parameter.id,
+					value: '4242'
+				});
+				const plan = JSON.parse(planned.body.toString('utf8')) as {
+					ok: boolean;
+					record?: { newText: string };
+				};
+				assert.strictEqual(plan.ok, true);
+				assert.ok(plan.record?.newText.includes('4242'));
+				await client.request('doc.close', { docId });
+			} finally {
+				client.dispose();
+			}
 		} finally {
 			engine.dispose();
 		}

@@ -40,29 +40,69 @@ function bundleOracle() {
 	return { dir, outfile };
 }
 
+function mismatch(at, left, right) {
+	return `${at || '<root>'}: ${JSON.stringify(left)} !== ${JSON.stringify(right)}`;
+}
+
+function isContainer(value) {
+	return value !== null && typeof value === 'object';
+}
+
+function isPrimitivePair(left, right) {
+	return !isContainer(left) || !isContainer(right);
+}
+
+function isSameContainerKind(left, right) {
+	return Array.isArray(left) === Array.isArray(right);
+}
+
 function compare(left, right, at = '') {
 	if (left === right) return undefined;
-	if (typeof left !== typeof right || left === null || right === null) {
-		return `${at || '<root>'}: ${JSON.stringify(left)} !== ${JSON.stringify(right)}`;
+	if (isPrimitivePair(left, right)) return compareMixed(left, right, at);
+	return compareContainer(left, right, at);
+}
+
+function compareMixed(left, right, at) {
+	if (!isSameContainerKind(left, right)) return mismatch(at, left, right);
+	return compareContainer(left, right, at);
+}
+
+function compareContainer(left, right, at) {
+	return Array.isArray(left) ? compareArray(left, right, at) : compareObject(left, right, at);
+}
+
+function compareArray(left, right, at) {
+	if (!isArrayPair(left, right)) return `${at}: array mismatch`;
+	if (left.length !== right.length) return `${at}.length: ${left.length} !== ${right.length}`;
+	return compareItems(left, right, at);
+}
+
+function compareItems(left, right, at) {
+	for (let index = 0; index < left.length; index++) {
+		const found = compare(left[index], right[index], `${at}[${index}]`);
+		if (found) return found;
 	}
-	if (Array.isArray(left) || Array.isArray(right)) {
-		if (!Array.isArray(left) || !Array.isArray(right)) return `${at}: array mismatch`;
-		if (left.length !== right.length) return `${at}.length: ${left.length} !== ${right.length}`;
-		for (let index = 0; index < left.length; index++) {
-			const found = compare(left[index], right[index], `${at}[${index}]`);
-			if (found) return found;
-		}
-		return undefined;
+	return undefined;
+}
+
+function compareObject(left, right, at) {
+	for (const key of unionKeys(left, right)) {
+		const found = compare(left[key], right[key], joinKey(at, key));
+		if (found) return found;
 	}
-	if (typeof left === 'object') {
-		const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-		for (const key of keys) {
-			const found = compare(left[key], right[key], at ? `${at}.${key}` : key);
-			if (found) return found;
-		}
-		return undefined;
-	}
-	return `${at}: ${JSON.stringify(left)} !== ${JSON.stringify(right)}`;
+	return undefined;
+}
+
+function isArrayPair(left, right) {
+	return Array.isArray(left) && Array.isArray(right);
+}
+
+function unionKeys(left, right) {
+	return new Set([...Object.keys(left), ...Object.keys(right)]);
+}
+
+function joinKey(at, key) {
+	return at ? `${at}.${key}` : key;
 }
 
 const { dir, outfile } = bundleOracle();

@@ -24,23 +24,36 @@ let buffer = Buffer.alloc(0);
 const pending = new Map();
 let nextId = 1;
 
+function deliver(header, body) {
+	const entry = pending.get(header.id);
+	if (!entry) return;
+	entry.chunks.push({ header, body: Buffer.from(body) });
+	if (header.chunk === undefined || header.chunk.last) {
+		pending.delete(header.id);
+		entry.resolve(entry.chunks);
+	}
+}
+
+function readFrame() {
+	const length = buffer.readUInt32LE(0);
+	if (buffer.length < 4 + length) return false;
+	const headerLength = buffer.readUInt16LE(4);
+	const header = JSON.parse(buffer.subarray(6, 6 + headerLength).toString('utf8'));
+	const body = buffer.subarray(6 + headerLength, 4 + length);
+	buffer = buffer.subarray(4 + length);
+	deliver(header, body);
+	return true;
+}
+
+function readFrames() {
+	while (buffer.length >= 6) {
+		if (!readFrame()) return;
+	}
+}
+
 child.stdout.on('data', (chunk) => {
 	buffer = buffer.length === 0 ? chunk : Buffer.concat([buffer, chunk]);
-	while (buffer.length >= 6) {
-		const length = buffer.readUInt32LE(0);
-		if (buffer.length < 4 + length) return;
-		const headerLength = buffer.readUInt16LE(4);
-		const header = JSON.parse(buffer.subarray(6, 6 + headerLength).toString('utf8'));
-		const body = buffer.subarray(6 + headerLength, 4 + length);
-		buffer = buffer.subarray(4 + length);
-		const entry = pending.get(header.id);
-		if (!entry) continue;
-		entry.chunks.push({ header, body: Buffer.from(body) });
-		if (header.chunk === undefined || header.chunk.last) {
-			pending.delete(header.id);
-			entry.resolve(entry.chunks);
-		}
-	}
+	readFrames();
 });
 
 function request(op, header = {}, body, timeout = 15000) {
