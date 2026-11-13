@@ -105,5 +105,5 @@ try {
 } finally {
 	rmSync(dir, { recursive: true, force: true });
 }
-console.log(`\n${checked - failures}/${checked} fixtures matched`);
+console.log(`\n${checked * SORTS.length - failures}/${checked * SORTS.length} fixture/sort combinations matched`);
 process.exit(failures === 0 ? 0 : 1);
