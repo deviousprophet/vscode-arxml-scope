@@ -13,15 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Missing parent containers are created when a copied element's target lacks them; a module copy that would duplicate a short name is refused
 - The pane label of a document edited by a copy shows `•` until it is saved
 
-### Fixed
-
-- An invalid numeric character reference in an ARXML value stays verbatim instead of aborting the scan
-- Search reflects a patched row immediately after a value edit, instead of waiting for a full document refresh
-
 ### Changed
 
 - The ARXML core now runs as a separate Rust engine process, which the extension requires at startup
 - Committing a value in the ECUC editor updates the value row and the ARXML source immediately, instead of re-scanning and re-rendering the whole document
+
+### Fixed
+
+- An invalid numeric character reference in an ARXML value stays verbatim instead of aborting the scan
+- Search reflects a patched row immediately after a value edit, instead of waiting for a full document refresh
 
 ## [0.9.0] - 2026-11-12
 
