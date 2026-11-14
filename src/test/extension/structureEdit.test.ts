@@ -172,3 +172,101 @@ suite('structural row actions', () => {
 		assert.ok(document.getText().includes('<VALUE>64</VALUE>'), 'the document is unchanged');
 	});
 });
+
+suite('plan coverage: STRUCT', () => {
+	const doc = (body: string, newline = '\n'): string =>
+		[
+			'<?xml version="1.0"?><AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>',
+			'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/M</DEFINITION-REF><CONTAINERS>',
+			body,
+			'</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES>',
+			'</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
+		].join(newline);
+	const container = (name: string, inner = ''): string =>
+		`<ECUC-CONTAINER-VALUE><SHORT-NAME>${name}</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/${name}</DEFINITION-REF>${inner}</ECUC-CONTAINER-VALUE>`;
+	const reference = `<ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/P/R</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">/P/C</VALUE-REF></ECUC-REFERENCE-VALUE>`;
+
+	test('STRUCT-01 deleting the first or last child removes one line and keeps neighbours', () => {
+		const text = doc([container('First'), container('Middle'), container('Last')].join('\n'));
+		const model = scanEcucValues(text);
+		const index = buildNodeIndex(model);
+		const byName = (name: string) => index.idOf(model.modules[0].containers.find((entry) => entry.shortName === name)!)!;
+		const first = planDelete(model, text, byName('First'));
+		const last = planDelete(model, text, byName('Last'));
+		assert.ok(first.ok && last.ok);
+		for (const [plan, neighbour] of [
+			[first, '<SHORT-NAME>Middle</SHORT-NAME>'],
+			[last, '<SHORT-NAME>Middle</SHORT-NAME>']
+		] as const) {
+			assert.ok(plan.ok);
+			const before = text.length;
+			const span = lineSpan(text, { start: 0, end: 0 });
+			assert.ok(span.start === 0, 'the helper agrees the document starts at 0');
+			assert.strictEqual(plan.record.oldText.includes(neighbour), false);
+			assert.ok(plan.record.oldText.length < before);
+			assert.strictEqual(plan.record.oldText.endsWith('\n'), true, 'the line break goes with the element');
+		}
+	});
+
+	test('STRUCT-02 deleting a reference-only container leaves no blank line', async () => {
+		const original = doc([container('Keep'), container('RefOnly', `<REFERENCE-VALUES>${reference}</REFERENCE-VALUES>`), container('Tail')].join('\n'));
+		const model = scanEcucValues(original);
+		const index = buildNodeIndex(model);
+		const refOnly = index.idOf(model.modules[0].containers.find((entry) => entry.shortName === 'RefOnly')!)!;
+		const plan = planDelete(model, original, refOnly);
+		assert.ok(plan.ok);
+		const document = await copyDocument(original);
+		const applied = await applyStructureEdit(document, plan.record);
+		assert.ok(applied.ok, applied.ok ? '' : applied.reason);
+		assert.ok(!/\n\s*\n\s*<ECUC-CONTAINER-VALUE><SHORT-NAME>Tail/.test(document.getText()), 'no blank line remains');
+	});
+
+	test('STRUCT-03 a container duplicate carries conditions and annotations verbatim', () => {
+		const text = doc(
+			container('C', '<SW-SYSCOND>(A == 1)</SW-SYSCOND><ANNOTATIONS><ECUC-ANNOTATION><ANNOTATION-TEXT><p><VERBATIM>note</VERBATIM></p></ANNOTATION-TEXT></ECUC-ANNOTATION></ANNOTATIONS>')
+		);
+		const model = scanEcucValues(text);
+		const plan = planDuplicate(model, text, buildNodeIndex(model).idOf(model.modules[0].containers[0])!);
+		assert.ok(plan.ok, plan.ok ? '' : plan.reason);
+		assert.ok(plan.record.oldText.includes('<SW-SYSCOND>(A == 1)</SW-SYSCOND>'));
+		assert.ok(plan.record.oldText.includes('VERBATIM>note</VERBATIM>'));
+	});
+
+	test('STRUCT-04 a CRLF document keeps CRLF in the inserted block', async () => {
+		const original = doc(container('Line'), '\r\n');
+		const model = scanEcucValues(original);
+		const plan = planDuplicate(model, original, buildNodeIndex(model).idOf(model.modules[0].containers[0])!, 'Line_Copy');
+		assert.ok(plan.ok, plan.ok ? '' : plan.reason);
+		const document = await copyDocument(original);
+		const applied = await applyStructureEdit(document, plan.record);
+		assert.ok(applied.ok, applied.ok ? '' : applied.reason);
+		const text = document.getText();
+		const copyAt = text.indexOf('>Line_Copy</SHORT-NAME>');
+		assert.ok(copyAt > 0);
+		const lineStart = text.lastIndexOf('\r\n', copyAt);
+		assert.ok(lineStart >= 0, 'the copied block is preceded by CRLF');
+		assert.strictEqual(text.split('\r\n').length > 1, true);
+		assert.ok(!/[^\r]\n/.test(text), 'no bare LF appears');
+	});
+
+	test('STRUCT-05 a second duplicate increments the suggestion', () => {
+		assert.strictEqual(defaultDuplicateName('A', ['A_Copy']), 'A_Copy2');
+		const text = doc(container('A'));
+		const model = scanEcucValues(text);
+		const id = buildNodeIndex(model).idOf(model.modules[0].containers[0])!;
+		assert.ok(duplicateNameRefusal(model, id, 'A_Copy') === undefined);
+		// After a copy exists, the same name is taken and the next suggestion moves on.
+		const withCopy = text.replace(container('A'), [container('A'), container('A_Copy')].join('\n'));
+		const next = scanEcucValues(withCopy);
+		const nextId = buildNodeIndex(next).idOf(next.modules[0].containers[0])!;
+		assert.ok(duplicateNameRefusal(next, nextId, 'A_Copy') !== undefined);
+		const plan = planDuplicate(next, withCopy, nextId);
+		assert.ok(plan.ok && plan.record.duplicateName === 'A_Copy2', plan.ok ? String(plan.record.duplicateName) : plan.reason);
+	});
+
+	test('STRUCT-06 an inline element is deleted by its exact range', () => {
+		const text = '<A/><B/>';
+		assert.deepStrictEqual(lineSpan(text, { start: 0, end: 4 }), { start: 0, end: 4 });
+		assert.deepStrictEqual(lineSpan('<A/> <!-- keep -->\n', { start: 0, end: 4 }), { start: 0, end: 4 });
+	});
+});
