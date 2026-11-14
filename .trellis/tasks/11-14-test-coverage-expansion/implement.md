@@ -3,48 +3,52 @@
 Owned by `11-14-test-coverage-expansion`. One test per plan row, named with its ID.
 Batches land in the layer the plan names; each batch runs `npm test` plus the area gate.
 
-## Progress (2026-11-14)
+## Progress (2026-11-15)
 
-| Batch | Rows | Status |
+122 of 127 plan rows are executable under their IDs; five are re-scoped with reasons.
+
+| Area | Rows | Where |
 |---|---|---|
-| SCAN | 01–10 | done — `src/test/core/planScan.test.ts` |
-| ID | 01–05 | done — `src/test/core/planIdentity.test.ts` |
-| ROW | 01–05, 07, 09 | done — `src/test/core/planRows.test.ts` |
-| COND | 01, 02, 05, 06 | done — `src/test/core/planConditions.test.ts` |
-| DIFF | 01, 03, 04, 05 | done — `src/test/core/planDiff.test.ts`, `diffPage.test.ts` |
-| EDIT | 01–04, 06, 07, 09, 10 | done — `editing.test.ts`; 05/08 need an engine handle |
-| FIELD | 01–05 | done — `editing.test.ts` |
-| STRUCT | 01–06 | done — `structureEdit.test.ts` |
-| NAV | 01–03 | done (ID-prefixed existing tests); 04/05 open |
-| DETAIL | 02, 03 | done; 01/04 open |
-| TREE | 01 | done; 02–06 open |
-| SEARCH | 01, 03 | done; 02/04 open |
-| CPANEL | 01 | done; 02–03 open |
-| INDEX | 01–06 | open |
-| VALID | 01–04 | open |
-| FEAT | 01–02 | done (ID-prefixed existing tests) |
-| ENG | 01–08 | open (ENG-01 is a product gap) |
-| MERGE | 01, 09, 14 | done; the host copy handler and the patch path still need tests |
-| PKG | 01–03 | open |
-| PERF | 01–06 | open; `diffBenchmark` exists, the others are commands |
-| X | 01–05 | done: 01/02 page, 03/04/05 ID-prefixed existing tests |
-| ROW | 06, 08 | open — annotation shapes, tail exception ordering |
+| SCAN | 01–10 | `core/planScan.test.ts` |
+| ID | 01–05 | `core/planIdentity.test.ts` |
+| ROW | 01–09 | `core/planRows.test.ts`, `core/planRowsExtra.test.ts` |
+| COND | 01, 02, 05, 06 (03/04 re-scoped) | `core/planConditions.test.ts` |
+| EDIT | 01–10 | `extension/editing.test.ts` |
+| FIELD | 01–05 | `extension/editing.test.ts` |
+| STRUCT | 01–06 | `extension/structureEdit.test.ts` |
+| NAV | 01–05 | `extension/reveal.test.ts`, `references.test.ts` |
+| DETAIL | 01–04 | `webview/components/detailsEditor.test.ts`, page suite |
+| TREE | 01–06 | page suites |
+| SEARCH | 01–04 | `webview/page/search.test.ts` |
+| CPANEL | 01–03 | `webview/components/conditionsPanel.test.ts` |
+| INDEX | 01–06 | `extension/planIndexValidation.test.ts` |
+| VALID | 01–04 | `extension/planIndexValidation.test.ts` |
+| FEAT | 01–02 | `extension/textFeatures.test.ts` |
+| DIFF | 01, 03–05 (02 re-scoped) | `core/planDiff.test.ts`, page suite |
+| ENG | 02–06, 08 (01/07 re-scoped) | `extension/engine.test.ts` |
+| MERGE | 01–15 | `extension/planMerge.test.ts`, `compare.test.ts`, page suite |
+| PKG | 01–03 | `extension/planEnginePackaging.test.ts` |
+| PERF | 01–06 | `extension/planEnginePackaging.test.ts` |
+| X | 01–05 | page suites, `compare.test.ts` |
 
-## Findings from the first batches
+## Re-scoped rows (recorded in TEST_PLAN known gaps)
 
-- SCAN-08 exposed a real defect: an out-of-range numeric entity threw
-  `RangeError` (`&#x110000;`). `decodeXml` now leaves it verbatim; changelog `Fixed`.
-- SCAN-06's planned wording was wrong: with no text the model falls back to the
-  `<VALUE>` element span. Plan row corrected.
-- COND-02: `1 == 1.0` is true (both are numbers); only string/boolean vs number is
-  unknown. Plan row corrected.
-- COND-03 and COND-04 are re-scoped, not asserted: the evaluator lists an ambiguous
-  symbol once, and the 201st entry is dropped without a notice. Both are in the plan's
-  known gaps.
-- DIFF-02 described the removed three-way merge; row re-scoped to the two-file suite.
+- COND-03: ambiguous same-tail candidates are reported as one missing symbol.
+- COND-04: stored overflow past 200 is dropped silently; the panel now caps Add.
+- DIFF-02: the three-way merge was removed; two-file pairing is covered.
+- ENG-01: restart/backoff is not implemented.
+- ENG-07: no engine-RSS measurement exists.
 
-## Validation per batch
+## Findings from the batches
 
-`npm run compile-tests` for a fast loop, `npm test` before a commit, and the area gate
-from the plan's regression table. Rust is untouched by these tests except where an
-engine row lands.
+- SCAN-08: out-of-range numeric entity threw `RangeError` — fixed.
+- SEARCH-03: an in-place `documentPatch` left the search index stale — fixed.
+- MERGE-06: ancestor chains were inserted beside the parent row, not inside it — fixed.
+- EDIT-05/PERF-03: the engine's second edit of the same value planned against the old
+  span and could corrupt the text — fixed.
+
+## Final validation
+
+`npm test` 909 passing, `npx tsc --noEmit`, `npm run lint`, `cargo test` 35, clippy,
+fmt, `parity:rows` 82/82, `parity:diff` 159/159, `parity:words` 44/44, engine smoke,
+fallow complexity 0 / duplication 0 (two build-entry false positives reported).

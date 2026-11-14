@@ -10,6 +10,15 @@ import * as assert from 'assert';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import type { ContainerNode, ParameterNode } from '../../core/ecuc/model';
 
+/** UTF-16 bytes with a BOM, byte-swapped for big-endian. */
+function utf16WithBom(source: string, little: boolean): Buffer {
+	const bytes = Buffer.from(source, 'utf16le');
+	if (little) {
+		return Buffer.concat([Buffer.from([0xff, 0xfe]), bytes]);
+	}
+	return Buffer.concat([Buffer.from([0xfe, 0xff]), swapPairs(bytes)]);
+}
+
 function doc(elements: string, prolog = ''): string {
 	return `<?xml version="1.0" encoding="UTF-8"?>\n${prolog}<AUTOSAR xmlns="http://autosar.org/schema/r4.0">\n<AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${elements}</ELEMENTS></AR-PACKAGE></AR-PACKAGES>\n</AUTOSAR>`;
 }
@@ -61,11 +70,7 @@ suite('plan coverage: SCAN', () => {
 		const source = doc(module(container('C', `<PARAMETER-VALUES>${parameter('A', '42')}</PARAMETER-VALUES>`)));
 		const utf8 = scanEcucValues(source);
 		for (const little of [true, false]) {
-			const bytes = Buffer.from(source, 'utf16le');
-			const withBom = little
-				? Buffer.concat([Buffer.from([0xff, 0xfe]), bytes])
-				: Buffer.concat([Buffer.from([0xfe, 0xff]), swapPairs(bytes)]);
-			const decoded = new TextDecoder(little ? 'utf-16le' : 'utf-16be').decode(withBom);
+			const decoded = new TextDecoder(little ? 'utf-16le' : 'utf-16be').decode(utf16WithBom(source, little));
 			const scanned = scanEcucValues(decoded);
 			assert.strictEqual(
 				JSON.stringify(scanned.modules),

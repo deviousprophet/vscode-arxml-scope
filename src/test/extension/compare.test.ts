@@ -10,6 +10,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
+import { indentationAt, planCopy } from '../../core/copy/planCopy';
+import { scanEcucValues } from '../../core/ecuc/scanner';
 import { CompareSelectionStore } from '../../host/compareSelection';
 import { DiffPanel } from '../../host/diffPanel';
 import { fixtureUri, repoRoot, sleep } from './testUtils';
@@ -28,6 +30,11 @@ interface Manifest {
 
 function readManifest(): Manifest {
 	return JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as Manifest;
+}
+
+/** The panel source, for the host-only copy decisions `vscode-test` cannot message. */
+function panelSource(): string {
+	return fs.readFileSync(path.join(repoRoot, 'src', 'host', 'diffPanel.ts'), 'utf8');
 }
 
 /** Every compare command is contributed by the manifest. */
@@ -246,5 +253,112 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 		await vscode.commands.executeCommand(COMPARE_SELECTED, notArxml, [notArxml, valid]);
 		await sleep(300);
 		assert.strictEqual(diffTabs().length, 0, 'a non-arxml path never opens the panel');
+	});
+
+	test('MERGE-07 copying into a missing module is refused with a message before any edit', () => {
+		// The refusal is a closure inside DiffPanel.open and needs a webview `copy`
+		// message, which vscode-test cannot deliver. Pin the decision and its order:
+		// the missing-module branch returns before the synthesized chain is applied.
+		const panel = panelSource();
+		assert.match(
+			panel,
+			/if \(hasTargetCell\(parent, sourceSide\)\) \{\s*return \{ ancestors, anchorParent: index \};/,
+			'the chain stops at the nearest ancestor the target has'
+		);
+		assert.match(
+			panel,
+			/if \(chain === undefined\) \{\s*await postError\('the module is missing on the target side; copy it first'\);\s*return true;\s*\}/,
+			'the refusal carries the documented message and returns'
+		);
+		const refusal = panel.indexOf('the module is missing on the target side; copy it first');
+		const mutation = panel.indexOf('applyPlan(otherDoc, chainInsertion', refusal);
+		assert.ok(mutation > refusal, 'a refused module copy reaches no applyPlan');
+	});
+
+	test('MERGE-08 a module row copy is allowed without a collision and refused with one', () => {
+		const module = (shortName: string): string =>
+			`        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>${shortName}</SHORT-NAME>
+          <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/${shortName}</DEFINITION-REF>
+          <CONTAINERS/>
+        </ECUC-MODULE-CONFIGURATION-VALUES>`;
+		const shell = (elements: string): string =>
+			`<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR>
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>Pkg</SHORT-NAME>
+      <ELEMENTS>
+${elements}
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>
+`;
+		const sourceText = shell(module('Mod'));
+		const targetText = shell(module('Other'));
+		const source = scanEcucValues(sourceText).modules.find((candidate) => candidate.shortName === 'Mod');
+		const anchor = scanEcucValues(targetText).modules.find((candidate) => candidate.shortName === 'Other');
+		assert.ok(source, 'the source has the module row');
+		assert.ok(anchor, 'the target has its own module row');
+		const planned = planCopy({
+			targetText,
+			sourceText,
+			source: source!.range,
+			anchorAfter: anchor!.range,
+			targetIndent: indentationAt(targetText, anchor!.range.start)
+		});
+		assert.ok(planned.ok, 'a module row with no target name collision is insertable');
+		const result = targetText.slice(0, planned.span.start) + planned.span.text + targetText.slice(planned.span.end);
+		assert.deepStrictEqual(
+			scanEcucValues(result).modules.map((candidate) => candidate.shortName),
+			['Other', 'Mod'],
+			'the module is inserted next to its target sibling'
+		);
+
+		// The collision refusal is host-only; pin the exact predicate and its ordering.
+		const panel = panelSource();
+		assert.match(panel, /if \(row\.kind !== 'module'\) \{\s*return false;\s*\}/, 'only a module row can collide');
+		assert.match(
+			panel,
+			/candidate\.kind === 'module' &&\s*cellOn\(candidate, targetSide\)\?\.shortName === name/,
+			'the collision compares the short name on the target side'
+		);
+		assert.match(
+			panel,
+			/if \(moduleCollision\(side, located\.rowIndex\)\) \{\s*await postError\('that module already exists on the target side'\);\s*return;\s*\}/,
+			'the collision is refused with the documented message'
+		);
+		const collision = panel.indexOf('moduleCollision(side, located.rowIndex)');
+		const place = panel.indexOf('await placeCopy(', collision);
+		assert.ok(place > collision, 'the collision check runs before the copy is planned');
+	});
+
+	test('MERGE-13 stale bytes offer Reload/Cancel and only Reload mutates anything', () => {
+		// The modal runs from the panel's `copy` message handler; vscode-test has no
+		// webview message channel to it. Pin the wording, the two answers and the
+		// single mutating branch: Cancel has no branch at all.
+		const panel = panelSource();
+		assert.match(
+			panel,
+			/showWarningMessage\(\s*'The comparison changed\. Reload it\?',\s*\{ modal: true \},\s*'Reload',\s*'Cancel'\s*\)/,
+			'the modal offers Reload and Cancel'
+		);
+		assert.match(
+			panel,
+			/if \(answer === 'Reload'\) \{\s*await refreshNow\(\);\s*\}/,
+			'only Reload rebuilds the comparison'
+		);
+		assert.ok(!panel.includes("answer === 'Cancel'"), 'Cancel has no branch, so it changes nothing');
+		assert.match(
+			panel,
+			/if \(snapshotIsStale\(side, clickedDoc, otherDoc\)\) \{\s*await askReload\(\);\s*return;\s*\}/,
+			'a stale snapshot is checked before the copy is planned'
+		);
+		assert.match(
+			panel,
+			/clickedPrepared\.version !== clickedDoc\.version \|\| otherPrepared\.version !== otherDoc\.version/,
+			'either compared document being newer makes the snapshot stale'
+		);
 	});
 });

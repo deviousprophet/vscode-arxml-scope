@@ -31,6 +31,8 @@ import {
 } from '../../host/ecucEdit';
 import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { EcucRow, buildRows } from '../../core/ecuc/renderRows';
+import type { CoreEngine } from '../../host/engine/coreEngine';
+import { enginePath, resolveEngine } from '../../host/engine/engineLoader';
 import { documentHeader } from '../../webviewProtocol';
 import type { EditorProviderToWebview } from '../../webviewProtocol';
 import { fixtureText } from '../core/modelTestUtils';
@@ -39,6 +41,7 @@ import { repoRoot, sleep } from './testUtils';
 interface StubMessage {
 	type?: string;
 	document?: { rows?: EcucRow[]; selectedId?: string };
+	patch?: { at: number; remove: number; rows: EcucRow[]; structural: boolean };
 	message?: string;
 	nodeId?: string;
 	inline?: boolean;
@@ -1269,5 +1272,176 @@ suite('plan coverage: FIELD', () => {
 		const plan = buildFieldEdit(model, text, moduleId(text), 'shortName', 'M2');
 		assert.ok(plan.ok === false);
 		assert.ok(plan.reason.includes('not a container'));
+	});
+});
+
+suite('plan coverage: EDIT through the engine', () => {
+	/** A real engine with observable opens and plans, so the fast path is provable. */
+	function trackedEngine(base: CoreEngine): {
+		engine: CoreEngine;
+		opened: Promise<number>;
+		planCalls: () => number;
+	} {
+		let settle: (docId: number) => void = () => undefined;
+		const opened = new Promise<number>((resolve) => {
+			settle = resolve;
+		});
+		let plans = 0;
+		const engine: CoreEngine = {
+			...base,
+			openDocument: async (uri, text, options) => {
+				const docId = await base.openDocument(uri, text, options);
+				// The provider stores the returned id on the microtask after this call;
+				// resolving on a macrotask makes the handle observable and usable.
+				setTimeout(() => settle(docId), 0);
+				return docId;
+			},
+			planEdit: async (docId, request) => {
+				plans += 1;
+				return base.planEdit(docId, request);
+			}
+		};
+		return { engine, opened, planCalls: () => plans };
+	}
+
+	async function openedWithin(what: string, promise: Promise<number>, timeoutMs = 5000): Promise<number> {
+		return Promise.race([
+			promise,
+			sleep(timeoutMs).then(() => {
+				throw new Error(`timed out waiting for ${what}`);
+			})
+		]);
+	}
+
+	function lastPatch(stub: StubPanel): NonNullable<StubMessage['patch']> | undefined {
+		return stub.messages.filter((message) => message.type === 'documentPatch').at(-1)?.patch;
+	}
+
+	function applyRowPatch(rows: readonly EcucRow[], patch: NonNullable<StubMessage['patch']>): EcucRow[] {
+		return [...rows.slice(0, patch.at), ...patch.rows, ...rows.slice(patch.at + patch.remove)];
+	}
+
+	/** Two scratch copies of `name`: one through the engine, one through the TypeScript path. */
+	async function twoCopies(name: string): Promise<{
+		dir: string;
+		engineDocument: vscode.TextDocument;
+		legacyDocument: vscode.TextDocument;
+	}> {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arxml-scope-engine-edit-'));
+		const engineFile = path.join(dir, 'engine.arxml');
+		const legacyFile = path.join(dir, 'legacy.arxml');
+		fs.copyFileSync(committed(name), engineFile);
+		fs.copyFileSync(committed(name), legacyFile);
+		try {
+			return {
+				dir,
+				engineDocument: await vscode.workspace.openTextDocument(vscode.Uri.file(engineFile)),
+				legacyDocument: await vscode.workspace.openTextDocument(vscode.Uri.file(legacyFile))
+			};
+		} catch (error) {
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+			throw error;
+		}
+	}
+
+	test('EDIT-05 the engine fast path writes the same bytes and rows as the TypeScript fallback', async () => {
+		assert.ok(fs.existsSync(enginePath(repoRoot)), 'run npm run engine:build before the suite');
+		const resolved = await resolveEngine(repoRoot);
+		const copies = await twoCopies('numeric.arxml');
+		try {
+			const tracked = trackedEngine(resolved);
+			const enginePanel = stubPanel();
+			new EcucEditorProvider(undefined, undefined, undefined, tracked.engine).resolveCustomTextEditor(
+				copies.engineDocument,
+				enginePanel.panel,
+				new vscode.CancellationTokenSource().token
+			);
+			const legacyPanel = stubPanel();
+			new EcucEditorProvider().resolveCustomTextEditor(
+				copies.legacyDocument,
+				legacyPanel.panel,
+				new vscode.CancellationTokenSource().token
+			);
+			await openedWithin('the engine document handle', tracked.opened);
+
+			await enginePanel.send({ type: 'ready' });
+			await legacyPanel.send({ type: 'ready' });
+			const before = lastRows(enginePanel);
+			assert.deepStrictEqual(before, expectedRows(copies.engineDocument.getText()), 'the starting rows');
+
+			const nodeId = parameterId(copies.engineDocument.getText(), 'Count');
+			await enginePanel.send({ type: 'edit', nodeId, value: '42' });
+			await legacyPanel.send({ type: 'edit', nodeId, value: '42' });
+			await waitFor('the engine write', () => copies.engineDocument.getText().includes('<VALUE>42</VALUE>'));
+			await waitFor('the legacy write', () => copies.legacyDocument.getText().includes('<VALUE>42</VALUE>'));
+
+			assert.strictEqual(
+				copies.engineDocument.getText(),
+				copies.legacyDocument.getText(),
+				'both paths write identical bytes'
+			);
+			assert.ok(tracked.planCalls() > 0, 'the engine planned the edit (not the fallback)');
+
+			await waitFor('the engine row patch', () => lastPatch(enginePanel) !== undefined);
+			const patch = lastPatch(enginePanel)!;
+			assert.strictEqual(patch.structural, false);
+			assert.deepStrictEqual(
+				JSON.parse(JSON.stringify(applyRowPatch(before, patch))),
+				JSON.parse(JSON.stringify(expectedRows(copies.engineDocument.getText()))),
+				'the one-row patch rebuilds the full row store'
+			);
+
+			await enginePanel.send({ type: 'ready' });
+			await legacyPanel.send({ type: 'ready' });
+			assert.deepStrictEqual(lastRows(enginePanel), lastRows(legacyPanel), 'both panels show identical rows');
+		} finally {
+			resolved.dispose();
+			await sleep(50);
+			fs.rmSync(copies.dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+		}
+	});
+
+	test('EDIT-08 undo and redo after an engine-path edit restore bytes and rows', async () => {
+		assert.ok(fs.existsSync(enginePath(repoRoot)), 'run npm run engine:build before the suite');
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const resolved = await resolveEngine(repoRoot);
+			try {
+				const tracked = trackedEngine(resolved);
+				const stub = stubPanel();
+				new EcucEditorProvider(undefined, undefined, undefined, tracked.engine).resolveCustomTextEditor(
+					document,
+					stub.panel,
+					new vscode.CancellationTokenSource().token
+				);
+				await openedWithin('the engine document handle', tracked.opened);
+				await vscode.window.showTextDocument(document);
+
+				const patchCount = (): number =>
+					stub.messages.filter((message) => message.type === 'documentPatch').length;
+
+				const original = document.getText();
+				await stub.send({ type: 'ready' });
+				await stub.send({ type: 'edit', nodeId: parameterId(original, 'Count'), value: '42' });
+				await waitFor('the engine edit', () => document.getText().includes('<VALUE>42</VALUE>'));
+				const edited = document.getText();
+				await waitFor('the edit row patch', () => patchCount() >= 1);
+
+				await vscode.commands.executeCommand('undo');
+				await waitFor('one undo to restore the bytes', () => document.getText() === original);
+				await waitFor('the undo row patch', () => patchCount() >= 2);
+				await stub.send({ type: 'ready' });
+				assert.strictEqual(lastRows(stub).find((row) => row.label === 'Count')?.value, '7');
+				assert.deepStrictEqual(lastRows(stub), expectedRows(original), 'the rows follow the undo');
+
+				await vscode.commands.executeCommand('redo');
+				await waitFor('one redo to re-apply the edit', () => document.getText() === edited);
+				await waitFor('the redo row patch', () => patchCount() >= 3);
+				await stub.send({ type: 'ready' });
+				assert.strictEqual(lastRows(stub).find((row) => row.label === 'Count')?.value, '42');
+				assert.deepStrictEqual(lastRows(stub), expectedRows(edited), 'the rows follow the redo');
+			} finally {
+				resolved.dispose();
+			}
+		});
 	});
 });

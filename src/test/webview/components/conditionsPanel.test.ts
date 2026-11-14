@@ -316,6 +316,46 @@ suite('ConditionsPanel component', () => {
 		}
 	});
 
+	test('CPANEL-02 Clear values with a draft open keeps the typed draft', () => {
+		const dom = panel();
+		try {
+			setConditionsCallback(() => undefined);
+			setConditionRows([]);
+			renderConditionEntries([{ name: 'A_SC', value: '1' }]);
+			(dom.document.getElementById('conditions-add') as HTMLElement).click();
+			const draft = rows(dom).find((entry) => entry.dataset.new === 'true')!;
+			assert.ok(draft, 'Add opened a draft row');
+			const input = draft.querySelector('.condition-name') as HTMLInputElement;
+			input.value = 'DRAFT_SC';
+			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+
+			(dom.document.getElementById('conditions-clear') as HTMLElement).click();
+			const survivor = rows(dom).find((entry) => entry.dataset.new === 'true');
+			assert.ok(survivor, 'the draft row survives Clear');
+			assert.strictEqual((survivor!.querySelector('.condition-name') as HTMLInputElement).value, 'DRAFT_SC');
+			assert.strictEqual(rows(dom).find((entry) => entry.dataset.name === 'A_SC')!.dataset.value, '');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('CPANEL-03 a 201st row is refused with the cap message', () => {
+		const dom = panel();
+		try {
+			setConditionsCallback(() => undefined);
+			setConditionRows([]);
+			renderConditionEntries(
+				Array.from({ length: 200 }, (_, at) => ({ name: `SC_${at}`, value: '1' }))
+			);
+			(dom.document.getElementById('conditions-add') as HTMLElement).click();
+			assert.strictEqual(rows(dom).length, 200, 'no 201st row is created');
+			const status = dom.document.getElementById('conditions-status') as HTMLElement;
+			assert.ok(status.textContent?.includes('At most 200'), status.textContent ?? '');
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('Remove, Clear values and the disabled count keep their contracts', () => {
 		const dom = panel();
 		try {

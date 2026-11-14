@@ -2695,4 +2695,27 @@ suite('diff page merge mode', () => {
 			dom.restore();
 		}
 	});
+
+	test('MERGE-10 after Swap the arrow copies from the displayed pane, not the stored side', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'mergeMode', enabled: true });
+			(dom.document.getElementById('diff-swap') as HTMLElement).click();
+			const arrow = dom.document.querySelector(
+				'#diff-pane-left .diff-copy-arrow'
+			) as HTMLButtonElement | null;
+			assert.ok(arrow, 'the displayed left pane has an arrow after Swap');
+			assert.strictEqual(arrow!.dataset.side, 'left', 'the arrow is drawn in the displayed left pane');
+			const key = (arrow!.closest('.diff-row') as HTMLElement | null)?.getAttribute('data-key');
+			assert.ok(key, 'the arrow row carries its diff key');
+			arrow!.click();
+			assert.deepStrictEqual(
+				messagesOf(dom.api, 'copy'),
+				[{ type: 'copy', side: 'right', key }],
+				'the copy names the stored right side because the displayed left pane is the right document'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
 });

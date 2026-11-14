@@ -338,5 +338,16 @@ Covered: scan/rows/diff/index/validation/rename/edit-latency.
    input test.
 5. A condition symbol with several same-tail candidates resolves to missing and lists
    the symbol once; the candidate paths are not surfaced (COND-03).
-6. The 201st condition entry is dropped without a notice; the panel has no cap message
-   yet (COND-04).
+6. `parseConditionEntries` still drops entries past 200 silently for stored data; the
+   panel now refuses a 201st row with a cap message (COND-04).
+7. `diff.patch` latency is 411 ms against the 50 ms gate; the PERF-06 test records the
+   number and the gate stays open (subtree-local rebuild).
+8. `PERF-01`'s 5/100 ms ceilings are measured by `npm run benchmark engineEdit`, not
+   asserted in the suite; the test documents the gate.
+9. `ENG-07` has no engine-RSS measurement: the client exposes no pid and the benchmark
+   records the host's retained heap only.
+10. `MERGE-12` lists seven fallback codes; `ancestor-changed` is defensive and no copy
+    edit reaches it. The suite pins the list and exercises the other six.
+11. Disabling the index mid-build can briefly publish the in-flight snapshot before the
+    queued enable rebuild; the settled state is asserted (INDEX-04).
+12. The three-way merge was removed; DIFF-02 is re-scoped to the two-file pairing suite.

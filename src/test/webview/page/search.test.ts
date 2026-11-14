@@ -8,6 +8,7 @@ import * as assert from 'assert';
 import { scanEcucValues } from '../../../core/ecuc/scanner';
 import { buildRows } from '../../../core/ecuc/renderRows';
 import { SORT_EXCEPTIONS } from '../../../core/ecuc/order';
+import { RowSearchEngine } from '../../../webview/render/rowSearch';
 import { TreeRow, flattenRows, haystack, matchRanges, searchRows, stepMatch } from '../../../webview/render/treeQuery';
 import { fixtureText } from '../../core/modelTestUtils';
 import { webviewCss } from '../cssTestUtils';
@@ -323,6 +324,96 @@ suite('search page', () => {
 			/body\.vscode-high-contrast\[data-view\] mark\s*\{[^}]*outline:/.test(tree),
 			'the high-contrast theme keeps marks visible as outlines'
 		);
+	});
+
+	test('SEARCH-02 clearing a running chunked search discards results and paints nothing late', async () => {
+		// Deterministic in-flight scan: a fake clock advances six units per read,
+		// so the first 24-unit slice scans four of ten rows and schedules a chunk.
+		const timers = new Map<number, () => void>();
+		let nextHandle = 1;
+		let clock = 0;
+		const updates: number[][] = [];
+		let completions = 0;
+		const engine = new RowSearchEngine({
+			debounceMs: 0,
+			budgetMs: 10,
+			progressMs: 0,
+			batchSize: 2,
+			now: () => (clock += 6),
+			setTimer: (callback) => {
+				const handle = nextHandle++;
+				timers.set(handle, callback);
+				return handle;
+			},
+			clearTimer: (handle) => {
+				timers.delete(handle as number);
+			},
+		});
+		const rows: TreeRow[] = Array.from({ length: 10 }, (_, at) => ({
+			id: 'r' + at,
+			parentId: null,
+			level: 1,
+			subtreeSize: 0,
+			hasChildren: false,
+			haystack: at === 0 ? 'needle first' : 'row ' + at,
+		}));
+		engine.search(
+			rows,
+			'needle',
+			{
+				onProgressUpdate: (matches) => updates.push(matches),
+				onComplete: () => {
+					completions++;
+				},
+			},
+			true
+		);
+		assert.deepStrictEqual(updates, [[0]], 'the first chunk painted one match');
+		assert.strictEqual(completions, 0, 'the scan is still in flight');
+		const pending = [...timers.values()];
+		assert.strictEqual(pending.length, 1, 'one chunk timer is pending');
+
+		engine.clear();
+		assert.strictEqual(timers.size, 0, 'clear cancels the pending chunk');
+		pending.forEach((callback) => callback());
+		assert.deepStrictEqual(updates, [[0]], 'no late partial result reaches the page');
+		assert.strictEqual(completions, 0, 'no late completion reaches the page');
+
+		// The page's Clear control resets the same engine and leaves no stale UI.
+		const dom = mountEditor();
+		try {
+			const input = dom.document.getElementById('search-input') as HTMLInputElement;
+			input.value = 'IniValue';
+			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+			input.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+			);
+			(dom.document.getElementById('search-clear') as HTMLElement).click();
+			await settleSearch();
+			assert.strictEqual(dom.document.getElementById('search-count')!.textContent, '');
+			assert.strictEqual(dom.document.querySelector('#tree mark'), null, 'no late highlight');
+			assert.strictEqual(messagesOf(dom.api, 'select').length, 0, 'no late jump selects a row');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('SEARCH-04 100k rows with one match at the end completes within the engine budget', async () => {
+		const rows: TreeRow[] = Array.from({ length: 100_000 }, (_, at) => ({
+			id: 'r' + at,
+			parentId: null,
+			level: 1,
+			subtreeSize: 0,
+			hasChildren: false,
+			haystack: at === 99_999 ? 'needle at the end' : 'row ' + at,
+		}));
+		const started = performance.now();
+		const matches = await new Promise<number[]>((resolve) => {
+			new RowSearchEngine().search(rows, 'needle', { onComplete: resolve }, true);
+		});
+		const elapsed = performance.now() - started;
+		assert.deepStrictEqual(matches, [99_999]);
+		assert.ok(elapsed < 2000, `100k rows took ${Math.round(elapsed)} ms (ceiling 2000 ms)`);
 	});
 
 	test('the schema/package rows scroll out of the rendered window', async () => {

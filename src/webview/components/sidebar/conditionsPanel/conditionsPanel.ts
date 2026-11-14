@@ -748,11 +748,18 @@ function openNewConditionRow(): void {
 	updateConditionsChrome();
 }
 
+/** Mirrors the host's `ENTRY_LIMIT`: the 201st row would be dropped silently. */
+const MAX_CONDITION_ROWS = 200;
+
 function addConditionEntry(): void {
 	if (!conditionsList) {
 		return;
 	}
 	if (focusExistingConditionDraft()) {
+		return;
+	}
+	if (conditionsList.querySelectorAll('.condition-row').length >= MAX_CONDITION_ROWS) {
+		showConditionsStatus(`At most ${MAX_CONDITION_ROWS} condition values can be added.`);
 		return;
 	}
 	openNewConditionRow();
@@ -773,12 +780,13 @@ function removeConditionRow(row: any): void {
 }
 
 function clearConditionEntries(): void {
-	if (editingConditionRow) {
-		cancelConditionEdit(editingConditionRow);
-	}
 	if (conditionsList) {
 		const list = conditionsList.querySelectorAll('.condition-row');
 		for (let at = 0; at < list.length; at++) {
+			// An open draft is not a committed value: clearing keeps its typed text.
+			if (list[at] === editingConditionRow) {
+				continue;
+			}
 			list[at].dataset.value = '';
 			renderConditionRow(list[at]);
 		}
