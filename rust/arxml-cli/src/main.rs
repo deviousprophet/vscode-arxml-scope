@@ -11,6 +11,7 @@ use std::process::ExitCode;
 
 use arxml_core::diff::{build_diff_document, DiffHeader, DiffOptions, DiffSide, FileLabel};
 use arxml_core::ecuc::{build_rows, scan_ecuc_values, Document, RowOptions};
+use arxml_core::word::{diff_words, WordPair};
 use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -50,6 +51,7 @@ fn main() -> ExitCode {
         "scan" => scan_command(&args),
         "rows" => rows_command(&args),
         "diff" => diff_command(&args),
+        "words" => words_command(&args),
         other => {
             eprintln!("unknown command {other}");
             ExitCode::from(2)
@@ -195,6 +197,41 @@ fn diff_command(args: &[String]) -> ExitCode {
         },
     );
     match serde_json::to_string(&document) {
+        Ok(json) => {
+            println!("{json}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn words_command(args: &[String]) -> ExitCode {
+    let Some(path) = option(args, "--pairs") else {
+        eprintln!("--pairs is required");
+        return ExitCode::from(2);
+    };
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("{path}: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    let pairs: Vec<(String, String)> = match serde_json::from_str(&text) {
+        Ok(pairs) => pairs,
+        Err(error) => {
+            eprintln!("{path}: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    let pairs: Vec<WordPair> = pairs
+        .into_iter()
+        .map(|(left, right)| diff_words(&left, &right))
+        .collect();
+    match serde_json::to_string(&pairs) {
         Ok(json) => {
             println!("{json}");
             ExitCode::SUCCESS

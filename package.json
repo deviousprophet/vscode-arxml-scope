@@ -327,6 +327,7 @@
     "parity": "node scripts/parity.mjs",
     "parity:rows": "node scripts/parityRows.mjs",
     "parity:diff": "node scripts/parityDiff.mjs",
+    "parity:words": "node scripts/parityWords.mjs",
     "engine:build": "node scripts/build-engine.mjs",
     "rust:test": "cargo test --manifest-path rust/Cargo.toml --workspace",
     "rust:fmt": "cargo fmt --manifest-path rust/Cargo.toml --all -- --check",

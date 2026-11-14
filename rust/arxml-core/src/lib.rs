@@ -9,6 +9,7 @@
 
 pub mod diff;
 pub mod ecuc;
+pub mod word;
 
 /// The protocol version the TypeScript client expects from the engine process.
 pub const ENGINE_PROTOCOL: u32 = 1;
