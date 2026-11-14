@@ -30,6 +30,7 @@ import {
 	planDuplicate,
 } from './ecucStructureEdit';
 import type { StructureEditRecord } from './ecucStructureEdit';
+import type { CoreEngine, EngineEditPlan, EngineEditRequest, EngineRowPatch } from './engine/coreEngine';
 import { followReference, nodeIdForRange, revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
 import type { BootWatchdog } from './bootWatchdog';
@@ -70,6 +71,12 @@ interface EditorSession {
 	boot: BootWatchdog;
 	model(): ReturnType<typeof scanEcucValues>;
 	push(): void;
+	/** Re-scans the text document and pushes the full row store. */
+	rescan(): void;
+	/** The engine document handle, once it is open; absent until then or without an engine. */
+	engineDocId?: number;
+	/** True when the engine moved the text but the TypeScript model has not caught up. */
+	state: { stale: boolean };
 }
 
 /** A reference chosen in the Quick Pick plus the document it was opened from. */
@@ -130,12 +137,20 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	private readonly extensionUri: vscode.Uri;
 	/** Definition lookup and change notifications; absent in unit tests. */
 	private readonly definitionSource?: DefinitionSource;
+	/** The Rust engine process; absent in unit tests, which drive the TypeScript path. */
+	private readonly engine?: CoreEngine;
 
-	constructor(conditionStore?: ConditionValueStore, extensionUri?: vscode.Uri, definitionSource?: DefinitionSource) {
+	constructor(
+		conditionStore?: ConditionValueStore,
+		extensionUri?: vscode.Uri,
+		definitionSource?: DefinitionSource,
+		engine?: CoreEngine
+	) {
 		this.conditionStore = conditionStore;
 		this.conditionEntries = storedConditionEntries(conditionStore);
 		this.extensionUri = resolvedExtensionUri(extensionUri);
 		this.definitionSource = definitionSource;
+		this.engine = engine;
 	}
 
 	/** The editor page's static shell plus its bundled script/style URIs. */
@@ -213,7 +228,17 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		// edit, or the sibling child's write — re-scans and pushes row data, so no range
 		// on screen can outlive the text it points at. The same push serves a settings
 		// change, which re-renders the model that is already scanned.
+		// The engine answers edits without touching the TypeScript model, so the model
+		// goes stale until something needs it. `push` and `model()` re-scan first.
+		const state = { stale: false };
+		const rescanModel = (): void => {
+			model = scanEcucValues(document.getText());
+			state.stale = false;
+		};
 		const push = (): void => {
+			if (state.stale) {
+				rescanModel();
+			}
 			const current = this.selections.get(key);
 			const rowDocument = buildRows(model, this.rowOptions(key));
 			// The page owns the row store; a re-scan replaces it without markup.
@@ -227,13 +252,38 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			});
 		};
 
+		// The engine keeps the text and the rows, so an accepted edit is answered with a
+		// one-row patch. Without a handle (unit tests, engine still opening, a structural
+		// change) the full TypeScript re-scan remains the single fallback.
+		const session: EditorSession = {
+			document,
+			panel,
+			key,
+			boot,
+			state,
+			model: () => {
+				if (state.stale) {
+					rescanModel();
+				}
+				return model;
+			},
+			push,
+			rescan: () => {
+				rescanModel();
+				push();
+			}
+		};
+
 		disposables.push(
 			vscode.workspace.onDidChangeTextDocument((event) => {
 				if (event.document.uri.toString() !== key) {
 					return;
 				}
-				model = scanEcucValues(document.getText());
-				push();
+				if (session.engineDocId !== undefined && event.contentChanges.length > 0) {
+					void this.applyEngineChange(session, event.contentChanges);
+					return;
+				}
+				session.rescan();
 			})
 		);
 
@@ -254,14 +304,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			disposables.push(this.definitionSource.subscribe(() => push()));
 		}
 
-		const session: EditorSession = {
-			document,
-			panel,
-			key,
-			boot,
-			model: () => model,
-			push,
-		};
+		void this.openEngineDocument(session);
 
 		disposables.push(
 			panel.webview.onDidReceiveMessage((raw: unknown) => this.handlePanelMessage(raw, session))
@@ -271,6 +314,9 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			boot.dispose();
 			for (const disposable of disposables) {
 				disposable.dispose();
+			}
+			if (session.engineDocId !== undefined) {
+				void this.engine?.closeDocument(session.engineDocId);
 			}
 			this.forget(key);
 		});
@@ -416,7 +462,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		const field: EditField = message.field ?? 'value';
 		// An unknown field is ignored rather than guessed at.
 		if (EDIT_FIELDS.includes(field)) {
-			void this.editField(session.document, session.panel, nodeId, field, message.value);
+			void this.editField(session.document, session.panel, nodeId, field, message.value, session);
 		}
 	}
 
@@ -808,6 +854,28 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		panel: vscode.WebviewPanel,
 		nodeId: string,
 		field: EditField,
+		value: string,
+		session?: EditorSession
+	): Promise<void> {
+		if (this.canUseEngine(session)) {
+			await this.editFieldThroughEngine(session, session.engineDocId, nodeId, field, value);
+			return;
+		}
+		await this.editFieldLegacy(document, panel, nodeId, field, value);
+	}
+
+	private canUseEngine(
+		session: EditorSession | undefined
+	): session is EditorSession & { engineDocId: number } {
+		return session !== undefined && session.engineDocId !== undefined && this.engine !== undefined;
+	}
+
+	/** The TypeScript write path: plan against a fresh scan, then one `WorkspaceEdit`. */
+	private async editFieldLegacy(
+		document: vscode.TextDocument,
+		panel: vscode.WebviewPanel,
+		nodeId: string,
+		field: EditField,
 		value: string
 	): Promise<void> {
 		const key = document.uri.toString();
@@ -828,6 +896,133 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 	}
 
+	/**
+	 * The engine plans against the retained model, so the host neither re-scans to find
+	 * the region nor re-scans to apply it: the plan carries the span and the bytes it
+	 * expects, which the host verifies before writing one `WorkspaceEdit`.
+	 */
+	private async editFieldThroughEngine(
+		session: EditorSession,
+		docId: number,
+		nodeId: string,
+		field: EditField,
+		value: string
+	): Promise<void> {
+		const plan = await this.requirePlan(session, docId, nodeId, field, value);
+		if (plan === undefined) {
+			return;
+		}
+		await this.applyPlannedEdit(session, nodeId, plan);
+	}
+
+	/** The engine's plan, or `undefined` after explaining the refusal inline. */
+	private async requirePlan(
+		session: EditorSession,
+		docId: number,
+		nodeId: string,
+		field: EditField,
+		value: string
+	): Promise<EngineEditPlan | undefined> {
+		const engine = this.engine;
+		if (engine === undefined) {
+			return undefined;
+		}
+		return acceptPlan(session.panel, await engine.planEdit(docId, planRequest(field, nodeId, value)));
+	}
+
+	/** Verifies the planned bytes and writes them as one `WorkspaceEdit`. */
+	private async applyPlannedEdit(
+		session: EditorSession,
+		nodeId: string,
+		plan: EngineEditPlan
+	): Promise<void> {
+		const record = plan.record;
+		if (record === undefined) {
+			return;
+		}
+		const range = new vscode.Range(
+			session.document.positionAt(record.range.start),
+			session.document.positionAt(record.range.end)
+		);
+		if (session.document.getText(range) !== record.oldText) {
+			await postInlineNotice(session.panel, 'the file changed since the value was read; try again');
+			return;
+		}
+		const previous = this.selections.get(session.key);
+		this.rememberPredictedId(session.key, nodeId, plan.nextNodeId);
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(session.document.uri, range, record.newText);
+		if (!(await vscode.workspace.applyEdit(edit))) {
+			this.restoreSelection(session.key, previous);
+			await postInlineNotice(session.panel, 'VS Code refused the edit');
+		}
+	}
+
+	/** Opens the engine handle for a panel; failures leave the TypeScript path in place. */
+	private async openEngineDocument(session: EditorSession): Promise<void> {
+		const engine = this.engine;
+		if (engine === undefined) {
+			return;
+		}
+		const settings = editorSettings();
+		const conditions = Object.fromEntries(this.conditionValues());
+		const version = session.document.version;
+		try {
+			const docId = await engine.openDocument(session.document.uri.toString(), session.document.getText(), {
+				sort: settings.sort,
+				sortExcept: settings.sortExcept,
+				conditions
+			});
+			// The text moved while the engine was parsing: its baseline is stale, so the
+			// TypeScript path stays in charge for this panel.
+			if (session.document.version !== version) {
+				await engine.closeDocument(docId);
+				return;
+			}
+			session.engineDocId = docId;
+		} catch {
+			session.engineDocId = undefined;
+		}
+	}
+
+	/** One text change through the engine: a one-row patch, or the full re-scan fallback. */
+	private async applyEngineChange(
+		session: EditorSession,
+		changes: readonly vscode.TextDocumentContentChangeEvent[]
+	): Promise<void> {
+		const patch = await this.patchFor(session, changes);
+		if (patch === undefined || patch.structural) {
+			session.rescan();
+			return;
+		}
+		session.state.stale = true;
+		await session.panel.webview.postMessage({ type: 'documentPatch', patch });
+	}
+
+	/** The engine's row patch for one text change, or `undefined` when it cannot answer. */
+	private async patchFor(
+		session: EditorSession,
+		changes: readonly vscode.TextDocumentContentChangeEvent[]
+	): Promise<EngineRowPatch | undefined> {
+		const engine = this.engine;
+		const docId = session.engineDocId;
+		if (engine === undefined || docId === undefined) {
+			return undefined;
+		}
+		try {
+			return await engine.updateDocument(
+				docId,
+				changes.map((change) => ({
+					start: session.document.offsetAt(change.range.start),
+					end: session.document.offsetAt(change.range.end),
+					text: change.text
+				}))
+			);
+		} catch {
+			return undefined;
+		}
+	}
+
 	/** Stores the post-write id a rename predicts, so the panel stays on the node. */
 	private rememberPredictedId(key: string, nodeId: string, nextNodeId: string | undefined): void {
 		if (nextNodeId !== undefined && nextNodeId !== nodeId) {
@@ -842,6 +1037,23 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			this.selections.set(key, previous);
 		}
 	}
+}
+
+/** The accepted plan, or `undefined` after showing the refusal beside the field. */
+async function acceptPlan(
+	panel: vscode.WebviewPanel,
+	plan: EngineEditPlan
+): Promise<EngineEditPlan | undefined> {
+	if (plan.ok && plan.record !== undefined) {
+		return plan;
+	}
+	await postInlineNotice(panel, plan.reason ?? 'the edit was refused');
+	return undefined;
+}
+
+/** The protocol shape for one edit request. */
+function planRequest(field: EditField, nodeId: string, value: string): EngineEditRequest {
+	return field === 'value' ? { kind: 'value', nodeId, value } : { kind: 'field', nodeId, field, value };
 }
 
 /** The user-facing summary of ignored condition names, first five then a count. */

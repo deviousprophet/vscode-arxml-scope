@@ -52,17 +52,17 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Build Native Addon
-        run: npm run rust:build
+      - name: Build Engine Binary
+        run: npm run engine:build
 
-      - name: Native Smoke Test
-        run: npm run rust:smoke
+      - name: Engine Smoke Test
+        run: npm run engine:smoke
 
-      - name: Upload Native Addon
+      - name: Upload Engine Binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
-          path: dist/native/${{ matrix.target }}
+          path: dist/engine/${{ matrix.target }}
           overwrite: true
 
   Build:
@@ -93,10 +93,10 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Download Native Addons
+      - name: Download Engine Binaries
         uses: actions/download-artifact@v4
         with:
-          path: dist/native
+          path: dist/engine
           pattern: '*'
 
       - name: Compile Extension
@@ -124,13 +124,15 @@ jobs:
       - name: Package VSIX
         run: npx @vscode/vsce package --out ${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}.vsix
 
-      - name: Verify Every Native Addon In VSIX
+      - name: Verify Every Engine Binary In VSIX
         run: |
           set -euo pipefail
           for target in linux-x64 win32-x64 darwin-x64 darwin-arm64; do
-            test -f "dist/native/${target}/arxml_node.node"
+            name=arxml-engine
+            case "$target" in win32-*) name=arxml-engine.exe ;; esac
+            test -f "dist/engine/${target}/${name}"
             unzip -l "${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}.vsix" \
-              | grep -q "dist/native/${target}/arxml_node.node"
+              | grep -q "dist/engine/${target}/${name}"
           done
 
       - name: Upload VSIX Artifact

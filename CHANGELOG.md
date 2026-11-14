@@ -5,6 +5,13 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The ARXML core now runs as a separate Rust engine process, which the extension requires at startup
+- Committing a value in the ECUC editor updates the value row and the ARXML source immediately, instead of re-scanning and re-rendering the whole document
+
 ## [0.9.0] - 2026-11-12
 
 ### Added

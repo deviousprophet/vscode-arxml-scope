@@ -117,19 +117,25 @@ Rules:
 
 ## Engine Boundary
 
-- `src/host/engine/coreEngine.ts` owns `CoreEngine`, `EngineKind` and
-  `EXPECTED_ENGINE_ABI`. `EngineKind` is `'rust'`; there is no TypeScript core engine and no
-  fallback. Do not re-declare the interface or the ABI constant locally.
-- `src/host/engine/nativeLoader.ts` is the only place that knows the
-  `dist/native/<platform>-<arch>/arxml_node.node` layout. It loads `unknown`, validates the
-  exported probe and ABI, and throws a clear activation error on failure.
-- `src/host/engine/rustEngine.ts` adapts the validated module to `CoreEngine`. Rust records
-  and Node-specific types do not leak past this adapter; later engine operations are coarse
-  host-shaped calls, not a generic RPC.
-- The TypeScript side is the VS Code host/UI layer. Do not add a second core implementation,
-  an engine-selection setting, or a runtime fallback.
-- `EXPECTED_ENGINE_ABI` in TypeScript must match `ENGINE_ABI` in
-  `rust/arxml-core/src/lib.rs`; an ABI change updates both sides and the loader test.
+- The Rust core runs as a **standalone process**; there is no N-API addon, no TypeScript
+  core engine and no runtime fallback. `src/host/engine/coreEngine.ts` owns `CoreEngine`,
+  `EngineKind` and `EXPECTED_PROTOCOL` (the process protocol version).
+- `src/host/engine/engineClient.ts` is the only place that knows the framing
+  (`u32 LE payload_len`, `u16 LE header_len`, JSON header, raw body). It validates the
+  frame length and header, correlates responses by id and rejects a malformed frame; it
+  does not interpret operation payloads.
+- `src/host/engine/engineLoader.ts` is the only place that knows the
+  `dist/engine/<platform>-<arch>/arxml-engine[.exe]` layout. It spawns the process,
+  completes the `hello` handshake and throws a clear activation error on a missing binary,
+  a start failure or a protocol mismatch.
+- `src/host/engine/ecucDocument.ts` adapts one document handle (`doc.open`, `doc.rows`,
+  `doc.plan`, `doc.close`). Operation bodies are JSON the engine produced; validate a
+  field before trusting it and never let a Rust record type leak further into the host.
+- `EXPECTED_PROTOCOL` in TypeScript must match `ENGINE_PROTOCOL` in
+  `rust/arxml-core/src/lib.rs`; a protocol change updates both sides, `engine-smoke` and
+  the loader test.
+- The TypeScript side is the VS Code host/UI layer. Do not add a second core
+  implementation, an engine-selection setting, or a runtime fallback.
 
 ## Numeric and Value Rules
 

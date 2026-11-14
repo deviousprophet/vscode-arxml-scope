@@ -80,7 +80,7 @@ import { hideRowMenu, mountContextMenu } from './components/contextMenu/contextM
 import { appendConditionTokens, appendHighlighted, setHighlightQuery } from './render/rowView';
 import { installConsoleErrors } from './render/pageError';
 import { postToHost, readPageState, resetVsCodeApi, writePageState } from './vscodeApi';
-import type { EditorDocumentHeader, EditorProviderToWebview } from '../webviewProtocol';
+import type { EditorDocumentHeader, EditorProviderToWebview, EditorRowPatch } from '../webviewProtocol';
 
 export type { EditorDocumentHeader, EditorDocumentPayload, EditorProviderToWebview } from '../webviewProtocol';
 export { documentHeader } from '../webviewProtocol';
@@ -2051,6 +2051,37 @@ function applyErrorMessage(text: string): void {
 	setDetailsStatus({ message: text, kind: 'warn' });
 }
 
+/** A patch that replaces one row and keeps its id can be applied without re-indexing. */
+function isSingleRowReplace(patch: EditorRowPatch): boolean {
+	return patch.structural === false && patch.remove === 1 && patch.rows.length === 1;
+}
+
+function keepsIdentity(existing: EcucRow | undefined, row: EcucRow): boolean {
+	return existing !== undefined && existing.id === row.id;
+}
+
+function canReplaceInPlace(patch: EditorRowPatch, existing: EcucRow | undefined): boolean {
+	return isSingleRowReplace(patch) && keepsIdentity(existing, patch.rows[0]);
+}
+
+function applyDocumentPatch(message: Extract<EditorProviderToWebview, { type: 'documentPatch' }>): void {
+	const patch = message.patch;
+	const existing = rows[patch.at];
+	if (canReplaceInPlace(patch, existing)) {
+		// A value edit keeps the row count and every id: no re-index, no rebuild.
+		// Fields the host owns (the resolved definition) survive the merge.
+		rows[patch.at] = { ...existing, ...patch.rows[0] };
+		if (message.header !== undefined) {
+			setHeaderRows(message.header);
+		}
+		renderWindow(true);
+		updateInspector();
+		return;
+	}
+	rows.splice(patch.at, patch.remove, ...patch.rows);
+	setRows(rows, message.selectedId ?? selectedId, message.header);
+}
+
 function handleDocumentMessage(message: EditorProviderToWebview): boolean {
 	if (message.type === 'conditions') {
 		renderConditionEntries(message.entries);
@@ -2058,6 +2089,10 @@ function handleDocumentMessage(message: EditorProviderToWebview): boolean {
 	}
 	if (message.type === 'document') {
 		applyDocumentMessage(message);
+		return true;
+	}
+	if (message.type === 'documentPatch') {
+		applyDocumentPatch(message);
 		return true;
 	}
 	return false;
