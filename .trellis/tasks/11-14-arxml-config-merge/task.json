@@ -1,0 +1,29 @@
+{
+  "id": "arxml-config-merge",
+  "name": "arxml-config-merge",
+  "title": "ARXML config merge",
+  "description": "Add an ARXML ECUC configuration merge: combine a base and an incoming configuration into a merged result, report each conflict with both values, and write only what the user resolves. Requirements to be pinned in planning.",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "deviousprophet",
+  "assignee": "deviousprophet",
+  "createdAt": "2026-11-14",
+  "completedAt": null,
+  "branch": "feat/arxml-config-merge",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-14-diff-engine-port",
+    "11-14-copy-merge-ui"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

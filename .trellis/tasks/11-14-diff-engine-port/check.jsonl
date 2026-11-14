@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify parity tests compare the serialized document, not a hand-picked subset."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify the streamed/patch protocol is typed and validated at the boundary."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify no production import of core/diff remains and all gates run."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify ownership: engine owns comparison, host owns the panel and protocol."}
