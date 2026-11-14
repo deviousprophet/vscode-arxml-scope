@@ -709,6 +709,19 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('a dirty buffer gains the unsaved marker on its pane label only', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'labels', labels: ['left.arxml •', 'right.arxml'] });
+			assert.strictEqual(dom.document.getElementById('diff-title-left')!.textContent, 'left.arxml •');
+			assert.strictEqual(dom.document.getElementById('diff-title-right')!.textContent, 'right.arxml');
+			dom.post({ type: 'labels', labels: ['left.arxml', 'right.arxml'] });
+			assert.strictEqual(dom.document.getElementById('diff-title-left')!.textContent, 'left.arxml');
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('1200 rows are windowed by the shared virtual math', () => {
 		const rows: DiffRow[] = Array.from({ length: 1200 }, (_, at) => windowDiffRow(at));
 		const { dom } = mount({

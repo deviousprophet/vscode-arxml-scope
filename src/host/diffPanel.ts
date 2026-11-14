@@ -45,6 +45,17 @@ function label(uri: vscode.Uri): FileLabel {
 	return { name: fileName(uri), path: uri.fsPath };
 }
 
+/** Whether one of the compared buffers has unsaved edits. */
+function isDirty(uri: vscode.Uri): boolean {
+	const target = uri.toString();
+	return vscode.workspace.textDocuments.some((open) => open.uri.toString() === target && open.isDirty);
+}
+
+/** The pane label, with the unsaved-edit marker VS Code uses in its own titles. */
+function paneLabel(name: string, dirty: boolean): string {
+	return dirty ? `${name} •` : name;
+}
+
 function rowsFor(document: vscode.TextDocument) {
 	const model = scanEcucValues(document.getText());
 	const index = buildNodeIndex(model);
@@ -177,6 +188,27 @@ export class DiffPanel {
 			await panel.webview.postMessage({ type: 'error', message });
 		};
 
+		/** The label each side has right now: a dirty buffer carries the marker. */
+		const labelsNow = (): [string, string] => [
+			paneLabel(leftLabel.name, isDirty(leftUri)),
+			paneLabel(rightLabel.name, isDirty(rightUri)),
+		];
+
+		const postDocument = async (): Promise<void> => {
+			current = { ...current, labels: labelsNow() };
+			await panel.webview.postMessage({ type: 'document', document: current, semantic });
+		};
+
+		/** An edit or a save changes only the labels; the rows are untouched. */
+		const postLabels = async (): Promise<void> => {
+			if (disposed) {
+				return;
+			}
+			const labels = labelsNow();
+			current = { ...current, labels };
+			await panel.webview.postMessage({ type: 'labels', labels });
+		};
+
 		const clearRefreshTimer = (): void => {
 			if (refreshTimer !== undefined) {
 				clearTimeout(refreshTimer);
@@ -204,7 +236,7 @@ export class DiffPanel {
 			if (isStale(disposed, generation, documentGeneration)) {
 				return;
 			}
-			await panel.webview.postMessage({ type: 'document', document: current, semantic });
+			await postDocument();
 		};
 
 		const reportRefreshFailure = async (generation: number, error: unknown): Promise<void> => {
@@ -252,7 +284,7 @@ export class DiffPanel {
 			const result = session.document(next);
 			current = result.document;
 			if (result.changed) {
-				await panel.webview.postMessage({ type: 'document', document: current, semantic });
+				await postDocument();
 			} else {
 				await postMatchModeState(semantic);
 			}
@@ -341,7 +373,7 @@ export class DiffPanel {
 
 		const onReady = (): void => {
 			boot.settle();
-			void panel.webview.postMessage({ type: 'document', document: current, semantic });
+			void postDocument();
 			void panel.webview.postMessage({ type: 'mergeMode', enabled: mergeMode });
 		};
 
@@ -713,7 +745,17 @@ ${indent}` };
 			vscode.workspace.onDidChangeTextDocument((event) => {
 				const changed = event.document.uri.toString();
 				if (changed === leftUri.toString() || changed === rightUri.toString()) {
+					void postLabels();
 					scheduleRefresh();
+				}
+			})
+		);
+
+		disposables.push(
+			vscode.workspace.onDidSaveTextDocument((saved) => {
+				const uri = saved.uri.toString();
+				if (uri === leftUri.toString() || uri === rightUri.toString()) {
+					void postLabels();
 				}
 			})
 		);

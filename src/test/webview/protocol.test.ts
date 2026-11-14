@@ -65,6 +65,7 @@ suite('webview protocol', () => {
 			},
 			{ type: 'error', message: 'refresh failed' },
 			{ type: 'matchModeState', semantic: true },
+			{ type: 'labels', labels: ['a •', 'b'] },
 		];
 		for (const message of host) {
 			assert.strictEqual(diffMessageType(message), message.type);

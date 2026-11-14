@@ -20,6 +20,8 @@ export type DiffProviderToWebview =
 	| { type: 'error'; message: string }
 	/** Merge mode is on: the page shows copy arrows and accepts copy gestures. */
 	| { type: 'mergeMode'; enabled: boolean }
+	/** A buffer was edited or saved: the pane labels gained or lost their dirty marker. */
+	| { type: 'labels'; labels: [string, string] }
 ;
 
 /** Diff page → host. */
@@ -45,5 +47,11 @@ export function diffMessageType(message: unknown): string | undefined {
 /** A host message with the diff protocol's shape; the page ignores anything else. */
 export function isDiffProviderMessage(message: unknown): message is DiffProviderToWebview {
 	const type = diffMessageType(message);
-	return type === 'document' || type === 'matchModeState' || type === 'error' || type === 'mergeMode';
+	return (
+		type === 'document' ||
+		type === 'matchModeState' ||
+		type === 'error' ||
+		type === 'mergeMode' ||
+		type === 'labels'
+	);
 }

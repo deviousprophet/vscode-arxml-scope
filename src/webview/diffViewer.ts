@@ -2517,6 +2517,11 @@ export function handleDiffMessage(message: DiffProviderToWebview): void {
 		applyMergeMode(message.enabled === true);
 		return;
 	}
+	if (message.type === 'labels') {
+		diffDocument.labels = message.labels;
+		renderHeaders();
+		return;
+	}
 	handleDiffStatusMessage(message);
 }
 
