@@ -53,7 +53,8 @@ compared, not just the bytes on disk.
   searchable, selectable or focusable.
 - Diff status also tints the gutter cell for added, removed and changed lines, using the VS Code diff
   gutter colours with the pane's line tint as the fallback. The pane-side 3px rails hidden under the
-  gutter are redrawn on the gutter cell (left changed/removed, right added).
+  gutter are redrawn on the gutter cell's inner edge (left changed/removed, right added), so a
+  four-digit number is never covered by the rail.
 - Annotations, braces and bracket guides follow each side of the comparison. Both panes use the same
   Document view as the editor, so annotations, braces, guides, colours and typography match.
 - A **read-only** status tint marks added, removed and changed cells; changed words are highlighted

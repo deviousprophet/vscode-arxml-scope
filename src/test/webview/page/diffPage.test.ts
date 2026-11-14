@@ -1465,8 +1465,28 @@ suite('semantic diff page', () => {
 	test('added rows use a leading edge and split lines own their styles', () => {
 		const diff = webviewCss('components', 'diffView', 'diffView.css');
 		assert.ok(diff.includes('.diff-row[data-status="added"] > .diff-cell[data-side="right"]'));
-		assert.ok(diff.includes('inset 3px 0 0 var(--diff-added-edge)'));
-		assert.ok(!diff.includes('inset -3px 0 0 var(--diff-added-edge)'), 'the trailing added edge is gone');
+		assert.ok(
+			/\.diff-row\[data-status="added"\] > \.diff-cell\[data-side="right"\]\s*\{[^}]*inset 3px 0 0/.test(diff),
+			'the code cell keeps its leading added edge'
+		);
+		assert.ok(
+			/\.document-tree-lines\[data-side="left"\] \.document-tree-line-number\[data-status="changed"\]\s*\{[^}]*inset -3px 0 0/.test(
+				diff
+			),
+			'the changed gutter rail sits on its inner edge'
+		);
+		assert.ok(
+			/\.document-tree-lines\[data-side="left"\] \.document-tree-line-number\[data-status="removed"\]\s*\{[^}]*inset -3px 0 0/.test(
+				diff
+			),
+			'the removed gutter rail sits on its inner edge'
+		);
+		assert.ok(
+			/\.document-tree-lines\[data-side="right"\] \.document-tree-line-number\[data-status="added"\]\s*\{[^}]*inset -3px 0 0/.test(
+				diff
+			),
+			'the added gutter rail sits on its inner edge'
+		);
 		assert.ok(diff.includes('.diff-gap-toggle'));
 		assert.ok(diff.includes('.diff-gap-line'));
 		assert.ok(diff.includes('.toolbar-center'));
@@ -1521,6 +1541,26 @@ suite('semantic diff page', () => {
 		assert.ok(toolbar.includes('white-space: normal'), 'long labels wrap inside the fixed box');
 		assert.ok(toolbar.includes('max-width: 1040px'), 'labels hide before the row can overlap');
 		assert.ok(toolbar.includes('max-width: 720px'), 'compact icon buttons at very narrow widths');
+	});
+
+	test('a selected changed row keeps its number clear of the status rail', () => {
+		const { dom } = mount();
+		try {
+			const row = dom.document.querySelector(
+				'#diff-pane-left .diff-row[data-status="changed"]'
+			) as HTMLElement | null;
+			assert.ok(row, 'the fixture has a changed row');
+			row.click();
+			const selected = dom.document.querySelector('#diff-pane-left .node[data-selected="true"]');
+			assert.ok(selected, 'the changed row is selected');
+			const gutter = paneGutter(dom, 'left');
+			const changedCell = gutter.querySelector('.document-tree-line-number[data-status="changed"]');
+			assert.ok(changedCell, 'the selected row keeps its gutter status');
+			// The rail edge itself is asserted on the stylesheet: jsdom does not apply it.
+			assert.ok(changedCell.textContent !== '', 'the number is still rendered');
+		} finally {
+			dom.restore();
+		}
 	});
 
 	test('selecting a container highlights the same subtree and annotation rows in both panes', () => {
