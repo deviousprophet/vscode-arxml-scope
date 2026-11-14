@@ -32,27 +32,41 @@ function shifted(row: DiffRow, side: 'left' | 'right', after: number, by: number
 	};
 }
 
-/** The document after one copy: replaced rows, re-sent ancestors, shifted ranges. */
-export function applyDiffPatch(document: DiffDocument, patch: DiffPatch): DiffDocument {
-	const rows = document.rows.slice();
-	const end = Math.min(rows.length, patch.at + patch.remove);
-	rows.splice(patch.at, end - patch.at, ...patch.rows);
-	for (const ancestor of patch.ancestors) {
+/** Re-sends the ancestor rows in place; a removed ancestor keeps the row as it is. */
+function replaceAncestors(rows: DiffRow[], ancestors: readonly DiffRow[]): void {
+	for (const ancestor of ancestors) {
 		const at = rows.findIndex((row) => row.key === ancestor.key);
 		if (at >= 0) {
 			rows[at] = ancestor;
 		}
 	}
-	if (patch.shift !== undefined) {
-		const replacedEnd = patch.at + patch.rows.length;
-		const { side, after, by } = patch.shift;
-		for (let at = 0; at < rows.length; at++) {
-			// The replacement rows already carry their new ranges.
-			if (at >= patch.at && at < replacedEnd) {
-				continue;
-			}
+}
+
+function isReplacementRow(at: number, insertAt: number, replacedEnd: number): boolean {
+	return at >= insertAt && at < replacedEnd;
+}
+
+/** Shifts every row after the edit, except the replacement rows themselves. */
+function shiftAfter(rows: DiffRow[], patch: DiffPatch): void {
+	const { shift, at: insertAt, rows: replacement } = patch;
+	if (shift === undefined) {
+		return;
+	}
+	const replacedEnd = insertAt + replacement.length;
+	const { side, after, by } = shift;
+	for (let at = 0; at < rows.length; at++) {
+		if (!isReplacementRow(at, insertAt, replacedEnd)) {
 			rows[at] = shifted(rows[at], side, after, by);
 		}
 	}
+}
+
+/** The document after one copy: replaced rows, re-sent ancestors, shifted ranges. */
+export function applyDiffPatch(document: DiffDocument, patch: DiffPatch): DiffDocument {
+	const rows = document.rows.slice();
+	const end = Math.min(rows.length, patch.at + patch.remove);
+	rows.splice(patch.at, end - patch.at, ...patch.rows);
+	replaceAncestors(rows, patch.ancestors);
+	shiftAfter(rows, patch);
 	return { ...document, rows, summary: patch.summary, semanticSkipped: patch.semanticSkipped };
 }

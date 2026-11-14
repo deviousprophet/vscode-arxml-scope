@@ -66,6 +66,51 @@ const comparedPairs = [
 	['exceptions.arxml', 'formatting.arxml']
 ];
 
+/** Meta chips pair by class, not by index: the page word-diffs each pair. */
+function twinOf(right, cls) {
+	return (right.meta ?? []).find((candidate) => candidate.cls === cls);
+}
+
+function metaPairs(row) {
+	const pairs = [];
+	for (const part of row.left.meta ?? []) {
+		const twin = twinOf(row.right, part.cls);
+		if (twin) {
+			pairs.push([part.text, twin.text]);
+		}
+	}
+	return pairs;
+}
+
+/** The cell fields the page word-diffs for one changed row. */
+function cellPairs(row) {
+	return [
+		[row.left.label, row.right.label],
+		[row.left.shownValue ?? '', row.right.shownValue ?? ''],
+		...metaPairs(row)
+	];
+}
+
+function changePairs(row) {
+	return (row.changes ?? []).map((change) => [change.left, change.right]);
+}
+
+function hasChangedPair(row) {
+	return row.status === 'changed' && row.left !== undefined && row.right !== undefined;
+}
+
+/** Change strings and cell fields from one compared document. */
+function documentPairs(document) {
+	const pairs = [];
+	for (const row of document.rows) {
+		pairs.push(...changePairs(row));
+		if (hasChangedPair(row)) {
+			pairs.push(...cellPairs(row));
+		}
+	}
+	return pairs;
+}
+
 function changedFieldPairs(oracleDiff) {
 	const pairs = [];
 	for (const [leftName, rightName] of comparedPairs) {
@@ -77,23 +122,7 @@ function changedFieldPairs(oracleDiff) {
 				maxBuffer: 256 * 1024 * 1024
 			})
 		);
-		for (const row of document.rows) {
-			for (const change of row.changes ?? []) {
-				pairs.push([change.left, change.right]);
-			}
-			if (row.status !== 'changed' || !row.left || !row.right) {
-				continue;
-			}
-			// The page word-diffs these cell fields, not only the change list.
-			pairs.push([row.left.label, row.right.label]);
-			pairs.push([row.left.shownValue ?? '', row.right.shownValue ?? '']);
-			for (const part of row.left.meta ?? []) {
-				const twin = (row.right.meta ?? []).find((candidate) => candidate.cls === part.cls);
-				if (twin) {
-					pairs.push([part.text, twin.text]);
-				}
-			}
-		}
+		pairs.push(...documentPairs(document));
 	}
 	return pairs;
 }

@@ -73,6 +73,7 @@ suite('diff patch', () => {
 	});
 
 	test('rows after the edit shift by the reported delta', () => {
+		const rightRange = (entry: DiffRow) => entry.right?.range;
 		const document = documentOf([row('a', 'Alpha', 0, 10), row('b', 'Bravo', 10, 20), row('c', 'Charlie', 20, 30)]);
 		const patched = applyDiffPatch(
 			document,
@@ -84,10 +85,10 @@ suite('diff patch', () => {
 			})
 		);
 		// The inserted row keeps its own ranges; rows before the shift point stay.
-		assert.deepStrictEqual(patched.rows[0].right?.range, { start: 0, end: 4 });
-		assert.deepStrictEqual(patched.rows[1].right?.range, { start: 0, end: 10 });
-		assert.deepStrictEqual(patched.rows[2].right?.range, { start: 14, end: 24 });
-		assert.deepStrictEqual(patched.rows[3].right?.range, { start: 24, end: 34 });
+		assert.deepStrictEqual(rightRange(patched.rows[0]), { start: 0, end: 4 });
+		assert.deepStrictEqual(rightRange(patched.rows[1]), { start: 0, end: 10 });
+		assert.deepStrictEqual(rightRange(patched.rows[2]), { start: 14, end: 24 });
+		assert.deepStrictEqual(rightRange(patched.rows[3]), { start: 24, end: 34 });
 	});
 
 	test('the summary and skip counters follow the patch', () => {

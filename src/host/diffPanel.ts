@@ -23,7 +23,7 @@ import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { FileLabel, compareTitle } from '../core/diff/diffModel';
 import type { DiffCell, DiffDocument } from '../core/diff/diffModel';
 import { applyDiffPatch } from '../core/diff/diffPatch';
-import type { CoreEngine, EngineDiffSide } from './engine/coreEngine';
+import type { CoreEngine, EngineDiffPatchResult, EngineDiffSide } from './engine/coreEngine';
 import { diffShell } from './webviewShell';
 import { fileName } from './compareSelection';
 import { gateReason } from './ecucEditorProvider';
@@ -63,6 +63,41 @@ interface PreparedSide {
 	document: vscode.TextDocument;
 	version: number;
 	docId: number;
+}
+
+/** Both sides, or `undefined` when either cannot be read (the read already warned). */
+async function readBoth(
+	leftUri: vscode.Uri,
+	rightUri: vscode.Uri
+): Promise<{ left: vscode.TextDocument; right: vscode.TextDocument } | undefined> {
+	const left = await readDocument(leftUri);
+	if (!left) {
+		return undefined;
+	}
+	const right = await readDocument(rightUri);
+	return right === undefined ? undefined : { left, right };
+}
+
+/** Opens both sides in the engine and builds their first document. */
+async function firstDocument(
+	engine: CoreEngine,
+	sides: { left: vscode.TextDocument; right: vscode.TextDocument },
+	leftLabel: FileLabel,
+	rightLabel: FileLabel
+): Promise<{ preparedLeft: PreparedSide; preparedRight: PreparedSide; current: DiffDocument } | undefined> {
+	try {
+		const preparedLeft = await prepareSide(engine, sides.left);
+		const preparedRight = await prepareSide(engine, sides.right);
+		const current = await engine.computeDiff(
+			engineSide(preparedLeft, leftLabel),
+			engineSide(preparedRight, rightLabel),
+			{ semanticMatching: semanticDefault() }
+		);
+		return { preparedLeft, preparedRight, current };
+	} catch (error) {
+		void vscode.window.showWarningMessage(`The comparison could not be built: ${errorMessage(error)}`);
+		return undefined;
+	}
 }
 
 /** The engine builds the rows and the diff; the host only uploads text. */
@@ -130,15 +165,11 @@ export class DiffPanel {
 		rightUri: vscode.Uri,
 		engine: CoreEngine
 	): Promise<boolean> {
-		const left = await DiffPanel.read(leftUri);
-		if (!left) {
+		const sides = await readBoth(leftUri, rightUri);
+		if (sides === undefined) {
 			return false;
 		}
-		const right = await DiffPanel.read(rightUri);
-		if (!right) {
-			return false;
-		}
-		const reason = firstGateReason(left, leftUri, right, rightUri);
+		const reason = firstGateReason(sides.left, leftUri, sides.right, rightUri);
 		if (reason) {
 			void vscode.window.showWarningMessage(reason);
 			return false;
@@ -146,21 +177,11 @@ export class DiffPanel {
 
 		const leftLabel = label(leftUri);
 		const rightLabel = label(rightUri);
-		let preparedLeft: PreparedSide;
-		let preparedRight: PreparedSide;
-		let current: DiffDocument;
-		try {
-			preparedLeft = await prepareSide(engine, left);
-			preparedRight = await prepareSide(engine, right);
-			current = await engine.computeDiff(
-				engineSide(preparedLeft, leftLabel),
-				engineSide(preparedRight, rightLabel),
-				{ semanticMatching: semanticDefault() }
-			);
-		} catch (error) {
-			void vscode.window.showWarningMessage(`The comparison could not be built: ${errorMessage(error)}`);
+		const initial = await firstDocument(engine, sides, leftLabel, rightLabel);
+		if (initial === undefined) {
 			return false;
 		}
+		let { preparedLeft, preparedRight, current } = initial;
 		let semantic = semanticDefault();
 		const panel = vscode.window.createWebviewPanel(
 			DiffPanel.viewType,
@@ -221,6 +242,33 @@ export class DiffPanel {
 			}
 		};
 
+		/** Re-opens both sides in the engine; false when a newer refresh won the race. */
+		const reopenSides = async (
+			generation: number,
+			nextLeft: vscode.TextDocument,
+			nextRight: vscode.TextDocument
+		): Promise<boolean> => {
+			const previous = [preparedLeft, preparedRight];
+			preparedLeft = await prepareSide(engine, nextLeft);
+			preparedRight = await prepareSide(engine, nextRight);
+			if (isStale(disposed, generation, documentGeneration)) {
+				void engine.closeDocument(preparedLeft.docId);
+				void engine.closeDocument(preparedRight.docId);
+				return false;
+			}
+			for (const side of previous) {
+				void engine.closeDocument(side.docId);
+			}
+			return true;
+		};
+
+		/** Posts only when no newer refresh started while the diff was built. */
+		const postDocumentIfFresh = async (generation: number): Promise<void> => {
+			if (!isStale(disposed, generation, documentGeneration)) {
+				await postDocument();
+			}
+		};
+
 		const refreshDocuments = async (generation: number): Promise<void> => {
 			const nextLeft = await vscode.workspace.openTextDocument(leftUri);
 			const nextRight = await vscode.workspace.openTextDocument(rightUri);
@@ -234,26 +282,15 @@ export class DiffPanel {
 				await postError(why);
 				return;
 			}
-			const previous = [preparedLeft, preparedRight];
-			preparedLeft = await prepareSide(engine, nextLeft);
-			preparedRight = await prepareSide(engine, nextRight);
-			if (isStale(disposed, generation, documentGeneration)) {
-				void engine.closeDocument(preparedLeft.docId);
-				void engine.closeDocument(preparedRight.docId);
+			if (!(await reopenSides(generation, nextLeft, nextRight))) {
 				return;
-			}
-			for (const side of previous) {
-				void engine.closeDocument(side.docId);
 			}
 			current = await engine.computeDiff(
 				engineSide(preparedLeft, leftLabel),
 				engineSide(preparedRight, rightLabel),
 				{ semanticMatching: semantic }
 			);
-			if (isStale(disposed, generation, documentGeneration)) {
-				return;
-			}
-			await postDocument();
+			await postDocumentIfFresh(generation);
 		};
 
 		const reportRefreshFailure = async (generation: number, error: unknown): Promise<void> => {
@@ -448,10 +485,20 @@ export class DiffPanel {
 		 * the engine text, `diff.patch` answers with the changed rows. A refusal falls
 		 * back to the debounced rebuild with a notice.
 		 */
+		/** Applies a patch answer; false when the engine refused and a rebuild follows. */
+		const applyPatchAnswer = async (result: EngineDiffPatchResult): Promise<boolean> => {
+			if (result.patch === undefined) {
+				await postError(`The comparison was rebuilt after this copy (${result.reason ?? 'unknown'}).`);
+				return false;
+			}
+			current = applyDiffPatch(current, result.patch);
+			await panel.webview.postMessage({ type: 'documentPatch', patch: result.patch });
+			return true;
+		};
+
 		const patchAfterCopy = async (
 			side: 'left' | 'right',
-			plan: { start: number; end: number; text: string },
-			doc: vscode.TextDocument
+			plan: { start: number; end: number; text: string }
 		): Promise<void> => {
 			const docId = side === 'left' ? preparedLeft.docId : preparedRight.docId;
 			try {
@@ -461,12 +508,9 @@ export class DiffPanel {
 					engineSide(preparedRight, rightLabel),
 					{ side, start: plan.start, end: plan.end, text: plan.text }
 				);
-				if (result.patch !== undefined) {
-					current = applyDiffPatch(current, result.patch);
-					await panel.webview.postMessage({ type: 'documentPatch', patch: result.patch });
+				if (await applyPatchAnswer(result)) {
 					return;
 				}
-				await postError(`The comparison was rebuilt after this copy (${result.reason ?? 'unknown'}).`);
 			} catch (error) {
 				await postError(`The comparison was rebuilt after this copy: ${errorMessage(error)}`);
 			}
@@ -494,7 +538,7 @@ export class DiffPanel {
 				preparedRight = { ...preparedRight, version: doc.version };
 			}
 			try {
-				await patchAfterCopy(side, plan, doc);
+				await patchAfterCopy(side, plan);
 			} finally {
 				// If the edit produced no change event, do not swallow the next one.
 				refreshSkip.delete(doc.uri.toString());
@@ -852,15 +896,16 @@ ${indent}` };
 		return true;
 	}
 
-	/** Opens a side as a text document; an unreadable file is warned about, not thrown. */
-	private static async read(uri: vscode.Uri): Promise<vscode.TextDocument | undefined> {
-		try {
-			return await vscode.workspace.openTextDocument(uri);
-		} catch (error) {
-			void vscode.window.showWarningMessage(
-				`Cannot read "${fileName(uri)}" for comparison: ${error instanceof Error ? error.message : String(error)}`
-			);
-			return undefined;
-		}
+}
+
+/** Opens a side as a text document; an unreadable file is warned about, not thrown. */
+async function readDocument(uri: vscode.Uri): Promise<vscode.TextDocument | undefined> {
+	try {
+		return await vscode.workspace.openTextDocument(uri);
+	} catch (error) {
+		void vscode.window.showWarningMessage(
+			`Cannot read "${fileName(uri)}" for comparison: ${error instanceof Error ? error.message : String(error)}`
+		);
+		return undefined;
 	}
 }

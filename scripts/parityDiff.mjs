@@ -7,11 +7,12 @@
  *   node scripts/parityDiff.mjs [filter]
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { buildSync } from 'esbuild';
+import { fixtures } from './parityFixtures.mjs';
 
 const root = process.cwd();
 const filter = process.argv[2] ?? '';
@@ -24,13 +25,6 @@ function runs() {
 		{ label: 'semantic', args: ['semantic'], cli: ['--semantic'] },
 		{ label: 'budget 1', args: ['semantic', '1'], cli: ['--semantic', '--budget', '1'] }
 	];
-}
-
-function fixtures() {
-	return readdirSync(fixturesDir, { recursive: true, withFileTypes: true })
-		.filter((entry) => entry.isFile() && entry.name.endsWith('.arxml'))
-		.map((entry) => path.join(entry.parentPath ?? fixturesDir, entry.name))
-		.sort();
 }
 
 function pairs(files) {
@@ -71,26 +65,34 @@ function bundleOracle() {
 	return { dir, outfile };
 }
 
-function firstDifference(left, right, at = '') {
-	if (isDeepStrictEqual(left, right)) {
-		return undefined;
+function isRecord(value) {
+	return value !== null && typeof value === 'object';
+}
+
+function arrayShapeMismatch(left, right, at) {
+	if (!Array.isArray(left) || !Array.isArray(right)) {
+		return `${at}: array mismatch`;
 	}
-	if (Array.isArray(left) || Array.isArray(right)) {
-		if (!Array.isArray(left) || !Array.isArray(right)) {
-			return `${at}: array mismatch`;
-		}
-		if (left.length !== right.length) {
-			return `${at}.length: ${left.length} !== ${right.length}`;
-		}
-		for (let index = 0; index < left.length; index++) {
-			const found = firstDifference(left[index], right[index], `${at}[${index}]`);
-			if (found) return found;
-		}
-		return undefined;
+	return left.length === right.length ? undefined : `${at}.length: ${left.length} !== ${right.length}`;
+}
+
+function compareArrays(left, right, at) {
+	const shape = arrayShapeMismatch(left, right, at);
+	if (shape !== undefined) {
+		return shape;
 	}
-	if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
-		return `${at}: ${JSON.stringify(left)} !== ${JSON.stringify(right)}`;
+	for (let index = 0; index < left.length; index++) {
+		const found = firstDifference(left[index], right[index], `${at}[${index}]`);
+		if (found) return found;
 	}
+	return undefined;
+}
+
+function eitherArray(left, right) {
+	return Array.isArray(left) || Array.isArray(right);
+}
+
+function compareObjects(left, right, at) {
 	const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
 	for (const key of keys) {
 		const found = firstDifference(left[key], right[key], at ? `${at}.${key}` : key);
@@ -99,11 +101,28 @@ function firstDifference(left, right, at = '') {
 	return undefined;
 }
 
+function eitherNotRecord(left, right) {
+	return !isRecord(left) || !isRecord(right);
+}
+
+function firstDifference(left, right, at = '') {
+	if (isDeepStrictEqual(left, right)) {
+		return undefined;
+	}
+	if (eitherArray(left, right)) {
+		return compareArrays(left, right, at);
+	}
+	if (eitherNotRecord(left, right)) {
+		return `${at}: ${JSON.stringify(left)} !== ${JSON.stringify(right)}`;
+	}
+	return compareObjects(left, right, at);
+}
+
 const { dir, outfile } = bundleOracle();
 let checked = 0;
 let failures = 0;
 try {
-	for (const [left, right] of pairs(fixtures())) {
+	for (const [left, right] of pairs(fixtures(fixturesDir))) {
 		const name = `${path.relative(fixturesDir, left)} ↔ ${path.relative(fixturesDir, right)}`;
 		for (const run of runs()) {
 			checked++;

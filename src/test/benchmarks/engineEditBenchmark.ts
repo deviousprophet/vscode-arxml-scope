@@ -16,21 +16,13 @@ import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { buildRows } from '../../core/ecuc/renderRows';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { engineBinaryPath, EngineClient } from '../../host/engine/engineClient';
-import { measureStage, retainedBytes } from './benchmarkUtils';
+import { benchmarkReporter, measureStage, retainedBytes } from './benchmarkUtils';
 import { buildEcucArxml } from './ecucLargeFixture';
 
 const EDIT_COUNT = 5;
 
-interface Record {
-	_type: string;
-	sourceMiB: number;
-	status: 'ok' | 'failed' | 'skipped';
-	[stage: string]: unknown;
-}
+const report = benchmarkReporter('edit-latency');
 
-function report(record: Record): void {
-	console.log(JSON.stringify({ ...record, _type: record._type ?? 'edit-latency' }));
-}
 
 function median(values: number[]): number {
 	const sorted = [...values].sort((left, right) => left - right);
@@ -160,7 +152,6 @@ async function measureEngine(
 		await client.request('doc.close', { docId: document.docId });
 		await client.request('shutdown');
 		report({
-			_type: 'edit-latency',
 			sourceMiB,
 			status: 'ok',
 			rows: document.rows.length,
@@ -186,8 +177,7 @@ async function main(): Promise<void> {
 	if (!existsSync(binary)) {
 		// The benchmark job has no Rust toolchain; the binary is staged by engine:build.
 		report({
-			_type: 'edit-latency',
-			sourceMiB,
+				sourceMiB,
 			status: 'skipped',
 			reason: `engine not built at ${binary}; run npm run engine:build`
 		});
@@ -198,7 +188,6 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
 	report({
-		_type: 'edit-latency',
 		sourceMiB: 0,
 		status: 'failed',
 		reason: error instanceof Error ? error.message : String(error)

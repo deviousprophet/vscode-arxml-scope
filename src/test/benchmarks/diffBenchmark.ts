@@ -19,19 +19,11 @@ import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { buildRows } from '../../core/ecuc/renderRows';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { engineBinaryPath, EngineClient } from '../../host/engine/engineClient';
-import { retainedBytes } from './benchmarkUtils';
+import { benchmarkReporter, retainedBytes } from './benchmarkUtils';
 import { buildEcucArxml } from './ecucLargeFixture';
 
-interface Record {
-	_type: string;
-	sourceMiB: number;
-	status: 'ok' | 'failed' | 'skipped';
-	[stage: string]: unknown;
-}
+const report = benchmarkReporter('diff');
 
-function report(record: Record): void {
-	console.log(JSON.stringify({ ...record, _type: record._type ?? 'diff' }));
-}
 
 function round(value: number): number {
 	return Math.round(value);
@@ -110,6 +102,47 @@ function measureJson(document: { rows: unknown[] }): { elapsedMs: number; miB: n
 	return { elapsedMs, miB: round(Buffer.byteLength(json) / 1048576) };
 }
 
+/** Opens both sides, computes twice and measures one patch. */
+async function measureEngine(client: EngineClient, leftText: string, rightText: string) {
+	const left = await openSide(client, 'left.arxml', leftText);
+	const right = await openSide(client, 'right.arxml', rightText);
+	const strict = await computeOnce(client, left.docId, right.docId, false);
+	const semantic = await computeOnce(client, left.docId, right.docId, true);
+	// One copy: the same edit the host applies, then `diff.patch`.
+	const valueAt = leftText.indexOf('<VALUE>');
+	const valueStart = valueAt + '<VALUE>'.length;
+	const valueEnd = leftText.indexOf('</VALUE>', valueAt);
+	const replacement = `${leftText.slice(valueStart, valueEnd)}7`;
+	await client.request('doc.update', {
+		docId: left.docId,
+		edits: [{ start: valueStart, end: valueEnd, text: replacement }]
+	});
+	const patchStarted = performance.now();
+	const [patchAnswer] = await client.requestStream(
+		'diff.patch',
+		{
+			left: { docId: left.docId, name: 'left.arxml', path: '/synthetic/left.arxml' },
+			right: { docId: right.docId, name: 'right.arxml', path: '/synthetic/right.arxml' },
+			edit: { side: 'left', start: valueStart, end: valueEnd, text: replacement }
+		},
+		undefined,
+		300_000
+	);
+	const patchMs = round(performance.now() - patchStarted);
+	const patch =
+		patchAnswer.header.patch === true
+			? (JSON.parse(patchAnswer.body.toString('utf8')) as { rows: unknown[] })
+			: undefined;
+	return {
+		openMs: left.openMs + right.openMs,
+		strict,
+		semantic,
+		patchFrames: patch === undefined ? 0 : patch.rows.length,
+		patchMs,
+		patchReason: patchAnswer.header.reason
+	};
+}
+
 async function main(): Promise<void> {
 	const leftText = buildEcucArxml('left');
 	const rightText = buildEcucArxml('right');
@@ -117,7 +150,6 @@ async function main(): Promise<void> {
 	const binary = engineBinaryPath(process.cwd());
 	if (!existsSync(binary)) {
 		report({
-			_type: 'diff',
 			sourceMiB,
 			status: 'skipped',
 			reason: `engine not built at ${binary}; run npm run engine:build`
@@ -126,51 +158,26 @@ async function main(): Promise<void> {
 	}
 	const client = await EngineClient.start({ binary });
 	try {
-		const left = await openSide(client, 'left.arxml', leftText);
-		const right = await openSide(client, 'right.arxml', rightText);
-		const strict = await computeOnce(client, left.docId, right.docId, false);
-		const semantic = await computeOnce(client, left.docId, right.docId, true);
-		// One copy: the same edit the host applies, then `diff.patch`.
-		const valueAt = leftText.indexOf('<VALUE>');
-		const valueStart = valueAt + '<VALUE>'.length;
-		const valueEnd = leftText.indexOf('</VALUE>', valueAt);
-		const replacement = `${leftText.slice(valueStart, valueEnd)}7`;
-		await client.request('doc.update', {
-			docId: left.docId,
-			edits: [{ start: valueStart, end: valueEnd, text: replacement }]
-		});
-		const patchStarted = performance.now();
-		const [patchAnswer] = await client.requestStream(
-			'diff.patch',
-			{
-				left: { docId: left.docId, name: 'left.arxml', path: '/synthetic/left.arxml' },
-				right: { docId: right.docId, name: 'right.arxml', path: '/synthetic/right.arxml' },
-				edit: { side: 'left', start: valueStart, end: valueEnd, text: replacement }
-			},
-			undefined,
-			300_000
-		);
-		const patchMs = round(performance.now() - patchStarted);
-		const patch = patchAnswer.header.patch === true ? (JSON.parse(patchAnswer.body.toString('utf8')) as { rows: unknown[] }) : undefined;
+		const measured = await measureEngine(client, leftText, rightText);
 		await client.request('shutdown');
-		const hostStrict = hostDocument(leftText, rightText, false);
-		const hostSemantic = hostDocument(leftText, rightText, true);
 		report({
-			_type: 'diff',
 			sourceMiB,
 			status: 'ok',
-			rows: strict.rows,
+			rows: measured.strict.rows,
 			engine: {
-				openMs: left.openMs + right.openMs,
-				strict,
-				semantic,
+				openMs: measured.openMs,
+				strict: measured.strict,
+				semantic: measured.semantic,
 				patch: {
-					elapsedMs: patchMs,
-					rows: patch === null || patch === undefined ? 0 : patch.rows.length,
-					reason: patchAnswer.header.reason
+					elapsedMs: measured.patchMs,
+					rows: measured.patchFrames,
+					reason: measured.patchReason
 				}
 			},
-			hostToday: { strict: hostStrict, semantic: hostSemantic },
+			hostToday: {
+				strict: hostDocument(leftText, rightText, false),
+				semantic: hostDocument(leftText, rightText, true)
+			},
 			retainedMiB: round(retainedBytes() / 1048576)
 		});
 	} finally {
@@ -180,7 +187,6 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
 	report({
-		_type: 'diff',
 		sourceMiB: 0,
 		status: 'failed',
 		reason: error instanceof Error ? error.message : String(error)

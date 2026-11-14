@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Merge two ARXML configurations directly in the diff panel: a merge toggle, per-row copy arrows in both directions, and missing parent containers created on demand
+- Merge two ARXML configurations directly in the diff panel: a merge toggle, copy arrows in both directions, and `Alt+←`/`Alt+→` for the focused row
+- Missing parent containers are created when a copied element's target lacks them; a module copy that would duplicate a short name is refused
+- The pane label of a document edited by a copy shows `•` until it is saved
 
 ### Changed
 

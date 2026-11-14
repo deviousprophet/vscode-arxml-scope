@@ -47,15 +47,18 @@ export function diffMessageType(message: unknown): string | undefined {
 	return typeof type === 'string' ? type : undefined;
 }
 
+/** Every host message the page knows; one place to add the next one. */
+const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+	'document',
+	'matchModeState',
+	'error',
+	'mergeMode',
+	'labels',
+	'documentPatch'
+]);
+
 /** A host message with the diff protocol's shape; the page ignores anything else. */
 export function isDiffProviderMessage(message: unknown): message is DiffProviderToWebview {
 	const type = diffMessageType(message);
-	return (
-		type === 'document' ||
-		type === 'matchModeState' ||
-		type === 'error' ||
-		type === 'mergeMode' ||
-		type === 'labels' ||
-		type === 'documentPatch'
-	);
+	return type !== undefined && PROVIDER_MESSAGE_TYPES.has(type);
 }

@@ -2505,28 +2505,31 @@ if (typeof ResizeObserver === 'function') {
 	}).observe(list);
 }
 }
+/** The messages that install or edit the document; everything else is status. */
+const DOCUMENT_MESSAGES: Record<
+	string,
+	(message: DiffProviderToWebview) => void
+> = {
+	document: (message) => applyDiffDocument(message as Extract<DiffProviderToWebview, { type: 'document' }>),
+	mergeMode: (message) => applyMergeMode((message as { enabled?: boolean }).enabled === true),
+	labels: (message) => {
+		diffDocument.labels = (message as { labels: [string, string] }).labels;
+		renderHeaders();
+	},
+	documentPatch: (message) =>
+		renderKeepingAnchor(function () {
+			setDocument(applyDiffPatch(diffDocument, (message as { patch: any }).patch));
+		})
+};
+
 /** One host protocol message. */
 export function handleDiffMessage(message: DiffProviderToWebview): void {
 	if (!message) {
 		return;
 	}
-	if (message.type === 'document') {
-		applyDiffDocument(message);
-		return;
-	}
-	if (message.type === 'mergeMode') {
-		applyMergeMode(message.enabled === true);
-		return;
-	}
-	if (message.type === 'labels') {
-		diffDocument.labels = message.labels;
-		renderHeaders();
-		return;
-	}
-	if (message.type === 'documentPatch') {
-		renderKeepingAnchor(function () {
-			setDocument(applyDiffPatch(diffDocument, message.patch));
-		});
+	const handler = DOCUMENT_MESSAGES[message.type];
+	if (handler !== undefined) {
+		handler(message);
 		return;
 	}
 	handleDiffStatusMessage(message);

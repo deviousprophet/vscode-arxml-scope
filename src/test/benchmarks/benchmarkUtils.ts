@@ -26,6 +26,20 @@ export function retainedBytes(): number {
 	return memory.heapUsed + memory.arrayBuffers;
 }
 
+/** One console record: the shape every benchmark prints. */
+export interface BenchmarkRecord {
+	sourceMiB: number;
+	status: 'ok' | 'failed' | 'skipped';
+	[key: string]: unknown;
+}
+
+/** A reporter that stamps one benchmark kind onto every record it prints. */
+export function benchmarkReporter(kind: string): (record: BenchmarkRecord) => void {
+	return (record) => {
+		console.log(JSON.stringify({ ...record, _type: kind }));
+	};
+}
+
 export interface RetainedDelta {
 	/** Unrounded byte delta, for a byte-exact limit check. */
 	retained: number;
