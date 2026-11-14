@@ -2511,26 +2511,39 @@ type DocumentMessage = Extract<
 	{ type: 'document' | 'mergeMode' | 'labels' | 'documentPatch' }
 >;
 
-const DOCUMENT_MESSAGES = {
-	document: (message: Extract<DocumentMessage, { type: 'document' }>) => applyDiffDocument(message),
-	mergeMode: (message: Extract<DocumentMessage, { type: 'mergeMode' }>) => applyMergeMode(message.enabled === true),
-	labels: (message: Extract<DocumentMessage, { type: 'labels' }>) => {
+type DocumentHandler = (message: DocumentMessage) => void;
+
+/**
+ * One typed registration: the key and the handler's narrowed message type stay in
+ * step. A `Map` and not an object, so a message named `toString` is not a handler.
+ */
+function documentEntry<K extends DocumentMessage['type']>(
+	type: K,
+	handler: (message: Extract<DocumentMessage, { type: K }>) => void
+): [string, DocumentHandler] {
+	return [type, handler as DocumentHandler];
+}
+
+const DOCUMENT_MESSAGES = new Map<string, DocumentHandler>([
+	documentEntry('document', (message) => applyDiffDocument(message)),
+	documentEntry('mergeMode', (message) => applyMergeMode(message.enabled === true)),
+	documentEntry('labels', (message) => {
 		diffDocument.labels = message.labels;
 		renderHeaders();
-	},
-	documentPatch: (message: Extract<DocumentMessage, { type: 'documentPatch' }>) =>
+	}),
+	documentEntry('documentPatch', (message) =>
 		renderKeepingAnchor(function () {
 			setDocument(applyDiffPatch(diffDocument, message.patch));
 		})
-} satisfies { [K in DocumentMessage['type']]: (message: Extract<DocumentMessage, { type: K }>) => void };
+	)
+]);
 
 function isDocumentMessage(message: DiffProviderToWebview): message is DocumentMessage {
-	return message.type in DOCUMENT_MESSAGES;
+	return DOCUMENT_MESSAGES.has(message.type);
 }
 
 function handleDocumentMessage(message: DocumentMessage): void {
-	const handler = DOCUMENT_MESSAGES[message.type] as (incoming: DocumentMessage) => void;
-	handler(message);
+	DOCUMENT_MESSAGES.get(message.type)?.(message);
 }
 
 /** One host protocol message. */

@@ -722,6 +722,19 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('a message named after an inherited member is ignored', () => {
+		const { dom } = mount();
+		try {
+			const stray = (type: string) => ({ type }) as unknown as Parameters<typeof dom.post>[0];
+			dom.post(stray('toString'));
+			dom.post(stray('constructor'));
+			assert.strictEqual(dom.document.getElementById('diff-list')!.hidden, false, 'the document is untouched');
+			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-left [role="treeitem"]').length > 0, true);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('a copy patch replaces rows without a full document message', () => {
 		const source = documentOf();
 		const { dom } = mount(source);
