@@ -38,11 +38,6 @@
         "category": "ARXML Scope"
       },
       {
-        "command": "vscode-arxml-scope.mergeConfigurations",
-        "title": "Merge ARXML Configurations",
-        "category": "ARXML Scope"
-      },
-      {
         "command": "vscode-arxml-scope.selectAsFirst",
         "title": "Select as First File to Compare",
         "category": "ARXML Scope"

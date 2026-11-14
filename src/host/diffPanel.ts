@@ -12,7 +12,6 @@
  */
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import type { MergeController } from './merge/mergeController';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { FileLabel, RangeLookup, compareTitle } from '../core/diff/diffModel';
@@ -115,8 +114,7 @@ export class DiffPanel {
 	public static async open(
 		context: vscode.ExtensionContext,
 		leftUri: vscode.Uri,
-		rightUri: vscode.Uri,
-		merge?: MergeController
+		rightUri: vscode.Uri
 	): Promise<boolean> {
 		const left = await DiffPanel.read(leftUri);
 		if (!left) {
@@ -333,41 +331,9 @@ export class DiffPanel {
 			}
 		};
 
-		/** The merge strip's state; only a panel opened with a controller has one. */
-		const postMergeState = async (): Promise<void> => {
-			if (merge === undefined || disposed) {
-				return;
-			}
-			await panel.webview.postMessage({ type: 'merge', state: merge.state() });
-		};
-
 		const onReady = (): void => {
 			boot.settle();
 			void panel.webview.postMessage({ type: 'document', document: current, semantic });
-			void postMergeState();
-		};
-
-		const onMergeResolve = (nodeId: string, side: 'ours' | 'theirs'): void => {
-			if (merge === undefined) {
-				return;
-			}
-			merge.resolve(nodeId, side);
-			void postMergeState();
-		};
-
-		const onMergeWrite = (): void => {
-			if (merge === undefined) {
-				return;
-			}
-			void (async () => {
-				const result = await merge.write();
-				if (!result.ok) {
-					await postError(result.message);
-					return;
-				}
-				void vscode.window.showInformationMessage(result.message);
-				await postMergeState();
-			})();
 		};
 
 		const onMatchMode = (value: unknown): void => {

@@ -61,7 +61,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<ArxmlS
 			webviewOptions: { retainContextWhenHidden: true },
 		})
 	);
-	registerCommands(context, ecucProvider, new CompareSelectionStore(), indexService, resolvedEngine);
+	registerCommands(context, ecucProvider, new CompareSelectionStore(), indexService);
 	return {
 		indexStats: () => indexService.stats(),
 		statusBarText: () => indexService.statusText(),

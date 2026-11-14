@@ -10,25 +10,6 @@ import type { DiffDocument } from './core/diff/diffModel';
 
 export type { DiffDocument } from './core/diff/diffModel';
 
-/** One conflict as the panel shows it; `nodeId` is what a resolution names. */
-export interface MergeConflictView {
-	nodeId: string;
-	path: string;
-	reason: 'both-changed' | 'delete-modify' | 'add-add';
-	resolution?: 'ours' | 'theirs';
-	base?: string;
-	ours?: string;
-	theirs?: string;
-}
-
-/** The merge state a panel shows; `target` is the file a write would create. */
-export interface MergeViewState {
-	conflicts: MergeConflictView[];
-	unresolved: number;
-	target: string;
-	problems: string[];
-}
-
 /** Host → diff page. */
 export type DiffProviderToWebview =
 	/** Install (or replace) the compared document. */
@@ -37,8 +18,7 @@ export type DiffProviderToWebview =
 	| { type: 'matchModeState'; semantic: boolean }
 	/** The refresh failed; keep the last good document and show the banner. */
 	| { type: 'error'; message: string }
-	/** The panel is in merge mode: conflicts, resolutions and the write target. */
-	| { type: 'merge'; state: MergeViewState };
+;
 
 /** Diff page → host. */
 export type DiffWebviewToProvider =
@@ -48,10 +28,7 @@ export type DiffWebviewToProvider =
 	| { type: 'matchMode'; semantic: boolean }
 	/** Reveal one row in its source file; `side` is the host row side (the page maps the displayed pane through `hostSide`). */
 	| { type: 'reveal'; side: 'left' | 'right'; key: string }
-	/** Resolve one merge conflict to a side. */
-	| { type: 'mergeResolve'; nodeId: string; side: 'ours' | 'theirs' }
-	/** Write the merged file; refused while a conflict is unresolved. */
-	| { type: 'mergeWrite' };
+;
 
 /** The message type, or `undefined` for a payload that is not a protocol message. */
 export function diffMessageType(message: unknown): string | undefined {
@@ -62,5 +39,5 @@ export function diffMessageType(message: unknown): string | undefined {
 /** A host message with the diff protocol's shape; the page ignores anything else. */
 export function isDiffProviderMessage(message: unknown): message is DiffProviderToWebview {
 	const type = diffMessageType(message);
-	return type === 'document' || type === 'matchModeState' || type === 'error' || type === 'merge';
+	return type === 'document' || type === 'matchModeState' || type === 'error';
 }

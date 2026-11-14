@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use arxml_core::ecuc::{build_rows, scan_ecuc_values, Document, RowOptions};
+use arxml_core::ecuc::{build_rows, scan_ecuc_values, RowOptions};
 use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -48,7 +48,6 @@ fn main() -> ExitCode {
         "fixture-manifest" => fixture_manifest(&args),
         "scan" => scan_command(&args),
         "rows" => rows_command(&args),
-        "merge-index" => merge_index_command(&args),
         other => {
             eprintln!("unknown command {other}");
             ExitCode::from(2)
@@ -107,27 +106,6 @@ fn rows_command(args: &[String]) -> ExitCode {
     let model = scan_ecuc_values(text);
     let rows = build_rows(&model, &options);
     match serde_json::to_string(&rows) {
-        Ok(json) => {
-            println!("{json}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("{error}");
-            ExitCode::from(1)
-        }
-    }
-}
-
-fn merge_index_command(args: &[String]) -> ExitCode {
-    let text = match source(args) {
-        Ok(text) => text,
-        Err(error) => {
-            eprintln!("{error}");
-            return ExitCode::from(2);
-        }
-    };
-    let document = Document::new(text);
-    match serde_json::to_string(&document.merge_index()) {
         Ok(json) => {
             println!("{json}");
             ExitCode::SUCCESS

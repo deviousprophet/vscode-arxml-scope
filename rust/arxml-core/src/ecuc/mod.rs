@@ -4,7 +4,6 @@
 //! I/O, and this crate owns every ECUC decision.
 
 pub mod edit;
-pub mod merge;
 pub mod model;
 pub mod node_id;
 pub mod order;
@@ -14,7 +13,6 @@ pub mod syscond;
 pub mod text;
 pub mod validate;
 
-pub use merge::MergeIndexNode;
 pub use model::{EcucDocumentModel, Range, SortMode};
 pub use node_id::{build_node_index, NodeIndex};
 pub use rows::{build_rows, Row, RowOptions};
@@ -74,11 +72,6 @@ impl Document {
         self.index.len()
     }
 
-    /// One entry per node for a three-way merge: id, parent, order, range, own digest.
-    pub fn merge_index(&self) -> Vec<MergeIndexNode> {
-        merge::merge_index(&self.model, &self.index)
-    }
-
     pub fn is_ecuc(&self) -> bool {
         !self.model.modules.is_empty()
     }
@@ -116,10 +109,6 @@ impl Document {
     }
 
     /// Applies a batch of changes (already ordered descending by start).
-    ///
-    /// One change inside a `<VALUE>` text — the editor's only value edit — takes the
-    /// in-place path: splice, shift the ranges after it, rewrite that one row. Nothing
-    /// else is re-parsed, so a 20 MiB document costs a few milliseconds.
     pub fn apply_changes(&mut self, changes: &[(usize, usize, String)]) -> Patch {
         if let [change] = changes {
             if let Some(patch) = self.apply_value_edit(change.0, change.1, &change.2) {
@@ -130,8 +119,6 @@ impl Document {
         for (start, end, new_text) in changes {
             let start_byte = self.text.byte_at_utf16(*start);
             let end_byte = self.text.byte_at_utf16(*end);
-            // Offsets are relative to the document the batch was recorded against, so
-            // each splice is computed from the original text for that change.
             let mut next = String::with_capacity(text.len() + new_text.len());
             next.push_str(&text[..start_byte]);
             next.push_str(new_text);

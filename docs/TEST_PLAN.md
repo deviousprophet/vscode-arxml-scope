@@ -261,33 +261,28 @@ trip, row parity, edit fast path.
 | ENG-07 | engine RSS on the 20 MiB document | under the recorded ceiling |
 | ENG-08 | two panels, two documents | handles isolated; closing one leaves the other |
 
-## MERGE — three-way config merge
+## MERGE — two-way copy merge in the diff view
 
-Covered (new): the 13-case matrix in `mergePlan`, insertion/deletion/rename/byte
-composition in the extension suite.
+Planned (see `11-14-arxml-config-merge`). The panel's merge toggle turns the comparison into
+a two-way merge: arrows copy a row to the other side as one undoable edit.
 
 | ID | Case | Expected |
 |---|---|---|
-| MERGE-01 | all three identical | output equals ours, zero conflicts |
-| MERGE-02 | only theirs changed, ours untouched | whole element from theirs, byte-exact |
-| MERGE-03 | both change the same value to the same text | no conflict |
-| MERGE-04 | both change the same value differently | one conflict with base/ours/theirs |
-| MERGE-05 | ours deletes, theirs modifies | delete/modify conflict; each resolution byte-exact |
-| MERGE-06 | theirs deletes, ours modifies | delete/modify conflict the other way |
-| MERGE-07 | both add the same parameter identically | one row, no conflict |
-| MERGE-08 | both add the same parameter differently | add/add conflict |
-| MERGE-09 | theirs adds a sibling parameter | inserted after the preceding ours sibling, same indent |
-| MERGE-10 | reordered modules/containers | no conflict; ours' order kept |
-| MERGE-11 | rename on one side only | no conflict, renamed short name in the result |
-| MERGE-12 | rename to a name that collides after resolution | plan problem reported, write refused |
-| MERGE-13 | CRLF ours, LF theirs | merged file keeps ours' line endings |
-| MERGE-14 | indentation 2 spaces vs 4 | inserted/replaced blocks re-indented to ours |
-| MERGE-15 | annotation/condition changed on one side | merged without a conflict, text preserved |
-| MERGE-16 | reference target changed on one side | merged; validation reports it if the target is gone |
-| MERGE-17 | unresolved conflict | write refused, no file created, source hashes unchanged |
-| MERGE-18 | write, then write again | only `<name>.merged.arxml` replaced |
-| MERGE-19 | 20 MiB three-way pair | plan and compose within the benchmark ceiling |
-| MERGE-20 | accept-all-left / accept-all-right on the fixture pair | byte-identical to ours / theirs |
+| MERGE-01 | toggle off | no arrows; the plain diff is read-only (existing suites) |
+| MERGE-02 | copy left→right on a changed parameter | the right value becomes the left one, one undo restores |
+| MERGE-03 | copy right→left | mirrored, same bytes |
+| MERGE-04 | copy a container | the whole subtree replaces the target, target-only children removed |
+| MERGE-05 | placeholder arrow on the empty side | the element is deleted from the other side, one undo |
+| MERGE-06 | copy into a missing parent | the ancestor chain is created; unrelated source siblings are not imported |
+| MERGE-07 | copy into a missing module | refused with a message, no mutation |
+| MERGE-08 | module row copy | allowed without a name collision; refused with one |
+| MERGE-09 | `Alt+←` / `Alt+→` | copies the focused row; read-only mode ignores the keys |
+| MERGE-10 | Swap, then copy | the arrow copies from the displayed pane, not the stored side |
+| MERGE-11 | patch after a copy | panel equals a full rebuild; no synchronous rebuild |
+| MERGE-12 | four fallback cases | rebuild with a notice, never a wrong row |
+| MERGE-13 | stale bytes | Reload/Cancel modal; Cancel changes nothing |
+| MERGE-14 | edited pane label | `•` while dirty, cleared on save |
+| MERGE-15 | 20 MiB pair | row visible < 100 ms, consistent < 250 ms, 10 copies / 10 s |
 
 ## PKG — packaging and activation
 
