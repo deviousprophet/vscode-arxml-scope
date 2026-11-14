@@ -513,7 +513,12 @@ impl<'a> Scanner<'a> {
             value_role,
         };
         let Some(mut rec) = rec else { return };
-        rec.range = Some(Range::new(start, end));
+        // `start`/`end` are byte offsets from the byte walker; every range on the
+        // wire is in UTF-16 code units.
+        rec.range = Some(Range::new(
+            self.src.utf16_at_byte(start),
+            self.src.utf16_at_byte(end),
+        ));
         self.finish_record(rec, &ctx);
     }
 

@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod diff;
 pub mod ecuc;
 
 /// The protocol version the TypeScript client expects from the engine process.

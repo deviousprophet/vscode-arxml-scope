@@ -18,7 +18,7 @@ use super::node_id::{build_node_index, NodeIndex};
 use super::order::{order_containers, order_members, order_modules, SORT_EXCEPTIONS};
 use super::syscond::{evaluate_syscond, ConditionResult, ConditionState, ConditionValue};
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaPart {
     pub cls: String,
