@@ -154,6 +154,10 @@ export class EngineClient {
 		return client;
 	}
 
+	public get isClosed(): boolean {
+		return this.closed;
+	}
+
 	private async handshake(): Promise<void> {
 		const hello = await this.request('hello', {}, undefined, 5000);
 		assertProtocol(hello.header);

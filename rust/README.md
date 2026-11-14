@@ -51,6 +51,13 @@ one `WorkspaceEdit`, so undo, dirty state and save stay VS Code's.
 
 The engine process is the required core at activation, and its scanner, rows,
 conditions and edit plans are at parity with the TypeScript oracle over the whole
-fixture corpus (`npm run parity:rows`). The ECUC editor's refresh path still builds
-its rows in TypeScript; moving it onto `doc.rows`/`doc.update` and trimming the
-per-update native work are the remaining steps (`.trellis/tasks/11-13-rust-edit-engine/implement.md`).
+fixture corpus (`npm run parity:rows`).
+
+The ECUC editor's edit path runs through it: `doc.plan` returns the span and bytes to
+write, and `doc.update` answers a value edit with one row in place (a splice plus a
+range shift, no re-parse and no row rebuild). The panel's first row store is still
+built in TypeScript, and the workspace index, validation and diff ports remain
+(`.trellis/tasks/11-13-rust-edit-engine/implement.md`).
+
+`npm run benchmark sampleFile` measures a local file named by `ARXML_SCOPE_SAMPLE`
+and reports `skipped` without it, so no private document enters the repository.

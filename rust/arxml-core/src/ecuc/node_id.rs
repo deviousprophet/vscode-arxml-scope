@@ -87,6 +87,16 @@ impl NodeIndex {
         self.by_id.insert(entry.id.clone(), entry);
     }
 
+    /// Moves every node's range and re-keys the range lookup.
+    pub fn shift(&mut self, pos: u32, delta: i32) {
+        self.by_range.clear();
+        for entry in self.by_id.values_mut() {
+            super::model::shift_range(&mut entry.range, pos, delta);
+            self.by_range
+                .insert((entry.range.start, entry.range.end), entry.id.clone());
+        }
+    }
+
     fn finish(&mut self) {
         self.sorted = self.by_id.keys().cloned().collect();
         self.sorted.sort_by(|left, right| {

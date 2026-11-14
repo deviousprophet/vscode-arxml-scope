@@ -149,7 +149,7 @@ impl Engine {
                 &[],
             )
             .map_err(|error| error.to_string()),
-            "doc.open" => self.open_document(id, &mut out, body),
+            "doc.open" => self.open_document(id, &mut out, header, body),
             "doc.close" => {
                 let document = header.get("docId").and_then(Value::as_u64).unwrap_or(0) as u32;
                 self.documents.remove(&document);
@@ -166,11 +166,24 @@ impl Engine {
         }
     }
 
-    fn open_document(&mut self, id: u64, out: &mut impl Write, body: &[u8]) -> Result<(), String> {
+    fn open_document(
+        &mut self,
+        id: u64,
+        out: &mut impl Write,
+        header: &Value,
+        body: &[u8],
+    ) -> Result<(), String> {
         let text = String::from_utf8(body.to_vec()).map_err(|_| "document body is not UTF-8")?;
+        let options: RowOptions = header
+            .get("options")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| error.to_string())?
+            .unwrap_or_default();
         let document_id = self.next_document;
         self.next_document += 1;
-        let document = Document::new(text);
+        let document = Document::with_options(text, options);
         let (modules, containers, parameters) = document.counts();
         let response = json!({
             "id": id,

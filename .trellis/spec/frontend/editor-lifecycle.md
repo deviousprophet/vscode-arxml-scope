@@ -7,8 +7,10 @@ Two independent webview surfaces use the same static-shell + `postMessage` patte
 
 The host owns documents, scans, writes and persistence. A Rust engine process is
 required at activation (`src/host/engine/engineLoader.ts`, `npm run engine:build`); it
-currently serves the parity-checked scanner, rows and edit plans, while the editor's
-refresh path still builds rows in TypeScript. Each page owns its row store, selection,
+serves the parity-checked scanner, rows and edit plans. The editor validates an edit against
+the engine model, applies the returned span as one `WorkspaceEdit`, and replaces the
+resulting row through a `documentPatch`; the full row store is still built in TypeScript
+when a panel opens and after a structural change. Each page owns its row store, selection,
 collapse, search and scroll state; the editor page also owns its sidebar state. The only cross-runtime
 channel is the typed protocol in `src/webviewProtocol.ts` or `src/diffProtocol.ts`.
 

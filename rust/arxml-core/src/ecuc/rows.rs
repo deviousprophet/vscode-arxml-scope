@@ -633,13 +633,33 @@ fn format_number(number: f64) -> String {
 }
 
 fn parameter_value_kind(parameter: &ParameterNode, value: &str) -> &'static str {
-    if !parameter.numeric {
+    value_kind_of(parameter.numeric, value)
+}
+
+fn value_kind_of(numeric: bool, value: &str) -> &'static str {
+    if !numeric {
         return "textual";
     }
     if value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("false") {
         return "boolean";
     }
     "numeric"
+}
+
+/// Rewrites the value-derived fields of a parameter row after an in-place value edit.
+pub fn refresh_value_row(row: &mut Row, definition_dest: Option<&str>, numeric: bool, value: &str) {
+    let kind = value_kind_of(numeric, value);
+    let parameter_type = parameter_type(definition_dest, kind);
+    row.value = Some(value.to_string());
+    row.shown_value = Some(if numeric {
+        value.to_string()
+    } else {
+        format!("\"{value}\"")
+    });
+    row.value_kind = Some(kind.to_string());
+    row.formats = Some(parameter_formats(value, &parameter_type));
+    row.parameter_type = Some(parameter_type);
+    row.haystack = haystack(&row.label, None, Some(value), &row.meta);
 }
 
 fn parameter_type(definition_dest: Option<&str>, value_kind: &str) -> String {

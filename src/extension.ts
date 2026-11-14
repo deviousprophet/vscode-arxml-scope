@@ -53,7 +53,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<ArxmlS
 	const ecucProvider = new EcucEditorProvider(
 		new ConditionValueStore(context.workspaceState),
 		context.extensionUri,
-		indexService
+		indexService,
+		resolvedEngine
 	);
 	context.subscriptions.push(
 		vscode.window.registerCustomEditorProvider(VIEW_TYPE, ecucProvider, {

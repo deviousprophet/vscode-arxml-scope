@@ -17,6 +17,8 @@ use super::validate::{validate_definition_ref, validate_short_name, validate_val
 pub struct EditRecord {
     pub node_id: String,
     pub region: String,
+    /// The UTF-16 span the host must replace, so it never has to re-scan to find it.
+    pub range: Range,
     pub old_text: String,
     pub new_text: String,
 }
@@ -113,6 +115,7 @@ pub fn plan_value_edit(
         EditRecord {
             node_id: node_id.to_string(),
             region: region.to_string(),
+            range,
             old_text,
             new_text,
         },
@@ -183,6 +186,7 @@ pub fn plan_field_edit(
         EditRecord {
             node_id: node_id.to_string(),
             region: field.to_string(),
+            range,
             old_text,
             new_text: validated.text,
         },

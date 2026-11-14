@@ -23,10 +23,21 @@ export interface EditorDocumentPayload {
 	header?: EditorDocumentHeader;
 }
 
+/** One contiguous row replacement the engine computed for a text change. */
+export interface EditorRowPatch {
+	at: number;
+	remove: number;
+	rows: EcucRow[];
+	/** False when rows did not shift, so the page can replace them in place. */
+	structural: boolean;
+}
+
 /** Host → editor page. */
 export type EditorProviderToWebview =
 	/** Replace the row store (first load and every re-scan). */
 	| { type: 'document'; document: EditorDocumentPayload }
+	/** Replace a contiguous row span after one edit; the rest of the store is untouched. */
+	| { type: 'documentPatch'; patch: EditorRowPatch; header?: EditorDocumentHeader; selectedId?: string }
 	/** Replace the workspace condition values (first load and a page reload). */
 	| { type: 'conditions'; entries: ConditionEntry[] }
 	/** Select one row, expanding its ancestors when needed. */
@@ -64,7 +75,14 @@ export function editorMessageType(message: unknown): string | undefined {
 }
 
 /** The message types a host → editor page payload may carry. */
-const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set(['document', 'conditions', 'select', 'notice', 'error']);
+const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+	'document',
+	'documentPatch',
+	'conditions',
+	'select',
+	'notice',
+	'error'
+]);
 
 /** A host message with the editor protocol's shape; the page ignores anything else. */
 export function isEditorProviderMessage(message: unknown): message is EditorProviderToWebview {

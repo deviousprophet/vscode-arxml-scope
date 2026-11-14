@@ -262,6 +262,50 @@ suite('editor bundled page', () => {
 		}
 	});
 
+	function renderedRow(dom: ReturnType<typeof installDom>, id: string): any {
+		return Array.from(treeRows(dom.document)).find(
+			(candidate) => candidate.getAttribute('data-node-id') === id
+		);
+	}
+
+	function patchValueRow(
+		dom: ReturnType<typeof installDom>,
+		payload: EditorDocumentPayload
+	): { id: string; at: number; before: string } {
+		const at = payload.rows.findIndex((row) => row.kind === 'parameter');
+		assert.ok(at >= 0, 'the fixture has a parameter row');
+		const existing = payload.rows[at];
+		const row = renderedRow(dom, existing.id);
+		assert.ok(row, 'the parameter row is rendered');
+		const before = row.querySelector('.value')?.textContent ?? '';
+		dom.post({
+			type: 'documentPatch',
+			patch: {
+				at,
+				remove: 1,
+				rows: [{ ...existing, value: '424242', shownValue: '424242', haystack: '424242' }],
+				structural: false
+			}
+		});
+		return { id: existing.id, at, before };
+	}
+
+	test('a documentPatch replaces one value row without a rebuild', () => {
+		const { dom, document: payload } = mount();
+		try {
+			const countBefore = treeRows(dom.document).length;
+			const { id, before } = patchValueRow(dom, payload);
+			const updated = renderedRow(dom, id);
+			assert.ok(updated, 'the row survives the patch');
+			const after = updated.querySelector('.value')?.textContent ?? '';
+			assert.notStrictEqual(after, before);
+			assert.ok(after.includes('424242'), 'the patched value is rendered in place');
+			assert.strictEqual(treeRows(dom.document).length, countBefore, 'the row count is unchanged');
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('the module gap is one inert numbered row between two modules', () => {
 		const { dom } = mount(twoModuleDocument());
 		try {

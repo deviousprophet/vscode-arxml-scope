@@ -30,11 +30,16 @@ pub struct Document {
 
 impl Document {
     pub fn new(text: String) -> Self {
+        Self::with_options(text, RowOptions::default())
+    }
+
+    /// Opens one document with the row options the host is displaying.
+    pub fn with_options(text: String, options: RowOptions) -> Self {
         let mut document = Self {
             text: SourceText::new(text),
             model: EcucDocumentModel::default(),
             index: NodeIndex::default(),
-            options: RowOptions::default(),
+            options,
             rows: Vec::new(),
         };
         document.rescan();
@@ -103,8 +108,17 @@ impl Document {
         self.apply_changes(&[(start, end, new_text.to_string())])
     }
 
-    /// Applies a batch of changes (already ordered descending by start), rescans once.
+    /// Applies a batch of changes (already ordered descending by start).
+    ///
+    /// One change inside a `<VALUE>` text — the editor's only value edit — takes the
+    /// in-place path: splice, shift the ranges after it, rewrite that one row. Nothing
+    /// else is re-parsed, so a 20 MiB document costs a few milliseconds.
     pub fn apply_changes(&mut self, changes: &[(usize, usize, String)]) -> Patch {
+        if let [change] = changes {
+            if let Some(patch) = self.apply_value_edit(change.0, change.1, &change.2) {
+                return patch;
+            }
+        }
         let mut text = self.text.as_str().to_string();
         for (start, end, new_text) in changes {
             let start_byte = self.text.byte_at_utf16(*start);
@@ -123,6 +137,63 @@ impl Document {
         diff_rows(&previous, &self.rows)
     }
 
+    fn apply_value_edit(&mut self, start: usize, end: usize, new_text: &str) -> Option<Patch> {
+        let (range, node_id, definition_dest, numeric) = self.value_target(start, end)?;
+        let delta = text::utf16_len(new_text) as i32 - (end - start) as i32;
+        let start_byte = self.text.byte_at_utf16(start);
+        let end_byte = self.text.byte_at_utf16(end);
+        let mut text = String::with_capacity(self.text.as_str().len() + new_text.len());
+        text.push_str(&self.text.as_str()[..start_byte]);
+        text.push_str(new_text);
+        text.push_str(&self.text.as_str()[end_byte..]);
+        self.text = SourceText::new(text);
+        self.model.shift(end as u32, delta);
+        self.index.shift(end as u32, delta);
+        let position = self.rows.iter().position(|row| row.id == node_id)?;
+        let value_end = (range.end as i64 + delta as i64) as usize;
+        let value = text::decode_xml(self.text.slice_utf16(range.start as usize, value_end))
+            .trim()
+            .to_string();
+        self.set_display_value(&node_id, &value);
+        rows::refresh_value_row(
+            &mut self.rows[position],
+            definition_dest.as_deref(),
+            numeric,
+            &value,
+        );
+        Some(Patch {
+            at: position,
+            remove: 1,
+            rows: vec![self.rows[position].clone()],
+            structural: false,
+        })
+    }
+
+    /// The value range, node id, DEST and numeric flag for a change inside a value text.
+    fn value_target(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Option<(Range, String, Option<String>, bool)> {
+        let covered = |range: &Option<Range>| match range {
+            Some(range) => start >= range.start as usize && end <= range.end as usize,
+            None => false,
+        };
+        for module in &self.model.modules {
+            if let Some(found) = find_value(&module.containers, &covered, &self.index) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    fn set_display_value(&mut self, node_id: &str, value: &str) {
+        let Some(range) = self.index.get(node_id).map(|entry| entry.range) else {
+            return;
+        };
+        set_value_in(&mut self.model.modules, range, value);
+    }
+
     /// Replaces the whole text (recovery path).
     pub fn resync(&mut self, text: String) {
         self.text = SourceText::new(text);
@@ -137,6 +208,8 @@ pub struct Patch {
     pub at: usize,
     pub remove: usize,
     pub rows: Vec<Row>,
+    /// True when rows shifted; a false patch can be applied in place by the page.
+    pub structural: bool,
 }
 
 /// The prefix/suffix comparison that turns two row stores into one replacement.
@@ -161,6 +234,7 @@ fn diff_rows(previous: &[Row], next: &[Row]) -> Patch {
         at: prefix,
         remove,
         rows: inserted,
+        structural: true,
     }
 }
 
@@ -172,6 +246,59 @@ fn same_identity(left: &Row, right: &Row) -> bool {
         && left.subtree_size == right.subtree_size
         && left.has_children == right.has_children
         && left.disabled == right.disabled
+}
+
+fn find_value(
+    containers: &[model::ContainerNode],
+    covered: &impl Fn(&Option<Range>) -> bool,
+    index: &NodeIndex,
+) -> Option<(Range, String, Option<String>, bool)> {
+    for container in containers {
+        for parameter in &container.parameters {
+            if !covered(&parameter.value_range) {
+                continue;
+            }
+            if let (Some(value_range), Some(id)) =
+                (parameter.value_range, index.id_of(parameter.range))
+            {
+                return Some((
+                    value_range,
+                    id.to_string(),
+                    parameter.definition_dest.clone(),
+                    parameter.numeric,
+                ));
+            }
+        }
+        if let Some(found) = find_value(&container.containers, covered, index) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn set_value_in(modules: &mut [model::ModuleNode], range: Range, value: &str) -> bool {
+    modules
+        .iter_mut()
+        .any(|module| set_value_in_containers(&mut module.containers, range, value))
+}
+
+fn set_value_in_containers(
+    containers: &mut [model::ContainerNode],
+    range: Range,
+    value: &str,
+) -> bool {
+    for container in containers.iter_mut() {
+        for parameter in container.parameters.iter_mut() {
+            if parameter.range == range {
+                parameter.display_value = Some(value.to_string());
+                return true;
+            }
+        }
+        if set_value_in_containers(&mut container.containers, range, value) {
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -277,17 +404,48 @@ mod tests {
     }
 
     #[test]
-    fn applies_a_change_and_returns_a_one_row_patch() {
+    fn applies_a_value_edit_in_place_and_shifts_the_ranges_after_it() {
         let mut document = Document::new(DOC.to_string());
         let before = document.rows()[2].clone();
-        let start = document.text().len_utf16();
-        let _ = start;
-        let text = document.text().as_str();
-        let value_at = text.find("<VALUE>1</VALUE>").expect("value element") + 7;
-        let patch = document.apply_change(value_at, value_at + 1, "7");
+        let value_at = document
+            .text()
+            .as_str()
+            .find("<VALUE>1</VALUE>")
+            .expect("value element")
+            + 7;
+        let patch = document.apply_change(value_at, value_at + 1, "42");
+        assert!(!patch.structural, "a value edit does not move rows");
         assert_eq!(patch.remove, 1);
         assert_eq!(patch.rows.len(), 1);
         assert_eq!(patch.rows[0].id, before.id);
-        assert_eq!(patch.rows[0].value.as_deref(), Some("7"));
+        assert_eq!(patch.rows[0].value.as_deref(), Some("42"));
+        assert_eq!(patch.rows[0].shown_value.as_deref(), Some("42"));
+        assert_eq!(document.rows()[2].value.as_deref(), Some("42"));
+
+        // The model and the id index moved with the text: a second edit plans and
+        // applies against the shifted ranges.
+        let plan = edit::plan_value_edit(
+            document.model(),
+            document.index(),
+            document.text(),
+            &before.id,
+            "7",
+        );
+        assert!(plan.ok, "{:?}", plan.reason);
+        let at = document
+            .text()
+            .as_str()
+            .find("<VALUE>42</VALUE>")
+            .expect("shifted value")
+            + 7;
+        let second = document.apply_change(at, at + 2, "7");
+        assert_eq!(second.rows[0].value.as_deref(), Some("7"));
+    }
+
+    #[test]
+    fn a_change_outside_a_value_takes_the_full_path() {
+        let mut document = Document::new(DOC.to_string());
+        let patch = document.apply_change(0, 0, " ");
+        assert!(patch.structural, "a structural edit reports itself");
     }
 }

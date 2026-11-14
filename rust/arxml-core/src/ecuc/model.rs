@@ -195,6 +195,90 @@ impl PathIndex {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Moves every range at or after `pos` by `delta` UTF-16 units.
+    pub fn shift(&mut self, pos: u32, delta: i32) {
+        for (_, range) in &mut self.entries {
+            shift_range(range, pos, delta);
+        }
+        for range in self.exact.values_mut() {
+            shift_range(range, pos, delta);
+        }
+    }
+}
+
+/// Shifts one range: wholly after `pos` moves, straddling it only grows/shrinks.
+pub fn shift_range(range: &mut Range, pos: u32, delta: i32) {
+    if range.start >= pos {
+        range.start = (range.start as i64 + delta as i64) as u32;
+        range.end = (range.end as i64 + delta as i64) as u32;
+    } else if range.end > pos {
+        range.end = (range.end as i64 + delta as i64) as u32;
+    }
+}
+
+fn shift_opt(range: &mut Option<Range>, pos: u32, delta: i32) {
+    if let Some(range) = range {
+        shift_range(range, pos, delta);
+    }
+}
+
+fn shift_suffixes(suffixes: &mut Suffixes, pos: u32, delta: i32) {
+    shift_opt(&mut suffixes.syscond_range, pos, delta);
+    shift_opt(&mut suffixes.post_build_range, pos, delta);
+    for annotation in suffixes.annotations.iter_mut().flatten() {
+        shift_opt(&mut annotation.range, pos, delta);
+    }
+}
+
+fn shift_parameter(parameter: &mut ParameterNode, pos: u32, delta: i32) {
+    shift_range(&mut parameter.range, pos, delta);
+    shift_opt(&mut parameter.definition_ref_range, pos, delta);
+    shift_opt(&mut parameter.value_range, pos, delta);
+    shift_suffixes(&mut parameter.suffixes, pos, delta);
+}
+
+fn shift_reference(reference: &mut ReferenceNode, pos: u32, delta: i32) {
+    shift_range(&mut reference.range, pos, delta);
+    shift_opt(&mut reference.definition_ref_range, pos, delta);
+    shift_opt(&mut reference.target_range, pos, delta);
+    shift_suffixes(&mut reference.suffixes, pos, delta);
+}
+
+fn shift_container(container: &mut ContainerNode, pos: u32, delta: i32) {
+    shift_range(&mut container.range, pos, delta);
+    shift_opt(&mut container.definition_ref_range, pos, delta);
+    shift_opt(&mut container.short_name_range, pos, delta);
+    shift_suffixes(&mut container.suffixes, pos, delta);
+    for parameter in &mut container.parameters {
+        shift_parameter(parameter, pos, delta);
+    }
+    for reference in &mut container.references {
+        shift_reference(reference, pos, delta);
+    }
+    for child in &mut container.containers {
+        shift_container(child, pos, delta);
+    }
+}
+
+impl EcucDocumentModel {
+    /// Moves every range at or after `pos`, the ranges one text change shifts.
+    pub fn shift(&mut self, pos: u32, delta: i32) {
+        for module in &mut self.modules {
+            shift_range(&mut module.range, pos, delta);
+            shift_opt(&mut module.definition_ref_range, pos, delta);
+            shift_opt(&mut module.short_name_range, pos, delta);
+            shift_opt(&mut module.variant_range, pos, delta);
+            shift_suffixes(&mut module.suffixes, pos, delta);
+            for container in &mut module.containers {
+                shift_container(container, pos, delta);
+            }
+        }
+        for package in &mut self.packages {
+            shift_range(&mut package.range, pos, delta);
+        }
+        self.path_index.shift(pos, delta);
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize)]

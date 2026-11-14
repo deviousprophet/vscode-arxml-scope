@@ -210,7 +210,16 @@ The Document surface is read-only. Editing happens in Details or through the row
 - A module cannot be renamed: its short name is part of every container id.
 
 Each accepted edit is exactly one `WorkspaceEdit` on the real text document, so it is one undo step.
-The editor re-scans after every change; it never replays a stored offset.
+
+The editor validates the value against the Rust engine's retained model, which also returns the exact
+span to replace, so the host does not re-scan to find or to apply the region. After the write the engine
+answers the document change with a one-row patch: the page replaces that row in place and the source
+keeps the new bytes. A structural change (a rename, delete or duplicate) still re-scans and re-pushes
+the row store, because it moves rows rather than one value.
+
+The engine's copy of the text is a cache of the real document: every change it applies comes from
+`onDidChangeTextDocument`, and if the document moves while the engine is opening it, the panel stays on
+the TypeScript path for that session instead of risking a desynchronised edit.
 
 ### Structural edits
 
