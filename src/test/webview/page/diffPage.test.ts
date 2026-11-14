@@ -2475,3 +2475,54 @@ suite('semantic diff page', () => {
 		}
 	});
 });
+
+suite('diff page merge mode', () => {
+	test('merge mode is off by default; the toggle shows arrows and posts the mode', () => {
+		const { dom } = mount();
+		try {
+			const toggle = dom.document.getElementById('diff-merge-toggle') as HTMLButtonElement;
+			assert.ok(toggle, 'the title strip owns the toggle');
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(dom.document.querySelectorAll('.diff-copy-arrow').length, 0, 'no arrows while off');
+
+			toggle.click();
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
+			assert.deepStrictEqual(messagesOf(dom.api, 'mergeMode'), [{ type: 'mergeMode', enabled: true }]);
+			assert.ok(dom.document.querySelectorAll('.diff-copy-arrow').length > 0, 'changed rows show an arrow');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('unchanged rows never show an arrow', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'mergeMode', enabled: true });
+			const unchanged = Array.from(dom.document.querySelectorAll('#diff-list .diff-row')) as HTMLElement[];
+			const row = unchanged.find((candidate) => candidate.getAttribute('data-status') === 'unchanged');
+			assert.ok(row, 'the fixture has an unchanged row');
+			assert.strictEqual(row.querySelector('.diff-copy-arrow'), null);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('clicking an arrow copies that row with its host side and key', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'mergeMode', enabled: true });
+			const arrow = dom.document.querySelector('#diff-list .diff-copy-arrow') as HTMLButtonElement;
+			assert.ok(arrow, 'a changed row has an arrow');
+			const row = arrow.closest('.diff-row') as HTMLElement;
+			const key = row.getAttribute('data-key');
+			assert.ok(key, 'the row carries its diff key');
+			arrow.click();
+			const copies = messagesOf(dom.api, 'copy');
+			assert.strictEqual(copies.length, 1);
+			assert.strictEqual(copies[0].key, key);
+			assert.ok(copies[0].side === 'left' || copies[0].side === 'right');
+		} finally {
+			dom.restore();
+		}
+	});
+});

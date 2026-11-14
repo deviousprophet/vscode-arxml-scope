@@ -72,15 +72,29 @@ function blank(text: string, start: number, end: number): boolean {
 	return text.slice(start, end).trim() === '';
 }
 
-/** The span that removes an element: its line when it owns it, else just the element. */
-export function removalSpan(text: string, range: CopyRange): CopyRange {
+/** True when the element owns both ends of its line. */
+function ownsWholeLine(text: string, range: CopyRange, start: number, end: number): boolean {
+	return blank(text, start, range.start) && blank(text, range.end, end);
+}
+
+/** The offset past the line break that starts at `end`, if any. */
+function afterLineBreak(text: string, end: number): number {
+	if (end >= text.length) {
+		return end;
+	}
+	return text[end] === '\r' && text[end + 1] === '\n' ? end + 2 : end + 1;
+}
+
+/** The whole-line span for an element that owns its line, or `undefined`. */
+function wholeLineSpan(text: string, range: CopyRange): CopyRange | undefined {
 	const start = lineStart(text, range.start);
 	const end = lineEnd(text, range.end);
-	if (!blank(text, start, range.start) || !blank(text, range.end, end)) {
-		return range;
-	}
-	const next = end < text.length ? end + (text[end] === '\r' && text[end + 1] === '\n' ? 2 : 1) : end;
-	return { start, end: next };
+	return ownsWholeLine(text, range, start, end) ? { start, end: afterLineBreak(text, end) } : undefined;
+}
+
+/** The span that removes an element: its line when it owns it, else just the element. */
+export function removalSpan(text: string, range: CopyRange): CopyRange {
+	return wholeLineSpan(text, range) ?? range;
 }
 
 /** The indentation of the line the offset sits on. */
@@ -93,19 +107,22 @@ export function indentationAt(text: string, offset: number): string {
 	return text.slice(start, end);
 }
 
+/** One line of a copied block, shifted by the indent delta. */
+function shiftLine(line: string, sourceIndent: string, targetIndent: string): string {
+	if (line.trim() === '') {
+		return line;
+	}
+	const lead = /^[ \t]*/.exec(line)?.[0] ?? '';
+	const width = Math.max(0, lead.length + targetIndent.length - sourceIndent.length);
+	return `${' '.repeat(width)}${line.slice(lead.length)}`;
+}
+
 /** Shifts every line of a copied block by the difference between the two indents. */
 export function reindent(block: string, sourceIndent: string, targetIndent: string): string {
 	const separator = block.includes('\r\n') ? '\r\n' : '\n';
 	return block
 		.split(separator)
-		.map((line, index) => {
-			if (index === 0 || line.trim() === '') {
-				return line;
-			}
-			const lead = /^[ \t]*/.exec(line)?.[0] ?? '';
-			const width = Math.max(0, lead.length + targetIndent.length - sourceIndent.length);
-			return `${' '.repeat(width)}${line.slice(lead.length)}`;
-		})
+		.map((line, index) => (index === 0 ? line : shiftLine(line, sourceIndent, targetIndent)))
 		.join(separator);
 }
 

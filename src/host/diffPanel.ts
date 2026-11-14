@@ -12,6 +12,7 @@
  */
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
+import { indentationAt, planCopy, planDelete } from '../core/copy/planCopy';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { FileLabel, RangeLookup, compareTitle } from '../core/diff/diffModel';
@@ -153,6 +154,7 @@ export class DiffPanel {
 		let disposed = false;
 		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 		let documentGeneration = 0;
+		let mergeMode = false;
 
 		panel.webview.html = shellHtml(panel, context);
 
@@ -334,6 +336,184 @@ export class DiffPanel {
 		const onReady = (): void => {
 			boot.settle();
 			void panel.webview.postMessage({ type: 'document', document: current, semantic });
+			void panel.webview.postMessage({ type: 'mergeMode', enabled: mergeMode });
+		};
+
+		/** One cell of a row by side. */
+		const cellOn = (row: { left?: DiffCell; right?: DiffCell }, side: 'left' | 'right') => (side === 'left' ? row.left : row.right);
+
+		const otherSideOf = (side: 'left' | 'right'): 'left' | 'right' => (side === 'left' ? 'right' : 'left');
+
+		/** Where a directional sibling scan ends. */
+		const scanStop = (step: 1 | -1): number => (step > 0 ? current.rows.length : -1);
+
+		/** The nearest sibling with a cell on `side`, searching one direction. */
+		const nearestSibling = (
+			rowIndex: number,
+			side: 'left' | 'right',
+			step: 1 | -1
+		): DiffCell | undefined => {
+			const row = current.rows[rowIndex];
+			for (let index = rowIndex + step; index !== scanStop(step); index += step) {
+				const candidate = current.rows[index];
+				if (candidate.parentKey !== row.parentKey) {
+					continue;
+				}
+				const cell = cellOn(candidate, side);
+				if (cell !== undefined) {
+					return cell;
+				}
+			}
+			return undefined;
+		};
+
+		const siblingAnchor = (
+			rowIndex: number,
+			side: 'left' | 'right'
+		): { after?: { start: number; end: number }; before?: { start: number; end: number } } => ({
+			after: nearestSibling(rowIndex, side, -1)?.range,
+			before: nearestSibling(rowIndex, side, 1)?.range
+		});
+
+		const askReload = async (): Promise<void> => {
+			const answer = await vscode.window.showWarningMessage(
+				'The comparison changed. Reload it?',
+				{ modal: true },
+				'Reload'
+			);
+			if (answer === 'Reload') {
+				await refreshNow();
+			}
+		};
+
+		/** Applies one planned span as a single edit on `doc`. */
+		const applyPlan = async (
+			doc: vscode.TextDocument,
+			plan: { start: number; end: number; text: string }
+		): Promise<void> => {
+			const edit = new vscode.WorkspaceEdit();
+			edit.replace(doc.uri, new vscode.Range(doc.positionAt(plan.start), doc.positionAt(plan.end)), plan.text);
+			if (!(await vscode.workspace.applyEdit(edit))) {
+				await postError('VS Code refused the copy');
+			}
+		};
+
+		/** The snapshot is older than the documents: reload before touching either. */
+		const snapshotIsStale = (
+			side: 'left' | 'right',
+			clickedDoc: vscode.TextDocument,
+			otherDoc: vscode.TextDocument
+		): boolean => {
+			const clickedPrepared = side === 'left' ? preparedLeft : preparedRight;
+			const otherPrepared = side === 'left' ? preparedRight : preparedLeft;
+			return clickedPrepared.version !== clickedDoc.version || otherPrepared.version !== otherDoc.version;
+		};
+
+		const locateCopy = (side: 'left' | 'right', key: string) => {
+			const rowIndex = current.rows.findIndex((row) => row.key === key);
+			if (rowIndex < 0) {
+				return undefined;
+			}
+			const row = current.rows[rowIndex];
+			const clickedCell = cellOn(row, side);
+			const otherCell = cellOn(row, otherSideOf(side));
+			if (clickedCell === undefined && otherCell === undefined) {
+				return undefined;
+			}
+			return { rowIndex, clickedCell, otherCell };
+		};
+
+		/** The indentation a copied element needs: its target element, else its anchor. */
+		const indentFor = (
+			targetText: string,
+			target: { start: number; end: number } | undefined,
+			anchors: { after?: { start: number; end: number }; before?: { start: number; end: number } }
+		): string => {
+			if (target !== undefined) {
+				return indentationAt(targetText, target.start);
+			}
+			if (anchors.after !== undefined) {
+				return indentationAt(targetText, anchors.after.start);
+			}
+			return anchors.before === undefined ? '' : indentationAt(targetText, anchors.before.start);
+		};
+
+		const copyDelete = async (doc: vscode.TextDocument, cell: DiffCell): Promise<void> => {
+			const plan = planDelete({
+				targetText: doc.getText(),
+				sourceText: '',
+				target: cell.range,
+				targetIndent: ''
+			});
+			if (!plan.ok) {
+				await postError(plan.reason);
+				return;
+			}
+			await applyPlan(doc, plan.span);
+		};
+
+		const copyInto = async (
+			clickedDoc: vscode.TextDocument,
+			otherDoc: vscode.TextDocument,
+			clickedCell: DiffCell,
+			otherCell: DiffCell | undefined,
+			rowIndex: number,
+			side: 'left' | 'right'
+		): Promise<void> => {
+			const targetText = otherDoc.getText();
+			const target = otherCell?.range;
+			const anchors: { after?: { start: number; end: number }; before?: { start: number; end: number } } =
+				target === undefined ? siblingAnchor(rowIndex, side) : {};
+			const plan = planCopy({
+				targetText,
+				sourceText: clickedDoc.getText(),
+				source: clickedCell.range,
+				target,
+				anchorAfter: anchors.after,
+				anchorBefore: anchors.before,
+				targetIndent: indentFor(targetText, target, anchors)
+			});
+			if (!plan.ok) {
+				await postError(plan.reason);
+				return;
+			}
+			await applyPlan(otherDoc, plan.span);
+		};
+
+		/**
+		 * One copy. `side` is where the click happened: that side's element moves to the
+		 * other side. A click on the empty side deletes the element from the side that has
+		 * it, which is how an added or removed row is resolved.
+		 */
+		const copyRow = async (side: 'left' | 'right', key: string): Promise<void> => {
+			if (!mergeMode) {
+				return;
+			}
+			const located = locateCopy(side, key);
+			if (located === undefined) {
+				return;
+			}
+			await runCopy(side, located);
+		};
+
+		const runCopy = async (
+			side: 'left' | 'right',
+			located: { rowIndex: number; clickedCell?: DiffCell; otherCell?: DiffCell }
+		): Promise<void> => {
+			const uriOf = (which: 'left' | 'right'): vscode.Uri => (which === 'left' ? leftUri : rightUri);
+			const clickedDoc = await vscode.workspace.openTextDocument(uriOf(side));
+			const otherDoc = await vscode.workspace.openTextDocument(uriOf(otherSideOf(side)));
+			if (snapshotIsStale(side, clickedDoc, otherDoc)) {
+				await askReload();
+				return;
+			}
+			if (located.clickedCell === undefined) {
+				if (located.otherCell !== undefined) {
+					await copyDelete(otherDoc, located.otherCell);
+				}
+				return;
+			}
+			await copyInto(clickedDoc, otherDoc, located.clickedCell, located.otherCell, located.rowIndex, side);
 		};
 
 		const onMatchMode = (value: unknown): void => {
@@ -342,13 +522,36 @@ export class DiffPanel {
 			}
 		};
 
-		const handleMessage = (message: DiffWebviewToProvider): void => {
+		/** Merge mode and copy intents; false when the message is not one of them. */
+		const handleMergeProtocol = (message: DiffWebviewToProvider): boolean => {
+			if (message.type === 'mergeMode') {
+				mergeMode = message.enabled === true;
+				return true;
+			}
+			if (message.type === 'copy') {
+				void copyRow(message.side, message.key);
+				return true;
+			}
+			return false;
+		};
+
+		const handleSessionMessage = (message: DiffWebviewToProvider): boolean => {
 			if (message.type === 'ready') {
 				onReady();
-				return;
+				return true;
 			}
 			if (message.type === 'matchMode') {
 				onMatchMode(message.semantic);
+				return true;
+			}
+			return false;
+		};
+
+		const handleMessage = (message: DiffWebviewToProvider): void => {
+			if (handleSessionMessage(message)) {
+				return;
+			}
+			if (handleMergeProtocol(message)) {
 				return;
 			}
 			if (message.type === 'reveal') {

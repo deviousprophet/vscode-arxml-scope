@@ -182,7 +182,7 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 		assert.ok(tab.label.startsWith('left.arxml'), tab.label);
 	});
 
-	test('the diff modules stay pure and the panel keeps no write path', () => {
+	test('the diff stays read-only outside merge mode', () => {
 		// Source-level guards for the task's hard constraints. The behavioural
 		// reveal/refresh checks live in the Extension Development Host.
 		for (const [folder, name] of [
@@ -194,22 +194,27 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 		}
 		const rowView = fs.readFileSync(path.join(repoRoot, 'src', 'webview', 'render', 'rowView.ts'), 'utf8');
 		assert.ok(!/from 'vscode'/.test(rowView), 'rowView has no vscode import');
-		const panel = fs.readFileSync(path.join(repoRoot, 'src', 'host', 'diffPanel.ts'), 'utf8');
-		assert.ok(panel.includes("mode: 'beside'"), 'reveal forces beside so the diff tab survives');
-		const diffSources = [
-			path.join(repoRoot, 'src', 'core', 'diff', 'diffModel.ts'),
-			path.join(repoRoot, 'src', 'webview', 'diffViewer.ts'),
-			path.join(repoRoot, 'src', 'webview', 'components', 'diffView', 'diffView.ts'),
-			path.join(repoRoot, 'src', 'host', 'diffPanel.ts'),
-		]
-			.map((file) => fs.readFileSync(file, 'utf8'))
-			.join('\n');
+		const panelSource = fs.readFileSync(path.join(repoRoot, 'src', 'host', 'diffPanel.ts'), 'utf8');
+		assert.ok(panelSource.includes("mode: 'beside'"), 'reveal forces beside so the diff tab survives');
+		const read = (file: string): string =>
+			fs.readFileSync(path.join(repoRoot, 'src', ...file.split('/')), 'utf8');
+		const pageSources = [
+			read('core/diff/diffModel.ts'),
+			read('webview/diffViewer.ts'),
+			read('webview/components/diffView/diffView.ts'),
+		].join('\n');
+		const mergePanel = read('host/diffPanel.ts');
 		assert.ok(
-			!/\bwriteFile(Sync)?\s*\(|\bappendFile(Sync)?\s*\(|\bnew vscode\.WorkspaceEdit\b|\bapplyEdit\s*\(/.test(
-				diffSources
-			),
-			'the diff never writes'
+			!/\bwriteFile(Sync)?\s*\(|\bappendFile(Sync)?\s*\(/.test(`${pageSources}\n${mergePanel}`),
+			'the diff never writes a file'
 		);
+		assert.ok(
+			!/\bnew vscode\.WorkspaceEdit\b|\bapplyEdit\s*\(/.test(pageSources),
+			'the page never edits a document'
+		);
+		// Merge mode is the only write path: one guard, one WorkspaceEdit.
+		assert.ok(mergePanel.includes('if (!mergeMode)'), 'a copy is refused outside merge mode');
+		assert.match(mergePanel, /new vscode\.WorkspaceEdit\(\)/, 'a copy applies one edit');
 	});
 
 	test('AC10/R19: opening the diff leaves both files byte-identical', async () => {

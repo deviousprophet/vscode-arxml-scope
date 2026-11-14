@@ -18,6 +18,8 @@ export type DiffProviderToWebview =
 	| { type: 'matchModeState'; semantic: boolean }
 	/** The refresh failed; keep the last good document and show the banner. */
 	| { type: 'error'; message: string }
+	/** Merge mode is on: the page shows copy arrows and accepts copy gestures. */
+	| { type: 'mergeMode'; enabled: boolean }
 ;
 
 /** Diff page → host. */
@@ -28,6 +30,10 @@ export type DiffWebviewToProvider =
 	| { type: 'matchMode'; semantic: boolean }
 	/** Reveal one row in its source file; `side` is the host row side (the page maps the displayed pane through `hostSide`). */
 	| { type: 'reveal'; side: 'left' | 'right'; key: string }
+	/** Turn merge mode on or off for this panel. */
+	| { type: 'mergeMode'; enabled: boolean }
+	/** Copy one row's element into the other document; `side` is the host source side. */
+	| { type: 'copy'; side: 'left' | 'right'; key: string }
 ;
 
 /** The message type, or `undefined` for a payload that is not a protocol message. */
@@ -39,5 +45,5 @@ export function diffMessageType(message: unknown): string | undefined {
 /** A host message with the diff protocol's shape; the page ignores anything else. */
 export function isDiffProviderMessage(message: unknown): message is DiffProviderToWebview {
 	const type = diffMessageType(message);
-	return type === 'document' || type === 'matchModeState' || type === 'error';
+	return type === 'document' || type === 'matchModeState' || type === 'error' || type === 'mergeMode';
 }

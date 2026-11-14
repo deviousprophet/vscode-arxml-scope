@@ -805,6 +805,70 @@ function displayStatus(row: any): any {
 function hostSide(side: 'left' | 'right'): 'left' | 'right' {
 	return swapped ? (side === 'left' ? 'right' : 'left') : side;
 }
+
+/** Merge mode: arrows are live and rows can be copied to the other pane. */
+let mergeMode = false;
+
+function applyMergeMode(enabled: boolean): void {
+	mergeMode = enabled;
+	const toggle = document.getElementById('diff-merge-toggle');
+	if (toggle !== null) {
+		toggle.setAttribute('aria-pressed', String(enabled));
+		toggle.classList.toggle('is-on', enabled);
+	}
+	if (views !== undefined) {
+		renderWindow(true);
+	}
+}
+
+function toggleMergeMode(): void {
+	applyMergeMode(!mergeMode);
+	postToHost({ type: 'mergeMode', enabled: mergeMode });
+}
+
+/**
+ * The copy arrow on a row's inner edge. It points at the other pane: right on the
+ * left pane, left on the right pane, and it follows the displayed side through Swap.
+ * A row with a cell on only one side keeps an arrow on the empty side, which deletes
+ * the element from the side that has it.
+ */
+function canCopyRow(row: DiffRow): boolean {
+	return row.status !== 'unchanged' && (row.left !== undefined || row.right !== undefined);
+}
+
+function arrowLabel(host: 'left' | 'right', own: DiffCell | undefined): string {
+	if (own === undefined) {
+		return 'Delete this element from the other side';
+	}
+	return host === 'left' ? 'Copy to the right' : 'Copy to the left';
+}
+
+function copyArrowButton(row: DiffRow, side: 'left' | 'right', host: 'left' | 'right'): HTMLButtonElement {
+	const button = document.createElement('button');
+	button.type = 'button';
+	button.className = 'diff-copy-arrow';
+	button.dataset.side = side;
+	button.textContent = host === 'left' ? '→' : '←';
+	button.setAttribute('aria-label', 'Copy to the other side');
+	button.title = arrowLabel(host, host === 'left' ? row.left : row.right);
+	button.addEventListener('click', function (event) {
+		event.stopPropagation();
+		selectKey(row.key, true);
+		postToHost({ type: 'copy', side: host, key: row.key });
+	});
+	return button;
+}
+
+function appendCopyArrow(element: HTMLElement, flat: DiffDisplayRow, side: 'left' | 'right'): void {
+	if (!mergeMode) {
+		return;
+	}
+	const row = rows[flat.rowIndex];
+	if (!canCopyRow(row)) {
+		return;
+	}
+	element.appendChild(copyArrowButton(row, side, hostSide(side)));
+}
 /** Every meta part text of one class, in display order. */
 function metaPartTexts(cell: DiffCell | undefined, cls: MetaPart['cls']): string[] {
 	if (!cell) {
@@ -1255,6 +1319,7 @@ function renderContentRow(flat: DiffDisplayRow | undefined, pane: string): HTMLE
 		return renderGapRow(flat.gap, element, cell, side);
 	}
 	fillContentRow(element, cell, flat, side, rows[flat.rowIndex]);
+	appendCopyArrow(element, flat, side);
 	return element;
 }
 
@@ -2109,6 +2174,7 @@ interface DiffKeyEvent {
 	shiftKey: boolean;
 	ctrlKey: boolean;
 	metaKey: boolean;
+	altKey: boolean;
 	target: Element;
 	preventDefault(): void;
 }
@@ -2137,7 +2203,34 @@ function handleChangeShortcut(event: DiffKeyEvent): boolean {
 	return true;
 }
 
+const COPY_SOURCE: Record<string, 'left' | 'right'> = { ArrowLeft: 'right', ArrowRight: 'left' };
+
+/** The pane a copy shortcut copies *from*, or `undefined` when it is not a copy key. */
+function copySourceSide(event: DiffKeyEvent): 'left' | 'right' | undefined {
+	if (!mergeMode || !event.altKey) {
+		return undefined;
+	}
+	return COPY_SOURCE[event.key];
+}
+
+function handleCopyShortcut(event: DiffKeyEvent): boolean {
+	const sourceDisplayed = copySourceSide(event);
+	if (sourceDisplayed === undefined) {
+		return false;
+	}
+	const key = focusedKey() ?? selectedKey;
+	if (key === undefined) {
+		return false;
+	}
+	event.preventDefault();
+	postToHost({ type: 'copy', side: hostSide(sourceDisplayed), key });
+	return true;
+}
+
 function handleGlobalShortcut(event: DiffKeyEvent): boolean {
+	if (handleCopyShortcut(event)) {
+		return true;
+	}
 	if (handleSearchShortcut(event)) {
 		return true;
 	}
@@ -2420,6 +2513,10 @@ export function handleDiffMessage(message: DiffProviderToWebview): void {
 		applyDiffDocument(message);
 		return;
 	}
+	if (message.type === 'mergeMode') {
+		applyMergeMode(message.enabled === true);
+		return;
+	}
 	handleDiffStatusMessage(message);
 }
 
@@ -2462,6 +2559,18 @@ export function mountDiff(): void {
 	window.addEventListener('message', function (event) {
 		handleDiffMessage(event.data as DiffProviderToWebview);
 	});
+	const mergeToggle = document.createElement('button');
+	mergeToggle.id = 'diff-merge-toggle';
+	mergeToggle.type = 'button';
+	mergeToggle.className = 'diff-merge-toggle';
+	mergeToggle.textContent = 'Merge';
+	mergeToggle.title = 'Merge mode: copy rows between the panes';
+	mergeToggle.setAttribute('aria-pressed', 'false');
+	mergeToggle.addEventListener('click', toggleMergeMode);
+	const titleStrip = document.getElementById('diff-title-strip');
+	if (titleStrip !== null) {
+		titleStrip.appendChild(mergeToggle);
+	}
 	mountDiffDomListeners();
 views = new DiffView({
 	onRender: function (pane) {
