@@ -16,6 +16,8 @@ use std::rc::Rc;
 
 use serde::Serialize;
 
+pub mod patch;
+
 use crate::ecuc::rows::{MetaPart, Row};
 use crate::ecuc::text::Range;
 

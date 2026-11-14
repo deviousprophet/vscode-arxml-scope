@@ -7,7 +7,7 @@
  *
  * Pure: no `vscode` import and no DOM.
  */
-import type { DiffDocument } from '../../core/diff/diffModel';
+import type { DiffDocument, DiffRow, DiffSummary } from '../../core/diff/diffModel';
 import type { EcucRow } from '../../core/ecuc/renderRows';
 import { EXPECTED_PROTOCOL, type EngineClient } from './engineClient';
 
@@ -59,6 +59,31 @@ export interface EngineDiffOptions {
 	semanticPairBudget?: number;
 }
 
+/** The text change one copy applied, in UTF-16 offsets. */
+export interface EngineDiffEdit {
+	side: 'left' | 'right';
+	start: number;
+	end: number;
+	text: string;
+}
+
+/** The rows one copy changed, plus what a row replacement cannot carry. */
+export interface EngineDiffPatch {
+	at: number;
+	remove: number;
+	rows: DiffRow[];
+	ancestors: DiffRow[];
+	shift?: { side: 'left' | 'right'; after: number; by: number };
+	summary: DiffSummary;
+	semanticSkipped: number;
+}
+
+export interface EngineDiffPatchResult {
+	patch?: EngineDiffPatch;
+	/** Why the engine cannot patch; the host rebuilds instead. */
+	reason?: string;
+}
+
 export interface EngineTextChange {
 	start: number;
 	end: number;
@@ -80,6 +105,12 @@ export interface CoreEngine {
 		right: EngineDiffSide,
 		options?: EngineDiffOptions
 	): Promise<DiffDocument>;
+	/** The rows one copy changed, or the reason a full rebuild is required. */
+	patchDiff(
+		left: EngineDiffSide,
+		right: EngineDiffSide,
+		edit: EngineDiffEdit
+	): Promise<EngineDiffPatchResult>;
 	closeDocument(docId: number): Promise<void>;
 	/** A side-effect-free probe used by diagnostics and tests. */
 	engineVersion(): string;
@@ -136,6 +167,14 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 				.filter((chunk) => chunk.body.length > 0)
 				.flatMap((chunk) => parseJson<DiffDocument['rows']>(chunk));
 			return { ...(envelope as Omit<DiffDocument, 'rows'>), rows };
+		},
+		patchDiff: async (left, right, edit) => {
+			const answer = await client.request('diff.patch', { left, right, edit }, undefined, 120_000);
+			if (answer.header.patch === true) {
+				const patch = JSON.parse(answer.body.toString('utf8')) as EngineDiffPatch;
+				return { patch };
+			}
+			return { reason: typeof answer.header.reason === 'string' ? answer.header.reason : 'unknown' };
 		},
 		closeDocument: async (docId) => {
 			if (client.isClosed) {

@@ -111,6 +111,16 @@ strictly — so M2 added `src/test/fixtures/semantic/`:
 | `large.left/right` | 600 x 600 under one definition is above the pair limit, so the fallback pairs all 600 with `fallback: true` |
 | `embed` at budget 1 | `semanticSkipped: 8`, `semanticLimitReason: "budget"` |
 
+## Copy patch result (M5, 2026-11-14)
+
+`diff.patch` answers with the changed child block, the ancestor rows that moved, the
+offset shift and the counters: 170 rows instead of 73 884 on the 26 MiB pair, at 411 ms
+against 893 ms for a full compute. The 50 ms gate is not met; the remaining work is a
+subtree-local rebuild rather than a whole-document one.
+
+The shift is not optional: ranges are absolute, so every node after the edit moves. A
+span-only patch failed its equality tests until `shift {side, after, by}` was added.
+
 Floating-point parity relies on writing the score expression in the TypeScript order;
 both languages use binary64, so equal order gives equal bits. Tie-breaks use `str::cmp`
 where the oracle uses `localeCompare`; no fixture has hit a tie that needs ICU collation,

@@ -22,6 +22,7 @@ import {
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { FileLabel, compareTitle } from '../core/diff/diffModel';
 import type { DiffCell, DiffDocument } from '../core/diff/diffModel';
+import { applyDiffPatch } from '../core/diff/diffPatch';
 import type { CoreEngine, EngineDiffSide } from './engine/coreEngine';
 import { diffShell } from './webviewShell';
 import { fileName } from './compareSelection';
@@ -439,15 +440,64 @@ export class DiffPanel {
 			}
 		};
 
+		/** The change events the host caused itself, so a copy does not schedule a rebuild. */
+		const refreshSkip = new Set<string>();
+
+		/**
+		 * One copy reaches the engine as the same edit it applied: `doc.update` moves
+		 * the engine text, `diff.patch` answers with the changed rows. A refusal falls
+		 * back to the debounced rebuild with a notice.
+		 */
+		const patchAfterCopy = async (
+			side: 'left' | 'right',
+			plan: { start: number; end: number; text: string },
+			doc: vscode.TextDocument
+		): Promise<void> => {
+			const docId = side === 'left' ? preparedLeft.docId : preparedRight.docId;
+			try {
+				await engine.updateDocument(docId, [{ start: plan.start, end: plan.end, text: plan.text }]);
+				const result = await engine.patchDiff(
+					engineSide(preparedLeft, leftLabel),
+					engineSide(preparedRight, rightLabel),
+					{ side, start: plan.start, end: plan.end, text: plan.text }
+				);
+				if (result.patch !== undefined) {
+					current = applyDiffPatch(current, result.patch);
+					await panel.webview.postMessage({ type: 'documentPatch', patch: result.patch });
+					return;
+				}
+				await postError(`The comparison was rebuilt after this copy (${result.reason ?? 'unknown'}).`);
+			} catch (error) {
+				await postError(`The comparison was rebuilt after this copy: ${errorMessage(error)}`);
+			}
+			await refreshNow();
+		};
+
 		/** Applies one planned span as a single edit on `doc`. */
 		const applyPlan = async (
 			doc: vscode.TextDocument,
 			plan: { start: number; end: number; text: string }
 		): Promise<void> => {
+			const side: 'left' | 'right' = doc.uri.toString() === leftUri.toString() ? 'left' : 'right';
 			const edit = new vscode.WorkspaceEdit();
 			edit.replace(doc.uri, new vscode.Range(doc.positionAt(plan.start), doc.positionAt(plan.end)), plan.text);
+			refreshSkip.add(doc.uri.toString());
 			if (!(await vscode.workspace.applyEdit(edit))) {
+				refreshSkip.delete(doc.uri.toString());
 				await postError('VS Code refused the copy');
+				return;
+			}
+			// The panel's snapshot now reflects the edit it made.
+			if (side === 'left') {
+				preparedLeft = { ...preparedLeft, version: doc.version };
+			} else {
+				preparedRight = { ...preparedRight, version: doc.version };
+			}
+			try {
+				await patchAfterCopy(side, plan, doc);
+			} finally {
+				// If the edit produced no change event, do not swallow the next one.
+				refreshSkip.delete(doc.uri.toString());
 			}
 		};
 
@@ -759,10 +809,14 @@ ${indent}` };
 		disposables.push(
 			vscode.workspace.onDidChangeTextDocument((event) => {
 				const changed = event.document.uri.toString();
-				if (changed === leftUri.toString() || changed === rightUri.toString()) {
-					void postLabels();
-					scheduleRefresh();
+				if (changed !== leftUri.toString() && changed !== rightUri.toString()) {
+					return;
 				}
+				void postLabels();
+				if (refreshSkip.delete(changed)) {
+					return;
+				}
+				scheduleRefresh();
 			})
 		);
 

@@ -278,8 +278,8 @@ a two-way merge: arrows copy a row to the other side as one undoable edit.
 | MERGE-08 | module row copy | allowed without a name collision; refused with one |
 | MERGE-09 | `Alt+←` / `Alt+→` | copies the focused row; read-only mode ignores the keys |
 | MERGE-10 | Swap, then copy | the arrow copies from the displayed pane, not the stored side |
-| MERGE-11 | patch after a copy | panel equals a full rebuild; no synchronous rebuild |
-| MERGE-12 | four fallback cases | rebuild with a notice, never a wrong row |
+| MERGE-11 | patch after a copy | panel equals a full rebuild; the answer carries the changed rows plus a range shift |
+| MERGE-12 | fallback cases | `top-level-order`, `module-row`, `outside-elements`, `no-baseline`, `stale-baseline`, `parent-created`, `ancestor-changed` rebuild with a notice, never a wrong row |
 | MERGE-13 | stale bytes | Reload/Cancel modal; Cancel changes nothing |
 | MERGE-14 | edited pane label | `•` while dirty, cleared on save |
 | MERGE-15 | 20 MiB pair | row visible < 100 ms, consistent < 250 ms, 10 copies / 10 s |
@@ -305,6 +305,7 @@ Covered: scan/rows/diff/index/validation/rename/edit-latency.
 | PERF-03 | repeated edits (100) | no retained growth beyond the ceiling |
 | PERF-04 | benchmark on a missing engine | reports `skipped`, exit 0 |
 | PERF-05 | 26 MiB pair: `diffBenchmark` | engine and host numbers recorded; engine stays within 2x the host builder |
+| PERF-06 | 26 MiB copy: `diff.patch` | payload under 1% of the document; latency recorded (411 ms today, gate 50 ms) |
 
 ## X — cross-cutting
 

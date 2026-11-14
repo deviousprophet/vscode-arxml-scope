@@ -121,6 +121,33 @@ const diffRows = diffChunks
 const envelope = diffChunks.map((chunk) => chunk.header.document).find(Boolean);
 const diffOk = Boolean(envelope) && diffRows.length === envelope.summary.changed + envelope.summary.added + envelope.summary.removed + envelope.summary.unchanged;
 
+// One copy: move the engine text with the same edit the host applied, then ask for
+// the rows it changed instead of the whole document.
+const leftSource = readFileSync(fixture, 'utf8');
+const valueAt = leftSource.indexOf('<VALUE>');
+const valueEnd = leftSource.indexOf('</VALUE>', valueAt);
+const valueStart = valueAt + '<VALUE>'.length;
+const replacement = leftSource.slice(valueStart, valueEnd) === '0' ? '1' : '0';
+await request('doc.update', {
+	docId,
+	edits: [{ start: valueStart, end: valueEnd, text: replacement }]
+});
+const [patchAnswer] = await request(
+	'diff.patch',
+	{
+		left: { docId, name: 'basic.arxml', path: fixture },
+		right: { docId: other.header.docId, name: 'deep.arxml', path: otherPath },
+		edit: { side: 'left', start: valueStart, end: valueEnd, text: replacement }
+	},
+	undefined,
+	60000
+);
+const patch =
+	patchAnswer.header.patch === true
+		? JSON.parse(patchAnswer.body.toString('utf8'))
+		: undefined;
+const patchOk = patch !== undefined && Array.isArray(patch.rows) && patch.at >= 0;
+
 await request('shutdown');
 const exitCode = await new Promise((resolve) => child.on('exit', resolve));
 console.log(
@@ -132,8 +159,11 @@ console.log(
 		planned,
 		diffRows: diffRows.length,
 		diffOk,
+		patchRows: patch === undefined ? 0 : patch.rows.length,
+		patchReason: patchAnswer.header.reason,
+		patchOk,
 		exitCode,
 		loadMs: Math.round(performance.now() - started)
 	})
 );
-process.exit(exitCode === 0 && planned === 1 && diffOk ? 0 : 1);
+process.exit(exitCode === 0 && planned === 1 && diffOk && patchOk ? 0 : 1);

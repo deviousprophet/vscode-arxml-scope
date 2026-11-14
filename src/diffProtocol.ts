@@ -7,6 +7,7 @@
  * mode request and a reveal intent.
  */
 import type { DiffDocument } from './core/diff/diffModel';
+import type { DiffPatch } from './core/diff/diffPatch';
 
 export type { DiffDocument } from './core/diff/diffModel';
 
@@ -22,6 +23,8 @@ export type DiffProviderToWebview =
 	| { type: 'mergeMode'; enabled: boolean }
 	/** A buffer was edited or saved: the pane labels gained or lost their dirty marker. */
 	| { type: 'labels'; labels: [string, string] }
+	/** A copy was answered with the rows it changed, not the whole document. */
+	| { type: 'documentPatch'; patch: DiffPatch }
 ;
 
 /** Diff page → host. */
@@ -52,6 +55,7 @@ export function isDiffProviderMessage(message: unknown): message is DiffProvider
 		type === 'matchModeState' ||
 		type === 'error' ||
 		type === 'mergeMode' ||
-		type === 'labels'
+		type === 'labels' ||
+		type === 'documentPatch'
 	);
 }

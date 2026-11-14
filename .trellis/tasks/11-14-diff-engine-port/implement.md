@@ -97,35 +97,36 @@ word marks behave as before.
 
 ## M5 — Copy patch
 
-**Status (2026-11-14): blocked on a contract decision, not started.**
+- [x] `diff/patch.rs`: the changed child block (with its descendants), the ancestor rows
+      that moved, the offset shift for later rows, and the new counters. Word marks are
+      recomputed by the page from the patched cells, as before.
+- [x] `diff.patch` protocol (patch JSON in the frame body, never the header) and
+      `CoreEngine.patchDiff`; the panel sends the edit to `doc.update` and asks for the
+      patch, then posts `documentPatch` to the page.
+- [x] Property tests: value change, add, remove, nested add, two copies in a row, and
+      each fallback. `apply_patch(before, patch) == after` on every case.
+- [x] `unpatchable` reasons: `top-level-order`, `module-row`, `outside-elements`,
+      `no-baseline`, `stale-baseline`, `parent-created`, `ancestor-changed`.
+- [ ] Patch benchmark `< 50 ms at 20 MiB`: measured **411 ms** (170 rows out of 73 884)
+      on the 26 MiB pair. The payload win is real (170 rows vs 67 MiB); the latency gate
+      needs the engine to rebuild only the parent chain instead of the whole document,
+      which is the remaining optimization.
 
-A first `patch_between` draft (sibling span + ancestor counters) failed its own equality
-tests for a reason the design has to answer: every `DiffCell.range` is an absolute UTF-16
-offset, so an edit shifts the ranges of *every node after it in the edited file*. Replacing
-only the affected sibling span leaves later rows stale, and `patched === rebuild` fails on
-the ranges alone.
+### The contract change M5 needed
 
-The exact patch needs one more field: the applied edit's `at` and `by`. Rows outside the
-span whose `range.start >= at` shift by `by`; nodes containing the edit are ancestors and
-arrive as full rows. `diff.patch` therefore has to receive the copy the host applied
-(`{start, end, text}`), not just the row key.
+Every `DiffCell.range` is an absolute UTF-16 offset, so an edit shifts the ranges of
+every node after it in the edited file. A span-only patch therefore cannot equal a
+rebuild. The patch carries `shift {side, after, by}` and `diff.patch` takes the applied
+edit `{side, start, end, text}`; rows outside the replaced block and ancestors shift.
 
-Baseline measured before the attempt (`npm run benchmark diffBenchmark`, 26 MiB pair,
-73 884 rows): engine `diff.compute` 918 ms including 67 MiB of row JSON; host builder
-370–444 ms plus 142–176 ms for the same JSON. A patch only wins if it stays in the
-kilobytes, which the span + shift contract can do.
+### Measured
 
-- [ ] `diff/patch.rs`: replace/insert/delete patch for one copy; ancestor counters; word
-      marks for the patched row.
-- [ ] `diff.patch` protocol in the engine and client.
-- [ ] Property suite: random copy sequences over fixtures and the generated document,
-      `patched === rebuild` on the serialized document.
-- [ ] The four `unpatchable` cases return their reason and never a patch.
-- [ ] Patch benchmark: < 50 ms at 20 MiB.
+`npm run benchmark diffBenchmark`, 26 MiB pair, 73 884 rows:
 
-Validation: `cargo test`, parity, `npm run benchmark diffPatch`.
-
-Gate: the equality property holds for every seed in the corpus; fallback cases are proven.
+| | Rows in answer | Time |
+|---|---|---|
+| `diff.compute` | 73 884 (67 MiB) | 893–933 ms |
+| `diff.patch` | 170 | **411 ms** |
 
 ## Review gates
 

@@ -13,7 +13,10 @@ use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use arxml_core::diff::{build_diff_document, DiffHeader, DiffOptions, DiffSide, FileLabel};
+use arxml_core::diff::patch::{patch_between, AppliedEdit, PatchOutcome, PatchSide};
+use arxml_core::diff::{
+    build_diff_document, DiffDocument, DiffHeader, DiffOptions, DiffSide, FileLabel,
+};
 use arxml_core::ecuc::{edit, Document, RowOptions};
 use serde_json::{json, Value};
 
@@ -73,15 +76,29 @@ fn write_frame(out: &mut impl Write, header: &Value, body: &[u8]) -> io::Result<
     out.flush()
 }
 
+/// The document `diff.patch` measures against, plus the text lengths it saw.
+struct DiffBaseline {
+    left_id: u32,
+    right_id: u32,
+    left_header: Value,
+    right_header: Value,
+    left_len: usize,
+    right_len: usize,
+    options: DiffOptions,
+    document: DiffDocument,
+}
+
 struct Engine {
     documents: HashMap<u32, Document>,
     next_document: u32,
+    last_diff: Option<DiffBaseline>,
 }
 
 fn main() {
     let mut engine = Engine {
         documents: HashMap::new(),
         next_document: 1,
+        last_diff: None,
     };
     let stdin = io::stdin();
     let mut input = stdin.lock();
@@ -164,6 +181,7 @@ impl Engine {
             "doc.node" => self.node(id, &mut out, header),
             "doc.model" => self.model(id, &mut out, header),
             "diff.compute" => self.diff_compute(id, &mut out, header),
+            "diff.patch" => self.diff_patch(id, &mut out, header),
             other => Err(format!("unknown operation {other}")),
         }
     }
@@ -388,29 +406,15 @@ fn diff_side(header: &Value, document: &Document) -> Result<(FileLabel, DiffHead
 }
 
 impl Engine {
-    fn diff_compute(
-        &mut self,
-        id: u64,
-        out: &mut impl Write,
-        header: &Value,
-    ) -> Result<(), String> {
-        let left_header = header.get("left").ok_or("left is required")?;
-        let right_header = header.get("right").ok_or("right is required")?;
-        let left_id = left_header
-            .get("docId")
-            .and_then(Value::as_u64)
-            .ok_or("left.docId is required")? as u32;
-        let right_id = right_header
-            .get("docId")
-            .and_then(Value::as_u64)
-            .ok_or("right.docId is required")? as u32;
-        let options: DiffOptions = header
-            .get("options")
-            .cloned()
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|error| error.to_string())?
-            .unwrap_or_default();
+    /// Builds the diff for two open documents; the shared half of compute and patch.
+    fn diff_document(
+        &self,
+        left_id: u32,
+        right_id: u32,
+        left_side: &Value,
+        right_side: &Value,
+        options: &DiffOptions,
+    ) -> Result<DiffDocument, String> {
         let left = self
             .documents
             .get(&left_id)
@@ -419,11 +423,11 @@ impl Engine {
             .documents
             .get(&right_id)
             .ok_or("unknown right document")?;
-        let (left_label, left_inner) = diff_side(left_header, left)?;
-        let (right_label, right_inner) = diff_side(right_header, right)?;
+        let (left_label, left_inner) = diff_side(left_side, left)?;
+        let (right_label, right_inner) = diff_side(right_side, right)?;
         let left_lookup = |id: &str| left.index().get(id).map(|entry| entry.range);
         let right_lookup = |id: &str| right.index().get(id).map(|entry| entry.range);
-        let document = build_diff_document(
+        Ok(build_diff_document(
             DiffSide {
                 label: left_label,
                 header: left_inner,
@@ -436,39 +440,190 @@ impl Engine {
                 rows: right.rows(),
                 range: &right_lookup,
             },
-            &options,
-        );
-        let total = document.rows.len();
-        let mut seq = 0usize;
-        // Row frames never carry the last flag: the envelope is the last frame, so a
-        // client that resolves on the final chunk always has the headers and summary.
-        for chunk in document.rows.chunks(ROWS_PER_CHUNK) {
-            let body = serde_json::to_vec(chunk).map_err(|error| error.to_string())?;
-            write_frame(
-                out,
-                &json!({"id": id, "ok": true, "chunk": {"seq": seq, "last": false, "total": total}}),
-                &body,
-            )
-            .map_err(|error| error.to_string())?;
-            seq += chunk.len();
-        }
-        let envelope = json!({
-            "id": id,
-            "ok": true,
-            "chunk": {"seq": total, "last": true, "total": total},
-            "document": {
-                "left": document.left,
-                "right": document.right,
-                "leftHeader": document.left_header,
-                "rightHeader": document.right_header,
-                "labels": document.labels,
-                "summary": document.summary,
-                "semanticSkipped": document.semantic_skipped,
-                "semanticLimitReason": document.semantic_limit_reason,
-            }
-        });
-        write_frame(out, &envelope, &[]).map_err(|error| error.to_string())
+            options,
+        ))
     }
+
+    fn diff_compute(
+        &mut self,
+        id: u64,
+        out: &mut impl Write,
+        header: &Value,
+    ) -> Result<(), String> {
+        let left_side = header.get("left").cloned().ok_or("left is required")?;
+        let right_side = header.get("right").cloned().ok_or("right is required")?;
+        let left_id = left_side
+            .get("docId")
+            .and_then(Value::as_u64)
+            .ok_or("left.docId is required")? as u32;
+        let right_id = right_side
+            .get("docId")
+            .and_then(Value::as_u64)
+            .ok_or("right.docId is required")? as u32;
+        let options: DiffOptions = header
+            .get("options")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| error.to_string())?
+            .unwrap_or_default();
+        let document = self.diff_document(left_id, right_id, &left_side, &right_side, &options)?;
+        self.last_diff = Some(DiffBaseline {
+            left_id,
+            right_id,
+            left_header: left_side,
+            right_header: right_side,
+            left_len: self
+                .documents
+                .get(&left_id)
+                .map(Document::text_len)
+                .unwrap_or(0),
+            right_len: self
+                .documents
+                .get(&right_id)
+                .map(Document::text_len)
+                .unwrap_or(0),
+            options,
+            document,
+        });
+        let baseline = self.last_diff.as_ref().expect("just stored");
+        stream_diff(out, id, &baseline.document)
+    }
+
+    /// One copy later: return the rows it changed, or why a rebuild is required.
+    fn diff_patch(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let left_side = header.get("left").ok_or("left is required")?;
+        let right_side = header.get("right").ok_or("right is required")?;
+        let left_id = left_side
+            .get("docId")
+            .and_then(Value::as_u64)
+            .ok_or("left.docId is required")? as u32;
+        let right_id = right_side
+            .get("docId")
+            .and_then(Value::as_u64)
+            .ok_or("right.docId is required")? as u32;
+        let edit = header.get("edit").ok_or("edit is required")?;
+        let side = match edit.get("side").and_then(Value::as_str) {
+            Some("left") => PatchSide::Left,
+            Some("right") => PatchSide::Right,
+            _ => return Err("edit.side must be left or right".to_string()),
+        };
+        let start = edit
+            .get("start")
+            .and_then(Value::as_u64)
+            .ok_or("edit.start is required")? as u32;
+        let end = edit
+            .get("end")
+            .and_then(Value::as_u64)
+            .ok_or("edit.end is required")? as u32;
+        if end < start {
+            return Err("edit.end is before edit.start".to_string());
+        }
+        let text = edit.get("text").and_then(Value::as_str).unwrap_or("");
+        let by = arxml_core::ecuc::text::utf16_len(text) as i64 - (end - start) as i64;
+        let Some(baseline) = self.last_diff.take() else {
+            return unpatchable(out, id, "no-baseline");
+        };
+        if baseline.left_id != left_id || baseline.right_id != right_id {
+            return unpatchable(out, id, "no-baseline");
+        }
+        // The engine's text must have advanced by exactly the edit the host reports;
+        // anything else means a change slipped past the panel.
+        let left_len = self
+            .documents
+            .get(&left_id)
+            .map(Document::text_len)
+            .unwrap_or(0) as i64;
+        let right_len = self
+            .documents
+            .get(&right_id)
+            .map(Document::text_len)
+            .unwrap_or(0) as i64;
+        let expected_left = match side {
+            PatchSide::Left => baseline.left_len as i64 + by,
+            PatchSide::Right => baseline.left_len as i64,
+        };
+        let expected_right = match side {
+            PatchSide::Right => baseline.right_len as i64 + by,
+            PatchSide::Left => baseline.right_len as i64,
+        };
+        if left_len != expected_left || right_len != expected_right {
+            self.last_diff = Some(baseline);
+            return unpatchable(out, id, "stale-baseline");
+        }
+        let rebuilt = self.diff_document(
+            left_id,
+            right_id,
+            &baseline.left_header,
+            &baseline.right_header,
+            &baseline.options,
+        )?;
+        let applied = AppliedEdit {
+            side,
+            start,
+            end,
+            by,
+        };
+        match patch_between(&baseline.document, &rebuilt, applied) {
+            PatchOutcome::Patch(patch) => {
+                // The next copy measures against the rebuilt document.
+                self.last_diff = Some(DiffBaseline {
+                    document: rebuilt,
+                    ..baseline
+                });
+                // The patch is row data, so it travels in the body, not the header.
+                let body = serde_json::to_vec(&patch).map_err(|error| error.to_string())?;
+                write_frame(out, &json!({"id": id, "ok": true, "patch": true}), &body)
+                    .map_err(|error| error.to_string())
+            }
+            PatchOutcome::Unpatchable(reason) => {
+                self.last_diff = Some(baseline);
+                unpatchable(out, id, reason)
+            }
+        }
+    }
+}
+
+fn unpatchable(out: &mut impl Write, id: u64, reason: &str) -> Result<(), String> {
+    write_frame(
+        out,
+        &json!({"id": id, "ok": true, "patch": Value::Null, "reason": reason}),
+        &[],
+    )
+    .map_err(|error| error.to_string())
+}
+
+/// Row frames never carry the last flag: the envelope is the last frame, so a client
+/// that resolves on the final chunk always has the headers and summary.
+fn stream_diff(out: &mut impl Write, id: u64, document: &DiffDocument) -> Result<(), String> {
+    let total = document.rows.len();
+    let mut seq = 0usize;
+    for chunk in document.rows.chunks(ROWS_PER_CHUNK) {
+        let body = serde_json::to_vec(chunk).map_err(|error| error.to_string())?;
+        write_frame(
+            out,
+            &json!({"id": id, "ok": true, "chunk": {"seq": seq, "last": false, "total": total}}),
+            &body,
+        )
+        .map_err(|error| error.to_string())?;
+        seq += chunk.len();
+    }
+    let envelope = json!({
+        "id": id,
+        "ok": true,
+        "chunk": {"seq": total, "last": true, "total": total},
+        "document": {
+            "left": document.left,
+            "right": document.right,
+            "leftHeader": document.left_header,
+            "rightHeader": document.right_header,
+            "labels": document.labels,
+            "summary": document.summary,
+            "semanticSkipped": document.semantic_skipped,
+            "semanticLimitReason": document.semantic_limit_reason,
+        }
+    });
+    write_frame(out, &envelope, &[]).map_err(|error| error.to_string())
 }
 
 fn doc_id(header: &Value) -> Result<u32, String> {

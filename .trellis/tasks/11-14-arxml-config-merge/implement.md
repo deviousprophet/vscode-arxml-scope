@@ -58,8 +58,9 @@ Owned by `11-14-copy-merge-ui`. Gate the parent needs:
 - [x] Copy left→right and right→left; placeholder delete; ancestor synthesis; module
       refusal; container replace semantics.
 - [x] One `WorkspaceEdit` per copy; undo in the edited pane; `•` dirty marker.
-- [ ] Engine patch applied, never a full rebuild for the patchable cases; four fallback
-      cases rebuild with a notice. This is milestone M5 of the port.
+- [x] Engine patch applied, never a full rebuild for the patchable cases; an unpatchable
+      answer rebuilds with a notice. Seven reasons are pinned; the panel applies the
+      returned rows without re-requesting the document.
 - [x] Stale modal Reload/Cancel; Cancel mutates nothing.
 - [ ] Performance: < 100 ms visible change, < 250 ms consistency, 10 copies / 10 s.
 

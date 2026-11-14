@@ -16,6 +16,7 @@ import {
 	type DiffDisplayRow,
 } from '../core/diff/diffModel';
 import { diffWords, type WordPair } from '../core/diff/wordDiff';
+import { applyDiffPatch } from '../core/diff/diffPatch';
 import type { MetaPart } from '../core/ecuc/renderRows';
 import { buildOffsets, totalHeightOf } from './render/virtualScroll';
 import {
@@ -2520,6 +2521,12 @@ export function handleDiffMessage(message: DiffProviderToWebview): void {
 	if (message.type === 'labels') {
 		diffDocument.labels = message.labels;
 		renderHeaders();
+		return;
+	}
+	if (message.type === 'documentPatch') {
+		renderKeepingAnchor(function () {
+			setDocument(applyDiffPatch(diffDocument, message.patch));
+		});
 		return;
 	}
 	handleDiffStatusMessage(message);

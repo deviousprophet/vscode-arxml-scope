@@ -130,6 +130,28 @@ async function main(): Promise<void> {
 		const right = await openSide(client, 'right.arxml', rightText);
 		const strict = await computeOnce(client, left.docId, right.docId, false);
 		const semantic = await computeOnce(client, left.docId, right.docId, true);
+		// One copy: the same edit the host applies, then `diff.patch`.
+		const valueAt = leftText.indexOf('<VALUE>');
+		const valueStart = valueAt + '<VALUE>'.length;
+		const valueEnd = leftText.indexOf('</VALUE>', valueAt);
+		const replacement = `${leftText.slice(valueStart, valueEnd)}7`;
+		await client.request('doc.update', {
+			docId: left.docId,
+			edits: [{ start: valueStart, end: valueEnd, text: replacement }]
+		});
+		const patchStarted = performance.now();
+		const [patchAnswer] = await client.requestStream(
+			'diff.patch',
+			{
+				left: { docId: left.docId, name: 'left.arxml', path: '/synthetic/left.arxml' },
+				right: { docId: right.docId, name: 'right.arxml', path: '/synthetic/right.arxml' },
+				edit: { side: 'left', start: valueStart, end: valueEnd, text: replacement }
+			},
+			undefined,
+			300_000
+		);
+		const patchMs = round(performance.now() - patchStarted);
+		const patch = patchAnswer.header.patch === true ? (JSON.parse(patchAnswer.body.toString('utf8')) as { rows: unknown[] }) : undefined;
 		await client.request('shutdown');
 		const hostStrict = hostDocument(leftText, rightText, false);
 		const hostSemantic = hostDocument(leftText, rightText, true);
@@ -141,7 +163,12 @@ async function main(): Promise<void> {
 			engine: {
 				openMs: left.openMs + right.openMs,
 				strict,
-				semantic
+				semantic,
+				patch: {
+					elapsedMs: patchMs,
+					rows: patch === null || patch === undefined ? 0 : patch.rows.length,
+					reason: patchAnswer.header.reason
+				}
 			},
 			hostToday: { strict: hostStrict, semantic: hostSemantic },
 			retainedMiB: round(retainedBytes() / 1048576)

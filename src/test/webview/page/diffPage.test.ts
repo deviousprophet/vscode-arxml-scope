@@ -722,6 +722,31 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('a copy patch replaces rows without a full document message', () => {
+		const source = documentOf();
+		const { dom } = mount(source);
+		try {
+			const at = source.rows.findIndex((row) => row.kind === 'parameter' && row.left !== undefined && row.right !== undefined);
+			assert.ok(at >= 0, 'the fixture has a paired parameter');
+			const target = source.rows[at];
+			dom.post({
+				type: 'documentPatch',
+				patch: {
+					at,
+					remove: 1,
+					rows: [{ ...target, left: { ...target.left!, label: 'Copied' } }],
+					ancestors: [],
+					summary: source.summary,
+					semanticSkipped: 0
+				}
+			});
+			const text = dom.document.getElementById('diff-pane-left')!.textContent || '';
+			assert.ok(text.includes('Copied'), 'the patched row is on screen');
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('1200 rows are windowed by the shared virtual math', () => {
 		const rows: DiffRow[] = Array.from({ length: 1200 }, (_, at) => windowDiffRow(at));
 		const { dom } = mount({
