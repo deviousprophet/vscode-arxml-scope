@@ -19,6 +19,10 @@ jobs:
       - name: Run Fallow Analysis
         uses: fallow-rs/fallow@v3
         with:
+          # Pin the CLI: the action selects its own code, not the CLI version. Without
+          # this it installs the latest release, and 3.43.0 fails the action's binary
+          # verification on this runner ("@fallow-cli/linux-x64-musl not installed").
+          version: '3.42.0'
           config: .fallowrc.json
           format: sarif
           # The repository still carries a pre-existing backlog, so keep the
