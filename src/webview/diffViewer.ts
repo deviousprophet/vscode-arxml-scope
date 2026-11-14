@@ -6,9 +6,11 @@
  * primitives and window math are imported from their one owner, so the editor
  * and the diff cannot disagree about a label, a value or a spacer.
  */
+import './components/mergeBar/mergeBar.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import type { DiffCell, DiffDocument, DiffHeader, DiffRow } from '../core/diff/diffModel';
+import type { MergeViewState } from '../diffProtocol';
 import {
 	diffVisibility,
 	flattenDiffDocument,
@@ -31,6 +33,7 @@ import type {
 	DocumentTreeLineInfo,
 	DocumentTreeView,
 } from './components/documentTree/documentTreeView';
+import { MergeBar } from './components/mergeBar/mergeBar';
 import { DiffToolbar } from './components/toolbar/toolbar';
 import type { SearchBar } from './components/searchBar/searchBar';
 import { RowSearchEngine } from './render/rowSearch';
@@ -177,6 +180,9 @@ function emptyDiffDocument(): DiffDocument {
 let diffDocument: DiffDocument = emptyDiffDocument();
 let rows: DiffRow[] = [];
 let semanticMatching = true;
+/** The merge strip and the host's last merge state; `undefined` for a plain diff. */
+let mergeBar: MergeBar | undefined;
+let mergeState: MergeViewState | undefined;
 /** Unchanged rows kept above and below each change in Show diff. */
 const CONTEXT_LINES = 5;
 /** Accessible description for a collapsed container with hidden changes. */
@@ -2420,6 +2426,11 @@ export function handleDiffMessage(message: DiffProviderToWebview): void {
 		applyDiffDocument(message);
 		return;
 	}
+	if (message.type === 'merge') {
+		mergeState = message.state;
+		mergeBar?.setState(mergeState);
+		return;
+	}
 	handleDiffStatusMessage(message);
 }
 
@@ -2448,6 +2459,15 @@ function showDiffError(message: string): void {
 	notice.dataset.kind = 'warn';
 }
 
+/** Cycles the merge strip through its conflicts, wrapping at both ends. */
+function cycleConflict(step: number): void {
+	const total = mergeState?.conflicts.length ?? 0;
+	if (total === 0 || mergeBar === undefined) {
+		return;
+	}
+	mergeBar.setIndex((mergeBar.currentIndex + step + total) % total);
+}
+
 export function mountDiff(): void {
 	resetDiffState();
 	list = document.getElementById('diff-list');
@@ -2462,6 +2482,22 @@ export function mountDiff(): void {
 	window.addEventListener('message', function (event) {
 		handleDiffMessage(event.data as DiffProviderToWebview);
 	});
+	mergeBar = new MergeBar(document, {
+		onPrev: function () { cycleConflict(-1); },
+		onNext: function () { cycleConflict(1); },
+		onAccept: function (side) {
+			const conflict = mergeState?.conflicts[mergeBar?.currentIndex ?? 0];
+			if (conflict !== undefined) {
+				postToHost({ type: 'mergeResolve', nodeId: conflict.nodeId, side });
+			}
+		},
+		onWrite: function () { postToHost({ type: 'mergeWrite' }); }
+	});
+	mergeBar.mount();
+	const barElement = mergeBar.element;
+	if (barElement !== undefined && notice.parentNode !== null) {
+		notice.parentNode.insertBefore(barElement, notice.nextSibling);
+	}
 	mountDiffDomListeners();
 views = new DiffView({
 	onRender: function (pane) {

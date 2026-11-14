@@ -1,5 +1,11 @@
 # Editor Session and Protocol Code-Spec
 
+A third flow reuses the diff surface in merge mode: the merge command plans a
+three-way merge and opens the panel with a `MergeController`. The panel posts
+`{type:'merge', state}` after `document`, and forwards `mergeResolve` and
+`mergeWrite`; the controller owns the plan and the write. Without a controller the
+panel is the read-only diff it always was.
+
 Two independent webview surfaces use the same static-shell + `postMessage` pattern:
 
 - the ECUC custom text editor (`EcucEditorProvider`, `VIEW_TYPE = 'vscode-arxml-scope.ecucEditor'`);

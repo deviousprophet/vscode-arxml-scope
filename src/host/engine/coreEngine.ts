@@ -45,6 +45,17 @@ export interface EngineRowPatch {
 	structural: boolean;
 }
 
+/** One node of the merge index: identity, placement, element span and own-field digest. */
+export interface EngineMergeNode {
+	id: string;
+	kind: string;
+	path: string;
+	parentId: string | null;
+	order: number;
+	range: { start: number; end: number };
+	ownDigest: string;
+}
+
 export interface EngineTextChange {
 	start: number;
 	end: number;
@@ -60,6 +71,10 @@ export interface CoreEngine {
 	planEdit(docId: number, request: EngineEditRequest): Promise<EngineEditPlan>;
 	/** Applies text changes; `patch` is absent when the answer was not a row patch. */
 	updateDocument(docId: number, edits: readonly EngineTextChange[]): Promise<EngineRowPatch | undefined>;
+	/** One entry per node for a three-way merge. */
+	mergeIndex(docId: number): Promise<EngineMergeNode[]>;
+	/** The row document the merge pairs on; same options the panel displays. */
+	rows(docId: number, options: EngineRowOptions): Promise<EcucRow[]>;
 	closeDocument(docId: number): Promise<void>;
 	/** A side-effect-free probe used by diagnostics and tests. */
 	engineVersion(): string;
@@ -105,6 +120,18 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 				return undefined;
 			}
 			return parseJson<EngineRowPatch>(updated);
+		},
+		rows: async (docId, options) => {
+			const chunks = await client.requestStream('doc.rows', { docId, options });
+			return chunks.flatMap((chunk) =>
+				chunk.body.length === 0 ? [] : parseJson<EcucRow[]>(chunk)
+			);
+		},
+		mergeIndex: async (docId) => {
+			const chunks = await client.requestStream('doc.mergeIndex', { docId });
+			return chunks.flatMap((chunk) =>
+				chunk.body.length === 0 ? [] : parseJson<EngineMergeNode[]>(chunk)
+			);
 		},
 		closeDocument: async (docId) => {
 			if (client.isClosed) {

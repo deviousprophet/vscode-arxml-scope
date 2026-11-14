@@ -38,6 +38,11 @@
         "category": "ARXML Scope"
       },
       {
+        "command": "vscode-arxml-scope.mergeConfigurations",
+        "title": "Merge ARXML Configurations",
+        "category": "ARXML Scope"
+      },
+      {
         "command": "vscode-arxml-scope.selectAsFirst",
         "title": "Select as First File to Compare",
         "category": "ARXML Scope"
@@ -293,7 +298,11 @@
         },
         "arxmlScope.validation.crossFileRules": {
           "type": "string",
-          "enum": ["auto", "always", "never"],
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
           "default": "auto",
           "description": "When cross-file rules run. auto runs them only when the index has at least one ECUC definition; always reproduces the unconditional behaviour; never disables broken references, DEST mismatches and cross-file duplicate checks."
         },

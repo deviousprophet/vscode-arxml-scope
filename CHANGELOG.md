@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Merge three ARXML configurations into a new merged file, with a three-way merge, a conflict review in the diff panel and a write that is blocked until every conflict is decided
+
 ### Changed
 
 - The ARXML core now runs as a separate Rust engine process, which the extension requires at startup

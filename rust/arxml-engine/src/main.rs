@@ -157,6 +157,7 @@ impl Engine {
                     .map_err(|error| error.to_string())
             }
             "doc.rows" => self.rows(id, &mut out, header),
+            "doc.mergeIndex" => self.merge_index(id, &mut out, header),
             "doc.plan" => self.plan(id, &mut out, header),
             "doc.update" => self.update(id, &mut out, header),
             "doc.resync" => self.resync(id, &mut out, header, body),
@@ -225,6 +226,35 @@ impl Engine {
         }
         let mut seq = 0usize;
         for chunk in rows.chunks(ROWS_PER_CHUNK) {
+            let last = seq + chunk.len() >= total;
+            let body = serde_json::to_vec(chunk).map_err(|error| error.to_string())?;
+            write_frame(
+                out,
+                &json!({"id": id, "ok": true, "chunk": {"seq": seq, "last": last, "total": total}}),
+                &body,
+            )
+            .map_err(|error| error.to_string())?;
+            seq += chunk.len();
+        }
+        Ok(())
+    }
+
+    /// Streams one entry per node: id, parent, order, element range and own digest.
+    fn merge_index(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let document_id = doc_id(header)?;
+        let document = self.documents.get(&document_id).ok_or("unknown document")?;
+        let nodes = document.merge_index();
+        let total = nodes.len();
+        if total == 0 {
+            return write_frame(
+                out,
+                &json!({"id": id, "ok": true, "chunk": {"seq": 0, "last": true, "total": 0}}),
+                b"[]",
+            )
+            .map_err(|error| error.to_string());
+        }
+        let mut seq = 0usize;
+        for chunk in nodes.chunks(ROWS_PER_CHUNK) {
             let last = seq + chunk.len() >= total;
             let body = serde_json::to_vec(chunk).map_err(|error| error.to_string())?;
             write_frame(

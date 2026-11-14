@@ -14,16 +14,22 @@ import { followReference, innermostNodeIdAt, revealRangeInTextEditor } from './h
 import { CompareSelectionStore, fileName } from './host/compareSelection';
 import { DiffPanel } from './host/diffPanel';
 import { IndexService } from './host/indexService';
+import type { CoreEngine } from './host/engine/coreEngine';
+import { mergeConfigurations } from './host/merge/mergeCommand';
 
 export function registerCommands(
 	context: vscode.ExtensionContext,
 	provider: EcucEditorProvider,
 	compare: CompareSelectionStore,
-	indexService: IndexService
+	indexService: IndexService,
+	engine: CoreEngine
 ): void {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('vscode-arxml-scope.openEcucEditor', (uri?: vscode.Uri) => openEcucEditor(uri)),
 		vscode.commands.registerCommand('vscode-arxml-scope.rebuildIndex', () => indexService.rebuild()),
+		vscode.commands.registerCommand('vscode-arxml-scope.mergeConfigurations', () =>
+			mergeConfigurations(context, engine)
+		),
 		vscode.commands.registerCommand('vscode-arxml-scope.cycleCrossFileRules', () => cycleCrossFileRules()),
 		vscode.commands.registerCommand('vscode-arxml-scope.revealInSource', (uri?: vscode.Uri, nodeId?: string, follow?: boolean) =>
 			revealInSource(uri, nodeId, follow)

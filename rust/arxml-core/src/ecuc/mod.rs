@@ -4,6 +4,7 @@
 //! I/O, and this crate owns every ECUC decision.
 
 pub mod edit;
+pub mod merge;
 pub mod model;
 pub mod node_id;
 pub mod order;
@@ -13,6 +14,7 @@ pub mod syscond;
 pub mod text;
 pub mod validate;
 
+pub use merge::MergeIndexNode;
 pub use model::{EcucDocumentModel, Range, SortMode};
 pub use node_id::{build_node_index, NodeIndex};
 pub use rows::{build_rows, Row, RowOptions};
@@ -70,6 +72,11 @@ impl Document {
 
     pub fn nodes(&self) -> usize {
         self.index.len()
+    }
+
+    /// One entry per node for a three-way merge: id, parent, order, range, own digest.
+    pub fn merge_index(&self) -> Vec<MergeIndexNode> {
+        merge::merge_index(&self.model, &self.index)
     }
 
     pub fn is_ecuc(&self) -> bool {
