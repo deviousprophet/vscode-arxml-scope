@@ -16,9 +16,9 @@ Batches land in the layer the plan names; each batch runs `npm test` plus the ar
 | FIELD | 01–05 | done — `editing.test.ts` |
 | STRUCT | 01–06 | done — `structureEdit.test.ts` |
 | NAV | 01–03 | done (ID-prefixed existing tests); 04/05 open |
-| DETAIL | 02 | done; 01/03/04 open |
+| DETAIL | 02, 03 | done; 01/04 open |
 | TREE | 01 | done; 02–06 open |
-| SEARCH | — | open |
+| SEARCH | 01, 03 | done; 02/04 open |
 | CPANEL | 01 | done; 02–03 open |
 | INDEX | 01–06 | open |
 | VALID | 01–04 | open |

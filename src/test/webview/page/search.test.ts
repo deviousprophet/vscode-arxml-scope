@@ -129,6 +129,36 @@ suite('search helpers', () => {
 });
 
 suite('search page', () => {
+	test('SEARCH-01 a query that exists only in meta text finds the row', async () => {
+		const dom = mountEditor();
+		try {
+			await runSearch(dom, 'context');
+			const current = dom.document.querySelector('#tree [data-search-current="true"]');
+			assert.ok(current, 'the meta-only token matches');
+			assert.strictEqual(current.querySelector('.label')?.textContent, 'PeerIref');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('SEARCH-03 a documentPatch updates the searched haystack', async () => {
+		const dom = mountEditor();
+		try {
+			const model = scanEcucValues(fixtureText('editor/render.arxml'));
+			const rows = buildRows(model, { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows;
+			dom.post({
+				type: 'documentPatch',
+				patch: { at: 1, remove: 1, rows: [{ ...rows[1], haystack: `${rows[1].haystack} zzz-meta` }], structural: false }
+			});
+			await runSearch(dom, 'zzz-meta');
+			const count = dom.document.getElementById('search-count')!.textContent || '';
+			assert.ok(count.length > 0, `the patched row is in the result set (${count})`);
+			assert.ok(dom.document.querySelector('#tree [data-search-current="true"]'), 'the patched row is the current match');
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('Enter jumps to the first match, marks every match and selects it', async () => {
 		const dom = mountEditor();
 		try {

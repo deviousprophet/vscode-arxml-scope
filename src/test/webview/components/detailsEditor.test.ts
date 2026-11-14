@@ -262,7 +262,7 @@ suite('DetailsEditor component', () => {
 		}
 	});
 
-	test('Tab from the last container field commits without trapping focus', () => {
+	test('DETAIL-03 Tab from the last container field commits without trapping focus', () => {
 		const dom = installMarkup('<body></body>');
 		try {
 			resetDetailsEditorState();

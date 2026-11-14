@@ -456,7 +456,7 @@ suite('editor Document interactions', () => {
 		}
 	});
 
-	test('Collapse all anchors to the nearest visible ancestor and Expand all restores the selected row', async () => {
+	test('TREE-01 Collapse all anchors to the nearest visible ancestor and Expand all restores the selected row', async () => {
 		const dom = mountFixture('editor/large.arxml');
 		try {
 			const scroller = dom.document.querySelector('#tree > .virtual-scroll-vscroll') as HTMLElement;
@@ -684,7 +684,7 @@ suite('editor Document interactions', () => {
 		assert.ok(!/fetch\(|XMLHttpRequest|new Worker|serviceWorker/.test(html), 'the shell has no remote/worker path');
 	});
 
-	test('the stylesheet keeps only the documented colour literals', () => {
+	test('X-04 the stylesheet keeps only the documented colour literals', () => {
 		const css = [webviewCss('styles', 'tokens.css'), webviewCss('components', 'documentTree', 'documentTree.css')].join('\n');
 		const hexes = [...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
 		assert.deepStrictEqual(
