@@ -97,9 +97,23 @@ word marks behave as before.
 
 ## M5 — Copy patch
 
-**Status (2026-11-14): not started.** M1–M4 are shipped; the panel rebuilds the whole
-document after a copy, which is correct but is the performance case this milestone
-removes.
+**Status (2026-11-14): blocked on a contract decision, not started.**
+
+A first `patch_between` draft (sibling span + ancestor counters) failed its own equality
+tests for a reason the design has to answer: every `DiffCell.range` is an absolute UTF-16
+offset, so an edit shifts the ranges of *every node after it in the edited file*. Replacing
+only the affected sibling span leaves later rows stale, and `patched === rebuild` fails on
+the ranges alone.
+
+The exact patch needs one more field: the applied edit's `at` and `by`. Rows outside the
+span whose `range.start >= at` shift by `by`; nodes containing the edit are ancestors and
+arrive as full rows. `diff.patch` therefore has to receive the copy the host applied
+(`{start, end, text}`), not just the row key.
+
+Baseline measured before the attempt (`npm run benchmark diffBenchmark`, 26 MiB pair,
+73 884 rows): engine `diff.compute` 918 ms including 67 MiB of row JSON; host builder
+370–444 ms plus 142–176 ms for the same JSON. A patch only wins if it stays in the
+kilobytes, which the span + shift contract can do.
 
 - [ ] `diff/patch.rs`: replace/insert/delete patch for one copy; ancestor counters; word
       marks for the patched row.

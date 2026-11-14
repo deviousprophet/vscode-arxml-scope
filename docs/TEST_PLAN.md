@@ -304,6 +304,7 @@ Covered: scan/rows/diff/index/validation/rename/edit-latency.
 | PERF-02 | 20 MiB merge plan + compose | under the merge ceiling, no quadratic pass |
 | PERF-03 | repeated edits (100) | no retained growth beyond the ceiling |
 | PERF-04 | benchmark on a missing engine | reports `skipped`, exit 0 |
+| PERF-05 | 26 MiB pair: `diffBenchmark` | engine and host numbers recorded; engine stays within 2x the host builder |
 
 ## X — cross-cutting
 
