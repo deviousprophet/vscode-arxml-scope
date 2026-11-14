@@ -273,7 +273,7 @@ suite('ConditionsPanel component', () => {
 		}
 	});
 
-	test('discovered rows lose Remove, regain it on re-scan and keep their committed value', () => {
+	test('CPANEL-01 discovered rows lose Remove, regain it on re-scan and keep their committed value', () => {
 		const dom = panel();
 		try {
 			renderConditionEntries([

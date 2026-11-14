@@ -12,22 +12,22 @@ Batches land in the layer the plan names; each batch runs `npm test` plus the ar
 | ROW | 01–05, 07, 09 | done — `src/test/core/planRows.test.ts` |
 | COND | 01, 02, 05, 06 | done — `src/test/core/planConditions.test.ts` |
 | DIFF | 01, 03, 04, 05 | done — `src/test/core/planDiff.test.ts`, `diffPage.test.ts` |
-| EDIT | 01–10 | open |
-| FIELD | 01–05 | open |
-| STRUCT | 01–06 | open |
-| NAV | 01–05 | open |
-| DETAIL | 01–04 | open |
-| TREE | 01–06 | open |
-| SEARCH | 01–04 | open |
-| CPANEL | 01–03 | open |
+| EDIT | 01–04, 06, 07, 09, 10 | done — `editing.test.ts`; 05/08 need an engine handle |
+| FIELD | 01–05 | done — `editing.test.ts` |
+| STRUCT | 01–06 | done — `structureEdit.test.ts` |
+| NAV | 01–03 | done (ID-prefixed existing tests); 04/05 open |
+| DETAIL | 02 | done; 01/03/04 open |
+| TREE | 01 | done; 02–06 open |
+| SEARCH | — | open |
+| CPANEL | 01 | done; 02–03 open |
 | INDEX | 01–06 | open |
 | VALID | 01–04 | open |
-| FEAT | 01–02 | open |
+| FEAT | 01–02 | done (ID-prefixed existing tests) |
 | ENG | 01–08 | open (ENG-01 is a product gap) |
-| MERGE | 01–15 | open; page/planner covered, host copy handler still untested |
+| MERGE | 01, 09, 14 | done; the host copy handler and the patch path still need tests |
 | PKG | 01–03 | open |
 | PERF | 01–06 | open; `diffBenchmark` exists, the others are commands |
-| X | 01–05 | partly covered by existing suites |
+| X | 01–05 | done: 01/02 page, 03/04/05 ID-prefixed existing tests |
 | ROW | 06, 08 | open — annotation shapes, tail exception ordering |
 
 ## Findings from the first batches

@@ -217,7 +217,7 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 		assert.match(mergePanel, /new vscode\.WorkspaceEdit\(\)/, 'a copy applies one edit');
 	});
 
-	test('AC10/R19: opening the diff leaves both files byte-identical', async () => {
+	test('X-05 AC10/R19: opening the diff leaves both files byte-identical', async () => {
 		await closeDiffTabs();
 		const left = fixtureUri('diff/left.arxml');
 		const right = fixtureUri('diff/right.arxml');

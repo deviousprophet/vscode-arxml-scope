@@ -657,7 +657,7 @@ suite('editor Document interactions', () => {
 		}
 	});
 
-	test('a refused write keeps the typed text and marks the details input invalid', () => {
+	test('DETAIL-02 a refused write keeps the typed text and marks the details input invalid', () => {
 		const dom = mount();
 		try {
 			const parameter = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;

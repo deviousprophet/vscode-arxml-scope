@@ -42,7 +42,7 @@ suite('editor references (AC6)', () => {
 		}
 	});
 
-	test('AC6: an absent path and an ambiguous suffix resolve to nothing, with a reason', () => {
+	test('NAV-03 AC6: an absent path and an ambiguous suffix resolve to nothing, with a reason', () => {
 		for (const name of ['Missing', 'Ambiguous']) {
 			const result = followReference(model, reference(name));
 			assert.strictEqual(result.ok, false, name);
@@ -53,7 +53,7 @@ suite('editor references (AC6)', () => {
 		}
 	});
 
-	test('AC6: following from the command selects the target, and resolves nothing otherwise', async () => {
+	test('NAV-02 AC6: following from the command selects the target, and resolves nothing otherwise', async () => {
 		const uri = fixtureUri(FIXTURE);
 		const target = await vscode.commands.executeCommand<vscode.Range>(
 			'vscode-arxml-scope.revealInSource',

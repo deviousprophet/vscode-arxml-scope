@@ -709,7 +709,7 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('a dirty buffer gains the unsaved marker on its pane label only', () => {
+	test('MERGE-14 a dirty buffer gains the unsaved marker on its pane label only', () => {
 		const { dom } = mount();
 		try {
 			dom.post({ type: 'labels', labels: ['left.arxml •', 'right.arxml'] });
@@ -742,7 +742,7 @@ suite('semantic diff page', () => {
 		}
 	});
 
-	test('a message named after an inherited member is ignored', () => {
+	test('X-01 a message named after an inherited member is ignored', () => {
 		const { dom } = mount();
 		try {
 			const stray = (type: string) => ({ type }) as unknown as Parameters<typeof dom.post>[0];
@@ -2588,7 +2588,7 @@ suite('semantic diff page', () => {
 });
 
 suite('diff page merge mode', () => {
-	test('merge mode is off by default; the toggle shows arrows and posts the mode', () => {
+	test('MERGE-01 merge mode is off by default; the toggle shows arrows and posts the mode', () => {
 		const { dom } = mount();
 		try {
 			const toggle = dom.document.querySelector('.diff-merge-toggle') as HTMLButtonElement;
@@ -2600,6 +2600,51 @@ suite('diff page merge mode', () => {
 			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
 			assert.deepStrictEqual(messagesOf(dom.api, 'mergeMode'), [{ type: 'mergeMode', enabled: true }]);
 			assert.ok(dom.document.querySelectorAll('.diff-copy-arrow').length > 0, 'changed rows show an arrow');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('X-02 a document message with a malformed body is not applied', () => {
+		const source = documentOf();
+		const { dom } = mount(source);
+		try {
+			const before = dom.document.querySelectorAll('#diff-pane-left [role="treeitem"]').length;
+			dom.post({ type: 'document', semantic: true, document: { rows: 'not an array' } as unknown as DiffDocument });
+			assert.strictEqual(
+				dom.document.querySelectorAll('#diff-pane-left [role="treeitem"]').length,
+				before,
+				'the last good document stays'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('MERGE-09 Alt+Arrow copies the focused row only in merge mode', () => {
+		const { dom, page } = mount();
+		try {
+			page.resetDiffState?.();
+			dom.post({ type: 'mergeMode', enabled: true });
+			const row = dom.document.querySelector('#diff-pane-left .diff-row[data-status="changed"]') as HTMLElement;
+			assert.ok(row, 'the fixture has a changed row');
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-copy-arrow'), 'merge mode is on');
+			row.click();
+			const pane = dom.document.getElementById('diff-pane-left')!;
+			pane.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true })
+			);
+			assert.strictEqual(messagesOf(dom.api, 'copy').length, 1, 'one copy is posted');
+			const copied = messagesOf(dom.api, 'copy')[0] as { side?: string; key?: string };
+			assert.strictEqual(copied.side, 'left');
+			assert.ok(copied.key);
+
+			dom.post({ type: 'mergeMode', enabled: false });
+			row.click();
+			pane.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true })
+			);
+			assert.strictEqual(messagesOf(dom.api, 'copy').length, 1, 'the read-only mode ignores the shortcut');
 		} finally {
 			dom.restore();
 		}
