@@ -19,10 +19,11 @@ function isHexCharRef(body: string): boolean {
 	return body.startsWith('#x') || body.startsWith('#X');
 }
 
-/** Decodes one numeric reference, or leaves it verbatim when the digits are not a number. */
+/** Decodes one numeric reference; out-of-range or surrogate code points stay verbatim. */
 function decodeCodePoint(match: string, digits: string, radix: number): string {
 	const code = Number.parseInt(digits, radix);
-	return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+	const valid = Number.isFinite(code) && code >= 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff);
+	return valid ? String.fromCodePoint(code) : match;
 }
 
 /** Decodes one entity-reference match; unknown names stay verbatim. */

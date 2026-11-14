@@ -45,7 +45,7 @@ empty, namespace prefixes, layout independence, stray end tags.
 | SCAN-03 | astral character before a value | value range lands on the same characters, not shifted by one |
 | SCAN-04 | attribute containing `>` and `'`/`"` | tag end is quote-aware; the model keeps the attribute |
 | SCAN-05 | CDATA with `]]` inside text and a `>` in content | section skipped, no stray range |
-| SCAN-06 | `<VALUE/>`, `<VALUE></VALUE>`, `<VALUE> </VALUE>` | three distinct shapes: element range, empty text, whitespace-only |
+| SCAN-06 | `<VALUE/>`, `<VALUE></VALUE>`, `<VALUE> </VALUE>` | all three keep an empty display value and fall back to their element range for edits |
 | SCAN-07 | 10,000-deep nesting | scans without stack overflow (iterative) |
 | SCAN-08 | unknown, unterminated and out-of-range entities | decode leaves them verbatim, never throws |
 | SCAN-09 | DOCTYPE with internal subset and `>` inside it | declaration skipped exactly once |

@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Missing parent containers are created when a copied element's target lacks them; a module copy that would duplicate a short name is refused
 - The pane label of a document edited by a copy shows `•` until it is saved
 
+### Fixed
+
+- An invalid numeric character reference in an ARXML value stays verbatim instead of aborting the scan
+
 ### Changed
 
 - The ARXML core now runs as a separate Rust engine process, which the extension requires at startup
