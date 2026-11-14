@@ -166,7 +166,17 @@ fn diff_command(args: &[String]) -> ExitCode {
     let left_lookup = |id: &str| left.index().get(id).map(|entry| entry.range);
     let right_lookup = |id: &str| right.index().get(id).map(|entry| entry.range);
     let semantic = args.iter().any(|arg| arg == "--semantic");
-    let document = match build_diff_document(
+    let budget = match option(args, "--budget") {
+        Some(value) => match value.parse::<u32>() {
+            Ok(budget) => Some(budget),
+            Err(_) => {
+                eprintln!("--budget needs a non-negative integer");
+                return ExitCode::from(2);
+            }
+        },
+        None => None,
+    };
+    let document = build_diff_document(
         DiffSide {
             label: file_label(left_path),
             header: header_of(&left),
@@ -181,14 +191,9 @@ fn diff_command(args: &[String]) -> ExitCode {
         },
         &DiffOptions {
             semantic_matching: semantic,
+            semantic_pair_budget: budget,
         },
-    ) {
-        Ok(document) => document,
-        Err(error) => {
-            eprintln!("{error}");
-            return ExitCode::from(1);
-        }
-    };
+    );
     match serde_json::to_string(&document) {
         Ok(json) => {
             println!("{json}");

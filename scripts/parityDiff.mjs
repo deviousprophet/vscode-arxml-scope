@@ -18,6 +18,14 @@ const filter = process.argv[2] ?? '';
 const fixturesDir = path.join(root, 'src', 'test', 'fixtures');
 const cli = path.join(root, 'rust', 'target', 'debug', process.platform === 'win32' ? 'arxml-cli.exe' : 'arxml-cli');
 
+function runs() {
+	return [
+		{ label: 'strict  ', args: [], cli: [] },
+		{ label: 'semantic', args: ['semantic'], cli: ['--semantic'] },
+		{ label: 'budget 1', args: ['semantic', '1'], cli: ['--semantic', '--budget', '1'] }
+	];
+}
+
 function fixtures() {
 	return readdirSync(fixturesDir, { recursive: true, withFileTypes: true })
 		.filter((entry) => entry.isFile() && entry.name.endsWith('.arxml'))
@@ -34,6 +42,10 @@ function pairs(files) {
 		['editing/self-closing.arxml', 'editing/self-closing.expected.arxml'],
 		['editing/escaping.arxml', 'editing/escaping.expected.arxml'],
 		['editing/textual.arxml', 'editing/textual.expected.arxml'],
+		['semantic/rename.left.arxml', 'semantic/rename.right.arxml'],
+		['semantic/embed.left.arxml', 'semantic/embed.right.arxml'],
+		['semantic/empty.left.arxml', 'semantic/empty.right.arxml'],
+		['semantic/large.left.arxml', 'semantic/large.right.arxml'],
 		['basic.arxml', 'deep.arxml'],
 		['exceptions.arxml', 'formatting.arxml']
 	];
@@ -92,16 +104,28 @@ let checked = 0;
 let failures = 0;
 try {
 	for (const [left, right] of pairs(fixtures())) {
-		checked++;
 		const name = `${path.relative(fixturesDir, left)} ↔ ${path.relative(fixturesDir, right)}`;
-		const expected = JSON.parse(execFileSync(process.execPath, [outfile, left, right], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }));
-		const actual = JSON.parse(execFileSync(cli, ['diff', '--left', left, '--right', right], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }));
-		const mismatch = firstDifference(expected, actual);
-		if (mismatch) {
-			failures++;
-			console.log(`FAIL ${name}: ${mismatch}`);
-		} else {
-			console.log(`ok   ${name} (${actual.rows.length} rows)`);
+		for (const run of runs()) {
+			checked++;
+			const expected = JSON.parse(
+				execFileSync(process.execPath, [outfile, left, right, ...run.args], {
+					encoding: 'utf8',
+					maxBuffer: 256 * 1024 * 1024
+				})
+			);
+			const actual = JSON.parse(
+				execFileSync(cli, ['diff', '--left', left, '--right', right, ...run.cli], {
+					encoding: 'utf8',
+					maxBuffer: 256 * 1024 * 1024
+				})
+			);
+			const mismatch = firstDifference(expected, actual);
+			if (mismatch) {
+				failures++;
+				console.log(`FAIL ${run.label} ${name}: ${mismatch}`);
+			} else {
+				console.log(`ok   ${run.label} ${name} (${actual.rows.length} rows)`);
+			}
 		}
 	}
 } finally {

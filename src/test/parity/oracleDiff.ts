@@ -23,6 +23,8 @@ function side(file: string) {
 
 const leftFile = process.argv[2];
 const rightFile = process.argv[3];
+const semantic = process.argv[4] === 'semantic';
+const budget = process.argv[5] === undefined ? undefined : Number(process.argv[5]);
 const left = side(leftFile);
 const right = side(rightFile);
 const document = buildDiffDocument(
@@ -33,6 +35,6 @@ const document = buildDiffDocument(
 	(id) => left.index.byId.get(id)?.range,
 	(id) => right.index.byId.get(id)?.range,
 	{ left: documentHeader(left.model), right: documentHeader(right.model) },
-	{ semanticMatching: false }
+	{ semanticMatching: semantic, ...(budget === undefined ? {} : { semanticPairBudget: budget }) }
 );
 process.stdout.write(JSON.stringify(document));
