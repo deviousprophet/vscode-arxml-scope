@@ -31,6 +31,8 @@ import {
 } from '../../host/ecucEdit';
 import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { EcucRow, buildRows } from '../../core/ecuc/renderRows';
+import type { CoreEngine } from '../../host/engine/coreEngine';
+import { enginePath, resolveEngine } from '../../host/engine/engineLoader';
 import { documentHeader } from '../../webviewProtocol';
 import type { EditorProviderToWebview } from '../../webviewProtocol';
 import { fixtureText } from '../core/modelTestUtils';
@@ -39,6 +41,7 @@ import { repoRoot, sleep } from './testUtils';
 interface StubMessage {
 	type?: string;
 	document?: { rows?: EcucRow[]; selectedId?: string };
+	patch?: { at: number; remove: number; rows: EcucRow[]; structural: boolean };
 	message?: string;
 	nodeId?: string;
 	inline?: boolean;
@@ -1107,5 +1110,338 @@ suite('editor container field editing (R1–R5)', () => {
 		assert.ok(names.includes('container.arxml'), 'the new fixture is present');
 		assert.ok(names.includes('container-short-name.expected.arxml'));
 		assert.ok(names.includes('container-ref.expected.arxml'));
+	});
+});
+
+suite('plan coverage: EDIT', () => {
+	/** Sends one value edit for `name` through the panel listener and waits for it. */
+	async function editValue(
+		stub: StubPanel,
+		document: vscode.TextDocument,
+		name: string,
+		value: string,
+		needle = value
+	): Promise<void> {
+		await stub.send({ type: 'edit', nodeId: parameterId(document.getText(), name), value });
+		await waitFor(`${name} = ${needle}`, () => document.getText().includes(needle));
+	}
+
+	test('EDIT-01 the same parameter edited twice plans against the shifted text', async () => {
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const { stub } = open(document);
+			await editValue(stub, document, 'Count', '42');
+			await editValue(stub, document, 'Count', '43');
+			assert.ok(document.getText().includes('<VALUE>43</VALUE>'));
+			assert.ok(document.getText().includes('<VALUE>10</VALUE>'), 'the sibling is untouched');
+			assert.strictEqual(lastRows(stub).find((row) => row.label === 'Count')?.value, '43');
+		});
+	});
+
+	test('EDIT-02 the first and last values edit without moving anything else', async () => {
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const before = document.getText();
+			const { stub } = open(document);
+			await editValue(stub, document, 'Count', '100');
+			await editValue(stub, document, 'Limit', '200');
+			const after = document.getText();
+			assert.strictEqual(after.replace('<VALUE>100</VALUE>', '<VALUE>7</VALUE>').replace('<VALUE>200</VALUE>', '<VALUE>10</VALUE>'), before);
+		});
+	});
+
+	test('EDIT-03 special characters are written escaped once and shown decoded', async () => {
+		await withEditingFixture('textual.arxml', async (_uri, document) => {
+			const { stub } = open(document);
+			const value = 'a & b < c > d "q"';
+			await editValue(stub, document, 'Label', value, '&amp;');
+			assert.ok(document.getText().includes('a &amp; b &lt; c &gt; d "q"'));
+			assert.strictEqual(lastRows(stub).find((row) => row.label === 'Label')?.value, value);
+		});
+	});
+
+	test('EDIT-04 an external change between plan and write is refused', async () => {
+		await withEditingFixture('numeric.arxml', async (uri, document) => {
+			const before = document.getText();
+			const plan = buildEdit(scanEcucValues(before), before, parameterId(before, 'Count'), '42');
+			assert.ok(plan.ok);
+			const parameter = parameterFor(scanEcucValues(document.getText()), plan.record.nodeId)!;
+			const region = regionOf(parameter, document.getText(), 'value')!;
+			const other = new vscode.WorkspaceEdit();
+			other.replace(uri, new vscode.Range(document.positionAt(region.range.start), document.positionAt(region.range.end)), '11');
+			assert.ok(await vscode.workspace.applyEdit(other));
+			const result = await applyEdit(document, plan.record);
+			assert.strictEqual(result.ok, false);
+			assert.ok(document.getText().includes('<VALUE>11</VALUE>'), 'the competing bytes survive');
+		});
+	});
+
+	test('EDIT-06 twenty rapid edits leave the last value and no range drift', async () => {
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const { stub } = open(document);
+			for (let index = 0; index < 20; index++) {
+				await editValue(stub, document, 'Count', String(1000 + index));
+			}
+			assert.ok(document.getText().includes('<VALUE>1019</VALUE>'));
+			assert.strictEqual(document.getText().match(/<VALUE>10\d\d<\/VALUE>/g)?.length, 1);
+			assert.ok(document.getText().includes('<VALUE>10</VALUE>'), 'the sibling keeps its value');
+		});
+	});
+
+	test('EDIT-07 a value longer than 10k stays on one line', async () => {
+		await withEditingFixture('textual.arxml', async (_uri, document) => {
+			const { stub } = open(document);
+			const lines = document.getText().split('\n').length;
+			const value = 'x'.repeat(10_001);
+			await editValue(stub, document, 'Label', value, 'xxxxxxxxxx');
+			assert.strictEqual(document.getText().split('\n').length, lines, 'no wrapping was injected');
+			assert.ok(document.getText().includes('<VALUE>' + value + '</VALUE>'));
+		});
+	});
+
+	test('EDIT-09 without an engine handle the legacy path still edits', async () => {
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const { stub } = open(document);
+			await editValue(stub, document, 'Count', '77');
+			assert.ok(document.getText().includes('<VALUE>77</VALUE>'));
+			assert.strictEqual(notices(stub).filter((notice) => String(notice.message).includes('engine')).length, 0);
+		});
+	});
+
+	test('EDIT-10 a surrogate pair in the value keeps its bytes and display', async () => {
+		await withEditingFixture('textual.arxml', async (_uri, document) => {
+			const { stub } = open(document);
+			const value = 'pair 😀 pair';
+			await editValue(stub, document, 'Label', value, '😀');
+			assert.ok(document.getText().includes('<VALUE>pair 😀 pair</VALUE>'));
+			assert.strictEqual(lastRows(stub).find((row) => row.label === 'Label')?.value, value);
+		});
+	});
+});
+
+suite('plan coverage: FIELD', () => {
+	const doc = (body: string): string =>
+		`<?xml version="1.0"?><AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/M</DEFINITION-REF><CONTAINERS>${body}</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+	const container = (name: string, inner = ''): string =>
+		`<ECUC-CONTAINER-VALUE><SHORT-NAME>${name}</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/${name}</DEFINITION-REF>${inner}</ECUC-CONTAINER-VALUE>`;
+
+	test('FIELD-01 a rename onto a sibling name is allowed at this layer', () => {
+		const text = doc(container('A') + container('B'));
+		const model = scanEcucValues(text);
+		const plan = buildFieldEdit(model, text, containerId(text, 'A'), 'shortName', 'B');
+		assert.ok(plan.ok, 'the edit layer allows it; validation reports the duplicate');
+	});
+
+	test('FIELD-02 definition refs with hyphens and dots are accepted and keep DEST', () => {
+		const text = doc(container('A'));
+		const model = scanEcucValues(text);
+		const plan = buildFieldEdit(model, text, containerId(text, 'A'), 'definitionRef', '/Pkg-A/Mod.B/Cont-C');
+		assert.ok(plan.ok);
+		assert.ok(plan.record.newText.includes('/Pkg-A/Mod.B/Cont-C'));
+		const after = text.slice(0, text.indexOf(plan.record.oldText)) + plan.record.newText + text.slice(text.indexOf(plan.record.oldText) + plan.record.oldText.length);
+		assert.ok(after.includes('DEST="ECUC-PARAM-CONF-CONTAINER-DEF"'), 'DEST is outside the replaced span');
+	});
+
+	test('FIELD-03 a CDATA-backed field is refused like a CDATA value', () => {
+		const text = doc('<ECUC-CONTAINER-VALUE><SHORT-NAME><![CDATA[C]]></SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/C</DEFINITION-REF></ECUC-CONTAINER-VALUE>');
+		const model = scanEcucValues(text);
+		const id = Array.from(buildNodeIndex(model).byId.values()).find((entry) => entry.kind === 'container')!.id;
+		const plan = buildFieldEdit(model, text, id, 'shortName', 'D');
+		assertFieldRefused(plan, 'CDATA');
+	});
+
+	test('FIELD-04 renaming a nested container moves its children and predicts the id', () => {
+		const text = doc(container('Outer', container('Inner')));
+		const model = scanEcucValues(text);
+		const outer = model.modules[0].containers[0];
+		const inner = outer.containers[0];
+		const innerId = buildNodeIndex(model).idOf(inner);
+		assert.ok(innerId);
+		const plan = buildFieldEdit(model, text, innerId!, 'shortName', 'Renamed');
+		assert.ok(plan.ok, JSON.stringify(plan));
+		const after = text.replace(inner.shortName, 'Renamed');
+		const next = scanEcucValues(after);
+		assert.strictEqual(next.modules[0].containers[0].containers[0].shortName, 'Renamed');
+		const index = buildNodeIndex(next);
+		const id = index.idOf(next.modules[0].containers[0].containers[0]);
+		assert.ok(id?.includes('Renamed'), id);
+		assert.strictEqual(plan.nextNodeId, id, 'the predicted id is the re-scanned id');
+	});
+
+	test('FIELD-05 a module field edit is refused', () => {
+		const text = doc(container('A'));
+		const model = scanEcucValues(text);
+		const plan = buildFieldEdit(model, text, moduleId(text), 'shortName', 'M2');
+		assert.ok(plan.ok === false);
+		assert.ok(plan.reason.includes('not a container'));
+	});
+});
+
+suite('plan coverage: EDIT through the engine', () => {
+	/** A real engine with observable opens and plans, so the fast path is provable. */
+	function trackedEngine(base: CoreEngine): {
+		engine: CoreEngine;
+		opened: Promise<number>;
+		planCalls: () => number;
+	} {
+		let settle: (docId: number) => void = () => undefined;
+		const opened = new Promise<number>((resolve) => {
+			settle = resolve;
+		});
+		let plans = 0;
+		const engine: CoreEngine = {
+			...base,
+			openDocument: async (uri, text, options) => {
+				const docId = await base.openDocument(uri, text, options);
+				// The provider stores the returned id on the microtask after this call;
+				// resolving on a macrotask makes the handle observable and usable.
+				setTimeout(() => settle(docId), 0);
+				return docId;
+			},
+			planEdit: async (docId, request) => {
+				plans += 1;
+				return base.planEdit(docId, request);
+			}
+		};
+		return { engine, opened, planCalls: () => plans };
+	}
+
+	async function openedWithin(what: string, promise: Promise<number>, timeoutMs = 5000): Promise<number> {
+		return Promise.race([
+			promise,
+			sleep(timeoutMs).then(() => {
+				throw new Error(`timed out waiting for ${what}`);
+			})
+		]);
+	}
+
+	function lastPatch(stub: StubPanel): NonNullable<StubMessage['patch']> | undefined {
+		return stub.messages.filter((message) => message.type === 'documentPatch').at(-1)?.patch;
+	}
+
+	function applyRowPatch(rows: readonly EcucRow[], patch: NonNullable<StubMessage['patch']>): EcucRow[] {
+		return [...rows.slice(0, patch.at), ...patch.rows, ...rows.slice(patch.at + patch.remove)];
+	}
+
+	/** Two scratch copies of `name`: one through the engine, one through the TypeScript path. */
+	async function twoCopies(name: string): Promise<{
+		dir: string;
+		engineDocument: vscode.TextDocument;
+		legacyDocument: vscode.TextDocument;
+	}> {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arxml-scope-engine-edit-'));
+		const engineFile = path.join(dir, 'engine.arxml');
+		const legacyFile = path.join(dir, 'legacy.arxml');
+		fs.copyFileSync(committed(name), engineFile);
+		fs.copyFileSync(committed(name), legacyFile);
+		try {
+			return {
+				dir,
+				engineDocument: await vscode.workspace.openTextDocument(vscode.Uri.file(engineFile)),
+				legacyDocument: await vscode.workspace.openTextDocument(vscode.Uri.file(legacyFile))
+			};
+		} catch (error) {
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+			throw error;
+		}
+	}
+
+	test('EDIT-05 the engine fast path writes the same bytes and rows as the TypeScript fallback', async () => {
+		assert.ok(fs.existsSync(enginePath(repoRoot)), 'run npm run engine:build before the suite');
+		const resolved = await resolveEngine(repoRoot);
+		const copies = await twoCopies('numeric.arxml');
+		try {
+			const tracked = trackedEngine(resolved);
+			const enginePanel = stubPanel();
+			new EcucEditorProvider(undefined, undefined, undefined, tracked.engine).resolveCustomTextEditor(
+				copies.engineDocument,
+				enginePanel.panel,
+				new vscode.CancellationTokenSource().token
+			);
+			const legacyPanel = stubPanel();
+			new EcucEditorProvider().resolveCustomTextEditor(
+				copies.legacyDocument,
+				legacyPanel.panel,
+				new vscode.CancellationTokenSource().token
+			);
+			await openedWithin('the engine document handle', tracked.opened);
+
+			await enginePanel.send({ type: 'ready' });
+			await legacyPanel.send({ type: 'ready' });
+			const before = lastRows(enginePanel);
+			assert.deepStrictEqual(before, expectedRows(copies.engineDocument.getText()), 'the starting rows');
+
+			const nodeId = parameterId(copies.engineDocument.getText(), 'Count');
+			await enginePanel.send({ type: 'edit', nodeId, value: '42' });
+			await legacyPanel.send({ type: 'edit', nodeId, value: '42' });
+			await waitFor('the engine write', () => copies.engineDocument.getText().includes('<VALUE>42</VALUE>'));
+			await waitFor('the legacy write', () => copies.legacyDocument.getText().includes('<VALUE>42</VALUE>'));
+
+			assert.strictEqual(
+				copies.engineDocument.getText(),
+				copies.legacyDocument.getText(),
+				'both paths write identical bytes'
+			);
+			assert.ok(tracked.planCalls() > 0, 'the engine planned the edit (not the fallback)');
+
+			await waitFor('the engine row patch', () => lastPatch(enginePanel) !== undefined);
+			const patch = lastPatch(enginePanel)!;
+			assert.strictEqual(patch.structural, false);
+			assert.deepStrictEqual(
+				JSON.parse(JSON.stringify(applyRowPatch(before, patch))),
+				JSON.parse(JSON.stringify(expectedRows(copies.engineDocument.getText()))),
+				'the one-row patch rebuilds the full row store'
+			);
+
+			await enginePanel.send({ type: 'ready' });
+			await legacyPanel.send({ type: 'ready' });
+			assert.deepStrictEqual(lastRows(enginePanel), lastRows(legacyPanel), 'both panels show identical rows');
+		} finally {
+			resolved.dispose();
+			await sleep(50);
+			fs.rmSync(copies.dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+		}
+	});
+
+	test('EDIT-08 undo and redo after an engine-path edit restore bytes and rows', async () => {
+		assert.ok(fs.existsSync(enginePath(repoRoot)), 'run npm run engine:build before the suite');
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const resolved = await resolveEngine(repoRoot);
+			try {
+				const tracked = trackedEngine(resolved);
+				const stub = stubPanel();
+				new EcucEditorProvider(undefined, undefined, undefined, tracked.engine).resolveCustomTextEditor(
+					document,
+					stub.panel,
+					new vscode.CancellationTokenSource().token
+				);
+				await openedWithin('the engine document handle', tracked.opened);
+				await vscode.window.showTextDocument(document);
+
+				const patchCount = (): number =>
+					stub.messages.filter((message) => message.type === 'documentPatch').length;
+
+				const original = document.getText();
+				await stub.send({ type: 'ready' });
+				await stub.send({ type: 'edit', nodeId: parameterId(original, 'Count'), value: '42' });
+				await waitFor('the engine edit', () => document.getText().includes('<VALUE>42</VALUE>'));
+				const edited = document.getText();
+				await waitFor('the edit row patch', () => patchCount() >= 1);
+
+				await vscode.commands.executeCommand('undo');
+				await waitFor('one undo to restore the bytes', () => document.getText() === original);
+				await waitFor('the undo row patch', () => patchCount() >= 2);
+				await stub.send({ type: 'ready' });
+				assert.strictEqual(lastRows(stub).find((row) => row.label === 'Count')?.value, '7');
+				assert.deepStrictEqual(lastRows(stub), expectedRows(original), 'the rows follow the undo');
+
+				await vscode.commands.executeCommand('redo');
+				await waitFor('one redo to re-apply the edit', () => document.getText() === edited);
+				await waitFor('the redo row patch', () => patchCount() >= 3);
+				await stub.send({ type: 'ready' });
+				assert.strictEqual(lastRows(stub).find((row) => row.label === 'Count')?.value, '42');
+				assert.deepStrictEqual(lastRows(stub), expectedRows(edited), 'the rows follow the redo');
+			} finally {
+				resolved.dispose();
+			}
+		});
 	});
 });

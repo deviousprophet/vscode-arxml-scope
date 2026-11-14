@@ -13,13 +13,15 @@ import type { NodeEntry } from './core/ecuc/nodeId';
 import { followReference, innermostNodeIdAt, revealRangeInTextEditor } from './host/navigation';
 import { CompareSelectionStore, fileName } from './host/compareSelection';
 import { DiffPanel } from './host/diffPanel';
+import type { CoreEngine } from './host/engine/coreEngine';
 import { IndexService } from './host/indexService';
 
 export function registerCommands(
 	context: vscode.ExtensionContext,
 	provider: EcucEditorProvider,
 	compare: CompareSelectionStore,
-	indexService: IndexService
+	indexService: IndexService,
+	engine: CoreEngine
 ): void {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('vscode-arxml-scope.openEcucEditor', (uri?: vscode.Uri) => openEcucEditor(uri)),
@@ -35,11 +37,11 @@ export function registerCommands(
 			selectAsFirst(compare, uri)
 		),
 		vscode.commands.registerCommand('vscode-arxml-scope.compareToStaged', (uri?: vscode.Uri) =>
-			compareToStaged(context, compare, uri)
+			compareToStaged(context, compare, engine, uri)
 		),
 		vscode.commands.registerCommand(
 			'vscode-arxml-scope.compareSelected',
-			(uri?: vscode.Uri, selectedUris?: vscode.Uri[]) => compareSelected(context, uri, selectedUris)
+			(uri?: vscode.Uri, selectedUris?: vscode.Uri[]) => compareSelected(context, engine, uri, selectedUris)
 		)
 	);
 }
@@ -223,6 +225,7 @@ function stashFirstFile(
 async function compareToStaged(
 	context: vscode.ExtensionContext,
 	compare: CompareSelectionStore,
+	engine: CoreEngine,
 	uri?: vscode.Uri
 ): Promise<void> {
 	const stashed = compare.get();
@@ -239,16 +242,17 @@ async function compareToStaged(
 	}
 	// The first-file stash is one-shot: a successful compare clears the context key
 	// so the Explorer item keeps telling the truth.
-	await compareWithStashed(context, compare, stashed, target);
+	await compareWithStashed(context, compare, engine, stashed, target);
 }
 
 async function compareWithStashed(
 	context: vscode.ExtensionContext,
 	compare: CompareSelectionStore,
+	engine: CoreEngine,
 	first: vscode.Uri,
 	second: vscode.Uri
 ): Promise<void> {
-	if (await DiffPanel.open(context, first, second)) {
+	if (await DiffPanel.open(context, first, second, engine)) {
 		compare.clear();
 	}
 }
@@ -259,19 +263,20 @@ async function compareWithStashed(
  */
 async function compareSelected(
 	context: vscode.ExtensionContext,
+	engine: CoreEngine,
 	uri?: vscode.Uri,
 	selectedUris?: vscode.Uri[]
 ): Promise<void> {
 	const pair = selectedComparePair(uri, selectedUris);
 	if (pair) {
-		await DiffPanel.open(context, pair[0], pair[1]);
+		await DiffPanel.open(context, pair[0], pair[1], engine);
 		return;
 	}
 	if (!isPaletteInvocation(uri, selectedUris)) {
 		void vscode.window.showWarningMessage('Select exactly two .arxml files to compare.');
 		return;
 	}
-	await comparePickedFiles(context);
+	await comparePickedFiles(context, engine);
 }
 
 /** True when the command ran from the palette with no Explorer selection. */
@@ -282,7 +287,7 @@ function isPaletteInvocation(uri?: vscode.Uri, selectedUris?: readonly vscode.Ur
 	return (selectedUris ?? []).length === 0;
 }
 
-async function comparePickedFiles(context: vscode.ExtensionContext): Promise<void> {
+async function comparePickedFiles(context: vscode.ExtensionContext, engine: CoreEngine): Promise<void> {
 	const picked = await vscode.window.showOpenDialog({
 		canSelectMany: true,
 		openLabel: 'Compare',
@@ -295,7 +300,7 @@ async function comparePickedFiles(context: vscode.ExtensionContext): Promise<voi
 		void vscode.window.showWarningMessage('Select exactly two .arxml files to compare.');
 		return;
 	}
-	await DiffPanel.open(context, picked[0], picked[1]);
+	await DiffPanel.open(context, picked[0], picked[1], engine);
 }
 
 /** The clicked file plus exactly one other selected file, or undefined. */

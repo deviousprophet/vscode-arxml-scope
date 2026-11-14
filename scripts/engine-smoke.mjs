@@ -5,7 +5,7 @@
  * the protocol version or an operation contract drifts.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -102,6 +102,52 @@ if (target_row) {
 	planned = plan.header.ok === true ? 1 : 0;
 }
 
+// The engine owns the comparison: two open documents, streamed rows, final envelope.
+const otherPath = path.join(root, 'src', 'test', 'fixtures', 'deep.arxml');
+const [other] = await request('doc.open', { uri: otherPath }, readFileSync(otherPath, 'utf8'));
+const diffChunks = await request(
+	'diff.compute',
+	{
+		left: { docId, name: 'basic.arxml', path: fixture },
+		right: { docId: other.header.docId, name: 'deep.arxml', path: otherPath },
+		options: { semanticMatching: true }
+	},
+	undefined,
+	60000
+);
+const diffRows = diffChunks
+	.filter((chunk) => chunk.body.length > 0)
+	.flatMap((chunk) => JSON.parse(chunk.body.toString('utf8')));
+const envelope = diffChunks.map((chunk) => chunk.header.document).find(Boolean);
+const diffOk = Boolean(envelope) && diffRows.length === envelope.summary.changed + envelope.summary.added + envelope.summary.removed + envelope.summary.unchanged;
+
+// One copy: move the engine text with the same edit the host applied, then ask for
+// the rows it changed instead of the whole document.
+const leftSource = readFileSync(fixture, 'utf8');
+const valueAt = leftSource.indexOf('<VALUE>');
+const valueEnd = leftSource.indexOf('</VALUE>', valueAt);
+const valueStart = valueAt + '<VALUE>'.length;
+const replacement = leftSource.slice(valueStart, valueEnd) === '0' ? '1' : '0';
+await request('doc.update', {
+	docId,
+	edits: [{ start: valueStart, end: valueEnd, text: replacement }]
+});
+const [patchAnswer] = await request(
+	'diff.patch',
+	{
+		left: { docId, name: 'basic.arxml', path: fixture },
+		right: { docId: other.header.docId, name: 'deep.arxml', path: otherPath },
+		edit: { side: 'left', start: valueStart, end: valueEnd, text: replacement }
+	},
+	undefined,
+	60000
+);
+const patch =
+	patchAnswer.header.patch === true
+		? JSON.parse(patchAnswer.body.toString('utf8'))
+		: undefined;
+const patchOk = patch !== undefined && Array.isArray(patch.rows) && patch.at >= 0;
+
 await request('shutdown');
 const exitCode = await new Promise((resolve) => child.on('exit', resolve));
 console.log(
@@ -111,8 +157,13 @@ console.log(
 		engine: hello.header.engine,
 		rows: rows.length,
 		planned,
+		diffRows: diffRows.length,
+		diffOk,
+		patchRows: patch === undefined ? 0 : patch.rows.length,
+		patchReason: patchAnswer.header.reason,
+		patchOk,
 		exitCode,
 		loadMs: Math.round(performance.now() - started)
 	})
 );
-process.exit(exitCode === 0 && planned === 1 ? 0 : 1);
+process.exit(exitCode === 0 && planned === 1 && diffOk && patchOk ? 0 : 1);

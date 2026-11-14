@@ -5,6 +5,7 @@
 import * as assert from 'assert';
 
 import { scanEcucValues } from '../../../core/ecuc/scanner';
+import { SORT_EXCEPTIONS } from '../../../core/ecuc/order';
 import { buildRows } from '../../../core/ecuc/renderRows';
 import { FlatNodeRow, TreeRow, ancestorIds, flattenRows, haystack, matchRanges } from '../../../webview/render/treeQuery';
 import {
@@ -16,6 +17,7 @@ import {
 import { inspectorFields } from '../../../webview/components/sidebar/detailsPanel/detailsPanel';
 import { calcRowOffset, calcTotalHeight, calcVisibleRange } from '../../../webview/render/virtualScroll';
 import { fixtureText } from '../../core/modelTestUtils';
+import { installDom, loadModule, treeRows } from '../pageTestUtils';
 import { documentHeader } from '../../../webviewProtocol';
 
 function syntheticRows(count = 12): TreeRow[] {
@@ -27,6 +29,20 @@ function syntheticRows(count = 12): TreeRow[] {
 		hasChildren: at < count - 1,
 		haystack: 'label' + at + ' value' + at,
 	}));
+}
+
+/** A document with enough parameters that a late row starts outside the window. */
+function parameterDocument(count: number): string {
+	let parameters = '';
+	for (let at = 0; at < count; at++) {
+		const name = 'P' + String(at).padStart(4, '0');
+		parameters += `<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/M/C/${name}</DEFINITION-REF><VALUE>${at}</VALUE></ECUC-NUMERICAL-PARAM-VALUE>`;
+	}
+	return `<?xml version="1.0" encoding="UTF-8"?>\n<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/M</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/C</DEFINITION-REF><PARAMETER-VALUES>${parameters}</PARAMETER-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+function renderedRow(document: any, id: string): any {
+	return treeRows(document).find((row: any) => row.getAttribute('data-node-id') === id);
 }
 
 suite('virtual page (design §4, §5, §8)', () => {
@@ -164,5 +180,96 @@ suite('virtual page (design §4, §5, §8)', () => {
 		assert.strictEqual(nodes(flattenRows(rows))[0].expanded, true);
 		assert.strictEqual(nodes(flattenRows(rows, { collapsed: new Set([rows[0].id]) }))[0].expanded, false);
 		assert.deepStrictEqual(ancestorIds(rows, 'row-4'), ['row-3', 'row-2', 'row-1', 'row-0'], 'nearest parent first');
+	});
+
+	test('TREE-02 a documentPatch outside the rendered window updates the store without patching a hidden row', async () => {
+		const rows = buildRows(scanEcucValues(parameterDocument(300)), {
+			sort: 'all',
+			sortExcept: SORT_EXCEPTIONS,
+		}).rows;
+		const at = 250;
+		const target = rows[at];
+		assert.strictEqual(target.kind, 'parameter', 'the patched index is a parameter row');
+
+		const dom = installDom('editor');
+		try {
+			loadModule<typeof import('../../../webview/editorViewer')>('../../webview/editorViewer').mountEditor();
+			dom.post({ type: 'document', document: { rows } });
+
+			const before = treeRows(dom.document);
+			assert.ok(before.length > 0 && before.length < rows.length, `the window is bounded (${before.length} rows)`);
+			assert.strictEqual(renderedRow(dom.document, target.id), undefined, 'the target starts outside the window');
+			const visibleHtml = before.map((row: any) => row.innerHTML).join('\n');
+
+			dom.post({
+				type: 'documentPatch',
+				patch: {
+					at,
+					remove: 1,
+					rows: [{ ...target, value: '424242', shownValue: '424242', haystack: `${target.haystack} 424242` }],
+					structural: false,
+				},
+			});
+
+			assert.strictEqual(renderedRow(dom.document, target.id), undefined, 'a hidden row gets no DOM patch');
+			assert.strictEqual(treeRows(dom.document).length, before.length, 'the window size is unchanged');
+			assert.strictEqual(
+				treeRows(dom.document).map((row: any) => row.innerHTML).join('\n'),
+				visibleHtml,
+				'visible rows are untouched by a patch for a hidden row'
+			);
+
+			const scroller = dom.document.querySelector('#tree .virtual-scroll-vscroll') as HTMLElement;
+			scroller.scrollTop = at * 20;
+			scroller.dispatchEvent(new dom.window.Event('scroll'));
+			await new Promise((resolve) => setTimeout(resolve, 20));
+
+			const updated = renderedRow(dom.document, target.id);
+			assert.ok(updated, 'scrolling to the patched index renders the row');
+			assert.ok(
+				(updated.querySelector('.value')?.textContent ?? '').includes('424242'),
+				'the patched store value is what the window paints'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('TREE-04 150k rows scroll to the end and back rebuild the window with no height drift', () => {
+		const state = {
+			rowCount: 150_000,
+			rowHeight: () => 20,
+			containerHeight: 600,
+			scrollTop: 0,
+			bufferSize: 10,
+			heightVersion: 1,
+		};
+		const first = calcVisibleRange(state);
+		const total = calcTotalHeight(state);
+		assert.strictEqual(total, 3_000_000);
+		assert.ok(first[1] < 100, `the first window is bounded (${first[1]} rows)`);
+
+		const end = calcVisibleRange({ ...state, scrollTop: total - 600 });
+		assert.ok(end[0] > 149_000, `the end window starts near the end (${end[0]})`);
+		assert.strictEqual(end[1], 150_000, 'the end window includes the last row');
+
+		const back = calcVisibleRange(state);
+		assert.deepStrictEqual(back, first, 'scrolling back rebuilds the same window');
+		assert.strictEqual(calcTotalHeight(state), total, 'the total height does not drift');
+		assert.strictEqual(calcRowOffset(150_000, state), total, 'the last offset still equals the total height');
+	});
+
+	test('TREE-06 a zero-height viewport still renders at least one row', () => {
+		const state = {
+			rowCount: 500,
+			rowHeight: () => 20,
+			containerHeight: 0,
+			scrollTop: 0,
+			bufferSize: 0,
+			heightVersion: 1,
+		};
+		assert.deepStrictEqual(calcVisibleRange(state), [0, 1], 'the top row stays renderable');
+		assert.deepStrictEqual(calcVisibleRange({ ...state, scrollTop: 400 }), [20, 21], 'a mid-list target stays renderable');
+		assert.deepStrictEqual(calcVisibleRange({ ...state, scrollTop: 9_999 }), [499, 500], 'the last row stays renderable');
 	});
 });

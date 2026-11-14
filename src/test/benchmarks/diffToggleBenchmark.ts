@@ -7,8 +7,8 @@
  */
 import { performance } from 'node:perf_hooks';
 import type { EcucRow } from '../../core/ecuc/renderRows';
-import { DiffSession } from '../../core/diff/diffSession';
-import type { DiffPreparedSide } from '../../core/diff/diffSession';
+import { DiffSession } from '../core/diffSessionOracle';
+import type { DiffPreparedSide } from '../core/diffSessionOracle';
 import { containerRows, retainedBytes, retainedDelta } from './benchmarkUtils';
 
 const MAX_FIRST_MS = 1_500;

@@ -7,8 +7,10 @@
  *
  * Pure: no `vscode` import and no DOM.
  */
-import { EXPECTED_PROTOCOL, type EngineClient } from './engineClient';
+import type { DiffDocument, DiffRow, DiffSummary } from '../../core/diff/diffModel';
+import type { DiffPatch } from '../../core/diff/diffPatch';
 import type { EcucRow } from '../../core/ecuc/renderRows';
+import { EXPECTED_PROTOCOL, type EngineClient } from './engineClient';
 
 export { EXPECTED_PROTOCOL };
 
@@ -45,6 +47,36 @@ export interface EngineRowPatch {
 	structural: boolean;
 }
 
+/** One compared document: its engine handle plus the pane label. */
+export interface EngineDiffSide {
+	docId: number;
+	name: string;
+	path: string;
+}
+
+export interface EngineDiffOptions {
+	semanticMatching?: boolean;
+	/** Deterministic scored-pair cap; tests set it, the host never does. */
+	semanticPairBudget?: number;
+}
+
+/** The text change one copy applied, in UTF-16 offsets. */
+export interface EngineDiffEdit {
+	side: 'left' | 'right';
+	start: number;
+	end: number;
+	text: string;
+}
+
+/** The engine's patch is the same shape the host and page apply. */
+export type EngineDiffPatch = DiffPatch;
+
+export interface EngineDiffPatchResult {
+	patch?: EngineDiffPatch;
+	/** Why the engine cannot patch; the host rebuilds instead. */
+	reason?: string;
+}
+
 export interface EngineTextChange {
 	start: number;
 	end: number;
@@ -60,6 +92,18 @@ export interface CoreEngine {
 	planEdit(docId: number, request: EngineEditRequest): Promise<EngineEditPlan>;
 	/** Applies text changes; `patch` is absent when the answer was not a row patch. */
 	updateDocument(docId: number, edits: readonly EngineTextChange[]): Promise<EngineRowPatch | undefined>;
+	/** The whole diff document: row chunks assembled, headers and summary from the last frame. */
+	computeDiff(
+		left: EngineDiffSide,
+		right: EngineDiffSide,
+		options?: EngineDiffOptions
+	): Promise<DiffDocument>;
+	/** The rows one copy changed, or the reason a full rebuild is required. */
+	patchDiff(
+		left: EngineDiffSide,
+		right: EngineDiffSide,
+		edit: EngineDiffEdit
+	): Promise<EngineDiffPatchResult>;
 	closeDocument(docId: number): Promise<void>;
 	/** A side-effect-free probe used by diagnostics and tests. */
 	engineVersion(): string;
@@ -77,6 +121,23 @@ export function protocolDiagnostic(header: Record<string, unknown>): string | un
 		return `engine protocol ${String(protocol)} does not match ${EXPECTED_PROTOCOL}`;
 	}
 	return undefined;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object';
+}
+
+function hasSides(envelope: Record<string, unknown>): boolean {
+	return isObject(envelope.left) && isObject(envelope.right);
+}
+
+function hasCounters(envelope: Record<string, unknown>): boolean {
+	return Array.isArray(envelope.labels) && isObject(envelope.summary);
+}
+
+/** The final frame's document envelope, checked before it is trusted. */
+function isDiffEnvelope(value: unknown): value is Omit<DiffDocument, 'rows'> {
+	return isObject(value) && hasSides(value) && hasCounters(value);
 }
 
 function parseJson<T>(chunk: { body: Buffer }): T {
@@ -105,6 +166,25 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 				return undefined;
 			}
 			return parseJson<EngineRowPatch>(updated);
+		},
+		computeDiff: async (left, right, options = {}) => {
+			const chunks = await client.requestStream('diff.compute', { left, right, options }, undefined, 60_000);
+			const envelope = chunks.map((chunk) => chunk.header.document).find((found) => found !== undefined);
+			if (!isDiffEnvelope(envelope)) {
+				throw new Error('engine returned no diff envelope');
+			}
+			const rows = chunks
+				.filter((chunk) => chunk.body.length > 0)
+				.flatMap((chunk) => parseJson<DiffDocument['rows']>(chunk));
+			return { ...envelope, rows };
+		},
+		patchDiff: async (left, right, edit) => {
+			const answer = await client.request('diff.patch', { left, right, edit }, undefined, 120_000);
+			if (answer.header.patch === true) {
+				const patch = JSON.parse(answer.body.toString('utf8')) as EngineDiffPatch;
+				return { patch };
+			}
+			return { reason: typeof answer.header.reason === 'string' ? answer.header.reason : 'unknown' };
 		},
 		closeDocument: async (docId) => {
 			if (client.isClosed) {

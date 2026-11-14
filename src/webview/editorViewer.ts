@@ -2071,6 +2071,9 @@ function applyDocumentPatch(message: Extract<EditorProviderToWebview, { type: 'd
 		// A value edit keeps the row count and every id: no re-index, no rebuild.
 		// Fields the host owns (the resolved definition) survive the merge.
 		rows[patch.at] = { ...existing, ...patch.rows[0] };
+		// The search index is a snapshot; an in-place patch must refresh it or a
+		// patched haystack is invisible until the next full document.
+		buildSearchCandidates();
 		if (message.header !== undefined) {
 			setHeaderRows(message.header);
 		}

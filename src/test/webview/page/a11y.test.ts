@@ -23,7 +23,7 @@ function mount() {
 }
 
 suite('editor accessibility (AC8)', () => {
-	test('AC8: the tree exposes real tree roles, levels and expansion state', () => {
+	test('X-03 AC8: the tree exposes real tree roles, levels and expansion state', () => {
 		const dom = mount();
 		try {
 			const tree = dom.document.getElementById('tree');

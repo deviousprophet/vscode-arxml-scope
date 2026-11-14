@@ -7,6 +7,7 @@
  * mode request and a reveal intent.
  */
 import type { DiffDocument } from './core/diff/diffModel';
+import type { DiffPatch } from './core/diff/diffPatch';
 
 export type { DiffDocument } from './core/diff/diffModel';
 
@@ -17,7 +18,14 @@ export type DiffProviderToWebview =
 	/** The mode changed but the same document is still displayed. */
 	| { type: 'matchModeState'; semantic: boolean }
 	/** The refresh failed; keep the last good document and show the banner. */
-	| { type: 'error'; message: string };
+	| { type: 'error'; message: string }
+	/** Merge mode is on: the page shows copy arrows and accepts copy gestures. */
+	| { type: 'mergeMode'; enabled: boolean }
+	/** A buffer was edited or saved: the pane labels gained or lost their dirty marker. */
+	| { type: 'labels'; labels: [string, string] }
+	/** A copy was answered with the rows it changed, not the whole document. */
+	| { type: 'documentPatch'; patch: DiffPatch }
+;
 
 /** Diff page → host. */
 export type DiffWebviewToProvider =
@@ -26,7 +34,12 @@ export type DiffWebviewToProvider =
 	/** Toggle semantic matching for this panel only. */
 	| { type: 'matchMode'; semantic: boolean }
 	/** Reveal one row in its source file; `side` is the host row side (the page maps the displayed pane through `hostSide`). */
-	| { type: 'reveal'; side: 'left' | 'right'; key: string };
+	| { type: 'reveal'; side: 'left' | 'right'; key: string }
+	/** Turn merge mode on or off for this panel. */
+	| { type: 'mergeMode'; enabled: boolean }
+	/** Copy one row's element into the other document; `side` is the host source side. */
+	| { type: 'copy'; side: 'left' | 'right'; key: string }
+;
 
 /** The message type, or `undefined` for a payload that is not a protocol message. */
 export function diffMessageType(message: unknown): string | undefined {
@@ -34,8 +47,18 @@ export function diffMessageType(message: unknown): string | undefined {
 	return typeof type === 'string' ? type : undefined;
 }
 
+/** Every host message the page knows; one place to add the next one. */
+const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+	'document',
+	'matchModeState',
+	'error',
+	'mergeMode',
+	'labels',
+	'documentPatch'
+]);
+
 /** A host message with the diff protocol's shape; the page ignores anything else. */
 export function isDiffProviderMessage(message: unknown): message is DiffProviderToWebview {
 	const type = diffMessageType(message);
-	return type === 'document' || type === 'matchModeState' || type === 'error';
+	return type !== undefined && PROVIDER_MESSAGE_TYPES.has(type);
 }

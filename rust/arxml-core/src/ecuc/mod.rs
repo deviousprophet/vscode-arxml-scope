@@ -109,10 +109,6 @@ impl Document {
     }
 
     /// Applies a batch of changes (already ordered descending by start).
-    ///
-    /// One change inside a `<VALUE>` text — the editor's only value edit — takes the
-    /// in-place path: splice, shift the ranges after it, rewrite that one row. Nothing
-    /// else is re-parsed, so a 20 MiB document costs a few milliseconds.
     pub fn apply_changes(&mut self, changes: &[(usize, usize, String)]) -> Patch {
         if let [change] = changes {
             if let Some(patch) = self.apply_value_edit(change.0, change.1, &change.2) {
@@ -123,8 +119,6 @@ impl Document {
         for (start, end, new_text) in changes {
             let start_byte = self.text.byte_at_utf16(*start);
             let end_byte = self.text.byte_at_utf16(*end);
-            // Offsets are relative to the document the batch was recorded against, so
-            // each splice is computed from the original text for that change.
             let mut next = String::with_capacity(text.len() + new_text.len());
             next.push_str(&text[..start_byte]);
             next.push_str(new_text);
@@ -154,7 +148,7 @@ impl Document {
         let value = text::decode_xml(self.text.slice_utf16(range.start as usize, value_end))
             .trim()
             .to_string();
-        self.set_display_value(&node_id, &value);
+        self.set_display_value(&node_id, &value, delta);
         rows::refresh_value_row(
             &mut self.rows[position],
             definition_dest.as_deref(),
@@ -187,11 +181,11 @@ impl Document {
         None
     }
 
-    fn set_display_value(&mut self, node_id: &str, value: &str) {
+    fn set_display_value(&mut self, node_id: &str, value: &str, delta: i32) {
         let Some(range) = self.index.get(node_id).map(|entry| entry.range) else {
             return;
         };
-        set_value_in(&mut self.model.modules, range, value);
+        set_value_in(&mut self.model.modules, range, value, delta);
     }
 
     /// Replaces the whole text (recovery path).
@@ -276,25 +270,31 @@ fn find_value(
     None
 }
 
-fn set_value_in(modules: &mut [model::ModuleNode], range: Range, value: &str) -> bool {
+fn set_value_in(modules: &mut [model::ModuleNode], range: Range, value: &str, delta: i32) -> bool {
     modules
         .iter_mut()
-        .any(|module| set_value_in_containers(&mut module.containers, range, value))
+        .any(|module| set_value_in_containers(&mut module.containers, range, value, delta))
 }
 
 fn set_value_in_containers(
     containers: &mut [model::ContainerNode],
     range: Range,
     value: &str,
+    delta: i32,
 ) -> bool {
     for container in containers.iter_mut() {
         for parameter in container.parameters.iter_mut() {
             if parameter.range == range {
                 parameter.display_value = Some(value.to_string());
+                // The value span ends exactly at the edit point, which `shift_range`
+                // deliberately leaves alone; this node is the one that changed.
+                if let Some(value_range) = parameter.value_range.as_mut() {
+                    value_range.end = (value_range.end as i64 + delta as i64).max(0) as u32;
+                }
                 return true;
             }
         }
-        if set_value_in_containers(&mut container.containers, range, value) {
+        if set_value_in_containers(&mut container.containers, range, value, delta) {
             return true;
         }
     }
@@ -440,6 +440,40 @@ mod tests {
             + 7;
         let second = document.apply_change(at, at + 2, "7");
         assert_eq!(second.rows[0].value.as_deref(), Some("7"));
+    }
+
+    #[test]
+    fn a_grown_value_range_is_replanned_not_reused() {
+        let mut document = Document::new(DOC.to_string());
+        let id = document.rows()[2].id.clone();
+        let first = edit::plan_value_edit(
+            document.model(),
+            document.index(),
+            document.text(),
+            &id,
+            "1000",
+        );
+        assert!(first.ok, "{:?}", first.reason);
+        let record = first.record.expect("a first plan");
+        document.apply_change(
+            record.range.start as usize,
+            record.range.end as usize,
+            &record.new_text,
+        );
+
+        // The value span ends exactly at the edit point, so it must be moved here:
+        // `shift_range` leaves a range that merely touches the edit alone.
+        let second = edit::plan_value_edit(
+            document.model(),
+            document.index(),
+            document.text(),
+            &id,
+            "7",
+        );
+        assert!(second.ok, "{:?}", second.reason);
+        let record = second.record.expect("a second plan");
+        assert_eq!(record.old_text, "1000");
+        assert_eq!(record.range.end - record.range.start, 4);
     }
 
     #[test]

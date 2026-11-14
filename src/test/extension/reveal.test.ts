@@ -20,7 +20,7 @@ const FIXTURE = 'editor/navigation.arxml';
 const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
 
 suite('editor reveal (AC4, AC5)', () => {
-	test('AC4: an offset inside an element selects that element, not an ancestor', () => {
+	test('NAV-01 AC4: an offset inside an element selects that element, not an ancestor', () => {
 		const model = scanEcucValues(fixtureText(FIXTURE));
 		const index = buildNodeIndex(model);
 		const module = model.modules[0];

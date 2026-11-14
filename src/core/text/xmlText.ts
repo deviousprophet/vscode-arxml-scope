@@ -19,10 +19,23 @@ function isHexCharRef(body: string): boolean {
 	return body.startsWith('#x') || body.startsWith('#X');
 }
 
-/** Decodes one numeric reference, or leaves it verbatim when the digits are not a number. */
+/** True when `code` is a Unicode scalar value. */
+function inUnicodeRange(code: number): boolean {
+	return code >= 0 && code <= 0x10ffff;
+}
+
+/** True for a lone surrogate, which `String.fromCodePoint` accepts but XML does not. */
+function isSurrogate(code: number): boolean {
+	return code >= 0xd800 && code <= 0xdfff;
+}
+
+/** Decodes one numeric reference; out-of-range or surrogate code points stay verbatim. */
 function decodeCodePoint(match: string, digits: string, radix: number): string {
 	const code = Number.parseInt(digits, radix);
-	return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+	if (!Number.isFinite(code) || !inUnicodeRange(code) || isSurrogate(code)) {
+		return match;
+	}
+	return String.fromCodePoint(code);
 }
 
 /** Decodes one entity-reference match; unknown names stay verbatim. */

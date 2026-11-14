@@ -8,23 +8,17 @@
  *   node scripts/parityRows.mjs basic      # fixtures whose path contains "basic"
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { buildSync } from 'esbuild';
+import { fixtures } from './parityFixtures.mjs';
 
 const root = process.cwd();
 const filter = process.argv[2] ?? '';
 const SORTS = ['all', 'declaration'];
 const fixturesDir = path.join(root, 'src', 'test', 'fixtures');
 const cli = path.join(root, 'rust', 'target', 'debug', process.platform === 'win32' ? 'arxml-cli.exe' : 'arxml-cli');
-
-function fixtures() {
-	return readdirSync(fixturesDir, { recursive: true, withFileTypes: true })
-		.filter((entry) => entry.isFile() && entry.name.endsWith('.arxml'))
-		.map((entry) => path.join(entry.parentPath ?? fixturesDir, entry.name))
-		.sort();
-}
 
 function bundleOracle() {
 	const dir = mkdtempSync(path.join(tmpdir(), 'arxml-parity-'));
@@ -109,7 +103,7 @@ const { dir, outfile } = bundleOracle();
 let failures = 0;
 let checked = 0;
 try {
-	for (const file of fixtures()) {
+	for (const file of fixtures(fixturesDir)) {
 		const relative = path.relative(root, file).replaceAll('\\', '/');
 		if (filter && !relative.includes(filter)) continue;
 		checked++;

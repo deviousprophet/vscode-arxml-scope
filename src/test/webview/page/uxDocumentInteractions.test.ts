@@ -116,6 +116,50 @@ function mountWithState(saved: unknown) {
 	return dom;
 }
 
+function displayIndices(dom: ReturnType<typeof installDom>): number[] {
+	return treeRows(dom.document).map((row) => Number(row.dataset.documentIndex));
+}
+
+function ascendingDisplayIndices(dom: ReturnType<typeof installDom>): boolean {
+	return displayIndices(dom).every((value, at, all) => at === 0 || value > all[at - 1]);
+}
+
+function rowById(dom: ReturnType<typeof installDom>, id: string): HTMLElement | undefined {
+	return treeRows(dom.document).find((candidate) => candidate.dataset.nodeId === id) as HTMLElement | undefined;
+}
+
+function displayIndexById(dom: ReturnType<typeof installDom>, id: string): number {
+	const row = treeRows(dom.document).find((candidate) => candidate.dataset.nodeId === id);
+	assert.ok(row, `row ${id} is rendered`);
+	return Number(row!.dataset.documentIndex);
+}
+
+function toggleTwisty(dom: ReturnType<typeof installDom>, id: string): void {
+	const row = rowById(dom, id);
+	assert.ok(row, `row ${id} is rendered`);
+	row!.querySelector('.twisty')!.dispatchEvent(
+		new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })
+	);
+}
+
+function paintedValue(dom: ReturnType<typeof installDom>, id: string): string {
+	return rowById(dom, id)?.querySelector('.value-text')?.textContent ?? '';
+}
+
+function assertSnapshotHeld(dom: ReturnType<typeof installDom>, before: ReadonlyMap<string, number>): void {
+	for (const [id, index] of before) {
+		if (rowById(dom, id) !== undefined) {
+			assert.strictEqual(displayIndexById(dom, id), index, `${id} keeps its display index`);
+		}
+	}
+}
+
+function displayIndexSnapshot(dom: ReturnType<typeof installDom>): Map<string, number> {
+	return new Map(
+		treeRows(dom.document).map((row) => [row.dataset.nodeId as string, Number(row.dataset.documentIndex)])
+	);
+}
+
 suite('editor Document interactions', () => {
 	test('bracket guides fade at rest and activate on container hover', () => {
 		const css = webviewCss('components', 'documentTree', 'documentTree.css');
@@ -456,7 +500,117 @@ suite('editor Document interactions', () => {
 		}
 	});
 
-	test('Collapse all anchors to the nearest visible ancestor and Expand all restores the selected row', async () => {
+	test('TREE-03 a documentPatch then collapse/expand keeps display indices consistent', () => {
+		const dom = mount();
+		try {
+			const payload = rowsOf(FIXTURE);
+			const at = payload.findIndex((row) => row.label === 'IniValue');
+			const target = payload[at];
+			const indexBefore = displayIndexById(dom, target.id);
+			const before = displayIndexSnapshot(dom);
+			assert.ok(ascendingDisplayIndices(dom), 'the mounted rows have unique ascending display indices');
+
+			dom.post({
+				type: 'documentPatch',
+				patch: {
+					at,
+					remove: 1,
+					rows: [
+						{
+							...target,
+							value: '424242',
+							shownValue: '424242',
+							haystack: `${target.haystack} 424242`,
+						},
+					],
+					structural: false,
+				},
+			});
+
+			assert.strictEqual(displayIndexById(dom, target.id), indexBefore, 'the patch does not renumber the row');
+			assertSnapshotHeld(dom, before);
+			assert.ok(paintedValue(dom, target.id).includes('424242'), 'the patched value is painted');
+
+			const container = payload.find((row) => row.kind === 'container' && row.shortName === 'ContA')!;
+			toggleTwisty(dom, container.id);
+			assert.strictEqual(rowById(dom, target.id), undefined, 'collapse hides the patched child');
+			assert.ok(ascendingDisplayIndices(dom), 'collapse keeps the remaining display indices ascending');
+
+			toggleTwisty(dom, container.id);
+			assert.strictEqual(
+				displayIndexById(dom, target.id),
+				indexBefore,
+				'the patched row returns at its pre-collapse display index'
+			);
+			assert.ok(paintedValue(dom, target.id).includes('424242'), 'the patched value survives collapse/expand');
+			assert.ok(ascendingDisplayIndices(dom), 'expand leaves the display indices ascending');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('TREE-05 a copy spanning a collapsed subtree stays on visible rows with 4-space indent', () => {
+		const text = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/M</DEFINITION-REF><CONTAINERS>
+<ECUC-CONTAINER-VALUE><SHORT-NAME>Alpha</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/M/Alpha</DEFINITION-REF><PARAMETER-VALUES>
+<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/M/Alpha/AlphaValue</DEFINITION-REF><VALUE>1</VALUE></ECUC-NUMERICAL-PARAM-VALUE>
+</PARAMETER-VALUES></ECUC-CONTAINER-VALUE>
+<ECUC-CONTAINER-VALUE><SHORT-NAME>Middle</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/M/Middle</DEFINITION-REF><PARAMETER-VALUES>
+<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/M/Middle/HiddenOnly</DEFINITION-REF><VALUE>2</VALUE></ECUC-NUMERICAL-PARAM-VALUE>
+</PARAMETER-VALUES></ECUC-CONTAINER-VALUE>
+<ECUC-CONTAINER-VALUE><SHORT-NAME>Zulu</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/M/Zulu</DEFINITION-REF><PARAMETER-VALUES>
+<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/M/Zulu/ZuluValue</DEFINITION-REF><VALUE>3</VALUE></ECUC-NUMERICAL-PARAM-VALUE>
+</PARAMETER-VALUES></ECUC-CONTAINER-VALUE>
+</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const dom = installDom('editor');
+		try {
+			loadModule<typeof import('../../../webview/editorViewer')>('../../webview/editorViewer').mountEditor();
+			const payload = buildRows(scanEcucValues(text), { sort: 'all', sortExcept: SORT_EXCEPTIONS }).rows;
+			dom.post({ type: 'document', document: { rows: payload } });
+			const rowOf = (id: string): HTMLElement | undefined =>
+				treeRows(dom.document).find((row) => row.dataset.nodeId === id) as HTMLElement | undefined;
+			const byName = (name: string): any => payload.find((row) => row.shortName === name)!;
+
+			const collapsed = byName('Middle');
+			rowOf(collapsed.id)!.querySelector('.twisty')!.dispatchEvent(
+				new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })
+			);
+			assert.strictEqual(
+				treeRows(dom.document).some((row) => row.querySelector('.label')?.textContent === 'HiddenOnly'),
+				false,
+				'the collapsed subtree child is not rendered'
+			);
+
+			const labelOf = (name: string): Node => {
+				const row = rowOf(byName(name).id)!;
+				return row.querySelector('.label')!.firstChild!;
+			};
+			selectBetween(dom, labelOf('Alpha'), labelOf('Zulu'));
+			const { copied, prevented } = dispatchCopy(dom);
+
+			assert.strictEqual(prevented, true, 'the page owns the multi-row copy');
+			assert.ok(copied, 'the page writes text/plain');
+			const lines = copied!.split('\n');
+			assert.deepStrictEqual(
+				lines.map((line) => line.trim()),
+				['Alpha "Alpha"', '{', 'AlphaValue = 1', '}', 'Middle "Middle"', 'Zulu "Zulu"'],
+				'only the visible rows and braces between the endpoints are copied'
+			);
+			assert.ok(!copied!.includes('HiddenOnly'), 'the collapsed subtree child is not copied');
+			for (const line of lines) {
+				assert.strictEqual(
+					(line.match(/^ */)![0].length) % 4,
+					0,
+					`4-space indent: ${JSON.stringify(line)}`
+				);
+			}
+		} finally {
+			dom.window.getSelection()?.removeAllRanges();
+			dom.restore();
+		}
+	});
+
+	test('TREE-01 Collapse all anchors to the nearest visible ancestor and Expand all restores the selected row', async () => {
 		const dom = mountFixture('editor/large.arxml');
 		try {
 			const scroller = dom.document.querySelector('#tree > .virtual-scroll-vscroll') as HTMLElement;
@@ -657,7 +811,7 @@ suite('editor Document interactions', () => {
 		}
 	});
 
-	test('a refused write keeps the typed text and marks the details input invalid', () => {
+	test('DETAIL-02 a refused write keeps the typed text and marks the details input invalid', () => {
 		const dom = mount();
 		try {
 			const parameter = treeRows(dom.document).find((row) => row.querySelector('.label')?.textContent === 'IniValue')!;
@@ -684,7 +838,7 @@ suite('editor Document interactions', () => {
 		assert.ok(!/fetch\(|XMLHttpRequest|new Worker|serviceWorker/.test(html), 'the shell has no remote/worker path');
 	});
 
-	test('the stylesheet keeps only the documented colour literals', () => {
+	test('X-04 the stylesheet keeps only the documented colour literals', () => {
 		const css = [webviewCss('styles', 'tokens.css'), webviewCss('components', 'documentTree', 'documentTree.css')].join('\n');
 		const hexes = [...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
 		assert.deepStrictEqual(

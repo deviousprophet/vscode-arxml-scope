@@ -7,7 +7,7 @@
  * the host's job.
  */
 import './conditionsPanel.css';
-import type { ConditionEntry } from '../../../../core/ecuc/conditionEntry';
+import { MAX_CONDITION_ENTRIES, type ConditionEntry } from '../../../../core/ecuc/conditionEntry';
 
 
 /** The one validation rule for a row name, shared by Save and the tests. */
@@ -755,6 +755,10 @@ function addConditionEntry(): void {
 	if (focusExistingConditionDraft()) {
 		return;
 	}
+	if (conditionsList.querySelectorAll('.condition-row').length >= MAX_CONDITION_ENTRIES) {
+		showConditionsStatus(`At most ${MAX_CONDITION_ENTRIES} condition values can be added.`);
+		return;
+	}
 	openNewConditionRow();
 }
 
@@ -773,12 +777,13 @@ function removeConditionRow(row: any): void {
 }
 
 function clearConditionEntries(): void {
-	if (editingConditionRow) {
-		cancelConditionEdit(editingConditionRow);
-	}
 	if (conditionsList) {
 		const list = conditionsList.querySelectorAll('.condition-row');
 		for (let at = 0; at < list.length; at++) {
+			// An open draft is not a committed value: clearing keeps its typed text.
+			if (list[at] === editingConditionRow) {
+				continue;
+			}
 			list[at].dataset.value = '';
 			renderConditionRow(list[at]);
 		}

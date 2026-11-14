@@ -709,6 +709,77 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('MERGE-14 a dirty buffer gains the unsaved marker on its pane label only', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'labels', labels: ['left.arxml •', 'right.arxml'] });
+			assert.strictEqual(dom.document.getElementById('diff-title-left')!.textContent, 'left.arxml •');
+			assert.strictEqual(dom.document.getElementById('diff-title-right')!.textContent, 'right.arxml');
+			dom.post({ type: 'labels', labels: ['left.arxml', 'right.arxml'] });
+			assert.strictEqual(dom.document.getElementById('diff-title-left')!.textContent, 'left.arxml');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('DIFF-05 1,200 changed rows still render a bounded window', () => {
+		const rows: DiffRow[] = Array.from({ length: 1200 }, (_, at) => windowDiffRow(at));
+		const { dom } = mount({
+			left: { name: 'left.arxml', path: '/work/left.arxml' },
+			right: { name: 'right.arxml', path: '/work/right.arxml' },
+			labels: ['left.arxml', 'right.arxml'],
+			leftHeader: { packages: [] },
+			rightHeader: { packages: [] },
+			rows,
+			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0, renamed: 0 },
+			semanticSkipped: 0
+		});
+		try {
+			const rendered = treeRows(dom.document, '#diff-pane-left').length;
+			assert.ok(rendered > 0 && rendered <= 200, `bounded window (${rendered})`);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('X-01 a message named after an inherited member is ignored', () => {
+		const { dom } = mount();
+		try {
+			const stray = (type: string) => ({ type }) as unknown as Parameters<typeof dom.post>[0];
+			dom.post(stray('toString'));
+			dom.post(stray('constructor'));
+			assert.strictEqual(dom.document.getElementById('diff-list')!.hidden, false, 'the document is untouched');
+			assert.strictEqual(dom.document.querySelectorAll('#diff-pane-left [role="treeitem"]').length > 0, true);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a copy patch replaces rows without a full document message', () => {
+		const source = documentOf();
+		const { dom } = mount(source);
+		try {
+			const at = source.rows.findIndex((row) => row.kind === 'parameter' && row.left !== undefined && row.right !== undefined);
+			assert.ok(at >= 0, 'the fixture has a paired parameter');
+			const target = source.rows[at];
+			dom.post({
+				type: 'documentPatch',
+				patch: {
+					at,
+					remove: 1,
+					rows: [{ ...target, left: { ...target.left!, label: 'Copied' } }],
+					ancestors: [],
+					summary: source.summary,
+					semanticSkipped: 0
+				}
+			});
+			const text = dom.document.getElementById('diff-pane-left')!.textContent || '';
+			assert.ok(text.includes('Copied'), 'the patched row is on screen');
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('1200 rows are windowed by the shared virtual math', () => {
 		const rows: DiffRow[] = Array.from({ length: 1200 }, (_, at) => windowDiffRow(at));
 		const { dom } = mount({
@@ -1414,8 +1485,28 @@ suite('semantic diff page', () => {
 	test('added rows use a leading edge and split lines own their styles', () => {
 		const diff = webviewCss('components', 'diffView', 'diffView.css');
 		assert.ok(diff.includes('.diff-row[data-status="added"] > .diff-cell[data-side="right"]'));
-		assert.ok(diff.includes('inset 3px 0 0 var(--diff-added-edge)'));
-		assert.ok(!diff.includes('inset -3px 0 0 var(--diff-added-edge)'), 'the trailing added edge is gone');
+		assert.ok(
+			/\.diff-row\[data-status="added"\] > \.diff-cell\[data-side="right"\]\s*\{[^}]*inset 3px 0 0/.test(diff),
+			'the code cell keeps its leading added edge'
+		);
+		assert.ok(
+			/\.document-tree-lines\[data-side="left"\] \.document-tree-line-number\[data-status="changed"\]\s*\{[^}]*inset -3px 0 0/.test(
+				diff
+			),
+			'the changed gutter rail sits on its inner edge'
+		);
+		assert.ok(
+			/\.document-tree-lines\[data-side="left"\] \.document-tree-line-number\[data-status="removed"\]\s*\{[^}]*inset -3px 0 0/.test(
+				diff
+			),
+			'the removed gutter rail sits on its inner edge'
+		);
+		assert.ok(
+			/\.document-tree-lines\[data-side="right"\] \.document-tree-line-number\[data-status="added"\]\s*\{[^}]*inset -3px 0 0/.test(
+				diff
+			),
+			'the added gutter rail sits on its inner edge'
+		);
 		assert.ok(diff.includes('.diff-gap-toggle'));
 		assert.ok(diff.includes('.diff-gap-line'));
 		assert.ok(diff.includes('.toolbar-center'));
@@ -1470,6 +1561,26 @@ suite('semantic diff page', () => {
 		assert.ok(toolbar.includes('white-space: normal'), 'long labels wrap inside the fixed box');
 		assert.ok(toolbar.includes('max-width: 1040px'), 'labels hide before the row can overlap');
 		assert.ok(toolbar.includes('max-width: 720px'), 'compact icon buttons at very narrow widths');
+	});
+
+	test('a selected changed row keeps its number clear of the status rail', () => {
+		const { dom } = mount();
+		try {
+			const row = dom.document.querySelector(
+				'#diff-pane-left .diff-row[data-status="changed"]'
+			) as HTMLElement | null;
+			assert.ok(row, 'the fixture has a changed row');
+			row.click();
+			const selected = dom.document.querySelector('#diff-pane-left .node[data-selected="true"]');
+			assert.ok(selected, 'the changed row is selected');
+			const gutter = paneGutter(dom, 'left');
+			const changedCell = gutter.querySelector('.document-tree-line-number[data-status="changed"]');
+			assert.ok(changedCell, 'the selected row keeps its gutter status');
+			// The rail edge itself is asserted on the stylesheet: jsdom does not apply it.
+			assert.ok(changedCell.textContent !== '', 'the number is still rendered');
+		} finally {
+			dom.restore();
+		}
 	});
 
 	test('selecting a container highlights the same subtree and annotation rows in both panes', () => {
@@ -2469,6 +2580,139 @@ suite('semantic diff page', () => {
 				content.style.height,
 				'3980px',
 				'100 rows plus 99 shared module gaps at one base row height'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+});
+
+suite('diff page merge mode', () => {
+	test('MERGE-01 merge mode is off by default; the toggle shows arrows and posts the mode', () => {
+		const { dom } = mount();
+		try {
+			const toggle = dom.document.querySelector('.diff-merge-toggle') as HTMLButtonElement;
+			assert.ok(toggle, 'the title strip owns the toggle');
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
+			assert.strictEqual(dom.document.querySelectorAll('.diff-copy-arrow').length, 0, 'no arrows while off');
+
+			toggle.click();
+			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
+			assert.deepStrictEqual(messagesOf(dom.api, 'mergeMode'), [{ type: 'mergeMode', enabled: true }]);
+			assert.ok(dom.document.querySelectorAll('.diff-copy-arrow').length > 0, 'changed rows show an arrow');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('X-02 a document message with a malformed body is not applied', () => {
+		const source = documentOf();
+		const { dom } = mount(source);
+		try {
+			const before = dom.document.querySelectorAll('#diff-pane-left [role="treeitem"]').length;
+			dom.post({ type: 'document', semantic: true, document: { rows: 'not an array' } as unknown as DiffDocument });
+			assert.strictEqual(
+				dom.document.querySelectorAll('#diff-pane-left [role="treeitem"]').length,
+				before,
+				'the last good document stays'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('MERGE-09 Alt+Arrow copies the focused row only in merge mode', () => {
+		const { dom, page } = mount();
+		try {
+			page.resetDiffState?.();
+			dom.post({ type: 'mergeMode', enabled: true });
+			const row = dom.document.querySelector('#diff-pane-left .diff-row[data-status="changed"]') as HTMLElement;
+			assert.ok(row, 'the fixture has a changed row');
+			assert.ok(dom.document.querySelector('#diff-pane-left .diff-copy-arrow'), 'merge mode is on');
+			row.click();
+			const pane = dom.document.getElementById('diff-pane-left')!;
+			pane.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true })
+			);
+			assert.strictEqual(messagesOf(dom.api, 'copy').length, 1, 'one copy is posted');
+			const copied = messagesOf(dom.api, 'copy')[0] as { side?: string; key?: string };
+			assert.strictEqual(copied.side, 'left');
+			assert.ok(copied.key);
+
+			dom.post({ type: 'mergeMode', enabled: false });
+			row.click();
+			pane.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true })
+			);
+			assert.strictEqual(messagesOf(dom.api, 'copy').length, 1, 'the read-only mode ignores the shortcut');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('after Swap the arrow points at the other displayed pane', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'mergeMode', enabled: true });
+			(dom.document.getElementById('diff-swap') as HTMLElement).click();
+			const left = dom.document.querySelector('#diff-pane-left .diff-copy-arrow');
+			const right = dom.document.querySelector('#diff-pane-right .diff-copy-arrow');
+			assert.strictEqual(left?.textContent, '→', 'the displayed left pane points right');
+			assert.strictEqual(right?.textContent, '←', 'the displayed right pane points left');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('unchanged rows never show an arrow', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'mergeMode', enabled: true });
+			const unchanged = Array.from(dom.document.querySelectorAll('#diff-list .diff-row')) as HTMLElement[];
+			const row = unchanged.find((candidate) => candidate.getAttribute('data-status') === 'unchanged');
+			assert.ok(row, 'the fixture has an unchanged row');
+			assert.strictEqual(row.querySelector('.diff-copy-arrow'), null);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('clicking an arrow copies that row with its host side and key', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'mergeMode', enabled: true });
+			const arrow = dom.document.querySelector('#diff-list .diff-copy-arrow') as HTMLButtonElement;
+			assert.ok(arrow, 'a changed row has an arrow');
+			const row = arrow.closest('.diff-row') as HTMLElement;
+			const key = row.getAttribute('data-key');
+			assert.ok(key, 'the row carries its diff key');
+			arrow.click();
+			const copies = messagesOf(dom.api, 'copy');
+			assert.strictEqual(copies.length, 1);
+			assert.strictEqual(copies[0].key, key);
+			assert.ok(copies[0].side === 'left' || copies[0].side === 'right');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('MERGE-10 after Swap the arrow copies from the displayed pane, not the stored side', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'mergeMode', enabled: true });
+			(dom.document.getElementById('diff-swap') as HTMLElement).click();
+			const arrow = dom.document.querySelector(
+				'#diff-pane-left .diff-copy-arrow'
+			) as HTMLButtonElement | null;
+			assert.ok(arrow, 'the displayed left pane has an arrow after Swap');
+			assert.strictEqual(arrow!.dataset.side, 'left', 'the arrow is drawn in the displayed left pane');
+			const key = (arrow!.closest('.diff-row') as HTMLElement | null)?.getAttribute('data-key');
+			assert.ok(key, 'the arrow row carries its diff key');
+			arrow!.click();
+			assert.deepStrictEqual(
+				messagesOf(dom.api, 'copy'),
+				[{ type: 'copy', side: 'right', key }],
+				'the copy names the stored right side because the displayed left pane is the right document'
 			);
 		} finally {
 			dom.restore();

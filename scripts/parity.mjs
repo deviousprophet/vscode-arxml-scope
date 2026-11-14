@@ -1,20 +1,14 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { fixtures as discover } from './parityFixtures.mjs';
 import { isDeepStrictEqual } from 'node:util';
 
 const root = process.cwd();
 const fixturesDir = path.join(root, 'src', 'test', 'fixtures');
 const update = process.argv.includes('--update');
 const allowMissingRust = process.argv.includes('--allow-missing-rust');
-
-function discover(dir) {
-	return readdirSync(dir, { recursive: true, withFileTypes: true })
-		.filter((entry) => entry.isFile() && entry.name.endsWith('.arxml'))
-		.map((entry) => path.join(entry.parentPath ?? dir, entry.name))
-		.sort();
-}
 
 function typescriptManifest() {
 	const fixtures = discover(fixturesDir).map((file) => {

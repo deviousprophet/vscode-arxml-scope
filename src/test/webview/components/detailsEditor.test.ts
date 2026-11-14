@@ -8,11 +8,13 @@ import {
 	beginDetailsEdit,
 	detailsContainerFields,
 	detailsInputAllowed,
+	detailsSelectionChanged,
 	detailsValueInput,
 	handleDetailsEditorMessage,
 	resetDetailsEditorState,
 	setDetailsEditorHost,
 } from '../../../webview/components/detailsEditor/detailsEditor';
+import { definitionRows } from '../../../webview/components/sidebar/detailsPanel/detailsPanel';
 import { webviewCss } from '../cssTestUtils';
 import { installMarkup } from '../pageTestUtils';
 
@@ -262,7 +264,7 @@ suite('DetailsEditor component', () => {
 		}
 	});
 
-	test('Tab from the last container field commits without trapping focus', () => {
+	test('DETAIL-03 Tab from the last container field commits without trapping focus', () => {
 		const dom = installMarkup('<body></body>');
 		try {
 			resetDetailsEditorState();
@@ -289,6 +291,77 @@ suite('DetailsEditor component', () => {
 			definition.dispatchEvent(tab);
 			assert.strictEqual(tab.defaultPrevented, false, 'the browser moves focus out of the panel');
 			assert.deepStrictEqual(commits, [{ type: 'edit', nodeId: 'c1', field: 'definitionRef', value: '/P/M/C' }]);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('DETAIL-01 definition rows keep the documented order and omit absent fields', () => {
+		assert.deepStrictEqual(
+			definitionRows({
+				kind: 'ECUC-ENUMERATION-PARAM-DEF',
+				type: 'Enumeration',
+				range: '0 .. 255',
+				defaultValue: '1',
+				multiplicity: '1..*',
+				literals: ['Off', 'On'],
+				destination: 'ECUC-INTEGER-PARAM-DEF',
+				description: 'Mode selector',
+				file: 'file:///workspace/Defs.arxml',
+				fileName: 'Defs.arxml',
+			}),
+			[
+				{ label: 'Definition type', value: 'Enumeration' },
+				{ label: 'Range', value: '0 .. 255' },
+				{ label: 'Default', value: '1' },
+				{ label: 'Multiplicity', value: '1..*' },
+				{ label: 'Values', value: 'Off, On' },
+				{ label: 'Destination', value: 'ECUC-INTEGER-PARAM-DEF' },
+				{ label: 'Definition description', value: 'Mode selector' },
+				{ label: 'Definition file', value: 'Defs.arxml' },
+			],
+			'only declared fields appear and the file stays last'
+		);
+
+		assert.deepStrictEqual(
+			definitionRows({
+				kind: 'ECUC-INTEGER-PARAM-DEF',
+				type: 'Integer',
+				file: 'file:///workspace/Defs.arxml',
+				fileName: 'Defs.arxml',
+			}),
+			[
+				{ label: 'Definition type', value: 'Integer' },
+				{ label: 'Definition file', value: 'Defs.arxml' },
+			],
+			'an absent range/default/multiplicity/literals/destination/description adds no row'
+		);
+	});
+
+	test('DETAIL-04 a selection change cancels the open draft and never writes its text', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			const commits: unknown[] = [];
+			setDetailsEditorHost(host({ commitEdit: (message: unknown) => commits.push(message) }));
+
+			const container = detailsValueInput(row(), { type: 'Integer' });
+			dom.document.body.appendChild(container);
+			const input = container.querySelector('input');
+			input.value = '999';
+			assert.strictEqual(input.value, '999', 'the draft is open');
+
+			detailsSelectionChanged('p2');
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+			assert.deepStrictEqual(commits, [], 'the cancelled draft never reaches commitEdit');
+
+			const fresh = detailsValueInput(row(), { type: 'Integer' }).querySelector('input');
+			assert.strictEqual(fresh.value, '63', 'a new control starts from the committed value, not the ghost draft');
+
+			fresh.value = '77';
+			detailsSelectionChanged('p1');
+			const kept = detailsValueInput(row(), { type: 'Integer' }).querySelector('input');
+			assert.strictEqual(kept.value, '77', 'a selection that stays on the row keeps its draft');
 		} finally {
 			dom.restore();
 		}

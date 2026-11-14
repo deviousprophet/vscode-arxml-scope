@@ -20,6 +20,9 @@ compiler cannot see: persisted webview state and `postMessage` payloads.
 | `src/core/text/arxmlFeatures.ts` | `RefToken`, `RefTokenKind`, `SymbolData`, `refTokenAt`, `refTokens`, `documentSymbols`. |
 | `src/core/diff/diffModel.ts` | The diff value model: `DiffCell`, `DiffStatus`, `DiffChange`, `DiffMatch`, `DiffRow`, `DiffSummary`, `DiffDocument` (including `semanticSkipped` and optional `semanticLimitReason`), `SemanticLimitReason`, `DiffHeader`, `FileLabel`, `RangeLookup`, `FlatDiffRow`, `DiffDisplayRow`, `DiffGap`, plus `buildDiffDocument`, `summarizeDiff`, `diffVisibility`, `flattenDiffRows`, `flattenDiffDocument`, `nextChangeIndex`, `baseId`, `disambiguatedLabels`, `compareTitle`. |
 | `src/core/diff/wordDiff.ts` | The token-level comparison: `WordSegment`, `WordPair` and `diffWords`. Pure; the diff page renders its segments. |
+| `src/core/diff/diffPatch.ts` | The copy patch the host and page both apply: `DiffPatch`, `applyDiffPatch`. The engine's `documentPatch` payload and `EngineDiffPatch` alias this type. |
+| `src/core/copy/planCopy.ts` | The copy plan: `CopyRange`, `CopySpan`, `CopyRequest`, `CopyPlan`, `MissingAncestor`; `planCopy`, `planDelete`, `wrapWithAncestors`, `reindent`, `lineBreakOf`, `indentationAt`. |
+| `src/core/ecuc/conditionEntry.ts` | `ConditionEntry` and `MAX_CONDITION_ENTRIES`, the one cap shared by the host store and the panel. |
 | `src/webviewProtocol.ts` | The editor surface's two message unions (`EditorProviderToWebview`, `EditorWebviewToProvider`), `EditorDocumentHeader`, `EditorDocumentPayload`, `documentHeader`, `editorMessageType`, `isEditorProviderMessage`. |
 | `src/diffProtocol.ts` | The diff surface's two message unions (`DiffProviderToWebview`, `DiffWebviewToProvider`) and `diffMessageType` / `isDiffProviderMessage`. |
 | `src/host/ecucEdit.ts` | The write plan: `EditRegion`, `EditableField`, `EcucEditRecord`, `EditPlan`, `ApplyResult`; `buildEdit`, `buildFieldEdit`, `applyEdit`. |

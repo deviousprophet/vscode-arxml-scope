@@ -62,7 +62,7 @@ suite('text features (extension)', function () {
 		assert.ok(locations.some((location) => location.uri.toString() === vscode.Uri.file(definitions).toString()));
 	});
 
-	test('hover explains a definition ref', async () => {
+	test('FEAT-02 hover explains a definition ref', async () => {
 		const document = await vscode.workspace.openTextDocument(valuesUri);
 		const model = scanEcucValues(document.getText());
 		const parameter = model.modules[0].containers[0].parameters[0];
@@ -112,7 +112,7 @@ suite('text features (extension)', function () {
 		}
 	});
 
-	test('an excluded document returns no index-backed features', async () => {
+	test('FEAT-01 an excluded document returns no index-backed features', async () => {
 		const excluded = path.join(root, 'text-features-excluded.arxml');
 		fs.writeFileSync(excluded, fixtureText('index/values.arxml'));
 		const config = vscode.workspace.getConfiguration('arxmlScope.index');

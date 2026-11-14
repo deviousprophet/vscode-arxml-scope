@@ -1,5 +1,12 @@
 # Editor Session and Protocol Code-Spec
 
+The diff panel has a second state: **merge mode**, off by default. The page posts
+`{type:'mergeMode', enabled}` and `{type:'copy', side, key}`, where `side` is the host
+side the page mapped from its displayed pane. The host refuses a copy while merge mode is
+off, applies exactly one `WorkspaceEdit` to the target document, and shows a Reload/Cancel
+modal when the snapshot is older than the document. The read-only diff is the same panel
+with merge mode off.
+
 Two independent webview surfaces use the same static-shell + `postMessage` pattern:
 
 - the ECUC custom text editor (`EcucEditorProvider`, `VIEW_TYPE = 'vscode-arxml-scope.ecucEditor'`);
