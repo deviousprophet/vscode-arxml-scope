@@ -712,11 +712,16 @@ ${indent}` };
 				await postError('the module is missing on the target side; copy it first');
 				return true;
 			}
-			const before = nearestSibling(chain.anchorParent, targetSide, -1);
-			const after = nearestSibling(chain.anchorParent, targetSide, 1);
-			const anchor = before ?? after;
+			// The chain belongs *inside* the anchor parent: its last existing child is
+			// the insertion point. Its siblings are a level too high.
+			const parentKey = current.rows[chain.anchorParent].key;
+			const childCells = current.rows
+				.filter((candidate) => candidate.parentKey === parentKey)
+				.map((candidate) => cellOn(candidate, targetSide))
+				.filter((cell): cell is DiffCell => cell !== undefined);
+			const anchor = childCells.at(-1);
 			if (anchor === undefined) {
-				await postError('the target parent has no sibling to place this element next to');
+				await postError('the target parent has no child to place this element next to');
 				return true;
 			}
 			const targetText = otherDoc.getText();
@@ -728,7 +733,7 @@ ${indent}` };
 				chain.ancestors,
 				indent
 			);
-			await applyPlan(otherDoc, chainInsertion(before, after, indent, block));
+			await applyPlan(otherDoc, chainInsertion(anchor, undefined, indent, block));
 			return true;
 		};
 

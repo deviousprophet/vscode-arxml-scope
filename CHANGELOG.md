@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - An invalid numeric character reference in an ARXML value stays verbatim instead of aborting the scan
 - Search reflects a patched row immediately after a value edit, instead of waiting for a full document refresh
+- Editing the same value twice in a row plans against the new value span instead of the previous one
 
 ## [0.9.0] - 2026-11-12
 
