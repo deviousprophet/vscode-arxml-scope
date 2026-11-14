@@ -809,13 +809,13 @@ function hostSide(side: 'left' | 'right'): 'left' | 'right' {
 
 /** Merge mode: arrows are live and rows can be copied to the other pane. */
 let mergeMode = false;
+/** The toggle lives in the title strip, so the page keeps its own reference. */
+let mergeToggle: HTMLButtonElement | null = null;
 
 function applyMergeMode(enabled: boolean): void {
 	mergeMode = enabled;
-	const toggle = document.getElementById('diff-merge-toggle');
-	if (toggle !== null) {
-		toggle.setAttribute('aria-pressed', String(enabled));
-		toggle.classList.toggle('is-on', enabled);
+	if (mergeToggle !== null) {
+		mergeToggle.setAttribute('aria-pressed', String(enabled));
 	}
 	if (views !== undefined) {
 		renderWindow(true);
@@ -849,9 +849,9 @@ function copyArrowButton(row: DiffRow, side: 'left' | 'right', host: 'left' | 'r
 	button.type = 'button';
 	button.className = 'diff-copy-arrow';
 	button.dataset.side = side;
-	button.textContent = host === 'left' ? '→' : '←';
+	button.textContent = side === 'left' ? '→' : '←';
 	button.setAttribute('aria-label', 'Copy to the other side');
-	button.title = arrowLabel(host, host === 'left' ? row.left : row.right);
+	button.title = arrowLabel(side, host === 'left' ? row.left : row.right);
 	button.addEventListener('click', function (event) {
 		event.stopPropagation();
 		selectKey(row.key, true);
@@ -2506,30 +2506,40 @@ if (typeof ResizeObserver === 'function') {
 }
 }
 /** The messages that install or edit the document; everything else is status. */
-const DOCUMENT_MESSAGES: Record<
-	string,
-	(message: DiffProviderToWebview) => void
-> = {
-	document: (message) => applyDiffDocument(message as Extract<DiffProviderToWebview, { type: 'document' }>),
-	mergeMode: (message) => applyMergeMode((message as { enabled?: boolean }).enabled === true),
-	labels: (message) => {
-		diffDocument.labels = (message as { labels: [string, string] }).labels;
+type DocumentMessage = Extract<
+	DiffProviderToWebview,
+	{ type: 'document' | 'mergeMode' | 'labels' | 'documentPatch' }
+>;
+
+const DOCUMENT_MESSAGES = {
+	document: (message: Extract<DocumentMessage, { type: 'document' }>) => applyDiffDocument(message),
+	mergeMode: (message: Extract<DocumentMessage, { type: 'mergeMode' }>) => applyMergeMode(message.enabled === true),
+	labels: (message: Extract<DocumentMessage, { type: 'labels' }>) => {
+		diffDocument.labels = message.labels;
 		renderHeaders();
 	},
-	documentPatch: (message) =>
+	documentPatch: (message: Extract<DocumentMessage, { type: 'documentPatch' }>) =>
 		renderKeepingAnchor(function () {
-			setDocument(applyDiffPatch(diffDocument, (message as { patch: any }).patch));
+			setDocument(applyDiffPatch(diffDocument, message.patch));
 		})
-};
+} satisfies { [K in DocumentMessage['type']]: (message: Extract<DocumentMessage, { type: K }>) => void };
+
+function isDocumentMessage(message: DiffProviderToWebview): message is DocumentMessage {
+	return message.type in DOCUMENT_MESSAGES;
+}
+
+function handleDocumentMessage(message: DocumentMessage): void {
+	const handler = DOCUMENT_MESSAGES[message.type] as (incoming: DocumentMessage) => void;
+	handler(message);
+}
 
 /** One host protocol message. */
 export function handleDiffMessage(message: DiffProviderToWebview): void {
 	if (!message) {
 		return;
 	}
-	const handler = DOCUMENT_MESSAGES[message.type];
-	if (handler !== undefined) {
-		handler(message);
+	if (isDocumentMessage(message)) {
+		handleDocumentMessage(message);
 		return;
 	}
 	handleDiffStatusMessage(message);
@@ -2574,8 +2584,7 @@ export function mountDiff(): void {
 	window.addEventListener('message', function (event) {
 		handleDiffMessage(event.data as DiffProviderToWebview);
 	});
-	const mergeToggle = document.createElement('button');
-	mergeToggle.id = 'diff-merge-toggle';
+	mergeToggle = document.createElement('button');
 	mergeToggle.type = 'button';
 	mergeToggle.className = 'diff-merge-toggle';
 	mergeToggle.textContent = 'Merge';

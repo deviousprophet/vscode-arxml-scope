@@ -470,7 +470,8 @@ export class DiffPanel {
 			const answer = await vscode.window.showWarningMessage(
 				'The comparison changed. Reload it?',
 				{ modal: true },
-				'Reload'
+				'Reload',
+				'Cancel'
 			);
 			if (answer === 'Reload') {
 				await refreshNow();
@@ -609,6 +610,16 @@ export class DiffPanel {
 
 		const hasTargetCell = (row: { left?: DiffCell; right?: DiffCell }, side: 'left' | 'right'): boolean =>
 			cellOn(row, otherSideOf(side)) !== undefined;
+
+		/** True when the row's parent container exists only on the source side. */
+		const parentMissing = (rowIndex: number, side: 'left' | 'right'): boolean => {
+			const parentKey = current.rows[rowIndex].parentKey;
+			if (parentKey === null) {
+				return false;
+			}
+			const parent = current.rows.find((candidate) => candidate.key === parentKey);
+			return parent === undefined || cellOn(parent, otherSideOf(side)) === undefined;
+		};
 
 		const missingAncestor = (
 			row: { left?: DiffCell; right?: DiffCell },
@@ -752,7 +763,7 @@ ${indent}` };
 			const targetText = otherDoc.getText();
 			const target = otherCell?.range;
 			const anchors: { after?: { start: number; end: number }; before?: { start: number; end: number } } =
-				target === undefined ? siblingAnchor(rowIndex, side) : {};
+				target === undefined ? siblingAnchor(rowIndex, otherSideOf(side)) : {};
 			const plan = planCopy({
 				targetText,
 				sourceText: clickedDoc.getText(),
@@ -774,15 +785,25 @@ ${indent}` };
 		 * other side. A click on the empty side deletes the element from the side that has
 		 * it, which is how an added or removed row is resolved.
 		 */
+		let copyInFlight = false;
+
 		const copyRow = async (side: 'left' | 'right', key: string): Promise<void> => {
 			if (!mergeMode) {
+				return;
+			}
+			if (copyInFlight) {
 				return;
 			}
 			const located = locateCopy(side, key);
 			if (located === undefined) {
 				return;
 			}
-			await runCopy(side, located);
+			copyInFlight = true;
+			try {
+				await runCopy(side, located);
+			} finally {
+				copyInFlight = false;
+			}
 		};
 
 		const runCopy = async (
@@ -804,7 +825,23 @@ ${indent}` };
 				await postError('that module already exists on the target side');
 				return;
 			}
-			await copyInto(clickedDoc, otherDoc, located.clickedCell, located.otherCell, located.rowIndex, side);
+			await placeCopy(clickedDoc, otherDoc, side, located.rowIndex, located.clickedCell, located.otherCell);
+		};
+
+		/** A copy whose parent is missing on the target synthesizes the chain first. */
+		const placeCopy = async (
+			clickedDoc: vscode.TextDocument,
+			otherDoc: vscode.TextDocument,
+			side: 'left' | 'right',
+			rowIndex: number,
+			clickedCell: DiffCell,
+			otherCell: DiffCell | undefined
+		): Promise<void> => {
+			if (parentMissing(rowIndex, side)) {
+				await synthesizeInto(clickedDoc, otherDoc, clickedCell, current.rows[rowIndex], side);
+				return;
+			}
+			await copyInto(clickedDoc, otherDoc, clickedCell, otherCell, rowIndex, side);
 		};
 
 		const onMatchMode = (value: unknown): void => {

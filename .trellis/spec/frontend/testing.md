@@ -81,8 +81,9 @@ in the task notes rather than implying it was tested.
 
 ## Manual checks happen in the Extension Development Host
 
-The in-repo preview harness (`preview:ecuc`, `preview:check`) and the `scripts/` directory were removed,
-so the page is no longer served with a stubbed `acquireVsCodeApi`. Open a fixture or a local `.arxml`
+The in-repo preview harness (`preview:ecuc`, `preview:check`) was removed, so the page is no longer
+served with a stubbed `acquireVsCodeApi`. (`scripts/` still holds the Rust parity and smoke runners,
+which have no webview.) Open a fixture or a local `.arxml`
 in the ECUC editor and observe the real webview: layout, hover, focus, scroll, search passes, the
 inspector and the reload path all need that host.
 

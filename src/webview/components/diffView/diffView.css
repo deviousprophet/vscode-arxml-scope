@@ -455,7 +455,7 @@ body.vscode-high-contrast .diff-row .word-changed[data-word-side] {
 /* Merge mode: the title-strip toggle and the per-row copy arrow. */
 .diff-merge-toggle {
 	margin-left: auto;
-	padding: 1px var(--space-2, 8px);
+	padding: 1px 8px;
 	border: 1px solid var(--vscode-button-border, transparent);
 	border-radius: 2px;
 	background: var(--vscode-button-secondaryBackground);
@@ -464,7 +464,7 @@ body.vscode-high-contrast .diff-row .word-changed[data-word-side] {
 	cursor: pointer;
 }
 
-.diff-merge-toggle.is-on {
+.diff-merge-toggle[aria-pressed='true'] {
 	background: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
 }

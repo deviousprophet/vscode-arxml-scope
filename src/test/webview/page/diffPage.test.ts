@@ -2518,7 +2518,7 @@ suite('diff page merge mode', () => {
 	test('merge mode is off by default; the toggle shows arrows and posts the mode', () => {
 		const { dom } = mount();
 		try {
-			const toggle = dom.document.getElementById('diff-merge-toggle') as HTMLButtonElement;
+			const toggle = dom.document.querySelector('.diff-merge-toggle') as HTMLButtonElement;
 			assert.ok(toggle, 'the title strip owns the toggle');
 			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
 			assert.strictEqual(dom.document.querySelectorAll('.diff-copy-arrow').length, 0, 'no arrows while off');
@@ -2527,6 +2527,20 @@ suite('diff page merge mode', () => {
 			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'true');
 			assert.deepStrictEqual(messagesOf(dom.api, 'mergeMode'), [{ type: 'mergeMode', enabled: true }]);
 			assert.ok(dom.document.querySelectorAll('.diff-copy-arrow').length > 0, 'changed rows show an arrow');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('after Swap the arrow points at the other displayed pane', () => {
+		const { dom } = mount();
+		try {
+			dom.post({ type: 'mergeMode', enabled: true });
+			(dom.document.getElementById('diff-swap') as HTMLElement).click();
+			const left = dom.document.querySelector('#diff-pane-left .diff-copy-arrow');
+			const right = dom.document.querySelector('#diff-pane-right .diff-copy-arrow');
+			assert.strictEqual(left?.textContent, '→', 'the displayed left pane points right');
+			assert.strictEqual(right?.textContent, '←', 'the displayed right pane points left');
 		} finally {
 			dom.restore();
 		}

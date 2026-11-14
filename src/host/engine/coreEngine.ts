@@ -8,6 +8,7 @@
  * Pure: no `vscode` import and no DOM.
  */
 import type { DiffDocument, DiffRow, DiffSummary } from '../../core/diff/diffModel';
+import type { DiffPatch } from '../../core/diff/diffPatch';
 import type { EcucRow } from '../../core/ecuc/renderRows';
 import { EXPECTED_PROTOCOL, type EngineClient } from './engineClient';
 
@@ -67,16 +68,8 @@ export interface EngineDiffEdit {
 	text: string;
 }
 
-/** The rows one copy changed, plus what a row replacement cannot carry. */
-export interface EngineDiffPatch {
-	at: number;
-	remove: number;
-	rows: DiffRow[];
-	ancestors: DiffRow[];
-	shift?: { side: 'left' | 'right'; after: number; by: number };
-	summary: DiffSummary;
-	semanticSkipped: number;
-}
+/** The engine's patch is the same shape the host and page apply. */
+export type EngineDiffPatch = DiffPatch;
 
 export interface EngineDiffPatchResult {
 	patch?: EngineDiffPatch;

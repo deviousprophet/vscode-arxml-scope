@@ -11,12 +11,13 @@ Validation: `npm test` (copy planner).
 
 ## M2 — Panel state and copy path
 
-- [ ] `mergeMode` per panel; toggle message; refuse copies when off.
-- [ ] Copy handler: resolve cells, build `CopyRequest`, apply one `WorkspaceEdit`, refusal
-      notice.
-- [ ] Stale detection via `expectedTarget`.
+- [x] `mergeMode` per panel; toggle message; refuse copies when off.
+- [x] Copy handler: resolve cells, build `CopyRequest`, apply one `WorkspaceEdit`, refusal
+      notice; one copy in flight at a time.
+- [x] Stale detection via `expectedTarget`, with a Reload/Cancel modal.
 - [ ] Extension tests: replace, delete, insert, undo, stale, mode-off. (The page messages
-      and the planner are covered; the panel's copy handler is not.)
+      and the planner are covered; the panel's copy handler is not. The host suite opens
+      real panels but cannot post a webview `copy` message.)
 
 Validation: `npm test` (extension), `check-types`, `lint`.
 
@@ -24,9 +25,9 @@ Gate: the three copy shapes change exactly the expected bytes; one undo restores
 
 ## M3 — Page affordance
 
-- [ ] Title-strip merge toggle; `mergeMode` message; arrows on changed rows; `Alt+←/→`;
-      row selection on click; dirty marker.
-- [ ] Page tests for visibility, message shape, keys, marker.
+- [x] Title-strip merge toggle; `mergeMode` message; arrows on changed rows; `Alt+←/→`;
+      row selection on click; dirty marker; arrows follow Swap.
+- [x] Page tests for visibility, message shape, keys, marker.
 
 Validation: `npm test` (page), `design:lint`.
 
@@ -47,8 +48,8 @@ Gate: arrows only in merge mode and only on changed rows; no arrow on unchanged 
 - [x] `docs/MERGE.md` (copy model), changelog `Added`, editor-lifecycle spec (merge mode +
       copy message).
 - [x] Copy benchmark on the 26 MiB document: plan < 1 ms, ceiling 100 ms.
-- [ ] Replace the debounced rebuild with the engine patch when the port lands (parent
-      follow-up).
+- [x] The copy now reaches the engine as `doc.update` + `diff.patch`; a refusal rebuilds
+      with a notice instead of waiting for the debounced rebuild.
 
 ## Rollback
 

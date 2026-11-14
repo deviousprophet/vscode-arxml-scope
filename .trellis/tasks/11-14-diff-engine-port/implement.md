@@ -5,9 +5,10 @@ cutover commit can change the panel.
 
 ## M0 — Fixtures and baseline
 
-- [ ] Record `diffSemantic`, `renameScale`, `diffToggle` and `ecucLargeFile` numbers.
+- [x] Record `diffSemantic`, `renameScale`, `diffToggle` and `ecucLargeFile` numbers
+      (`research/keys.md`).
 - [ ] Add a generated ~2 MiB pair fixture builder for parity (deterministic, no random).
-- [ ] Confirm the TS key derivation rules (`identity.ts`/`diffModel` helpers) and write
+- [x] Confirm the TS key derivation rules (`identity.ts`/`diffModel` helpers) and write
       them down in `research/keys.md`: ordinal-free base, duplicate handling, added/removed
       side keys, parent keys.
 
