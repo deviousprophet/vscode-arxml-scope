@@ -12,7 +12,13 @@
  */
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import { indentationAt, planCopy, planDelete } from '../core/copy/planCopy';
+import {
+	indentationAt,
+	planCopy,
+	planDelete,
+	wrapWithAncestors,
+	type MissingAncestor
+} from '../core/copy/planCopy';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { scanEcucValues } from '../core/ecuc/scanner';
 import { FileLabel, RangeLookup, compareTitle } from '../core/diff/diffModel';
@@ -436,6 +442,123 @@ export class DiffPanel {
 				return indentationAt(targetText, anchors.after.start);
 			}
 			return anchors.before === undefined ? '' : indentationAt(targetText, anchors.before.start);
+		};
+
+		const childKindOf = (kind: string): MissingAncestor['childKind'] => {
+			if (kind === 'parameter') {
+				return 'parameter';
+			}
+			return kind === 'reference' ? 'reference' : 'container';
+		};
+
+		/** The row indexes from a parent key up to the root, nearest first. */
+		const parentChain = (key: string | null): number[] => {
+			const chain: number[] = [];
+			let cursor = key;
+			while (cursor !== null) {
+				const index = current.rows.findIndex((row) => row.key === cursor);
+				if (index < 0) {
+					return chain;
+				}
+				chain.push(index);
+				cursor = current.rows[index].parentKey;
+			}
+			return chain;
+		};
+
+		const hasTargetCell = (row: { left?: DiffCell; right?: DiffCell }, side: 'left' | 'right'): boolean =>
+			cellOn(row, otherSideOf(side)) !== undefined;
+
+		const missingAncestor = (
+			row: { left?: DiffCell; right?: DiffCell },
+			side: 'left' | 'right',
+			childKind: MissingAncestor['childKind']
+		): MissingAncestor | undefined => {
+			const cell = cellOn(row, side);
+			return cell === undefined
+				? undefined
+				: {
+						shortName: cell.shortName ?? cell.label,
+						definitionRef: cell.definitionRef,
+						definitionDest: cell.definitionDest,
+						childKind
+					};
+		};
+
+		/**
+		 * The missing containers between a row and the nearest ancestor the target has.
+		 * `undefined` when the chain reaches a module the target does not have.
+		 */
+		const ancestorChain = (
+			parentKey: string | null,
+			sourceSide: 'left' | 'right',
+			childKind: MissingAncestor['childKind']
+		): { ancestors: MissingAncestor[]; anchorParent: number } | undefined => {
+			const ancestors: MissingAncestor[] = [];
+			let kind = childKind;
+			for (const index of parentChain(parentKey)) {
+				const parent = current.rows[index];
+				if (hasTargetCell(parent, sourceSide)) {
+					return { ancestors, anchorParent: index };
+				}
+				const ancestor = missingAncestor(parent, sourceSide, kind);
+				if (ancestor === undefined) {
+					return undefined;
+				}
+				ancestors.push(ancestor);
+				kind = 'container';
+			}
+			return undefined;
+		};
+
+		/** The insertion for a synthesized chain: after its preceding sibling, else before its anchor. */
+		const chainInsertion = (
+			before: DiffCell | undefined,
+			after: DiffCell | undefined,
+			indent: string,
+			block: string
+		): { start: number; end: number; text: string } => {
+			if (before !== undefined) {
+				return { start: before.range.end, end: before.range.end, text: `
+${indent}${block}` };
+			}
+			const anchor = after as DiffCell;
+			return { start: anchor.range.start, end: anchor.range.start, text: `${block}
+${indent}` };
+		};
+
+		/** Creates the missing ancestors around the copied element and inserts the chain. */
+		const synthesizeInto = async (
+			clickedDoc: vscode.TextDocument,
+			otherDoc: vscode.TextDocument,
+			clickedCell: DiffCell,
+			row: { parentKey: string | null; kind: string },
+			side: 'left' | 'right'
+		): Promise<boolean> => {
+			const targetSide = otherSideOf(side);
+			const chain = ancestorChain(row.parentKey, side, childKindOf(row.kind));
+			if (chain === undefined) {
+				await postError('the module is missing on the target side; copy it first');
+				return true;
+			}
+			const before = nearestSibling(chain.anchorParent, targetSide, -1);
+			const after = nearestSibling(chain.anchorParent, targetSide, 1);
+			const anchor = before ?? after;
+			if (anchor === undefined) {
+				await postError('the target parent has no sibling to place this element next to');
+				return true;
+			}
+			const targetText = otherDoc.getText();
+			const sourceText = clickedDoc.getText();
+			const indent = indentationAt(targetText, anchor.range.start);
+			const block = wrapWithAncestors(
+				sourceText.slice(clickedCell.range.start, clickedCell.range.end),
+				indentationAt(sourceText, clickedCell.range.start),
+				chain.ancestors,
+				indent
+			);
+			await applyPlan(otherDoc, chainInsertion(before, after, indent, block));
+			return true;
 		};
 
 		const copyDelete = async (doc: vscode.TextDocument, cell: DiffCell): Promise<void> => {

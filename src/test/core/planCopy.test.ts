@@ -7,7 +7,14 @@
  */
 import * as assert from 'assert';
 
-import { indentationAt, planCopy, planDelete, reindent, removalSpan } from '../../core/copy/planCopy';
+import {
+	indentationAt,
+	planCopy,
+	planDelete,
+	reindent,
+	removalSpan,
+	wrapWithAncestors
+} from '../../core/copy/planCopy';
 
 const OURS = `<?xml version="1.0" encoding="UTF-8"?>
 <AUTOSAR>
@@ -139,5 +146,52 @@ suite('copy planner (core)', () => {
 		});
 		assert.ok(planned.ok);
 		assert.ok(planned.span.text.startsWith('\r\n'), 'the inserted line uses CRLF');
+	});
+});
+
+suite('copy ancestors (core)', () => {
+	const element = '<ECUC-NUMERICAL-PARAM-VALUE>\n          <VALUE>1</VALUE>\n        </ECUC-NUMERICAL-PARAM-VALUE>';
+
+	test('wraps a copied parameter in a minimal container with one child list', () => {
+		const wrapped = wrapWithAncestors(
+			element,
+			'        ',
+			[{ shortName: 'B', definitionRef: '/P/A/B', childKind: 'parameter' }],
+			'    '
+		);
+		assert.ok(wrapped.startsWith('<ECUC-CONTAINER-VALUE>'));
+		assert.ok(wrapped.includes('<SHORT-NAME>B</SHORT-NAME>'));
+		assert.ok(wrapped.includes('DEST="ECUC-PARAM-CONF-CONTAINER-DEF"'));
+		assert.ok(wrapped.includes('<PARAMETER-VALUES>'), 'a parameter goes in PARAMETER-VALUES');
+		assert.ok(wrapped.includes('<VALUE>1</VALUE>'), 'the copied element is kept');
+		assert.ok(!wrapped.includes('<SUB-CONTAINERS>'), 'no unrelated child list is invented');
+		assert.ok(wrapped.trimEnd().endsWith('</ECUC-CONTAINER-VALUE>'));
+	});
+
+	test('nests the whole missing chain, innermost last', () => {
+		const wrapped = wrapWithAncestors(
+			element,
+			'        ',
+			[
+				{ shortName: 'A', definitionRef: '/P/A', childKind: 'container' },
+				{ shortName: 'B', definitionRef: '/P/A/B', childKind: 'parameter' }
+			],
+			'  '
+		);
+		const a = wrapped.indexOf('<SHORT-NAME>A</SHORT-NAME>');
+		const b = wrapped.indexOf('<SHORT-NAME>B</SHORT-NAME>');
+		assert.ok(a >= 0 && b > a, 'A wraps B');
+		assert.ok(wrapped.includes('  <SUB-CONTAINERS>'), 'A holds B in SUB-CONTAINERS');
+		assert.ok(wrapped.includes('      <PARAMETER-VALUES>'), 'B holds the parameter');
+	});
+
+	test('keeps a definition DEST when the ancestor has one', () => {
+		const wrapped = wrapWithAncestors(
+			element,
+			'        ',
+			[{ shortName: 'C', definitionRef: '/P/C', definitionDest: 'ECUC-PARAM-CONF-CONTAINER-DEF', childKind: 'parameter' }],
+			'  '
+		);
+		assert.ok(wrapped.includes('DEST="ECUC-PARAM-CONF-CONTAINER-DEF"'));
 	});
 });

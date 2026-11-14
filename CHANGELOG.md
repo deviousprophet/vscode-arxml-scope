@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Merge two ARXML configurations directly in the diff panel: a merge toggle, per-row copy arrows in both directions, and missing parent containers created on demand
+
 ### Changed
 
 - The ARXML core now runs as a separate Rust engine process, which the extension requires at startup

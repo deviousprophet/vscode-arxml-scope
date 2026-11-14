@@ -200,3 +200,64 @@ export function planDelete(request: Omit<CopyRequest, 'source' | 'anchorAfter' |
 		? { ok: false, reason: STALE }
 		: deletion({ ...request, source: request.target });
 }
+
+/** One missing container between the copied element and the target parent. */
+export interface MissingAncestor {
+	shortName: string;
+	definitionRef: string;
+	definitionDest?: string;
+	/** The kind of the element nested inside this ancestor. */
+	childKind: 'container' | 'parameter' | 'reference';
+}
+
+const LIST_TAG: Record<MissingAncestor['childKind'], string> = {
+	container: 'SUB-CONTAINERS',
+	parameter: 'PARAMETER-VALUES',
+	reference: 'REFERENCE-VALUES'
+};
+
+const DEFAULT_CONTAINER_DEST = 'ECUC-PARAM-CONF-CONTAINER-DEF';
+
+/** One ancestor element wrapping the block below it. */
+function wrapOne(
+	block: string,
+	childIndent: string,
+	ancestor: MissingAncestor,
+	wrapperIndent: string
+): string {
+	const fieldIndent = `${wrapperIndent}  `;
+	const list = LIST_TAG[ancestor.childKind];
+	return [
+		'<ECUC-CONTAINER-VALUE>',
+		`${fieldIndent}<SHORT-NAME>${ancestor.shortName}</SHORT-NAME>`,
+		`${fieldIndent}<DEFINITION-REF DEST="${ancestor.definitionDest ?? DEFAULT_CONTAINER_DEST}">${ancestor.definitionRef}</DEFINITION-REF>`,
+		`${fieldIndent}<${list}>`,
+		`${childIndent}${block}`,
+		`${fieldIndent}</${list}>`,
+		`${wrapperIndent}</ECUC-CONTAINER-VALUE>`
+	].join('\n');
+}
+
+/**
+ * Wraps a copied element in the missing ancestor containers, as minimal containers:
+ * their own short name, definition ref and one child list holding only the copied
+ * chain. Copying the source ancestors verbatim would import their unrelated children.
+ *
+ * `elementIndent` is the source indentation of the copied element; `targetIndent` is
+ * the indentation the outermost created container must occupy.
+ */
+export function wrapWithAncestors(
+	elementText: string,
+	elementIndent: string,
+	ancestors: readonly MissingAncestor[],
+	targetIndent: string
+): string {
+	let block = reindent(elementText, elementIndent, targetIndent + '    '.repeat(ancestors.length));
+	let blockIndent = targetIndent + '    '.repeat(ancestors.length);
+	for (let index = ancestors.length - 1; index >= 0; index--) {
+		const wrapperIndent = targetIndent + '    '.repeat(index);
+		block = wrapOne(block, blockIndent, ancestors[index], wrapperIndent);
+		blockIndent = wrapperIndent;
+	}
+	return block;
+}
