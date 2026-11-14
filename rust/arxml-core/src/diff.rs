@@ -159,7 +159,8 @@ struct Ranges<'a> {
     right: RangeLookup<'a>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct DiffOptions {
     pub semantic_matching: bool,
     /// Deterministic cap on scored semantic pairs. The default is the module budget;

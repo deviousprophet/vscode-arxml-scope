@@ -4,7 +4,7 @@ import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { scanEcucValues } from '../../core/ecuc/scanner';
 import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { buildRows } from '../../core/ecuc/renderRows';
-import { DiffPreparedSide, DiffSession } from '../../core/diff/diffSession';
+import { DiffPreparedSide, DiffSession } from './diffSessionOracle';
 
 const LEFT = { name: 'left.arxml', path: '/work/left.arxml' };
 const RIGHT = { name: 'right.arxml', path: '/work/right.arxml' };

@@ -20,18 +20,14 @@ import {
 	type MissingAncestor
 } from '../core/copy/planCopy';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
-import { scanEcucValues } from '../core/ecuc/scanner';
-import { FileLabel, RangeLookup, compareTitle } from '../core/diff/diffModel';
-import type { DiffCell } from '../core/diff/diffModel';
-import { DiffSession } from '../core/diff/diffSession';
-import type { DiffPreparedSide } from '../core/diff/diffSession';
+import { FileLabel, compareTitle } from '../core/diff/diffModel';
+import type { DiffCell, DiffDocument } from '../core/diff/diffModel';
+import type { CoreEngine, EngineDiffSide } from './engine/coreEngine';
 import { diffShell } from './webviewShell';
 import { fileName } from './compareSelection';
 import { gateReason } from './ecucEditorProvider';
 import { revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
-import { buildNodeIndex } from '../core/ecuc/nodeId';
-import { buildRows } from '../core/ecuc/renderRows';
 import { diffMessageType } from '../diffProtocol';
 import type { DiffWebviewToProvider } from '../diffProtocol';
 
@@ -56,31 +52,29 @@ function paneLabel(name: string, dirty: boolean): string {
 	return dirty ? `${name} •` : name;
 }
 
-function rowsFor(document: vscode.TextDocument) {
-	const model = scanEcucValues(document.getText());
-	const index = buildNodeIndex(model);
-	const rows = buildRows(model, {
-		sort: 'all',
-		sortExcept: SORT_EXCEPTIONS,
-	}).rows;
-	// The row document deliberately carries no source positions; the diff gets each
-	// cell's reveal range from the same node index that produced the ids.
-	const rangeOf: RangeLookup = (id) => index.byId.get(id)?.range;
-	const header = {
-		schema: model.schema ? model.schema.release : undefined,
-		packages: model.packages.map((pkg) => pkg.path.join('.')),
-	};
-	return { rows, rangeOf, header };
+/** The panel's initial match mode, from the setting. */
+function semanticDefault(): boolean {
+	return vscode.workspace.getConfiguration('arxmlScope.diff').get<boolean>('semanticMatching', true);
 }
 
-/** One prepared side; the version makes a toggle safely reuse it or refresh. */
-interface PreparedSide extends DiffPreparedSide {
+/** One side opened in the engine; the version makes a toggle safely reuse it. */
+interface PreparedSide {
 	document: vscode.TextDocument;
 	version: number;
+	docId: number;
 }
 
-function prepareSide(document: vscode.TextDocument): PreparedSide {
-	return { document, version: document.version, ...rowsFor(document) };
+/** The engine builds the rows and the diff; the host only uploads text. */
+async function prepareSide(engine: CoreEngine, document: vscode.TextDocument): Promise<PreparedSide> {
+	const docId = await engine.openDocument(document.uri.toString(), document.getText(), {
+		sort: 'all',
+		sortExcept: SORT_EXCEPTIONS
+	});
+	return { document, version: document.version, docId };
+}
+
+function engineSide(side: PreparedSide, label: FileLabel): EngineDiffSide {
+	return { docId: side.docId, name: label.name, path: label.path };
 }
 
 /** The first refusal reason for either side, or `undefined` when both are ECUC. */
@@ -132,7 +126,8 @@ export class DiffPanel {
 	public static async open(
 		context: vscode.ExtensionContext,
 		leftUri: vscode.Uri,
-		rightUri: vscode.Uri
+		rightUri: vscode.Uri,
+		engine: CoreEngine
 	): Promise<boolean> {
 		const left = await DiffPanel.read(leftUri);
 		if (!left) {
@@ -150,13 +145,22 @@ export class DiffPanel {
 
 		const leftLabel = label(leftUri);
 		const rightLabel = label(rightUri);
-		let preparedLeft = prepareSide(left);
-		let preparedRight = prepareSide(right);
-		let semantic = vscode.workspace
-			.getConfiguration('arxmlScope.diff')
-			.get<boolean>('semanticMatching', true);
-		let session = new DiffSession(leftLabel, rightLabel, preparedLeft, preparedRight);
-		let current = session.document(semantic).document;
+		let preparedLeft: PreparedSide;
+		let preparedRight: PreparedSide;
+		let current: DiffDocument;
+		try {
+			preparedLeft = await prepareSide(engine, left);
+			preparedRight = await prepareSide(engine, right);
+			current = await engine.computeDiff(
+				engineSide(preparedLeft, leftLabel),
+				engineSide(preparedRight, rightLabel),
+				{ semanticMatching: semanticDefault() }
+			);
+		} catch (error) {
+			void vscode.window.showWarningMessage(`The comparison could not be built: ${errorMessage(error)}`);
+			return false;
+		}
+		let semantic = semanticDefault();
 		const panel = vscode.window.createWebviewPanel(
 			DiffPanel.viewType,
 			compareTitle(leftLabel, rightLabel),
@@ -229,10 +233,22 @@ export class DiffPanel {
 				await postError(why);
 				return;
 			}
-			preparedLeft = prepareSide(nextLeft);
-			preparedRight = prepareSide(nextRight);
-			session = new DiffSession(leftLabel, rightLabel, preparedLeft, preparedRight);
-			current = session.document(semantic).document;
+			const previous = [preparedLeft, preparedRight];
+			preparedLeft = await prepareSide(engine, nextLeft);
+			preparedRight = await prepareSide(engine, nextRight);
+			if (isStale(disposed, generation, documentGeneration)) {
+				void engine.closeDocument(preparedLeft.docId);
+				void engine.closeDocument(preparedRight.docId);
+				return;
+			}
+			for (const side of previous) {
+				void engine.closeDocument(side.docId);
+			}
+			current = await engine.computeDiff(
+				engineSide(preparedLeft, leftLabel),
+				engineSide(preparedRight, rightLabel),
+				{ semanticMatching: semantic }
+			);
 			if (isStale(disposed, generation, documentGeneration)) {
 				return;
 			}
@@ -281,13 +297,12 @@ export class DiffPanel {
 				await fullRefresh();
 				return;
 			}
-			const result = session.document(next);
-			current = result.document;
-			if (result.changed) {
-				await postDocument();
-			} else {
-				await postMatchModeState(semantic);
-			}
+			current = await engine.computeDiff(
+				engineSide(preparedLeft, leftLabel),
+				engineSide(preparedRight, rightLabel),
+				{ semanticMatching: next }
+			);
+			await postDocument();
 		};
 
 		const restoreMatchMode = async (
@@ -773,6 +788,8 @@ ${indent}` };
 			disposed = true;
 			boot.dispose();
 			clearRefreshTimer();
+			void engine.closeDocument(preparedLeft.docId);
+			void engine.closeDocument(preparedRight.docId);
 			for (const disposable of disposables) {
 				disposable.dispose();
 			}

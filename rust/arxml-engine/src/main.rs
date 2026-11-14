@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+use arxml_core::diff::{build_diff_document, DiffHeader, DiffOptions, DiffSide, FileLabel};
 use arxml_core::ecuc::{edit, Document, RowOptions};
 use serde_json::{json, Value};
 
@@ -162,6 +163,7 @@ impl Engine {
             "doc.resync" => self.resync(id, &mut out, header, body),
             "doc.node" => self.node(id, &mut out, header),
             "doc.model" => self.model(id, &mut out, header),
+            "diff.compute" => self.diff_compute(id, &mut out, header),
             other => Err(format!("unknown operation {other}")),
         }
     }
@@ -353,6 +355,119 @@ impl Engine {
         let document = self.documents.get(&document_id).ok_or("unknown document")?;
         let body = serde_json::to_vec(document.model()).map_err(|error| error.to_string())?;
         write_frame(out, &json!({"id": id, "ok": true}), &body).map_err(|error| error.to_string())
+    }
+}
+
+/// The header lines a diff shows above one pane.
+fn diff_header(document: &Document) -> DiffHeader {
+    let model = document.model();
+    DiffHeader {
+        schema: model.schema.as_ref().map(|schema| schema.release.clone()),
+        packages: model
+            .packages
+            .iter()
+            .map(|package| package.path.join("."))
+            .collect(),
+    }
+}
+
+/// One side of `diff.compute`: the document handle plus the label the page shows.
+fn diff_side(header: &Value, document: &Document) -> Result<(FileLabel, DiffHeader), String> {
+    let name = header
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or("name is required")?;
+    let path = header.get("path").and_then(Value::as_str).unwrap_or(name);
+    Ok((
+        FileLabel {
+            name: name.to_string(),
+            path: path.to_string(),
+        },
+        diff_header(document),
+    ))
+}
+
+impl Engine {
+    fn diff_compute(
+        &mut self,
+        id: u64,
+        out: &mut impl Write,
+        header: &Value,
+    ) -> Result<(), String> {
+        let left_header = header.get("left").ok_or("left is required")?;
+        let right_header = header.get("right").ok_or("right is required")?;
+        let left_id = left_header
+            .get("docId")
+            .and_then(Value::as_u64)
+            .ok_or("left.docId is required")? as u32;
+        let right_id = right_header
+            .get("docId")
+            .and_then(Value::as_u64)
+            .ok_or("right.docId is required")? as u32;
+        let options: DiffOptions = header
+            .get("options")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| error.to_string())?
+            .unwrap_or_default();
+        let left = self
+            .documents
+            .get(&left_id)
+            .ok_or("unknown left document")?;
+        let right = self
+            .documents
+            .get(&right_id)
+            .ok_or("unknown right document")?;
+        let (left_label, left_inner) = diff_side(left_header, left)?;
+        let (right_label, right_inner) = diff_side(right_header, right)?;
+        let left_lookup = |id: &str| left.index().get(id).map(|entry| entry.range);
+        let right_lookup = |id: &str| right.index().get(id).map(|entry| entry.range);
+        let document = build_diff_document(
+            DiffSide {
+                label: left_label,
+                header: left_inner,
+                rows: left.rows(),
+                range: &left_lookup,
+            },
+            DiffSide {
+                label: right_label,
+                header: right_inner,
+                rows: right.rows(),
+                range: &right_lookup,
+            },
+            &options,
+        );
+        let total = document.rows.len();
+        let mut seq = 0usize;
+        // Row frames never carry the last flag: the envelope is the last frame, so a
+        // client that resolves on the final chunk always has the headers and summary.
+        for chunk in document.rows.chunks(ROWS_PER_CHUNK) {
+            let body = serde_json::to_vec(chunk).map_err(|error| error.to_string())?;
+            write_frame(
+                out,
+                &json!({"id": id, "ok": true, "chunk": {"seq": seq, "last": false, "total": total}}),
+                &body,
+            )
+            .map_err(|error| error.to_string())?;
+            seq += chunk.len();
+        }
+        let envelope = json!({
+            "id": id,
+            "ok": true,
+            "chunk": {"seq": total, "last": true, "total": total},
+            "document": {
+                "left": document.left,
+                "right": document.right,
+                "leftHeader": document.left_header,
+                "rightHeader": document.right_header,
+                "labels": document.labels,
+                "summary": document.summary,
+                "semanticSkipped": document.semantic_skipped,
+                "semanticLimitReason": document.semantic_limit_reason,
+            }
+        });
+        write_frame(out, &envelope, &[]).map_err(|error| error.to_string())
     }
 }
 

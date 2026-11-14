@@ -9,8 +9,8 @@
  *
  * Pure: no `vscode` import and no DOM.
  */
-import { DiffDocument, DiffHeader, FileLabel, RangeLookup, buildDiffDocument } from './diffModel';
-import type { EcucRow } from '../ecuc/renderRows';
+import { DiffDocument, DiffHeader, FileLabel, RangeLookup, buildDiffDocument } from '../../core/diff/diffModel';
+import type { EcucRow } from '../../core/ecuc/renderRows';
 
 /** The row build for one side of a comparison. */
 export interface DiffPreparedSide {
