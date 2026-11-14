@@ -2511,39 +2511,45 @@ type DocumentMessage = Extract<
 	{ type: 'document' | 'mergeMode' | 'labels' | 'documentPatch' }
 >;
 
-type DocumentHandler = (message: DocumentMessage) => void;
-
-/**
- * One typed registration: the key and the handler's narrowed message type stay in
- * step. A `Map` and not an object, so a message named `toString` is not a handler.
- */
-function documentEntry<K extends DocumentMessage['type']>(
-	type: K,
-	handler: (message: Extract<DocumentMessage, { type: K }>) => void
-): [string, DocumentHandler] {
-	return [type, handler as DocumentHandler];
-}
-
-const DOCUMENT_MESSAGES = new Map<string, DocumentHandler>([
-	documentEntry('document', (message) => applyDiffDocument(message)),
-	documentEntry('mergeMode', (message) => applyMergeMode(message.enabled === true)),
-	documentEntry('labels', (message) => {
-		diffDocument.labels = message.labels;
-		renderHeaders();
-	}),
-	documentEntry('documentPatch', (message) =>
-		renderKeepingAnchor(function () {
-			setDocument(applyDiffPatch(diffDocument, message.patch));
-		})
-	)
+const DOCUMENT_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+	'document',
+	'mergeMode',
+	'labels',
+	'documentPatch'
 ]);
 
 function isDocumentMessage(message: DiffProviderToWebview): message is DocumentMessage {
-	return DOCUMENT_MESSAGES.has(message.type);
+	return DOCUMENT_MESSAGE_TYPES.has(message.type);
 }
 
+/**
+ * Constant call targets only: the selector decides which branch runs, and the branch
+ * names the function. An indexed lookup would let a message name choose the callee.
+ */
 function handleDocumentMessage(message: DocumentMessage): void {
-	DOCUMENT_MESSAGES.get(message.type)?.(message);
+	if (message.type === 'document') {
+		applyDiffDocument(message);
+		return;
+	}
+	if (message.type === 'labels') {
+		diffDocument.labels = message.labels;
+		renderHeaders();
+		return;
+	}
+	handleDocumentEditMessage(message);
+}
+
+/** The two messages that edit the installed document. */
+function handleDocumentEditMessage(
+	message: Extract<DocumentMessage, { type: 'mergeMode' | 'documentPatch' }>
+): void {
+	if (message.type === 'mergeMode') {
+		applyMergeMode(message.enabled === true);
+		return;
+	}
+	renderKeepingAnchor(function () {
+		setDocument(applyDiffPatch(diffDocument, message.patch));
+	});
 }
 
 /** One host protocol message. */
