@@ -722,6 +722,26 @@ suite('semantic diff page', () => {
 		}
 	});
 
+	test('DIFF-05 1,200 changed rows still render a bounded window', () => {
+		const rows: DiffRow[] = Array.from({ length: 1200 }, (_, at) => windowDiffRow(at));
+		const { dom } = mount({
+			left: { name: 'left.arxml', path: '/work/left.arxml' },
+			right: { name: 'right.arxml', path: '/work/right.arxml' },
+			labels: ['left.arxml', 'right.arxml'],
+			leftHeader: { packages: [] },
+			rightHeader: { packages: [] },
+			rows,
+			summary: { changed: rows.length, added: 0, removed: 0, unchanged: 0, renamed: 0 },
+			semanticSkipped: 0
+		});
+		try {
+			const rendered = treeRows(dom.document, '#diff-pane-left').length;
+			assert.ok(rendered > 0 && rendered <= 200, `bounded window (${rendered})`);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('a message named after an inherited member is ignored', () => {
 		const { dom } = mount();
 		try {

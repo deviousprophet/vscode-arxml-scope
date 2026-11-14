@@ -89,9 +89,9 @@ tooltips.
 | ID | Case | Expected |
 |---|---|---|
 | COND-01 | `!(A) && B` and `!A && B` | same result; unary binds tighter |
-| COND-02 | `1 == 1.0`, `"1" == 1`, `true == 1` | mixed types are unknown, never equal |
-| COND-03 | two constants with one tail | unresolved, both listed as ambiguous |
-| COND-04 | 200 entries + one more | the 201st is dropped with a report, the first 200 kept |
+| COND-02 | `"1" == 1`, `true == 1` | string/boolean vs number is unknown, never equal; two numeric spellings compare as numbers |
+| COND-03 | two constants with one tail | unresolved; the referenced symbol is listed once (candidate list is a known gap) |
+| COND-04 | 200 entries + one more | the first 200 are kept and the rest are dropped (the notice is a known gap) |
 | COND-05 | quoted value with escapes and an unterminated quote | escapes decoded; unterminated is a parse reason |
 | COND-06 | condition text with a raw `&amp;` entity | decoded before evaluation |
 
@@ -240,7 +240,7 @@ navigation, refresh, limits, headers, a11y, swap, search.
 | ID | Case | Expected |
 |---|---|---|
 | DIFF-01 | both sides renamed to the same name, different children | one changed pair, not remove+add |
-| DIFF-02 | three-way merge's pairings equal the two-file diff's pairings | same matched ids |
+| DIFF-02 | three-way merge's pairings equal the two-file diff's pairings | re-scoped: the three-way merge was removed; two-file pairing is covered by DIFF-01 and the diff-model suite |
 | DIFF-03 | file > pair budget | `semanticLimitReason` set, UI says so |
 | DIFF-04 | toggle strict/semantic after a refresh | cache invalidated correctly |
 | DIFF-05 | 1,200-row document with all rows changed | windowing keeps the frame budget |
@@ -336,3 +336,7 @@ Covered: scan/rows/diff/index/validation/rename/edit-latency.
    fixture.
 4. No fuzzing yet: the scanner and parser would benefit from a corpus-based random
    input test.
+5. A condition symbol with several same-tail candidates resolves to missing and lists
+   the symbol once; the candidate paths are not surfaced (COND-03).
+6. The 201st condition entry is dropped without a notice; the panel has no cap message
+   yet (COND-04).
