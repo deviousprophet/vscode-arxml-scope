@@ -101,7 +101,6 @@ suite('copy merge planner (MERGE rows)', () => {
 			source: source.range,
 			target: target.range,
 			targetIndent: indentationAt(RIGHT_TEXT, target.range.start),
-			expectedTarget: RIGHT_TEXT.slice(target.range.start, target.range.end)
 		});
 		assert.ok(planned.ok);
 		assert.strictEqual(planned.span.start, target.range.start, 'one contiguous replace starts at the target');
@@ -122,7 +121,6 @@ suite('copy merge planner (MERGE rows)', () => {
 			source: source.range,
 			target: target.range,
 			targetIndent: indentationAt(LEFT_TEXT, target.range.start),
-			expectedTarget: LEFT_TEXT.slice(target.range.start, target.range.end)
 		});
 		assert.ok(planned.ok);
 		assert.strictEqual(planned.span.start, target.range.start);
@@ -145,7 +143,6 @@ suite('copy merge planner (MERGE rows)', () => {
 			source: source.range,
 			target: target.range,
 			targetIndent: indentationAt(RIGHT_TEXT, target.range.start),
-			expectedTarget: RIGHT_TEXT.slice(target.range.start, target.range.end)
 		});
 		assert.ok(planned.ok);
 		const result = replaceRange(RIGHT_TEXT, target.range, planned.span.text);
@@ -165,7 +162,6 @@ suite('copy merge planner (MERGE rows)', () => {
 			sourceText: '',
 			target: target.range,
 			targetIndent: indentationAt(LEFT_TEXT, target.range.start),
-			expectedTarget: LEFT_TEXT.slice(target.range.start, target.range.end)
 		});
 		assert.ok(planned.ok);
 		assert.strictEqual(planned.span.text, '');
@@ -471,7 +467,6 @@ suite('copy merge budget (MERGE-15)', () => {
 				source: range,
 				target: range,
 				targetIndent: indent,
-				expectedTarget: expected
 			});
 			durations.push(performance.now() - at);
 			assert.ok(planned.ok);
@@ -485,8 +480,7 @@ suite('copy merge budget (MERGE-15)', () => {
 			sourceText: left,
 			source: range,
 			target: range,
-			targetIndent: indent,
-			expectedTarget: expected
+			targetIndent: indent
 		});
 		assert.ok(answer.ok);
 		const applyStart = performance.now();

@@ -9,7 +9,7 @@
  */
 import * as vscode from 'vscode';
 
-import type { ConditionEntry } from '../core/ecuc/conditionEntry';
+import { MAX_CONDITION_ENTRIES, type ConditionEntry } from '../core/ecuc/conditionEntry';
 import { ConditionValue, isConditionName, parseConditionValue } from '../core/ecuc/syscond';
 
 export interface ParsedConditions {
@@ -22,7 +22,7 @@ export interface ParsedConditions {
 /** The `workspaceState` key that holds the raw entries. */
 export const CONDITION_VALUES_KEY = 'arxmlScope.conditionValues.v1';
 
-const ENTRY_LIMIT = 200;
+const ENTRY_LIMIT = MAX_CONDITION_ENTRIES;
 const NAME_LIMIT = 200;
 const VALUE_LIMIT = 200;
 

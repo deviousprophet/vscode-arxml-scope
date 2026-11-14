@@ -161,13 +161,12 @@ that is not obvious from the code.
 - **Semantic diff is opt-in in core, on in the host.** `DiffOptions.semanticMatching` defaults off so
   core output is stable; the host reads `arxmlScope.diff.semanticMatching` (default on) and the toolbar
   posts `matchMode` for the current panel only. Strict must reproduce the pre-semantic output exactly.
-- **A match-mode toggle never re-scans.** The host keeps the prepared rows, ranges and headers from the
-  last refresh and a `DiffSession` caches the strict and semantic documents. A toggle reuses that cache,
-  falls back to a full refresh when either `TextDocument.version` changed, and reuses the current
-  document when a semantic build reports `renamed === 0` (the two modes are identical). The page flips
-  `aria-pressed` and the label immediately, shows `aria-busy` plus a live `Switching to …` status, and
-  the host answers a no-document switch with `matchModeState`. Do not call `refreshNow()` or
-  `rowsFor()` from the match-mode handler unless the prepared version is stale.
+- **A match-mode toggle never re-scans.** The host keeps both engine handles from the last refresh and
+  asks `diff.compute` for the other mode; the engine re-pairs without a re-scan, and a stale
+  `TextDocument.version` falls back to a full refresh. The page flips `aria-pressed` and the label
+  immediately and shows `aria-busy` while the engine answers. `DiffSession` survives only as the
+  TypeScript parity oracle under `src/test`; do not route production through it. Do not call
+  `refreshNow()` from the match-mode handler unless the prepared version is stale.
 - **The diff toolbar has no count summary.** The left order is Show all / Show diff, divider,
   Context, divider, Semantic / Strict, divider, Prev/Next; Swap is centered over the pane divider;
   status and Search are on the right. Context is the only standalone toggle, default active at five

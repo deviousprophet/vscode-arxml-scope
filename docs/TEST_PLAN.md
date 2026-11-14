@@ -27,11 +27,11 @@ Run order for a change: `check-types` → `lint` → `cargo test`/`clippy`/`fmt`
 | `core/ecuc/*` | core scanner/rows/order/validate suites, `parity:rows`, `ecucLargeFile`, `engineEdit` |
 | `core/diff/*` | `diffModel` (43 tests), `wordDiff`, `diffSemantic`, `renameScale`, `diffPage` |
 | `core/index/*`, `host/indexService` | `indexBuilder`, `workspaceIndex`, `index` (extension), `indexBenchmark`, `validation` |
-| `host/ecucEdit`, `host/ecucStructureEdit` | `editing` (37), `structureEdit`, `rescan`, `merge` |
+| `host/ecucEdit`, `host/ecucStructureEdit` | `editing`, `structureEdit`, `rescan`, `planMerge` |
 | `host/engine/*`, `rust/*` | `engine` suites, `engine:smoke`, `parity`, `parity:rows`, `engineEdit` |
 | `webview/*` | page + component suites for the touched component, `protocol` |
 | `commands.ts`, manifests | `activation`, `menus`, `compare`, `reveal` |
-| merge modules | `mergePlan`, `merge` (extension), `merge` benchmark |
+| copy modules | `planCopy`, `planMerge` (extension), `copyBenchmark` |
 
 ## SCAN — scanner and model
 
@@ -351,3 +351,11 @@ Covered: scan/rows/diff/index/validation/rename/edit-latency.
 11. Disabling the index mid-build can briefly publish the in-flight snapshot before the
     queued enable rebuild; the settled state is asserted (INDEX-04).
 12. The three-way merge was removed; DIFF-02 is re-scoped to the two-file pairing suite.
+13. Ancestor synthesis has no end-to-end panel regression: `synthesizeInto` is a closure
+    inside `DiffPanel.open`. MERGE-06 builds the wrap and insertion by hand, so the
+    sibling-anchor bug would not have been caught there; the fix is covered by review only.
+14. A copy's one-`WorkspaceEdit`/undo path and MERGE-15's engine patch are not exercised in
+    `vscode-test` (no webview message bridge); the planner and page cover the span and the
+    message shape.
+15. The fuzz corpus (gap 4), ENG-01 and ENG-07 have no follow-up task: the programme's
+    tasks are archived, so they live here with their reasons.

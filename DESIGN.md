@@ -271,6 +271,12 @@ subtree fills keep one stable width while rows scroll horizontally.
 
 ### Chrome
 
+**Merge mode.** The diff title strip gains one `Merge` toggle styled from the secondary button
+tokens, with its pressed state carried by `aria-pressed` (never a mirroring class). Turning it on
+shows a 22px copy arrow on the inner edge of each changed row, in the row's own height so the text
+never shifts; the arrow mirrors its glyph and tooltip with the displayed pane, so Swap keeps it
+pointing at the destination. Turning it off restores the read-only diff exactly.
+
 The toolbar is a 54px strip with divider-separated groups and icon-over-label tools: a 60x48 box with
 an 18px icon above a 10px label. Labels hide at 1040px and the boxes compact to 32px at 720px. The
 Document strip carries Collapse, Expand and the Sidebar toggle in the same variant as the diff

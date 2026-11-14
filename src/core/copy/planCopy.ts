@@ -40,17 +40,10 @@ export interface CopyRequest {
 	anchorBefore?: CopyRange;
 	/** The indentation of the target parent's children. */
 	targetIndent: string;
-	/** The bytes the row showed for `target`; a mismatch means the snapshot is stale. */
-	expectedTarget?: string;
 }
 
 const STALE = 'the comparison changed; reload and try again';
 const NO_ANCHOR = 'the target has no sibling to place this element next to';
-
-/** True when the range still holds the bytes the row showed. */
-function holds(text: string, range: CopyRange, expected: string | undefined): boolean {
-	return expected === undefined || text.slice(range.start, range.end) === expected;
-}
 
 function lineStart(text: string, from: number): number {
 	let at = Math.min(from, text.length);
@@ -117,20 +110,26 @@ function shiftLine(line: string, sourceIndent: string, targetIndent: string): st
 	return `${' '.repeat(width)}${line.slice(lead.length)}`;
 }
 
+/** The document's own line break, the one a copied block must adopt. */
+export function lineBreakOf(text: string): string {
+	return text.includes('\r\n') ? '\r\n' : '\n';
+}
+
 /** Shifts every line of a copied block by the difference between the two indents. */
-export function reindent(block: string, sourceIndent: string, targetIndent: string): string {
-	const separator = block.includes('\r\n') ? '\r\n' : '\n';
+export function reindent(
+	block: string,
+	sourceIndent: string,
+	targetIndent: string,
+	lineBreak = lineBreakOf(block)
+): string {
 	return block
-		.split(separator)
+		.split(/\r?\n/)
 		.map((line, index) => (index === 0 ? line : shiftLine(line, sourceIndent, targetIndent)))
-		.join(separator);
+		.join(lineBreak);
 }
 
 function replacement(request: CopyRequest): CopyPlan {
 	const target = request.target as CopyRange;
-	if (!holds(request.targetText, target, request.expectedTarget)) {
-		return { ok: false, reason: STALE };
-	}
 	const sourceIndent = indentationAt(request.sourceText, request.source.start);
 	const block = request.sourceText.slice(request.source.start, request.source.end);
 	return {
@@ -138,16 +137,13 @@ function replacement(request: CopyRequest): CopyPlan {
 		span: {
 			start: target.start,
 			end: target.end,
-			text: reindent(block, sourceIndent, request.targetIndent)
+			text: reindent(block, sourceIndent, request.targetIndent, lineBreakOf(request.targetText))
 		}
 	};
 }
 
 function deletion(request: CopyRequest): CopyPlan {
 	const target = request.target as CopyRange;
-	if (!holds(request.targetText, target, request.expectedTarget)) {
-		return { ok: false, reason: STALE };
-	}
 	const span = removalSpan(request.targetText, target);
 	return { ok: true, span: { start: span.start, end: span.end, text: '' } };
 }
@@ -157,9 +153,10 @@ function insertion(request: CopyRequest): CopyPlan {
 	const block = reindent(
 		request.sourceText.slice(request.source.start, request.source.end),
 		sourceIndent,
-		request.targetIndent
+		request.targetIndent,
+		lineBreakOf(request.targetText)
 	);
-	const separator = request.targetText.includes('\r\n') ? '\r\n' : '\n';
+	const separator = lineBreakOf(request.targetText);
 	if (request.anchorAfter !== undefined) {
 		return {
 			ok: true,
@@ -205,7 +202,7 @@ export function planDelete(request: Omit<CopyRequest, 'source' | 'anchorAfter' |
 export interface MissingAncestor {
 	shortName: string;
 	definitionRef: string;
-	definitionDest?: string;
+	definitionDest: string;
 	/** The kind of the element nested inside this ancestor. */
 	childKind: 'container' | 'parameter' | 'reference';
 }
@@ -216,26 +213,25 @@ const LIST_TAG: Record<MissingAncestor['childKind'], string> = {
 	reference: 'REFERENCE-VALUES'
 };
 
-const DEFAULT_CONTAINER_DEST = 'ECUC-PARAM-CONF-CONTAINER-DEF';
-
 /** One ancestor element wrapping the block below it. */
 function wrapOne(
 	block: string,
 	childIndent: string,
 	ancestor: MissingAncestor,
-	wrapperIndent: string
+	wrapperIndent: string,
+	lineBreak: string
 ): string {
 	const fieldIndent = `${wrapperIndent}  `;
 	const list = LIST_TAG[ancestor.childKind];
 	return [
 		'<ECUC-CONTAINER-VALUE>',
 		`${fieldIndent}<SHORT-NAME>${ancestor.shortName}</SHORT-NAME>`,
-		`${fieldIndent}<DEFINITION-REF DEST="${ancestor.definitionDest ?? DEFAULT_CONTAINER_DEST}">${ancestor.definitionRef}</DEFINITION-REF>`,
+		`${fieldIndent}<DEFINITION-REF DEST="${ancestor.definitionDest}">${ancestor.definitionRef}</DEFINITION-REF>`,
 		`${fieldIndent}<${list}>`,
 		`${childIndent}${block}`,
 		`${fieldIndent}</${list}>`,
 		`${wrapperIndent}</ECUC-CONTAINER-VALUE>`
-	].join('\n');
+	].join(lineBreak);
 }
 
 /**
@@ -250,13 +246,14 @@ export function wrapWithAncestors(
 	elementText: string,
 	elementIndent: string,
 	ancestors: readonly MissingAncestor[],
-	targetIndent: string
+	targetIndent: string,
+	lineBreak = lineBreakOf(elementText)
 ): string {
-	let block = reindent(elementText, elementIndent, targetIndent + '    '.repeat(ancestors.length));
+	let block = reindent(elementText, elementIndent, targetIndent + '    '.repeat(ancestors.length), lineBreak);
 	let blockIndent = targetIndent + '    '.repeat(ancestors.length);
 	for (let index = ancestors.length - 1; index >= 0; index--) {
 		const wrapperIndent = targetIndent + '    '.repeat(index);
-		block = wrapOne(block, blockIndent, ancestors[index], wrapperIndent);
+		block = wrapOne(block, blockIndent, ancestors[index], wrapperIndent, lineBreak);
 		blockIndent = wrapperIndent;
 	}
 	return block;

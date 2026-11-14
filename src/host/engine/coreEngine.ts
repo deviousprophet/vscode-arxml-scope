@@ -123,6 +123,23 @@ export function protocolDiagnostic(header: Record<string, unknown>): string | un
 	return undefined;
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object';
+}
+
+function hasSides(envelope: Record<string, unknown>): boolean {
+	return isObject(envelope.left) && isObject(envelope.right);
+}
+
+function hasCounters(envelope: Record<string, unknown>): boolean {
+	return Array.isArray(envelope.labels) && isObject(envelope.summary);
+}
+
+/** The final frame's document envelope, checked before it is trusted. */
+function isDiffEnvelope(value: unknown): value is Omit<DiffDocument, 'rows'> {
+	return isObject(value) && hasSides(value) && hasCounters(value);
+}
+
 function parseJson<T>(chunk: { body: Buffer }): T {
 	return JSON.parse(chunk.body.toString('utf8')) as T;
 }
@@ -153,13 +170,13 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 		computeDiff: async (left, right, options = {}) => {
 			const chunks = await client.requestStream('diff.compute', { left, right, options }, undefined, 60_000);
 			const envelope = chunks.map((chunk) => chunk.header.document).find((found) => found !== undefined);
-			if (envelope === undefined || typeof envelope !== 'object') {
+			if (!isDiffEnvelope(envelope)) {
 				throw new Error('engine returned no diff envelope');
 			}
 			const rows = chunks
 				.filter((chunk) => chunk.body.length > 0)
 				.flatMap((chunk) => parseJson<DiffDocument['rows']>(chunk));
-			return { ...(envelope as Omit<DiffDocument, 'rows'>), rows };
+			return { ...envelope, rows };
 		},
 		patchDiff: async (left, right, edit) => {
 			const answer = await client.request('diff.patch', { left, right, edit }, undefined, 120_000);

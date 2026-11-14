@@ -54,25 +54,12 @@ suite('copy planner (core)', () => {
 			sourceText,
 			source: sourceRange,
 			target: P1,
-			targetIndent: indentationAt(OURS, P1.start),
-			expectedTarget: OURS.slice(P1.start, P1.end)
+			targetIndent: indentationAt(OURS, P1.start)
 		});
 		assert.ok(planned.ok);
 		assert.strictEqual(OURS.slice(0, planned.span.start) + planned.span.text + OURS.slice(planned.span.end), sourceText);
 	});
 
-	test('refuses a stale target instead of overwriting unknown bytes', () => {
-		const planned = planCopy({
-			targetText: OURS,
-			sourceText: theirs('22'),
-			source: P1,
-			target: P1,
-			targetIndent: '        ',
-			expectedTarget: '<something the row did not show>'
-		});
-		assert.ok(!planned.ok);
-		assert.match(planned.reason, /reload/);
-	});
 
 	test('deletes an element with its line and leaves the neighbours intact', () => {
 		const two = OURS.replace(
@@ -146,6 +133,7 @@ suite('copy planner (core)', () => {
 		});
 		assert.ok(planned.ok);
 		assert.ok(planned.span.text.startsWith('\r\n'), 'the inserted line uses CRLF');
+		assert.ok(!/[^\r]\n/.test(planned.span.text), 'an LF source block is converted to CRLF, with no mixed endings');
 	});
 });
 
@@ -156,7 +144,7 @@ suite('copy ancestors (core)', () => {
 		const wrapped = wrapWithAncestors(
 			element,
 			'        ',
-			[{ shortName: 'B', definitionRef: '/P/A/B', childKind: 'parameter' }],
+			[{ shortName: 'B', definitionRef: '/P/A/B', definitionDest: 'ECUC-PARAM-CONF-CONTAINER-DEF', childKind: 'parameter' }],
 			'    '
 		);
 		assert.ok(wrapped.startsWith('<ECUC-CONTAINER-VALUE>'));
@@ -173,8 +161,8 @@ suite('copy ancestors (core)', () => {
 			element,
 			'        ',
 			[
-				{ shortName: 'A', definitionRef: '/P/A', childKind: 'container' },
-				{ shortName: 'B', definitionRef: '/P/A/B', childKind: 'parameter' }
+				{ shortName: 'A', definitionRef: '/P/A', definitionDest: 'ECUC-PARAM-CONF-CONTAINER-DEF', childKind: 'container' },
+				{ shortName: 'B', definitionRef: '/P/A/B', definitionDest: 'ECUC-PARAM-CONF-CONTAINER-DEF', childKind: 'parameter' }
 			],
 			'  '
 		);
@@ -183,6 +171,18 @@ suite('copy ancestors (core)', () => {
 		assert.ok(a >= 0 && b > a, 'A wraps B');
 		assert.ok(wrapped.includes('  <SUB-CONTAINERS>'), 'A holds B in SUB-CONTAINERS');
 		assert.ok(wrapped.includes('      <PARAMETER-VALUES>'), 'B holds the parameter');
+	});
+
+	test('a CRLF target gets CRLF through the ancestor wrapper', () => {
+		const wrapped = wrapWithAncestors(
+			'<A>\n  <B/>\n</A>',
+			'  ',
+			[{ shortName: 'C', definitionRef: '/P/C', definitionDest: 'ECUC-PARAM-CONF-CONTAINER-DEF', childKind: 'container' }],
+			'    ',
+			'\r\n'
+		);
+		assert.ok(!/[^\r]\n/.test(wrapped), 'no bare LF remains');
+		assert.ok(wrapped.split('\r\n').length > 3, 'the block is multi-line');
 	});
 
 	test('keeps a definition DEST when the ancestor has one', () => {

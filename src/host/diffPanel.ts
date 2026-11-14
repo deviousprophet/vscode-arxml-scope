@@ -14,6 +14,7 @@ import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import {
 	indentationAt,
+	lineBreakOf,
 	planCopy,
 	planDelete,
 	wrapWithAncestors,
@@ -627,14 +628,16 @@ export class DiffPanel {
 			childKind: MissingAncestor['childKind']
 		): MissingAncestor | undefined => {
 			const cell = cellOn(row, side);
-			return cell === undefined
-				? undefined
-				: {
-						shortName: cell.shortName ?? cell.label,
-						definitionRef: cell.definitionRef,
-						definitionDest: cell.definitionDest,
-						childKind
-					};
+			if (cell === undefined || cell.definitionDest === undefined) {
+				// No DEST to copy: refuse instead of inventing one in the user's file.
+				return undefined;
+			}
+			return {
+				shortName: cell.shortName ?? cell.label,
+				definitionRef: cell.definitionRef,
+				definitionDest: cell.definitionDest,
+				childKind
+			};
 		};
 
 		/**
@@ -682,21 +685,17 @@ export class DiffPanel {
 			);
 		};
 
-		/** The insertion for a synthesized chain: after its preceding sibling, else before its anchor. */
+		/** The insertion for a synthesized chain: after the parent's last child. */
 		const chainInsertion = (
-			before: DiffCell | undefined,
-			after: DiffCell | undefined,
+			before: DiffCell,
 			indent: string,
-			block: string
-		): { start: number; end: number; text: string } => {
-			if (before !== undefined) {
-				return { start: before.range.end, end: before.range.end, text: `
-${indent}${block}` };
-			}
-			const anchor = after as DiffCell;
-			return { start: anchor.range.start, end: anchor.range.start, text: `${block}
-${indent}` };
-		};
+			block: string,
+			lineBreak: string
+		): { start: number; end: number; text: string } => ({
+			start: before.range.end,
+			end: before.range.end,
+			text: `${lineBreak}${indent}${block}`
+		});
 
 		/** Creates the missing ancestors around the copied element and inserts the chain. */
 		const synthesizeInto = async (
@@ -727,13 +726,15 @@ ${indent}` };
 			const targetText = otherDoc.getText();
 			const sourceText = clickedDoc.getText();
 			const indent = indentationAt(targetText, anchor.range.start);
+			const lineBreak = lineBreakOf(targetText);
 			const block = wrapWithAncestors(
 				sourceText.slice(clickedCell.range.start, clickedCell.range.end),
 				indentationAt(sourceText, clickedCell.range.start),
 				chain.ancestors,
-				indent
+				indent,
+				lineBreak
 			);
-			await applyPlan(otherDoc, chainInsertion(anchor, undefined, indent, block));
+			await applyPlan(otherDoc, chainInsertion(anchor, indent, block, lineBreak));
 			return true;
 		};
 
