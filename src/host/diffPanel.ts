@@ -511,6 +511,25 @@ export class DiffPanel {
 			return undefined;
 		};
 
+		/** A module copy may not create a second module with the same short name. */
+		const moduleCollision = (side: 'left' | 'right', rowIndex: number): boolean => {
+			const row = current.rows[rowIndex];
+			if (row.kind !== 'module') {
+				return false;
+			}
+			const name = cellOn(row, side)?.shortName;
+			if (name === undefined) {
+				return false;
+			}
+			const targetSide = otherSideOf(side);
+			return current.rows.some(
+				(candidate) =>
+					candidate !== row &&
+					candidate.kind === 'module' &&
+					cellOn(candidate, targetSide)?.shortName === name
+			);
+		};
+
 		/** The insertion for a synthesized chain: after its preceding sibling, else before its anchor. */
 		const chainInsertion = (
 			before: DiffCell | undefined,
@@ -559,6 +578,12 @@ ${indent}` };
 			);
 			await applyPlan(otherDoc, chainInsertion(before, after, indent, block));
 			return true;
+		};
+
+		const deleteFromOther = async (doc: vscode.TextDocument, cell: DiffCell | undefined): Promise<void> => {
+			if (cell !== undefined) {
+				await copyDelete(doc, cell);
+			}
 		};
 
 		const copyDelete = async (doc: vscode.TextDocument, cell: DiffCell): Promise<void> => {
@@ -631,9 +656,11 @@ ${indent}` };
 				return;
 			}
 			if (located.clickedCell === undefined) {
-				if (located.otherCell !== undefined) {
-					await copyDelete(otherDoc, located.otherCell);
-				}
+				await deleteFromOther(otherDoc, located.otherCell);
+				return;
+			}
+			if (moduleCollision(side, located.rowIndex)) {
+				await postError('that module already exists on the target side');
 				return;
 			}
 			await copyInto(clickedDoc, otherDoc, located.clickedCell, located.otherCell, located.rowIndex, side);
