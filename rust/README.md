@@ -40,7 +40,16 @@ again. Requests are answered in order per `id`; operations that can exceed one
 frame stream chunks and mark the last with `"chunk":{"last":true}`.
 
 Operations: `hello`, `shutdown`, `doc.open`, `doc.close`, `doc.rows`,
-`doc.plan`, `doc.update`, `doc.resync`, `doc.node`, `doc.model`.
+`doc.plan`, `doc.update`, `doc.resync`, `doc.node`, `doc.model`, `diff.compute`,
+`diff.patch`, plus the chunked upload path `doc.open.begin`, `doc.open.chunk`,
+`doc.open.end`, `doc.resync.begin`, `doc.resync.chunk`, `doc.resync.end` and
+`upload.abort`.
+
+`doc.open` carries the whole text in one frame and refuses a request above 64 MiB.
+The host switches to the chunked path above 56 MiB: raw UTF-8 byte chunks of 8 MiB,
+assembled by the engine before decoding, with a 512 MiB document cap. Chunks may
+split a multi-byte character; chunk order is checked and a bad sequence drops the
+upload.
 
 `doc.update` answers with one contiguous row replacement
 (`{"at":n,"remove":m,"rows":[…]}`): a value edit is one row, a container rename is

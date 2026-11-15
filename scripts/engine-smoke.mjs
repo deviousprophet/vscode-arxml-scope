@@ -92,6 +92,25 @@ if (opened.header.ecuc !== true) {
 	process.exit(1);
 }
 const docId = opened.header.docId;
+
+// Chunked open: the same operation for any document above the single-frame limit.
+const chunkedText = `<AUTOSAR><!--${'y'.repeat(2 * 1024 * 1024)}--></AUTOSAR>`;
+const chunkedBytes = Buffer.from(chunkedText, 'utf8');
+const [chunkBegin] = await request('doc.open.begin', { uri: 'mem://chunked.arxml' });
+const chunkUpload = chunkBegin.header.uploadId;
+for (let seq = 0, at = 0; at < chunkedBytes.length; seq++, at += 1024 * 1024) {
+	await request(
+		'doc.open.chunk',
+		{ uploadId: chunkUpload, seq },
+		chunkedBytes.subarray(at, at + 1024 * 1024)
+	);
+}
+const [chunked] = await request('doc.open.end', { uploadId: chunkUpload });
+const chunkedOk = chunked.header.docId !== undefined && chunked.header.textLength === chunkedText.length;
+if (!chunkedOk) {
+	console.error('chunked open did not return a document');
+	process.exit(1);
+}
 const rowChunks = await request('doc.rows', { docId, options: { sort: 'all' } });
 const rows = rowChunks.flatMap((chunk) => JSON.parse(chunk.body.toString('utf8')));
 
@@ -157,6 +176,7 @@ console.log(
 		engine: hello.header.engine,
 		rows: rows.length,
 		planned,
+		chunkedOk,
 		diffRows: diffRows.length,
 		diffOk,
 		patchRows: patch === undefined ? 0 : patch.rows.length,
@@ -166,4 +186,4 @@ console.log(
 		loadMs: Math.round(performance.now() - started)
 	})
 );
-process.exit(exitCode === 0 && planned === 1 && diffOk && patchOk ? 0 : 1);
+process.exit(exitCode === 0 && planned === 1 && chunkedOk && diffOk && patchOk ? 0 : 1);

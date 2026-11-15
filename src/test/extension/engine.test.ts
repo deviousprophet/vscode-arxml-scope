@@ -117,6 +117,47 @@ suite('core engine process', () => {
 			engine.dispose();
 		}
 	});
+
+	test('opens a document above the 64 MiB frame limit through chunked upload', async function () {
+		this.timeout(120_000);
+		const mib = 65;
+		const padding = 'x'.repeat(mib * 1024 * 1024);
+		const text =
+			`<?xml version="1.0" encoding="UTF-8"?>\n<AUTOSAR><!--${padding}-->` +
+			'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME></ECUC-MODULE-CONFIGURATION-VALUES></AUTOSAR>';
+		assert.ok(Buffer.byteLength(text) > 64 * 1024 * 1024, 'the fixture exceeds one frame');
+		const engine = await resolveEngine(repoRoot);
+		try {
+			const docId = await engine.openDocument('mem://large.arxml', text, ROW_OPTIONS);
+			const side = { docId, name: 'large.arxml', path: 'mem://large.arxml' };
+			const document = await engine.computeDiff(side, side, { semanticMatching: false });
+			assert.ok(document.rows.length > 0, 'the chunked document was parsed');
+			assert.strictEqual(document.summary.changed, 0);
+			assert.strictEqual(document.summary.added, 0);
+			assert.strictEqual(document.summary.removed, 0);
+		} finally {
+			engine.dispose();
+		}
+	});
+
+	test('rejects an out-of-order chunk and forgets the upload', async () => {
+		const client = await EngineClient.start({ binary: enginePath(repoRoot), root: repoRoot });
+		try {
+			const begun = await client.request('doc.open.begin', { options: ROW_OPTIONS });
+			const uploadId = Number(begun.header.uploadId);
+			assert.ok(Number.isInteger(uploadId), 'the engine returns an upload id');
+			await assert.rejects(
+				() => client.request('doc.open.chunk', { uploadId, seq: 1 }, Buffer.from('x')),
+				/out of order/
+			);
+			await assert.rejects(
+				() => client.request('doc.open.chunk', { uploadId, seq: 0 }, Buffer.from('x')),
+				/unknown upload/
+			);
+		} finally {
+			client.dispose();
+		}
+	});
 });
 
 interface RowLike {
