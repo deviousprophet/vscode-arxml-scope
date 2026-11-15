@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Engine supervision, stable document ids and the host/webview contract"}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Protocol and boundary types for the engine operations"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Final integration review across host, Rust and the oracle"}
