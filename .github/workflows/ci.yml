@@ -20,7 +20,7 @@ jobs:
       pull-requests: write
 
   Package:
-    name: Package VSIX
+    name: Package extension
     needs: [CT_After_Commit]
     if: ${{ needs.CT_After_Commit.result == 'success' }}
     uses: ./.github/workflows/package.yml

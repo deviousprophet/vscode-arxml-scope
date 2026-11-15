@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   Package:
-    name: Package VSIX
+    name: Package extension
     uses: ./.github/workflows/package.yml
     with:
       use_package_version: true
