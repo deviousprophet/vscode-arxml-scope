@@ -554,14 +554,14 @@ fn blob_mentions_substitution(blob: &str, substitutions: &Substitutions) -> bool
         .any(|(old, _)| blob.contains(old.as_str()))
 }
 
-fn child_blob(side: Side, node: usize) -> String {
+fn child_blob(side: Side, node: usize, self_name: &str) -> String {
     side.children(node)
         .iter()
         .map(|child| {
             format!(
                 "{} {}",
-                name_of(side, *child),
-                sort_identity(side.row(*child))
+                mask_self(&name_of(side, *child), self_name),
+                mask_self(&sort_identity(side.row(*child)), self_name)
             )
         })
         .collect::<Vec<_>>()
@@ -587,8 +587,8 @@ fn substitution_score(
         "{} {} {} {}",
         left_name,
         right_name,
-        child_blob(side, left),
-        child_blob(right, right_node)
+        child_blob(side, left, &left_name),
+        child_blob(right, right_node, &right_name)
     );
     if blob_mentions_substitution(&blob, substitutions) {
         0.5
@@ -608,8 +608,8 @@ fn substitutions_used(
         "{} {} {} {}",
         name_of(side, left),
         name_of(right, right_node),
-        child_blob(side, left),
-        child_blob(right, right_node)
+        child_blob(side, left, &name_of(side, left)),
+        child_blob(right, right_node, &name_of(right, right_node))
     );
     substitutions
         .borrow()
@@ -941,13 +941,20 @@ fn collapse_digits(text: &str) -> String {
     out
 }
 
-fn child_key(side: Side, node: usize, substitutions: &Substitutions) -> String {
+fn mask_self(text: &str, self_name: &str) -> String {
+    if self_name.is_empty() {
+        return text.to_string();
+    }
+    text.replace(self_name, "<self>")
+}
+
+fn child_key(side: Side, node: usize, substitutions: &Substitutions, self_name: &str) -> String {
     let row = side.row(node);
     format!(
         "{}|{}|{}",
         row.kind,
         row.definition_ref,
-        apply_substitutions(&sort_identity(row), substitutions)
+        apply_substitutions(&mask_self(&sort_identity(row), self_name), substitutions)
     )
 }
 
@@ -960,7 +967,7 @@ fn semantic_nodes(side: Side, nodes: &[usize], substitutions: &Substitutions) ->
             let substituted = apply_substitutions(&name, substitutions).to_lowercase();
             let mut child_keys: HashMap<String, u32> = HashMap::new();
             for child in side.children(*node) {
-                let key = child_key(side, *child, substitutions);
+                let key = child_key(side, *child, substitutions, &name);
                 *child_keys.entry(key).or_insert(0) += 1;
             }
             SemanticNode {
@@ -969,13 +976,13 @@ fn semantic_nodes(side: Side, nodes: &[usize], substitutions: &Substitutions) ->
                 signature: collapse_digits(&substituted),
                 tokens: token_set(&substituted),
                 substituted,
-                name,
+                name: name.clone(),
                 child_key_signature: if child_keys.is_empty() {
                     String::new()
                 } else {
                     counts_signature(&child_keys)
                 },
-                child_blob: child_blob(side, *node),
+                child_blob: child_blob(side, *node, &name),
                 child_keys,
             }
         })
@@ -3135,5 +3142,140 @@ mod tests {
         assert_eq!(document.summary.renamed, 1);
         assert_eq!(document.summary.added, 0);
         assert_eq!(document.summary.removed, 0);
+    }
+
+    /// One container whose parameter values embed the container's own short name.
+    fn rename_block(name: &str, marker: &str, children: usize) -> String {
+        let values: String = (0..children)
+            .map(|at| {
+                format!(
+                    r#"        <ECUC-NUMERICAL-PARAM-VALUE>
+          <DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/Pkg/Mod/Child/P{at}</DEFINITION-REF>
+          <VALUE>{name}_{marker}_{at}</VALUE>
+        </ECUC-NUMERICAL-PARAM-VALUE>
+"#
+                )
+            })
+            .collect();
+        format!(
+            r#"      <ECUC-CONTAINER-VALUE>
+        <SHORT-NAME>{name}</SHORT-NAME>
+        <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/Pkg/Mod/Child</DEFINITION-REF>
+        <PARAMETER-VALUES>
+{values}        </PARAMETER-VALUES>
+      </ECUC-CONTAINER-VALUE>
+"#
+        )
+    }
+
+    fn rename_document(containers: &[(&str, &str)], children: usize) -> String {
+        let body: String = containers
+            .iter()
+            .map(|(name, marker)| rename_block(name, marker, children))
+            .collect();
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>Pkg</SHORT-NAME>
+      <ELEMENTS>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>Mod</SHORT-NAME>
+          <DEFINITION-REF DEST="ECUC-MODULE-DEF">/Pkg/Mod</DEFINITION-REF>
+          <CONTAINERS>
+{body}          </CONTAINERS>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>
+"#
+        )
+    }
+
+    fn semantic_container_pairs(document: &DiffDocument) -> usize {
+        document
+            .rows
+            .iter()
+            .filter(|row| {
+                row.kind == "container"
+                    && row.match_.as_ref().map(|found| found.kind.as_str()) == Some("semantic")
+            })
+            .count()
+    }
+
+    fn renamed_names(prefix: &str, count: usize) -> Vec<(String, &'static str)> {
+        (0..count)
+            .map(|at| (format!("{prefix}_{at}_MO"), "V"))
+            .collect()
+    }
+
+    #[test]
+    fn pairs_a_wholly_different_name_token() {
+        let names: Vec<(String, &str)> = renamed_names("Old", 50);
+        let renamed: Vec<(String, &str)> = renamed_names("New", 50);
+        let left: Vec<(&str, &str)> = names
+            .iter()
+            .map(|(name, marker)| (name.as_str(), *marker))
+            .collect();
+        let right: Vec<(&str, &str)> = renamed
+            .iter()
+            .map(|(name, marker)| (name.as_str(), *marker))
+            .collect();
+        let document = diff_with(
+            &rename_document(&left, 10),
+            &rename_document(&right, 10),
+            true,
+        );
+        assert_eq!(semantic_container_pairs(&document), 50);
+        assert_eq!(document.summary.added, 0);
+        assert_eq!(document.summary.removed, 0);
+    }
+
+    #[test]
+    fn pairs_renamed_containers_after_new_ones_sorting_before() {
+        let renamed: Vec<(String, &str)> = renamed_names("New", 50);
+        let mut right_names: Vec<(String, &str)> = renamed_names("Extra", 50);
+        right_names.extend(renamed);
+        let right: Vec<(&str, &str)> = right_names
+            .iter()
+            .map(|(name, marker)| (name.as_str(), *marker))
+            .collect();
+        let left_names: Vec<(String, &str)> = renamed_names("Old", 50);
+        let left: Vec<(&str, &str)> = left_names
+            .iter()
+            .map(|(name, marker)| (name.as_str(), *marker))
+            .collect();
+        let document = diff_with(
+            &rename_document(&left, 10),
+            &rename_document(&right, 10),
+            true,
+        );
+        assert_eq!(semantic_container_pairs(&document), 50);
+        assert!(document.summary.added > 0, "the extra containers are added");
+        assert_eq!(document.summary.removed, 0);
+    }
+
+    #[test]
+    fn unrelated_child_content_is_not_paired() {
+        let left_names: Vec<(String, &str)> = renamed_names("Old", 50);
+        let right_names: Vec<(String, &str)> =
+            (0..50).map(|at| (format!("Other_{at}_MO"), "Z")).collect();
+        let left: Vec<(&str, &str)> = left_names
+            .iter()
+            .map(|(name, marker)| (name.as_str(), *marker))
+            .collect();
+        let right: Vec<(&str, &str)> = right_names
+            .iter()
+            .map(|(name, marker)| (name.as_str(), *marker))
+            .collect();
+        let document = diff_with(
+            &rename_document(&left, 10),
+            &rename_document(&right, 10),
+            true,
+        );
+        assert_eq!(semantic_container_pairs(&document), 0);
+        assert_eq!(document.summary.renamed, 0);
     }
 }

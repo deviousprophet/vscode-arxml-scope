@@ -37,6 +37,8 @@ function pairs(files) {
 		['editing/escaping.arxml', 'editing/escaping.expected.arxml'],
 		['editing/textual.arxml', 'editing/textual.expected.arxml'],
 		['semantic/rename.left.arxml', 'semantic/rename.right.arxml'],
+		['semantic/whole-token.left.arxml', 'semantic/whole-token.right.arxml'],
+		['semantic/new-before.left.arxml', 'semantic/new-before.right.arxml'],
 		['semantic/embed.left.arxml', 'semantic/embed.right.arxml'],
 		['semantic/empty.left.arxml', 'semantic/empty.right.arxml'],
 		['semantic/large.left.arxml', 'semantic/large.right.arxml'],
