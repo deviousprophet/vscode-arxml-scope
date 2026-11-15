@@ -1,13 +1,15 @@
 # Rust core engine
 
 The Rust workspace contains the extension's core engine, run as a **standalone
-process** — there is no N-API addon and no TypeScript fallback:
+process**. There is no N-API addon and no TypeScript fallback:
 
-- `arxml-core` — the pure domain engine (no Node, no VS Code): ECUC scanner, model,
-  node ids, ordering, rows, conditions, validation, edit planning.
-- `arxml-engine` — the stdio process: framing, document handles, row streaming,
-  edit plans, panic guard.
-- `arxml-cli` — debug probe, `scan`/`rows` parity output and the fixture manifest.
+- `arxml-core` - the pure domain engine (no Node, no VS Code): ECUC scanner, model,
+  node ids, ordering, rows, conditions, edit planning, the semantic diff, word diff,
+  diff patching and the merge copy planner.
+- `arxml-engine` - the stdio process: framing, document handles, chunked upload, row
+  streaming, edit plans, copy plans, panic guard.
+- `arxml-cli` - debug probe and the parity surface: `scan`, `rows`, `diff`, `words`,
+  `copy` and the fixture manifest.
 
 ## Build and test
 
@@ -16,15 +18,18 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
 cargo fmt --manifest-path rust/Cargo.toml --all -- --check
 npm run engine:build        # writes dist/engine/<platform>-<arch>/arxml-engine[.exe]
-npm run engine:smoke        # spawn, handshake, open a fixture, plan an edit, shut down
+npm run engine:smoke        # spawn, handshake, chunked open, rows, plan, diff, patch
 npm run parity              # fixture-manifest parity with the TypeScript side
 npm run parity:rows         # row-store parity against the TypeScript oracle
+npm run parity:diff         # semantic diff parity against the TypeScript oracle
+npm run parity:words        # word-diff parity
+npm run parity:copy         # copy-planner parity
 ```
 
-`npm run engine:build` stages the release binary under `dist/engine/`. The host
-loads it from `enginePath()` in `src/host/engine/engineLoader.ts`; a missing binary
-or a protocol mismatch is an activation error. The binary is a release/CI artifact,
-not a source file.
+`npm run engine:build` stages the release binary under `dist/engine/`. The host loads
+it from `enginePath()` in `src/host/engine/engineLoader.ts`; a missing binary, an
+unsupported platform or a protocol mismatch is an activation error. The binary is a
+release/CI artifact, not a source file.
 
 ## Protocol
 
@@ -35,15 +40,30 @@ One long-lived process per extension-host window, stdio only:
 ```
 
 The header carries `id`, `op`, `ok` and small scalars; the body carries document
-text and row JSON raw, so a 26 MiB document is uploaded once and never escaped
-again. Requests are answered in order per `id`; operations that can exceed one
-frame stream chunks and mark the last with `"chunk":{"last":true}`.
+text, row JSON and diff patch JSON raw. Requests are answered in order per `id`;
+operations that can exceed one frame stream chunks and mark the last with
+`"chunk":{"last":true}`.
 
-Operations: `hello`, `shutdown`, `doc.open`, `doc.close`, `doc.rows`,
-`doc.plan`, `doc.update`, `doc.resync`, `doc.node`, `doc.model`, `diff.compute`,
-`diff.patch`, plus the chunked upload path `doc.open.begin`, `doc.open.chunk`,
-`doc.open.end`, `doc.resync.begin`, `doc.resync.chunk`, `doc.resync.end` and
-`upload.abort`.
+| Operation | Purpose |
+|-----------|---------|
+| `hello` | protocol version and engine version |
+| `shutdown` | end the process |
+| `doc.open` | open a document from one body frame |
+| `doc.open.begin` / `doc.open.chunk` / `doc.open.end` | chunked document open |
+| `doc.close` | drop a document handle |
+| `doc.rows` | stream row JSON in `doc.rows` order |
+| `doc.plan` | plan one value or field edit |
+| `doc.update` | apply text changes; answers one row patch |
+| `doc.resync` | replace a document's text from one frame |
+| `doc.resync.begin` / `doc.resync.chunk` / `doc.resync.end` | chunked text replacement |
+| `upload.abort` | drop a partial chunked upload |
+| `doc.node` | one node's model entry |
+| `doc.model` | the document's module tree |
+| `diff.compute` | stream the semantic diff |
+| `diff.patch` | rows changed by one copy |
+| `copy.plan` | one merge arrow's span, computed from document ids |
+
+### Large documents
 
 `doc.open` carries the whole text in one frame and refuses a request above 64 MiB.
 The host switches to the chunked path above 56 MiB: raw UTF-8 byte chunks of 8 MiB,
@@ -51,28 +71,34 @@ assembled by the engine before decoding, with a 512 MiB document cap. Chunks may
 split a multi-byte character; chunk order is checked and a bad sequence drops the
 upload.
 
-`doc.update` answers with one contiguous row replacement
-(`{"at":n,"remove":m,"rows":[…]}`): a value edit is one row, a container rename is
-the renamed subtree. The engine never writes a file — the host applies the plan as
-one `WorkspaceEdit`, so undo, dirty state and save stay VS Code's.
+### Supervisor
+
+The host runs the process through a supervisor. If the process exits or answers with
+a protocol error, a new one is spawned with bounded backoff, the live documents are
+reopened with their last text and row options, and the host's document ids stay
+stable. Repeated failures stop with an actionable error. `ARXML Scope: Show Engine
+Status` reports state, pid, uptime, restarts, memory on Linux and the last error, and
+offers a restart.
+
+## Platform support
+
+The packaged VSIX ships four engine binaries:
+
+- `linux-x64`
+- `win32-x64`
+- `darwin-x64`
+- `darwin-arm64`
+
+Other targets fail activation with a message that names this list. Build from source
+with `npm run engine:build` on a supported platform; do not replace the binary with an
+untested one.
 
 ## Status
 
-The engine process is the required core at activation, and its scanner, rows,
-conditions and edit plans are at parity with the TypeScript oracle over the whole
-fixture corpus (`npm run parity:rows`).
-
-The host runs the process through a supervisor. If the process exits or answers with
-a protocol error, the next request spawns a new one with bounded backoff, reopens the
-live documents and keeps the host's document ids. Repeated failures stop with an
-actionable error; `ARXML Scope: Show Engine Status` reports state, pid, uptime,
-restarts, memory on Linux and the last error.
-
-The ECUC editor's edit path runs through it: `doc.plan` returns the span and bytes to
-write, and `doc.update` answers a value edit with one row in place (a splice plus a
-range shift, no re-parse and no row rebuild). The panel's first row store is still
-built in TypeScript, and the workspace index, validation and diff ports remain
-(`.trellis/tasks/11-13-rust-edit-engine/implement.md`).
+The scanner, rows, node ids, conditions, edit plans, word diff, semantic diff, diff
+patch and copy planner are in Rust and gated by the parity scripts. The workspace
+index, validation, text-editor features and the webview renderer are still
+TypeScript; moving them is the rest of the v0.11.0 plan.
 
 `npm run benchmark sampleFile` measures a local file named by `ARXML_SCOPE_SAMPLE`
 and reports `skipped` without it, so no private document enters the repository.

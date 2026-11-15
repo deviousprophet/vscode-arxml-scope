@@ -5,6 +5,21 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The Rust engine now restarts after a crash with bounded backoff, reopens live documents and keeps their ids; `ARXML Scope: Show Engine Status` reports state, pid, uptime, restarts, memory and the last error
+- Documents above the 64 MiB frame limit open through a chunked upload, up to a 512 MiB cap
+- Large ECUC files can be diffed and edited through the engine instead of failing at upload
+- The merge copy planner runs in Rust, so the host applies the engine's span instead of recomputing it
+
+### Fixed
+
+- A bulk rename whose names share no token now pairs containers in the semantic diff, including when new containers sort before the renamed block
+- The engine documentation lists the real protocol operations and the supported platforms
+- The edit benchmark reports a planned value edit separately from the arbitrary-byte resync path
+
 ## [0.10.0] - 2026-11-15
 
 ### Added

@@ -378,8 +378,11 @@ suite('plan coverage: PERF', () => {
 			assert.strictEqual(patch.rows.length, 1);
 			const benchmark = read('src/test/benchmarks/engineEditBenchmark.ts');
 			assert.ok(
-				benchmark.includes('planMs') && benchmark.includes('updateMs') && benchmark.includes('pushedBytes'),
-				'the 20 MiB gate records all three numbers'
+				benchmark.includes('planMs') &&
+					benchmark.includes('valueUpdateMs') &&
+					benchmark.includes('resyncMs') &&
+					benchmark.includes('pushedBytes'),
+				'the benchmark separates a planned value edit from the resync fallback'
 			);
 			// The plan's 5 ms / 100 ms gates are on the 20 MiB document and are enforced by
 			// `npm run benchmark engineEdit`; this is only a hang guard for the small run.

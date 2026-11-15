@@ -16,6 +16,9 @@ import { EXPECTED_PROTOCOL, protocolDiagnostic, type CoreEngine } from './coreEn
 
 export type { EngineSpawner };
 
+/** Platforms this build ships an engine binary for. */
+export const SUPPORTED_TARGETS = ['linux-x64', 'win32-x64', 'darwin-x64', 'darwin-arm64'] as const;
+
 /** The packaged engine binary for one platform/architecture. */
 export function enginePath(
 	root: string,
@@ -23,6 +26,11 @@ export function enginePath(
 	arch: string = process.arch
 ): string {
 	return engineBinaryPath(root, platform, arch);
+}
+
+/** True when this build has an engine for the target. */
+export function isSupportedTarget(platform: string, arch: string): boolean {
+	return (SUPPORTED_TARGETS as readonly string[]).includes(`${platform}-${arch}`);
 }
 
 /** The handshake check, split out so the loader test can drive it without a process. */
@@ -83,6 +91,13 @@ export async function resolveEngine(
 	arch: string = process.arch,
 	start: EngineSpawner = startProcess
 ): Promise<CoreEngine> {
+	if (!isSupportedTarget(platform, arch)) {
+		throw new Error(
+			`ARXML Scope has no Rust engine for ${platform}-${arch}. ` +
+				`Supported: ${SUPPORTED_TARGETS.join(', ')}. ` +
+				'Build from source with "npm run engine:build" on a supported platform.'
+		);
+	}
 	const binary = enginePath(root, platform, arch);
 	const spawn: EngineSpawner = (target, workspace, onExit) =>
 		startClient(start, target, workspace, onExit);

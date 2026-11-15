@@ -35,6 +35,13 @@ suite('core engine process', () => {
 		);
 	});
 
+	test('names the supported targets when the platform has no engine', async () => {
+		await assert.rejects(
+			() => resolveEngine(repoRoot, 'linux', 'arm64'),
+			/no Rust engine for linux-arm64[\s\S]*linux-x64, win32-x64, darwin-x64, darwin-arm64/
+		);
+	});
+
 	test('a missing engine binary is an error, not a TypeScript fallback', async () => {
 		const missingRoot = path.join(repoRoot, 'does-not-exist');
 		await assert.rejects(() => resolveEngine(missingRoot), /not built/);
