@@ -271,7 +271,7 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 			'the refusal carries the documented message and returns'
 		);
 		const refusal = panel.indexOf('the module is missing on the target side; copy it first');
-		const mutation = panel.indexOf('applyPlan(otherDoc, chainInsertion', refusal);
+		const mutation = panel.indexOf('await applyPlan(otherDoc, span)', refusal);
 		assert.ok(mutation > refusal, 'a refused module copy reaches no applyPlan');
 	});
 

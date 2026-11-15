@@ -454,7 +454,7 @@ suite('plan coverage: ENG', () => {
 				(error: unknown) =>
 					error instanceof EngineError && error.code === 'protocol' && /malformed header/.test(error.message)
 			);
-			assert.strictEqual(fake.client.isClosed, false, 'a malformed frame does not close the client by itself');
+			assert.strictEqual(fake.client.isClosed, true, 'a malformed frame ends the process so the supervisor can restart it');
 		} finally {
 			fake.dispose();
 		}

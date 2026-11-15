@@ -494,7 +494,22 @@ export async function createEngineSupervisor(options: EngineSupervisorOptions): 
 	const supervisor = new EngineSupervisor(options);
 	try {
 		await supervisor.start();
-		return supervisor;
+		return {
+			kind: supervisor.kind,
+			protocol: supervisor.protocol,
+			openDocument: (uri, text, rowOptions) => supervisor.openDocument(uri, text, rowOptions),
+			planEdit: (docId, request) => supervisor.planEdit(docId, request),
+			updateDocument: (docId, edits) => supervisor.updateDocument(docId, edits),
+			computeDiff: (left, right, diffOptions) => supervisor.computeDiff(left, right, diffOptions),
+			patchDiff: (left, right, edit) => supervisor.patchDiff(left, right, edit),
+			planCopy: (request) => supervisor.planCopy(request),
+			closeDocument: (docId) => supervisor.closeDocument(docId),
+			engineVersion: () => supervisor.engineVersion(),
+			health: () => supervisor.health(),
+			restart: () => supervisor.restart(),
+			onDidChangeState: (listener) => supervisor.onDidChangeState(listener),
+			dispose: () => supervisor.dispose()
+		};
 	} catch (error) {
 		supervisor.dispose();
 		throw error;
