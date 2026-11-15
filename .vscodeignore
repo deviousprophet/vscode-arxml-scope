@@ -17,3 +17,6 @@ eslint-rules/**
 AGENTS.md
 package-lock.json
 .gitattributes
+DESIGN.md
+examples/**
+docs/**
