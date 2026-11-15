@@ -14,12 +14,36 @@ Two independent webview surfaces use the same static-shell + `postMessage` patte
 
 The host owns documents, scans, writes and persistence. A Rust engine process is
 required at activation (`src/host/engine/engineLoader.ts`, `npm run engine:build`); it
-serves the parity-checked scanner, rows and edit plans. The editor validates an edit against
-the engine model, applies the returned span as one `WorkspaceEdit`, and replaces the
-resulting row through a `documentPatch`; the full row store is still built in TypeScript
-when a panel opens and after a structural change. Each page owns its row store, selection,
-collapse, search and scroll state; the editor page also owns its sidebar state. The only cross-runtime
-channel is the typed protocol in `src/webviewProtocol.ts` or `src/diffProtocol.ts`.
+serves the parity-checked scanner, rows, edit plans, diff and copy plans. The editor
+validates an edit against the engine model, applies the returned span as one
+`WorkspaceEdit`, and replaces the resulting row through a `documentPatch`; the full
+row store is still built in TypeScript when a panel opens and after a structural
+change. Each page owns its row store, selection, collapse, search and scroll state;
+the editor page also owns its sidebar state. The only cross-runtime channel is the
+typed protocol in `src/webviewProtocol.ts` or `src/diffProtocol.ts`.
+
+### Engine supervision and stable handles
+
+`resolveEngine` returns a supervisor-backed `CoreEngine`
+(`src/host/engine/engineSupervisor.ts`). Do not add a second engine process or a
+TypeScript fallback.
+
+- Host document ids are stable for the whole session. The supervisor maps them to
+  the current process id and replays every live document with its last text and row
+  options after a restart.
+- A process exit or protocol violation rejects in-flight requests, sets the state to
+  `restarting`, and spawns a new process with bounded backoff. After five
+  consecutive failures the state is `failed` and requests reject with code
+  `unavailable`.
+- `health()` and `onDidChangeState()` feed the status bar and
+  `ARXML Scope: Show Engine Status`; they are optional on `CoreEngine` so test
+  doubles stay small.
+- New protocol operations must be additive and keep single-frame behavior for small
+  documents. Chunked upload is the host-side path above 56 MiB; the engine cap is
+  512 MiB.
+- Copy planning lives in Rust (`copy.plan`); `diffPanel` must not import
+  `planCopy`/`planDelete`/`wrapWithAncestors` from production code. Those stay as the
+  parity oracle only.
 
 ## Scenario: Open and coordinate one ECUC custom editor
 

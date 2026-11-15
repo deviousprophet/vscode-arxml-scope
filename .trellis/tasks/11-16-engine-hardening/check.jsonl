@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Integration gates and forbidden fallbacks"}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Full-suite and parity expectations before the PR"}

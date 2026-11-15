@@ -55,3 +55,23 @@ npm test
 
 P3, P4, P5, R2, R3, R6 and R7 are recorded in the PRD. Do not start them in this
 task; their designs need separate measurements and a real-project soak.
+
+## Results
+
+- Supervisor: engine restarts and replays documents; health command and status bar
+  added. Verified with a real engine kill and the supervisor unit tests.
+- Large upload: a 65 MiB document opens through the chunked path; chunk-order and
+  UTF-8 failures are tested; `engine:smoke` covers a chunked open.
+- Rename matching: masked child content pairs wholly different tokens and renamed
+  blocks after new containers; 177/177 diff parity pairs match.
+- Copy planner: `copy.plan` returns the same spans as the TypeScript oracle
+  (9/9 parity cases); the host no longer imports the planner.
+- Cleanup: platform gate names the four targets, `rust/README.md` matches the
+  dispatch table, `cargo deny` passes, Dependabot and the four-platform host-test
+  matrix are in CI, and the benchmark separates a planned value edit from a resync.
+- Gates: 923 extension-host tests pass; `cargo test` 53 tests; `cargo fmt`,
+  `cargo clippy -D warnings`, `check-types`, `lint`, `parity`, `parity:rows`
+  (90/90), `parity:diff` (177/177), `parity:words` (44/44), `parity:copy` (9/9)
+  and `engine:smoke` pass.
+- Deferred and stated in the PR: P3 cancellation, P4 incremental re-parse, P5 row
+  windows and the R2/R3/R6/R7 ports.
