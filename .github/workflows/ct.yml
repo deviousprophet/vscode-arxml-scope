@@ -123,6 +123,9 @@ jobs:
       - name: Cross-Language Parity
         run: npm run parity
 
+      - name: Copy Planner Parity
+        run: npm run parity:copy
+
   Finalize:
     name: Finalize Workflow
     needs: [UT_Test, Benchmarks, Rust]

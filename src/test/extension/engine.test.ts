@@ -158,6 +158,43 @@ suite('core engine process', () => {
 			client.dispose();
 		}
 	});
+	test('plans a copy and a delete against the engine documents', async () => {
+		const targetText = fs.readFileSync(fixture('editing/numeric.arxml'), 'utf8');
+		const sourceText = targetText.replace('<VALUE>7</VALUE>', '<VALUE>9</VALUE>');
+		const element = (text: string): { start: number; end: number } => {
+			const start = text.indexOf('<ECUC-NUMERICAL-PARAM-VALUE>');
+			const end = text.indexOf('</ECUC-NUMERICAL-PARAM-VALUE>', start) + '</ECUC-NUMERICAL-PARAM-VALUE>'.length;
+			return { start, end };
+		};
+		const engine = await resolveEngine(repoRoot);
+		try {
+			assert.ok(engine.planCopy, 'the engine plans copies');
+			const targetId = await engine.openDocument('mem://copy-target.arxml', targetText, ROW_OPTIONS);
+			const sourceId = await engine.openDocument('mem://copy-source.arxml', sourceText, ROW_OPTIONS);
+			const planned = await engine.planCopy({
+				kind: 'copy',
+				targetDocId: targetId,
+				sourceDocId: sourceId,
+				source: element(sourceText),
+				target: element(targetText)
+			});
+			assert.ok(planned.ok);
+			const copied = targetText.slice(0, planned.span.start) + planned.span.text + targetText.slice(planned.span.end);
+			assert.strictEqual(copied, sourceText, 'the replacement carries the source bytes');
+
+			const deleted = await engine.planCopy({
+				kind: 'delete',
+				targetDocId: targetId,
+				target: element(targetText)
+			});
+			assert.ok(deleted.ok);
+			const removed = targetText.slice(0, deleted.span.start) + targetText.slice(deleted.span.end);
+			assert.ok(!removed.includes('/Count'), 'the deleted parameter is gone');
+			assert.ok(removed.includes('/Limit'), 'the neighbour survives');
+		} finally {
+			engine.dispose();
+		}
+	});
 });
 
 interface RowLike {

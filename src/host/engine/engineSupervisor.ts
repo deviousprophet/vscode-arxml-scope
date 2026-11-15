@@ -17,6 +17,8 @@ import {
 	createEngine,
 	protocolDiagnostic,
 	type CoreEngine,
+	type EngineCopyPlan,
+	type EngineCopyRequest,
 	type EngineDiffEdit,
 	type EngineDiffOptions,
 	type EngineDiffPatchResult,
@@ -216,6 +218,22 @@ export class EngineSupervisor implements CoreEngine {
 		});
 	}
 
+	public async planCopy(request: EngineCopyRequest): Promise<EngineCopyPlan> {
+		return this.withEngine(async (engine) => {
+			if (engine.planCopy === undefined) {
+				throw new EngineError('the engine does not plan copies', 'unsupported');
+			}
+			const translated: EngineCopyRequest = {
+				...request,
+				targetDocId: this.translateDocumentId(request.targetDocId),
+				...(request.sourceDocId === undefined
+					? {}
+					: { sourceDocId: this.translateDocumentId(request.sourceDocId) })
+			};
+			return engine.planCopy(translated);
+		});
+	}
+
 	public async closeDocument(docId: number): Promise<void> {
 		const document = this.documents.get(docId);
 		if (document === undefined) {
@@ -411,6 +429,14 @@ export class EngineSupervisor implements CoreEngine {
 			throw new EngineError('document is not open in the engine', 'doc');
 		}
 		return { ...side, docId: document.processId };
+	}
+
+	private translateDocumentId(docId: number): number {
+		const document = this.requireDocument(docId);
+		if (document.processId === undefined) {
+			throw new EngineError('document is not open in the engine', 'doc');
+		}
+		return document.processId;
 	}
 
 	private noteProcessFailure(error: unknown): void {

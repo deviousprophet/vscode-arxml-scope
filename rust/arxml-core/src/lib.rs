@@ -2,11 +2,12 @@
 //!
 //! This crate has no Node, N-API or VS Code dependency. The stdio process wrapper
 //! (`arxml-engine`), the parity CLI (`arxml-cli`) and the test oracle live in
-//! sibling crates; this crate owns the parser, ids, rows, conditions, validation
-//! and edit planning.
+//! sibling crates; this crate owns the parser, ids, rows, conditions, edit planning
+//! and the copy planner.
 
 #![forbid(unsafe_code)]
 
+pub mod copy;
 pub mod diff;
 pub mod ecuc;
 pub mod word;

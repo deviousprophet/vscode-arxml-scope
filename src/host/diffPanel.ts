@@ -12,19 +12,12 @@
  */
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import {
-	indentationAt,
-	lineBreakOf,
-	planCopy,
-	planDelete,
-	wrapWithAncestors,
-	type MissingAncestor
-} from '../core/copy/planCopy';
+import type { MissingAncestor } from '../core/copy/planCopy';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { FileLabel, compareTitle } from '../core/diff/diffModel';
 import type { DiffCell, DiffDocument } from '../core/diff/diffModel';
 import { applyDiffPatch } from '../core/diff/diffPatch';
-import type { CoreEngine, EngineDiffPatchResult, EngineDiffSide } from './engine/coreEngine';
+import type { CoreEngine, EngineCopyRequest, EngineDiffPatchResult, EngineDiffSide } from './engine/coreEngine';
 import { diffShell } from './webviewShell';
 import { fileName } from './compareSelection';
 import { gateReason } from './ecucEditorProvider';
@@ -572,21 +565,6 @@ export class DiffPanel {
 			return { rowIndex, clickedCell, otherCell };
 		};
 
-		/** The indentation a copied element needs: its target element, else its anchor. */
-		const indentFor = (
-			targetText: string,
-			target: { start: number; end: number } | undefined,
-			anchors: { after?: { start: number; end: number }; before?: { start: number; end: number } }
-		): string => {
-			if (target !== undefined) {
-				return indentationAt(targetText, target.start);
-			}
-			if (anchors.after !== undefined) {
-				return indentationAt(targetText, anchors.after.start);
-			}
-			return anchors.before === undefined ? '' : indentationAt(targetText, anchors.before.start);
-		};
-
 		const childKindOf = (kind: string): MissingAncestor['childKind'] => {
 			if (kind === 'parameter') {
 				return 'parameter';
@@ -685,21 +663,29 @@ export class DiffPanel {
 			);
 		};
 
-		/** The insertion for a synthesized chain: after the parent's last child. */
-		const chainInsertion = (
-			before: DiffCell,
-			indent: string,
-			block: string,
-			lineBreak: string
-		): { start: number; end: number; text: string } => ({
-			start: before.range.end,
-			end: before.range.end,
-			text: `${lineBreak}${indent}${block}`
-		});
+		/** The engine document id for a pane. */
+		const docIdFor = (which: 'left' | 'right'): number =>
+			which === 'left' ? preparedLeft.docId : preparedRight.docId;
+
+		/** Asks the engine for one copy span, reporting a refusal in the panel. */
+		const requestCopyPlan = async (
+			request: EngineCopyRequest
+		): Promise<{ start: number; end: number; text: string } | undefined> => {
+			if (engine.planCopy === undefined) {
+				await postError('this engine cannot plan a copy');
+				return undefined;
+			}
+			const plan = await engine.planCopy(request);
+			if (!plan.ok) {
+				await postError(plan.reason);
+				return undefined;
+			}
+			return plan.span;
+		};
 
 		/** Creates the missing ancestors around the copied element and inserts the chain. */
 		const synthesizeInto = async (
-			clickedDoc: vscode.TextDocument,
+			_clickedDoc: vscode.TextDocument,
 			otherDoc: vscode.TextDocument,
 			clickedCell: DiffCell,
 			row: { parentKey: string | null; kind: string },
@@ -723,67 +709,68 @@ export class DiffPanel {
 				await postError('the target parent has no child to place this element next to');
 				return true;
 			}
-			const targetText = otherDoc.getText();
-			const sourceText = clickedDoc.getText();
-			const indent = indentationAt(targetText, anchor.range.start);
-			const lineBreak = lineBreakOf(targetText);
-			const block = wrapWithAncestors(
-				sourceText.slice(clickedCell.range.start, clickedCell.range.end),
-				indentationAt(sourceText, clickedCell.range.start),
-				chain.ancestors,
-				indent,
-				lineBreak
-			);
-			await applyPlan(otherDoc, chainInsertion(anchor, indent, block, lineBreak));
+			const span = await requestCopyPlan({
+				kind: 'copy',
+				targetDocId: docIdFor(targetSide),
+				sourceDocId: docIdFor(side),
+				source: clickedCell.range,
+				anchorAfter: anchor.range,
+				ancestors: chain.ancestors
+			});
+			if (span !== undefined) {
+				await applyPlan(otherDoc, span);
+			}
 			return true;
 		};
 
-		const deleteFromOther = async (doc: vscode.TextDocument, cell: DiffCell | undefined): Promise<void> => {
+		const deleteFromOther = async (
+			doc: vscode.TextDocument,
+			cell: DiffCell | undefined,
+			side: 'left' | 'right'
+		): Promise<void> => {
 			if (cell !== undefined) {
-				await copyDelete(doc, cell);
+				await copyDelete(doc, cell, side);
 			}
 		};
 
-		const copyDelete = async (doc: vscode.TextDocument, cell: DiffCell): Promise<void> => {
-			const plan = planDelete({
-				targetText: doc.getText(),
-				sourceText: '',
-				target: cell.range,
-				targetIndent: ''
+		const copyDelete = async (
+			doc: vscode.TextDocument,
+			cell: DiffCell,
+			side: 'left' | 'right'
+		): Promise<void> => {
+			const span = await requestCopyPlan({
+				kind: 'delete',
+				targetDocId: docIdFor(otherSideOf(side)),
+				target: cell.range
 			});
-			if (!plan.ok) {
-				await postError(plan.reason);
-				return;
+			if (span !== undefined) {
+				await applyPlan(doc, span);
 			}
-			await applyPlan(doc, plan.span);
 		};
 
 		const copyInto = async (
-			clickedDoc: vscode.TextDocument,
+			_clickedDoc: vscode.TextDocument,
 			otherDoc: vscode.TextDocument,
 			clickedCell: DiffCell,
 			otherCell: DiffCell | undefined,
 			rowIndex: number,
 			side: 'left' | 'right'
 		): Promise<void> => {
-			const targetText = otherDoc.getText();
 			const target = otherCell?.range;
 			const anchors: { after?: { start: number; end: number }; before?: { start: number; end: number } } =
 				target === undefined ? siblingAnchor(rowIndex, otherSideOf(side)) : {};
-			const plan = planCopy({
-				targetText,
-				sourceText: clickedDoc.getText(),
+			const span = await requestCopyPlan({
+				kind: 'copy',
+				targetDocId: docIdFor(otherSideOf(side)),
+				sourceDocId: docIdFor(side),
 				source: clickedCell.range,
 				target,
 				anchorAfter: anchors.after,
-				anchorBefore: anchors.before,
-				targetIndent: indentFor(targetText, target, anchors)
+				anchorBefore: anchors.before
 			});
-			if (!plan.ok) {
-				await postError(plan.reason);
-				return;
+			if (span !== undefined) {
+				await applyPlan(otherDoc, span);
 			}
-			await applyPlan(otherDoc, plan.span);
 		};
 
 		/**
@@ -824,7 +811,7 @@ export class DiffPanel {
 				return;
 			}
 			if (located.clickedCell === undefined) {
-				await deleteFromOther(otherDoc, located.otherCell);
+				await deleteFromOther(otherDoc, located.otherCell, side);
 				return;
 			}
 			if (moduleCollision(side, located.rowIndex)) {

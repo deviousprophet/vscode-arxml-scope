@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+use arxml_core::copy::{plan_copy, plan_delete, CopySpec};
 use arxml_core::diff::patch::{patch_between, AppliedEdit, PatchOutcome, PatchSide};
 use arxml_core::diff::{
     build_diff_document, DiffDocument, DiffHeader, DiffOptions, DiffSide, FileLabel,
@@ -206,6 +207,7 @@ impl Engine {
             "doc.model" => self.model(id, &mut out, header),
             "diff.compute" => self.diff_compute(id, &mut out, header),
             "diff.patch" => self.diff_patch(id, &mut out, header),
+            "copy.plan" => self.copy_plan(id, &mut out, header),
             other => Err(format!("unknown operation {other}")),
         }
     }
@@ -604,6 +606,32 @@ impl Engine {
             },
             options,
         ))
+    }
+
+    fn copy_plan(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let target_id = header
+            .get("targetDocId")
+            .and_then(Value::as_u64)
+            .ok_or("targetDocId is required")? as u32;
+        let target = self.documents.get(&target_id).ok_or("unknown document")?;
+        let spec: CopySpec =
+            serde_json::from_value(header.clone()).map_err(|error| error.to_string())?;
+        let kind = header.get("kind").and_then(Value::as_str).unwrap_or("copy");
+        let plan = if kind == "delete" {
+            plan_delete(target.text(), spec.target)
+        } else {
+            let source_id = header
+                .get("sourceDocId")
+                .and_then(Value::as_u64)
+                .ok_or("sourceDocId is required")? as u32;
+            let source = self
+                .documents
+                .get(&source_id)
+                .ok_or("unknown source document")?;
+            plan_copy(target.text(), source.text(), &spec)
+        };
+        let body = serde_json::to_vec(&plan).map_err(|error| error.to_string())?;
+        write_frame(out, &json!({"id": id, "ok": true}), &body).map_err(|error| error.to_string())
     }
 
     fn diff_compute(

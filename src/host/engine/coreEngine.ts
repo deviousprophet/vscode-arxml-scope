@@ -84,6 +84,35 @@ export interface EngineTextChange {
 	text: string;
 }
 
+export interface EngineCopyRange {
+	start: number;
+	end: number;
+}
+
+/** One missing container the copy must synthesize around the element. */
+export interface EngineMissingAncestor {
+	shortName: string;
+	definitionRef: string;
+	definitionDest: string;
+	childKind: 'container' | 'parameter' | 'reference';
+}
+
+/** One merge-mode arrow, addressed by the engine's document ids. */
+export interface EngineCopyRequest {
+	kind: 'copy' | 'delete';
+	targetDocId: number;
+	sourceDocId?: number;
+	source?: EngineCopyRange;
+	target?: EngineCopyRange;
+	anchorAfter?: EngineCopyRange;
+	anchorBefore?: EngineCopyRange;
+	ancestors?: EngineMissingAncestor[];
+}
+
+export type EngineCopyPlan =
+	| { ok: true; span: { start: number; end: number; text: string } }
+	| { ok: false; reason: string };
+
 export interface CoreEngine {
 	readonly kind: EngineKind;
 	/** The protocol version the running engine reported during the handshake. */
@@ -105,6 +134,8 @@ export interface CoreEngine {
 		right: EngineDiffSide,
 		edit: EngineDiffEdit
 	): Promise<EngineDiffPatchResult>;
+	/** The span one merge arrow writes, computed against the engine's documents. */
+	planCopy?(request: EngineCopyRequest): Promise<EngineCopyPlan>;
 	closeDocument(docId: number): Promise<void>;
 	/** A side-effect-free probe used by diagnostics and tests. */
 	engineVersion(): string;
@@ -240,6 +271,10 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 				return { patch };
 			}
 			return { reason: typeof answer.header.reason === 'string' ? answer.header.reason : 'unknown' };
+		},
+		planCopy: async (request) => {
+			const answer = await client.request('copy.plan', { ...request });
+			return parseJson<EngineCopyPlan>(answer);
 		},
 		closeDocument: async (docId) => {
 			if (client.isClosed) {
