@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Protocol types, optional CoreEngine methods and boundary casts for the supervisor"}
-{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Engine session, document handles, disposal and the error matrix"}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Host state, restart/replay and what survives a process change"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Host-to-engine boundary and stable ids across a restart"}
