@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Copy request/plan types at the host boundary"}
-{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Merge-mode session, document handles and patch-after-copy"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "UTF-16 ranges and document-id ownership"}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "TS planner becomes the oracle; no duplicate production logic"}

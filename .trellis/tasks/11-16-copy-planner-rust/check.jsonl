@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Parity harness and byte-exact assertions"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No production import of the TypeScript oracle"}
-{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Copy refusal and undo/dirty-state behavior"}
