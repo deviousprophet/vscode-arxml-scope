@@ -69,8 +69,10 @@ function sendAsset(response, url) {
 function sendState(response, data, states, name) {
 	const state = states.find((candidate) => candidate.name === name);
 	if (!state) {
-		response.writeHead(404);
-		response.end(`unknown state: ${name}`);
+		// Never echo the query value: this is a localhost surface, but a reflected
+		// state name is still an XSS sink under a strict scanner.
+		response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+		response.end('unknown state');
 		return;
 	}
 	response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
