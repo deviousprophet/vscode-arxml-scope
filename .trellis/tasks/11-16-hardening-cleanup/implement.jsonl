@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/testing.md", "reason": "CI matrix and benchmark assertions"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Actionable platform errors and no untested binaries"}
-{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Engine status, restart behavior and documented error matrix"}
