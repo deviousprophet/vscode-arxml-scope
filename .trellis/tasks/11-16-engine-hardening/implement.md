@@ -69,9 +69,18 @@ task; their designs need separate measurements and a real-project soak.
 - Cleanup: platform gate names the four targets, `rust/README.md` matches the
   dispatch table, `cargo deny` passes, Dependabot and the four-platform host-test
   matrix are in CI, and the benchmark separates a planned value edit from a resync.
-- Gates: 923 extension-host tests pass; `cargo test` 53 tests; `cargo fmt`,
+- Gates: 925 extension-host tests pass; `cargo test` 57 tests; `cargo fmt`,
   `cargo clippy -D warnings`, `check-types`, `lint`, `parity`, `parity:rows`
   (90/90), `parity:diff` (177/177), `parity:words` (44/44), `parity:copy` (9/9)
   and `engine:smoke` pass.
+- Review fixes: the supervisor counts rapid crashes and stops at the limit, clears
+  `lastError` after a successful request, refuses to install a process after
+  disposal, and includes the status command in exit errors. Copy types moved to
+  `core/copy/copyTypes.ts`, so production no longer imports the TypeScript oracle.
+  Rename tests now cover 10/50/500/2,000 plus mixed and extras after/interleaved;
+  copy tests cover an astral character; the large-document test diffs an edited
+  copy and the chunk test asserts UTF-16 `textLength`.
+- Fuzzing: no `cargo fuzz` target in this PR; it is recorded as the deferred
+  follow-up in `prd.md` and covered by `cargo deny` for advisories/sources.
 - Deferred and stated in the PR: P3 cancellation, P4 incremental re-parse, P5 row
   windows and the R2/R3/R6/R7 ports.

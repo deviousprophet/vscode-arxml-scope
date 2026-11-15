@@ -48,6 +48,10 @@ function formatUptime(uptimeMs: number): string {
 	return `${minutes} min ${seconds % 60} s`;
 }
 
+function formatMemory(bytes: number | undefined): string {
+	return bytes === undefined ? 'unavailable on this platform' : formatBytes(bytes);
+}
+
 /** The status command's text: stable field order, one field per line. */
 export function formatEngineHealth(health: EngineHealth): string {
 	const lines = [
@@ -59,7 +63,7 @@ export function formatEngineHealth(health: EngineHealth): string {
 		`restarts:         ${health.restarts}`,
 		`open documents:   ${health.openDocuments}`,
 		`pending requests: ${health.pendingRequests}`,
-		`memory:           ${health.memoryBytes === undefined ? 'unavailable on this platform' : formatBytes(health.memoryBytes)}`,
+		`memory:           ${formatMemory(health.memoryBytes)}`,
 		`last error:       ${health.lastError ?? 'none'}`
 	];
 	return lines.join('\n');

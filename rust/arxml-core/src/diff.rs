@@ -3258,6 +3258,98 @@ mod tests {
     }
 
     #[test]
+    fn pairs_a_wholly_different_name_token_at_every_size() {
+        for count in [10usize, 50, 500, 2_000] {
+            let left_names: Vec<(String, &str)> = renamed_names("Old", count);
+            let right_names: Vec<(String, &str)> = renamed_names("New", count);
+            let left: Vec<(&str, &str)> = left_names
+                .iter()
+                .map(|(name, marker)| (name.as_str(), *marker))
+                .collect();
+            let right: Vec<(&str, &str)> = right_names
+                .iter()
+                .map(|(name, marker)| (name.as_str(), *marker))
+                .collect();
+            let document = diff_with(
+                &rename_document(&left, 2),
+                &rename_document(&right, 2),
+                true,
+            );
+            assert_eq!(
+                semantic_container_pairs(&document),
+                count,
+                "{count} renamed containers pair"
+            );
+            assert_eq!(document.summary.added, 0, "{count}: no additions");
+            assert_eq!(document.summary.removed, 0, "{count}: no removals");
+        }
+    }
+
+    #[test]
+    fn pairs_two_hundred_renamed_and_leaves_three_hundred_unchanged() {
+        let left_names: Vec<(String, &str)> = renamed_names("Old", 500);
+        let mut right_names: Vec<(String, &str)> = renamed_names("New", 200);
+        right_names.extend(left_names[200..].iter().cloned());
+        let left: Vec<(&str, &str)> = left_names
+            .iter()
+            .map(|(name, marker)| (name.as_str(), *marker))
+            .collect();
+        let right: Vec<(&str, &str)> = right_names
+            .iter()
+            .map(|(name, marker)| (name.as_str(), *marker))
+            .collect();
+        let document = diff_with(
+            &rename_document(&left, 2),
+            &rename_document(&right, 2),
+            true,
+        );
+        assert_eq!(semantic_container_pairs(&document), 200);
+        assert_eq!(document.summary.added, 0);
+        assert_eq!(document.summary.removed, 0);
+    }
+
+    #[test]
+    fn pairs_renamed_containers_with_new_ones_after_and_interleaved() {
+        for interleaved in [false, true] {
+            let renamed: Vec<(String, &str)> = renamed_names("New", 50);
+            let extras: Vec<(String, &str)> = renamed_names("Extra", 50)
+                .into_iter()
+                .map(|(name, _)| (name, "Z"))
+                .collect();
+            let mut right_names: Vec<(String, &str)> = Vec::new();
+            for index in 0..50 {
+                if interleaved {
+                    right_names.push(extras[index].clone());
+                }
+                right_names.push(renamed[index].clone());
+                if !interleaved {
+                    right_names.push(extras[index].clone());
+                }
+            }
+            let left_names: Vec<(String, &str)> = renamed_names("Old", 50);
+            let left: Vec<(&str, &str)> = left_names
+                .iter()
+                .map(|(name, marker)| (name.as_str(), *marker))
+                .collect();
+            let right: Vec<(&str, &str)> = right_names
+                .iter()
+                .map(|(name, marker)| (name.as_str(), *marker))
+                .collect();
+            let document = diff_with(
+                &rename_document(&left, 2),
+                &rename_document(&right, 2),
+                true,
+            );
+            assert_eq!(
+                semantic_container_pairs(&document),
+                50,
+                "new containers ({}) do not hide the rename",
+                if interleaved { "interleaved" } else { "after" }
+            );
+        }
+    }
+
+    #[test]
     fn unrelated_child_content_is_not_paired() {
         let left_names: Vec<(String, &str)> = renamed_names("Old", 50);
         let right_names: Vec<(String, &str)> =

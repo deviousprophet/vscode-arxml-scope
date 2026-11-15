@@ -33,41 +33,40 @@ class FakeClient {
 		return 0;
 	}
 
+	private readonly handlers: Record<string, (header: Record<string, unknown>, body?: string | Buffer) => EngineChunk> = {
+		hello: () => this.chunk({ protocol: 1, engine: 'fake-1' }),
+		'doc.open': (header, body) => {
+			const docId = this.nextDocument++;
+			this.opened.set(docId, { uri: String(header.uri), text: String(body ?? '') });
+			return this.chunk({ docId });
+		},
+		'doc.close': (header) => {
+			this.opened.delete(Number(header.docId));
+			return this.chunk({});
+		},
+		'doc.plan': () =>
+			this.chunk(
+				{},
+				Buffer.from(
+					JSON.stringify({
+						ok: true,
+						record: {
+							nodeId: 'n',
+							region: 'r',
+							range: { start: 0, end: 0 },
+							oldText: '',
+							newText: 'x'
+						}
+					})
+				)
+			),
+		'doc.update': () =>
+			this.chunk({}, Buffer.from(JSON.stringify({ at: 0, remove: 0, rows: [], structural: false })))
+	};
+
 	public async request(op: string, header: Record<string, unknown> = {}, body?: string | Buffer): Promise<EngineChunk> {
-		switch (op) {
-			case 'hello':
-				return this.chunk({ protocol: 1, engine: 'fake-1' });
-			case 'doc.open': {
-				const docId = this.nextDocument++;
-				this.opened.set(docId, { uri: String(header.uri), text: String(body ?? '') });
-				return this.chunk({ docId });
-			}
-			case 'doc.close':
-				this.opened.delete(Number(header.docId));
-				return this.chunk({});
-			case 'doc.plan':
-				return this.chunk(
-					{},
-					Buffer.from(
-						JSON.stringify({
-							ok: true,
-							record: {
-								nodeId: 'n',
-								region: 'r',
-								range: { start: 0, end: 0 },
-								oldText: '',
-								newText: 'x'
-							}
-						})
-					)
-				);
-			case 'doc.update':
-				return this.chunk({}, Buffer.from(JSON.stringify({ at: 0, remove: 0, rows: [], structural: false })));
-			case 'doc.rows':
-				return this.chunk({});
-			default:
-				return this.chunk({ ok: true });
-		}
+		const handler = this.handlers[op];
+		return handler === undefined ? this.chunk({ ok: true }) : handler(header, body);
 	}
 
 	public async requestStream(op: string, header: Record<string, unknown> = {}): Promise<EngineChunk[]> {
@@ -99,6 +98,30 @@ function fakeSpawner(pidBase = 100): { clients: FakeClient[]; start: EngineSpawn
 		return client as unknown as EngineClient;
 	};
 	return { clients, start };
+}
+
+async function waitForClients(clients: FakeClient[], count: number): Promise<void> {
+	for (let attempt = 0; attempt < 100 && clients.length < count; attempt++) {
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+	if (clients.length < count) {
+		throw new Error(`expected ${count} clients, saw ${clients.length}`);
+	}
+}
+
+async function waitForRunning(engine: { health?: () => Promise<{ state: string }> }): Promise<void> {
+	for (let attempt = 0; attempt < 100; attempt++) {
+		if (await isRunning(engine)) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+	throw new Error('the supervisor did not return to running');
+}
+
+async function isRunning(engine: { health?: () => Promise<{ state: string }> }): Promise<boolean> {
+	const health = await engine.health?.();
+	return health?.state === 'running';
 }
 
 suite('engine supervisor', () => {
@@ -152,6 +175,49 @@ suite('engine supervisor', () => {
 		assert.strictEqual(health.state, 'failed');
 		assert.match(health.lastError ?? '', /spawn failed/);
 		supervisor.dispose();
+	});
+
+	test('counts rapid process crashes and gives up at the limit', async () => {
+		const { clients, start } = fakeSpawner();
+		const engine = await createEngineSupervisor({ binary: 'fake', root: '/', start, maxRestarts: 3 });
+		try {
+			const docId = await engine.openDocument('mem://left.arxml', '<A/>', ROW_OPTIONS);
+			clients[0].crash();
+			await waitForClients(clients, 2);
+			await waitForRunning(engine);
+			clients[1].crash();
+			await waitForClients(clients, 3);
+			await waitForRunning(engine);
+			clients[2].crash();
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			const health = await engine.health!();
+			assert.strictEqual(health.state, 'failed');
+			assert.match(health.lastError ?? '', /exited/);
+			await assert.rejects(
+				() => engine.planEdit(docId, { kind: 'value', nodeId: 'n', value: '2' }),
+				/unavailable/
+			);
+		} finally {
+			engine.dispose();
+		}
+	});
+
+	test('a successful request clears the last error', async () => {
+		const { clients, start } = fakeSpawner();
+		const engine = await createEngineSupervisor({ binary: 'fake', root: '/', start });
+		try {
+			const docId = await engine.openDocument('mem://left.arxml', '<A/>', ROW_OPTIONS);
+			clients[0].crash();
+			await waitForClients(clients, 2);
+			await waitForRunning(engine);
+			assert.match((await engine.health!()).lastError ?? '', /exited/);
+			await engine.planEdit(docId, { kind: 'value', nodeId: 'n', value: '2' });
+			const health = await engine.health!();
+			assert.strictEqual(health.lastError, undefined);
+			assert.strictEqual(health.state, 'running');
+		} finally {
+			engine.dispose();
+		}
 	});
 
 	test('dispose stops restarts', async () => {

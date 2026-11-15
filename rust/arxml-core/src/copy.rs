@@ -280,11 +280,10 @@ fn replacement(target: &SourceText, source: &SourceText, spec: &CopySpec) -> Cop
 }
 
 fn insertion(target: &SourceText, source: &SourceText, spec: &CopySpec) -> CopyPlan {
-    let target_indent = match (spec.anchor_after, spec.anchor_before) {
-        (Some(anchor), _) => indentation_at(target, anchor.start),
-        (None, Some(anchor)) => indentation_at(target, anchor.start),
-        (None, None) => return CopyPlan::refused(NO_ANCHOR),
+    let Some(anchor) = spec.anchor_after.or(spec.anchor_before) else {
+        return CopyPlan::refused(NO_ANCHOR);
     };
+    let target_indent = indentation_at(target, anchor.start);
     let source_indent = indentation_at(source, spec.source.start);
     let block = source.slice_utf16(spec.source.start, spec.source.end);
     let line_break = line_break_of(target.as_str());
@@ -516,16 +515,38 @@ mod tests {
     }
 
     #[test]
-    fn utf16_offsets_survive_a_non_ascii_prefix() {
-        let target_text = format!("<!--é-->\n{OURS}");
-        let target = text(&target_text);
-        let offset = target_text.find("<ECUC-NUMERICAL-PARAM-VALUE>").unwrap();
-        let range = CopyRange {
-            start: offset,
-            end: offset + "<ECUC-NUMERICAL-PARAM-VALUE>".len(),
-        };
-        let plan = plan_delete(&target, Some(range));
-        assert!(plan.ok, "the range is a valid UTF-16 span");
+    fn utf16_offsets_survive_a_non_ascii_or_astral_prefix() {
+        for prefix in ["<!--é-->\n", "😀\n"] {
+            let target_text = format!("{prefix}{OURS}");
+            let target = text(&target_text);
+            let open = target_text.find("<ECUC-NUMERICAL-PARAM-VALUE>").unwrap();
+            let close = target_text.find("</ECUC-NUMERICAL-PARAM-VALUE>").unwrap()
+                + "</ECUC-NUMERICAL-PARAM-VALUE>".len();
+            let start = target_text[..open].encode_utf16().count();
+            let end = target_text[..close].encode_utf16().count();
+            let plan = plan_delete(&target, Some(CopyRange { start, end }));
+            assert!(plan.ok, "the UTF-16 range names the parameter");
+            let span = plan.span.unwrap();
+            assert_ne!(
+                start, open,
+                "the non-ASCII prefix makes bytes and UTF-16 differ"
+            );
+            assert!(span.start < start, "the removal starts at the owning line");
+            assert!(
+                span.end > end,
+                "the removal includes the closing line break"
+            );
+            let result = format!(
+                "{}{}",
+                target.slice_utf16(0, span.start),
+                target.slice_utf16(span.end, target.len_utf16())
+            );
+            assert!(result.contains(prefix.trim_end()), "the prefix survives");
+            assert!(
+                !result.contains("<VALUE>1</VALUE>"),
+                "the parameter is gone"
+            );
+        }
     }
 
     #[test]

@@ -9,8 +9,9 @@
  */
 import type { DiffDocument, DiffRow, DiffSummary } from '../../core/diff/diffModel';
 import type { DiffPatch } from '../../core/diff/diffPatch';
+import type { CopyPlan, CopyRange, MissingAncestor } from '../../core/copy/copyTypes';
 import type { EcucRow } from '../../core/ecuc/renderRows';
-import { EXPECTED_PROTOCOL, type EngineClient } from './engineClient';
+import { EXPECTED_PROTOCOL, EngineError, type EngineClient } from './engineClient';
 import type { EngineHealth, EngineStateListener } from './engineHealth';
 
 export { EXPECTED_PROTOCOL };
@@ -84,18 +85,10 @@ export interface EngineTextChange {
 	text: string;
 }
 
-export interface EngineCopyRange {
-	start: number;
-	end: number;
-}
+export type EngineCopyRange = CopyRange;
 
 /** One missing container the copy must synthesize around the element. */
-export interface EngineMissingAncestor {
-	shortName: string;
-	definitionRef: string;
-	definitionDest: string;
-	childKind: 'container' | 'parameter' | 'reference';
-}
+export type EngineMissingAncestor = MissingAncestor;
 
 /** One merge-mode arrow, addressed by the engine's document ids. */
 export interface EngineCopyRequest {
@@ -109,9 +102,7 @@ export interface EngineCopyRequest {
 	ancestors?: EngineMissingAncestor[];
 }
 
-export type EngineCopyPlan =
-	| { ok: true; span: { start: number; end: number; text: string } }
-	| { ok: false; reason: string };
+export type EngineCopyPlan = CopyPlan;
 
 export interface CoreEngine {
 	readonly kind: EngineKind;
@@ -232,8 +223,9 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 		openDocument: async (uri, text, options) => {
 			const bytes = Buffer.from(text, 'utf8');
 			if (bytes.length > MAX_DOCUMENT) {
-				throw new Error(
-					`document is ${Math.round(bytes.length / (1024 * 1024))} MiB; the engine accepts at most ${MAX_DOCUMENT / (1024 * 1024)} MiB`
+				throw new EngineError(
+					`document is ${Math.round(bytes.length / (1024 * 1024))} MiB; the engine accepts at most ${MAX_DOCUMENT / (1024 * 1024)} MiB`,
+					'too_large'
 				);
 			}
 			if (bytes.length > DATAGRAM_LIMIT) {

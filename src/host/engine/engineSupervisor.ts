@@ -15,7 +15,6 @@ import type { DiffDocument } from '../../core/diff/diffModel';
 import { EngineError, EXPECTED_PROTOCOL, type EngineClient, type EngineSpawner } from './engineClient';
 import {
 	createEngine,
-	protocolDiagnostic,
 	type CoreEngine,
 	type EngineCopyPlan,
 	type EngineCopyRequest,
@@ -35,6 +34,7 @@ import type {
 	EngineStateChange,
 	EngineStateListener
 } from './engineHealth';
+import { validateHandshake } from './engineHandshake';
 
 const DEFAULT_MAX_RESTARTS = 5;
 const BASE_RESTART_DELAY_MS = 100;
@@ -70,14 +70,10 @@ export function applyTextChanges(text: string, edits: readonly EngineTextChange[
 	return next;
 }
 
+const PROCESS_FAILURES = new Set(['exited', 'protocol', 'fatal', 'disposed']);
+
 function isProcessFailure(error: unknown): boolean {
-	return (
-		error instanceof EngineError &&
-		(error.code === 'exited' ||
-			error.code === 'protocol' ||
-			error.code === 'fatal' ||
-			error.code === 'disposed')
-	);
+	return error instanceof EngineError && error.code !== undefined && PROCESS_FAILURES.has(error.code);
 }
 
 function delay(ms: number): Promise<void> {
@@ -85,6 +81,10 @@ function delay(ms: number): Promise<void> {
 		const timer = setTimeout(resolve, ms);
 		timer.unref?.();
 	});
+}
+
+function warmRestartDelay(failures: number): number {
+	return Math.min(BASE_RESTART_DELAY_MS * 2 ** Math.max(0, failures - 1), MAX_RESTART_DELAY_MS);
 }
 
 export class EngineSupervisor implements CoreEngine {
@@ -105,6 +105,7 @@ export class EngineSupervisor implements CoreEngine {
 	private nextDocumentId = 1;
 	private spawns = 0;
 	private failures = 0;
+	private failedProcess = false;
 	private restarts = 0;
 	private version = '';
 	private startedAt = 0;
@@ -124,33 +125,39 @@ export class EngineSupervisor implements CoreEngine {
 		await this.ensureEngine();
 	}
 
-	public get isClosed(): boolean {
-		return this.disposed || this.state === 'failed';
-	}
-
-	/** The state the status bar shows. */
-	public get processState(): EngineProcessState {
-		return this.state;
-	}
-
 	public onDidChangeState(listener: EngineStateListener): { dispose(): void } {
 		this.listeners.add(listener);
 		return { dispose: () => this.listeners.delete(listener) };
 	}
 
 	public async health(): Promise<EngineHealth> {
+		return { ...this.healthSnapshot(), memoryBytes: await this.engineMemory() };
+	}
+
+	private healthSnapshot(): EngineHealth {
 		return {
 			state: this.state,
-			version: this.version || undefined,
+			version: this.versionOrUndefined(),
 			protocol: EXPECTED_PROTOCOL,
 			pid: this.client?.pid,
-			uptimeMs: this.startedAt === 0 ? 0 : Date.now() - this.startedAt,
+			uptimeMs: this.uptime(),
 			restarts: this.restarts,
 			openDocuments: this.documents.size,
-			pendingRequests: this.client?.pendingCount ?? 0,
-			memoryBytes: await this.engineMemory(),
+			pendingRequests: this.pendingRequests(),
 			lastError: this.lastError
 		};
+	}
+
+	private versionOrUndefined(): string | undefined {
+		return this.version === '' ? undefined : this.version;
+	}
+
+	private pendingRequests(): number {
+		return this.client?.pendingCount ?? 0;
+	}
+
+	private uptime(): number {
+		return this.startedAt === 0 ? 0 : Date.now() - this.startedAt;
 	}
 
 	public async restart(): Promise<void> {
@@ -162,6 +169,7 @@ export class EngineSupervisor implements CoreEngine {
 		this.engine = undefined;
 		previous?.dispose();
 		this.failures = 0;
+		this.failedProcess = false;
 		this.setState('restarting');
 		await this.ensureEngine();
 	}
@@ -176,7 +184,7 @@ export class EngineSupervisor implements CoreEngine {
 	}
 
 	public async planEdit(docId: number, request: EngineEditRequest): Promise<EngineEditPlan> {
-		return this.withDocument(docId, (document, engine) => engine.planEdit(document.processId as number, request));
+		return this.withDocument(docId, (_document, engine, processId) => engine.planEdit(processId, request));
 	}
 
 	public async updateDocument(
@@ -187,8 +195,8 @@ export class EngineSupervisor implements CoreEngine {
 		const previous = document.text;
 		document.text = applyTextChanges(document.text, edits);
 		try {
-			return await this.withDocument(docId, (live, engine) =>
-				engine.updateDocument(live.processId as number, edits)
+			return await this.withDocument(docId, (_live, engine, processId) =>
+				engine.updateDocument(processId, edits)
 			);
 		} catch (error) {
 			if (!isProcessFailure(error)) {
@@ -240,17 +248,30 @@ export class EngineSupervisor implements CoreEngine {
 			return;
 		}
 		this.documents.delete(docId);
-		if (this.engine === undefined || this.client === undefined || this.client.isClosed) {
-			return;
-		}
-		if (document.processId === undefined) {
+		await this.closeInProcess(document);
+	}
+
+	private async closeInProcess(document: LiveDocument): Promise<void> {
+		const target = this.closableProcess(document);
+		if (target === undefined) {
 			return;
 		}
 		try {
-			await this.engine.closeDocument(document.processId);
+			await target.engine.closeDocument(target.processId);
 		} catch {
 			// A dead process already forgot the document; the restart will not replay it.
 		}
+	}
+
+	private closableProcess(
+		document: LiveDocument
+	): { engine: CoreEngine; processId: number } | undefined {
+		const processId = document.processId;
+		const engine = this.engine;
+		if (processId === undefined || engine === undefined || !this.hasLiveProcess()) {
+			return undefined;
+		}
+		return { engine, processId };
 	}
 
 	public engineVersion(): string {
@@ -282,12 +303,20 @@ export class EngineSupervisor implements CoreEngine {
 		if (this.disposed) {
 			return Promise.reject(new EngineError('engine supervisor is disposed', 'disposed'));
 		}
-		if (this.engine !== undefined && this.client !== undefined && !this.client.isClosed) {
-			return Promise.resolve(this.engine);
+		if (this.hasLiveProcess()) {
+			return Promise.resolve(this.engine as CoreEngine);
 		}
 		if (this.state === 'failed') {
 			return Promise.reject(this.unavailableError());
 		}
+		return this.connectOnce();
+	}
+
+	private hasLiveProcess(): boolean {
+		return this.engine !== undefined && this.client !== undefined && !this.client.isClosed;
+	}
+
+	private connectOnce(): Promise<CoreEngine> {
 		if (this.connecting === undefined) {
 			this.connecting = this.replaceProcess().finally(() => {
 				this.connecting = undefined;
@@ -297,48 +326,64 @@ export class EngineSupervisor implements CoreEngine {
 	}
 
 	private async replaceProcess(): Promise<CoreEngine> {
-		if (this.failures > 0) {
-			await delay(Math.min(BASE_RESTART_DELAY_MS * 2 ** (this.failures - 1), MAX_RESTART_DELAY_MS));
-		}
-		this.setState(this.spawns === 0 ? 'starting' : 'restarting');
+		await this.waitBeforeRestart();
+		this.noteSpawnAttempt();
 		let client: EngineClient | undefined;
 		try {
 			client = await this.spawn(this.binary, this.root, (error) => this.handleClientExit(error));
-			if (this.spawns === 0) {
-				this.spawns = 1;
-			} else {
-				this.spawns += 1;
-				this.restarts = this.spawns - 1;
-			}
-			const hello = await client.request('hello', {}, undefined, HANDSHAKE_TIMEOUT_MS);
-			const version = this.validateHello(hello.header as Record<string, unknown>);
-			const engine = createEngine(client, version);
-			for (const document of this.documents.values()) {
-				document.processId = await engine.openDocument(document.uri, document.text, document.options);
-			}
-			this.client?.dispose();
-			this.client = client;
-			this.engine = engine;
-			this.version = version;
-			this.startedAt = Date.now();
-			this.setState('running');
-			return engine;
+			const opened = await this.openProcess(client);
+			this.installProcess(client, opened.engine, opened.version);
+			return opened.engine;
 		} catch (error) {
 			client?.dispose();
+			if (this.disposed) {
+				throw new EngineError('engine supervisor is disposed', 'disposed');
+			}
 			throw this.noteFailure(error);
 		}
 	}
 
-	private validateHello(header: Record<string, unknown>): string {
-		const diagnostic = protocolDiagnostic(header);
-		if (diagnostic !== undefined) {
-			throw new EngineError(diagnostic, 'protocol');
+	private async waitBeforeRestart(): Promise<void> {
+		if (this.failures === 0) {
+			return;
 		}
-		const version = header.engine;
-		if (typeof version !== 'string' || version.length === 0) {
-			throw new EngineError('engine handshake did not report a version', 'protocol');
+		await delay(Math.min(BASE_RESTART_DELAY_MS * 2 ** (this.failures - 1), MAX_RESTART_DELAY_MS));
+	}
+
+	private noteSpawnAttempt(): void {
+		this.setState(this.spawns === 0 ? 'starting' : 'restarting');
+		this.spawns += 1;
+		this.restarts = this.spawns - 1;
+	}
+
+	private async openProcess(
+		client: EngineClient
+	): Promise<{ engine: CoreEngine; version: string }> {
+		const hello = await client.request('hello', {}, undefined, HANDSHAKE_TIMEOUT_MS);
+		const validated = validateHandshake(hello.header as Record<string, unknown>);
+		if ('diagnostic' in validated) {
+			throw new EngineError(validated.diagnostic, 'protocol');
 		}
-		return version;
+		const version = validated.version;
+		const engine = createEngine(client, version);
+		for (const document of this.documents.values()) {
+			document.processId = await engine.openDocument(document.uri, document.text, document.options);
+		}
+		return { engine, version };
+	}
+
+	private installProcess(client: EngineClient, engine: CoreEngine, version: string): void {
+		if (this.disposed) {
+			client.dispose();
+			throw new EngineError('engine supervisor is disposed', 'disposed');
+		}
+		this.client?.dispose();
+		this.client = client;
+		this.engine = engine;
+		this.version = version;
+		this.startedAt = Date.now();
+		this.failedProcess = false;
+		this.setState('running');
 	}
 
 	private noteFailure(error: unknown): Error {
@@ -365,23 +410,25 @@ export class EngineSupervisor implements CoreEngine {
 	}
 
 	private scheduleWarmRestart(): void {
-		if (this.disposed || this.warmTimer !== undefined || this.connecting !== undefined) {
+		if (!this.canScheduleWarmRestart()) {
 			return;
 		}
-		const delayMs = Math.min(
-			BASE_RESTART_DELAY_MS * 2 ** Math.max(0, this.failures - 1),
-			MAX_RESTART_DELAY_MS
-		);
-		this.warmTimer = setTimeout(() => {
-			this.warmTimer = undefined;
-			if (this.disposed) {
-				return;
-			}
-			void this.ensureEngine().catch(() => {
-				// noteFailure scheduled the next attempt; stop at the limit.
-			});
-		}, delayMs);
+		this.warmTimer = setTimeout(() => this.warmRestart(), warmRestartDelay(this.failures));
 		this.warmTimer.unref?.();
+	}
+
+	private canScheduleWarmRestart(): boolean {
+		return !this.disposed && this.warmTimer === undefined && this.connecting === undefined;
+	}
+
+	private warmRestart(): void {
+		this.warmTimer = undefined;
+		if (this.disposed) {
+			return;
+		}
+		void this.ensureEngine().catch(() => {
+			// noteFailure scheduled the next attempt; stop at the limit.
+		});
 	}
 
 	// -----------------------------------------------------------------------
@@ -393,6 +440,7 @@ export class EngineSupervisor implements CoreEngine {
 		try {
 			const value = await run(engine);
 			this.failures = 0;
+			this.lastError = undefined;
 			return value;
 		} catch (error) {
 			if (isProcessFailure(error)) {
@@ -404,14 +452,14 @@ export class EngineSupervisor implements CoreEngine {
 
 	private async withDocument<T>(
 		docId: number,
-		run: (document: LiveDocument, engine: CoreEngine) => Promise<T>
+		run: (document: LiveDocument, engine: CoreEngine, processId: number) => Promise<T>
 	): Promise<T> {
 		const document = this.requireDocument(docId);
 		return this.withEngine((engine) => {
 			if (document.processId === undefined) {
 				throw new EngineError('document is not open in the engine', 'doc');
 			}
-			return run(document, engine);
+			return run(document, engine, document.processId);
 		});
 	}
 
@@ -440,10 +488,23 @@ export class EngineSupervisor implements CoreEngine {
 	}
 
 	private noteProcessFailure(error: unknown): void {
+		if (this.failedProcess) {
+			return;
+		}
+		this.failedProcess = true;
+		this.failures += 1;
 		this.lastError = error instanceof Error ? error.message : String(error);
 		this.engine = undefined;
 		this.client = undefined;
+		this.afterProcessFailure();
+	}
+
+	private afterProcessFailure(): void {
 		if (this.disposed) {
+			return;
+		}
+		if (this.failures >= this.maxRestarts) {
+			this.setState('failed', this.lastError);
 			return;
 		}
 		this.setState('restarting', this.lastError);
@@ -460,25 +521,18 @@ export class EngineSupervisor implements CoreEngine {
 
 	private async engineMemory(): Promise<number | undefined> {
 		const pid = this.client?.pid;
-		if (pid === undefined || process.platform !== 'linux') {
-			return undefined;
-		}
-		try {
-			const status = await readFile(`/proc/${pid}/status`, 'utf8');
-			const match = /VmRSS:\s+(\d+)\s+kB/.exec(status);
-			return match === null ? undefined : Number(match[1]) * 1024;
-		} catch {
-			return undefined;
-		}
+		return pid === undefined ? undefined : readResidentBytes(pid);
 	}
 
 	private setState(state: EngineProcessState, error?: string): void {
 		const changed = this.state !== state || error !== undefined;
 		this.state = state;
-		if (!changed) {
-			return;
+		if (changed) {
+			this.notify(error === undefined ? { state } : { state, error });
 		}
-		const change: EngineStateChange = error === undefined ? { state } : { state, error };
+	}
+
+	private notify(change: EngineStateChange): void {
 		for (const listener of [...this.listeners]) {
 			try {
 				listener(change);
@@ -489,11 +543,27 @@ export class EngineSupervisor implements CoreEngine {
 	}
 }
 
+/** Resident set size from `/proc`, on the platform where it is cheap to read. */
+async function readResidentBytes(pid: number): Promise<number | undefined> {
+	if (process.platform !== 'linux') {
+		return undefined;
+	}
+	try {
+		const status = await readFile(`/proc/${pid}/status`, 'utf8');
+		const match = /VmRSS:\s+(\d+)\s+kB/.exec(status);
+		return match === null ? undefined : Number(match[1]) * 1024;
+	} catch {
+		return undefined;
+	}
+}
+
 /** Starts the supervisor and one engine process. */
 export async function createEngineSupervisor(options: EngineSupervisorOptions): Promise<CoreEngine> {
 	const supervisor = new EngineSupervisor(options);
 	try {
 		await supervisor.start();
+		// A facade with own methods: host test doubles spread a CoreEngine, and a class
+		// instance's prototype methods would not survive `{ ...engine }`.
 		return {
 			kind: supervisor.kind,
 			protocol: supervisor.protocol,

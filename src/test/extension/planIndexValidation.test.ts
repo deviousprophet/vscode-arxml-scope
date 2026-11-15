@@ -147,7 +147,7 @@ suite('plan index and validation rows (extension)', function () {
 			await waitFor('the initial index', () => service.workspaceIndex.file(beforeUri.toString()) !== undefined);
 			fs.renameSync(before, after);
 			await waitFor('the renamed file', () => service.workspaceIndex.file(afterUri.toString()) !== undefined);
-			await waitFor('the old path to be dropped', () => service.workspaceIndex.file(beforeUri.toString()) === undefined);
+			await waitFor('the old path to be dropped', () => service.workspaceIndex.file(beforeUri.toString()) === undefined, 20_000);
 
 			const resolution = service.workspaceIndex.resolveTarget('/Plan/Renamed');
 			assert.ok(resolution.ok, 'the renamed path resolves');

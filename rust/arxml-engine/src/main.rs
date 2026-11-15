@@ -110,14 +110,27 @@ struct Engine {
     last_diff: Option<DiffBaseline>,
 }
 
+impl Engine {
+    fn new() -> Self {
+        Self {
+            documents: HashMap::new(),
+            uploads: HashMap::new(),
+            next_document: 1,
+            next_upload: 1,
+            last_diff: None,
+        }
+    }
+
+    /// Reserves one upload id; the caller inserts the upload with it.
+    fn next_upload_id(&mut self) -> u32 {
+        let upload_id = self.next_upload;
+        self.next_upload += 1;
+        upload_id
+    }
+}
+
 fn main() {
-    let mut engine = Engine {
-        documents: HashMap::new(),
-        uploads: HashMap::new(),
-        next_document: 1,
-        next_upload: 1,
-        last_diff: None,
-    };
+    let mut engine = Engine::new();
     let stdin = io::stdin();
     let mut input = stdin.lock();
     let stdout = io::stdout();
@@ -153,11 +166,7 @@ fn main() {
         match result {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
-                let _ = write_frame(
-                    &mut out,
-                    &json!({"id": id, "ok": false, "reason": error}),
-                    &[],
-                );
+                let _ = write_frame(&mut out, &failure_frame(id, error), &[]);
             }
             Err(_) => {
                 let _ = write_frame(
@@ -167,6 +176,15 @@ fn main() {
                 );
             }
         }
+    }
+}
+
+/// The error envelope, with a machine code for the failures a client can act on.
+fn failure_frame(id: u64, error: String) -> Value {
+    let code = error.starts_with("document exceeds").then_some("too_large");
+    match code {
+        Some(code) => json!({"id": id, "ok": false, "code": code, "reason": error}),
+        None => json!({"id": id, "ok": false, "reason": error}),
     }
 }
 
@@ -250,19 +268,24 @@ impl Engine {
         write_frame(out, &response, &[]).map_err(|error| error.to_string())
     }
 
-    fn open_begin(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
-        let upload_id = self.next_upload;
-        self.next_upload += 1;
+    /// Reserves an id and stores an empty upload for it.
+    fn start_upload(&mut self, kind: UploadKind) -> u32 {
+        let upload_id = self.next_upload_id();
         self.uploads.insert(
             upload_id,
             Upload {
-                kind: UploadKind::Open {
-                    options: row_options(header)?,
-                },
+                kind,
                 bytes: Vec::new(),
                 next_seq: 0,
             },
         );
+        upload_id
+    }
+
+    fn open_begin(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let upload_id = self.start_upload(UploadKind::Open {
+            options: row_options(header)?,
+        });
         write_frame(
             out,
             &json!({"id": id, "ok": true, "uploadId": upload_id}),
@@ -281,18 +304,9 @@ impl Engine {
         if !self.documents.contains_key(&document_id) {
             return Err("unknown document".to_string());
         }
-        let upload_id = self.next_upload;
-        self.next_upload += 1;
-        self.uploads.insert(
-            upload_id,
-            Upload {
-                kind: UploadKind::Resync {
-                    doc_id: document_id,
-                },
-                bytes: Vec::new(),
-                next_seq: 0,
-            },
-        );
+        let upload_id = self.start_upload(UploadKind::Resync {
+            doc_id: document_id,
+        });
         write_frame(
             out,
             &json!({"id": id, "ok": true, "uploadId": upload_id}),
@@ -308,10 +322,7 @@ impl Engine {
         header: &Value,
         body: &[u8],
     ) -> Result<(), String> {
-        let upload_id = header
-            .get("uploadId")
-            .and_then(Value::as_u64)
-            .ok_or("uploadId is required")? as u32;
+        let upload_id = upload_id(header)?;
         let seq = header.get("seq").and_then(Value::as_u64).unwrap_or(0) as u32;
         let Some((expected, length)) = self
             .uploads
@@ -847,13 +858,14 @@ mod tests {
     use super::*;
 
     fn engine() -> Engine {
-        Engine {
-            documents: HashMap::new(),
-            uploads: HashMap::new(),
-            next_document: 1,
-            next_upload: 1,
-            last_diff: None,
-        }
+        Engine::new()
+    }
+
+    #[test]
+    fn too_large_errors_carry_a_code() {
+        let frame = failure_frame(7, "document exceeds the 512 MiB cap".to_string());
+        assert_eq!(frame["code"], "too_large");
+        assert_eq!(frame["id"], 7);
     }
 
     #[test]

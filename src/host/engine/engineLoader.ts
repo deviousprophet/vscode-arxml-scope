@@ -12,12 +12,14 @@ import {
 	type EngineSpawner
 } from './engineClient';
 import { createEngineSupervisor } from './engineSupervisor';
-import { EXPECTED_PROTOCOL, protocolDiagnostic, type CoreEngine } from './coreEngine';
+import { EXPECTED_PROTOCOL, type CoreEngine } from './coreEngine';
+import { validateHandshake } from './engineHandshake';
 
 export type { EngineSpawner };
+export { validateHandshake };
 
 /** Platforms this build ships an engine binary for. */
-export const SUPPORTED_TARGETS = ['linux-x64', 'win32-x64', 'darwin-x64', 'darwin-arm64'] as const;
+const SUPPORTED_TARGETS = ['linux-x64', 'win32-x64', 'darwin-x64', 'darwin-arm64'] as const;
 
 /** The packaged engine binary for one platform/architecture. */
 export function enginePath(
@@ -29,23 +31,8 @@ export function enginePath(
 }
 
 /** True when this build has an engine for the target. */
-export function isSupportedTarget(platform: string, arch: string): boolean {
+function isSupportedTarget(platform: string, arch: string): boolean {
 	return (SUPPORTED_TARGETS as readonly string[]).includes(`${platform}-${arch}`);
-}
-
-/** The handshake check, split out so the loader test can drive it without a process. */
-export function validateHandshake(
-	header: Record<string, unknown>
-): { version: string } | { diagnostic: string } {
-	const diagnostic = protocolDiagnostic(header);
-	if (diagnostic !== undefined) {
-		return { diagnostic };
-	}
-	const version = header.engine;
-	if (typeof version !== 'string' || version.length === 0) {
-		return { diagnostic: 'engine handshake did not report a version' };
-	}
-	return { version };
 }
 
 async function startProcess(

@@ -325,8 +325,7 @@ export class EngineClient {
 			return;
 		}
 		this.closed = true;
-		const reason = `engine exited (${code ?? 'null'}${signal ? `, ${signal}` : ''})`;
-		const error = new EngineError(reason, 'exited');
+		const error = exitError(code, signal);
 		this.fail(error);
 		this.onExit?.(error);
 	}
@@ -358,4 +357,12 @@ export class EngineClient {
 
 function isValidPayload(payloadLength: number): boolean {
 	return payloadLength >= 2 && payloadLength <= MAX_FRAME;
+}
+
+function exitError(code: number | null, signal: string | null): EngineError {
+	const suffix = signal === null ? '' : `, ${signal}`;
+	return new EngineError(
+		`engine exited (${code ?? 'null'}${suffix}); run "ARXML Scope: Show Engine Status" for details`,
+		'exited'
+	);
 }

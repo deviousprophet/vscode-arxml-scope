@@ -53,6 +53,9 @@ are not part of this PR:
    second document copy need a protocol shape shared with the webview.
 4. **R2/R3/R6/R7 ports** (index, validation, text features, cutover) — the large
    v0.11.0 rewrite; each needs its own parity corpus and release slice.
+5. **Scanner fuzzing** — `cargo deny` covers advisories and sources, but a
+   `cargo fuzz` scanner target is not added in this PR; it needs nightly CI and a
+   seed corpus. Recorded here as the follow-up requested by the cleanup PRD.
 
 ## Constraints
 

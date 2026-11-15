@@ -12,7 +12,7 @@
  */
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import type { MissingAncestor } from '../core/copy/planCopy';
+import type { MissingAncestor } from '../core/copy/copyTypes';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { FileLabel, compareTitle } from '../core/diff/diffModel';
 import type { DiffCell, DiffDocument } from '../core/diff/diffModel';
@@ -685,7 +685,6 @@ export class DiffPanel {
 
 		/** Creates the missing ancestors around the copied element and inserts the chain. */
 		const synthesizeInto = async (
-			_clickedDoc: vscode.TextDocument,
 			otherDoc: vscode.TextDocument,
 			clickedCell: DiffCell,
 			row: { parentKey: string | null; kind: string },
@@ -723,16 +722,6 @@ export class DiffPanel {
 			return true;
 		};
 
-		const deleteFromOther = async (
-			doc: vscode.TextDocument,
-			cell: DiffCell | undefined,
-			side: 'left' | 'right'
-		): Promise<void> => {
-			if (cell !== undefined) {
-				await copyDelete(doc, cell, side);
-			}
-		};
-
 		const copyDelete = async (
 			doc: vscode.TextDocument,
 			cell: DiffCell,
@@ -749,7 +738,6 @@ export class DiffPanel {
 		};
 
 		const copyInto = async (
-			_clickedDoc: vscode.TextDocument,
 			otherDoc: vscode.TextDocument,
 			clickedCell: DiffCell,
 			otherCell: DiffCell | undefined,
@@ -799,31 +787,48 @@ export class DiffPanel {
 			}
 		};
 
+		const openCopyDocuments = async (
+			side: 'left' | 'right'
+		): Promise<{ clickedDoc: vscode.TextDocument; otherDoc: vscode.TextDocument }> => {
+			const uriOf = (which: 'left' | 'right'): vscode.Uri => (which === 'left' ? leftUri : rightUri);
+			return {
+				clickedDoc: await vscode.workspace.openTextDocument(uriOf(side)),
+				otherDoc: await vscode.workspace.openTextDocument(uriOf(otherSideOf(side)))
+			};
+		};
+
 		const runCopy = async (
 			side: 'left' | 'right',
 			located: { rowIndex: number; clickedCell?: DiffCell; otherCell?: DiffCell }
 		): Promise<void> => {
-			const uriOf = (which: 'left' | 'right'): vscode.Uri => (which === 'left' ? leftUri : rightUri);
-			const clickedDoc = await vscode.workspace.openTextDocument(uriOf(side));
-			const otherDoc = await vscode.workspace.openTextDocument(uriOf(otherSideOf(side)));
+			const { clickedDoc, otherDoc } = await openCopyDocuments(side);
 			if (snapshotIsStale(side, clickedDoc, otherDoc)) {
 				await askReload();
 				return;
 			}
+			await applyLocatedCopy(side, located, otherDoc);
+		};
+
+		const applyLocatedCopy = async (
+			side: 'left' | 'right',
+			located: { rowIndex: number; clickedCell?: DiffCell; otherCell?: DiffCell },
+			otherDoc: vscode.TextDocument
+		): Promise<void> => {
 			if (located.clickedCell === undefined) {
-				await deleteFromOther(otherDoc, located.otherCell, side);
+				if (located.otherCell !== undefined) {
+					await copyDelete(otherDoc, located.otherCell, side);
+				}
 				return;
 			}
 			if (moduleCollision(side, located.rowIndex)) {
 				await postError('that module already exists on the target side');
 				return;
 			}
-			await placeCopy(clickedDoc, otherDoc, side, located.rowIndex, located.clickedCell, located.otherCell);
+			await placeCopy(otherDoc, side, located.rowIndex, located.clickedCell, located.otherCell);
 		};
 
 		/** A copy whose parent is missing on the target synthesizes the chain first. */
 		const placeCopy = async (
-			clickedDoc: vscode.TextDocument,
 			otherDoc: vscode.TextDocument,
 			side: 'left' | 'right',
 			rowIndex: number,
@@ -831,10 +836,10 @@ export class DiffPanel {
 			otherCell: DiffCell | undefined
 		): Promise<void> => {
 			if (parentMissing(rowIndex, side)) {
-				await synthesizeInto(clickedDoc, otherDoc, clickedCell, current.rows[rowIndex], side);
+				await synthesizeInto(otherDoc, clickedCell, current.rows[rowIndex], side);
 				return;
 			}
-			await copyInto(clickedDoc, otherDoc, clickedCell, otherCell, rowIndex, side);
+			await copyInto(otherDoc, clickedCell, otherCell, rowIndex, side);
 		};
 
 		const onMatchMode = (value: unknown): void => {

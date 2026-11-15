@@ -131,17 +131,30 @@ suite('core engine process', () => {
 		const padding = 'x'.repeat(mib * 1024 * 1024);
 		const text =
 			`<?xml version="1.0" encoding="UTF-8"?>\n<AUTOSAR><!--${padding}-->` +
-			'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME></ECUC-MODULE-CONFIGURATION-VALUES></AUTOSAR>';
+			'<AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>' +
+			'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>' +
+			'<DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/M</DEFINITION-REF><CONTAINERS>' +
+			'<ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME>' +
+			'<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/M/C</DEFINITION-REF>' +
+			'<PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE>' +
+			'<DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/M/C/V</DEFINITION-REF>' +
+			'<VALUE>1</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES>' +
+			'</ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES>' +
+			'</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>';
+		const edited = text.replace('<VALUE>1</VALUE>', '<VALUE>2</VALUE>');
 		assert.ok(Buffer.byteLength(text) > 64 * 1024 * 1024, 'the fixture exceeds one frame');
 		const engine = await resolveEngine(repoRoot);
 		try {
 			const docId = await engine.openDocument('mem://large.arxml', text, ROW_OPTIONS);
-			const side = { docId, name: 'large.arxml', path: 'mem://large.arxml' };
-			const document = await engine.computeDiff(side, side, { semanticMatching: false });
+			const editedId = await engine.openDocument('mem://large-edited.arxml', edited, ROW_OPTIONS);
+			const left = { docId, name: 'large.arxml', path: 'mem://large.arxml' };
+			const right = { docId: editedId, name: 'large-edited.arxml', path: 'mem://large-edited.arxml' };
+			const document = await engine.computeDiff(left, right, { semanticMatching: false });
 			assert.ok(document.rows.length > 0, 'the chunked document was parsed');
-			assert.strictEqual(document.summary.changed, 0);
-			assert.strictEqual(document.summary.added, 0);
-			assert.strictEqual(document.summary.removed, 0);
+			assert.ok(
+				document.summary.changed + document.summary.renamed > 0,
+				'the edited copy differs from the original'
+			);
 		} finally {
 			engine.dispose();
 		}
@@ -150,15 +163,26 @@ suite('core engine process', () => {
 	test('rejects an out-of-order chunk and forgets the upload', async () => {
 		const client = await EngineClient.start({ binary: enginePath(repoRoot), root: repoRoot });
 		try {
+			// A successful chunked open first: the body splits a surrogate pair's bytes.
+			const small = '<AUTOSAR>😀</AUTOSAR>';
+			const bytes = Buffer.from(small, 'utf8');
 			const begun = await client.request('doc.open.begin', { options: ROW_OPTIONS });
 			const uploadId = Number(begun.header.uploadId);
-			assert.ok(Number.isInteger(uploadId), 'the engine returns an upload id');
+			await client.request('doc.open.chunk', { uploadId, seq: 0 }, bytes.subarray(0, 12));
+			await client.request('doc.open.chunk', { uploadId, seq: 1 }, bytes.subarray(12));
+			const opened = await client.request('doc.open.end', { uploadId });
+			assert.strictEqual(opened.header.textLength, small.length, 'UTF-16 length survives chunking');
+			await client.request('doc.close', { docId: opened.header.docId });
+
+			const next = await client.request('doc.open.begin', { options: ROW_OPTIONS });
+			const nextUpload = Number(next.header.uploadId);
+			assert.ok(Number.isInteger(nextUpload), 'the engine returns an upload id');
 			await assert.rejects(
-				() => client.request('doc.open.chunk', { uploadId, seq: 1 }, Buffer.from('x')),
+				() => client.request('doc.open.chunk', { uploadId: nextUpload, seq: 1 }, Buffer.from('x')),
 				/out of order/
 			);
 			await assert.rejects(
-				() => client.request('doc.open.chunk', { uploadId, seq: 0 }, Buffer.from('x')),
+				() => client.request('doc.open.chunk', { uploadId: nextUpload, seq: 0 }, Buffer.from('x')),
 				/unknown upload/
 			);
 		} finally {

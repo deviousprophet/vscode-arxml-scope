@@ -1021,15 +1021,17 @@ suite('semantic diff model (design §2, §3.3)', () => {
 	}
 
 	test('self-name masking pairs a wholly different name token', () => {
-		const left = embeddedValues('Old', 50);
-		const right = embeddedValues('New', 50);
-		const { document } = diffOf(left, right, true);
-		const pairs = document.rows.filter(
-			(row) => row.kind === 'container' && row.match?.kind === 'semantic'
-		);
-		assert.strictEqual(pairs.length, 50, 'every renamed container pairs without a shared token');
-		assert.strictEqual(document.summary.added, 0);
-		assert.strictEqual(document.summary.removed, 0);
+		for (const count of [10, 50, 500]) {
+			const left = embeddedValues('Old', count);
+			const right = embeddedValues('New', count);
+			const { document } = diffOf(left, right, true);
+			const pairs = document.rows.filter(
+				(row) => row.kind === 'container' && row.match?.kind === 'semantic'
+			);
+			assert.strictEqual(pairs.length, count, `every renamed container pairs at ${count}`);
+			assert.strictEqual(document.summary.added, 0);
+			assert.strictEqual(document.summary.removed, 0);
+		}
 	});
 
 	test('masked children pair renamed containers after new ones sorting before', () => {

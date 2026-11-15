@@ -9,26 +9,72 @@ import * as vscode from 'vscode';
 import type { CoreEngine } from './engine/coreEngine';
 import { formatEngineHealth, type EngineHealth, type EngineProcessState } from './engine/engineHealth';
 
-export const ENGINE_STATUS_COMMAND = 'vscode-arxml-scope.showEngineStatus';
+const ENGINE_STATUS_COMMAND = 'vscode-arxml-scope.showEngineStatus';
 const REFRESH_MS = 30_000;
 
+const STATUS_TEXT: Record<EngineProcessState, string> = {
+	running: '$(pulse) ARXML Engine',
+	starting: '$(sync~spin) ARXML Engine',
+	restarting: '$(sync~spin) ARXML Engine',
+	failed: '$(error) ARXML Engine',
+	disposed: '$(circle-slash) ARXML Engine'
+};
+
 function statusText(state: EngineProcessState): string {
-	switch (state) {
-		case 'running':
-			return '$(pulse) ARXML Engine';
-		case 'starting':
-		case 'restarting':
-			return '$(sync~spin) ARXML Engine';
-		case 'failed':
-			return '$(error) ARXML Engine';
-		default:
-			return '$(circle-slash) ARXML Engine';
-	}
+	return STATUS_TEXT[state];
 }
 
 function healthLine(health: EngineHealth): string {
 	const pid = health.pid === undefined ? '' : `, pid ${health.pid}`;
 	return `ARXML Scope engine ${health.state}${pid}`;
+}
+
+function writeHealth(output: vscode.OutputChannel, health: EngineHealth): void {
+	output.clear();
+	output.appendLine('ARXML Scope engine status');
+	output.appendLine('');
+	output.appendLine(formatEngineHealth(health));
+	output.show(true);
+}
+
+async function restartEngine(engine: CoreEngine): Promise<void> {
+	if (engine.restart === undefined) {
+		return;
+	}
+	try {
+		await engine.restart();
+		void vscode.window.showInformationMessage('ARXML Scope: engine restarted');
+	} catch (error) {
+		void vscode.window.showErrorMessage(
+			`ARXML Scope: engine restart failed: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
+}
+
+async function showStatus(
+	engine: CoreEngine,
+	output: vscode.OutputChannel,
+	refresh: () => Promise<void>
+): Promise<void> {
+	if (engine.health === undefined) {
+		void vscode.window.showWarningMessage('ARXML Scope: this engine does not report health');
+		return;
+	}
+	const health = await engine.health();
+	writeHealth(output, health);
+	const action = await vscode.window.showInformationMessage(
+		healthLine(health),
+		'Restart Engine',
+		'Open Output'
+	);
+	if (action === 'Open Output') {
+		output.show(true);
+		return;
+	}
+	if (action === 'Restart Engine') {
+		await restartEngine(engine);
+	}
+	await refresh();
 }
 
 /** Registers the status item, output channel and command. */
@@ -63,38 +109,7 @@ export function registerEngineStatus(context: vscode.ExtensionContext, engine: C
 	}
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand(ENGINE_STATUS_COMMAND, async () => {
-			if (engine.health === undefined) {
-				void vscode.window.showWarningMessage('ARXML Scope: this engine does not report health');
-				return;
-			}
-			const health = await engine.health();
-			output.clear();
-			output.appendLine('ARXML Scope engine status');
-			output.appendLine('');
-			output.appendLine(formatEngineHealth(health));
-			output.show(true);
-			const action = await vscode.window.showInformationMessage(
-				healthLine(health),
-				'Restart Engine',
-				'Open Output'
-			);
-			if (action === 'Open Output') {
-				output.show(true);
-				return;
-			}
-			if (action === 'Restart Engine' && engine.restart !== undefined) {
-				try {
-					await engine.restart();
-					void vscode.window.showInformationMessage('ARXML Scope: engine restarted');
-				} catch (error) {
-					void vscode.window.showErrorMessage(
-						`ARXML Scope: engine restart failed: ${error instanceof Error ? error.message : String(error)}`
-					);
-				}
-			}
-			await refresh();
-		})
+		vscode.commands.registerCommand(ENGINE_STATUS_COMMAND, () => showStatus(engine, output, refresh))
 	);
 
 	void refresh();
