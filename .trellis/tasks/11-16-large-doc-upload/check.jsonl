@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No leaked buffers, clear too-large errors, additive protocol"}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Large-fixture memory and engine test isolation"}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Byte versus UTF-16 length assertions"}
