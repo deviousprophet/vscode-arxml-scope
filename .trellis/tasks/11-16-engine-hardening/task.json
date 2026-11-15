@@ -1,0 +1,28 @@
+{
+  "id": "engine-hardening",
+  "name": "engine-hardening",
+  "title": "v0.11.0 engine hardening",
+  "description": "Close the actionable v0.10.0 review findings and the v0.11.0 robustness tracks: engine supervisor and health, large-document upload, rename matching F1-F4, copy planner in Rust, platform and supply-chain cleanup, docs and CI coverage. Performance rewrites P4/P5 stay documented follow-ups.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "deviousprophet",
+  "assignee": "deviousprophet",
+  "createdAt": "2026-11-16",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-16-rename-matching"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

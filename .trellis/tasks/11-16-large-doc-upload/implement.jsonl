@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Raw buffer bodies and protocol header types for chunked upload"}
+{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Document open/close handles and failure cleanup"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "UTF-8 bytes over the wire versus UTF-16 offsets in the model"}
