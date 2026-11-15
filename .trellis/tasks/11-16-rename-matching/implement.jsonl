@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Rust and TypeScript implementations must produce identical diff documents"}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Parity and shape-matrix test conventions"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No false pairs, deterministic output, no weakened guard"}

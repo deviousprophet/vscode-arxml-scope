@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Matrix coverage and parity assertions"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Correctness guarantees and performance regression limits"}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Keep one algorithm ported twice in lockstep without drift"}
