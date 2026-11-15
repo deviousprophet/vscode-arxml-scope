@@ -61,6 +61,11 @@
         "command": "vscode-arxml-scope.cycleCrossFileRules",
         "title": "Cycle Cross-File Checks",
         "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.showEngineStatus",
+        "title": "Show Engine Status",
+        "category": "ARXML Scope"
       }
     ],
     "customEditors": [

@@ -53,6 +53,12 @@ The engine process is the required core at activation, and its scanner, rows,
 conditions and edit plans are at parity with the TypeScript oracle over the whole
 fixture corpus (`npm run parity:rows`).
 
+The host runs the process through a supervisor. If the process exits or answers with
+a protocol error, the next request spawns a new one with bounded backoff, reopens the
+live documents and keeps the host's document ids. Repeated failures stop with an
+actionable error; `ARXML Scope: Show Engine Status` reports state, pid, uptime,
+restarts, memory on Linux and the last error.
+
 The ECUC editor's edit path runs through it: `doc.plan` returns the span and bytes to
 write, and `doc.update` answers a value edit with one row in place (a splice plus a
 range shift, no re-parse and no row rebuild). The panel's first row store is still

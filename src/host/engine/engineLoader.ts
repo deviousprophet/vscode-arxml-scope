@@ -2,12 +2,19 @@
  * Starts and validates the Rust engine process.
  *
  * A missing, unstartable or wrong-protocol engine is an activation error: there is
- * no TypeScript fallback and no engine-selection setting.
+ * no TypeScript fallback and no engine-selection setting. Once started, the
+ * supervisor owns restarts, so the rest of the host keeps one `CoreEngine`.
  */
-import { engineBinaryPath, EngineClient, EngineError } from './engineClient';
-import { createEngine, EXPECTED_PROTOCOL, protocolDiagnostic, type CoreEngine } from './coreEngine';
+import {
+	engineBinaryPath,
+	EngineClient,
+	EngineError,
+	type EngineSpawner
+} from './engineClient';
+import { createEngineSupervisor } from './engineSupervisor';
+import { EXPECTED_PROTOCOL, protocolDiagnostic, type CoreEngine } from './coreEngine';
 
-export type EngineSpawner = (binary: string, root: string) => Promise<EngineClient>;
+export type { EngineSpawner };
 
 /** The packaged engine binary for one platform/architecture. */
 export function enginePath(
@@ -33,18 +40,23 @@ export function validateHandshake(
 	return { version };
 }
 
-async function startProcess(binary: string, root: string): Promise<EngineClient> {
-	return EngineClient.start({ binary, root });
+async function startProcess(
+	binary: string,
+	root: string,
+	onExit?: (error: EngineError) => void
+): Promise<EngineClient> {
+	return EngineClient.start({ binary, root, onExit });
 }
 
 /** Starts the process and turns every failure into one activation error. */
 async function startClient(
 	start: EngineSpawner,
 	binary: string,
-	root: string
+	root: string,
+	onExit?: (error: EngineError) => void
 ): Promise<EngineClient> {
 	try {
-		return await start(binary, root);
+		return await start(binary, root, onExit);
 	} catch (error) {
 		throw startFailure(error, binary);
 	}
@@ -61,17 +73,6 @@ function startFailure(error: unknown, binary: string): Error {
 	);
 }
 
-/** Completes the handshake and refuses a protocol drift. */
-async function requireHandshake(client: EngineClient): Promise<string> {
-	const hello = await client.request('hello');
-	const validated = validateHandshake(hello.header as Record<string, unknown>);
-	if ('diagnostic' in validated) {
-		client.dispose();
-		throw new Error(`Rust engine rejected: ${validated.diagnostic}`);
-	}
-	return validated.version;
-}
-
 /**
  * Resolves the required engine. Spawns the process and completes the handshake, so
  * a bad binary or a protocol drift fails activation before any service starts.
@@ -83,7 +84,7 @@ export async function resolveEngine(
 	start: EngineSpawner = startProcess
 ): Promise<CoreEngine> {
 	const binary = enginePath(root, platform, arch);
-	const client = await startClient(start, binary, root);
-	const version = await requireHandshake(client);
-	return createEngine(client, version);
+	const spawn: EngineSpawner = (target, workspace, onExit) =>
+		startClient(start, target, workspace, onExit);
+	return createEngineSupervisor({ binary, root, start: spawn });
 }

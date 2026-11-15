@@ -11,6 +11,7 @@ import type { DiffDocument, DiffRow, DiffSummary } from '../../core/diff/diffMod
 import type { DiffPatch } from '../../core/diff/diffPatch';
 import type { EcucRow } from '../../core/ecuc/renderRows';
 import { EXPECTED_PROTOCOL, type EngineClient } from './engineClient';
+import type { EngineHealth, EngineStateListener } from './engineHealth';
 
 export { EXPECTED_PROTOCOL };
 
@@ -107,6 +108,12 @@ export interface CoreEngine {
 	closeDocument(docId: number): Promise<void>;
 	/** A side-effect-free probe used by diagnostics and tests. */
 	engineVersion(): string;
+	/** Current process state; present on the supervisor-backed engine. */
+	health?(): Promise<EngineHealth>;
+	/** Replaces the process on demand; open documents are replayed. */
+	restart?(): Promise<void>;
+	/** State transitions, so the host can keep the status bar current. */
+	onDidChangeState?(listener: EngineStateListener): { dispose(): void };
 	dispose(): void;
 }
 

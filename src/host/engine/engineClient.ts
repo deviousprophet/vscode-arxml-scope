@@ -57,7 +57,16 @@ export interface EngineClientOptions {
 	root?: string;
 	/** Spawn implementation, for tests. */
 	spawnProcess?: (binary: string) => ChildProcessWithoutNullStreams;
+	/** Called once when the process exits or is aborted, before pending requests settle. */
+	onExit?: (error: EngineError) => void;
 }
+
+/** Creates one engine process; the supervisor uses it for every restart. */
+export type EngineSpawner = (
+	binary: string,
+	root: string,
+	onExit?: (error: EngineError) => void
+) => Promise<EngineClient>;
 
 interface Pending {
 	resolve: (chunks: EngineChunk[]) => void;
@@ -134,13 +143,15 @@ function isCorrelated(header: EngineFrame): header is EngineFrame & { id: number
  */
 export class EngineClient {
 	private readonly child: ChildProcessWithoutNullStreams;
+	private readonly onExit: ((error: EngineError) => void) | undefined;
 	private readonly pending = new Map<number, Pending>();
 	private nextId = 1;
 	private buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
 	private closed = false;
 
-	private constructor(child: ChildProcessWithoutNullStreams) {
+	private constructor(child: ChildProcessWithoutNullStreams, onExit?: (error: EngineError) => void) {
 		this.child = child;
+		this.onExit = onExit;
 		child.stdout.on('data', (chunk: Buffer) => this.receive(chunk));
 		child.on('exit', (code, signal) => this.handleExit(code, signal));
 		child.on('error', (error) => this.handleExit(null, String(error)));
@@ -149,13 +160,23 @@ export class EngineClient {
 	/** Spawns the engine and completes the handshake. */
 	public static async start(options: EngineClientOptions): Promise<EngineClient> {
 		assertBuilt(options.binary);
-		const client = new EngineClient(spawnEngine(options));
+		const client = new EngineClient(spawnEngine(options), options.onExit);
 		await client.handshake();
 		return client;
 	}
 
 	public get isClosed(): boolean {
 		return this.closed;
+	}
+
+	/** The process id, for health output. */
+	public get pid(): number | undefined {
+		return this.child.pid;
+	}
+
+	/** Requests waiting for a reply, for health output. */
+	public get pendingCount(): number {
+		return this.pending.size;
 	}
 
 	private async handshake(): Promise<void> {
@@ -247,7 +268,7 @@ export class EngineClient {
 	private nextFrame(): { header: EngineFrame; body: Buffer } | undefined {
 		const payloadLength = this.buffer.readUInt32LE(0);
 		if (!isValidPayload(payloadLength)) {
-			this.fail(new EngineError('engine sent an invalid frame', 'protocol'));
+			this.abort(new EngineError('engine sent an invalid frame', 'protocol'));
 			return undefined;
 		}
 		if (this.buffer.length < 4 + payloadLength) {
@@ -264,7 +285,7 @@ export class EngineClient {
 		try {
 			return JSON.parse(bytes.toString('utf8')) as EngineFrame;
 		} catch {
-			this.fail(new EngineError('engine sent a malformed header', 'protocol'));
+			this.abort(new EngineError('engine sent a malformed header', 'protocol'));
 			return undefined;
 		}
 	}
@@ -282,7 +303,7 @@ export class EngineClient {
 
 	private deliverNotification(header: EngineFrame): void {
 		if (header.fatal !== undefined) {
-			this.fail(new EngineError(String(header.reason ?? 'engine fatal error'), 'fatal'));
+			this.abort(new EngineError(String(header.reason ?? 'engine fatal error'), 'fatal'));
 		}
 	}
 
@@ -305,7 +326,20 @@ export class EngineClient {
 		}
 		this.closed = true;
 		const reason = `engine exited (${code ?? 'null'}${signal ? `, ${signal}` : ''})`;
-		this.fail(new EngineError(reason, 'exited'));
+		const error = new EngineError(reason, 'exited');
+		this.fail(error);
+		this.onExit?.(error);
+	}
+
+	/** Ends this process after a protocol violation and rejects everything pending. */
+	private abort(error: EngineError): void {
+		if (this.closed) {
+			return;
+		}
+		this.closed = true;
+		this.fail(error);
+		this.onExit?.(error);
+		this.child.kill();
 	}
 
 	private fail(error: Error): void {
