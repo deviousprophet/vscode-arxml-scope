@@ -809,13 +809,11 @@ function hostSide(side: 'left' | 'right'): 'left' | 'right' {
 
 /** Merge mode: arrows are live and rows can be copied to the other pane. */
 let mergeMode = false;
-/** The toggle lives in the title strip, so the page keeps its own reference. */
-let mergeToggle: HTMLButtonElement | null = null;
 
 function applyMergeMode(enabled: boolean): void {
 	mergeMode = enabled;
-	if (mergeToggle !== null) {
-		mergeToggle.setAttribute('aria-pressed', String(enabled));
+	if (toolbar) {
+		toolbar.setMergeMode(enabled);
 	}
 	if (views !== undefined) {
 		renderWindow(true);
@@ -2603,17 +2601,6 @@ export function mountDiff(): void {
 	window.addEventListener('message', function (event) {
 		handleDiffMessage(event.data as DiffProviderToWebview);
 	});
-	mergeToggle = document.createElement('button');
-	mergeToggle.type = 'button';
-	mergeToggle.className = 'diff-merge-toggle';
-	mergeToggle.textContent = 'Merge';
-	mergeToggle.title = 'Merge mode: copy rows between the panes';
-	mergeToggle.setAttribute('aria-pressed', 'false');
-	mergeToggle.addEventListener('click', toggleMergeMode);
-	const titleStrip = document.getElementById('diff-title-strip');
-	if (titleStrip !== null) {
-		titleStrip.appendChild(mergeToggle);
-	}
 	mountDiffDomListeners();
 views = new DiffView({
 	onRender: function (pane) {
@@ -2641,6 +2628,7 @@ toolbar = new DiffToolbar({
 	onCollapseAll: function () { collapseAll(); },
 	onExpandAll: function () { expandAll(); },
 	onSwap: function () { setSwapped(!swapped); },
+	onMergeMode: function () { toggleMergeMode(); },
 	onMatchMode: function (semantic: boolean) {
 		semanticMatching = semantic;
 		// Confirm the click before the host has rebuilt anything; the document or

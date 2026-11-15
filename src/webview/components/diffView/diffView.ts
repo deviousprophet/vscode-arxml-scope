@@ -18,6 +18,12 @@ export interface DiffViewCallbacks {
 	onViewportChange?(viewport: DocumentTreeViewport): void;
 }
 
+/** The slice of a DocumentTreeView the arrow geometry needs. */
+interface ArrowPane {
+	root?: HTMLElement;
+	getWindowElement?(): Element | undefined;
+}
+
 export class DiffView {
 	callbacks: DiffViewCallbacks;
 	left: any;
@@ -26,6 +32,7 @@ export class DiffView {
 	titleLeft: any;
 	titleRight: any;
 	mounted: boolean;
+	resizeObserver: ResizeObserver | undefined;
 
 	constructor(callbacks: DiffViewCallbacks = {}) {
 		this.callbacks = callbacks;
@@ -35,6 +42,7 @@ export class DiffView {
 		this.titleLeft = undefined;
 		this.titleRight = undefined;
 		this.mounted = false;
+		this.resizeObserver = undefined;
 	}
 
 	mount(): void {
@@ -90,6 +98,7 @@ export class DiffView {
 		});
 		this.left.mount();
 		this.right.mount();
+		this.observePaneResize();
 	}
 
 	setModel(model: DocumentTreeViewModel): void {
@@ -129,10 +138,88 @@ export class DiffView {
 	}
 
 	render(viewport: DocumentTreeViewport, force: boolean): void {
+		this.syncArrowOffsets(viewport);
 		const lefts = viewportOffsets(viewport);
 		this.left.render({ ...viewport, left: lefts[0] ?? 0 }, force);
 		this.right.render({ ...viewport, left: rightPaneOffset(lefts) }, force);
 		this.emitViewport(viewport);
+	}
+
+	/**
+	 * Keep each copy arrow on the pane's fixed inner edge while the rows pan.
+	 *
+	 * The arrow lives inside the row, which is as wide as the horizontally
+	 * scrollable content. Its `right`/`left` inset is therefore the distance from
+	 * the content edge back to the viewport edge, not a constant.
+	 */
+	private syncArrowOffsets(viewport: DocumentTreeViewport): void {
+		const lefts = viewportOffsets(viewport);
+		this.setArrowOffset(this.left, '--diff-arrow-right', this.arrowRightOffset(0, lefts[0] ?? 0));
+		this.setArrowOffset(this.right, '--diff-arrow-left', this.arrowLeftOffset(1, lefts[1] ?? 0));
+	}
+
+	private arrowRightOffset(index: number, scrollLeft: number): number {
+		return Math.max(0, this.arrowOverflow(index) - scrollLeft);
+	}
+
+	private arrowLeftOffset(index: number, scrollLeft: number): number {
+		return Math.max(0, Math.min(scrollLeft, this.arrowOverflow(index)));
+	}
+
+	private arrowOverflow(index: number): number {
+		const pane = this.paneWidth(index);
+		const measured = this.windowWidth(index);
+		const estimate = this.scroll ? this.scroll.contentWidths[index] ?? 0 : 0;
+		const content = measured > pane ? measured : estimate;
+		return Math.max(0, content - pane);
+	}
+
+	/** The rendered row width, including the gutter the content estimate omits. */
+	private windowWidth(index: number): number {
+		const view = this.viewAt(index);
+		if (!view) {
+			return 0;
+		}
+		const windowEl = view.getWindowElement ? view.getWindowElement() : undefined;
+		return windowEl ? this.rectWidthOf(windowEl) : 0;
+	}
+
+	private viewAt(index: number): ArrowPane | undefined {
+		return index === 0 ? this.left : this.right;
+	}
+
+	private rectWidthOf(element: Element): number {
+		return element.getBoundingClientRect().width;
+	}
+
+	private paneWidth(index: number): number {
+		const view = this.viewAt(index);
+		return view && view.root ? view.root.clientWidth : 0;
+	}
+
+	private setArrowOffset(view: ArrowPane | undefined, property: string, value: number): void {
+		const root = view ? view.root : undefined;
+		if (!root) {
+			return;
+		}
+		if (typeof root.style.setProperty !== 'function') {
+			return;
+		}
+		root.style.setProperty(property, `${value}px`);
+	}
+
+	/** A pane resizes when the shared vertical scrollbar appears or the host resizes. */
+	private observePaneResize(): void {
+		if (typeof ResizeObserver === 'undefined' || !this.scroll) {
+			return;
+		}
+		this.resizeObserver = new ResizeObserver(() => {
+			const viewport = this.scroll ? this.scroll.getViewport() : { top: 0, left: 0, height: 0, width: 0 };
+			this.syncArrowOffsets(viewport);
+		});
+		this.resizeObserver.observe(this.scroll.getPane(0));
+		this.resizeObserver.observe(this.scroll.getPane(1));
+		window.addEventListener('pagehide', () => this.resizeObserver?.disconnect());
 	}
 
 	private emitViewport(viewport: DocumentTreeViewport): void {

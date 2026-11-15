@@ -168,9 +168,11 @@ that is not obvious from the code.
   TypeScript parity oracle under `src/test`; do not route production through it. Do not call
   `refreshNow()` from the match-mode handler unless the prepared version is stale.
 - **The diff toolbar has no count summary.** The left order is Show all / Show diff, divider,
-  Context, divider, Semantic / Strict, divider, Prev/Next; Swap is centered over the pane divider;
-  status and Search are on the right. Context is the only standalone toggle, default active at five
-  lines and disabled in Show all. Every main button uses an inline icon over a small label.
+  Context, divider, Semantic / Strict, divider, Prev/Next, divider, Merge, divider, Collapse /
+  Expand; the strip stays a three-column grid and Swap sits over the pane divider. Context is the
+  only standalone toggle, default active at five lines and disabled in Show all. Every main button
+  uses an inline icon over a small label; the secondary labels drop first, then the primary labels,
+  and the Search count drops at 940px while the match arrows stay.
 - **One virtual scroll owns the document.** `VirtualScroll` owns the vertical bar, the per-pane
   horizontal bars and the precomputed offsets; `DocumentTreeView` renders only the visible window.
   Header rows are ordinary content rows and must not be pinned again. The diff keeps the file-name
@@ -180,9 +182,11 @@ that is not obvious from the code.
   rows; `flattenDiffDocument` turns the remaining hidden runs into `DiffGap` rows. A gap row is not a
   tree node: it must stay out of `displayIndexByKey`, `navigationVisible`, `F7` and search. The
   displayed left pane owns the toggle; the right pane draws the line only.
-- **Collapse controls stay findable.** The toolbar Collapse/Expand controls keep their labels above
-  1040px, matching the diff toolbar; labels hide only at <=1040px and the `aria-label` remains. The
-  fixed gutter keeps the row control at the far left instead of indenting it with the label.
+- **Collapse controls stay findable.** The editor's Collapse/Expand controls keep their labels above
+  1040px. The dense diff strip hides its secondary labels at 1399px, its primary labels at 1150px,
+  and compacts its boxes to 40px, then 36px at 960px, 32px at 880px and 28px at 720px. The
+  `aria-label` remains at every width. The fixed gutter keeps the row control at the far left instead
+  of indenting it with the label.
 - **A re-scan keeps state, not markup.** The host posts `{ type: 'document', document: { rows, selectedId, header } }`; the
   page reconciles selection, collapse, search and scroll, rebuilds the display list and renders the
   window. There is no `innerHTML` tree swap and no second refresh path.

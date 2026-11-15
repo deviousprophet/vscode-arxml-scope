@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Merge two ARXML configurations directly in the diff panel: a merge toggle, copy arrows in both directions, and `Alt+←`/`Alt+→` for the focused row
-- Missing parent containers are created when a copied element's target lacks them; a module copy that would duplicate a short name is refused
+- Merge two ARXML configurations directly in the diff panel: a toolbar `Merge` toggle, copy arrows in both directions, and `Alt+←`/`Alt+→` for the focused row
+- Missing parent containers are created when a copied element's target lacks them; a module copy that would duplicate a short name, or a copied element whose target has no `DEST`, is refused
+- Copied blocks adopt the target file's line endings, so an LF block copied into a CRLF file does not mix endings
 - The pane label of a document edited by a copy shows `•` until it is saved
 
 ### Changed
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Diff line-number status rails sit beside the digits on both panes instead of crossing the number or appearing at the window edge
 - An invalid numeric character reference in an ARXML value stays verbatim instead of aborting the scan
 - Search reflects a patched row immediately after a value edit, instead of waiting for a full document refresh
 - Editing the same value twice in a row plans against the new value span instead of the previous one

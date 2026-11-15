@@ -55,9 +55,10 @@ suite('Toolbar component', () => {
 		assert.ok(left.indexOf('id="diff-mode-semantic"') < left.indexOf('id="diff-mode-strict"'));
 		assert.ok(left.indexOf('id="diff-mode-strict"') < left.indexOf('id="diff-prev"'));
 		assert.ok(left.indexOf('id="diff-prev"') < left.indexOf('id="diff-next"'));
-		assert.ok(left.indexOf('id="diff-next"') < left.indexOf('id="diff-collapse-all"'));
+		assert.ok(left.indexOf('id="diff-next"') < left.indexOf('id="diff-merge"'));
+		assert.ok(left.indexOf('id="diff-merge"') < left.indexOf('id="diff-collapse-all"'));
 		assert.ok(left.indexOf('id="diff-collapse-all"') < left.indexOf('id="diff-expand-all"'));
-		assert.strictEqual(left.split('toolbar-divider').length - 1, 4, 'four group dividers');
+		assert.strictEqual(left.split('toolbar-divider').length - 1, 5, 'five group dividers');
 		assert.ok(left.includes('>Show diff<'), 'the label is Show diff');
 		const centre = html.slice(html.indexOf('class="toolbar-center"'), html.indexOf('class="toolbar-right"'));
 		assert.ok(centre.includes('id="diff-swap"'));
@@ -72,8 +73,8 @@ suite('Toolbar component', () => {
 
 	test('every main diff toolbar button has an icon over a label', () => {
 		const html = renderDiffToolbarHtml('<div class="search-box"></div>');
-		const buttons = html.match(/<button[^>]*class="tool diff-tool"[\s\S]*?<\/button>/g) ?? [];
-		assert.strictEqual(buttons.length, 10);
+		const buttons = html.match(/<button[^>]*class="tool diff-tool[^"]*"[\s\S]*?<\/button>/g) ?? [];
+		assert.strictEqual(buttons.length, 11);
 		for (const button of buttons) {
 			assert.ok(button.includes('<svg'), `icon missing: ${button}`);
 			assert.ok(button.includes('width="18"'), `18px icon missing: ${button}`);

@@ -79,20 +79,31 @@ selector. Pure row/flatten/search/window behaviour is tested directly; anything 
 browser layout, paint or focus has to be confirmed by hand in the Extension Development Host — say so
 in the task notes rather than implying it was tested.
 
-## Manual checks happen in the Extension Development Host
+## Manual checks happen through the preview harness or the Extension Development Host
 
-The in-repo preview harness (`preview:ecuc`, `preview:check`) was removed, so the page is no longer
-served with a stubbed `acquireVsCodeApi`. (`scripts/` still holds the Rust parity and smoke runners,
-which have no webview.) Open a fixture or a local `.arxml`
-in the ECUC editor and observe the real webview: layout, hover, focus, scroll, search passes, the
-inspector and the reload path all need that host.
+The page is served locally by `npm run preview:webview` and captured by `npm run shots:webview`.
+The harness wraps the **production shell** (`webviewShell.ts`) and imports the real page entries
+(`diffViewer.ts`, `editorViewer.ts`), which auto-mount exactly as in the extension. It seeds states
+through the host protocol and writes `artifacts/webview/<state>.png` plus `<state>.audit.json`;
+`docs/WEBVIEW_PREVIEW.md` holds the state table and the visual audit checklist. The runner fails
+when the rendered geometry violates an invariant: a copy arrow outside its pane, a toolbar control
+overlapping or clipped, a digit touching its rail, or a page-level horizontal scroll. When changing
+scroll-dependent chrome, add a wide/overflow state and a panned state; a fixture whose lines fit
+the pane cannot catch an arrow pinned to the content edge. Do not call a mount function after
+importing a page entry: a second mount binds every toolbar action twice and toggles cancel
+themselves.
+
+The screenshots are Chromium layout evidence, not a behavioural gate. They do not prove VS Code
+theme fidelity (the harness seeds the supported dark-theme tokens), keyboard focus, screen-reader output or
+performance. For those, open a fixture or a local `.arxml` in the ECUC editor and observe the real
+webview: hover, focus, scroll, search passes, the inspector and the reload path still need that host.
 
 A host observation is not a repeatable check. It cannot run in CI, so record it as host-observed with
 the file and the steps that produced it, and keep the real-host rows in the task's manual table.
 
-If a preview harness is reintroduced, it must wrap the production shell and bundled page; a second
-renderer is a test that agrees with itself. The page must be driven through the host protocol and its
-rows compared against `buildRows`, not against a full-tree string.
+The harness must keep wrapping the production shell and bundled pages; a second renderer is a test
+that agrees with itself. Drive the page through the host protocol and compare its rows against
+`buildRows`, not against a full-tree string.
 
 ## The reference must be the post-processed output
 

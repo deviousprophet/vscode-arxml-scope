@@ -158,3 +158,67 @@
 		padding: 0 4px;
 	}
 }
+/* Between the label and icon-only steps: 36px tools keep ten actions plus the
+ * centred Swap inside an 800px panel without a hidden button. */
+@media (max-width: 880px) and (min-width: 721px) {
+	.diff-tool {
+		width: 36px;
+		min-width: 36px;
+	}
+}
+@media (max-width: 900px) {
+	body[data-page="diff"] .toolbar-divider {
+		display: none;
+	}
+	body[data-page="diff"] .toolbar {
+		gap: 2px;
+		padding: 0 4px;
+	}
+}
+/* Secondary labels drop first; the primary labels (Context, Semantic, Strict,
+ * Merge) keep their words until the strip is icon-only. */
+@media (min-width: 1151px) and (max-width: 1399px) {
+	body[data-page="diff"] .diff-tool.tool-secondary {
+		width: 40px;
+		min-width: 40px;
+	}
+	body[data-page="diff"] .tool-secondary .lbl {
+		display: none;
+	}
+}
+@media (max-width: 1150px) {
+	body[data-page="diff"] .diff-tool .lbl {
+		display: none;
+	}
+	body[data-page="diff"] .diff-tool {
+		width: 40px;
+		min-width: 40px;
+	}
+	body[data-page="diff"] .toolbar-left {
+		gap: 2px;
+	}
+}
+@media (max-width: 960px) {
+	body[data-page="diff"] .diff-tool {
+		width: 36px;
+		min-width: 36px;
+	}
+}
+@media (max-width: 880px) and (min-width: 721px) {
+	body[data-page="diff"] .diff-tool {
+		width: 32px;
+		min-width: 32px;
+	}
+	body[data-page="diff"] .toolbar-left {
+		gap: 1px;
+	}
+}
+@media (max-width: 720px) {
+	body[data-page="diff"] .diff-tool {
+		width: 28px;
+		min-width: 28px;
+	}
+	body[data-page="diff"] .toolbar-left {
+		gap: 1px;
+	}
+}

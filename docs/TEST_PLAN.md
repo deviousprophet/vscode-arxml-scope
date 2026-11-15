@@ -11,6 +11,7 @@ at the plan row.
 |---|---|---|
 | Core unit | pure scanner/model/rows/index/diff/merge logic | `npm test` (`src/test/core`) |
 | Webview DOM | the bundled page, its components and the host↔page protocol in jsdom | `npm test` (`src/test/webview`) |
+| Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `npm run shots:webview` (see [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md)) |
 | Extension integration | real VS Code: panels, edits, undo, watchers, diagnostics | `npm test` (`src/test/extension`) |
 | Rust core | parse, ids, rows, edit plans, merge index, digests | `cargo test --workspace` |
 | Engine process | protocol, lifecycle, byte-for-byte row parity with the TS oracle | `npm run engine:smoke`, `npm run parity`, `npm run parity:rows` |
@@ -18,7 +19,9 @@ at the plan row.
 | Local sample | a real private ARXML, never committed | `ARXML_SCOPE_SAMPLE=… npm run benchmark sampleFile` |
 
 Run order for a change: `check-types` → `lint` → `cargo test`/`clippy`/`fmt` →
-`npm test` → `parity:rows` → the area benchmarks.
+`npm test` → `parity:rows` → the area benchmarks. For any toolbar, gutter or row-layout
+change, also run `npm run shots:webview`; it exits non-zero on a placement violation.
+Still audit every image for colour, spacing and clipping the invariants do not encode.
 
 ## Regression gates
 
@@ -29,7 +32,7 @@ Run order for a change: `check-types` → `lint` → `cargo test`/`clippy`/`fmt`
 | `core/index/*`, `host/indexService` | `indexBuilder`, `workspaceIndex`, `index` (extension), `indexBenchmark`, `validation` |
 | `host/ecucEdit`, `host/ecucStructureEdit` | `editing`, `structureEdit`, `rescan`, `planMerge` |
 | `host/engine/*`, `rust/*` | `engine` suites, `engine:smoke`, `parity`, `parity:rows`, `engineEdit` |
-| `webview/*` | page + component suites for the touched component, `protocol` |
+| `webview/*` | page + component suites for the touched component, `protocol`; `shots:webview` for layout changes |
 | `commands.ts`, manifests | `activation`, `menus`, `compare`, `reveal` |
 | copy modules | `planCopy`, `planMerge` (extension), `copyBenchmark` |
 

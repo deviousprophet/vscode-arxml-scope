@@ -271,17 +271,22 @@ subtree fills keep one stable width while rows scroll horizontally.
 
 ### Chrome
 
-**Merge mode.** The diff title strip gains one `Merge` toggle styled from the secondary button
-tokens, with its pressed state carried by `aria-pressed` (never a mirroring class). Turning it on
-shows a 22px copy arrow on the inner edge of each changed row, in the row's own height so the text
-never shifts; the arrow mirrors its glyph and tooltip with the displayed pane, so Swap keeps it
-pointing at the destination. Turning it off restores the read-only diff exactly.
+**Merge mode.** The diff toolbar carries one `Merge` toggle, styled as a toolbar tool with its
+pressed state carried by `aria-pressed` (never a mirroring class). Turning it on shows a 22px copy
+arrow on the inner edge of each changed row, fixed to the pane viewport even when the long rows pan;
+the arrow sits on an opaque chip so the text underneath never shows through, and it mirrors its glyph
+and tooltip with the displayed pane, so Swap keeps it pointing at the destination. Turning it off
+restores the read-only diff exactly.
 
 The toolbar is a 54px strip with divider-separated groups and icon-over-label tools: a 60x48 box with
-an 18px icon above a 10px label. Labels hide at 1040px and the boxes compact to 32px at 720px. The
+an 18px icon above a 10px label. The dense diff group drops its secondary labels (Show all/Show diff,
+Prev/Next, Collapse/Expand) at 1399px, then its primary labels (Context, Semantic, Strict, Merge) at
+1150px; the editor labels hide at 1040px. Diff boxes compact to 40px, then 36px at 960px, 32px at
+880px and 28px at 720px. The strip stays a three-column grid at every width, so the Swap action keeps
+its place over the pane divider; the Search count drops at 940px while the match arrows stay. The
 Document strip carries Collapse, Expand and the Sidebar toggle in the same variant as the diff
-toolbar. Use the shared sidebar button primitives for other actions; do not invent a second
-button style. The sidebar is a 360px panel with a 28px vertical tab strip and a 22px section header.
+toolbar. Use the shared sidebar button primitives for other actions; do not invent a second button
+style. The sidebar is a 360px panel with a 28px vertical tab strip and a 22px section header.
 
 ### Search
 

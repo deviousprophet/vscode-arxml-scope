@@ -69,6 +69,7 @@ export interface DiffToolbarCallbacks {
 	onCollapseAll?(): void;
 	onExpandAll?(): void;
 	onSwap?(): void;
+	onMergeMode?(): void;
 	onMatchMode?(semantic: boolean): void;
 	onContext?(active: boolean): void;
 }
@@ -91,6 +92,9 @@ const ICON_PREV = diffIcon('<path d="M8 12V4M4 8l4-4 4 4"/>');
 const ICON_NEXT = diffIcon('<path d="M8 4v8M4 8l4 4 4-4"/>');
 const ICON_COLLAPSE_ALL = diffIcon('<path d="M4 2.25l4 4 4-4M4 13.75l4-4 4 4"/>');
 const ICON_EXPAND_ALL = diffIcon('<path d="M4 6.25 8 2.25l4 4M4 9.75l4 4 4-4"/>');
+const ICON_MERGE = diffIcon(
+	'<path d="M2.5 4.5h4l4 3.5h3M2.5 11.5h4l4-3.5"/><path d="m11 2.5 2.5 2L11 6.5M11 9.5l2.5 2L11 13.5"/>'
+);
 const ICON_SWAP = diffIcon(
 	'<path d="M3 5h9m0 0-2.5-2.5M12 5 9.5 7.5M13 11H4m0 0 2.5-2.5M4 11l2.5 2.5"/>'
 );
@@ -103,8 +107,8 @@ export function renderDiffToolbarHtml(searchHtml: string): string {
 	return `<div class="toolbar">
 <div class="toolbar-left">
 <div class="view-switch" role="group" aria-label="Diff view">
-<button id="diff-view-all" class="tool diff-tool" type="button" aria-pressed="true" aria-label="Show every row" title="Show every row">${ICON_SHOW_ALL}<span class="lbl">Show all</span></button>
-<button id="diff-view-diff" class="tool diff-tool" type="button" aria-pressed="false" aria-label="Show differences only" title="Show only differences and their context">${ICON_SHOW_DIFF}<span class="lbl">Show diff</span></button>
+<button id="diff-view-all" class="tool diff-tool tool-secondary" type="button" aria-pressed="true" aria-label="Show every row" title="Show every row">${ICON_SHOW_ALL}<span class="lbl">Show all</span></button>
+<button id="diff-view-diff" class="tool diff-tool tool-secondary" type="button" aria-pressed="false" aria-label="Show differences only" title="Show only differences and their context">${ICON_SHOW_DIFF}<span class="lbl">Show diff</span></button>
 </div>
 <span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
 <button id="diff-context" class="tool diff-tool" type="button" aria-pressed="true" aria-label="Show 5 lines of context" title="Show 5 unchanged lines above and below each difference">${ICON_CONTEXT}<span class="lbl">Context</span></button>
@@ -114,11 +118,13 @@ export function renderDiffToolbarHtml(searchHtml: string): string {
 <button id="diff-mode-strict" class="tool diff-tool" type="button" aria-pressed="false" aria-label="Strict matching" title="Strict matching reproduces the previous diff">${ICON_STRICT}<span class="lbl">Strict</span></button>
 </div>
 <span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
-<button id="diff-prev" class="tool diff-tool" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference">${ICON_PREV}<span class="lbl">Prev diff</span></button>
-<button id="diff-next" class="tool diff-tool" type="button" title="Next difference (F7)" aria-label="Next difference">${ICON_NEXT}<span class="lbl">Next diff</span></button>
+<button id="diff-prev" class="tool diff-tool tool-secondary" type="button" title="Previous difference (Shift+F7)" aria-label="Previous difference">${ICON_PREV}<span class="lbl">Prev diff</span></button>
+<button id="diff-next" class="tool diff-tool tool-secondary" type="button" title="Next difference (F7)" aria-label="Next difference">${ICON_NEXT}<span class="lbl">Next diff</span></button>
 <span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
-<button id="diff-collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
-<button id="diff-expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
+<button id="diff-merge" class="tool diff-tool" type="button" aria-pressed="false" aria-label="Merge mode" title="Copy rows between the panes">${ICON_MERGE}<span class="lbl">Merge</span></button>
+<span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
+<button id="diff-collapse-all" class="tool diff-tool tool-secondary" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
+<button id="diff-expand-all" class="tool diff-tool tool-secondary" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
 </div>
 <div class="toolbar-center">
 <button id="diff-swap" class="tool diff-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false">${ICON_SWAP}<span class="lbl">Swap sides</span></button>
@@ -195,6 +201,7 @@ export class DiffToolbar {
 		this.bind('diff-collapse-all', () => this.callbacks.onCollapseAll && this.callbacks.onCollapseAll());
 		this.bind('diff-expand-all', () => this.callbacks.onExpandAll && this.callbacks.onExpandAll());
 		this.bind('diff-swap', () => this.callbacks.onSwap && this.callbacks.onSwap());
+		this.bind('diff-merge', () => this.callbacks.onMergeMode && this.callbacks.onMergeMode());
 		this.bind('diff-mode-semantic', () => this.callbacks.onMatchMode && this.callbacks.onMatchMode(true));
 		this.bind('diff-mode-strict', () => this.callbacks.onMatchMode && this.callbacks.onMatchMode(false));
 		this.bind('diff-context', () => {
@@ -224,6 +231,11 @@ export class DiffToolbar {
 		if (swap) {
 			swap.setAttribute('aria-pressed', swapped ? 'true' : 'false');
 		}
+	}
+
+	/** Merge mode is a toolbar action now, not a title-strip toggle. */
+	setMergeMode(enabled: boolean): void {
+		setPressed('diff-merge', enabled);
 	}
 
 	setMatchMode(semantic: boolean, pending = false): void {
