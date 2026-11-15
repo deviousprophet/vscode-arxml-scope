@@ -1,4 +1,4 @@
-name: Build VSIX Package
+name: Package extension
 
 env:
   NODE_VERSION: '24'
@@ -18,7 +18,7 @@ on:
 
 jobs:
   Native:
-    name: Native ${{ matrix.target }}
+    name: Native engine (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -66,7 +66,7 @@ jobs:
           overwrite: true
 
   Build:
-    name: Build
+    name: Build VSIX
     needs: Native
     runs-on: ubuntu-latest
     env:
