@@ -121,6 +121,13 @@ input[type="search"]::-webkit-search-decoration {
 	from { transform: rotate(0deg); }
 	to { transform: rotate(360deg); }
 }
+@media (max-width: 940px) {
+	/* Status, not an action: the count is the first thing to drop when the
+	 * toolbar needs room for the actual controls. */
+	.search-count {
+		display: none;
+	}
+}
 @media (max-width: 720px) {
 	.search-box {
 		flex: 1 1 0;

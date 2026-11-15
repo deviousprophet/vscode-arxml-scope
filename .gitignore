@@ -7,3 +7,6 @@ src/test/data/
 rust/target/
 dist/native/
 *.node
+
+# Webview preview screenshots (generated)
+artifacts/

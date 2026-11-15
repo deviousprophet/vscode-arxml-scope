@@ -1482,12 +1482,12 @@ suite('semantic diff page', () => {
 		assert.ok(tree.includes('.node[aria-expanded="false"] > .row::after'));
 	});
 
-	test('added rows use a leading edge and split lines own their styles', () => {
+	test('status rails live on the gutter and split lines own their styles', () => {
 		const diff = webviewCss('components', 'diffView', 'diffView.css');
 		assert.ok(diff.includes('.diff-row[data-status="added"] > .diff-cell[data-side="right"]'));
 		assert.ok(
-			/\.diff-row\[data-status="added"\] > \.diff-cell\[data-side="right"\]\s*\{[^}]*inset 3px 0 0/.test(diff),
-			'the code cell keeps its leading added edge'
+			!/\.diff-row\[data-status="changed"\] > \.diff-cell\[data-side="right"\]\s*\{[^}]*box-shadow/.test(diff),
+			'the right code cell paints no rail at the pane outer edge'
 		);
 		assert.ok(
 			/\.document-tree-lines\[data-side="left"\] \.document-tree-line-number\[data-status="changed"\]\s*\{[^}]*inset -3px 0 0/.test(
@@ -1507,12 +1507,56 @@ suite('semantic diff page', () => {
 			),
 			'the added gutter rail sits on its inner edge'
 		);
+		assert.ok(
+			/\.document-tree-lines\[data-side="right"\] \.document-tree-line-number\[data-status="changed"\]\s*\{[^}]*inset -3px 0 0/.test(
+				diff
+			),
+			'the changed right gutter rail sits on its inner edge'
+		);
+		assert.ok(
+			/\.diff-copy-arrow\s*\{[^}]*position:\s*absolute/.test(diff),
+			'the copy arrow is overlaid instead of taking layout space'
+		);
+		assert.ok(
+			/\.diff-copy-arrow\s*\{[^}]*background-color:/.test(diff),
+			'the copy arrow masks the text it overlays'
+		);
+		assert.ok(
+			/#diff-pane-left,\s*#diff-pane-right\s*\{[^}]*--diff-arrow-strip:\s*22px/.test(diff),
+			'both panes share one arrow-strip width'
+		);
+		assert.ok(
+			/#diff-pane-left \.diff-row\s*\{[^}]*padding-right:\s*var\(--diff-arrow-strip\)/.test(diff) &&
+				/#diff-pane-right \.diff-row\s*\{[^}]*padding-left:\s*var\(--diff-arrow-strip\)/.test(diff),
+			'both panes reserve the arrow strip inside their inner edge'
+		);
+		assert.ok(
+			/#diff-pane-right \.document-tree-lines\s*\{[^}]*left:\s*var\(--diff-arrow-strip\)/.test(diff),
+			'the right gutter starts after the reserved arrow strip'
+		);
+		assert.ok(
+			/#diff-pane-left \.diff-copy-arrow\s*\{[^}]*right:\s*var\(--diff-arrow-right/.test(diff),
+			'the left arrow follows the pane scroll offset'
+		);
+		assert.ok(
+			/#diff-pane-right \.diff-copy-arrow\s*\{[^}]*left:\s*var\(--diff-arrow-left/.test(diff),
+			'the right arrow follows the pane scroll offset'
+		);
 		assert.ok(diff.includes('.diff-gap-toggle'));
 		assert.ok(diff.includes('.diff-gap-line'));
 		assert.ok(diff.includes('.toolbar-center'));
-		assert.ok(/\.toolbar-center\s*\{[^}]*position:\s*absolute/.test(diff));
-		assert.ok(/left:\s*50%/.test(diff));
-		assert.ok(/transform:\s*translate\(-50%,\s*-50%\)/.test(diff));
+		assert.ok(
+			/body\[data-page="diff"\] \.toolbar\s*\{[^}]*display:\s*grid/.test(diff),
+			'the diff toolbar lays out in columns so the groups never overlap'
+		);
+		assert.ok(
+			/body\[data-page="diff"\] \.toolbar-center\s*\{[^}]*position:\s*static/.test(diff),
+			'the centre action is not lifted out of the flow'
+		);
+		assert.ok(
+			/body\[data-page="diff"\] \.toolbar-left\s*\{[^}]*overflow-x:\s*auto/.test(diff),
+			'the left group scrolls inside its column instead of colliding'
+		);
 		assert.ok(!diff.includes('.diff-match-badge'), 'the renamed badge is gone');
 		assert.ok(!diff.includes('data-rename-implied'), 'the dashed rename marker is gone');
 		const toolbar = webviewCss('components', 'toolbar', 'toolbar.css');
@@ -1864,8 +1908,14 @@ suite('semantic diff page', () => {
 			const rightWidth = (dom.document.getElementById('diff-pane-right') as HTMLElement).style.getPropertyValue(
 				'--line-numbers-width'
 			);
-			assert.ok(/^\d+ch$/.test(leftWidth) && /^\d+ch$/.test(rightWidth), `${leftWidth} / ${rightWidth}`);
-			assert.ok(Number.parseFloat(leftWidth) >= 5 && Number.parseFloat(rightWidth) >= 5);
+			const widthChars = (value: string): number => {
+				const match = /^calc\((\d+)ch \+ 4px\)$/.exec(value);
+				return match ? Number.parseInt(match[1], 10) : 0;
+			};
+			assert.ok(
+				widthChars(leftWidth) >= 5 && widthChars(rightWidth) >= 5,
+				`${leftWidth} / ${rightWidth}`
+			);
 
 			// left header: one package line; right header: schema + two packages.
 			assert.strictEqual(paneCellAt(dom, 'left', 0).textContent, '1');
@@ -2591,8 +2641,9 @@ suite('diff page merge mode', () => {
 	test('MERGE-01 merge mode is off by default; the toggle shows arrows and posts the mode', () => {
 		const { dom } = mount();
 		try {
-			const toggle = dom.document.querySelector('.diff-merge-toggle') as HTMLButtonElement;
-			assert.ok(toggle, 'the title strip owns the toggle');
+			const toggle = dom.document.querySelector('#diff-merge') as HTMLButtonElement;
+			assert.ok(toggle, 'the toolbar owns the toggle');
+			assert.ok(toggle.closest('.toolbar'), 'the toggle is a toolbar action');
 			assert.strictEqual(toggle.getAttribute('aria-pressed'), 'false');
 			assert.strictEqual(dom.document.querySelectorAll('.diff-copy-arrow').length, 0, 'no arrows while off');
 

@@ -24,18 +24,35 @@ body[data-page="diff"] .toolbar-center,
 body[data-page="diff"] .toolbar-right {
 	align-items: center;
 }
+/* Three columns: the centre action stays over the pane divider without ever
+ * sitting on top of the left or right groups. The left group scrolls inside its
+ * own column when the panel is narrower than its tools. */
+body[data-page="diff"] .toolbar {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	gap: 4px;
+}
+body[data-page="diff"] .toolbar-divider {
+	margin: 0;
+}
 body[data-page="diff"] .toolbar-left {
-	flex: 0 1 auto;
+	min-width: 0;
+	gap: 3px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scrollbar-width: none;
+}
+body[data-page="diff"] .toolbar-left::-webkit-scrollbar {
+	display: none;
 }
 body[data-page="diff"] .toolbar-center {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	transform: translate(-50%, -50%);
-	z-index: 1;
+	position: static;
+	transform: none;
+	justify-self: center;
 }
 body[data-page="diff"] .toolbar-right {
-	margin-left: auto;
+	justify-self: end;
+	min-width: 0;
 }
 body[data-page="diff"] .toolbar .view-switch {
 	gap: 2px;
@@ -222,17 +239,11 @@ body[data-page="diff"] .nav-btn:disabled {
 .diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
 	background-color: var(--diff-removed-bg);
 }
-.diff-row[data-status="changed"] > .diff-cell[data-side="left"] {
-	box-shadow: inset 3px 0 0 var(--diff-changed-edge);
-}
-.diff-row[data-status="changed"] > .diff-cell[data-side="right"] {
-	box-shadow: inset -3px 0 0 var(--diff-changed-edge);
-}
-.diff-row[data-status="added"] > .diff-cell[data-side="right"] {
-	box-shadow: inset 3px 0 0 var(--diff-added-edge);
-}
-.diff-row[data-status="removed"] > .diff-cell[data-side="left"] {
-	box-shadow: inset 3px 0 0 var(--diff-removed-edge);
+/* The diff gutter paints a status rail on this cell's inner-right 3px, so its
+ * right-aligned digits stop short of the rail. The editor gutter has no rail and
+ * keeps the full column. */
+.diff-pane .document-tree-line-number {
+	padding-right: 4px;
 }
 /* The gutter overlays the row cells, so it carries the same status tint and
  * redraws each pane's rail on its own cell. The rail sits on the gutter's inner
@@ -264,6 +275,9 @@ body[data-page="diff"] .nav-btn:disabled {
 }
 .document-tree-lines[data-side="right"] .document-tree-line-number[data-status="added"] {
 	box-shadow: inset -3px 0 0 var(--diff-added-edge);
+}
+.document-tree-lines[data-side="right"] .document-tree-line-number[data-status="changed"] {
+	box-shadow: inset -3px 0 0 var(--diff-changed-edge);
 }
 /* Selection is painted by the shared document-tree rule on the inner .node,
  * so the diff and the document page use one container/parameter treatment. */
@@ -454,48 +468,60 @@ body.vscode-high-contrast .diff-row .word-changed[data-word-side] {
 	}
 }
 
-/* Merge mode: the title-strip toggle and the per-row copy arrow. */
-.diff-merge-toggle {
-	margin-left: auto;
-	padding: 1px 8px;
-	border: 1px solid var(--vscode-button-border, transparent);
-	border-radius: 2px;
-	background: var(--vscode-button-secondaryBackground);
-	color: var(--vscode-button-secondaryForeground);
-	font: inherit;
-	cursor: pointer;
+/* Merge mode is a toolbar action; each copyable row carries an arrow on its
+ * pane's inner edge. The arrow is absolutely positioned inside a permanently
+ * reserved strip, so toggling merge mode never moves the row text. */
+#diff-pane-left,
+#diff-pane-right {
+	--diff-arrow-strip: 22px;
 }
-
-.diff-merge-toggle[aria-pressed='true'] {
-	background: var(--vscode-button-background);
-	color: var(--vscode-button-foreground);
+#diff-pane-left .diff-row,
+#diff-pane-right .diff-row {
+	box-sizing: border-box;
 }
-
-.diff-merge-toggle:focus-visible {
-	outline: 1px solid var(--vscode-focusBorder);
-	outline-offset: 1px;
+#diff-pane-left .diff-row {
+	padding-right: var(--diff-arrow-strip);
 }
-
+#diff-pane-right .diff-row {
+	padding-left: var(--diff-arrow-strip);
+}
 .diff-copy-arrow {
-	flex: 0 0 auto;
-	align-self: stretch;
-	width: 22px;
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: var(--diff-arrow-strip);
 	border: 0;
-	background: transparent;
+	background-color: var(--vscode-editor-background);
 	color: var(--vscode-foreground);
 	font: inherit;
 	cursor: pointer;
-	opacity: 0;
 }
-
-/* The arrow points at the other pane: at the row's inner edge on both panes. */
-.diff-row[data-side="right"] .diff-copy-arrow {
-	order: -1;
+/* The arrow overlays panned text, so its background must stay opaque. Match the
+ * row tint where the pane has one; an empty side keeps the editor background. */
+.diff-row[data-status="changed"] .diff-copy-arrow {
+	background-color: var(--diff-changed-bg);
 }
-
+#diff-pane-right .diff-row[data-status="added"] .diff-copy-arrow {
+	background-color: var(--diff-added-bg);
+}
+#diff-pane-left .diff-row[data-status="removed"] .diff-copy-arrow {
+	background-color: var(--diff-removed-bg);
+}
+#diff-pane-left .diff-copy-arrow {
+	right: var(--diff-arrow-right, 0);
+}
+#diff-pane-right .diff-copy-arrow {
+	left: var(--diff-arrow-left, 0);
+}
+/* The right pane's cell starts one reserved strip in, so its gutter does too.
+ * Otherwise the overlay covers the arrow and the digits drift away from the
+ * number column the row layout reserved for them. */
+#diff-pane-right .document-tree-lines {
+	left: var(--diff-arrow-strip);
+}
 .diff-row:hover .diff-copy-arrow,
 .diff-copy-arrow:focus-visible {
-	opacity: 1;
+	background: var(--hover-bg);
 }
 
 .diff-copy-arrow:hover {

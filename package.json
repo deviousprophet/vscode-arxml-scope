@@ -318,6 +318,8 @@
     "check-types": "tsc --noEmit",
     "lint": "node eslint-rules/require-escaped-html.test.mjs && eslint src && npm run design:lint",
     "design:lint": "npx -y -p @google/design.md@0.4.0 designmd lint DESIGN.md",
+    "preview:webview": "node scripts/previewWebview.mjs",
+    "shots:webview": "node scripts/shotWebview.mjs",
     "test": "vscode-test",
     "benchmark": "node src/test/benchmarks/runBenchmark.ts",
     "parity": "node scripts/parity.mjs",

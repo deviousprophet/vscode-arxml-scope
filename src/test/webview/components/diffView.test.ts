@@ -146,12 +146,12 @@ suite('DiffView component', () => {
 			assert.strictEqual(right.getAttribute('data-side'), 'right');
 			assert.strictEqual(
 				(dom.document.getElementById('diff-pane-left') as HTMLElement).style.getPropertyValue('--line-numbers-width'),
-				'6ch',
+				'calc(6ch + 4px)',
 				'the left digit count sets its own column'
 			);
 			assert.strictEqual(
 				(dom.document.getElementById('diff-pane-right') as HTMLElement).style.getPropertyValue('--line-numbers-width'),
-				'5ch',
+				'calc(5ch + 4px)',
 				'the right pane keeps an independent width'
 			);
 			const leftCells = left.querySelectorAll('.document-tree-line-number');
@@ -200,6 +200,35 @@ suite('DiffView component', () => {
 				['left', 1, 7, false],
 				['right', 1, 6, false],
 			]);
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('copy arrows stay on the pane inner edge while the rows pan', () => {
+		const dom = installMarkup(`<body>${renderDiffViewHtml()}</body>`);
+		try {
+			const view = new DiffView();
+			view.mount();
+			const leftPane = dom.document.getElementById('diff-pane-left') as HTMLElement;
+			const rightPane = dom.document.getElementById('diff-pane-right') as HTMLElement;
+			Object.defineProperty(leftPane, 'clientWidth', { configurable: true, value: 500 });
+			Object.defineProperty(rightPane, 'clientWidth', { configurable: true, value: 500 });
+			view.left.render = () => {};
+			view.right.render = () => {};
+			view.scroll!.contentWidths = [1500, 1500];
+
+			view.render({ top: 0, left: 900, height: 100, width: 1000, lefts: [900, 900] }, true);
+			assert.strictEqual(leftPane.style.getPropertyValue('--diff-arrow-right'), '100px');
+			assert.strictEqual(rightPane.style.getPropertyValue('--diff-arrow-left'), '900px');
+
+			view.render({ top: 0, left: 0, height: 100, width: 1000, lefts: [0, 0] }, true);
+			assert.strictEqual(leftPane.style.getPropertyValue('--diff-arrow-right'), '1000px');
+			assert.strictEqual(rightPane.style.getPropertyValue('--diff-arrow-left'), '0px');
+
+			view.render({ top: 0, left: 1200, height: 100, width: 1000, lefts: [1200, 1200] }, true);
+			assert.strictEqual(leftPane.style.getPropertyValue('--diff-arrow-right'), '0px');
+			assert.strictEqual(rightPane.style.getPropertyValue('--diff-arrow-left'), '1000px');
 		} finally {
 			dom.restore();
 		}

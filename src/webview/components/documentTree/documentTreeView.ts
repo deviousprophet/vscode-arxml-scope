@@ -557,10 +557,27 @@ export class DocumentTreeView {
 
 	/** Publish the number-column width to the pane's CSS geometry. */
 	applyLineNumberWidth(): void {
-		if (!this.root || !this.root.style || typeof this.root.style.setProperty !== 'function') {
+		if (!this.canPublishWidth()) {
 			return;
 		}
-		this.root.style.setProperty('--line-numbers-width', this.lineNumberColumns + 'ch');
+		this.root.style.setProperty('--line-numbers-width', this.lineNumberWidth());
+	}
+
+	private canPublishWidth(): boolean {
+		return Boolean(this.root && this.root.style && typeof this.root.style.setProperty === 'function');
+	}
+
+	private lineNumberWidth(): string {
+		if (this.isDiffPane()) {
+			// Only the diff panes paint a status rail on the gutter; the editor keeps
+			// the plain digit column and never gains the extra 4px.
+			return `calc(${this.lineNumberColumns}ch + 4px)`;
+		}
+		return `${this.lineNumberColumns}ch`;
+	}
+
+	private isDiffPane(): boolean {
+		return this.pane === 'left' || this.pane === 'right';
 	}
 
 	/** Rebuild the gutter cells for the slice the window just rendered. */

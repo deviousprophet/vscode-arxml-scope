@@ -45,7 +45,7 @@ also sets `data-page="diff"`, which scopes its own surface tokens. Plain declara
 | Typography | `--ecuc-fs`, `--ecuc-lh` | `--ecuc-lh` is `calc(var(--ecuc-fs) * 1.55)`; the CSS and the page's `heightFn` must agree. |
 | Syntax | `--tok-keyword`, `--tok-string`, `--tok-number`, `--tok-meta`, `--tok-comment`, `--tok-key`, `--tok-punct`, `--tok-dim` | Every value resolves from a `--vscode-*` token, with the editor foreground as the fallback. |
 | Surfaces | `--hover-bg`, `--sel-bg`, `--sel-bg-focus`, `--subtree-bg`, `--sel-container-bg`, `--sel-outline`, `--rail` | Selection uses tint + rail; it never recolours syntax. |
-| Geometry | `--fold-gutter: 26px`, `--line-numbers-width: 0px`, `--doc-pad: 3ch`, `--indent: 4ch`, `--content-pad` | `--content-pad` is `calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad))`; depth is generated from it. `--line-numbers-width` is written per pane as `<chars>ch` and defaults to `0px`. |
+| Geometry | `--fold-gutter: 26px`, `--line-numbers-width: 0px`, `--doc-pad: 3ch`, `--indent: 4ch`, `--content-pad`, `--diff-arrow-strip` | `--content-pad` is `calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad))`; depth is generated from it. `--line-numbers-width` is written per pane as `<chars>ch` (the diff panes add 4px for the status rail) and defaults to `0px`. `--diff-arrow-strip` is the diff pane's reserved 22px inner edge. |
 | Search | `--match-bg`, `--match-hi` | Fixed amber tiers: 0.18 alpha for every hit, 0.36 for the current hit (see the exception log). |
 | Container accent | `--container-accent` | Fixed `#4EC9B0` (see the exception log). |
 
@@ -111,7 +111,8 @@ Rules:
   full pane height, `width: var(--line-numbers-width)`, `overflow: hidden`, `z-index: 1`,
   `aria-hidden="true"` and `user-select: none`. One `.document-tree-line-number` cell per rendered row is
   placed with the CSSOM `top`/`height` from the shared offsets; the pane publishes
-  `--line-numbers-width: <max(digits, 5)>ch` (`0ch` for an empty model) and redeclares
+  `--line-numbers-width: <max(digits, 5)>ch` (`calc(<chars>ch + 4px)` in the diff panes, `0ch` for an
+  empty model) and redeclares
   `--content-pad` from it, because `var()` inside a custom property is substituted where the
   property is declared, not where it is used. The gutter is never translated,
   so horizontal panning leaves it fixed; the window scrolls underneath its opaque
@@ -189,8 +190,13 @@ Rules:
 - Each pane numbers its own display lines in a fixed gutter. A padded header line or a row missing on
   that side leaves the cell blank; hidden unchanged-run rows are not numbered. The module gap is
   numbered on both sides; header/gap/comment and brace lines are numbered. The gutter cell reuses the
-  `diffEditorGutter-*` tint with the diff line-background fallbacks and redraws the pane-side rails
-  hidden under the overlay (left changed/removed, right added).
+  `diffEditorGutter-*` tint with the diff line-background fallbacks and redraws the pane-side rails on
+  the gutter's inner edge (left changed/removed, right added/changed). The right pane's gutter starts
+  after the reserved copy-arrow strip, so the column lines up with the number column in the row.
+- Merge mode reserves `--diff-arrow-strip` (22px) on each pane's inner edge. The copy arrow is
+  absolutely positioned in that strip; its inset follows the rendered row width and the live scroll
+  offset, and its background is opaque so panned text does not show through. The arrow's chip uses the
+  row tint on a tinted side and the editor background on an empty side.
 - The header gap is one blank row with no rule child or border, numbered on both sides. The module gap
   shares that treatment, adds no cell and never carries a status attribute.
 
@@ -199,7 +205,8 @@ Rules:
 - `esbuild.js` builds three outputs: the Node `dist/extension.js` and the browser entries
   `src/webview/editorViewer.ts` → `dist/editorViewer.js` and `src/webview/diffViewer.ts` →
   `dist/diffViewer.js`. The imported CSS is emitted by esbuild next to each browser bundle as
-  `dist/editorViewer.css` and `dist/diffViewer.css`.
+  `dist/editorViewer.css` and `dist/diffViewer.css`. The development-only preview harness adds a
+  fourth, unshipped pair under `dist/preview/` when `scripts/previewWebview.mjs` runs.
 - The extension bundle uses the `ignore-css` plugin: importing a component's `.ts` from the host (for
   its static HTML builder) must not emit a CSS artifact beside `extension.js`.
 - `src/host/webviewShell.ts` writes the static shell. `editorShell` and `diffShell` receive
