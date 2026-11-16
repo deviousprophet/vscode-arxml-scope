@@ -5,6 +5,8 @@
     "src/webview/diffViewer.ts",
     "src/test/**/*.test.ts",
     "src/test/benchmarks/*.ts",
+    "src/test/parity/oracle*.ts",
+    "src/test/preview/preview*.ts",
     ".vscode-test.mjs",
     "esbuild.js",
     ".github/scripts/*.mjs"
