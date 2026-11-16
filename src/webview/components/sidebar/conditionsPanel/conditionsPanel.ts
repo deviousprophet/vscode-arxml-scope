@@ -161,7 +161,7 @@ function conditionRowValueAttribute(row: HTMLElement): string {
 
 function conditionNameInput(name: string): HTMLInputElement {
 	const nameInput = document.createElement('input');
-	nameInput.className = 'condition-name';
+	nameInput.className = 'condition-name field-input';
 	nameInput.type = 'text';
 	nameInput.placeholder = 'CONSTANT_NAME';
 	nameInput.setAttribute('aria-label', 'Constant name');
@@ -195,7 +195,7 @@ function appendConditionEquals(row: HTMLElement): void {
 
 function appendConditionEdit(row: HTMLElement, value: string, name: string): void {
 	const valueInput = document.createElement('input');
-	valueInput.className = 'condition-value';
+	valueInput.className = 'condition-value field-input';
 	valueInput.type = 'text';
 	valueInput.placeholder = 'value';
 	valueInput.setAttribute('aria-label', 'Constant value');

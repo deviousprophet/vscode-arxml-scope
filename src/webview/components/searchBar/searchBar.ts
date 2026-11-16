@@ -49,7 +49,7 @@ export function renderSearchBarHtml(prefix: string, ariaLabel: string, withRepla
 		`<button id="${id(name)}" class="find-toggle" type="button" aria-pressed="false" title="${title}" aria-label="${label}">${glyph}</button>`;
 	const replaceRow = withReplace
 		? `<div id="${id('search-replace-row')}" class="find-row replace-row" hidden>
-<input id="${id('search-replace-input')}" class="search-input replace-input" type="text" placeholder="Replace" aria-label="Replace" autocomplete="off" spellcheck="false">
+<input id="${id('search-replace-input')}" class="search-input replace-input field-input" type="text" placeholder="Replace" aria-label="Replace" autocomplete="off" spellcheck="false">
 <button id="${id('search-preserve-case')}" class="find-toggle" type="button" aria-pressed="true" title="Preserve case" aria-label="Preserve case">AB</button>
 <button id="${id('search-replace')}" class="find-action" type="button" title="Replace" aria-label="Replace" disabled>Replace</button>
 <button id="${id('search-replace-all')}" class="find-action" type="button" title="Replace All" aria-label="Replace All" disabled>Replace All</button>
@@ -58,7 +58,7 @@ export function renderSearchBarHtml(prefix: string, ariaLabel: string, withRepla
 	return `<div id="${id('find-widget')}" class="find-widget" role="dialog" aria-label="${ariaLabel}" hidden>
 <div class="find-row query-row">
 <button id="${id('search-replace-toggle')}" class="find-toggle find-expand" type="button" aria-expanded="false" title="Toggle Replace" aria-label="Toggle Replace"${withReplace ? '' : ' hidden'}><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button>
-<div class="find-field"><input id="${id('search-input')}" class="search-input" type="search" placeholder="Find" aria-label="${ariaLabel}" autocomplete="off" spellcheck="false">
+<div class="find-field"><input id="${id('search-input')}" class="search-input field-input" type="search" placeholder="Find" aria-label="${ariaLabel}" autocomplete="off" spellcheck="false">
 <button id="${id('search-clear')}" class="find-toggle search-clear" type="button" title="Clear search" aria-label="Clear search" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
 ${toggle('search-match-case', 'Match Case', 'Match Case (Alt+C)', 'Aa')}
 ${toggle('search-whole-word', 'Match Whole Word', 'Match Whole Word (Alt+W)', 'ab|')}

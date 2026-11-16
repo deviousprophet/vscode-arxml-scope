@@ -67,7 +67,7 @@ suite('SearchBar component', () => {
 		const editor = renderSearchBarHtml('', 'Find in the ECUC tree', true);
 		const diff = renderSearchBarHtml('diff-', 'Find in the diff', false);
 		assert.ok(/id="find-widget"[^>]*class="find-widget"[^>]*hidden/.test(editor));
-		assert.ok(/id="search-input"[^>]*class="search-input"[^>]*type="search"/.test(editor));
+		assert.ok(/id="search-input"[^>]*class="search-input field-input"[^>]*type="search"/.test(editor));
 		assert.ok(/id="diff-search-input"[^>]*aria-label="Find in the diff"/.test(diff));
 		assert.ok(editor.includes('id="search-match-case"') && editor.includes('id="search-whole-word"'));
 		assert.ok(editor.includes('id="search-regex"') && editor.includes('id="search-replace-row"'));
