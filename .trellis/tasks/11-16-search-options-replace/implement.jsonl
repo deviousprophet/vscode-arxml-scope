@@ -1,7 +1,0 @@
-{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Host/webview message flow, engine document handles and edit application"}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Protocol unions, search result types and UTF-16 offsets"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Widget DOM contract, event ownership and focus behavior"}
-{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Find widget placement, tokens and row mark styling"}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Search generation, retained query/options and page reload state"}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Widget, page and engine search tests"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Webview to host to engine search/replace contract"}
