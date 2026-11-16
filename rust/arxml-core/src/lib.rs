@@ -2,14 +2,15 @@
 //!
 //! This crate has no Node, N-API or VS Code dependency. The stdio process wrapper
 //! (`arxml-engine`), the parity CLI (`arxml-cli`) and the test oracle live in
-//! sibling crates; this crate owns the parser, ids, rows, conditions, edit planning
-//! and the copy planner.
+//! sibling crates; this crate owns the parser, ids, rows, conditions, edit planning,
+//! the copy planner, the diff and the find/replace matcher.
 
 #![forbid(unsafe_code)]
 
 pub mod copy;
 pub mod diff;
 pub mod ecuc;
+pub mod search;
 pub mod word;
 
 /// The protocol version the TypeScript client expects from the engine process.

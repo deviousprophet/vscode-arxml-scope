@@ -8,6 +8,7 @@
  */
 import type { DiffDocument } from './core/diff/diffModel';
 import type { DiffPatch } from './core/diff/diffPatch';
+import type { DiffFindResult, FindOptions } from './core/searchModel';
 
 export type { DiffDocument } from './core/diff/diffModel';
 
@@ -25,6 +26,8 @@ export type DiffProviderToWebview =
 	| { type: 'labels'; labels: [string, string] }
 	/** A copy was answered with the rows it changed, not the whole document. */
 	| { type: 'documentPatch'; patch: DiffPatch }
+	/** The engine answer for one find request. */
+	| { type: 'findResult'; requestId: number; result: DiffFindResult; error?: string }
 ;
 
 /** Diff page → host. */
@@ -39,6 +42,8 @@ export type DiffWebviewToProvider =
 	| { type: 'mergeMode'; enabled: boolean }
 	/** Copy one row's element into the other document; `side` is the host source side. */
 	| { type: 'copy'; side: 'left' | 'right'; key: string }
+	/** Ask the engine for occurrences in the displayed diff. */
+	| { type: 'find'; requestId: number; query: string; options: FindOptions; changesOnly: boolean }
 ;
 
 /** The message type, or `undefined` for a payload that is not a protocol message. */
@@ -54,7 +59,8 @@ const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'error',
 	'mergeMode',
 	'labels',
-	'documentPatch'
+	'documentPatch',
+	'findResult'
 ]);
 
 /** A host message with the diff protocol's shape; the page ignores anything else. */

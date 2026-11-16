@@ -87,21 +87,27 @@ offsets; the docs view has one horizontal bar, and the scrollbars are native.
 | `F2` | Open a parameter's Details value editor. |
 | A single character | Type-ahead jump to the next visible label with that prefix. |
 
-### Search
+### Search and replace
 
-Search runs on `Enter`; typing alone never scans.
+`Ctrl+F` / `Cmd+F` opens the floating find widget; `Ctrl+H` opens it with the replace row.
+The widget is hidden until one of those shortcuts. `Escape` closes it and returns focus to the
+Document.
 
-- `Ctrl+F` / `Cmd+F` focuses the Search field.
-- `Enter` runs a changed query and jumps to the first match; a second `Enter` moves to the next match.
-- `Shift+Enter` moves backwards. `F3` / `Shift+F3` cycle while a committed query exists.
-- `Escape` clears the query and returns focus to the Document.
-- The count reads `1 / N`, or `0 / 0` when nothing matches. All matches are marked; the current row uses
-  the stronger highlight.
-- The schema/package keyword (`schema`, `package`) and its value are search candidates: both are
-  marked, and the current header uses the stronger tier. A header jump focuses the header line and posts
-  no `select` message, so the ECUC selection and Details stay unchanged.
-- Search jumps and marks; it never hides rows. A jump expands the target's ancestors and selects the
-  target but keeps focus in the Search field.
+- The three toggles are `Aa` case sensitive, `ab|` match whole word and `.*` regular expression.
+- The Rust engine owns the match list, the count, navigation and replace plans. Typing starts a
+  new request; `Enter` jumps to the first/next match, `Shift+Enter` goes back, `F3` / `Shift+F3`
+  cycle. The count reads `1 / N`, `0 / 0`, `Invalid pattern` or is empty before a query runs.
+- All matches are marked; the current row uses the stronger amber tier. The schema/package
+  keyword and value are page-local search candidates; a header jump focuses the header line and
+  posts no `select` message.
+- Replace edits parameter values and container short names only. `Replace` changes the current
+  occurrence; `Replace All` plans every replaceable field atomically. Module labels, reference
+  targets, meta text and headers refuse with an inline notice. Preserve case (`AB↔`) copies the
+  matched text's case style.
+- A match in numeric formatting that differs from the raw value is search-only; the engine will
+  not guess a replacement span.
+- Search jumps and marks; it never hides rows. A jump expands the target's ancestors and selects
+  the target but keeps focus in the find input.
 
 ## Details panel
 

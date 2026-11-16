@@ -92,6 +92,12 @@ if (opened.header.ecuc !== true) {
 	process.exit(1);
 }
 const docId = opened.header.docId;
+const [searched] = await request('doc.search', {
+	docId,
+	query: 'M',
+	options: { caseSensitive: false, wholeWord: false, regex: false }
+});
+const searchOk = searched.header.ok === true && JSON.parse(searched.body.toString('utf8')).total > 0;
 
 // Chunked open: the same operation for any document above the single-frame limit.
 const chunkedText = `<AUTOSAR><!--${'y'.repeat(2 * 1024 * 1024)}--></AUTOSAR>`;
@@ -139,6 +145,14 @@ const diffRows = diffChunks
 	.flatMap((chunk) => JSON.parse(chunk.body.toString('utf8')));
 const envelope = diffChunks.map((chunk) => chunk.header.document).find(Boolean);
 const diffOk = Boolean(envelope) && diffRows.length === envelope.summary.changed + envelope.summary.added + envelope.summary.removed + envelope.summary.unchanged;
+const [diffSearch] = await request('diff.search', {
+	left: { docId },
+	right: { docId: other.header.docId },
+	query: 'a',
+	options: { caseSensitive: false, wholeWord: false, regex: false },
+	changesOnly: false
+});
+const diffSearchOk = diffSearch.header.ok === true && JSON.parse(diffSearch.body.toString('utf8')).total > 0;
 
 // One copy: move the engine text with the same edit the host applied, then ask for
 // the rows it changed instead of the whole document.
@@ -176,9 +190,11 @@ console.log(
 		engine: hello.header.engine,
 		rows: rows.length,
 		planned,
+		searchOk,
 		chunkedOk,
 		diffRows: diffRows.length,
 		diffOk,
+		diffSearchOk,
 		patchRows: patch === undefined ? 0 : patch.rows.length,
 		patchReason: patchAnswer.header.reason,
 		patchOk,
@@ -186,4 +202,4 @@ console.log(
 		loadMs: Math.round(performance.now() - started)
 	})
 );
-process.exit(exitCode === 0 && planned === 1 && chunkedOk && diffOk && patchOk ? 0 : 1);
+process.exit(exitCode === 0 && planned === 1 && searchOk && chunkedOk && diffOk && diffSearchOk && patchOk ? 0 : 1);

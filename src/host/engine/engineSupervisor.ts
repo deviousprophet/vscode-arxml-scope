@@ -29,6 +29,13 @@ import {
 	type EngineTextChange
 } from './coreEngine';
 import type {
+	DiffFindResult,
+	FindOptions,
+	FindResult,
+	ReplaceRequest,
+	ReplaceResult
+} from '../../core/searchModel';
+import type {
 	EngineHealth,
 	EngineProcessState,
 	EngineStateChange,
@@ -239,6 +246,39 @@ export class EngineSupervisor implements CoreEngine {
 					: { sourceDocId: this.translateDocumentId(request.sourceDocId) })
 			};
 			return engine.planCopy(translated);
+		});
+	}
+
+	public async searchDocument(docId: number, query: string, options: FindOptions): Promise<FindResult> {
+		return this.withDocument(docId, (_document, engine, processId) => {
+			if (engine.searchDocument === undefined) {
+				throw new EngineError('the engine does not search documents', 'unsupported');
+			}
+			return engine.searchDocument(processId, query, options);
+		});
+	}
+
+	public async replaceDocument(docId: number, request: ReplaceRequest): Promise<ReplaceResult> {
+		return this.withDocument(docId, (_document, engine, processId) => {
+			if (engine.replaceDocument === undefined) {
+				throw new EngineError('the engine does not replace document text', 'unsupported');
+			}
+			return engine.replaceDocument(processId, request);
+		});
+	}
+
+	public async searchDiff(
+		left: EngineDiffSide,
+		right: EngineDiffSide,
+		query: string,
+		options: FindOptions,
+		changesOnly: boolean
+	): Promise<DiffFindResult> {
+		return this.withEngine(async (engine) => {
+			if (engine.searchDiff === undefined) {
+				throw new EngineError('the engine does not search diffs', 'unsupported');
+			}
+			return engine.searchDiff(this.translateSide(left), this.translateSide(right), query, options, changesOnly);
 		});
 	}
 
@@ -573,6 +613,10 @@ export async function createEngineSupervisor(options: EngineSupervisorOptions): 
 			computeDiff: (left, right, diffOptions) => supervisor.computeDiff(left, right, diffOptions),
 			patchDiff: (left, right, edit) => supervisor.patchDiff(left, right, edit),
 			planCopy: (request) => supervisor.planCopy(request),
+			searchDocument: (docId, query, options) => supervisor.searchDocument(docId, query, options),
+			replaceDocument: (docId, request) => supervisor.replaceDocument(docId, request),
+			searchDiff: (left, right, query, options, changesOnly) =>
+				supervisor.searchDiff(left, right, query, options, changesOnly),
 			closeDocument: (docId) => supervisor.closeDocument(docId),
 			engineVersion: () => supervisor.engineVersion(),
 			health: () => supervisor.health(),

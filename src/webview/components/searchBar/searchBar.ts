@@ -1,39 +1,75 @@
 /**
- * SearchBar component: query field, clear, match navigation, fixed count and
- * busy slots. Owns its markup, its keys and its transient typing state.
+ * SearchBar component: the floating find widget shared by both pages.
  *
- * The composition root owns the search engine, candidate rows, the match index
- * and what a query means; it receives every action through callbacks and feeds
- * the count/busy/navigation state back with setters.
+ * Owns the markup, option toggles, replace row, focus and transient typing state.
+ * The composition root owns matching, the match index and every consequence of a
+ * query; it receives actions through callbacks and feeds count/busy/state back.
  */
 import './searchBar.css';
+
+import type { FindOptions } from '../../../core/searchModel';
 
 export interface SearchBarCallbacks {
 	/** Enter/F3: run a changed query or move through the current match set. */
 	onExecute?(direction: 1 | -1): void;
 	/** Previous/next buttons. */
 	onCycle?(direction: 1 | -1): void;
-	/** Clear control or Escape. */
+	/** Clear control: drop the query and the result set. */
 	onClear?(): void;
-	/** Escape after clearing: the composition root returns focus to the tree. */
-	onEscape?(): void;
+	/** Escape or the close button: the composition root hides and clears. */
+	onClose?(): void;
 	/** The field text changed; the composition root drops stale matches. */
 	onInput?(value: string): void;
+	/** One option toggle changed. */
+	onOptions?(options: FindOptions): void;
+	/** Replace / Replace All. */
+	onReplace?(text: string, all: boolean): void;
+}
+
+/** The query or replacement input shape the widget reads. */
+interface WidgetKeyEvent {
+	key?: string;
+	shiftKey?: boolean;
+	preventDefault(): void;
+}
+
+interface WidgetInput {
+	value: string;
+	focus(options?: { preventScroll?: boolean }): void;
+	select?(): void;
+	disabled?: boolean;
+	addEventListener(type: string, listener: (event: WidgetKeyEvent) => void): void;
+	setAttribute(name: string, value: string): void;
 }
 
 /** Markup for one instance. `prefix` is `''` (editor) or `'diff-'` (diff). */
-export function renderSearchBarHtml(prefix: string, ariaLabel: string): string {
+export function renderSearchBarHtml(prefix: string, ariaLabel: string, withReplace = true): string {
 	const id = (name: string): string => `${prefix}${name}`;
-	return `<div class="search-box">
-<div class="search-field">
-<span class="search-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l3.5 3.5"/></svg></span>
-<input id="${id('search-input')}" class="search-input" type="search" placeholder="Search" aria-label="${ariaLabel}" autocomplete="off" spellcheck="false">
-<button id="${id('search-clear')}" class="nav-btn search-clear" type="button" title="Clear search" aria-label="Clear search" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
-</div>
-<button id="${id('search-prev')}" class="nav-btn search-nav" type="button" title="Previous match (Shift+F3)" aria-label="Previous match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.75l4-4 4 4"/></svg></button>
-<button id="${id('search-next')}" class="nav-btn search-nav" type="button" title="Next match (F3)" aria-label="Next match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25l4 4 4-4"/></svg></button>
+	const toggle = (name: string, label: string, title: string, glyph: string): string =>
+		`<button id="${id(name)}" class="find-toggle" type="button" aria-pressed="false" title="${title}" aria-label="${label}">${glyph}</button>`;
+	const replaceRow = withReplace
+		? `<div id="${id('search-replace-row')}" class="find-row replace-row" hidden>
+<input id="${id('search-replace-input')}" class="search-input replace-input" type="text" placeholder="Replace" aria-label="Replace" autocomplete="off" spellcheck="false">
+<button id="${id('search-preserve-case')}" class="find-toggle" type="button" aria-pressed="true" title="Preserve case" aria-label="Preserve case">AB</button>
+<button id="${id('search-replace')}" class="find-action" type="button" title="Replace" aria-label="Replace" disabled>Replace</button>
+<button id="${id('search-replace-all')}" class="find-action" type="button" title="Replace All" aria-label="Replace All" disabled>Replace All</button>
+</div>`
+		: '';
+	return `<div id="${id('find-widget')}" class="find-widget" role="dialog" aria-label="${ariaLabel}" hidden>
+<div class="find-row query-row">
+<button id="${id('search-replace-toggle')}" class="find-toggle find-expand" type="button" aria-expanded="false" title="Toggle Replace" aria-label="Toggle Replace"${withReplace ? '' : ' hidden'}><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button>
+<div class="find-field"><input id="${id('search-input')}" class="search-input" type="search" placeholder="Find" aria-label="${ariaLabel}" autocomplete="off" spellcheck="false">
+<button id="${id('search-clear')}" class="find-toggle search-clear" type="button" title="Clear search" aria-label="Clear search" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+${toggle('search-match-case', 'Match Case', 'Match Case (Alt+C)', 'Aa')}
+${toggle('search-whole-word', 'Match Whole Word', 'Match Whole Word (Alt+W)', 'ab|')}
+${toggle('search-regex', 'Use Regular Expression', 'Use Regular Expression (Alt+R)', '.*')}
 <span id="${id('search-count')}" class="search-count" role="status" aria-live="polite"></span>
 <span id="${id('search-busy')}" class="search-progress" role="status" aria-label="Searching" data-busy="false"></span>
+<button id="${id('search-prev')}" class="find-toggle find-nav" type="button" title="Previous match (Shift+F3)" aria-label="Previous match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.75l4-4 4 4"/></svg></button>
+<button id="${id('search-next')}" class="find-toggle find-nav" type="button" title="Next match (F3)" aria-label="Next match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25l4 4 4-4"/></svg></button>
+<button id="${id('search-close')}" class="find-toggle find-close" type="button" title="Close (Escape)" aria-label="Close find"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+</div>
+${replaceRow}
 </div>`;
 }
 
@@ -42,6 +78,23 @@ interface SearchKeyEvent {
 	key?: string;
 	shiftKey?: boolean;
 	preventDefault(): void;
+}
+
+function keyAction(key: string | undefined): 'close' | 'execute' | '' {
+	if (key === 'Escape') {
+		return 'close';
+	}
+	return key === 'Enter' || key === 'F3' ? 'execute' : '';
+}
+
+function readOptions(widget: HTMLElement): FindOptions {
+	const pressed = (name: string): boolean =>
+		widget.querySelector(`#${name}`)?.getAttribute('aria-pressed') === 'true';
+	return {
+		caseSensitive: pressed(`${widget.id}search-match-case`.replace(`${widget.id}`, widget.id.startsWith('diff-') ? 'diff-' : '')),
+		wholeWord: pressed(`${widget.id}search-whole-word`.replace(`${widget.id}`, widget.id.startsWith('diff-') ? 'diff-' : '')),
+		regex: pressed(`${widget.id}search-regex`.replace(`${widget.id}`, widget.id.startsWith('diff-') ? 'diff-' : ''))
+	};
 }
 
 /** The page controller; the composition root instantiates it. */
@@ -60,8 +113,16 @@ export class SearchBar {
 		return this.prefix + name;
 	}
 
-	input(): any {
-		return document.getElementById(this.id('search-input'));
+	widget(): HTMLElement | null {
+		return document.getElementById(this.id('find-widget'));
+	}
+
+	input(): WidgetInput | null {
+		return document.getElementById(this.id('search-input')) as WidgetInput | null;
+	}
+
+	replaceInput(): WidgetInput | null {
+		return document.getElementById(this.id('search-replace-input')) as WidgetInput | null;
 	}
 
 	mount(): void {
@@ -72,6 +133,8 @@ export class SearchBar {
 		this.mountInput();
 		this.mountClear();
 		this.mountNavigation();
+		this.mountOptions();
+		this.mountReplace();
 	}
 
 	private mountInput(): void {
@@ -90,28 +153,27 @@ export class SearchBar {
 	}
 
 	private onKeydown(event: SearchKeyEvent): void {
-		if (event.key === 'Enter') {
-			this.executeKey(event);
-		} else if (event.key === 'Escape') {
-			this.escapeKey(event);
-		} else if (event.key === 'F3') {
-			this.executeKey(event);
+		const action = keyAction(event.key);
+		if (action !== '') {
+			this.performKey(action, event);
 		}
 	}
 
-	private executeKey(event: SearchKeyEvent): void {
+	private performKey(action: 'close' | 'execute', event: SearchKeyEvent): void {
 		event.preventDefault();
-		if (this.callbacks.onExecute) {
-			this.callbacks.onExecute(event.shiftKey ? -1 : 1);
+		if (action === 'close') {
+			this.close();
+		} else {
+			this.execute(event);
 		}
 	}
 
-	private escapeKey(event: SearchKeyEvent): void {
-		event.preventDefault();
-		this.clear();
-		if (this.callbacks.onEscape) {
-			this.callbacks.onEscape();
-		}
+	private close(): void {
+		this.callbacks.onClose?.();
+	}
+
+	private execute(event: SearchKeyEvent): void {
+		this.callbacks.onExecute?.(event.shiftKey ? -1 : 1);
 	}
 
 	private mountClear(): void {
@@ -149,6 +211,40 @@ export class SearchBar {
 		}
 	}
 
+	private mountOptions(): void {
+		for (const name of ['search-match-case', 'search-whole-word', 'search-regex']) {
+			const button = document.getElementById(this.id(name));
+			if (!button) {
+				continue;
+			}
+			button.addEventListener('click', () => {
+				const pressed = button.getAttribute('aria-pressed') === 'true';
+				button.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+				this.callbacks.onOptions?.(this.options());
+			});
+		}
+		const close = document.getElementById(this.id('search-close'));
+		close?.addEventListener('click', () => this.callbacks.onClose?.());
+	}
+
+	private mountReplace(): void {
+		const toggle = document.getElementById(this.id('search-replace-toggle'));
+		toggle?.addEventListener('click', () => this.toggleReplace());
+		const replace = document.getElementById(this.id('search-replace'));
+		replace?.addEventListener('click', () => this.replace(false));
+		const all = document.getElementById(this.id('search-replace-all'));
+		all?.addEventListener('click', () => this.replace(true));
+		const preserve = document.getElementById(this.id('search-preserve-case'));
+		preserve?.addEventListener('click', () => {
+			const pressed = preserve.getAttribute('aria-pressed') === 'true';
+			preserve.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+		});
+	}
+
+	private replace(all: boolean): void {
+		this.callbacks.onReplace?.(this.replaceInput()?.value ?? '', all);
+	}
+
 	value(): string {
 		const input = this.input();
 		return input ? input.value : '';
@@ -180,6 +276,10 @@ export class SearchBar {
 		}
 	}
 
+	focusReplace(): void {
+		this.replaceInput()?.focus({ preventScroll: true });
+	}
+
 	setCount(text: string): void {
 		const count = document.getElementById(this.id('search-count'));
 		if (count) {
@@ -195,20 +295,96 @@ export class SearchBar {
 	}
 
 	setNavigationEnabled(enabled: boolean): void {
-		const prev = document.getElementById(this.id('search-prev')) as HTMLButtonElement | null;
-		if (prev) {
-			prev.disabled = !enabled;
-		}
-		const next = document.getElementById(this.id('search-next')) as HTMLButtonElement | null;
-		if (next) {
-			next.disabled = !enabled;
+		for (const name of ['search-prev', 'search-next']) {
+			const button = document.getElementById(this.id(name)) as HTMLButtonElement | null;
+			if (button) {
+				button.disabled = !enabled;
+			}
 		}
 	}
 
-		setClearVisible(visible: boolean): void {
+	setClearVisible(visible: boolean): void {
 		const clear = document.getElementById(this.id('search-clear'));
 		if (clear) {
 			clear.hidden = !visible;
 		}
+	}
+
+	setInvalid(invalid: boolean): void {
+		const input = this.input();
+		if (input) {
+			input.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+		}
+	}
+
+	setReplaceEnabled(enabled: boolean): void {
+		for (const name of ['search-replace', 'search-replace-all']) {
+			const button = document.getElementById(this.id(name)) as HTMLButtonElement | null;
+			if (button) {
+				button.disabled = !enabled;
+			}
+		}
+	}
+
+	options(): FindOptions {
+		const pressed = (name: string): boolean =>
+			document.getElementById(this.id(name))?.getAttribute('aria-pressed') === 'true';
+		return {
+			caseSensitive: pressed('search-match-case'),
+			wholeWord: pressed('search-whole-word'),
+			regex: pressed('search-regex')
+		};
+	}
+
+	replaceValue(): string {
+		return this.replaceInput()?.value ?? '';
+	}
+
+	preserveCase(): boolean {
+		return document.getElementById(this.id('search-preserve-case'))?.getAttribute('aria-pressed') === 'true';
+	}
+
+	toggleReplace(force?: boolean): void {
+		const row = document.getElementById(this.id('search-replace-row'));
+		const toggle = document.getElementById(this.id('search-replace-toggle'));
+		if (!row || !toggle) {
+			return;
+		}
+		this.setReplaceOpen(row, toggle, force ?? row.hasAttribute('hidden'));
+	}
+
+	private setReplaceOpen(row: HTMLElement, toggle: HTMLElement, open: boolean): void {
+		row.hidden = !open;
+		toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+		if (open) {
+			this.focusReplace();
+		} else {
+			this.focus();
+		}
+	}
+
+	show(expandReplace = false): void {
+		const widget = this.widget();
+		if (!widget) {
+			return;
+		}
+		widget.hidden = false;
+		if (expandReplace) {
+			this.toggleReplace(true);
+		} else {
+			this.focus();
+		}
+	}
+
+	hide(): void {
+		const widget = this.widget();
+		if (widget) {
+			widget.hidden = true;
+		}
+	}
+
+	get visible(): boolean {
+		const widget = this.widget();
+		return widget !== null && !widget.hidden;
 	}
 }

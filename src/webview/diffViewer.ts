@@ -34,14 +34,10 @@ import type {
 } from './components/documentTree/documentTreeView';
 import { DiffToolbar } from './components/toolbar/toolbar';
 import type { SearchBar } from './components/searchBar/searchBar';
-import { RowSearchEngine } from './render/rowSearch';
-import {
-	beginSearch,
-	finishSearch,
-	mountSearchBar,
-	renderSearchCount,
-	retainedSearchIndex,
-} from './render/searchState';
+import { mountSearchBar, renderSearchCount } from './render/searchState';
+import { findRanges } from './render/searchPattern';
+import type { FindOptions } from '../core/searchModel';
+import { DEFAULT_FIND_OPTIONS } from '../core/searchModel';
 import { appendHighlighted, setHighlightQuery } from './render/rowView';
 import { installNoticeErrors } from './render/pageError';
 import { postToHost, resetVsCodeApi } from './vscodeApi';
@@ -146,19 +142,19 @@ let empty: any;
 let emptyText: any;
 let semanticSkip: HTMLElement | null;
 let reportError: (text: string) => void = function () {};
-const searchEngine = new RowSearchEngine();
 let searchQuery = '';
 
-let searchMatches: string[] = [];
-let searchIndex = -1;
-let searchRunning = false;
-let searchFirstJumpDone = false;
-interface DiffSearchCandidate {
+/** One occurrence; `headerIndex` marks the page-local schema/package matches. */
+interface DiffFindPageMatch {
 	key: string;
-	haystack: string;
+	headerIndex?: number;
 }
-
-let searchCandidates: DiffSearchCandidate[] = [];
+let searchMatches: DiffFindPageMatch[] = [];
+let searchIndex = -1;
+let searchOptions: FindOptions = { ...DEFAULT_FIND_OPTIONS };
+let searchRequestId = 0;
+let searchPreserveKey: string | undefined;
+let searchRunning = false;
 let showChangesOnly = false;
 let swapped = false;
 /** A fresh empty document; the page starts and reloads from this exact shape. */
@@ -611,7 +607,7 @@ function restartSearchIfNeeded(): void {
 	if (searchQuery.trim() === '') {
 		return;
 	}
-	startSearch(searchQuery, currentMatchKey(), true);
+	startSearch(searchQuery, currentMatchKey());
 }
 
 function setDocument(next: any): void {
@@ -1659,46 +1655,46 @@ function applyView() {
 		applyModels();
 	});
 	if (searchQuery.trim() !== '') {
-		startSearch(searchQuery, currentMatchKey(), true);
+		startSearch(searchQuery, currentMatchKey());
 	}
 }
-function currentMatchKey() {
-	return searchIndex >= 0 && searchIndex < searchMatches.length ? searchMatches[searchIndex] : undefined;
+function currentMatchKey(): string | undefined {
+	return searchIndex >= 0 && searchIndex < searchMatches.length ? searchMatches[searchIndex].key : undefined;
 }
 function setSearchBusy(busy: boolean): void {
 	searchRunning = busy === true;
 	renderSearchUi();
 }
 function searchIndexOfKey(key: string | undefined): number {
-	return key === undefined ? -1 : searchMatches.indexOf(key);
+	return key === undefined ? -1 : searchMatches.findIndex((found) => found.key === key);
 }
 function renderSearchUi() {
 	renderSearchCount(searchBar, searchBar.hasText(), searchQuery, searchMatches.length, searchIndex, searchRunning);
 }
-function headerHaystack(row: HeaderRow): string {
-	const parts: string[] = [];
-	if (row.left) {
-		parts.push(row.left.keyword + ' ' + row.left.text);
-	}
-	if (row.right) {
-		parts.push(row.right.keyword + ' ' + row.right.text);
-	}
-	return parts.join(' ').toLowerCase();
+
+function textHasMatch(text: string | undefined, query: string, options: FindOptions): boolean {
+	return text !== undefined && findRanges(text, query, options).length > 0;
 }
 
-function buildHeaderCandidates(out: DiffSearchCandidate[]): void {
+function headerSideTexts(side: { keyword: string; text: string } | undefined): string[] {
+	return side === undefined ? [] : [side.keyword, side.text];
+}
+
+function headerRowHasMatch(row: HeaderRow, query: string, options: FindOptions): boolean {
+	return [...headerSideTexts(row.left), ...headerSideTexts(row.right)].some((text) =>
+		textHasMatch(text, query, options)
+	);
+}
+
+/** Header occurrences are page-local; the engine searches row cells only. */
+function headerFindMatches(query: string, options: FindOptions): DiffFindPageMatch[] {
+	const matches: DiffFindPageMatch[] = [];
 	for (let at = 0; at < headerRowCount; at++) {
-		out.push({ key: 'header:' + at, haystack: headerHaystack(headerRows[at]) });
+		if (headerRowHasMatch(headerRows[at], query, options)) {
+			matches.push({ key: 'header:' + at, headerIndex: at });
+		}
 	}
-}
-
-function buildDiffSearchCandidates(): DiffSearchCandidate[] {
-	const out: DiffSearchCandidate[] = [];
-	buildHeaderCandidates(out);
-	for (const row of searchCandidatesFor(rows, showChangesOnly)) {
-		out.push({ key: row.key, haystack: row.haystack });
-	}
-	return out;
+	return matches;
 }
 
 function isHeaderKey(key: string): boolean {
@@ -1756,15 +1752,15 @@ function revealSearchTarget(key: string): void {
 }
 
 function jumpToSearchMatch(index: number): void {
-	const key = searchMatches[index];
-	if (key === undefined) {
+	const found = searchMatches[index];
+	if (found === undefined) {
 		return;
 	}
-	if (isHeaderKey(key)) {
-		jumpToHeaderMatchKey(key);
+	if (found.headerIndex !== undefined) {
+		jumpToHeaderMatch(found.headerIndex);
 		return;
 	}
-	revealSearchTarget(key);
+	revealSearchTarget(found.key);
 }
 function cycleSearch(direction: number): void {
 	if (searchMatches.length === 0) {
@@ -1773,69 +1769,80 @@ function cycleSearch(direction: number): void {
 	searchIndex = (searchIndex + direction + searchMatches.length) % searchMatches.length;
 	jumpToSearchMatch(searchIndex);
 }
-function startSearch(query: string, previousKey?: string, immediate?: boolean): void {
-	const start = beginSearch<string>(searchEngine, query, previousKey, setHighlightQuery);
-	if (start === undefined) {
+
+/** Start an engine diff search; header occurrences are merged into the answer. */
+function startSearch(query: string, previousKey?: string): void {
+	const text = (query || '').trim();
+	if (text === '') {
 		resetSearchResults();
 		return;
 	}
-	searchQuery = start.query;
-	searchMatches = start.matches;
-	searchIndex = start.index;
-	searchFirstJumpDone = start.firstJumpDone;
-	searchCandidates = buildDiffSearchCandidates();
+	searchQuery = query;
+	searchPreserveKey = previousKey;
+	setHighlightQuery(query, searchOptions);
+	searchBar.setInvalid(false);
+	const requestId = ++searchRequestId;
 	setSearchBusy(true);
-	renderWindow(true);
-	searchEngine.search(
-		searchCandidates,
-		start.query,
-		{
-			onProgressUpdate: function (indices) {
-				const currentKey = currentMatchKey();
-				searchMatches = indices.map(function (index) { return searchCandidates[index].key; });
-				if (!searchFirstJumpDone && searchMatches.length > 0) {
-					searchIndex = 0;
-					searchFirstJumpDone = true;
-					renderSearchUi();
-					jumpToSearchMatch(0);
-					return;
-				}
-				const wanted = currentKey !== undefined ? currentKey : previousKey;
-				searchIndex = retainedSearchIndex(
-					wanted,
-					searchMatches.length,
-					searchIndexOfKey,
-					Math.min(Math.max(searchIndex, 0), searchMatches.length - 1)
-				);
-				renderSearchUi();
-				renderWindow(true);
-			},
-			onComplete: function (indices) {
-				const currentKey = currentMatchKey();
-				searchMatches = indices.map(function (index) { return searchCandidates[index].key; });
-				const wanted = currentKey !== undefined ? currentKey : previousKey;
-				searchIndex = retainedSearchIndex(wanted, searchMatches.length, searchIndexOfKey, 0);
-				searchFirstJumpDone = true;
-				finishSearch(
-					searchIndex,
-					setSearchBusy,
-					renderSearchUi,
-					jumpToSearchMatch,
-					function () { renderWindow(true); }
-				);
-			}
-		},
-		immediate === true
-	);
+	postToHost({ type: 'find', requestId, query, options: searchOptions, changesOnly: showChangesOnly });
 }
-function resetSearchResults() {
-	searchEngine.clear();
-	searchQuery = '';
-	setHighlightQuery('');
+
+function applyDiffFindResult(
+	requestId: number,
+	result: { matches: { key: string }[]; limited: boolean },
+	error?: string
+): void {
+	if (requestId !== searchRequestId) {
+		return;
+	}
+	setSearchBusy(false);
+	if (error !== undefined) {
+		showDiffFindError(error);
+		return;
+	}
+	const wanted = currentMatchKey() ?? searchPreserveKey;
+	searchMatches = headerFindMatches(searchQuery, searchOptions).concat(
+		result.matches.map((found) => ({ key: found.key }))
+	);
+	searchIndex = retainedDiffFindIndex(wanted);
+	renderSearchUi();
+	jumpToRetainedDiffMatch();
+}
+
+function jumpToRetainedDiffMatch(): void {
+	if (searchIndex >= 0) {
+		jumpToSearchMatch(searchIndex);
+	} else {
+		renderWindow(true);
+	}
+}
+
+function showDiffFindError(error: string): void {
+	const invalid = searchOptions.regex;
+	searchBar.setInvalid(invalid);
 	searchMatches = [];
 	searchIndex = -1;
-	searchCandidates = [];
-	searchFirstJumpDone = false;
+	searchBar.setCount(invalid ? 'Invalid pattern' : 'Search unavailable');
+	renderWindow(true);
+	if (!invalid) {
+		reportError(error);
+	}
+}
+
+function retainedDiffFindIndex(wanted: string | undefined): number {
+	if (searchMatches.length === 0) {
+		return -1;
+	}
+	const kept = searchIndexOfKey(wanted);
+	return kept >= 0 ? kept : 0;
+}
+function resetSearchResults() {
+	searchRequestId++;
+	searchQuery = '';
+	searchPreserveKey = undefined;
+	setHighlightQuery('', searchOptions);
+	searchMatches = [];
+	searchIndex = -1;
+	searchBar.setInvalid(false);
 	setSearchBusy(false);
 	renderWindow(true);
 }
@@ -2187,7 +2194,18 @@ function handleSearchShortcut(event: DiffKeyEvent): boolean {
 		return false;
 	}
 	event.preventDefault();
-	searchBar.focus();
+	searchBar.show(false);
+	return true;
+}
+
+function handleFindEscape(event: DiffKeyEvent): boolean {
+	if (event.key !== 'Escape' || !searchBar.visible) {
+		return false;
+	}
+	event.preventDefault();
+	searchBar.hide();
+	resetSearchResults();
+	focusListAfterSearch();
 	return true;
 }
 
@@ -2231,6 +2249,9 @@ function handleGlobalShortcut(event: DiffKeyEvent): boolean {
 		return true;
 	}
 	if (handleSearchShortcut(event)) {
+		return true;
+	}
+	if (handleFindEscape(event)) {
 		return true;
 	}
 	return handleChangeShortcut(event);
@@ -2572,6 +2593,14 @@ function applyDiffDocument(message: Extract<DiffProviderToWebview, { type: 'docu
 
 /** Mode and error updates keep the current document on screen. */
 function handleDiffStatusMessage(message: DiffProviderToWebview): void {
+	if (message.type === 'findResult') {
+		applyDiffFindResult(message.requestId, message.result, message.error);
+		return;
+	}
+	handleDiffModeStatus(message);
+}
+
+function handleDiffModeStatus(message: DiffProviderToWebview): void {
 	if (message.type === 'matchModeState') {
 		semanticMatching = message.semantic !== false;
 		updateViewButtons();
@@ -2649,9 +2678,18 @@ searchBar = mountSearchBar(
 	startSearch,
 	cycleSearch,
 	renderSearchUi,
-	setHighlightQuery,
+	(value) => setHighlightQuery(value, searchOptions),
 	true,
-	focusListAfterSearch
+	focusListAfterSearch,
+	{
+		onOptions: (options) => {
+			searchOptions = options;
+			setHighlightQuery(searchQuery, searchOptions);
+			if (searchQuery.trim() !== '') {
+				startSearch(searchQuery, currentMatchKey());
+			}
+		}
+	}
 );
 renderWindow(true);
 updateSelection();
@@ -2692,15 +2730,16 @@ function resetDiffState(): void {
 	searchQuery = '';
 	searchMatches = [];
 	searchIndex = -1;
-	searchCandidates = [];
+	searchOptions = { ...DEFAULT_FIND_OPTIONS };
+	searchRequestId = 0;
+	searchPreserveKey = undefined;
 	searchRunning = false;
-	searchFirstJumpDone = false;
 	showChangesOnly = false;
 	swapped = false;
 	contextActive = true;
 	expandedGaps = new Set();
 	resetVsCodeApi();
-	setHighlightQuery('');
+	setHighlightQuery('', searchOptions);
 }
 
 if (typeof document !== 'undefined' && document.getElementById('diff-list')) {

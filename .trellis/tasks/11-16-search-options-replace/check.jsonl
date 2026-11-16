@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "No fallback, atomic replace and forbidden write paths"}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Tests that fail when the feature is removed"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Message and search contract ownership"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Offsets, stale results and error mapping across layers"}

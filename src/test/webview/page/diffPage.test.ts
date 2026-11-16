@@ -52,8 +52,60 @@ function documentOf(): DiffDocument {
 	);
 }
 
+function diffSearchMatches(
+	against: DiffDocument,
+	query: string,
+	changesOnly: boolean
+): Array<{ key: string; side: 'left'; field: 'value'; start: number; end: number }> {
+	const needle = query.trim().toLowerCase();
+	if (needle === '') {
+		return [];
+	}
+	const rows = changesOnly ? against.rows.filter((row) => row.status !== 'unchanged') : against.rows;
+	return rows
+		.filter((row) => row.haystack.includes(needle))
+		.map((row) => ({ key: row.key, side: 'left' as const, field: 'value' as const, start: 0, end: 1 }));
+}
+
+function isFindRequest(message: {
+	type?: string;
+	requestId?: number;
+}): message is { type: 'find'; requestId: number; query?: string; changesOnly?: boolean } {
+	return message.type === 'find' && typeof message.requestId === 'number';
+}
+
+function handleDiffFindRequest(
+	dom: ReturnType<typeof installDom>,
+	against: DiffDocument,
+	message: { type?: string; requestId?: number; query?: string; changesOnly?: boolean }
+): void {
+	if (!isFindRequest(message)) {
+		return;
+	}
+	const matches = diffSearchMatches(against, message.query ?? '', message.changesOnly === true);
+	dom.post({
+		type: 'findResult',
+		requestId: message.requestId,
+		result: { matches, total: matches.length, limited: false }
+	});
+}
+
+function installDiffFindResponder(dom: ReturnType<typeof installDom>, against: DiffDocument): void {
+	const send = dom.api.api.postMessage.bind(dom.api.api);
+	dom.api.api.postMessage = (message: {
+		type?: string;
+		requestId?: number;
+		query?: string;
+		changesOnly?: boolean;
+	}) => {
+		send(message);
+		handleDiffFindRequest(dom, against, message);
+	};
+}
+
 function mount(document = documentOf()): { dom: ReturnType<typeof installDom>; page: any; document: DiffDocument } {
 	const dom = installDom('diff');
+	installDiffFindResponder(dom, document);
 	const module = loadModule<typeof import('../../../webview/diffViewer')>('../../webview/diffViewer');
 	module.mountDiff();
 	dom.post({ type: 'document', semantic: false, document });

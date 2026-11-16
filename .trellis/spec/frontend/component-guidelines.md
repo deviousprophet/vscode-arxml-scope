@@ -104,29 +104,27 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
 
 ## DOM contracts
 
-- **Search is the only query control and runs on Enter.** `#search-input` stays `type="search"` for
-  its searchbox role; Chromium's native cancel/decoration pseudo-elements are suppressed so the one
-  custom `#search-clear` X is the only clear control. Typing only updates the field and the clear X;
-  it never starts a run, scrolls or jumps, and a changed query clears the previous result set. Enter
-  executes that changed query, and a second Enter cycles; Shift+Enter goes backwards. Escape clears
-  and returns focus to the tree. The page uses a chunked
-  `RowSearchEngine` with a 120 ms debounce, 24 ms time slices, a 512-row batch, a generation token
-  and 150 ms progress throttling. `#search-busy` is the spinner while a run is active. Do not add a
-  second query field, a separate find bar or a synchronous full-store scan.
-- **Search jumps; it never hides.** The engine scans the whole row store; collapse and any view state
-  never remove a candidate. The haystack is the label, value and every visible meta fragment (short
-  name, variant, context, condition and annotation), so a word the Document shows can be found.
-  The first streamed match is selected and scrolled into view; completion
-  preserves the current row by id. Later Enter/Shift+Enter and the previous/next buttons only move
-  the match index and jump — they never rescan. A jump expands ancestors, scrolls and selects the
-  row but keeps focus in the Search input. `#search-count` reads `1 / N`, `0 / 0`, or is empty for an
-  unexecuted query, but it never leaves the flow: its fixed `14ch` slot and the always-present busy
-  slot stop the field from shifting. The Search control closes the toolbar, after Details.
+- **Search is the only query control and runs through the engine.** The floating
+  `.find-widget` is hidden until `Ctrl+F`; `Ctrl+H` opens the replace row and
+  `Escape` closes it. `#search-input` stays `type="search"` for its searchbox role;
+  Chromium's native cancel/decoration pseudo-elements are suppressed so the one
+  custom `#search-clear` X is the only clear control. The three option toggles
+  (`Aa`, `ab|`, `.*`) carry `aria-pressed`; the document page also has the replace
+  row. The engine match list drives the count and navigation; the page matcher is
+  only for `<mark>` and header text. Do not add a second query field or a
+  synchronous full-store scan.
+- **Search jumps; it never hides.** The engine searches the whole row store; collapse and any view
+  state never remove a candidate. The engine checks the label, value and every visible meta
+  fragment (short name, variant, context, condition and annotation). Each answer preserves the
+  current row by id. Enter/Shift+Enter and the previous/next buttons only move the match index and
+  jump; a changed input or option starts a new engine request. A jump expands ancestors, scrolls
+  and selects the row but keeps focus in the find input. `#search-count` reads `1 / N`, `0 / 0`,
+  `Invalid pattern` or is empty for an unexecuted query.
 - **All matches are marked; the current match is stronger.** `appendHighlighted` wraps every
-  case-insensitive occurrence in `<mark>` in the label, value and every visible meta fragment
-  (short name, variant, context, condition and annotation). `buildDocumentNodeRow` sets
-  `data-search-current="true"` on the row that owns the current match. The page defines fixed
-  dark-theme tiers `--match-bg: rgba(234, 179, 8, 0.18)` and `--match-hi: rgba(234, 179, 8, 0.36)`;
+  occurrence in `<mark>` in the label, value and every visible meta fragment using the active
+  options. `buildDocumentNodeRow` sets `data-search-current="true"` on the row that owns the current
+  match. The page defines fixed dark-theme tiers `--match-bg: rgba(234, 179, 8, 0.18)` and
+  `--match-hi: rgba(234, 179, 8, 0.36)`;
   all marks use the subtle tier and the current row uses the strong tier. Do not depend on
   `--vscode-editor-findMatch*`, which a theme may resolve to transparent. Clearing the search removes
   both marks. Do not add a second highlight implementation.

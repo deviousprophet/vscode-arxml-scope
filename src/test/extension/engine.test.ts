@@ -226,6 +226,55 @@ suite('core engine process', () => {
 			engine.dispose();
 		}
 	});
+	test('searches row fields and plans a replaceable value', async () => {
+		const text = fs.readFileSync(fixture('editing/textual.arxml'), 'utf8');
+		const options = { caseSensitive: false, wholeWord: false, regex: false };
+		const engine = await resolveEngine(repoRoot);
+		try {
+			assert.ok(engine.searchDocument && engine.replaceDocument);
+			const docId = await engine.openDocument('mem://search.arxml', text, ROW_OPTIONS);
+			const found = await engine.searchDocument(docId, 'bee', options);
+			assert.strictEqual(found.total, 1);
+			assert.strictEqual(found.matches[0].field, 'value');
+			assert.strictEqual(found.matches[0].replaceable, true);
+			const match = found.matches[0];
+			const replaced = await engine.replaceDocument(docId, {
+				query: 'bee',
+				options,
+				replacement: 'see',
+				preserveCase: false,
+				all: false,
+				match: { rowId: match.rowId, field: match.field, start: match.start, end: match.end }
+			});
+			assert.strictEqual(replaced.ok, true, replaced.reason);
+			assert.strictEqual(replaced.plans[0].record.newText, 'see');
+			const invalid = await engine.searchDocument(docId, '(', { ...options, regex: true }).catch((error) => error);
+			assert.match(String(invalid), /regex|pattern/i);
+		} finally {
+			engine.dispose();
+		}
+	});
+	test('searches the last diff on both sides', async () => {
+		const leftText = fs.readFileSync(fixture('editing/numeric.arxml'), 'utf8');
+		const rightText = leftText.replace('<VALUE>7</VALUE>', '<VALUE>9</VALUE>');
+		const options = { caseSensitive: false, wholeWord: false, regex: false };
+		const engine = await resolveEngine(repoRoot);
+		try {
+			assert.ok(engine.searchDiff);
+			const leftId = await engine.openDocument('mem://diff-search-left.arxml', leftText, ROW_OPTIONS);
+			const rightId = await engine.openDocument('mem://diff-search-right.arxml', rightText, ROW_OPTIONS);
+			const left = { docId: leftId, name: 'left.arxml', path: 'mem://diff-search-left.arxml' };
+			const right = { docId: rightId, name: 'right.arxml', path: 'mem://diff-search-right.arxml' };
+			await engine.computeDiff(left, right, { semanticMatching: false });
+			const found = await engine.searchDiff(left, right, 'Count', options, false);
+			assert.ok(found.total > 0);
+			assert.ok(found.matches.every((match) => typeof match.key === 'string'));
+			assert.ok(found.matches.some((match) => match.side === 'left'));
+			assert.ok(found.matches.some((match) => match.side === 'right'));
+		} finally {
+			engine.dispose();
+		}
+	});
 });
 
 interface RowLike {

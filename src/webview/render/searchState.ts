@@ -7,6 +7,7 @@
  * rules from drifting apart.
  */
 import { SearchBar } from '../components/searchBar/searchBar';
+import type { FindOptions } from '../../core/searchModel';
 
 /** The SearchBar members the shared controller drives. */
 export interface SearchBarState {
@@ -72,51 +73,6 @@ function clearSearchField(bar: SearchBarState, reset: () => void, focusInput: bo
 	}
 }
 
-/** The result state a new query starts from. */
-export interface SearchStart<T> {
-	query: string;
-	matches: T[];
-	index: number;
-	firstJumpDone: boolean;
-}
-
-/**
- * Validates a query and clears the previous run, or returns undefined for a blank
- * query so the caller can drop its results. A previous match means this is a
- * re-scan, not a first jump.
- */
-export function beginSearch<T>(
-	engine: { clear(): void },
-	query: string,
-	previous: string | undefined,
-	setHighlight: (text: string) => void
-): SearchStart<T> | undefined {
-	const text = query || '';
-	if (text.trim() === '') {
-		return undefined;
-	}
-	engine.clear();
-	setHighlight(text);
-	return { query: text, matches: [], index: -1, firstJumpDone: previous !== undefined };
-}
-
-/** Keeps a surviving current match, otherwise applies the page's fallback. */
-export function retainedSearchIndex<W>(
-	wanted: W | undefined,
-	matchCount: number,
-	indexOf: (wanted: W) => number,
-	fallback: number
-): number {
-	const kept = wanted === undefined ? -1 : indexOf(wanted);
-	if (matchCount === 0) {
-		return -1;
-	}
-	if (kept >= 0) {
-		return kept;
-	}
-	return fallback;
-}
-
 /** Drops stale results when the typed query no longer matches the active one. */
 function searchInputChanged(
 	value: string,
@@ -138,21 +94,9 @@ function searchInputChanged(
 	reset();
 }
 
-/** Ends a search run: stop the busy state, repaint, then reveal the chosen match. */
-export function finishSearch(
-	index: number,
-	setBusy: (busy: boolean) => void,
-	renderUi: () => void,
-	jump: (index: number) => void,
-	renderWindow: () => void
-): void {
-	setBusy(false);
-	renderUi();
-	if (index >= 0) {
-		jump(index);
-	} else {
-		renderWindow();
-	}
+export interface SearchBarActions {
+	onOptions?(options: FindOptions): void;
+	onReplace?(text: string, all: boolean): void;
 }
 
 /** Creates and mounts a SearchBar whose callbacks drive the shared search flow. */
@@ -166,8 +110,14 @@ export function mountSearchBar(
 	renderUi: () => void,
 	setHighlight: (value: string) => void,
 	clearFocus: boolean,
-	leaveSearch: () => void
+	leaveSearch: () => void,
+	actions: SearchBarActions = {}
 ): SearchBar {
+	const close = (): void => {
+		bar.hide();
+		clearSearchField(bar, reset, clearFocus);
+		leaveSearch();
+	};
 	const bar = new SearchBar(prefix, {
 		onExecute: (direction) => {
 			executeSearchCommand(direction, bar, query(), reset, start, cycle);
@@ -178,9 +128,13 @@ export function mountSearchBar(
 		onClear: () => {
 			reset();
 		},
-		onEscape: () => {
-			clearSearchField(bar, reset, clearFocus);
-			leaveSearch();
+		onClose: close,
+		onOptions: (options) => {
+			setHighlight(bar.value());
+			actions.onOptions?.(options);
+		},
+		onReplace: (text, all) => {
+			actions.onReplace?.(text, all);
 		},
 		onInput: (value) => {
 			searchInputChanged(value, query(), hasMatches(), setHighlight, renderUi, reset);

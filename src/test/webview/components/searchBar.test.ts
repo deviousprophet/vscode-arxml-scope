@@ -1,13 +1,10 @@
 /**
- * SearchBar component: markup, fixed feedback slots, key behaviour and the
- * root-scoped prefix that lets the editor and the diff coexist.
+ * SearchBar component: floating find widget markup, option toggles, replace row,
+ * focus and the root-scoped prefix that lets the editor and the diff coexist.
  */
 import * as assert from 'assert';
 
-import {
-	SearchBar,
-	renderSearchBarHtml,
-} from '../../../webview/components/searchBar/searchBar';
+import { SearchBar, renderSearchBarHtml } from '../../../webview/components/searchBar/searchBar';
 
 interface FakeElement {
 	value?: string;
@@ -15,25 +12,42 @@ interface FakeElement {
 	disabled?: boolean;
 	textContent?: string;
 	dataset: Record<string, string>;
+	attributes: Record<string, string>;
 	focusOptions: unknown[];
 	listeners: Record<string, (event: unknown) => void>;
 	addEventListener(type: string, listener: (event: unknown) => void): void;
 	focus(options?: unknown): void;
 	select?(): void;
+	setAttribute(name: string, value: string): void;
+	getAttribute(name: string): string | null;
+	hasAttribute(name: string): boolean;
 }
 
 function fakeElement(): FakeElement {
 	return {
 		dataset: {},
+		attributes: {},
 		focusOptions: [],
 		listeners: {},
-		addEventListener(type: string, listener: (event: unknown) => void) {
+		addEventListener(type: string, listener: (event: any) => void) {
 			this.listeners[type] = listener;
 		},
 		focus(options?: unknown) {
 			this.focusOptions.push(options);
 		},
 		select() {},
+		setAttribute(name: string, value: string) {
+			this.attributes[name] = value;
+		},
+		getAttribute(name: string): string | null {
+			if (name === 'hidden') {
+				return this.hidden ? '' : null;
+			}
+			return this.attributes[name] ?? null;
+		},
+		hasAttribute(name: string): boolean {
+			return name === 'hidden' ? this.hidden === true : name in this.attributes;
+		},
 	};
 }
 
@@ -49,15 +63,16 @@ function withDocument<T>(elements: Record<string, FakeElement>, run: () => T): T
 }
 
 suite('SearchBar component', () => {
-	test('the editor and diff instances get distinct, stable ids', () => {
-		const editor = renderSearchBarHtml('', 'Search the ECUC tree');
-		const diff = renderSearchBarHtml('diff-', 'Search the diff');
+	test('the editor and diff instances get distinct ids and option controls', () => {
+		const editor = renderSearchBarHtml('', 'Find in the ECUC tree', true);
+		const diff = renderSearchBarHtml('diff-', 'Find in the diff', false);
+		assert.ok(/id="find-widget"[^>]*class="find-widget"[^>]*hidden/.test(editor));
 		assert.ok(/id="search-input"[^>]*class="search-input"[^>]*type="search"/.test(editor));
-		assert.ok(/id="diff-search-input"[^>]*aria-label="Search the diff"/.test(diff));
-		assert.ok(editor.includes('id="search-clear"') && diff.includes('id="diff-search-clear"'));
-		assert.ok(/id="search-count"[^>]*role="status"[^>]*aria-live="polite"/.test(editor));
-		assert.ok(/id="search-busy"[^>]*data-busy="false"/.test(editor));
-		assert.strictEqual((editor.match(/<input\b/g) ?? []).length, 1, 'one query control');
+		assert.ok(/id="diff-search-input"[^>]*aria-label="Find in the diff"/.test(diff));
+		assert.ok(editor.includes('id="search-match-case"') && editor.includes('id="search-whole-word"'));
+		assert.ok(editor.includes('id="search-regex"') && editor.includes('id="search-replace-row"'));
+		assert.ok(!diff.includes('id="diff-search-replace-row"'), 'the diff has no replace row');
+		assert.ok(editor.includes('id="search-close"') && diff.includes('id="diff-search-close"'));
 		assert.ok(!/style="/.test(editor), 'no inline styles');
 	});
 
@@ -72,7 +87,7 @@ suite('SearchBar component', () => {
 			'search-busy': busy,
 			'search-clear': clear,
 			'search-prev': prev,
-			'search-next': next,
+			'search-next': next
 		};
 		withDocument(elements, () => {
 			const bar = new SearchBar('');
@@ -97,7 +112,7 @@ suite('SearchBar component', () => {
 			'search-input': input,
 			'search-clear': clear,
 			'search-prev': prev,
-			'search-next': next,
+			'search-next': next
 		};
 		const calls: string[] = [];
 		withDocument(elements, () => {
@@ -105,8 +120,8 @@ suite('SearchBar component', () => {
 				onExecute: (direction) => calls.push(`execute:${direction}`),
 				onCycle: (direction) => calls.push(`cycle:${direction}`),
 				onClear: () => calls.push('clear'),
-				onEscape: () => calls.push('escape'),
-				onInput: (value) => calls.push(`input:${value}`),
+				onClose: () => calls.push('close'),
+				onInput: (value) => calls.push(`input:${value}`)
 			});
 			bar.mount();
 			bar.mount();
@@ -118,25 +133,93 @@ suite('SearchBar component', () => {
 			clear.listeners.click({});
 			prev.listeners.click({});
 			next.listeners.click({});
-			assert.deepStrictEqual(input.focusOptions, [{ preventScroll: true }], 'Escape refocuses the field');
-			assert.ok(input.value === '');
 		});
 		assert.deepStrictEqual(calls, [
 			'input:alp',
 			'execute:1',
 			'execute:-1',
-			'escape',
+			'close',
 			'clear',
 			'cycle:-1',
-			'cycle:1',
+			'cycle:1'
 		]);
 	});
 
-	test('the class owns the keys and never the search engine', () => {
-		assert.ok(typeof SearchBar.prototype.mount === 'function');
-		for (const name of ['setCount', 'setBusy', 'setNavigationEnabled', 'focus']) {
-			assert.ok(typeof (SearchBar.prototype as any)[name] === 'function', `${name} is part of the contract`);
-		}
+	test('toggles carry aria-pressed and report the options', () => {
+		const caseButton = fakeElement();
+		const wordButton = fakeElement();
+		const regexButton = fakeElement();
+		const calls: unknown[] = [];
+		withDocument(
+			{
+				'search-match-case': caseButton,
+				'search-whole-word': wordButton,
+				'search-regex': regexButton
+			},
+			() => {
+				const bar = new SearchBar('', { onOptions: (options) => calls.push(options) });
+				bar.mount();
+				caseButton.listeners.click({});
+				regexButton.listeners.click({});
+				assert.deepStrictEqual(bar.options(), { caseSensitive: true, wholeWord: false, regex: true });
+			}
+		);
+		assert.strictEqual(caseButton.getAttribute('aria-pressed'), 'true');
+		assert.strictEqual(regexButton.getAttribute('aria-pressed'), 'true');
+		assert.deepStrictEqual(calls.length, 2);
+	});
+
+	test('the replace row toggles, reports replace and preserves case', () => {
+		const widget = fakeElement();
+		const row = fakeElement();
+		row.hidden = true;
+		const toggle = fakeElement();
+		const replace = fakeElement();
+		const all = fakeElement();
+		const preserve = fakeElement();
+		preserve.attributes['aria-pressed'] = 'true';
+		const replaceInput = fakeElement();
+		const calls: string[] = [];
+		withDocument(
+			{
+				'find-widget': widget,
+				'search-replace-row': row,
+				'search-replace-toggle': toggle,
+				'search-replace': replace,
+				'search-replace-all': all,
+				'search-preserve-case': preserve,
+				'search-replace-input': replaceInput
+			},
+			() => {
+				const bar = new SearchBar('', { onReplace: (text, every) => calls.push(`${text}:${every}`) });
+				bar.mount();
+				bar.show(true);
+				assert.strictEqual(widget.hidden, false);
+				assert.strictEqual(row.hidden, false);
+				replaceInput.value = 'beta';
+				replace.listeners.click({});
+				all.listeners.click({});
+				preserve.listeners.click({});
+				assert.strictEqual(bar.preserveCase(), false);
+			}
+		);
+		assert.deepStrictEqual(calls, ['beta:false', 'beta:true']);
+	});
+
+	test('show and hide control the widget without touching the query', () => {
+		const widget = fakeElement();
+		const input = fakeElement();
+		withDocument({ 'find-widget': widget, 'search-input': input }, () => {
+			const bar = new SearchBar('');
+			bar.mount();
+			bar.setValue('keep');
+			bar.show(false);
+			assert.strictEqual(widget.hidden, false);
+			assert.deepStrictEqual(input.focusOptions, [{ preventScroll: true }]);
+			bar.hide();
+			assert.strictEqual(widget.hidden, true);
+			assert.strictEqual(bar.value(), 'keep');
+		});
 	});
 
 	test('F3 and Shift+F3 execute in both directions without touching the text', () => {
@@ -153,7 +236,7 @@ suite('SearchBar component', () => {
 					shiftKey,
 					preventDefault() {
 						prevented = true;
-					},
+					}
 				});
 				return prevented;
 			};
@@ -173,17 +256,15 @@ suite('SearchBar component', () => {
 		});
 		const input = fakeElement();
 		const prevented: number[] = [];
-		const key = { key: 'Enter', shiftKey: false, preventDefault: () => prevented.push(1) };
 		withDocument({ 'search-input': input }, () => {
 			const bar = new SearchBar('');
 			bar.mount();
 			input.value = 'abc';
 			input.listeners.input({});
-			input.listeners.keydown(key);
+			input.listeners.keydown({ key: 'Enter', shiftKey: false, preventDefault: () => prevented.push(1) });
 			input.listeners.keydown({ key: 'Escape', preventDefault: () => prevented.push(1) });
-			assert.strictEqual(input.value, '');
+			assert.strictEqual(input.value, 'abc', 'Escape lets the page close and clear');
 		});
 		assert.deepStrictEqual(prevented, [1, 1]);
-		assert.deepStrictEqual(input.focusOptions, [], 'Escape clears without moving focus');
 	});
 });

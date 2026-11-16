@@ -13,14 +13,13 @@ export interface EditorToolbarCallbacks {
 	onToggleSidebar?(): void;
 }
 
-/** Editor strip: flexible slot, sidebar toggle, Collapse, Expand, Details, then Search. */
-export function renderEditorToolbarHtml(searchHtml: string): string {
+/** Editor strip: flexible slot, sidebar toggle, Collapse, Expand. */
+export function renderEditorToolbarHtml(): string {
 	return `<div class="toolbar">
 <span class="grow"></span>
 <button id="collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
 <button id="expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
 <button id="toggle-sidebar" class="tool diff-tool" type="button" aria-pressed="true" title="Hide sidebar" aria-label="Sidebar">${ICON_SIDEBAR}<span class="lbl">Sidebar</span></button>
-${searchHtml}
 </div>`;
 }
 
@@ -103,7 +102,7 @@ const ICON_CONTEXT = diffIcon(
 );
 const ICON_SIDEBAR = diffIcon('<rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M10 2.5v11"/>');
 
-export function renderDiffToolbarHtml(searchHtml: string): string {
+export function renderDiffToolbarHtml(): string {
 	return `<div class="toolbar">
 <div class="toolbar-left">
 <div class="view-switch" role="group" aria-label="Diff view">
@@ -131,7 +130,6 @@ export function renderDiffToolbarHtml(searchHtml: string): string {
 </div>
 <div class="toolbar-right">
 <span id="diff-match-status" class="match-status" role="status" aria-live="polite"></span>
-${searchHtml}
 </div>
 </div>`;
 }

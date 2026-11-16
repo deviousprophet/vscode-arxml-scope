@@ -10,7 +10,9 @@
  * root calls `setHighlightQuery` whenever the query changes; row builders pass an
  * explicit query when they have one.
  */
-import { matchRanges } from './treeQuery';
+import { findRanges } from './searchPattern';
+import type { FindOptions } from '../../core/searchModel';
+import { DEFAULT_FIND_OPTIONS } from '../../core/searchModel';
 import type { MatchRange } from './treeQuery';
 
 /** The subset `valueSpan` / `metaSpan` read from a row or a projected diff cell. */
@@ -28,10 +30,12 @@ export interface PageElement {
 
 /** The page's live search query, shared by every row primitive. */
 let highlightQuery = '';
+let highlightOptions: FindOptions = { ...DEFAULT_FIND_OPTIONS };
 
-/** Set the query every later highlight falls back to. */
-export function setHighlightQuery(query: string): void {
+/** Set the query and options every later highlight falls back to. */
+export function setHighlightQuery(query: string, options: FindOptions = DEFAULT_FIND_OPTIONS): void {
 	highlightQuery = query;
+	highlightOptions = options;
 }
 
 /** The Codicon chevron-right used by both tree row renderers (inline, no asset). */
@@ -53,7 +57,7 @@ export function twistyIcon(): SVGElement {
 /** The explicit query, or the page's live one when none was passed. */
 function searchRanges(text: string, query: string | undefined): MatchRange[] {
 	const needle = query === undefined ? highlightQuery : query;
-	return needle.trim() === '' ? [] : matchRanges(text, needle);
+	return needle.trim() === '' ? [] : findRanges(text, needle, highlightOptions);
 }
 
 /** Appends one plain text node; an empty slice is never emitted. */

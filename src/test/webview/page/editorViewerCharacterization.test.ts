@@ -348,6 +348,9 @@ suite('editor viewer characterization', () => {
 			);
 
 			const input = dom.document.getElementById('search-input') as HTMLInputElement;
+			dom.document.dispatchEvent(
+				new dom.window.KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true })
+			);
 			input.value = 'IniValue';
 			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
 			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));

@@ -37,6 +37,7 @@ import type { BootWatchdog } from './bootWatchdog';
 import { editorShell } from './webviewShell';
 import { editorMessageType, documentHeader } from '../webviewProtocol';
 import type { EditorWebviewToProvider } from '../webviewProtocol';
+import type { ReplaceResult } from '../core/searchModel';
 import type { DefinitionInfo } from '../core/index/definitions';
 import type { IndexElement, IndexReference } from '../core/index/indexModel';
 import type { ElementResolution } from '../core/index/workspaceIndex';
@@ -75,6 +76,8 @@ interface EditorSession {
 	rescan(): void;
 	/** The engine document handle, once it is open; absent until then or without an engine. */
 	engineDocId?: number;
+	/** The in-flight open; find/replace wait for it instead of racing the first paint. */
+	engineOpening?: Promise<void>;
 	/** True when the engine moved the text but the TypeScript model has not caught up. */
 	state: { stale: boolean };
 }
@@ -304,7 +307,9 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			disposables.push(this.definitionSource.subscribe(() => push()));
 		}
 
-		void this.openEngineDocument(session);
+		session.engineOpening = this.openEngineDocument(session).finally(() => {
+			session.engineOpening = undefined;
+		});
 
 		disposables.push(
 			panel.webview.onDidReceiveMessage((raw: unknown) => this.handlePanelMessage(raw, session))
@@ -360,7 +365,138 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			this.handleConditions(message, session);
 			return true;
 		}
+		return this.handleFindReplaceMessage(message, session);
+	}
+
+	private handleFindReplaceMessage(message: EditorWebviewToProvider, session: EditorSession): boolean {
+		if (message.type === 'find') {
+			void this.handleFind(message, session);
+			return true;
+		}
+		if (message.type === 'replace') {
+			void this.handleReplace(message, session);
+			return true;
+		}
 		return false;
+	}
+
+	private engineForFind(session: EditorSession): { engine: CoreEngine; docId: number } | undefined {
+		const engine = this.engine;
+		const docId = session.engineDocId;
+		if (engine?.searchDocument === undefined || docId === undefined) {
+			return undefined;
+		}
+		return { engine, docId };
+	}
+
+	private engineForReplace(session: EditorSession): { engine: CoreEngine; docId: number } | undefined {
+		const engine = this.engine;
+		const docId = session.engineDocId;
+		if (engine?.replaceDocument === undefined || docId === undefined) {
+			return undefined;
+		}
+		return { engine, docId };
+	}
+
+	private async handleFind(
+		message: Extract<EditorWebviewToProvider, { type: 'find' }>,
+		session: EditorSession
+	): Promise<void> {
+		await session.engineOpening;
+		const target = this.engineForFind(session);
+		if (target === undefined) {
+			await this.postFindError(session, message.requestId, 'Search is unavailable because the engine document is not open');
+			return;
+		}
+		try {
+			const result = await target.engine.searchDocument!(target.docId, message.query, message.options);
+			await session.panel.webview.postMessage({ type: 'findResult', requestId: message.requestId, result });
+		} catch (error) {
+			await this.postFindError(session, message.requestId, describeError(error));
+		}
+	}
+
+	private async postFindError(session: EditorSession, requestId: number, reason: string): Promise<void> {
+		await session.panel.webview.postMessage({
+			type: 'findResult',
+			requestId,
+			result: { matches: [], total: 0, limited: false },
+			error: reason
+		});
+	}
+
+	private async handleReplace(
+		message: Extract<EditorWebviewToProvider, { type: 'replace' }>,
+		session: EditorSession
+	): Promise<void> {
+		await session.engineOpening;
+		const target = this.engineForReplace(session);
+		if (target === undefined) {
+			await this.postReplaceError(
+				session,
+				message.requestId,
+				'Replace is unavailable because the engine document is not open'
+			);
+			return;
+		}
+		try {
+			await this.performReplace(target.engine, message, session, target.docId);
+		} catch (error) {
+			await this.postReplaceError(session, message.requestId, describeError(error));
+		}
+	}
+
+	private async performReplace(
+		engine: CoreEngine,
+		message: Extract<EditorWebviewToProvider, { type: 'replace' }>,
+		session: EditorSession,
+		docId: number
+	): Promise<void> {
+		const { type: _type, requestId, ...request } = message;
+		const result = await engine.replaceDocument!(docId, request);
+		if (result.ok && result.plans.length > 0) {
+			const applied = await this.applyReplacePlans(session, result);
+			if (!applied.ok) {
+				result.ok = false;
+				result.reason = applied.reason;
+			}
+		}
+		await session.panel.webview.postMessage({ type: 'replaceResult', requestId, result });
+	}
+
+	private async postReplaceError(session: EditorSession, requestId: number, reason: string): Promise<void> {
+		await session.panel.webview.postMessage({
+			type: 'replaceResult',
+			requestId,
+			result: {
+				ok: false,
+				plans: [],
+				reason,
+				replacedFields: 0,
+				replacedOccurrences: 0,
+				stopped: false
+			}
+		});
+	}
+
+	/** Applies every plan in one WorkspaceEdit; ranges are UTF-16 into the current text. */
+	private async applyReplacePlans(
+		session: EditorSession,
+		result: ReplaceResult
+	): Promise<{ ok: true } | { ok: false; reason: string }> {
+		const edit = new vscode.WorkspaceEdit();
+		const plans = [...result.plans].sort((left, right) => right.record.range.start - left.record.range.start);
+		for (const plan of plans) {
+			const range = new vscode.Range(
+				session.document.positionAt(plan.record.range.start),
+				session.document.positionAt(plan.record.range.end)
+			);
+			edit.replace(session.document.uri, range, plan.record.newText);
+		}
+		if (!(await vscode.workspace.applyEdit(edit))) {
+			return { ok: false, reason: 'VS Code refused the replace' };
+		}
+		return { ok: true };
 	}
 
 	private handleReady(session: EditorSession): void {
@@ -1037,6 +1173,10 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			this.selections.set(key, previous);
 		}
 	}
+}
+
+function describeError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 /** The accepted plan, or `undefined` after showing the refusal beside the field. */
