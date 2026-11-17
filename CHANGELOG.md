@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- The Rust engine now restarts after a crash with bounded backoff, reopens live documents and keeps their ids; `ARXML Scope: Show Engine Status` reports state, pid, uptime, restarts, memory and the last error
+- The Rust engine restarts automatically after a crash with bounded backoff, reopens live documents and keeps their ids
+- `ARXML Scope: Show Engine Status` reports the engine state, pid, uptime, restarts, memory and last error, and can restart the engine
 - Documents above the 64 MiB frame limit open through a chunked upload, up to a 512 MiB cap, so large ECUC files can be diffed and edited
 - Find is a VS Code-style floating widget opened with `Ctrl+F`/`Ctrl+H`, with case-sensitive, whole-word and regular-expression options in the document and diff views
 - Replace and Replace All update validated parameter values and container short names in the document view, with preserve case and no write when the engine refuses
 - The diff view searches the same row fields with the same options but has no replace row
+
+### Changed
+
+- Starting on an unsupported platform now names the packaged engine targets instead of failing with a missing-binary error
 
 ### Fixed
 
