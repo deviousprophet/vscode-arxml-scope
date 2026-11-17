@@ -12,18 +12,9 @@
  * diff already carries, and the target indent; the planner returns one span or a reason.
  */
 
-export interface CopyRange {
-	start: number;
-	end: number;
-}
+import type { CopyPlan, CopyRange, MissingAncestor } from './copyTypes';
 
-export interface CopySpan {
-	start: number;
-	end: number;
-	text: string;
-}
-
-export type CopyPlan = { ok: true; span: CopySpan } | { ok: false; reason: string };
+export type { CopyPlan, CopyRange, MissingAncestor } from './copyTypes';
 
 export interface CopyRequest {
 	/** The document the arrow copies *into*. */
@@ -196,15 +187,6 @@ export function planDelete(request: Omit<CopyRequest, 'source' | 'anchorAfter' |
 	return request.target === undefined
 		? { ok: false, reason: STALE }
 		: deletion({ ...request, source: request.target });
-}
-
-/** One missing container between the copied element and the target parent. */
-export interface MissingAncestor {
-	shortName: string;
-	definitionRef: string;
-	definitionDest: string;
-	/** The kind of the element nested inside this ancestor. */
-	childKind: 'container' | 'parameter' | 'reference';
 }
 
 const LIST_TAG: Record<MissingAncestor['childKind'], string> = {

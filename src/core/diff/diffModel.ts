@@ -640,13 +640,17 @@ const SEMANTIC_SCORE_BUDGET = 250_000;
 /** Number of nearest positions added so a near-tie still has a second score. */
 const SEMANTIC_POSITION_NEIGHBOURS = 2;
 
+function maskSelf(text: string, selfName: string): string {
+	return selfName === '' ? text : text.split(selfName).join('<self>');
+}
+
 function semanticNodes(trees: readonly TreeRow[], substitutions: ReadonlyMap<string, string>): SemanticNode[] {
 	return trees.map((tree, index) => {
 		const name = nameOf(tree);
 		const substituted = applySubstitutions(name, substitutions).toLowerCase();
 		const childKeys = new Map<string, number>();
 		for (const child of tree.children) {
-			const key = childKey(child, substitutions);
+			const key = childKey(child, substitutions, name);
 			childKeys.set(key, (childKeys.get(key) ?? 0) + 1);
 		}
 		return {
@@ -658,7 +662,7 @@ function semanticNodes(trees: readonly TreeRow[], substitutions: ReadonlyMap<str
 			signature: substituted.replace(/[0-9]+/g, '#'),
 			childKeys,
 			childKeySignature: childKeys.size === 0 ? '' : countsSignature(childKeys),
-			childBlob: childBlob(tree),
+			childBlob: childBlob(tree, name),
 		};
 	});
 }
@@ -1730,8 +1734,8 @@ function tokenJaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): nu
 	return union === 0 ? 0 : intersection / union;
 }
 
-function childKey(node: TreeRow, substitutions: ReadonlyMap<string, string>): string {
-	return `${node.row.kind}|${node.row.definitionRef}|${applySubstitutions(sortIdentity(node.row), substitutions)}`;
+function childKey(node: TreeRow, substitutions: ReadonlyMap<string, string>, selfName: string): string {
+	return `${node.row.kind}|${node.row.definitionRef}|${applySubstitutions(maskSelf(sortIdentity(node.row), selfName), substitutions)}`;
 }
 
 function nameScore(left: TreeRow, right: TreeRow, substitutions: ReadonlyMap<string, string>): number {
@@ -1763,16 +1767,20 @@ function substitutionScore(left: TreeRow, right: TreeRow, substitutions: Readonl
 	if (renamesToOneSide(leftName, rightName, substitutions)) {
 		return 1;
 	}
-	const blob = `${leftName} ${rightName} ${childBlob(left)} ${childBlob(right)}`;
+	const blob = `${leftName} ${rightName} ${childBlob(left, leftName)} ${childBlob(right, rightName)}`;
 	return blobMentionsSubstitution(blob, substitutions) ? 0.5 : 0;
 }
 
-function childBlob(node: TreeRow): string {
-	return node.children.map((child) => `${nameOf(child)} ${sortIdentity(child.row)}`).join(' ');
+function childBlob(node: TreeRow, selfName: string): string {
+	return node.children
+		.map((child) => `${maskSelf(nameOf(child), selfName)} ${maskSelf(sortIdentity(child.row), selfName)}`)
+		.join(' ');
 }
 
 function substitutionsUsed(left: TreeRow, right: TreeRow, substitutions: ReadonlyMap<string, string>): string[] {
-	const blob = `${nameOf(left)} ${nameOf(right)} ${childBlob(left)} ${childBlob(right)}`;
+	const leftName = nameOf(left);
+	const rightName = nameOf(right);
+	const blob = `${leftName} ${rightName} ${childBlob(left, leftName)} ${childBlob(right, rightName)}`;
 	return [...substitutions.entries()]
 		.filter(([old]) => blob.includes(old))
 		.map(([old, next]) => `${old}→${next}`);

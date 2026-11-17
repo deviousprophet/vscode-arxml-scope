@@ -87,23 +87,48 @@ function numericTarget(rows: EngineRows['rows']): string {
 	return target.id;
 }
 
-async function planOnce(client: EngineClient, docId: number, nodeId: string, value: string): Promise<number> {
+async function planOnce(
+	client: EngineClient,
+	docId: number,
+	nodeId: string,
+	value: string
+): Promise<PlannedEdit> {
 	const started = performance.now();
 	const plan = await client.request('doc.plan', { docId, kind: 'value', nodeId, value });
 	if (plan.header.ok !== true) {
 		throw new Error(`plan refused: ${String(plan.header.reason)}`);
 	}
-	return performance.now() - started;
+	const parsed = JSON.parse(plan.body.toString('utf8')) as {
+		ok: boolean;
+		record?: { range: { start: number; end: number }; newText: string };
+	};
+	if (!parsed.ok || parsed.record === undefined) {
+		throw new Error('plan returned no edit record');
+	}
+	return { elapsed: performance.now() - started, range: parsed.record.range, newText: parsed.record.newText };
 }
 
 interface EditStats {
 	planMs: number;
-	updateMs: number;
+	/** A real value edit: the span `doc.plan` returned. */
+	valueUpdateMs: number;
+	/** An arbitrary byte flip: the full-resync fallback. */
+	resyncMs: number;
 	pushedBytes: number;
+	paths: {
+		valueUpdate: string;
+		resync: string;
+	};
+}
+
+interface PlannedEdit {
+	elapsed: number;
+	range: { start: number; end: number };
+	newText: string;
 }
 
 /** A same-size replacement mid-file: the cost of one delta, not edit semantics. */
-async function updateOnce(
+async function resyncOnce(
 	client: EngineClient,
 	docId: number,
 	text: string,
@@ -118,21 +143,44 @@ async function updateOnce(
 	return { elapsed: performance.now() - started, pushedBytes: updated.body.length };
 }
 
+/** The value edit the engine itself planned. */
+async function valueOnce(
+	client: EngineClient,
+	docId: number,
+	plan: PlannedEdit
+): Promise<{ elapsed: number; pushedBytes: number }> {
+	const started = performance.now();
+	const updated = await client.request('doc.update', {
+		docId,
+		edits: [{ start: plan.range.start, end: plan.range.end, text: plan.newText }]
+	});
+	return { elapsed: performance.now() - started, pushedBytes: updated.body.length };
+}
+
 async function runEdits(client: EngineClient, document: EngineRows, text: string): Promise<EditStats> {
 	const nodeId = numericTarget(document.rows);
 	const planTimes: number[] = [];
-	const updateTimes: number[] = [];
+	const valueTimes: number[] = [];
+	const resyncTimes: number[] = [];
 	let pushedBytes = 0;
 	for (let index = 0; index < EDIT_COUNT; index++) {
-		planTimes.push(await planOnce(client, document.docId, nodeId, String(9000 + index)));
-		const update = await updateOnce(client, document.docId, text, index);
-		updateTimes.push(update.elapsed);
-		pushedBytes = Math.max(pushedBytes, update.pushedBytes);
+		const plan = await planOnce(client, document.docId, nodeId, String(9000 + index));
+		planTimes.push(plan.elapsed);
+		const value = await valueOnce(client, document.docId, plan);
+		valueTimes.push(value.elapsed);
+		pushedBytes = Math.max(pushedBytes, value.pushedBytes);
+		const resync = await resyncOnce(client, document.docId, text, index);
+		resyncTimes.push(resync.elapsed);
 	}
 	return {
 		planMs: Math.round(median(planTimes)),
-		updateMs: Math.round(median(updateTimes)),
-		pushedBytes
+		valueUpdateMs: Math.round(median(valueTimes)),
+		resyncMs: Math.round(median(resyncTimes)),
+		pushedBytes,
+		paths: {
+			valueUpdate: 'doc.plan span',
+			resync: 'arbitrary byte, full resync'
+		}
 	};
 }
 

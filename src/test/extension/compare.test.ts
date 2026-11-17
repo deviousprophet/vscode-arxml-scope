@@ -271,8 +271,9 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 			'the refusal carries the documented message and returns'
 		);
 		const refusal = panel.indexOf('the module is missing on the target side; copy it first');
-		const mutation = panel.indexOf('applyPlan(otherDoc, chainInsertion', refusal);
-		assert.ok(mutation > refusal, 'a refused module copy reaches no applyPlan');
+		const planning = panel.indexOf('await requestCopyPlan({', refusal);
+		const mutation = panel.indexOf('await applyPlan(otherDoc, span)', planning);
+		assert.ok(planning > refusal && mutation > planning, 'a refused module copy reaches no plan and no applyPlan');
 	});
 
 	test('MERGE-08 a module row copy is allowed without a collision and refused with one', () => {

@@ -9,6 +9,7 @@ import { IndexService } from './host/indexService';
 import { ValidationService } from './host/validationService';
 import { registerTextFeatures } from './host/textFeatures';
 import { resolveEngine } from './host/engine/engineLoader';
+import { registerEngineStatus } from './host/engineStatus';
 import type { CoreEngine } from './host/engine/coreEngine';
 import type { IndexStats } from './core/index/indexModel';
 
@@ -37,6 +38,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<ArxmlS
 		throw error;
 	}
 	context.subscriptions.push({ dispose: () => resolvedEngine.dispose() });
+	registerEngineStatus(context, resolvedEngine);
 
 	// The workspace index is in memory only. It starts in the background so a large
 	// workspace never delays activation.

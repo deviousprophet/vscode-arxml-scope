@@ -61,6 +61,11 @@
         "command": "vscode-arxml-scope.cycleCrossFileRules",
         "title": "Cycle Cross-File Checks",
         "category": "ARXML Scope"
+      },
+      {
+        "command": "vscode-arxml-scope.showEngineStatus",
+        "title": "Show Engine Status",
+        "category": "ARXML Scope"
       }
     ],
     "customEditors": [
@@ -325,6 +330,7 @@
     "parity": "node scripts/parity.mjs",
     "parity:rows": "node scripts/parityRows.mjs",
     "parity:diff": "node scripts/parityDiff.mjs",
+    "parity:copy": "node scripts/parityCopy.mjs",
     "parity:words": "node scripts/parityWords.mjs",
     "engine:build": "node scripts/build-engine.mjs",
     "rust:test": "cargo test --manifest-path rust/Cargo.toml --workspace",

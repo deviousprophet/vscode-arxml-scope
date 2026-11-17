@@ -1,0 +1,42 @@
+# The Rust engine
+
+ARXML Scope runs its ECUC core in a separate Rust process. This page is the
+operator-facing summary; the protocol table lives in `rust/README.md`.
+
+## Why a process
+
+- A native failure cannot take the extension host down.
+- The same engine is reusable for a language server and a CLI.
+- The host stays glue and rendering.
+
+There is no TypeScript fallback and no engine setting. Activation fails when the
+engine is missing, unsupported or speaks another protocol.
+
+## Lifecycle
+
+1. Activation starts one process and completes a `hello` handshake.
+2. The supervisor tracks every open document with its URI, text and row options.
+3. If the process exits, in-flight requests reject and the supervisor spawns a new
+   process with bounded backoff.
+4. Live documents are reopened with their last text; host document ids stay stable.
+5. After repeated failures the supervisor stops and reports an actionable error.
+
+The supervisor never writes a file. The engine answers data, plans and patches; the
+host applies one `WorkspaceEdit`, so undo, dirty state and save stay VS Code's.
+
+## Status and support
+
+Run `ARXML Scope: Show Engine Status` from the command palette. It prints state,
+engine version, protocol, pid, uptime, restart count, open documents, pending
+requests, memory (Linux) and the last error, and offers `Restart Engine`.
+
+The VSIX ships `linux-x64`, `win32-x64`, `darwin-x64` and `darwin-arm64`. Any other
+target fails activation with that list. Large documents use the chunked upload path
+(8 MiB chunks, 512 MiB cap); single-frame open refuses above 64 MiB.
+
+## Limits
+
+- Cancelling a long diff is not supported yet; restarting the engine is the coarse
+  cancel.
+- A non-value edit still takes a full resync in the engine, about 1.7 s at 26 MiB.
+- The first row store is still built in TypeScript; row windows are planned.

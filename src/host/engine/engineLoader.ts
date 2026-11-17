@@ -2,12 +2,24 @@
  * Starts and validates the Rust engine process.
  *
  * A missing, unstartable or wrong-protocol engine is an activation error: there is
- * no TypeScript fallback and no engine-selection setting.
+ * no TypeScript fallback and no engine-selection setting. Once started, the
+ * supervisor owns restarts, so the rest of the host keeps one `CoreEngine`.
  */
-import { engineBinaryPath, EngineClient, EngineError } from './engineClient';
-import { createEngine, EXPECTED_PROTOCOL, protocolDiagnostic, type CoreEngine } from './coreEngine';
+import {
+	engineBinaryPath,
+	EngineClient,
+	EngineError,
+	type EngineSpawner
+} from './engineClient';
+import { createEngineSupervisor } from './engineSupervisor';
+import { EXPECTED_PROTOCOL, type CoreEngine } from './coreEngine';
+import { validateHandshake } from './engineHandshake';
 
-export type EngineSpawner = (binary: string, root: string) => Promise<EngineClient>;
+export type { EngineSpawner };
+export { validateHandshake };
+
+/** Platforms this build ships an engine binary for. */
+const SUPPORTED_TARGETS = ['linux-x64', 'win32-x64', 'darwin-x64', 'darwin-arm64'] as const;
 
 /** The packaged engine binary for one platform/architecture. */
 export function enginePath(
@@ -18,33 +30,28 @@ export function enginePath(
 	return engineBinaryPath(root, platform, arch);
 }
 
-/** The handshake check, split out so the loader test can drive it without a process. */
-export function validateHandshake(
-	header: Record<string, unknown>
-): { version: string } | { diagnostic: string } {
-	const diagnostic = protocolDiagnostic(header);
-	if (diagnostic !== undefined) {
-		return { diagnostic };
-	}
-	const version = header.engine;
-	if (typeof version !== 'string' || version.length === 0) {
-		return { diagnostic: 'engine handshake did not report a version' };
-	}
-	return { version };
+/** True when this build has an engine for the target. */
+function isSupportedTarget(platform: string, arch: string): boolean {
+	return (SUPPORTED_TARGETS as readonly string[]).includes(`${platform}-${arch}`);
 }
 
-async function startProcess(binary: string, root: string): Promise<EngineClient> {
-	return EngineClient.start({ binary, root });
+async function startProcess(
+	binary: string,
+	root: string,
+	onExit?: (error: EngineError) => void
+): Promise<EngineClient> {
+	return EngineClient.start({ binary, root, onExit });
 }
 
 /** Starts the process and turns every failure into one activation error. */
 async function startClient(
 	start: EngineSpawner,
 	binary: string,
-	root: string
+	root: string,
+	onExit?: (error: EngineError) => void
 ): Promise<EngineClient> {
 	try {
-		return await start(binary, root);
+		return await start(binary, root, onExit);
 	} catch (error) {
 		throw startFailure(error, binary);
 	}
@@ -61,17 +68,6 @@ function startFailure(error: unknown, binary: string): Error {
 	);
 }
 
-/** Completes the handshake and refuses a protocol drift. */
-async function requireHandshake(client: EngineClient): Promise<string> {
-	const hello = await client.request('hello');
-	const validated = validateHandshake(hello.header as Record<string, unknown>);
-	if ('diagnostic' in validated) {
-		client.dispose();
-		throw new Error(`Rust engine rejected: ${validated.diagnostic}`);
-	}
-	return validated.version;
-}
-
 /**
  * Resolves the required engine. Spawns the process and completes the handshake, so
  * a bad binary or a protocol drift fails activation before any service starts.
@@ -82,8 +78,15 @@ export async function resolveEngine(
 	arch: string = process.arch,
 	start: EngineSpawner = startProcess
 ): Promise<CoreEngine> {
+	if (!isSupportedTarget(platform, arch)) {
+		throw new Error(
+			`ARXML Scope has no Rust engine for ${platform}-${arch}. ` +
+				`Supported: ${SUPPORTED_TARGETS.join(', ')}. ` +
+				'Build from source with "npm run engine:build" on a supported platform.'
+		);
+	}
 	const binary = enginePath(root, platform, arch);
-	const client = await startClient(start, binary, root);
-	const version = await requireHandshake(client);
-	return createEngine(client, version);
+	const spawn: EngineSpawner = (target, workspace, onExit) =>
+		startClient(start, target, workspace, onExit);
+	return createEngineSupervisor({ binary, root, start: spawn });
 }

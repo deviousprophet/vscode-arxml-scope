@@ -429,6 +429,9 @@ suite('editor value editing (AC1–AC9)', () => {
 
 			await stub.send({ type: 'edit', nodeId: parameterId(original, 'Count'), value: '42' });
 			await waitFor('the edit', () => document.getText().includes('<VALUE>42</VALUE>'));
+			// Text and the dirty flag reach the extension host in separate messages; the
+			// flag can lag the text by a tick on a slow runner.
+			await waitFor('the edit to dirty the document', () => document.isDirty);
 			assert.strictEqual(document.isDirty, true, 'an edit dirties the real document');
 
 			await document.save();
@@ -439,6 +442,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			// refreshed by the re-scan subscription, not by a save/revert hook.
 			await stub.send({ type: 'edit', nodeId: parameterId(document.getText(), 'Count'), value: '99' });
 			await waitFor('the second edit', () => document.getText().includes('<VALUE>99</VALUE>'));
+			await waitFor('the second edit to dirty the document', () => document.isDirty);
 			assert.strictEqual(document.isDirty, true);
 
 			await vscode.window.showTextDocument(document);
@@ -893,6 +897,7 @@ suite('editor container field editing (R1–R5)', () => {
 
 			await stub.send({ type: 'edit', nodeId: id, field: 'shortName', value: 'FirstContA' });
 			await waitFor('the rename', () => document.getText().includes('<SHORT-NAME>FirstContA</SHORT-NAME>'));
+			await waitFor('the rename to dirty the document', () => document.isDirty);
 
 			const renamed = fixtureText('editing/container-short-name.expected.arxml');
 			assert.strictEqual(document.getText(), renamed, 'only the short name line changed');

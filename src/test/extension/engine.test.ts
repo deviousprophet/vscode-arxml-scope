@@ -35,6 +35,13 @@ suite('core engine process', () => {
 		);
 	});
 
+	test('names the supported targets when the platform has no engine', async () => {
+		await assert.rejects(
+			() => resolveEngine(repoRoot, 'linux', 'arm64'),
+			/no Rust engine for linux-arm64[\s\S]*linux-x64, win32-x64, darwin-x64, darwin-arm64/
+		);
+	});
+
 	test('a missing engine binary is an error, not a TypeScript fallback', async () => {
 		const missingRoot = path.join(repoRoot, 'does-not-exist');
 		await assert.rejects(() => resolveEngine(missingRoot), /not built/);
@@ -113,6 +120,108 @@ suite('core engine process', () => {
 			} finally {
 				client.dispose();
 			}
+		} finally {
+			engine.dispose();
+		}
+	});
+
+	test('opens a document above the 64 MiB frame limit through chunked upload', async function () {
+		this.timeout(120_000);
+		const mib = 65;
+		const padding = 'x'.repeat(mib * 1024 * 1024);
+		const text =
+			`<?xml version="1.0" encoding="UTF-8"?>\n<AUTOSAR><!--${padding}-->` +
+			'<AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>' +
+			'<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>M</SHORT-NAME>' +
+			'<DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/M</DEFINITION-REF><CONTAINERS>' +
+			'<ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME>' +
+			'<DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/M/C</DEFINITION-REF>' +
+			'<PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE>' +
+			'<DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/M/C/V</DEFINITION-REF>' +
+			'<VALUE>1</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES>' +
+			'</ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES>' +
+			'</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>';
+		const edited = text.replace('<VALUE>1</VALUE>', '<VALUE>2</VALUE>');
+		assert.ok(Buffer.byteLength(text) > 64 * 1024 * 1024, 'the fixture exceeds one frame');
+		const engine = await resolveEngine(repoRoot);
+		try {
+			const docId = await engine.openDocument('mem://large.arxml', text, ROW_OPTIONS);
+			const editedId = await engine.openDocument('mem://large-edited.arxml', edited, ROW_OPTIONS);
+			const left = { docId, name: 'large.arxml', path: 'mem://large.arxml' };
+			const right = { docId: editedId, name: 'large-edited.arxml', path: 'mem://large-edited.arxml' };
+			const document = await engine.computeDiff(left, right, { semanticMatching: false });
+			assert.ok(document.rows.length > 0, 'the chunked document was parsed');
+			assert.ok(
+				document.summary.changed + document.summary.renamed > 0,
+				'the edited copy differs from the original'
+			);
+		} finally {
+			engine.dispose();
+		}
+	});
+
+	test('rejects an out-of-order chunk and forgets the upload', async () => {
+		const client = await EngineClient.start({ binary: enginePath(repoRoot), root: repoRoot });
+		try {
+			// A successful chunked open first: the body splits a surrogate pair's bytes.
+			const small = '<AUTOSAR>😀</AUTOSAR>';
+			const bytes = Buffer.from(small, 'utf8');
+			const begun = await client.request('doc.open.begin', { options: ROW_OPTIONS });
+			const uploadId = Number(begun.header.uploadId);
+			await client.request('doc.open.chunk', { uploadId, seq: 0 }, bytes.subarray(0, 12));
+			await client.request('doc.open.chunk', { uploadId, seq: 1 }, bytes.subarray(12));
+			const opened = await client.request('doc.open.end', { uploadId });
+			assert.strictEqual(opened.header.textLength, small.length, 'UTF-16 length survives chunking');
+			await client.request('doc.close', { docId: opened.header.docId });
+
+			const next = await client.request('doc.open.begin', { options: ROW_OPTIONS });
+			const nextUpload = Number(next.header.uploadId);
+			assert.ok(Number.isInteger(nextUpload), 'the engine returns an upload id');
+			await assert.rejects(
+				() => client.request('doc.open.chunk', { uploadId: nextUpload, seq: 1 }, Buffer.from('x')),
+				/out of order/
+			);
+			await assert.rejects(
+				() => client.request('doc.open.chunk', { uploadId: nextUpload, seq: 0 }, Buffer.from('x')),
+				/unknown upload/
+			);
+		} finally {
+			client.dispose();
+		}
+	});
+	test('plans a copy and a delete against the engine documents', async () => {
+		const targetText = fs.readFileSync(fixture('editing/numeric.arxml'), 'utf8');
+		const sourceText = targetText.replace('<VALUE>7</VALUE>', '<VALUE>9</VALUE>');
+		const element = (text: string): { start: number; end: number } => {
+			const start = text.indexOf('<ECUC-NUMERICAL-PARAM-VALUE>');
+			const end = text.indexOf('</ECUC-NUMERICAL-PARAM-VALUE>', start) + '</ECUC-NUMERICAL-PARAM-VALUE>'.length;
+			return { start, end };
+		};
+		const engine = await resolveEngine(repoRoot);
+		try {
+			assert.ok(engine.planCopy, 'the engine plans copies');
+			const targetId = await engine.openDocument('mem://copy-target.arxml', targetText, ROW_OPTIONS);
+			const sourceId = await engine.openDocument('mem://copy-source.arxml', sourceText, ROW_OPTIONS);
+			const planned = await engine.planCopy({
+				kind: 'copy',
+				targetDocId: targetId,
+				sourceDocId: sourceId,
+				source: element(sourceText),
+				target: element(targetText)
+			});
+			assert.ok(planned.ok);
+			const copied = targetText.slice(0, planned.span.start) + planned.span.text + targetText.slice(planned.span.end);
+			assert.strictEqual(copied, sourceText, 'the replacement carries the source bytes');
+
+			const deleted = await engine.planCopy({
+				kind: 'delete',
+				targetDocId: targetId,
+				target: element(targetText)
+			});
+			assert.ok(deleted.ok);
+			const removed = targetText.slice(0, deleted.span.start) + targetText.slice(deleted.span.end);
+			assert.ok(!removed.includes('/Count'), 'the deleted parameter is gone');
+			assert.ok(removed.includes('/Limit'), 'the neighbour survives');
 		} finally {
 			engine.dispose();
 		}
@@ -369,7 +478,7 @@ suite('plan coverage: ENG', () => {
 				(error: unknown) =>
 					error instanceof EngineError && error.code === 'protocol' && /malformed header/.test(error.message)
 			);
-			assert.strictEqual(fake.client.isClosed, false, 'a malformed frame does not close the client by itself');
+			assert.strictEqual(fake.client.isClosed, true, 'a malformed frame ends the process so the supervisor can restart it');
 		} finally {
 			fake.dispose();
 		}

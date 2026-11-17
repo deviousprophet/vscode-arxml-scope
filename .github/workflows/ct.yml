@@ -9,7 +9,11 @@ on:
 jobs:
   UT_Test:
     name: Unit Test Execution
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15-intel, macos-15]
+    runs-on: ${{ matrix.os }}
     outputs:
       run-tests-outcome: ${{ steps.run-tests.outcome }}
     steps:
@@ -40,16 +44,21 @@ jobs:
 
       - name: Run Tests
         id: run-tests
+        shell: bash
         run: |
           set -o pipefail
-          xvfb-run -a npm test 2>&1 | tee unit-test-output.log
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a npm test 2>&1 | tee unit-test-output.log
+          else
+            npm test 2>&1 | tee unit-test-output.log
+          fi
 
       - name: Upload Test Results Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           path: unit-test-output.log
-          name: unit-test-output
+          name: unit-test-output-${{ matrix.os }}
           overwrite: true
 
   Benchmarks:
@@ -114,6 +123,11 @@ jobs:
       - name: Rust Tests
         run: npm run rust:test
 
+      - name: Supply Chain
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: rust/Cargo.toml
+
       - name: Build Native Addon
         run: npm run engine:build
 
@@ -122,6 +136,9 @@ jobs:
 
       - name: Cross-Language Parity
         run: npm run parity
+
+      - name: Copy Planner Parity
+        run: npm run parity:copy
 
   Finalize:
     name: Finalize Workflow
@@ -164,7 +181,7 @@ jobs:
         if: always()
         uses: actions/download-artifact@v4
         with:
-          name: unit-test-output
+          name: unit-test-output-ubuntu-latest
           path: .
 
       - name: Download Benchmark Log

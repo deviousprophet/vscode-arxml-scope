@@ -1003,6 +1003,62 @@ suite('semantic diff model (design §2, §3.3)', () => {
 		assert.strictEqual(document.summary.removed, 0);
 	});
 
+	/** Containers whose parameter values embed their own short name. */
+	function embeddedContainers(prefix: string, count: number, marker = 'V', from = 0): string {
+		const containers: string[] = [];
+		for (let at = from; at < from + count; at++) {
+			const name = `${prefix}_${at}_MO`;
+			const parameters = Array.from({ length: 10 }, (_, child) =>
+				parameter(`P${child}`, `${name}_${marker}_${child}`)
+			);
+			containers.push(container(name, { definitionRef: '/D/MainBus', parameters }));
+		}
+		return containers.join('');
+	}
+
+	function embeddedValues(prefix: string, count: number, marker = 'V'): string {
+		return arxml(module('M1', embeddedContainers(prefix, count, marker)));
+	}
+
+	test('self-name masking pairs a wholly different name token', () => {
+		for (const count of [10, 50, 500]) {
+			const left = embeddedValues('Old', count);
+			const right = embeddedValues('New', count);
+			const { document } = diffOf(left, right, true);
+			const pairs = document.rows.filter(
+				(row) => row.kind === 'container' && row.match?.kind === 'semantic'
+			);
+			assert.strictEqual(pairs.length, count, `every renamed container pairs at ${count}`);
+			assert.strictEqual(document.summary.added, 0);
+			assert.strictEqual(document.summary.removed, 0);
+		}
+	});
+
+	test('masked children pair renamed containers after new ones sorting before', () => {
+		const left = embeddedValues('Old', 50);
+		const right = arxml(
+			module('M1', embeddedContainers('Extra', 50, 'Z') + embeddedContainers('New', 50))
+		);
+		const { document } = diffOf(left, right, true);
+		const pairs = document.rows.filter(
+			(row) => row.kind === 'container' && row.match?.kind === 'semantic'
+		);
+		assert.strictEqual(pairs.length, 50, 'the extras do not hide the renamed block');
+		assert.ok(document.summary.added > 0, 'the extra containers are added');
+		assert.strictEqual(document.summary.removed, 0);
+	});
+
+	test('masked children do not pair unrelated content', () => {
+		const left = embeddedValues('Old', 50);
+		const right = embeddedValues('Other', 50, 'Z');
+		const { document } = diffOf(left, right, true);
+		const pairs = document.rows.filter(
+			(row) => row.kind === 'container' && row.match?.kind === 'semantic'
+		);
+		assert.strictEqual(pairs.length, 0);
+		assert.strictEqual(document.summary.renamed, 0);
+	});
+
 	test('identical-child siblings pair by name and position', () => {
 		const make = (prefix: string): string =>
 			arxml(

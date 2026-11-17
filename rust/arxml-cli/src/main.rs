@@ -9,12 +9,27 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use arxml_core::copy::{plan_copy, plan_delete, CopyRange, CopySpec, MissingAncestor};
 use arxml_core::diff::{build_diff_document, DiffHeader, DiffOptions, DiffSide, FileLabel};
-use arxml_core::ecuc::{build_rows, scan_ecuc_values, Document, RowOptions};
+use arxml_core::ecuc::{build_rows, scan_ecuc_values, Document, RowOptions, SourceText};
 use arxml_core::word::{diff_words, WordPair};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
+
+/// The CLI copy request: explicit texts so the parity harness needs no engine process.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct CopyFileRequest {
+    target_text: String,
+    source_text: String,
+    kind: Option<String>,
+    source: CopyRange,
+    target: Option<CopyRange>,
+    anchor_after: Option<CopyRange>,
+    anchor_before: Option<CopyRange>,
+    ancestors: Vec<MissingAncestor>,
+}
 
 /// One fixture entry. Field order is part of the parity contract with `scripts/parity.mjs`.
 #[derive(Serialize)]
@@ -33,7 +48,7 @@ struct FixtureManifest {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(command) = args.first().map(String::as_str) else {
-        eprintln!("usage: arxml-cli <info|fixture-manifest|scan|rows> [options]");
+        eprintln!("usage: arxml-cli <info|fixture-manifest|scan|rows|diff|words|copy> [options]");
         return ExitCode::from(2);
     };
     match command {
@@ -52,6 +67,7 @@ fn main() -> ExitCode {
         "rows" => rows_command(&args),
         "diff" => diff_command(&args),
         "words" => words_command(&args),
+        "copy" => copy_command(&args),
         other => {
             eprintln!("unknown command {other}");
             ExitCode::from(2)
@@ -197,6 +213,51 @@ fn diff_command(args: &[String]) -> ExitCode {
         },
     );
     match serde_json::to_string(&document) {
+        Ok(json) => {
+            println!("{json}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn copy_command(args: &[String]) -> ExitCode {
+    let Some(path) = option(args, "--request") else {
+        eprintln!("--request is required");
+        return ExitCode::from(2);
+    };
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("{path}: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    let request: CopyFileRequest = match serde_json::from_str(&text) {
+        Ok(request) => request,
+        Err(error) => {
+            eprintln!("{path}: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    let target = SourceText::new(request.target_text);
+    let plan = if request.kind.as_deref() == Some("delete") {
+        plan_delete(&target, request.target)
+    } else {
+        let source = SourceText::new(request.source_text);
+        let spec = CopySpec {
+            source: request.source,
+            target: request.target,
+            anchor_after: request.anchor_after,
+            anchor_before: request.anchor_before,
+            ancestors: request.ancestors,
+        };
+        plan_copy(&target, &source, &spec)
+    };
+    match serde_json::to_string(&plan) {
         Ok(json) => {
             println!("{json}");
             ExitCode::SUCCESS

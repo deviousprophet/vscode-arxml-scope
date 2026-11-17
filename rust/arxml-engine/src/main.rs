@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+use arxml_core::copy::{plan_copy, plan_delete, CopySpec};
 use arxml_core::diff::patch::{patch_between, AppliedEdit, PatchOutcome, PatchSide};
 use arxml_core::diff::{
     build_diff_document, DiffDocument, DiffHeader, DiffOptions, DiffSide, FileLabel,
@@ -22,10 +23,23 @@ use serde_json::{json, Value};
 
 const MAX_FRAME: usize = 64 * 1024 * 1024;
 const ROWS_PER_CHUNK: usize = 4000;
+const MAX_DOCUMENT: usize = 512 * 1024 * 1024;
 
 struct Frame {
     header: Value,
     body: Vec<u8>,
+}
+
+/// A chunked document upload; the body is assembled before it is decoded as UTF-8.
+enum UploadKind {
+    Open { options: RowOptions },
+    Resync { doc_id: u32 },
+}
+
+struct Upload {
+    kind: UploadKind,
+    bytes: Vec<u8>,
+    next_seq: u32,
 }
 
 fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
@@ -90,16 +104,33 @@ struct DiffBaseline {
 
 struct Engine {
     documents: HashMap<u32, Document>,
+    uploads: HashMap<u32, Upload>,
     next_document: u32,
+    next_upload: u32,
     last_diff: Option<DiffBaseline>,
 }
 
+impl Engine {
+    fn new() -> Self {
+        Self {
+            documents: HashMap::new(),
+            uploads: HashMap::new(),
+            next_document: 1,
+            next_upload: 1,
+            last_diff: None,
+        }
+    }
+
+    /// Reserves one upload id; the caller inserts the upload with it.
+    fn next_upload_id(&mut self) -> u32 {
+        let upload_id = self.next_upload;
+        self.next_upload += 1;
+        upload_id
+    }
+}
+
 fn main() {
-    let mut engine = Engine {
-        documents: HashMap::new(),
-        next_document: 1,
-        last_diff: None,
-    };
+    let mut engine = Engine::new();
     let stdin = io::stdin();
     let mut input = stdin.lock();
     let stdout = io::stdout();
@@ -135,11 +166,7 @@ fn main() {
         match result {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
-                let _ = write_frame(
-                    &mut out,
-                    &json!({"id": id, "ok": false, "reason": error}),
-                    &[],
-                );
+                let _ = write_frame(&mut out, &failure_frame(id, error), &[]);
             }
             Err(_) => {
                 let _ = write_frame(
@@ -149,6 +176,15 @@ fn main() {
                 );
             }
         }
+    }
+}
+
+/// The error envelope, with a machine code for the failures a client can act on.
+fn failure_frame(id: u64, error: String) -> Value {
+    let code = error.starts_with("document exceeds").then_some("too_large");
+    match code {
+        Some(code) => json!({"id": id, "ok": false, "code": code, "reason": error}),
+        None => json!({"id": id, "ok": false, "reason": error}),
     }
 }
 
@@ -168,6 +204,13 @@ impl Engine {
             )
             .map_err(|error| error.to_string()),
             "doc.open" => self.open_document(id, &mut out, header, body),
+            "doc.open.begin" => self.open_begin(id, &mut out, header),
+            "doc.open.chunk" => self.upload_chunk(id, &mut out, header, body),
+            "doc.open.end" => self.open_end(id, &mut out, header),
+            "doc.resync.begin" => self.resync_begin(id, &mut out, header),
+            "doc.resync.chunk" => self.upload_chunk(id, &mut out, header, body),
+            "doc.resync.end" => self.resync_end(id, &mut out, header),
+            "upload.abort" => self.upload_abort(id, &mut out, header),
             "doc.close" => {
                 let document = header.get("docId").and_then(Value::as_u64).unwrap_or(0) as u32;
                 self.documents.remove(&document);
@@ -182,6 +225,7 @@ impl Engine {
             "doc.model" => self.model(id, &mut out, header),
             "diff.compute" => self.diff_compute(id, &mut out, header),
             "diff.patch" => self.diff_patch(id, &mut out, header),
+            "copy.plan" => self.copy_plan(id, &mut out, header),
             other => Err(format!("unknown operation {other}")),
         }
     }
@@ -194,13 +238,18 @@ impl Engine {
         body: &[u8],
     ) -> Result<(), String> {
         let text = String::from_utf8(body.to_vec()).map_err(|_| "document body is not UTF-8")?;
-        let options: RowOptions = header
-            .get("options")
-            .cloned()
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|error| error.to_string())?
-            .unwrap_or_default();
+        let options = row_options(header)?;
+        self.store_document(id, out, text, options)
+    }
+
+    /// Creates the document and answers the same envelope for both open paths.
+    fn store_document(
+        &mut self,
+        id: u64,
+        out: &mut impl Write,
+        text: String,
+        options: RowOptions,
+    ) -> Result<(), String> {
         let document_id = self.next_document;
         self.next_document += 1;
         let document = Document::with_options(text, options);
@@ -217,6 +266,132 @@ impl Engine {
         });
         self.documents.insert(document_id, document);
         write_frame(out, &response, &[]).map_err(|error| error.to_string())
+    }
+
+    /// Reserves an id and stores an empty upload for it.
+    fn start_upload(&mut self, kind: UploadKind) -> u32 {
+        let upload_id = self.next_upload_id();
+        self.uploads.insert(
+            upload_id,
+            Upload {
+                kind,
+                bytes: Vec::new(),
+                next_seq: 0,
+            },
+        );
+        upload_id
+    }
+
+    fn open_begin(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let upload_id = self.start_upload(UploadKind::Open {
+            options: row_options(header)?,
+        });
+        write_frame(
+            out,
+            &json!({"id": id, "ok": true, "uploadId": upload_id}),
+            &[],
+        )
+        .map_err(|error| error.to_string())
+    }
+
+    fn resync_begin(
+        &mut self,
+        id: u64,
+        out: &mut impl Write,
+        header: &Value,
+    ) -> Result<(), String> {
+        let document_id = doc_id(header)?;
+        if !self.documents.contains_key(&document_id) {
+            return Err("unknown document".to_string());
+        }
+        let upload_id = self.start_upload(UploadKind::Resync {
+            doc_id: document_id,
+        });
+        write_frame(
+            out,
+            &json!({"id": id, "ok": true, "uploadId": upload_id}),
+            &[],
+        )
+        .map_err(|error| error.to_string())
+    }
+
+    fn upload_chunk(
+        &mut self,
+        id: u64,
+        out: &mut impl Write,
+        header: &Value,
+        body: &[u8],
+    ) -> Result<(), String> {
+        let upload_id = upload_id(header)?;
+        let seq = header.get("seq").and_then(Value::as_u64).unwrap_or(0) as u32;
+        let Some((expected, length)) = self
+            .uploads
+            .get(&upload_id)
+            .map(|upload| (upload.next_seq, upload.bytes.len()))
+        else {
+            return Err("unknown upload".to_string());
+        };
+        if seq != expected {
+            self.uploads.remove(&upload_id);
+            return Err(format!("chunk {seq} out of order; expected {expected}"));
+        }
+        if length + body.len() > MAX_DOCUMENT {
+            self.uploads.remove(&upload_id);
+            return Err(format!(
+                "document exceeds the {} MiB cap",
+                MAX_DOCUMENT / (1024 * 1024)
+            ));
+        }
+        let Some(upload) = self.uploads.get_mut(&upload_id) else {
+            return Err("unknown upload".to_string());
+        };
+        upload.bytes.extend_from_slice(body);
+        upload.next_seq += 1;
+        let received = upload.bytes.len();
+        let next_seq = upload.next_seq;
+        write_frame(
+            out,
+            &json!({"id": id, "ok": true, "received": received, "nextSeq": next_seq}),
+            &[],
+        )
+        .map_err(|error| error.to_string())
+    }
+
+    fn open_end(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let upload_id = upload_id(header)?;
+        let Some(upload) = self.uploads.remove(&upload_id) else {
+            return Err("unknown upload".to_string());
+        };
+        let UploadKind::Open { options } = upload.kind else {
+            return Err("upload is not a document open".to_string());
+        };
+        let text = String::from_utf8(upload.bytes).map_err(|_| "document body is not UTF-8")?;
+        self.store_document(id, out, text, options)
+    }
+
+    fn resync_end(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let upload_id = upload_id(header)?;
+        let Some(upload) = self.uploads.remove(&upload_id) else {
+            return Err("unknown upload".to_string());
+        };
+        let UploadKind::Resync { doc_id } = upload.kind else {
+            return Err("upload is not a document resync".to_string());
+        };
+        let text = String::from_utf8(upload.bytes).map_err(|_| "document body is not UTF-8")?;
+        let document = self.documents.get_mut(&doc_id).ok_or("unknown document")?;
+        document.resync(text);
+        write_frame(out, &json!({"id": id, "ok": true}), &[]).map_err(|error| error.to_string())
+    }
+
+    fn upload_abort(
+        &mut self,
+        id: u64,
+        out: &mut impl Write,
+        header: &Value,
+    ) -> Result<(), String> {
+        let upload_id = upload_id(header)?;
+        self.uploads.remove(&upload_id);
+        write_frame(out, &json!({"id": id, "ok": true}), &[]).map_err(|error| error.to_string())
     }
 
     fn rows(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
@@ -444,6 +619,32 @@ impl Engine {
         ))
     }
 
+    fn copy_plan(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let target_id = header
+            .get("targetDocId")
+            .and_then(Value::as_u64)
+            .ok_or("targetDocId is required")? as u32;
+        let target = self.documents.get(&target_id).ok_or("unknown document")?;
+        let spec: CopySpec =
+            serde_json::from_value(header.clone()).map_err(|error| error.to_string())?;
+        let kind = header.get("kind").and_then(Value::as_str).unwrap_or("copy");
+        let plan = if kind == "delete" {
+            plan_delete(target.text(), spec.target)
+        } else {
+            let source_id = header
+                .get("sourceDocId")
+                .and_then(Value::as_u64)
+                .ok_or("sourceDocId is required")? as u32;
+            let source = self
+                .documents
+                .get(&source_id)
+                .ok_or("unknown source document")?;
+            plan_copy(target.text(), source.text(), &spec)
+        };
+        let body = serde_json::to_vec(&plan).map_err(|error| error.to_string())?;
+        write_frame(out, &json!({"id": id, "ok": true}), &body).map_err(|error| error.to_string())
+    }
+
     fn diff_compute(
         &mut self,
         id: u64,
@@ -632,4 +833,110 @@ fn doc_id(header: &Value) -> Result<u32, String> {
         .and_then(Value::as_u64)
         .map(|value| value as u32)
         .ok_or_else(|| "docId is required".to_string())
+}
+
+fn upload_id(header: &Value) -> Result<u32, String> {
+    header
+        .get("uploadId")
+        .and_then(Value::as_u64)
+        .map(|value| value as u32)
+        .ok_or_else(|| "uploadId is required".to_string())
+}
+
+fn row_options(header: &Value) -> Result<RowOptions, String> {
+    header
+        .get("options")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|error| error.to_string())
+        .map(|options| options.unwrap_or_default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn engine() -> Engine {
+        Engine::new()
+    }
+
+    #[test]
+    fn too_large_errors_carry_a_code() {
+        let frame = failure_frame(7, "document exceeds the 512 MiB cap".to_string());
+        assert_eq!(frame["code"], "too_large");
+        assert_eq!(frame["id"], 7);
+    }
+
+    #[test]
+    fn chunked_open_assembles_utf8_across_a_split_character() {
+        let mut engine = engine();
+        let mut out = Vec::new();
+        engine
+            .open_begin(1, &mut out, &json!({"options": {"sort": "all"}}))
+            .unwrap();
+        let text = "é-data";
+        let bytes = text.as_bytes();
+        engine
+            .upload_chunk(2, &mut out, &json!({"uploadId": 1, "seq": 0}), &bytes[..1])
+            .unwrap();
+        engine
+            .upload_chunk(3, &mut out, &json!({"uploadId": 1, "seq": 1}), &bytes[1..])
+            .unwrap();
+        engine
+            .open_end(4, &mut out, &json!({"uploadId": 1}))
+            .unwrap();
+        assert_eq!(engine.documents.get(&1).unwrap().text().as_str(), text);
+        assert!(engine.uploads.is_empty());
+    }
+
+    #[test]
+    fn out_of_order_chunk_removes_the_upload() {
+        let mut engine = engine();
+        let mut out = Vec::new();
+        engine.open_begin(1, &mut out, &json!({})).unwrap();
+        let error = engine
+            .upload_chunk(2, &mut out, &json!({"uploadId": 1, "seq": 1}), b"x")
+            .unwrap_err();
+        assert!(error.contains("out of order"));
+        assert!(engine.uploads.is_empty());
+        assert!(engine
+            .upload_chunk(3, &mut out, &json!({"uploadId": 1, "seq": 0}), b"x")
+            .is_err());
+    }
+
+    #[test]
+    fn invalid_utf8_at_end_leaves_no_document() {
+        let mut engine = engine();
+        let mut out = Vec::new();
+        engine.open_begin(1, &mut out, &json!({})).unwrap();
+        engine
+            .upload_chunk(2, &mut out, &json!({"uploadId": 1, "seq": 0}), &[0xff])
+            .unwrap();
+        let error = engine
+            .open_end(3, &mut out, &json!({"uploadId": 1}))
+            .unwrap_err();
+        assert!(error.contains("UTF-8"));
+        assert!(engine.documents.is_empty());
+        assert!(engine.uploads.is_empty());
+    }
+
+    #[test]
+    fn chunked_resync_replaces_the_document_text() {
+        let mut engine = engine();
+        let mut out = Vec::new();
+        engine
+            .store_document(1, &mut out, "old".to_string(), RowOptions::default())
+            .unwrap();
+        engine
+            .resync_begin(2, &mut out, &json!({"docId": 1}))
+            .unwrap();
+        engine
+            .upload_chunk(3, &mut out, &json!({"uploadId": 1, "seq": 0}), b"new")
+            .unwrap();
+        engine
+            .resync_end(4, &mut out, &json!({"uploadId": 1}))
+            .unwrap();
+        assert_eq!(engine.documents.get(&1).unwrap().text().as_str(), "new");
+    }
 }

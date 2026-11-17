@@ -9,8 +9,10 @@
  */
 import type { DiffDocument, DiffRow, DiffSummary } from '../../core/diff/diffModel';
 import type { DiffPatch } from '../../core/diff/diffPatch';
+import type { CopyPlan, CopyRange, MissingAncestor } from '../../core/copy/copyTypes';
 import type { EcucRow } from '../../core/ecuc/renderRows';
-import { EXPECTED_PROTOCOL, type EngineClient } from './engineClient';
+import { EXPECTED_PROTOCOL, EngineError, type EngineClient } from './engineClient';
+import type { EngineHealth, EngineStateListener } from './engineHealth';
 
 export { EXPECTED_PROTOCOL };
 
@@ -83,6 +85,25 @@ export interface EngineTextChange {
 	text: string;
 }
 
+export type EngineCopyRange = CopyRange;
+
+/** One missing container the copy must synthesize around the element. */
+export type EngineMissingAncestor = MissingAncestor;
+
+/** One merge-mode arrow, addressed by the engine's document ids. */
+export interface EngineCopyRequest {
+	kind: 'copy' | 'delete';
+	targetDocId: number;
+	sourceDocId?: number;
+	source?: EngineCopyRange;
+	target?: EngineCopyRange;
+	anchorAfter?: EngineCopyRange;
+	anchorBefore?: EngineCopyRange;
+	ancestors?: EngineMissingAncestor[];
+}
+
+export type EngineCopyPlan = CopyPlan;
+
 export interface CoreEngine {
 	readonly kind: EngineKind;
 	/** The protocol version the running engine reported during the handshake. */
@@ -104,9 +125,17 @@ export interface CoreEngine {
 		right: EngineDiffSide,
 		edit: EngineDiffEdit
 	): Promise<EngineDiffPatchResult>;
+	/** The span one merge arrow writes, computed against the engine's documents. */
+	planCopy?(request: EngineCopyRequest): Promise<EngineCopyPlan>;
 	closeDocument(docId: number): Promise<void>;
 	/** A side-effect-free probe used by diagnostics and tests. */
 	engineVersion(): string;
+	/** Current process state; present on the supervisor-backed engine. */
+	health?(): Promise<EngineHealth>;
+	/** Replaces the process on demand; open documents are replayed. */
+	restart?(): Promise<void>;
+	/** State transitions, so the host can keep the status bar current. */
+	onDidChangeState?(listener: EngineStateListener): { dispose(): void };
 	dispose(): void;
 }
 
@@ -125,6 +154,49 @@ export function protocolDiagnostic(header: Record<string, unknown>): string | un
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === 'object';
+}
+
+/** The largest body sent in one frame; the header and room for the prefix stay below 64 MiB. */
+const DATAGRAM_LIMIT = 56 * 1024 * 1024;
+/** Chunk size for a document above `DATAGRAM_LIMIT`. */
+const UPLOAD_CHUNK = 8 * 1024 * 1024;
+/** Hard cap for one document, matching the engine's assembled-buffer limit. */
+const MAX_DOCUMENT = 512 * 1024 * 1024;
+
+function documentId(chunk: { header: Record<string, unknown> }): number {
+	const docId = chunk.header.docId;
+	if (typeof docId !== 'number' || !Number.isInteger(docId)) {
+		throw new Error('engine did not return a document id');
+	}
+	return docId;
+}
+
+/** Uploads one large document in raw byte chunks and returns its process document id. */
+async function openChunked(
+	client: EngineClient,
+	uri: string,
+	options: EngineRowOptions,
+	bytes: Buffer
+): Promise<number> {
+	const begin = await client.request('doc.open.begin', { uri, options });
+	const uploadId = begin.header.uploadId;
+	if (typeof uploadId !== 'number') {
+		throw new Error('engine did not return an upload id');
+	}
+	try {
+		for (let seq = 0, at = 0; at < bytes.length; seq++, at += UPLOAD_CHUNK) {
+			await client.request(
+				'doc.open.chunk',
+				{ uploadId, seq },
+				bytes.subarray(at, Math.min(at + UPLOAD_CHUNK, bytes.length))
+			);
+		}
+		const opened = await client.request('doc.open.end', { uploadId }, undefined, 120_000);
+		return documentId(opened);
+	} catch (error) {
+		void client.request('upload.abort', { uploadId }, undefined, 2_000).catch(() => undefined);
+		throw error;
+	}
 }
 
 function hasSides(envelope: Record<string, unknown>): boolean {
@@ -149,12 +221,18 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 		kind: 'rust',
 		protocol: EXPECTED_PROTOCOL,
 		openDocument: async (uri, text, options) => {
-			const opened = await client.request('doc.open', { uri, options }, text);
-			const docId = opened.header.docId;
-			if (typeof docId !== 'number' || !Number.isInteger(docId)) {
-				throw new Error('engine did not return a document id');
+			const bytes = Buffer.from(text, 'utf8');
+			if (bytes.length > MAX_DOCUMENT) {
+				throw new EngineError(
+					`document is ${Math.round(bytes.length / (1024 * 1024))} MiB; the engine accepts at most ${MAX_DOCUMENT / (1024 * 1024)} MiB`,
+					'too_large'
+				);
 			}
-			return docId;
+			if (bytes.length > DATAGRAM_LIMIT) {
+				return openChunked(client, uri, options, bytes);
+			}
+			const opened = await client.request('doc.open', { uri, options }, text);
+			return documentId(opened);
 		},
 		planEdit: async (docId, request) => {
 			const planned = await client.request('doc.plan', { docId, ...request });
@@ -185,6 +263,10 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 				return { patch };
 			}
 			return { reason: typeof answer.header.reason === 'string' ? answer.header.reason : 'unknown' };
+		},
+		planCopy: async (request) => {
+			const answer = await client.request('copy.plan', { ...request });
+			return parseJson<EngineCopyPlan>(answer);
 		},
 		closeDocument: async (docId) => {
 			if (client.isClosed) {
