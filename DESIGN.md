@@ -283,17 +283,23 @@ an 18px icon above a 10px label. The dense diff group drops its secondary labels
 Prev/Next, Collapse/Expand) at 1399px, then its primary labels (Context, Semantic, Strict, Merge) at
 1150px; the editor labels hide at 1040px. Diff boxes compact to 40px, then 36px at 960px, 32px at
 880px and 28px at 720px. The strip stays a three-column grid at every width, so the Swap action keeps
-its place over the pane divider; the Search count drops at 940px while the match arrows stay. The
-Document strip carries Collapse, Expand and the Sidebar toggle in the same variant as the diff
-toolbar. Use the shared sidebar button primitives for other actions; do not invent a second button
-style. The sidebar is a 360px panel with a 28px vertical tab strip and a 22px section header.
+its place over the pane divider. The Document strip carries Collapse, Expand and the Sidebar toggle
+in the same variant as the diff toolbar. Use the shared sidebar button primitives for other actions;
+do not invent a second button style. The sidebar is a 360px panel with a 28px vertical tab strip and
+a 22px section header.
 
 ### Search
 
-The search field is a 26px input on `surface-input`. Match marks use the two fixed amber tiers:
-`match` at 18% alpha for every hit and `match-active` at 36% for the current hit, so the text stays
-readable while the current match remains clearly stronger. Never use theme find-match colours,
-because a theme may resolve them to transparent.
+Find is a floating VS Code-style widget above the content, not a toolbar slot. It is hidden
+until `Ctrl+F` (`Ctrl+H` opens the replace row) and closes on `Escape` or its close button.
+The query row carries the case-sensitive, whole-word and regex toggles, the count, previous/
+next and close; the document view adds a replace row with preserve-case, Replace and Replace
+All. The diff view has no replace row.
+
+The engine owns the match list; the page owns the marks. Match marks use the two fixed amber
+tiers: `match` at 18% alpha for every hit and `match-active` at 36% for the current row, so
+the text stays readable while the current match remains clearly stronger. Never use theme
+find-match colours, because a theme may resolve them to transparent.
 
 ### Diff
 

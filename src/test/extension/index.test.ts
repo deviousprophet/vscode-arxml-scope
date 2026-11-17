@@ -118,10 +118,16 @@ suite('workspace index (extension)', function () {
 			'<AUTOSAR><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>Extra</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>ExtraModule</SHORT-NAME></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>'
 		);
 		await waitFor('the created file to be indexed', () => extension.indexStats().files === 2);
+		await waitFor('the status bar to show two files', () =>
+			extension.statusBarText().includes('2 files indexed')
+		);
 		assert.ok(extension.statusBarText().includes('2 files indexed'), extension.statusBarText());
 
 		fs.rmSync(extra);
 		await waitFor('the deleted file to be dropped', () => extension.indexStats().files === 1);
+		await waitFor('the status bar to show one file', () =>
+			extension.statusBarText().includes('1 file indexed')
+		);
 		assert.ok(extension.statusBarText().includes('1 file indexed'), extension.statusBarText());
 	});
 
@@ -188,6 +194,11 @@ suite('workspace index (extension)', function () {
 
 		await config.update('enabled', true, vscode.ConfigurationTarget.Workspace);
 		await waitFor('the enabled index to rebuild', () => extension.indexStats().files === 1);
+		// The rebuild publishes its status after the stats swap; wait for it so a
+		// slow runner does not assert against the busy text.
+		await waitFor('the status bar to report the rebuilt index', () =>
+			extension.statusBarText().includes('1 file indexed')
+		);
 		assert.ok(extension.statusBarText().includes('1 file indexed'), extension.statusBarText());
 		await config.update('enabled', undefined, vscode.ConfigurationTarget.Workspace);
 	});

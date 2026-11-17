@@ -10,6 +10,13 @@
 import type { DiffDocument, DiffRow, DiffSummary } from '../../core/diff/diffModel';
 import type { DiffPatch } from '../../core/diff/diffPatch';
 import type { CopyPlan, CopyRange, MissingAncestor } from '../../core/copy/copyTypes';
+import type {
+	DiffFindResult,
+	FindOptions,
+	FindResult,
+	ReplaceRequest,
+	ReplaceResult
+} from '../../core/searchModel';
 import type { EcucRow } from '../../core/ecuc/renderRows';
 import { EXPECTED_PROTOCOL, EngineError, type EngineClient } from './engineClient';
 import type { EngineHealth, EngineStateListener } from './engineHealth';
@@ -127,6 +134,18 @@ export interface CoreEngine {
 	): Promise<EngineDiffPatchResult>;
 	/** The span one merge arrow writes, computed against the engine's documents. */
 	planCopy?(request: EngineCopyRequest): Promise<EngineCopyPlan>;
+	/** Occurrences in one document's row fields. */
+	searchDocument?(docId: number, query: string, options: FindOptions): Promise<FindResult>;
+	/** The validated plans for one or every replaceable match. */
+	replaceDocument?(docId: number, request: ReplaceRequest): Promise<ReplaceResult>;
+	/** Occurrences in the last diff's cells. */
+	searchDiff?(
+		left: EngineDiffSide,
+		right: EngineDiffSide,
+		query: string,
+		options: FindOptions,
+		changesOnly: boolean
+	): Promise<DiffFindResult>;
 	closeDocument(docId: number): Promise<void>;
 	/** A side-effect-free probe used by diagnostics and tests. */
 	engineVersion(): string;
@@ -267,6 +286,18 @@ export function createEngine(client: EngineClient, version: string): CoreEngine 
 		planCopy: async (request) => {
 			const answer = await client.request('copy.plan', { ...request });
 			return parseJson<EngineCopyPlan>(answer);
+		},
+		searchDocument: async (docId, query, options) => {
+			const answer = await client.request('doc.search', { docId, query, options });
+			return parseJson<FindResult>(answer);
+		},
+		replaceDocument: async (docId, request) => {
+			const answer = await client.request('doc.replace', { docId, ...request });
+			return parseJson<ReplaceResult>(answer);
+		},
+		searchDiff: async (left, right, query, options, changesOnly) => {
+			const answer = await client.request('diff.search', { left, right, query, options, changesOnly });
+			return parseJson<DiffFindResult>(answer);
 		},
 		closeDocument: async (docId) => {
 			if (client.isClosed) {

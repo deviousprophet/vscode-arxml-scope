@@ -9,6 +9,12 @@
 import type { ConditionEntry } from './core/ecuc/conditionEntry';
 import type { EcucDocumentModel } from './core/ecuc/model';
 import type { EcucRow } from './core/ecuc/renderRows';
+import type {
+	FindOptions,
+	FindResult,
+	ReplaceRequest,
+	ReplaceResult
+} from './core/searchModel';
 
 /** The schema/packages the Document header shows. */
 export interface EditorDocumentHeader {
@@ -45,7 +51,11 @@ export type EditorProviderToWebview =
 	/** A recoverable warning for the Details or Conditions status line. */
 	| { type: 'notice'; message: string; kind?: 'warn' | 'info'; inline?: boolean; scope?: 'details' | 'conditions' }
 	/** A fatal refresh failure; the page keeps showing the last good rows. */
-	| { type: 'error'; message: string };
+	| { type: 'error'; message: string }
+	/** The engine answer for one find request. */
+	| { type: 'findResult'; requestId: number; result: FindResult; error?: string }
+	/** The engine answer for one replace request. */
+	| { type: 'replaceResult'; requestId: number; result: ReplaceResult };
 
 /** Editor page → host. */
 export type EditorWebviewToProvider =
@@ -58,7 +68,9 @@ export type EditorWebviewToProvider =
 	| { type: 'edit'; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string }
 	| { type: 'delete'; nodeId: string }
 	| { type: 'duplicate'; nodeId: string }
-	| { type: 'conditions'; entries: ConditionEntry[] };
+	| { type: 'conditions'; entries: ConditionEntry[] }
+	| { type: 'find'; requestId: number; query: string; options: FindOptions }
+	| ({ type: 'replace'; requestId: number } & ReplaceRequest);
 
 /** The schema/packages payload for one model. One owner for both host paths. */
 export function documentHeader(model: EcucDocumentModel): EditorDocumentHeader {
@@ -81,7 +93,9 @@ const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'conditions',
 	'select',
 	'notice',
-	'error'
+	'error',
+	'findResult',
+	'replaceResult'
 ]);
 
 /** A host message with the editor protocol's shape; the page ignores anything else. */

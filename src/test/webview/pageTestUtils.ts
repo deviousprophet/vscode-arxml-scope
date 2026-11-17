@@ -13,6 +13,8 @@ import './cssImportHook';
 import { editorShell, diffShell } from '../../host/webviewShell';
 import type { EditorProviderToWebview } from '../../webviewProtocol';
 import type { DiffProviderToWebview } from '../../diffProtocol';
+import { findRanges } from '../../webview/render/searchPattern';
+import type { FindOptions } from '../../core/searchModel';
 
 export interface HostMessageRecorder {
 	messages: any[];
@@ -157,13 +159,122 @@ export function installMarkup(html: string): InstalledDom {
 	window.acquireVsCodeApi = () => api.api;
 	globals.acquireVsCodeApi = () => api.api;
 
+	/** Row store captured from host messages, so a page find gets a host answer. */
+	let echoedRows: any[] = [];
+
+	function rowTexts(row: any): string[] {
+		if (row.key !== undefined) {
+			return [row.left, row.right]
+				.filter(Boolean)
+				.flatMap((cell: any) => [cell.label, cell.shownValue, ...(cell.meta ?? []).map((part: any) => part.text)]);
+		}
+		return [row.label, row.shownValue, ...(row.meta ?? []).map((part: any) => part.text)];
+	}
+
+	function rowHasHit(row: any, query: string, options: FindOptions): boolean {
+		return rowTexts(row).some(
+			(text: string | undefined) => text !== undefined && findRanges(text, query, options).length > 0
+		);
+	}
+
+	function findMatches(query: string, options: FindOptions, changesOnly: boolean): any[] {
+		const rows = changesOnly ? echoedRows.filter((row) => row.status !== 'unchanged') : echoedRows;
+		return rowsFlat(rows, query, options);
+	}
+
+	function rowsFlat(rows: any[], query: string, options: FindOptions): any[] {
+		const matches: any[] = [];
+		for (const row of rows) {
+			if (!rowHasHit(row, query, options)) {
+				continue;
+			}
+			matches.push(
+				row.key !== undefined
+					? { key: row.key, side: 'left', field: 'value', start: 0, end: 1 }
+					: { rowId: row.id, field: 'value', start: 0, end: 1, replaceable: true }
+			);
+		}
+		return matches;
+	}
+
+	function dispatchPageMessage(message: any): void {
+		window.dispatchEvent(new window.MessageEvent('message', { data: message }));
+	}
+
+	const sendFindResult = (message: { requestId?: number; query?: string; options?: FindOptions; changesOnly?: boolean }): void => {
+		if (typeof message.requestId !== 'number') {
+			return;
+		}
+		const options = message.options ?? { caseSensitive: false, wholeWord: false, regex: false };
+		const matches = findMatches(message.query ?? '', options, message.changesOnly === true);
+		dispatchPageMessage({
+			type: 'findResult',
+			requestId: message.requestId,
+			result: { matches, total: matches.length, limited: false }
+		});
+	};
+
+	function answerReplace(message: any): void {
+		if (message?.type !== 'replace' || typeof message.requestId !== 'number') {
+			return;
+		}
+		dispatchPageMessage({
+			type: 'replaceResult',
+			requestId: message.requestId,
+			result: {
+				ok: false,
+				plans: [],
+				reason: 'the test host does not replace',
+				replacedFields: 0,
+				replacedOccurrences: 0,
+				stopped: false
+			}
+		});
+	}
+
+	const protocolPost = api.api.postMessage.bind(api.api);
+	api.api.postMessage = (message: any) => {
+		protocolPost(message);
+		if (message?.type === 'find') {
+			sendFindResult(message);
+		} else {
+			answerReplace(message);
+		}
+	};
+
+	function captureHostMessage(message: any): void {
+		const type = message?.type;
+		if (type === 'document') {
+			captureRows(message.document);
+			return;
+		}
+		if (type === 'documentPatch') {
+			applyEchoedPatch(message.patch);
+		}
+	}
+
+	function captureRows(documentPayload: any): void {
+		if (Array.isArray(documentPayload?.rows)) {
+			echoedRows = documentPayload.rows;
+		}
+	}
+
+	function applyEchoedPatch(patch: any): void {
+		echoedRows = [
+			...echoedRows.slice(0, patch.at),
+			...patch.rows,
+			...echoedRows.slice(patch.at + patch.remove)
+		];
+	}
+
 	return {
 		dom,
 		window,
 		document: window.document,
 		api,
 		post(message) {
-			window.dispatchEvent(new window.MessageEvent('message', { data: message }));
+			captureHostMessage(message);
+			dispatchPageMessage(message);
 		},
 		restore() {
 			for (const [name, value] of Object.entries(saved)) {

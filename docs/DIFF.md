@@ -32,8 +32,8 @@ compared, not just the bytes on disk.
 - One panel titled `<left> ↔ <right>`, with the two panes side by side.
 - The toolbar is icon-over-label: **Show all** / **Show diff** ÷ **Context** ÷ **Semantic** /
   **Strict** ÷ **Prev diff** / **Next diff** ÷ **Collapse** / **Expand**, with **Swap sides**
-  centered over the pane divider and Search on the right. There is no
-  changed/added/removed/renamed count in the page.
+  centered over the pane divider. Find is a floating widget opened by `Ctrl+F`, not a toolbar slot.
+  There is no changed/added/removed/renamed count in the page.
 - A fixed file-name strip above the two panes shows the shortest distinguishing label on each side,
   with the full path in its tooltip. It is chrome, not content: it never scrolls.
 - Schema and package lines are the first rows of each pane's document content. They scroll with the
@@ -206,8 +206,9 @@ split line. The split line is a display control only; it never changes the compa
 | Row twisty / `Left` / `Right` | Collapse or expand a subtree. |
 | `Space` | Select the focused row. |
 | `Enter` | Reveal the selected row in its source file. The revealed side follows the displayed pane after a swap. |
-| **Search** | Type a query and press `Enter`; `Shift+Enter` goes backwards. `Ctrl+F` / `Cmd+F` focuses the field. |
-| **Search count** | `1 / N` or `0 / 0`; the busy slot shows a running chunked search. |
+| **Search** | `Ctrl+F` / `Cmd+F` opens the find widget; type a query and press `Enter`; `Shift+Enter` goes backwards. |
+| **Search options** | `Aa` case sensitive, `ab|` whole word, `.*` regular expression. The diff has no replace row. |
+| **Search count** | `1 / N`, `0 / 0` or `Invalid pattern`; the busy slot shows a running engine request. |
 
 Search jumps and marks; it never hides rows. In **Show diff** the search candidates are the
 changed/added/removed rows; in **Show all** they are all rows. Switching the view restarts the committed query

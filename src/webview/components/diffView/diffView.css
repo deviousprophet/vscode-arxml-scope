@@ -62,15 +62,6 @@ body[data-page="diff"] .toolbar .view-switch {
 	flex: none;
 	gap: 2px;
 }
-body[data-page="diff"] .search-input {
-	height: 22px;
-	color: var(--vscode-input-foreground, var(--vscode-foreground));
-	background: var(--vscode-input-background, transparent);
-	border-color: var(--vscode-input-border, var(--vscode-panel-border, transparent));
-}
-body[data-page="diff"] .search-box .search-nav {
-	height: 22px;
-}
 body[data-page="diff"] .nav-btn {
 	display: inline-flex;
 	align-items: center;
@@ -451,9 +442,6 @@ body.vscode-high-contrast .diff-row .word-changed[data-word-side] {
 	.toolbar {
 		padding: 0 4px;
 		gap: 3px;
-	}
-	.search-field {
-		flex: 1 1 0;
 	}
 	.notice {
 		display: none;

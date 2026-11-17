@@ -317,7 +317,10 @@ suite('sidebar shell', () => {
 	});
 
 	test('the shared button and field primitives use theme tokens', () => {
-		const style = webviewCss('components', 'sidebar', 'sidebar.css') + webviewCss('components', 'searchBar', 'searchBar.css');
+		const style =
+			webviewCss('styles', 'base.css') +
+			webviewCss('components', 'sidebar', 'sidebar.css') +
+			webviewCss('components', 'searchBar', 'searchBar.css');
 		for (const selector of ['.sb-btn', '.sb-btn-primary', '.sb-btn-secondary', '.sb-btn-add', '.sb-btn-danger']) {
 			assert.ok(style.includes(selector), selector);
 		}
@@ -334,8 +337,8 @@ suite('sidebar shell', () => {
 		assert.ok(/\.act-btn\s*\{[^}]*width:\s*18px[^}]*height:\s*18px[^}]*opacity:\s*0/.test(style));
 		assert.ok(/\.parent:hover \.act-btn/.test(style), 'row actions appear on row hover');
 		assert.ok(/\.search-input\s*\{[^}]*height:\s*26px/.test(style));
-		assert.ok(/\.search-input\s*\{[^}]*--vscode-input-background/.test(style));
-		assert.ok(/\.search-input\s*\{[^}]*--vscode-input-border/.test(style));
+		assert.ok(/\.field-input\s*\{[^}]*--vscode-input-background/.test(style));
+		assert.ok(/\.field-input\s*\{[^}]*--vscode-input-border/.test(style));
 		assert.ok(/input\[type="search"\]::-webkit-search-cancel-button/.test(style));
 		assert.ok(/\.search-clear\s*\{[^}]*position:\s*absolute/.test(style));
 	});
@@ -652,7 +655,7 @@ suite('sidebar shell', () => {
 		assert.ok(/id="collapse-all" class="tool diff-tool"/.test(html));
 		assert.ok(/id="expand-all" class="tool diff-tool"/.test(html));
 		assert.ok(/id="toggle-sidebar" class="tool diff-tool"/.test(html));
-		assert.ok(html.includes('class="search-input"'));
+		assert.ok(html.includes('class="search-input field-input"'));
 		assert.ok(!html.includes('id="conditions-toggle"'));
 		assert.ok(!html.includes('id="details-toggle"'));
 	});

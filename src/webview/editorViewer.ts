@@ -34,15 +34,11 @@ import {
 	subtreeRowIds,
 	toggleCollapsed,
 } from './components/documentTree/documentTreeState';
-import { RowSearchEngine } from './render/rowSearch';
-import {
-	beginSearch,
-	finishSearch,
-	mountSearchBar,
-	renderSearchCount,
-	retainedSearchIndex,
-} from './render/searchState';
+import { mountSearchBar, renderSearchCount } from './render/searchState';
 import { inspectorElement } from './render/dom';
+import { findRanges } from './render/searchPattern';
+import type { FindMatch, FindOptions } from '../core/searchModel';
+import { DEFAULT_FIND_OPTIONS } from '../core/searchModel';
 import {
 	getSidebarState,
 	mountSidebarShell,
@@ -113,9 +109,8 @@ interface EditorHeaderRow {
 	haystack: string;
 }
 
-interface EditorSearchCandidate {
-	id: string;
-	haystack: string;
+/** One engine or header occurrence; `headerIndex` marks the local header matches. */
+interface EditorFindMatch extends FindMatch {
 	headerIndex?: number;
 }
 
@@ -124,17 +119,17 @@ let headerRowCount = 0;
 let headerGapCount = 0;
 let offsets: number[] = [0];
 let contentWidth = 0;
-let searchCandidates: EditorSearchCandidate[] = [];
 // Search is a jump control, not a visibility control: the whole row store is the
-// candidate set, and the collapsed set never removes a candidate. The query is
-// mirrored into the row primitives for the mark text.
+// candidate set, and the collapsed set never removes a candidate. The engine owns
+// the row match list; the page adds header occurrences and owns highlight marks.
 let searchQuery = '';
-let searchMatches: number[] = [];
+let searchOptions: FindOptions = { ...DEFAULT_FIND_OPTIONS };
+let searchMatches: EditorFindMatch[] = [];
 let searchIndex = -1;
-
-const searchEngine = new RowSearchEngine();
+let searchRequestId = 0;
+let searchInvalid = false;
+let searchPreserveId: string | undefined;
 let searchRunning = false;
-let searchFirstJumpDone = false;
 // Discovery derives row names from the current document; manual rows are the
 // only removable ones, so there is no dismissal set any more.
 let windowRange: [number, number] = [0, 0];
@@ -285,20 +280,6 @@ function setHeaderRows(header: DocumentTreeHeader | undefined): void {
 	headerGapCount = Math.min(1, headerRowCount);
 }
 
-function buildSearchCandidates(): void {
-	searchCandidates = [];
-	for (let at = 0; at < headerRows.length; at++) {
-		searchCandidates.push({
-			id: headerRows[at].id,
-			haystack: headerRows[at].haystack.toLowerCase(),
-			headerIndex: at
-		});
-	}
-	for (const row of rows) {
-		searchCandidates.push({ id: row.id, haystack: row.haystack });
-	}
-}
-
 function measuredRowHeight(measure: HTMLElement): number {
 	const element = measure.querySelector('.probe-doc > .row');
 	const measured = element ? element.getBoundingClientRect().height : 0;
@@ -345,7 +326,6 @@ function rebuildDisplay() {
 			}
 		}
 	}
-	buildSearchCandidates();
 	buildHeightFn();
 }
 
@@ -372,12 +352,12 @@ function refreshSearchAfterRows(previousMatchId: string | undefined): void {
 	// A re-scan keeps the search and, when the row survived, the current match; the
 	// matches themselves are recomputed against the new row indices.
 	if (searchQuery.trim() !== '') {
-		startSearch(searchQuery, previousMatchId, true);
+		startSearch(searchQuery, previousMatchId);
 		return;
 	}
 	searchMatches = [];
 	searchIndex = -1;
-	setHighlightQuery('');
+	setHighlightQuery('', searchOptions);
 	setSearchBusy(false);
 	renderSearchUi();
 }
@@ -1266,9 +1246,8 @@ function renderedItemFor(id: string): HTMLElement | undefined {
 }
 
 /** The row id at the current search position, or undefined when nothing is current. */
-function currentMatchId() {
-	const candidate = searchCandidates[searchMatches[searchIndex]];
-	return candidate ? candidate.id : undefined;
+function currentMatchId(): string | undefined {
+	return searchMatches[searchIndex]?.rowId;
 }
 
 /** The index of a row id in the current match list, or -1. */
@@ -1276,10 +1255,9 @@ function searchIndexOfId(id: string | undefined): number {
 	if (id === undefined) {
 		return -1;
 	}
-	const candidateIndex = searchCandidates.findIndex(function (candidate) {
-		return candidate.id === id;
+	return searchMatches.findIndex(function (found) {
+		return found.rowId === id;
 	});
-	return candidateIndex < 0 ? -1 : searchMatches.indexOf(candidateIndex);
 }
 
 function setSearchBusy(busy: boolean): void {
@@ -1287,72 +1265,102 @@ function setSearchBusy(busy: boolean): void {
 	renderSearchUi();
 }
 
-/**
- * Start a chunked search. previousId is preserved across progress/completion
- * and a re-scan; immediate skips the 120 ms debounce for a re-scan.
- */
-function startSearch(query: string, previousId?: string, immediate?: boolean): void {
-	const start = beginSearch<number>(searchEngine, query, previousId, setHighlightQuery);
-	if (start === undefined) {
+/** Header matches are page-local: the engine owns rows, not schema/package text. */
+function headerFindMatches(query: string, options: FindOptions): EditorFindMatch[] {
+	const matches: EditorFindMatch[] = [];
+	for (let at = 0; at < headerRows.length; at++) {
+		const header = headerRows[at];
+		for (const [field, text] of [
+			['label', header.keyword],
+			['value', header.text]
+		] as const) {
+			for (const range of findRanges(text, query, options)) {
+				matches.push({
+					rowId: header.id,
+					field,
+					start: range.start,
+					end: range.end,
+					replaceable: false,
+					headerIndex: at
+				});
+			}
+		}
+	}
+	return matches;
+}
+
+/** Start an engine search; header occurrences are merged into the answer. */
+function startSearch(query: string, previousId?: string): void {
+	const text = (query || '').trim();
+	if (text === '') {
 		resetSearchResults();
 		return;
 	}
-	searchQuery = start.query;
-	searchMatches = start.matches;
-	searchIndex = start.index;
-	searchFirstJumpDone = start.firstJumpDone;
+	searchQuery = query;
+	searchInvalid = false;
+	searchPreserveId = previousId;
+	setHighlightQuery(query, searchOptions);
+	searchBar.setInvalid(false);
+	const requestId = ++searchRequestId;
 	setSearchBusy(true);
 	renderSearchUi();
 	renderWindow(true);
-	searchEngine.search(
-		searchCandidates,
-		start.query,
-		{
-			onProgressUpdate: function (matches) {
-				const currentId = currentMatchId();
-				searchMatches = matches;
-				if (!searchFirstJumpDone && searchMatches.length > 0) {
-					searchIndex = 0;
-					searchFirstJumpDone = true;
-					renderSearchUi();
-					jumpToSearchMatch(0);
-					return;
-				}
-				const wanted = currentId !== undefined ? currentId : previousId;
-				searchIndex = retainedSearchIndex(
-					wanted,
-					searchMatches.length,
-					searchIndexOfId,
-					Math.min(Math.max(searchIndex, 0), searchMatches.length - 1)
-				);
-				renderSearchUi();
-				renderWindow(true);
-			},
-			onComplete: function (matches) {
-				const currentId = currentMatchId();
-				searchMatches = matches;
-				const wanted = currentId !== undefined ? currentId : previousId;
-				searchIndex = retainedSearchIndex(wanted, searchMatches.length, searchIndexOfId, 0);
-				searchFirstJumpDone = true;
-				finishSearch(
-					searchIndex,
-					setSearchBusy,
-					renderSearchUi,
-					jumpToSearchMatch,
-					function () { renderWindow(true); }
-				);
-			}
-		},
-		immediate === true
-	);
+	postToHost({ type: 'find', requestId, query, options: searchOptions });
+}
+
+/** Installs one engine answer, preserving the nearest previous row. */
+function applyFindResult(requestId: number, result: { matches: FindMatch[]; limited: boolean }, error?: string): void {
+	if (requestId !== searchRequestId) {
+		return;
+	}
+	setSearchBusy(false);
+	if (error !== undefined) {
+		showFindError(error);
+		return;
+	}
+	const wanted = currentMatchId() ?? searchPreserveId;
+	searchMatches = headerFindMatches(searchQuery, searchOptions).concat(result.matches);
+	searchIndex = retainedFindIndex(wanted);
+	renderSearchUi();
+	jumpToRetainedMatch();
+}
+
+function jumpToRetainedMatch(): void {
+	if (searchIndex >= 0) {
+		jumpToSearchMatch(searchIndex);
+	} else {
+		renderWindow(true);
+	}
+}
+
+/** The invalid-pattern or engine-unavailable state. */
+function showFindError(error: string): void {
+	searchInvalid = searchOptions.regex;
+	searchBar.setInvalid(searchInvalid);
+	searchMatches = [];
+	searchIndex = -1;
+	searchBar.setCount(searchInvalid ? 'Invalid pattern' : 'Search unavailable');
+	renderWindow(true);
+	if (!searchInvalid) {
+		reportError(error);
+	}
+}
+
+function retainedFindIndex(wanted: string | undefined): number {
+	if (searchMatches.length === 0) {
+		return -1;
+	}
+	const kept = searchIndexOfId(wanted);
+	return kept >= 0 ? kept : 0;
 }
 
 /** The count and control state: '1 / N', '0 / 0', or empty for a blank query. */
 function renderSearchUi() {
 	renderSearchCount(searchBar, searchBar.hasText(), searchQuery, searchMatches.length, searchIndex, searchRunning);
+	searchBar.setReplaceEnabled(searchMatches.length > 0);
 }
 
-function jumpToHeader(candidate: EditorSearchCandidate): void {
+function jumpToHeader(candidate: EditorFindMatch): void {
 	const index = candidate.headerIndex;
 	if (index === undefined) {
 		return;
@@ -1390,15 +1398,15 @@ function jumpToNode(id: string): void {
 
 /** Move to one match: expand ancestors, rebuild, scroll, select, keep focus in Search. */
 function jumpToSearchMatch(index: number): void {
-	const candidate = searchCandidates[searchMatches[index]];
-	if (!candidate) {
+	const found = searchMatches[index];
+	if (!found) {
 		return;
 	}
-	if (candidate.headerIndex !== undefined) {
-		jumpToHeader(candidate);
+	if (found.headerIndex !== undefined) {
+		jumpToHeader(found);
 		return;
 	}
-	jumpToNode(candidate.id);
+	jumpToNode(found.rowId);
 }
 
 /** Cycle matches with wrapping; no-op when the query has no candidates. */
@@ -1412,15 +1420,62 @@ function cycleSearch(direction: number): void {
 
 /** Drop the active result set without touching the search field text. */
 function resetSearchResults() {
-	searchEngine.clear();
+	searchRequestId++;
 	searchQuery = '';
+	searchInvalid = false;
 	searchMatches = [];
 	searchIndex = -1;
-	setHighlightQuery('');
-	searchFirstJumpDone = false;
+	setHighlightQuery('', searchOptions);
+	searchBar.setInvalid(false);
 	setSearchBusy(false);
 	renderSearchUi();
 	renderWindow(true);
+}
+
+let replaceRequestId = 0;
+
+/** Replace the current occurrence, or every replaceable one. */
+function requestReplace(all: boolean): void {
+	const found = searchMatches[searchIndex];
+	if (!all && !isReplaceable(found)) {
+		searchBar.setCount('Not replaceable');
+		reportError('This match is not an editable value or container short name');
+		return;
+	}
+	const requestId = ++replaceRequestId;
+	postToHost({
+		type: 'replace',
+		requestId,
+		query: searchQuery,
+		options: searchOptions,
+		replacement: searchBar.replaceValue(),
+		preserveCase: searchBar.preserveCase(),
+		all,
+		...(found === undefined
+			? {}
+			: { match: { rowId: found.rowId, field: found.field, start: found.start, end: found.end } })
+	});
+}
+
+function isReplaceable(found: EditorFindMatch | undefined): boolean {
+	return found !== undefined && found.replaceable;
+}
+
+function applyReplaceResult(requestId: number, result: { ok: boolean; reason?: string; replacedFields: number }): void {
+	if (requestId !== replaceRequestId) {
+		return;
+	}
+	if (!result.ok) {
+		searchBar.setCount('Replace refused');
+		reportError(result.reason ?? 'Replace refused');
+		return;
+	}
+	// Let the host's document-change path reach the engine before the next search.
+	setTimeout(() => {
+		if (searchQuery.trim() !== '') {
+			startSearch(searchQuery, currentMatchId());
+		}
+	}, 50);
 }
 
 function firstVisibleNodeId(): string | undefined {
@@ -1447,13 +1502,9 @@ function syncSearchToSelection(id: string): void {
 	if (searchQuery.trim() === '') {
 		return;
 	}
-	const candidateIndex = searchCandidates.findIndex(function (candidate) {
-		return candidate.id === id;
+	const at = searchMatches.findIndex(function (found) {
+		return found.rowId === id;
 	});
-	if (candidateIndex < 0) {
-		return;
-	}
-	const at = searchMatches.indexOf(candidateIndex);
 	if (at >= 0) {
 		searchIndex = at;
 		renderSearchUi();
@@ -1750,22 +1801,54 @@ function isFindShortcut(event: KeyboardEvent): boolean {
 	return isCommandKey(event) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f';
 }
 
+function isReplaceShortcut(event: KeyboardEvent): boolean {
+	return isCommandKey(event) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'h';
+}
+
 function isSearchCycleKey(event: KeyboardEvent): boolean {
 	return event.key === 'F3' && searchQuery.trim() !== '';
+}
+
+function handleFindShortcutKey(event: KeyboardEvent): boolean {
+	if (isFindShortcut(event)) {
+		event.preventDefault();
+		searchBar.show(false);
+		return true;
+	}
+	if (isReplaceShortcut(event)) {
+		event.preventDefault();
+		searchBar.show(true);
+		return true;
+	}
+	return false;
+}
+
+function handleEscapeSearch(event: KeyboardEvent): boolean {
+	if (event.key !== 'Escape' || !searchBar.visible) {
+		return false;
+	}
+	event.preventDefault();
+	searchBar.hide();
+	resetSearchResults();
+	focusTreeAfterSearch();
+	return true;
+}
+
+function handleCycleKey(event: KeyboardEvent): void {
+	if (!isSearchCycleKey(event)) {
+		return;
+	}
+	event.preventDefault();
+	cycleSearch(event.shiftKey ? -1 : 1);
 }
 
 function onDocumentKeydown(event: KeyboardEvent): void {
 	// A keyboard gesture supersedes a deferred value click.
 	cancelPendingDetailsEdit();
-	if (isFindShortcut(event)) {
-		event.preventDefault();
-		searchBar.focus();
+	if (handleFindShortcutKey(event) || handleEscapeSearch(event)) {
 		return;
 	}
-	if (isSearchCycleKey(event)) {
-		event.preventDefault();
-		cycleSearch(event.shiftKey ? -1 : 1);
-	}
+	handleCycleKey(event);
 }
 
 /** The row pieces a copied line reconstructs; guides, twisties and gaps contribute nothing. */
@@ -2067,22 +2150,35 @@ function canReplaceInPlace(patch: EditorRowPatch, existing: EcucRow | undefined)
 function applyDocumentPatch(message: Extract<EditorProviderToWebview, { type: 'documentPatch' }>): void {
 	const patch = message.patch;
 	const existing = rows[patch.at];
-	if (canReplaceInPlace(patch, existing)) {
-		// A value edit keeps the row count and every id: no re-index, no rebuild.
-		// Fields the host owns (the resolved definition) survive the merge.
-		rows[patch.at] = { ...existing, ...patch.rows[0] };
-		// The search index is a snapshot; an in-place patch must refresh it or a
-		// patched haystack is invisible until the next full document.
-		buildSearchCandidates();
-		if (message.header !== undefined) {
-			setHeaderRows(message.header);
-		}
-		renderWindow(true);
-		updateInspector();
+	if (!canReplaceInPlace(patch, existing)) {
+		rows.splice(patch.at, patch.remove, ...patch.rows);
+		setRows(rows, message.selectedId ?? selectedId, message.header);
 		return;
 	}
-	rows.splice(patch.at, patch.remove, ...patch.rows);
-	setRows(rows, message.selectedId ?? selectedId, message.header);
+	applyInPlacePatch(message, patch, existing);
+}
+
+function applyInPlacePatch(
+	message: Extract<EditorProviderToWebview, { type: 'documentPatch' }>,
+	patch: EditorRowPatch,
+	existing: EcucRow | undefined
+): void {
+	if (existing === undefined) {
+		return;
+	}
+	// A value edit keeps the row count and every id: no re-index, no rebuild.
+	// Fields the host owns (the resolved definition) survive the merge.
+	rows[patch.at] = { ...existing, ...patch.rows[0] };
+	// The engine match list is a snapshot; a patched row must be searched again
+	// before the next jump uses a stale occurrence.
+	if (searchQuery.trim() !== '') {
+		startSearch(searchQuery, currentMatchId());
+	}
+	if (message.header !== undefined) {
+		setHeaderRows(message.header);
+	}
+	renderWindow(true);
+	updateInspector();
 }
 
 function handleDocumentMessage(message: EditorProviderToWebview): boolean {
@@ -2106,12 +2202,28 @@ function handleInteractionMessage(message: EditorProviderToWebview): boolean {
 		handleSelectMessage(message);
 		return true;
 	}
+	return handleStatusMessage(message) || handleFindResultMessage(message);
+}
+
+function handleStatusMessage(message: EditorProviderToWebview): boolean {
 	if (message.type === 'notice') {
 		applyNoticeMessage(message);
 		return true;
 	}
 	if (message.type === 'error') {
 		applyErrorMessage(message.message);
+		return true;
+	}
+	return false;
+}
+
+function handleFindResultMessage(message: EditorProviderToWebview): boolean {
+	if (message.type === 'findResult') {
+		applyFindResult(message.requestId, message.result, message.error);
+		return true;
+	}
+	if (message.type === 'replaceResult') {
+		applyReplaceResult(message.requestId, message.result);
 		return true;
 	}
 	return false;
@@ -2184,9 +2296,19 @@ searchBar = mountSearchBar(
 	startSearch,
 	cycleSearch,
 	renderSearchUi,
-	setHighlightQuery,
+	(value) => setHighlightQuery(value, searchOptions),
 	false,
-	focusTreeAfterSearch
+	focusTreeAfterSearch,
+	{
+		onOptions: (options) => {
+			searchOptions = options;
+			setHighlightQuery(searchQuery, searchOptions);
+			if (searchQuery.trim() !== '') {
+				startSearch(searchQuery, currentMatchId());
+			}
+		},
+		onReplace: (_text, all) => requestReplace(all)
+	}
 );
 virtualScroll = new VirtualScroll(
 	'#tree',
@@ -2234,12 +2356,14 @@ function resetEditorState(): void {
 	headerGapCount = 0;
 	offsets = [0];
 	contentWidth = 0;
-	searchCandidates = [];
 	searchQuery = '';
+	searchOptions = { ...DEFAULT_FIND_OPTIONS };
 	searchMatches = [];
 	searchIndex = -1;
+	searchRequestId = 0;
+	searchInvalid = false;
+	searchPreserveId = undefined;
 	searchRunning = false;
-	searchFirstJumpDone = false;
 	windowRange = [0, 0];
 	renderedById = new Map();
 	heights = { document: 20 };
@@ -2250,7 +2374,7 @@ function resetEditorState(): void {
 	treeView = undefined;
 	resetVsCodeApi();
 	resetDetailsEditorState();
-	setHighlightQuery('');
+	setHighlightQuery('', searchOptions);
 }
 
 if (typeof document !== 'undefined' && document.getElementById('tree')) {

@@ -61,7 +61,10 @@ operations that can exceed one frame stream chunks and mark the last with
 | `doc.model` | the document's module tree |
 | `diff.compute` | stream the semantic diff |
 | `diff.patch` | rows changed by one copy |
+| `diff.search` | occurrences in the last diff's cells |
 | `copy.plan` | one merge arrow's span, computed from document ids |
+| `doc.search` | occurrences in one document's row fields |
+| `doc.replace` | validated replace plans for one or every match |
 
 ### Large documents
 
