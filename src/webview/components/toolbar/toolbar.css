@@ -48,6 +48,18 @@
 	gap: 6px;
 	min-width: 0;
 }
+.editor-dirty-status {
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	padding: 0 6px;
+	color: var(--vscode-editorWarning-foreground, var(--vscode-gitDecoration-modifiedResourceForeground, var(--tok-dim)));
+	font-size: 11px;
+	white-space: nowrap;
+}
+.editor-dirty-status[hidden] {
+	display: none;
+}
 .tool {
 	display: inline-flex;
 	align-items: center;

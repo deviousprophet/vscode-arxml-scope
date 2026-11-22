@@ -205,7 +205,14 @@ collapsed sections and visibility persist across a webview reload.
 
 ## Editing rules
 
-The Document surface is read-only. Editing happens in Details or through the row context menu.
+The Document surface supports direct value and container-short-name typing; definition-ref and
+structural edits stay in Details or the row context menu. The editor is optimistic: the typed text
+is shown immediately, an `Unsaved changes` marker appears in the toolbar and the tab title gets a
+`•`, and the host write happens after a short idle pause. Edits carry an id and document revision;
+the host serializes its `WorkspaceEdit`s and acknowledges each one. A refusal restores the last
+host-accepted text only when no newer local edit is waiting. `Ctrl+S` flushes pending edits before
+the save, so the file cannot save an older value. The tab title and marker clear when the real
+`TextDocument` becomes clean.
 
 ### Field edits
 
@@ -220,6 +227,8 @@ The Document surface is read-only. Editing happens in Details or through the row
   refused value never reaches the file.
 - A value backed by CDATA is shown but not editable.
 - A module cannot be renamed: its short name is part of every container id.
+- Direct typing is local-first: the value stays visible while the host write is in flight, and a
+  host re-scan cannot overwrite a newer local field.
 
 Each accepted edit is exactly one `WorkspaceEdit` on the real text document, so it is one undo step.
 

@@ -110,7 +110,11 @@ export function editorShell(assets: WebviewShellAssets): string;
 
 // src/webviewProtocol.ts
 export type EditorProviderToWebview =
-  | { type: 'document'; document: EditorDocumentPayload }
+  | { type: 'document'; document: EditorDocumentPayload } // rows, selectedId, header, settings, revision, dirty
+  | { type: 'documentPatch'; patch: EditorRowPatch; header?: EditorDocumentHeader; selectedId?: string; revision?: number; dirty?: boolean }
+  | { type: 'editResult'; editId: number; ok: boolean; reason?: string; revision: number }
+  | { type: 'dirty'; dirty: boolean; revision: number }
+  | { type: 'flushEdits'; requestId: number }
   | { type: 'conditions'; entries: ConditionEntry[] }
   | { type: 'select'; nodeId: string }
   | { type: 'notice'; message: string; kind?: 'warn' | 'info'; inline?: boolean; scope?: 'details' | 'conditions' }
@@ -120,7 +124,8 @@ export type EditorWebviewToProvider =
   | { type: 'select'; nodeId: string }
   | { type: 'reveal'; nodeId: string }
   | { type: 'follow'; nodeId: string }
-  | { type: 'edit'; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string }
+  | { type: 'edit'; editId?: number; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string; baseRevision?: number }
+  | { type: 'flushed'; requestId: number }
   | { type: 'delete'; nodeId: string }
   | { type: 'duplicate'; nodeId: string }
   | { type: 'conditions'; entries: ConditionEntry[] };
@@ -182,12 +187,16 @@ store, then `postToHost({ type: 'ready' })`.
    handled first; the remaining messages must carry a string `nodeId`. `edit` also requires a string
    `value`; a missing `field` normalizes to `'value'`, and an unknown field is ignored. `select` only
    updates the host's selection map.
-6. **One user action, one write.** `editField` scans the current text, builds an `EditPlan` with
-   `buildEdit` (parameter `<VALUE>`) or `buildFieldEdit` (container `<SHORT-NAME>` /
-   `<DEFINITION-REF>`), and applies exactly one `WorkspaceEdit` through `applyEdit`. Delete and
-   duplicate go through `planDelete` / `planDuplicate` and `applyStructureEdit` after a modal
-   confirmation. A refusal posts a `notice` (for a field, `inline: true`, `scope: 'details'`) and leaves
-   the bytes untouched.
+6. **One user action, one write.** `editField` validates against the current text (or the engine's
+   retained model), then applies exactly one `WorkspaceEdit` through `applyEdit`. Edits carry
+   `editId` and `baseRevision`; the host serializes them on `session.editChain` and answers each with
+   `{ type: 'editResult', editId, ok, reason?, revision }`. Every `document` / `documentPatch` push
+   carries `revision` and `dirty`, a save posts `dirty`, and the panel title's `•` follows
+   `TextDocument.isDirty` after every change, save and edit.
+   `onWillSaveTextDocument` asks the page to flush pending edits (`flushEdits`/`flushed`) and waits
+   for the queue before the save. Delete and duplicate go through `planDelete` / `planDuplicate` and
+   `applyStructureEdit` after a modal confirmation. A refusal posts a `notice` (for a field,
+   `inline: true`, `scope: 'details'`) and leaves the bytes untouched.
 7. **Renames follow the id.** A container rename changes its path-based id. Before writing,
    `editField` stores `plan.nextNodeId`; the re-scan that follows the document change carries that
    surviving id. A refused write restores the previous selection entry.

@@ -40,12 +40,18 @@ import { repoRoot, sleep } from './testUtils';
 
 interface StubMessage {
 	type?: string;
-	document?: { rows?: EcucRow[]; selectedId?: string };
+	document?: { rows?: EcucRow[]; selectedId?: string; revision?: number; dirty?: boolean };
 	patch?: { at: number; remove: number; rows: EcucRow[]; structural: boolean };
 	message?: string;
 	nodeId?: string;
 	inline?: boolean;
 	scope?: string;
+	editId?: number;
+	requestId?: number;
+	ok?: boolean;
+	reason?: string;
+	revision?: number;
+	dirty?: boolean;
 }
 
 interface StubPanel {
@@ -455,6 +461,125 @@ suite('editor value editing (AC1–AC9)', () => {
 				const rows = lastRows(stub);
 				return rows.some((row) => row.value === '42') && !rows.some((row) => row.value === '99');
 			});
+		});
+	});
+
+	test('AC5: edit acknowledgements carry revisions and dirty transitions', async () => {
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const original = document.getText();
+			const { stub } = open(document);
+
+			await stub.send({
+				type: 'edit',
+				editId: 1,
+				nodeId: parameterId(original, 'Count'),
+				value: '41',
+				baseRevision: document.version
+			});
+			await waitFor('the acknowledged edit', () =>
+				stub.messages.some((message) => message.type === 'editResult' && message.editId === 1)
+			);
+			const result = stub.messages.find(
+				(message) => message.type === 'editResult' && message.editId === 1
+			);
+			assert.strictEqual(result?.ok, true);
+			assert.ok((result?.revision ?? 0) >= document.version, 'the result carries the document revision');
+			await waitFor('the dirty notification', () =>
+				stub.messages.some((message) => message.type === 'dirty' && message.dirty === true)
+			);
+			assert.ok(stub.panel.title.includes('•'), 'the panel title shows the dirty marker');
+
+			await document.save();
+			await waitFor('the clean notification', () =>
+				stub.messages.some((message) => message.type === 'dirty' && message.dirty === false)
+			);
+			assert.ok(!stub.panel.title.includes('•'), 'save removes the dirty marker');
+		});
+	});
+
+	test('AC5: two rapid edits to one field apply in revision order', async () => {
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const original = document.getText();
+			const { stub } = open(document);
+
+			await stub.send({
+				type: 'edit',
+				editId: 1,
+				nodeId: parameterId(original, 'Count'),
+				value: '41',
+				baseRevision: document.version
+			});
+			await stub.send({
+				type: 'edit',
+				editId: 2,
+				nodeId: parameterId(original, 'Count'),
+				value: '42',
+				baseRevision: document.version
+			});
+
+			await waitFor('the last value', () => document.getText().includes('<VALUE>42</VALUE>'));
+			await waitFor('both edit acknowledgements', () =>
+				stub.messages.filter((message) => message.type === 'editResult').length >= 2
+			);
+			const results = stub.messages.filter((message) => message.type === 'editResult');
+			assert.deepStrictEqual(
+				results.map((message) => message.editId),
+				[1, 2],
+				'the host acknowledges the edits in order'
+			);
+			assert.ok(results.every((message) => message.ok === true));
+			assert.ok(
+				(results[0]?.revision ?? 0) <= (results[1]?.revision ?? 0),
+				'the revision moves forward'
+			);
+		});
+	});
+
+	test('AC5: save flushes a queued edit before the file is written', async () => {
+		await withEditingFixture('numeric.arxml', async (_uri, document) => {
+			const original = document.getText();
+			const { stub } = open(document);
+			await stub.send({ type: 'ready' });
+
+			await stub.send({
+				type: 'edit',
+				editId: 1,
+				nodeId: parameterId(original, 'Count'),
+				value: '41',
+				baseRevision: document.version
+			});
+			await waitFor('the first edit acknowledgement', () =>
+				stub.messages.some((message) => message.type === 'editResult' && message.editId === 1)
+			);
+			assert.strictEqual(document.isDirty, true, 'the applied edit dirties the document');
+
+			// The page has not sent its last keystroke yet when the save starts. The
+			// host must ask for it, apply it, and only then let the save proceed.
+			const saving = document.save();
+			await waitFor('the save flush request', () =>
+				stub.messages.some((message) => message.type === 'flushEdits')
+			);
+			const request = stub.messages.find((message) => message.type === 'flushEdits');
+			assert.ok(request?.requestId !== undefined, 'the flush carries a request id');
+
+			await stub.send({
+				type: 'edit',
+				editId: 2,
+				nodeId: parameterId(document.getText(), 'Count'),
+				value: '123',
+				baseRevision: document.version
+			});
+			await waitFor('the flushed edit acknowledgement', () =>
+				stub.messages.some((message) => message.type === 'editResult' && message.editId === 2)
+			);
+			await stub.send({ type: 'flushed', requestId: request?.requestId ?? 0 });
+			await saving;
+
+			assert.ok(
+				document.getText().includes('<VALUE>123</VALUE>'),
+				'the save persists the value typed while the save was waiting'
+			);
+			assert.strictEqual(document.isDirty, false, 'the save leaves the document clean');
 		});
 	});
 
@@ -1471,6 +1596,7 @@ suite('plan coverage: EDIT through the engine', () => {
 				await vscode.commands.executeCommand('undo');
 				await waitFor('one undo to restore the bytes', () => document.getText() === original);
 				await waitFor('the undo row patch', () => patchCount() >= 2);
+				assert.ok(!stub.panel.title.includes('•'), 'undo back to the saved text clears the title marker');
 				await stub.send({ type: 'ready' });
 				assert.strictEqual(lastRows(stub).find((row) => row.label === 'Count')?.value, '7');
 				assert.deepStrictEqual(lastRows(stub), expectedRows(original), 'the rows follow the undo');
@@ -1478,6 +1604,7 @@ suite('plan coverage: EDIT through the engine', () => {
 				await vscode.commands.executeCommand('redo');
 				await waitFor('one redo to re-apply the edit', () => document.getText() === edited);
 				await waitFor('the redo row patch', () => patchCount() >= 3);
+				assert.ok(stub.panel.title.includes('•'), 'redo away from the saved text restores the title marker');
 				await stub.send({ type: 'ready' });
 				assert.strictEqual(lastRows(stub).find((row) => row.label === 'Count')?.value, '42');
 				assert.deepStrictEqual(lastRows(stub), expectedRows(edited), 'the rows follow the redo');

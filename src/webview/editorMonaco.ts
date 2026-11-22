@@ -109,14 +109,24 @@ let nativeReplaceRequestId = 0;
 let applyingModel = false;
 interface QueuedEdit {
 	type: 'edit';
+	editId: number;
 	nodeId: string;
 	field?: 'value' | 'shortName' | 'definitionRef';
+	/** The host value, after the display-to-raw conversion for numeric text. */
 	value: string;
+	/** The exact text currently shown in the synthetic line. */
+	display: string;
 }
 let pendingEdits = new Map<string, QueuedEdit>();
+let inflightEdits = new Map<number, QueuedEdit>();
+let editSequence = 0;
+let hostRevision = 0;
+let hostDirty = false;
+/** True once the host proves it speaks the revisioned edit protocol. */
+let hostAcks = false;
 let editTimer: ReturnType<typeof setTimeout> | undefined;
-let awaitingHost = false;
-const EDIT_DEBOUNCE_MS = 120;
+const EDIT_DEBOUNCE_MS = 160;
+const flushRequests = new Set<number>();
 let decorationIds: string[] = [];
 let detailsBody: HTMLElement | null = null;
 let detailsStatus: HTMLElement | null = null;
@@ -422,18 +432,34 @@ interface CursorAnchor {
 	rowId?: string;
 	line: number;
 	column: number;
+	/** The active end of a non-empty selection; equal to the cursor when collapsed. */
+	selectionEndRowId?: string;
+	selectionEndLine: number;
+	selectionEndColumn: number;
+	scrollTop: number;
+	scrollLeft: number;
 }
 
 /** Capture the text cursor by row id so model rebuilds cannot send it to line 1. */
 function captureCursor(): CursorAnchor {
 	const position = editor?.getPosition();
-	if (position === undefined || position === null) {
-		return { line: 1, column: 1 };
+	if (editor === undefined || position === undefined || position === null) {
+		return { line: 1, column: 1, selectionEndLine: 1, selectionEndColumn: 1, scrollTop: 0, scrollLeft: 0 };
 	}
+	const selection = editor.getSelection();
+	const startLine = selection?.selectionStartLineNumber ?? position.lineNumber;
+	const startColumn = selection?.selectionStartColumn ?? position.column;
+	const endLine = selection?.positionLineNumber ?? position.lineNumber;
+	const endColumn = selection?.positionColumn ?? position.column;
 	return {
-		rowId: rowIdAtLine(position.lineNumber),
-		line: position.lineNumber,
-		column: position.column
+		rowId: rowIdAtLine(startLine),
+		line: startLine,
+		column: startColumn,
+		selectionEndRowId: rowIdAtLine(endLine),
+		selectionEndLine: endLine,
+		selectionEndColumn: endColumn,
+		scrollTop: editor.getScrollTop(),
+		scrollLeft: editor.getScrollLeft()
 	};
 }
 
@@ -442,16 +468,51 @@ function restoreCursor(anchor: CursorAnchor): void {
 		return;
 	}
 	const line = anchor.rowId !== undefined ? documentModel.rowLine.get(anchor.rowId) : anchor.line;
+	const endLine =
+		anchor.selectionEndRowId !== undefined
+			? documentModel.rowLine.get(anchor.selectionEndRowId) ?? anchor.selectionEndLine
+			: anchor.selectionEndLine;
 	if (line === undefined) {
 		return;
 	}
 	const safeLine = Math.min(line, model.getLineCount());
-	const maxColumn = model.getLineMaxColumn(safeLine);
-	editor.setPosition({ lineNumber: safeLine, column: Math.min(anchor.column, maxColumn) });
+	const safeEndLine = Math.min(endLine, model.getLineCount());
+	editor.setSelection(
+		new monaco.Selection(
+			safeLine,
+			Math.min(anchor.column, model.getLineMaxColumn(safeLine)),
+			safeEndLine,
+			Math.min(anchor.selectionEndColumn, model.getLineMaxColumn(safeEndLine))
+		)
+	);
+	editor.setScrollTop(anchor.scrollTop);
+	editor.setScrollLeft(anchor.scrollLeft);
+}
+
+function editKey(edit: QueuedEdit): string {
+	return `${edit.nodeId}|${edit.field ?? ''}`;
+}
+
+function localEditPending(): boolean {
+	return pendingEdits.size > 0 || inflightEdits.size > 0 || editTimer !== undefined;
 }
 
 function hasPendingEdits(): boolean {
-	return pendingEdits.size > 0 || editTimer !== undefined;
+	return localEditPending();
+}
+
+function updateDirtyStatus(): void {
+	editorToolbar?.setDirty(localEditPending() || hostDirty);
+}
+
+function maybeAcknowledgeFlush(): void {
+	if (pendingEdits.size > 0 || inflightEdits.size > 0 || editTimer !== undefined || flushRequests.size === 0) {
+		return;
+	}
+	for (const requestId of flushRequests) {
+		postToHost({ type: 'flushed', requestId });
+	}
+	flushRequests.clear();
 }
 
 function clearPendingEdits(): void {
@@ -460,7 +521,9 @@ function clearPendingEdits(): void {
 		editTimer = undefined;
 	}
 	pendingEdits.clear();
-	awaitingHost = false;
+	inflightEdits.clear();
+	updateDirtyStatus();
+	maybeAcknowledgeFlush();
 }
 
 function flushEdits(): void {
@@ -468,24 +531,117 @@ function flushEdits(): void {
 		clearTimeout(editTimer);
 		editTimer = undefined;
 	}
-	const edits = Array.from(pendingEdits.values());
-	pendingEdits.clear();
-	if (edits.length > 0) {
-		awaitingHost = true;
+	for (const [key, edit] of Array.from(pendingEdits)) {
+		// One edit per field may be in flight. A newer value waits for its ack so
+		// a refusal cannot be confused with the value that superseded it.
+		if (inflightEdits.has(edit.editId)) {
+			continue;
+		}
+		const keyBusy = Array.from(inflightEdits.values()).some((candidate) => editKey(candidate) === key);
+		if (keyBusy) {
+			continue;
+		}
+		pendingEdits.delete(key);
+		inflightEdits.set(edit.editId, edit);
+		postToHost({
+			type: 'edit',
+			editId: edit.editId,
+			nodeId: edit.nodeId,
+			field: edit.field,
+			value: edit.value,
+			baseRevision: hostRevision
+		});
 	}
-	for (const edit of edits) {
-		postToHost(edit);
-	}
+	updateDirtyStatus();
+	maybeAcknowledgeFlush();
 }
 
-function queueEdit(edit: QueuedEdit): void {
+function queueEdit(edit: { nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string; display: string }): void {
 	// Coalesce a fast typing run into one host write. The local buffer is already
 	// authoritative for the keystroke; the host round-trip only persists it.
-	pendingEdits.set(`${edit.nodeId}|${edit.field ?? ''}`, edit);
+	const next: QueuedEdit = {
+		type: 'edit',
+		editId: (editSequence += 1),
+		nodeId: edit.nodeId,
+		field: edit.field,
+		value: edit.value,
+		display: edit.display
+	};
+	pendingEdits.set(editKey(next), next);
 	if (editTimer !== undefined) {
 		clearTimeout(editTimer);
 	}
 	editTimer = setTimeout(flushEdits, EDIT_DEBOUNCE_MS);
+	updateDirtyStatus();
+}
+
+function hasNewerLocalEdit(edit: QueuedEdit): boolean {
+	const key = editKey(edit);
+	return (
+		Array.from(pendingEdits.values()).some((candidate) => editKey(candidate) === key && candidate.editId > edit.editId) ||
+		Array.from(inflightEdits.values()).some((candidate) => editKey(candidate) === key && candidate.editId > edit.editId)
+	);
+}
+
+/** Put the host-accepted row text back after a refusal with no newer local edit. */
+function revertRejectedEdit(edit: QueuedEdit): void {
+	const row = rowById.get(edit.nodeId);
+	const line = documentModel.rowLine.get(edit.nodeId);
+	if (row === undefined || line === undefined || model === undefined) {
+		return;
+	}
+	const built = syntheticRowLine(row);
+	const anchor = captureCursor();
+	documentModel.lines[line - 1] = {
+		line,
+		rowId: row.id,
+		kind: row.kind,
+		text: built.text,
+		fieldSpans: built.fieldSpans,
+		searchSpans: built.searchSpans
+	};
+	overlayLocalOnLine(documentModel.lines[line - 1]);
+	documentModel.text = documentModel.lines.map((candidate) => candidate.text).join('\n');
+	applyingModel = true;
+	model.pushEditOperations(
+		[],
+		[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text: documentModel.lines[line - 1].text }],
+		function () {
+			return null;
+		}
+	);
+	applyingModel = false;
+	restoreCursor(anchor);
+	updateInspector();
+	applyDecorations();
+	invalidateNativeFind();
+}
+
+function handleEditResult(message: { editId: number; ok: boolean; reason?: string; revision: number }): void {
+	if (typeof message.editId !== 'number' || typeof message.revision !== 'number' || typeof message.ok !== 'boolean') {
+		return;
+	}
+	const edit = inflightEdits.get(message.editId);
+	if (edit === undefined) {
+		return;
+	}
+	inflightEdits.delete(message.editId);
+	hostAcks = true;
+	hostRevision = Math.max(hostRevision, message.revision);
+	if (message.ok) {
+		hostDirty = true;
+	} else if (!hasNewerLocalEdit(edit)) {
+		if (message.reason !== undefined && message.reason !== '') {
+			setDetailsStatus({ message: message.reason, kind: 'warn' });
+		}
+		revertRejectedEdit(edit);
+	}
+	updateDirtyStatus();
+	if (pendingEdits.size > 0) {
+		flushEdits();
+	} else {
+		maybeAcknowledgeFlush();
+	}
 }
 
 function revealRow(id: string | undefined, focus = false, column = 1): void {
@@ -504,8 +660,48 @@ function revealRow(id: string | undefined, focus = false, column = 1): void {
 	}
 }
 
+function latestLocalEdits(): QueuedEdit[] {
+	const latest = new Map<string, QueuedEdit>();
+	for (const edit of inflightEdits.values()) {
+		latest.set(editKey(edit), edit);
+	}
+	for (const edit of pendingEdits.values()) {
+		const current = latest.get(editKey(edit));
+		if (current === undefined || edit.editId > current.editId) {
+			latest.set(editKey(edit), edit);
+		}
+	}
+	return Array.from(latest.values());
+}
+
+/** Paint an optimistic field value over a line built from host-accepted rows. */
+function overlayLocalOnLine(line: SyntheticLine, local: readonly QueuedEdit[] = latestLocalEdits()): void {
+	for (const edit of local) {
+		if (line.rowId !== edit.nodeId) {
+			continue;
+		}
+		const field = edit.field ?? 'value';
+		const span = line.fieldSpans.find((candidate) => candidate.field === field);
+		if (span === undefined) {
+			continue;
+		}
+		const before = line.text.slice(0, span.startColumn - 1);
+		const after = line.text.slice(span.endColumn - 1);
+		line.text = before + edit.display + after;
+		span.text = edit.display;
+		span.endColumn = span.startColumn + edit.display.length;
+	}
+}
+
+function overlayLocalEdits(doc: SyntheticDocument): void {
+	const local = latestLocalEdits();
+	for (const line of doc.lines) {
+		overlayLocalOnLine(line, local);
+	}
+	doc.text = doc.lines.map((line) => line.text).join('\n');
+}
+
 function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
-	clearPendingEdits();
 	const anchor = captureCursor();
 	rows = Array.isArray(nextRows) ? nextRows : [];
 	indexRows();
@@ -513,6 +709,7 @@ function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextS
 		header = nextHeader;
 	}
 	documentModel = buildSyntheticDocument(rows, header);
+	overlayLocalEdits(documentModel);
 	if (model !== undefined) {
 		applyingModel = true;
 		model.setValue(documentModel.text);
@@ -547,7 +744,7 @@ function applyPatch(patch: EditorRowPatch, nextHeader?: EditorDocumentHeader, ne
 			const line = documentModel.rowLine.get(row.id);
 			if (line !== undefined && model !== undefined) {
 				const built = syntheticRowLine(row);
-				documentModel.lines[line - 1] = {
+				const nextLine: SyntheticLine = {
 					line,
 					rowId: row.id,
 					kind: row.kind,
@@ -555,10 +752,13 @@ function applyPatch(patch: EditorRowPatch, nextHeader?: EditorDocumentHeader, ne
 					fieldSpans: built.fieldSpans,
 					searchSpans: built.searchSpans
 				};
+				documentModel.lines[line - 1] = nextLine;
+				overlayLocalOnLine(nextLine);
+				documentModel.text = documentModel.lines.map((candidate) => candidate.text).join('\n');
 				applyingModel = true;
 				model.pushEditOperations(
 					[],
-					[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text: built.text }],
+					[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text: nextLine.text }],
 					function () {
 						return null;
 					}
@@ -986,10 +1186,10 @@ function handleMultiChange(event: monaco.editor.IModelContentChangedEvent): void
 		edit.span.text = edit.text;
 		edit.span.endColumn = edit.span.startColumn + edit.text.length;
 		queueEdit({
-			type: 'edit',
 			nodeId: edit.span.nodeId,
 			field: edit.span.field,
-			value: edit.span.field === 'value' ? rawFieldText(edit.row, edit.text) : edit.text
+			value: edit.span.field === 'value' ? rawFieldText(edit.row, edit.text) : edit.text,
+			display: edit.text
 		});
 	}
 }
@@ -1040,10 +1240,10 @@ function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
 	span.text = text;
 	span.endColumn = span.startColumn + text.length;
 	queueEdit({
-		type: 'edit',
 		nodeId: span.nodeId,
 		field: span.field,
-		value: span.field === 'value' ? rawFieldText(row, text) : text
+		value: span.field === 'value' ? rawFieldText(row, text) : text,
+		display: text
 	});
 }
 
@@ -1158,19 +1358,59 @@ function handleMessage(message: EditorProviderToWebview): void {
 	}
 	handleDetailsEditorMessage(message);
 	if (message.type === 'document') {
-		if (hasPendingEdits()) {
+		const revision = typeof message.document.revision === 'number' ? message.document.revision : undefined;
+		if (revision !== undefined && revision < hostRevision) {
 			return;
+		}
+		if (revision !== undefined) {
+			hostRevision = revision;
+			hostAcks = true;
+		}
+		if (typeof message.document.dirty === 'boolean') {
+			hostDirty = message.document.dirty;
 		}
 		applySettings(message.document.settings);
 		applyRows(message.document.rows, message.document.header, message.document.selectedId);
+		updateDirtyStatus();
 		return;
 	}
 	if (message.type === 'documentPatch') {
-		if (hasPendingEdits()) {
+		const revision = typeof message.revision === 'number' ? message.revision : undefined;
+		if (revision !== undefined && revision < hostRevision) {
 			return;
 		}
-		clearPendingEdits();
+		if (revision !== undefined) {
+			hostRevision = revision;
+			hostAcks = true;
+		}
+		if (typeof message.dirty === 'boolean') {
+			hostDirty = message.dirty;
+		}
 		applyPatch(message.patch, message.header, message.selectedId);
+		updateDirtyStatus();
+		return;
+	}
+	if (message.type === 'editResult') {
+		handleEditResult(message);
+		return;
+	}
+	if (message.type === 'dirty') {
+		if (typeof message.revision !== 'number' || typeof message.dirty !== 'boolean') {
+			return;
+		}
+		hostAcks = true;
+		hostRevision = Math.max(hostRevision, message.revision);
+		hostDirty = message.dirty;
+		updateDirtyStatus();
+		return;
+	}
+	if (message.type === 'flushEdits') {
+		if (typeof message.requestId !== 'number') {
+			return;
+		}
+		flushRequests.add(message.requestId);
+		flushEdits();
+		maybeAcknowledgeFlush();
 		return;
 	}
 	if (message.type === 'settings') {
@@ -1213,7 +1453,10 @@ function handleMessage(message: EditorProviderToWebview): void {
 			setConditionsStatus(message.message || '');
 			return;
 		}
-		if ((hasPendingEdits() || awaitingHost) && message.kind === 'warn') {
+		// A revisioned host answers every field edit with an `editResult`, which
+		// restores exactly the refused field and keeps newer edits. The blanket
+		// restore here is only for a host that predates that acknowledgement.
+		if (hasPendingEdits() && !hostAcks && message.kind === 'warn') {
 			revertToAccepted();
 		}
 		if (!refusalShownInDetails(message, getSidebarState().tab !== 'details')) {
@@ -1343,6 +1586,7 @@ export async function mountEditor(): Promise<void> {
 	editor.onDidBlurEditorText(function () {
 		flushEdits();
 	});
+	window.addEventListener('pagehide', flushEdits);
 	editor.onDidChangeCursorPosition(function (event) {
 		const id = rowIdAtLine(event.position.lineNumber);
 		if (id !== undefined && id !== selectedId) {

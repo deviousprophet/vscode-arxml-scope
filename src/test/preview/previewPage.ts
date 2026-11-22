@@ -25,6 +25,7 @@ interface PreviewPayload {
 	jump?: number;
 	select?: boolean;
 	find?: string;
+	edit?: string;
 }
 
 interface PreviewCell {
@@ -295,6 +296,42 @@ async function applyFind(): Promise<void> {
 	(input as HTMLTextAreaElement | null)?.focus();
 }
 
+async function applyDirtyEdit(): Promise<void> {
+	const edit = payload.edit;
+	if (edit === undefined || edit === '') {
+		return;
+	}
+	const editor = (window as unknown as {
+		__ARXML_EDITOR__?: {
+			focus(): void;
+			getModel(): { getLineCount(): number; getLineContent(line: number): string } | null;
+			setPosition(position: { lineNumber: number; column: number }): void;
+			trigger(source: string, id: string, args: unknown): void;
+		};
+	}).__ARXML_EDITOR__;
+	const model = editor?.getModel();
+	if (editor === undefined || model === null || model === undefined) {
+		return;
+	}
+	let line = 0;
+	for (let at = 1; at <= model.getLineCount(); at += 1) {
+		if (model.getLineContent(at).includes('P0000 = ')) {
+			line = at;
+			break;
+		}
+	}
+	if (line === 0) {
+		return;
+	}
+	editor.focus();
+	editor.setPosition({ lineNumber: line, column: model.getLineContent(line).length + 1 });
+	for (const character of edit) {
+		editor.trigger('preview', 'type', { text: character });
+		await new Promise((resolve) => setTimeout(resolve, 40));
+	}
+	await new Promise((resolve) => setTimeout(resolve, 250));
+}
+
 async function run(): Promise<void> {
 	window.postMessage(payload.message, '*');
 	const root = payload.page === 'diff' ? '.monaco-diff-editor' : '#tree .monaco-editor';
@@ -316,6 +353,7 @@ async function run(): Promise<void> {
 	await applyJumps();
 	await applySelect();
 	await applyFind();
+	await applyDirtyEdit();
 	await settle();
 	document.body.dataset.previewReady = 'true';
 	publishAudit();

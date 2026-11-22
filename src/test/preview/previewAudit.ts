@@ -445,6 +445,18 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 	if (state.name === 'editor-syntax') {
 		issues.push(...syntaxColorViolations(audit));
 	}
+	if (state.name === 'editor-dirty') {
+		const status = document.getElementById('editor-dirty-status');
+		if (status === null || status.hidden || !/Unsaved changes/.test(status.textContent ?? '')) {
+			issues.push('the dirty edit did not show the Unsaved changes marker');
+		}
+		const edits = (window.__PREVIEW_MESSAGES__ as Array<{ type?: string; value?: string }>).filter(
+			(message) => message.type === 'edit'
+		);
+		if (edits.length !== 1) {
+			issues.push(`the typing run posted ${edits.length} edit messages instead of one`);
+		}
+	}
 	if (state.select && !audit.selected) {
 		issues.push('the select gesture left no selected row');
 	}

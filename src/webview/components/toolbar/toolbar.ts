@@ -13,9 +13,10 @@ export interface EditorToolbarCallbacks {
 	onToggleSidebar?(): void;
 }
 
-/** Editor strip: flexible slot, sidebar toggle, Collapse, Expand. */
+/** Editor strip: flexible slot, dirty status, sidebar toggle, Collapse, Expand. */
 export function renderEditorToolbarHtml(): string {
 	return `<div class="toolbar">
+<span id="editor-dirty-status" class="editor-dirty-status" role="status" aria-live="polite" hidden></span>
 <span class="grow"></span>
 <button id="collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
 <button id="expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
@@ -50,6 +51,27 @@ export class EditorToolbar {
 		}
 		button.setAttribute('aria-pressed', hidden ? 'false' : 'true');
 		button.title = hidden ? 'Show sidebar' : 'Hide sidebar';
+	}
+
+	/** Show the unsaved marker while the page has a local edit or the host is dirty. */
+	setDirty(dirty: boolean): void {
+		const status = document.getElementById('editor-dirty-status');
+		if (!status) {
+			return;
+		}
+		// The page calls this on every keystroke; write only a real change so the
+		// polite live region does not announce the same marker over and over.
+		if (status.hidden !== !dirty) {
+			status.hidden = !dirty;
+		}
+		const text = dirty ? '● Unsaved changes' : '';
+		if (status.textContent !== text) {
+			status.textContent = text;
+		}
+		const title = dirty ? 'This ECUC document has unsaved changes' : '';
+		if (status.title !== title) {
+			status.title = title;
+		}
 	}
 
 	private bind(id: string, action: () => void): void {

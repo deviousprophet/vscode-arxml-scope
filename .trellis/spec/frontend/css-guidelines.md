@@ -12,7 +12,7 @@ These rules describe the stylesheets that ship in `dist/editorViewer.css` and `d
 | `src/webview/styles/base.css` | Reset, `body` layout, `#content` / `#main` boxes, `#tree-measure` probe host, `.sr-only`, `.grow` and the narrow layout. |
 | `components/documentTree/documentTree.css` | `.document-tree*` shell (header, scroller, window, spacers, line-number gutter), `.row`, `.label`, `.value`, `.row-meta`, `.twisty`, `.guide`, condition/annotation/mark styling, depth and high-contrast rules. |
 | `components/diffView/diffView.css` | Diff page tokens, the `#diff-body` column, the `#diff-list` / `.diff-pane` grid, `.diff-row` / `.diff-cell` status tints, `.word-changed` removed/inserted runs, the empty state and pane header parity. |
-| `components/toolbar/toolbar.css` | `.toolbar`, `.toolbar-left` / `-center` / `-right`, `.tool`, `.diff-tool`. |
+| `components/toolbar/toolbar.css` | `.toolbar`, `.toolbar-left` / `-center` / `-right`, `.tool`, `.diff-tool`, `.editor-dirty-status`. |
 | `components/searchBar/searchBar.css` | `.find-widget`, `.find-row`, `.find-field`, `.find-toggle`, `.find-action`, `.search-input`, `.search-clear`, `.search-count`, `.search-progress` and `.replace-row`. |
 | `components/sidebar/sidebar.css` | `#sidebar`, `#sidebar-resizer`, `#side-tabs`, `.stab`, `.sb-tab-panel`, `.sb-pane*`, `.sb-section-*` and the shared `.sb-btn*` / `.nav-btn` / `.act-btn` primitives. |
 | `components/sidebar/detailsPanel/detailsPanel.css` | `#inspector`, `.inspector-*`, `.condition-code`, `.details-status`. |

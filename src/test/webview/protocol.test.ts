@@ -16,7 +16,17 @@ import { fixtureText } from '../core/modelTestUtils';
 suite('webview protocol', () => {
 	test('the editor host messages have one discriminator and a shape guard', () => {
 		const messages: EditorProviderToWebview[] = [
-			{ type: 'document', document: { rows: [] } },
+			{ type: 'document', document: { rows: [], revision: 1, dirty: true } },
+			{
+				type: 'documentPatch',
+				patch: { at: 0, remove: 0, rows: [], structural: false },
+				revision: 2,
+				dirty: true,
+			},
+			{ type: 'editResult', editId: 1, ok: true, revision: 3 },
+			{ type: 'editResult', editId: 2, ok: false, reason: 'not an integer', revision: 3 },
+			{ type: 'dirty', dirty: false, revision: 4 },
+			{ type: 'flushEdits', requestId: 1 },
 			{ type: 'conditions', entries: [] },
 			{ type: 'select', nodeId: 'x' },
 			{ type: 'notice', message: 'warning', kind: 'warn', inline: true, scope: 'details' },
@@ -36,14 +46,15 @@ suite('webview protocol', () => {
 			{ type: 'select', nodeId: 'x' },
 			{ type: 'reveal', nodeId: 'x' },
 			{ type: 'follow', nodeId: 'x' },
-			{ type: 'edit', nodeId: 'x', field: 'shortName', value: 'Y' },
+			{ type: 'edit', editId: 1, nodeId: 'x', field: 'shortName', value: 'Y', baseRevision: 0 },
+			{ type: 'flushed', requestId: 1 },
 			{ type: 'delete', nodeId: 'x' },
 			{ type: 'duplicate', nodeId: 'x' },
 			{ type: 'conditions', entries: [{ name: 'A_SC', value: '1' }] },
 		];
 		assert.deepStrictEqual(
 			intents.map((intent) => intent.type),
-			['ready', 'select', 'reveal', 'follow', 'edit', 'delete', 'duplicate', 'conditions']
+			['ready', 'select', 'reveal', 'follow', 'edit', 'flushed', 'delete', 'duplicate', 'conditions']
 		);
 	});
 

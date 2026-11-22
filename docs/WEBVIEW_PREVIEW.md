@@ -54,6 +54,7 @@ its old bundle.
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; both arrows stay on the inner edges |
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
 | `editor-syntax` | editor | 1400×900 | decimal, binary, text, reference and system-condition values; binary matches the numeric colour, references use the reference colour, and condition names/operators/numbers stay distinct |
+| `editor-dirty` | editor | 1400×900 | a typed parameter shows the `● Unsaved changes` toolbar marker |
 | `editor-find` | editor | 1400×900 | native find widget open on `Items`, with the Rust result count and field highlight |
 | `diff-find` | diff | 1400×900 | native find widget in the modified pane, with the Rust diff match count |
 | `toolbar-1400` | diff | 1400×900 | full labels; Merge active; Swap over the pane divider |
@@ -87,6 +88,10 @@ strip or the page shell, and check each image before asking for review.
 - [ ] **Value kinds keep their colours.** `editor-syntax` shows `0b1010` in the same colour as
       decimal `42`, `P.Syn.Syntax.Target` in the reference colour, and
       `CANIPCORETYPE_SC==0` with distinct name, operator and number colours.
+- [ ] **Dirty typing is visible and coalesced.** `editor-dirty` shows `● Unsaved changes`
+      after a multi-character typing run and posts exactly one edit message.
+- [ ] **The dirty marker is visible.** `editor-dirty` shows `● Unsaved changes` in the editor
+      toolbar; the audit fails when the status is hidden or empty.
 - [ ] **Copy arrows are visible without hover.** Both panes show an arrow on the
       changed rows; the left arrow points right, the right arrow points left. The audit
       reports an arrow in each pane, on the inner edge, visible and with an opaque

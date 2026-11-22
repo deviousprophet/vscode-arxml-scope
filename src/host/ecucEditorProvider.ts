@@ -58,9 +58,17 @@ export interface DefinitionSource {
 
 /** How long a panel may take to report `ready` before the host warns. */
 const BOOT_TIMEOUT_MS = 10_000;
+/** The longest the page may take to submit and acknowledge its pending edits. */
+const FLUSH_TIMEOUT_MS = 2_000;
 
 /** The field a `type: 'edit'` message targets; absent means the parameter `<VALUE>`. */
 type EditField = 'value' | 'shortName' | 'definitionRef';
+
+/** The host outcome for one optimistic edit. */
+interface EditOutcome {
+	ok: boolean;
+	reason?: string;
+}
 
 const EDIT_FIELDS: readonly EditField[] = ['value', 'shortName', 'definitionRef'];
 
@@ -80,6 +88,13 @@ interface EditorSession {
 	engineOpening?: Promise<void>;
 	/** True when the engine moved the text but the TypeScript model has not caught up. */
 	state: { stale: boolean };
+	/** True when the page mounted and is listening. */
+	ready: boolean;
+	/** Serializes host writes for this document so acknowledgements cannot race. */
+	editChain: Promise<void>;
+	/** Pending save-flush handshakes, keyed by request id. */
+	flushes: Map<number, () => void>;
+	flushSequence: number;
 }
 
 /** A reference chosen in the Quick Pick plus the document it was opened from. */
@@ -274,8 +289,11 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					selectedId: current,
 					header: documentHeader(model),
 					settings: monacoSettings(),
+					revision: document.version,
+					dirty: document.isDirty
 				},
 			});
+			this.updateTitle(session);
 		};
 
 		// The engine keeps the text and the rows, so an accepted edit is answered with a
@@ -287,6 +305,10 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			key,
 			boot,
 			state,
+			ready: false,
+			editChain: Promise.resolve(),
+			flushes: new Map(),
+			flushSequence: 0,
 			model: () => {
 				if (state.stale) {
 					rescanModel();
@@ -300,6 +322,8 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			}
 		};
 
+		this.updateTitle(session);
+
 		disposables.push(
 			vscode.workspace.onDidChangeTextDocument((event) => {
 				if (event.document.uri.toString() !== key) {
@@ -310,6 +334,24 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				}
 				session.rescan();
+			})
+		);
+
+		disposables.push(
+			vscode.workspace.onDidSaveTextDocument((saved) => {
+				if (saved.uri.toString() !== key) {
+					return;
+				}
+				this.postDirty(session);
+			})
+		);
+
+		disposables.push(
+			vscode.workspace.onWillSaveTextDocument((event) => {
+				if (event.document.uri.toString() !== key) {
+					return;
+				}
+				event.waitUntil(this.flushBeforeSave(session));
 			})
 		);
 
@@ -366,6 +408,62 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		this.pending.delete(key);
 	}
 
+	/** Keep the webview tab title in step with the TextDocument's dirty flag. */
+	private updateTitle(session: EditorSession): void {
+		const base = path.basename(session.document.uri.fsPath);
+		const title = `${base}${session.document.isDirty ? ' •' : ''}`;
+		if (session.panel.title !== title) {
+			session.panel.title = title;
+		}
+	}
+
+	/** Push the revision and dirty flag after a host-side change or save. */
+	private postDirty(session: EditorSession): void {
+		this.updateTitle(session);
+		void session.panel.webview.postMessage({
+			type: 'dirty',
+			dirty: session.document.isDirty,
+			revision: session.document.version
+		});
+	}
+
+	/** Ask the page for its final pending values, then let the queued writes finish. */
+	private async flushBeforeSave(session: EditorSession): Promise<void> {
+		if (!session.ready) {
+			return;
+		}
+		const requestId = (session.flushSequence += 1);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const answer = new Promise<void>((resolve) => {
+			const finish = (): void => {
+				if (timer !== undefined) {
+					clearTimeout(timer);
+					timer = undefined;
+				}
+				resolve();
+			};
+			session.flushes.set(requestId, finish);
+			timer = setTimeout(() => {
+				if (session.flushes.delete(requestId)) {
+					finish();
+				}
+			}, FLUSH_TIMEOUT_MS);
+		});
+		await session.panel.webview.postMessage({ type: 'flushEdits', requestId });
+		// Never let a silent page hold the save past the timeout: the document is
+		// saved as it stands, exactly as it would be without the handshake.
+		await answer;
+		await session.editChain;
+	}
+
+	private resolveFlush(session: EditorSession, requestId: number): void {
+		const resolve = session.flushes.get(requestId);
+		if (resolve !== undefined) {
+			session.flushes.delete(requestId);
+			resolve();
+		}
+	}
+
 	/** Consumes a pending selection for a panel that just opened, or restores the last one. */
 	private resumeSelection(key: string): void {
 		const selectedId = this.pending.get(key) ?? this.selections.get(key);
@@ -399,6 +497,12 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 		if (message.type === 'undo' || message.type === 'redo') {
 			void vscode.commands.executeCommand(message.type);
+			return true;
+		}
+		if (message.type === 'flushed') {
+			if (typeof message.requestId === 'number') {
+				this.resolveFlush(session, message.requestId);
+			}
 			return true;
 		}
 		return this.handleFindReplaceMessage(message, session);
@@ -536,6 +640,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	}
 
 	private handleReady(session: EditorSession): void {
+		session.ready = true;
 		session.boot.settle();
 		// The page can be reloaded without reopening the panel; re-post the
 		// host's current entries and the row document so a reload cannot show
@@ -633,9 +738,45 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 		const field: EditField = message.field ?? 'value';
 		// An unknown field is ignored rather than guessed at.
-		if (EDIT_FIELDS.includes(field)) {
-			void this.editField(session.document, session.panel, nodeId, field, message.value, session);
+		if (!EDIT_FIELDS.includes(field)) {
+			void session.panel.webview.postMessage({
+				type: 'editResult',
+				editId: typeof message.editId === 'number' ? message.editId : 0,
+				ok: false,
+				reason: 'the edit field is unknown',
+				revision: session.document.version
+			});
+			return;
 		}
+		const editId = typeof message.editId === 'number' ? message.editId : 0;
+		session.editChain = session.editChain
+			.then(async () => {
+				const outcome = await this.editField(
+					session.document,
+					session.panel,
+					nodeId,
+					field,
+					message.value,
+					session
+				);
+				await session.panel.webview.postMessage({
+					type: 'editResult',
+					editId,
+					ok: outcome.ok,
+					...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+					revision: session.document.version
+				});
+				this.postDirty(session);
+			})
+			.catch(async (error: unknown) => {
+				await session.panel.webview.postMessage({
+					type: 'editResult',
+					editId,
+					ok: false,
+					reason: describeError(error),
+					revision: session.document.version
+				});
+			});
 	}
 
 	private handleStructureMessage(
@@ -1028,12 +1169,11 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		field: EditField,
 		value: string,
 		session?: EditorSession
-	): Promise<void> {
+	): Promise<EditOutcome> {
 		if (this.canUseEngine(session)) {
-			await this.editFieldThroughEngine(session, session.engineDocId, nodeId, field, value);
-			return;
+			return this.editFieldThroughEngine(session, session.engineDocId, nodeId, field, value);
 		}
-		await this.editFieldLegacy(document, panel, nodeId, field, value);
+		return this.editFieldLegacy(document, panel, nodeId, field, value);
 	}
 
 	private canUseEngine(
@@ -1049,7 +1189,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		nodeId: string,
 		field: EditField,
 		value: string
-	): Promise<void> {
+	): Promise<EditOutcome> {
 		const key = document.uri.toString();
 		const text = document.getText();
 		const model = scanEcucValues(text);
@@ -1057,7 +1197,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			field === 'value' ? buildEdit(model, text, nodeId, value) : buildFieldEdit(model, text, nodeId, field, value);
 		if (!plan.ok) {
 			await postInlineNotice(panel, plan.reason);
-			return;
+			return { ok: false, reason: plan.reason };
 		}
 		const previous = this.selections.get(key);
 		this.rememberPredictedId(key, nodeId, plan.nextNodeId);
@@ -1065,7 +1205,9 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		if (!applied.ok) {
 			this.restoreSelection(key, previous);
 			await postInlineNotice(panel, applied.reason);
+			return { ok: false, reason: applied.reason };
 		}
+		return { ok: true };
 	}
 
 	/**
@@ -1079,25 +1221,25 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		nodeId: string,
 		field: EditField,
 		value: string
-	): Promise<void> {
-		const plan = await this.requirePlan(session, docId, nodeId, field, value);
-		if (plan === undefined) {
-			return;
+	): Promise<EditOutcome> {
+		const planned = await this.requirePlan(session, docId, nodeId, field, value);
+		if (planned.plan === undefined) {
+			return { ok: false, reason: planned.reason };
 		}
-		await this.applyPlannedEdit(session, nodeId, plan);
+		return this.applyPlannedEdit(session, nodeId, planned.plan);
 	}
 
-	/** The engine's plan, or `undefined` after explaining the refusal inline. */
+	/** The engine's plan, or a refusal reason after explaining it inline. */
 	private async requirePlan(
 		session: EditorSession,
 		docId: number,
 		nodeId: string,
 		field: EditField,
 		value: string
-	): Promise<EngineEditPlan | undefined> {
+	): Promise<{ plan?: EngineEditPlan; reason?: string }> {
 		const engine = this.engine;
 		if (engine === undefined) {
-			return undefined;
+			return { reason: 'the engine is not available' };
 		}
 		return acceptPlan(session.panel, await engine.planEdit(docId, planRequest(field, nodeId, value)));
 	}
@@ -1107,18 +1249,19 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		session: EditorSession,
 		nodeId: string,
 		plan: EngineEditPlan
-	): Promise<void> {
+	): Promise<EditOutcome> {
 		const record = plan.record;
 		if (record === undefined) {
-			return;
+			return { ok: false, reason: 'the edit was refused' };
 		}
 		const range = new vscode.Range(
 			session.document.positionAt(record.range.start),
 			session.document.positionAt(record.range.end)
 		);
 		if (session.document.getText(range) !== record.oldText) {
-			await postInlineNotice(session.panel, 'the file changed since the value was read; try again');
-			return;
+			const reason = 'the file changed since the value was read; try again';
+			await postInlineNotice(session.panel, reason);
+			return { ok: false, reason };
 		}
 		const previous = this.selections.get(session.key);
 		this.rememberPredictedId(session.key, nodeId, plan.nextNodeId);
@@ -1126,8 +1269,11 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		edit.replace(session.document.uri, range, record.newText);
 		if (!(await vscode.workspace.applyEdit(edit))) {
 			this.restoreSelection(session.key, previous);
-			await postInlineNotice(session.panel, 'VS Code refused the edit');
+			const reason = 'VS Code refused the edit';
+			await postInlineNotice(session.panel, reason);
+			return { ok: false, reason };
 		}
+		return { ok: true };
 	}
 
 	/** Opens the engine handle for a panel; failures leave the TypeScript path in place. */
@@ -1168,7 +1314,15 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			return;
 		}
 		session.state.stale = true;
-		await session.panel.webview.postMessage({ type: 'documentPatch', patch });
+		await session.panel.webview.postMessage({
+			type: 'documentPatch',
+			patch,
+			revision: session.document.version,
+			dirty: session.document.isDirty
+		});
+		// An undo, a revert or another panel's write arrives here as well, so the
+		// `•` has to follow this change even though no `editResult` follows it.
+		this.updateTitle(session);
 	}
 
 	/** The engine's row patch for one text change, or `undefined` when it cannot answer. */
@@ -1215,16 +1369,17 @@ function describeError(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-/** The accepted plan, or `undefined` after showing the refusal beside the field. */
+/** The accepted plan, or a refusal reason after showing it beside the field. */
 async function acceptPlan(
 	panel: vscode.WebviewPanel,
 	plan: EngineEditPlan
-): Promise<EngineEditPlan | undefined> {
+): Promise<{ plan?: EngineEditPlan; reason?: string }> {
 	if (plan.ok && plan.record !== undefined) {
-		return plan;
+		return { plan };
 	}
-	await postInlineNotice(panel, plan.reason ?? 'the edit was refused');
-	return undefined;
+	const reason = plan.reason ?? 'the edit was refused';
+	await postInlineNotice(panel, reason);
+	return { reason };
 }
 
 /** The protocol shape for one edit request. */

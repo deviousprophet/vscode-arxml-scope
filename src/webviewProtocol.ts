@@ -46,6 +46,10 @@ export interface EditorDocumentPayload {
 	selectedId?: string;
 	header?: EditorDocumentHeader;
 	settings?: MonacoSettings;
+	/** Host TextDocument version after the payload was built. */
+	revision?: number;
+	/** True when the TextDocument has unsaved changes. */
+	dirty?: boolean;
 }
 
 /** One contiguous row replacement the engine computed for a text change. */
@@ -62,7 +66,20 @@ export type EditorProviderToWebview =
 	/** Replace the row store (first load and every re-scan). */
 	| { type: 'document'; document: EditorDocumentPayload }
 	/** Replace a contiguous row span after one edit; the rest of the store is untouched. */
-	| { type: 'documentPatch'; patch: EditorRowPatch; header?: EditorDocumentHeader; selectedId?: string }
+	| {
+			type: 'documentPatch';
+			patch: EditorRowPatch;
+			header?: EditorDocumentHeader;
+			selectedId?: string;
+			revision?: number;
+			dirty?: boolean;
+	  }
+	/** The host confirms or refuses one optimistic edit. */
+	| { type: 'editResult'; editId: number; ok: boolean; reason?: string; revision: number }
+	/** The TextDocument's dirty state changed. */
+	| { type: 'dirty'; dirty: boolean; revision: number }
+	/** The host asks the page to submit pending edits before saving. */
+	| { type: 'flushEdits'; requestId: number }
 	/** Replace the workspace condition values (first load and a page reload). */
 	| { type: 'conditions'; entries: ConditionEntry[] }
 	/** Select one row, expanding its ancestors when needed. */
@@ -92,7 +109,8 @@ export type EditorWebviewToProvider =
 	| { type: 'reveal'; nodeId: string }
 	| { type: 'follow'; nodeId: string }
 	| { type: 'references'; nodeId: string }
-	| { type: 'edit'; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string }
+	| { type: 'edit'; editId?: number; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string; baseRevision?: number }
+	| { type: 'flushed'; requestId: number }
 	| { type: 'delete'; nodeId: string }
 	| { type: 'duplicate'; nodeId: string }
 	| { type: 'conditions'; entries: ConditionEntry[] }
@@ -117,6 +135,9 @@ export function editorMessageType(message: unknown): string | undefined {
 const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'document',
 	'documentPatch',
+	'editResult',
+	'dirty',
+	'flushEdits',
 	'conditions',
 	'select',
 	'notice',

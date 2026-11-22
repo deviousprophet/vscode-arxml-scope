@@ -30,6 +30,8 @@ export interface PreviewState {
 	select?: boolean;
 	/** Opens the native find widget and seeds this query, with Rust-shaped results. */
 	find?: string;
+	/** Types this text into the first parameter to exercise the local dirty state. */
+	edit?: string;
 }
 
 export const STATES: PreviewState[] = [
@@ -49,6 +51,7 @@ export const STATES: PreviewState[] = [
 	},
 	{ name: 'editor', page: 'editor', width: 1400, height: 900, select: true },
 	{ name: 'editor-syntax', page: 'editor', width: 1400, height: 900 },
+	{ name: 'editor-dirty', page: 'editor', width: 1400, height: 900, edit: '42' },
 	{ name: 'editor-find', page: 'editor', width: 1400, height: 900, find: 'Items' },
 	{ name: 'diff-find', page: 'diff', width: 1400, height: 900, merge: true, find: 'Items' },
 	{ name: 'toolbar-1400', page: 'diff', width: 1400, height: 900, merge: true },
@@ -204,7 +207,8 @@ function payloadFor(state: PreviewState, document: unknown) {
 		pan: state.pan,
 		jump: state.jump,
 		select: state.select,
-		find: state.find
+		find: state.find,
+		edit: state.edit
 	};
 }
 

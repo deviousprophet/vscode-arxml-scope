@@ -655,6 +655,7 @@ suite('sidebar shell', () => {
 		assert.ok(/id="collapse-all" class="tool diff-tool"/.test(html));
 		assert.ok(/id="expand-all" class="tool diff-tool"/.test(html));
 		assert.ok(/id="toggle-sidebar" class="tool diff-tool"/.test(html));
+		assert.ok(/id="editor-dirty-status"[^>]*role="status"/.test(html));
 		assert.ok(!html.includes('id="find-widget"'), 'Monaco paints its own find widget');
 		assert.ok(!html.includes('id="conditions-toggle"'));
 		assert.ok(!html.includes('id="details-toggle"'));
