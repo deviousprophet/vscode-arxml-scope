@@ -208,17 +208,17 @@ store, then `postToHost({ type: 'ready' })`.
    focus to the browser, `Escape` restores the field's accepted value. Local syntax markers and
    the `#editor-error-strip` live in the page; invalid values never enter the `TextDocument` and
    block save until corrected or reverted.
-7. **Renames follow the id.** A container rename changes its path-based id. Before writing,
+8. **Renames follow the id.** A container rename changes its path-based id. Before writing,
    `editField` stores `plan.nextNodeId`; the re-scan that follows the document change carries that
    surviving id. A refused write restores the previous selection entry.
-8. **Reveal and follow are navigation only.** `reveal` maps the node id through
+9. **Reveal and follow are navigation only.** `reveal` maps the node id through
    `buildNodeIndex(model).byId` and calls `revealRangeInTextEditor` with the panel's column;
    `arxmlScope.ecuc.editor.revealMode` (`beside`, `focus`, `replace`) decides where the source opens.
    `follow` resolves a same-file reference through `followReference`; the resolved range is mapped back
    to a node id and posted as `select`. Failure is a Details notice, never a write.
-9. **Dispose everything.** The panel's `onDidDispose` disposes the boot watchdog and every subscription
-   and deletes the document's panel, selection and pending entries (`forget`).
-10. **Layout survives a re-scan.** The toolbar, sidebar, tabs, inspector and Conditions panel are
+10. **Dispose everything.** The panel's `onDidDispose` disposes the boot watchdog and every subscription
+    and deletes the document's panel, selection and pending entries (`forget`).
+11. **Layout survives a re-scan.** The toolbar, sidebar, tabs, inspector and Conditions panel are
     outside the row window. The row store, flattened display list, virtual range and selected subtree
     are rebuilt in place; the shell and panels are not replaced.
 

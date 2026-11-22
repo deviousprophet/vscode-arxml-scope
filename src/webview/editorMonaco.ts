@@ -10,6 +10,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './monaco/monaco.css';
 import type { EcucRow, RowCondition } from '../core/ecuc/renderRows';
+import { lastShortName } from '../core/ecuc/model';
 import type {
 	EditorDocumentHeader,
 	EditorProviderToWebview,
@@ -630,14 +631,19 @@ function updateErrorState(): void {
 	updateDirtyStatus();
 }
 
-function replaceSyntheticLine(line: number, row: EcucRow, display: string): void {
+function replaceSyntheticLine(line: number, row: EcucRow, field: string, display: string): void {
 	if (model === undefined) {
 		return;
 	}
+	// A container's line label is its definition-ref tail, so a Details edit must
+	// repaint it now instead of waiting for the host's re-scan.
+	const patched: EcucRow = field === 'definitionRef' ? { ...row, label: lastShortName(display) } : row;
 	const built = syntheticRowLine({
-		...row,
-		...(row.kind === 'parameter' ? { value: rawFieldText(row, display), shownValue: display } : {}),
-		...(row.kind === 'container' ? { shortName: display } : {})
+		...patched,
+		...(patched.kind === 'parameter' && field === 'value'
+			? { value: rawFieldText(patched, display), shownValue: display }
+			: {}),
+		...(patched.kind === 'container' && field === 'shortName' ? { shortName: display } : {})
 	});
 	const anchor = captureCursor();
 	documentModel.lines[line - 1] = {
@@ -665,6 +671,57 @@ function syncDetails(nodeId: string, field: string, raw: string): void {
 	syncDetailsField(nodeId, field, raw);
 }
 
+/** The host-accepted raw value for one field, matching the edit payload's `value`. */
+function acceptedFieldValue(row: EcucRow, field: 'value' | 'shortName' | 'definitionRef'): string | undefined {
+	if (field === 'value') {
+		return row.value;
+	}
+	return field === 'shortName' ? row.shortName : row.definitionRef;
+}
+
+/** The newest pending/in-flight edit for one field key, or undefined. */
+function newestLocalEdit(key: string): QueuedEdit | undefined {
+	let newest = pendingEdits.get(key);
+	for (const edit of inflightEdits.values()) {
+		if (editKey(edit) === key && (newest === undefined || edit.editId > newest.editId)) {
+			newest = edit;
+		}
+	}
+	return newest;
+}
+
+function inflightFor(key: string): QueuedEdit | undefined {
+	for (const edit of inflightEdits.values()) {
+		if (editKey(edit) === key) {
+			return edit;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * True when the requested value needs no host write: it is already the queued
+ * value, or it is the accepted value and no acknowledgement can overwrite it.
+ * The host refuses an unchanged value, so sending one would mark an untouched
+ * field invalid and block Ctrl+S.
+ */
+function isRedundantEdit(key: string, value: string, accepted: string | undefined): boolean {
+	const newest = newestLocalEdit(key);
+	if (newest !== undefined && newest.value === value) {
+		return true;
+	}
+	if (value !== accepted) {
+		return false;
+	}
+	if (inflightFor(key) !== undefined) {
+		return false;
+	}
+	// The host already holds this value, so drop a queued revert instead of
+	// writing it and dirtying the document for nothing.
+	pendingEdits.delete(key);
+	return true;
+}
+
 /** The single mutation path for a live field value from Monaco or Details. */
 function applyLocalField(
 	nodeId: string,
@@ -680,7 +737,7 @@ function applyLocalField(
 	const key = fieldKey(nodeId, field);
 	const error = localValueError(row, field, raw);
 	const shown = displayForRaw(row, field, display);
-	replaceSyntheticLine(line, row, shown);
+	replaceSyntheticLine(line, row, field, shown);
 	const detailsValue = field === 'value' ? raw : display;
 	syncDetails(nodeId, field, detailsValue);
 	if (error !== undefined) {
@@ -690,13 +747,13 @@ function applyLocalField(
 		updateErrorState();
 		return;
 	}
+	const value = field === 'value' ? rawFieldText(row, raw) : raw;
 	invalidEdits.delete(key);
-	queueEdit({
-		nodeId,
-		field,
-		value: field === 'value' ? rawFieldText(row, raw) : raw,
-		display: shown
-	});
+	if (isRedundantEdit(key, value, acceptedFieldValue(row, field))) {
+		updateErrorState();
+		return;
+	}
+	queueEdit({ nodeId, field, value, display: shown });
 	updateErrorState();
 }
 
@@ -738,6 +795,7 @@ function flushEdits(): void {
 		}
 		pendingEdits.delete(key);
 		inflightEdits.set(edit.editId, edit);
+		hostAcks = true;
 		postToHost({
 			type: 'edit',
 			editId: edit.editId,
