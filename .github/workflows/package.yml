@@ -34,10 +34,10 @@ jobs:
             target: darwin-arm64
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -59,7 +59,7 @@ jobs:
         run: npm run engine:smoke
 
       - name: Upload Engine Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}
           path: dist/engine/${{ matrix.target }}
@@ -75,10 +75,10 @@ jobs:
       vsix_name: ${{ steps.package-output.outputs.vsix_name }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -94,7 +94,7 @@ jobs:
         run: npm ci
 
       - name: Download Engine Binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist/engine
           pattern: '*'
@@ -136,7 +136,7 @@ jobs:
           done
 
       - name: Upload VSIX Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}
           path: ${{ steps.extension-name.outputs.extension_name }}-${{ steps.suffix.outputs.suffix }}.vsix

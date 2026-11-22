@@ -285,7 +285,7 @@ a two-way merge: arrows copy a row to the other side as one undoable edit.
 | MERGE-12 | fallback cases | `top-level-order`, `module-row`, `outside-elements`, `no-baseline`, `stale-baseline`, `parent-created`, `ancestor-changed` rebuild with a notice, never a wrong row |
 | MERGE-13 | stale bytes | Reload/Cancel modal; Cancel changes nothing |
 | MERGE-14 | edited pane label | `•` while dirty, cleared on save |
-| MERGE-15 | 20 MiB pair | row visible < 100 ms, consistent < 250 ms, 10 copies / 10 s |
+| MERGE-15 | 20 MiB pair | row visible < 100 ms (median), no copy > 250 ms, 10 copies / 10 s |
 
 ## PKG — packaging and activation
 
