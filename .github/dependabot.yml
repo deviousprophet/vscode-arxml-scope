@@ -10,6 +10,10 @@ updates:
     ignore:
       - dependency-name: "typescript"
         versions: ["7.x", "8.x"]
+      # vsce refuses @types/vscode newer than engines.vscode; keep the types at
+      # the extension's declared minimum until the minimum itself moves.
+      - dependency-name: "@types/vscode"
+        versions: [">=1.126"]
     groups:
       npm:
         patterns:
