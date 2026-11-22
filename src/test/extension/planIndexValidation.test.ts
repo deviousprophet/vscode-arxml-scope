@@ -155,7 +155,7 @@ suite('plan index and validation rows (extension)', function () {
 			assert.strictEqual(resolution.element.file, afterUri.toString());
 		} finally {
 			service.dispose();
-			fs.rmSync(dir, { recursive: true, force: true });
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -189,7 +189,7 @@ suite('plan index and validation rows (extension)', function () {
 		} finally {
 			service.dispose();
 			await indexConfig().update('exclude', undefined, vscode.ConfigurationTarget.Workspace);
-			fs.rmSync(dir, { recursive: true, force: true });
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -222,7 +222,7 @@ suite('plan index and validation rows (extension)', function () {
 			assert.strictEqual(service.workspaceIndex.element('/Plan/SavedOne'), undefined);
 		} finally {
 			service.dispose();
-			fs.rmSync(dir, { recursive: true, force: true });
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -261,7 +261,7 @@ suite('plan index and validation rows (extension)', function () {
 		} finally {
 			service.dispose();
 			await indexConfig().update('enabled', undefined, vscode.ConfigurationTarget.Workspace);
-			fs.rmSync(dir, { recursive: true, force: true });
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -308,7 +308,7 @@ suite('plan index and validation rows (extension)', function () {
 			assert.deepStrictEqual(incremental, rebuilt, 'the incremental map equals a fresh build');
 		} finally {
 			service.dispose();
-			fs.rmSync(dir, { recursive: true, force: true });
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -341,7 +341,7 @@ suite('plan index and validation rows (extension)', function () {
 		} finally {
 			service.dispose();
 			await indexConfig().update('maxFileSizeMB', undefined, vscode.ConfigurationTarget.Workspace);
-			fs.rmSync(dir, { recursive: true, force: true });
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 

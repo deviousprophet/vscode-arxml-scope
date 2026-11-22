@@ -34,7 +34,7 @@ suite('text features (extension)', function () {
 
 	suiteTeardown(() => {
 		for (const file of [values, definitions]) {
-			fs.rmSync(file, { force: true });
+			fs.rmSync(file, { force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -125,7 +125,7 @@ suite('text features (extension)', function () {
 			assert.ok(symbols === undefined || symbols.length === 0);
 		} finally {
 			await config.update('exclude', undefined, vscode.ConfigurationTarget.Workspace);
-			fs.rmSync(excluded, { force: true });
+			fs.rmSync(excluded, { force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 });

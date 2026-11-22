@@ -82,7 +82,7 @@ suite('index service rebuild race (extension)', function () {
 			assert.strictEqual(service.workspaceIndex.element('/Race/NEW')?.shortName, 'NEW');
 		} finally {
 			service.dispose();
-			fs.rmSync(uri.fsPath, { force: true });
+			fs.rmSync(uri.fsPath, { force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 });

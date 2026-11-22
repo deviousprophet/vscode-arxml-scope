@@ -111,7 +111,7 @@ suite('cross-file provider follow (extension)', () => {
 			stub.dispose();
 		} finally {
 			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-			fs.rmSync(dir, { recursive: true, force: true });
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 });
