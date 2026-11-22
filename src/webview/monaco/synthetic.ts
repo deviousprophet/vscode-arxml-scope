@@ -35,6 +35,17 @@ export interface FieldSpan {
 	text: string;
 }
 
+/** One rendered field the Rust search engine reports offsets into. */
+export interface SearchSpan {
+	field: 'label' | 'value' | 'meta';
+	/** Index into the row's meta parts, for `meta` spans. */
+	part?: number;
+	/** 1-based inclusive column. */
+	startColumn: number;
+	/** 1-based exclusive column. */
+	endColumn: number;
+}
+
 export interface SyntheticLine {
 	/** 1-based model line. */
 	line: number;
@@ -43,6 +54,7 @@ export interface SyntheticLine {
 	/** The exact text of the line, without the line break. */
 	text: string;
 	fieldSpans: FieldSpan[];
+	searchSpans: SearchSpan[];
 }
 
 export interface FoldingRange {
@@ -72,6 +84,7 @@ interface LineBuilder {
 	parts: string[];
 	length: number;
 	spans: FieldSpan[];
+	searchSpans: SearchSpan[];
 	lineKind: SyntheticLineKind;
 	rowId?: string;
 }
@@ -80,13 +93,35 @@ function indent(level: number): string {
 	return '    '.repeat(Math.max(0, level - 1));
 }
 
+/** A synthetic row is one model line; show embedded newlines as a literal. */
+function singleLine(text: string): string {
+	return text.replace(/\r\n|\r|\n/g, '\\n');
+}
+
 function startLine(kind: SyntheticLineKind, rowId?: string): LineBuilder {
-	return { line: 0, parts: [], length: 0, spans: [], lineKind: kind, rowId };
+	return { line: 0, parts: [], length: 0, spans: [], searchSpans: [], lineKind: kind, rowId };
 }
 
 function append(builder: LineBuilder, text: string): void {
 	builder.parts.push(text);
 	builder.length += text.length;
+}
+
+/** Append one rendered field and remember where the engine's offsets land. */
+function appendSearch(
+	builder: LineBuilder,
+	text: string,
+	field: SearchSpan['field'],
+	part?: number
+): void {
+	const start = builder.length + 1;
+	append(builder, text);
+	builder.searchSpans.push({
+		field,
+		...(part !== undefined ? { part } : {}),
+		startColumn: start,
+		endColumn: builder.length + 1
+	});
 }
 
 function appendField(
@@ -132,55 +167,77 @@ function buildNodeLine(row: EcucRow): LineBuilder {
 	if (row.kind === 'module') {
 		append(builder, 'module ');
 	}
-	append(builder, row.label);
+	appendSearch(builder, row.label, 'label');
 
 	const value = displayValue(row);
 	if (value !== undefined && (row.kind === 'parameter' || row.kind === 'reference')) {
+		const shown = singleLine(value);
 		append(builder, ' = ');
-		if (row.kind === 'parameter') {
-			appendField(builder, value, 'value', row.id);
+		if (row.kind === 'parameter' && shown === value) {
+			appendField(builder, shown, 'value', row.id);
 		} else {
-			append(builder, value);
+			append(builder, shown);
 		}
+		appendSearchSpan(builder, shown);
 	}
 
-	for (const part of row.meta) {
+	for (let index = 0; index < row.meta.length; index += 1) {
+		const part = row.meta[index];
 		if (part.cls === 'annotation') {
 			continue;
 		}
 		append(builder, ' ');
 		if (part.cls === 'short' && row.kind === 'container' && row.shortName !== undefined) {
 			// `shortPart` renders `"name"`; the editable span is the name inside.
-			const displayed = part.text;
+			const displayed = singleLine(part.text);
 			const quoted = displayed.startsWith('"') && displayed.endsWith('"');
 			if (quoted) {
+				const searchStart = builder.length + 1;
 				append(builder, '"');
-				appendField(builder, row.shortName, 'shortName', row.id);
+				appendField(builder, singleLine(row.shortName), 'shortName', row.id);
 				append(builder, '"');
+				builder.searchSpans.push({
+					field: 'meta',
+					part: index,
+					startColumn: searchStart,
+					endColumn: builder.length + 1
+				});
 			} else {
 				append(builder, displayed);
+				appendSearchSpan(builder, displayed, 'meta', index);
 			}
 		} else {
-			append(builder, part.text);
+			const displayed = singleLine(part.text);
+			append(builder, displayed);
+			appendSearchSpan(builder, displayed, 'meta', index);
 		}
 	}
 
 	if (row.kind === 'container' && row.empty) {
 		append(builder, ' { }');
 	}
-	if (row.kind === 'container' && row.definitionRef !== '') {
-		// The full definition ref is normally only in Details; show it as a
-		// compact suffix so the settled direct-edit rule has a real span.
-		append(builder, ' @');
-		appendField(builder, row.definitionRef, 'definitionRef', row.id);
-	}
 	return builder;
+}
+
+/** Record the span of text already appended immediately before this call. */
+function appendSearchSpan(
+	builder: LineBuilder,
+	text: string,
+	field: SearchSpan['field'] = 'value',
+	part?: number
+): void {
+	builder.searchSpans.push({
+		field,
+		...(part !== undefined ? { part } : {}),
+		startColumn: builder.length - text.length + 1,
+		endColumn: builder.length + 1
+	});
 }
 
 function buildCommentLine(text: string, level: number, rowId: string): LineBuilder {
 	const builder = startLine('annotation', rowId);
 	append(builder, indent(level));
-	append(builder, `/* ${text} */`);
+	append(builder, `/* ${singleLine(text)} */`);
 	return builder;
 }
 
@@ -273,7 +330,8 @@ export function buildSyntheticDocument(
 		...(builder.rowId !== undefined ? { rowId: builder.rowId } : {}),
 		kind: builder.lineKind,
 		text: builder.parts.join(''),
-		fieldSpans: builder.spans
+		fieldSpans: builder.spans,
+		searchSpans: builder.searchSpans
 	}));
 
 	return { text, lines, rowLine, foldingRanges: folding };
@@ -290,9 +348,13 @@ export function rowForLine(document: SyntheticDocument, line: number): string | 
 }
 
 /** Build one node line and its spans; used for a one-row host patch. */
-export function syntheticRowLine(row: EcucRow): { text: string; fieldSpans: FieldSpan[] } {
+export function syntheticRowLine(row: EcucRow): {
+	text: string;
+	fieldSpans: FieldSpan[];
+	searchSpans: SearchSpan[];
+} {
 	const builder = buildNodeLine(row);
-	return { text: builder.parts.join(''), fieldSpans: builder.spans };
+	return { text: builder.parts.join(''), fieldSpans: builder.spans, searchSpans: builder.searchSpans };
 }
 
 /** All editable spans on a line. */
@@ -300,20 +362,53 @@ export function fieldSpansForLine(document: SyntheticDocument, line: number): re
 	return document.lines[line - 1]?.fieldSpans ?? [];
 }
 
-function cellLine(cell: DiffCell | undefined, row: DiffRow): string {
+/** Map one Rust match's field offsets to 1-based columns on a synthetic line. */
+export function searchRangeOnLine(
+	line: SyntheticLine,
+	match: { field: SearchSpan['field']; part?: number; start: number; end: number }
+): { startColumn: number; endColumn: number } | undefined {
+	const span = line.searchSpans.find(
+		(candidate) => candidate.field === match.field && candidate.part === match.part
+	);
+	if (span === undefined) {
+		return undefined;
+	}
+	const startColumn = span.startColumn + match.start;
+	const endColumn = span.startColumn + match.end;
+	if (endColumn <= startColumn || endColumn > span.endColumn) {
+		return undefined;
+	}
+	return { startColumn, endColumn };
+}
+
+function cellLine(cell: DiffCell | undefined, row: DiffRow): { text: string; searchSpans: SearchSpan[] } {
 	if (cell === undefined) {
-		return '';
+		return { text: '', searchSpans: [] };
 	}
 	const pad = indent(row.level);
-	let text = pad + (cell.kind === 'module' ? 'module ' : '') + cell.label;
+	let text = pad + (cell.kind === 'module' ? 'module ' : '');
+	const searchSpans: SearchSpan[] = [];
+	const labelStart = text.length + 1;
+	text += cell.label;
+	searchSpans.push({ field: 'label', startColumn: labelStart, endColumn: text.length + 1 });
 	const value = cell.shownValue !== undefined ? cell.shownValue : cell.kind === 'reference' ? cell.target : cell.value;
 	if ((cell.kind === 'parameter' || cell.kind === 'reference') && value !== undefined) {
-		text += ` = ${value}`;
+		text += ' = ';
+		const shown = singleLine(value);
+		const valueStart = text.length + 1;
+		text += shown;
+		searchSpans.push({ field: 'value', startColumn: valueStart, endColumn: text.length + 1 });
 	}
-	for (const part of cell.meta) {
-		if (part.cls !== 'annotation') {
-			text += ` ${part.text}`;
+	for (let index = 0; index < cell.meta.length; index += 1) {
+		const part = cell.meta[index];
+		if (part.cls === 'annotation') {
+			continue;
 		}
+		text += ' ';
+		const shown = singleLine(part.text);
+		const metaStart = text.length + 1;
+		text += shown;
+		searchSpans.push({ field: 'meta', part: index, startColumn: metaStart, endColumn: text.length + 1 });
 	}
 	if (cell.kind === 'container' && !row.hasChildren) {
 		text += ' { }';
@@ -327,18 +422,20 @@ function cellLine(cell: DiffCell | undefined, row: DiffRow): string {
 			text += ` [${cell.definitionDest}]`;
 		}
 	}
-	return text;
+	return { text, searchSpans };
 }
 
 function commentText(cell: DiffCell | undefined, index: number, level: number): string {
 	const text = cell?.comments?.[index];
-	return text === undefined ? '' : `${indent(level)}/* ${text} */`;
+	return text === undefined ? '' : `${indent(level)}/* ${singleLine(text)} */`;
 }
 
 /** Serialize the merged diff rows into two line-aligned synthetic documents. */
 export function buildAlignedSyntheticDocuments(document: DiffDocument): AlignedSyntheticDocuments {
 	const leftText: string[] = [];
 	const rightText: string[] = [];
+	const leftSearchSpans: SearchSpan[][] = [];
+	const rightSearchSpans: SearchSpan[][] = [];
 	const leftKeys: (string | undefined)[] = [];
 	const rightKeys: (string | undefined)[] = [];
 	const leftRowLine = new Map<string, number>();
@@ -346,9 +443,17 @@ export function buildAlignedSyntheticDocuments(document: DiffDocument): AlignedS
 	const leftFolding: FoldingRange[] = [];
 	const rightFolding: FoldingRange[] = [];
 
-	const emit = (left: string, right: string, key?: string): void => {
+	const emit = (
+		left: string,
+		right: string,
+		key?: string,
+		leftSpans: SearchSpan[] = [],
+		rightSpans: SearchSpan[] = []
+	): void => {
 		leftText.push(left);
 		rightText.push(right);
+		leftSearchSpans.push(leftSpans);
+		rightSearchSpans.push(rightSpans);
 		leftKeys.push(key);
 		rightKeys.push(key);
 	};
@@ -375,7 +480,9 @@ export function buildAlignedSyntheticDocuments(document: DiffDocument): AlignedS
 
 		const leftLine = leftText.length + 1;
 		const rightLine = rightText.length + 1;
-		emit(cellLine(row.left, row), cellLine(row.right, row), row.key);
+		const leftCell = cellLine(row.left, row);
+		const rightCell = cellLine(row.right, row);
+		emit(leftCell.text, rightCell.text, row.key, leftCell.searchSpans, rightCell.searchSpans);
 		leftRowLine.set(row.key, leftLine);
 		rightRowLine.set(row.key, rightLine);
 
@@ -412,7 +519,8 @@ export function buildAlignedSyntheticDocuments(document: DiffDocument): AlignedS
 		lines: string[],
 		keys: (string | undefined)[],
 		rowLine: Map<string, number>,
-		foldingRanges: FoldingRange[]
+		foldingRanges: FoldingRange[],
+		spans: SearchSpan[][]
 	): SyntheticDocument => ({
 		text: lines.join('\n'),
 		lines: lines.map((text, index) => ({
@@ -420,15 +528,16 @@ export function buildAlignedSyntheticDocuments(document: DiffDocument): AlignedS
 			...(keys[index] !== undefined ? { rowId: keys[index] } : {}),
 			kind: 'diff',
 			text,
-			fieldSpans: []
+			fieldSpans: [],
+			searchSpans: spans[index] ?? []
 		})),
 		rowLine,
 		foldingRanges
 	});
 
 	return {
-		left: toDocument(leftText, leftKeys, leftRowLine, leftFolding),
-		right: toDocument(rightText, rightKeys, rightRowLine, rightFolding),
+		left: toDocument(leftText, leftKeys, leftRowLine, leftFolding, leftSearchSpans),
+		right: toDocument(rightText, rightKeys, rightRowLine, rightFolding, rightSearchSpans),
 		leftLineKeys: leftKeys,
 		rightLineKeys: rightKeys
 	};

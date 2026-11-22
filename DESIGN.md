@@ -290,16 +290,17 @@ a 22px section header.
 
 ### Search
 
-Find is a floating VS Code-style widget above the content, not a toolbar slot. It is hidden
+Find is Monaco's own find widget, mounted inside the editor pane, not a toolbar slot. It is hidden
 until `Ctrl+F` (`Ctrl+H` opens the replace row) and closes on `Escape` or its close button.
 The query row carries the case-sensitive, whole-word and regex toggles, the count, previous/
 next and close; the document view adds a replace row with preserve-case, Replace and Replace
-All. The diff view has no replace row.
+All. The diff view has no replace row because both panes are read-only.
 
-The engine owns the match list; the page owns the marks. Match marks use the two fixed amber
-tiers: `match` at 18% alpha for every hit and `match-active` at 36% for the current row, so
-the text stays readable while the current match remains clearly stronger. Never use theme
-find-match colours, because a theme may resolve them to transparent.
+The widget and its marks are Monaco's; the Rust engine owns the match list. The page maps every
+Rust field offset onto the synthetic line, so the native count and navigation show only real
+ARXML matches. Typing starts a new Rust request; an open query is re-run after a document patch,
+an accepted replace or a view change. Replace and Replace All are intercepted and sent to the
+Rust replace planner instead of editing the synthetic text.
 
 ### Diff
 

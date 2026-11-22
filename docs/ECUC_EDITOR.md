@@ -8,8 +8,8 @@ The editor is opt-in: a normal open still uses VS Code's text editor.
 
 > **Renderer status.** The Document surface is now a Monaco editor — the same editor and diff
 > editor that VS Code uses. Selection, scrolling, folding, word wrap, minimap, sticky scroll and
-> undo follow the host editor. Parameter values, container short names and container definition refs
-> can be typed directly; everything else is read-only. Sections below that describe roving row focus, Space-to-select,
+> undo follow the host editor. Parameter values and container short names can be typed directly;
+> definition refs are edited in Details; everything else is read-only. Sections below that describe roving row focus, Space-to-select,
 > type-ahead, the custom copy planner, the custom collapsible hint or the custom virtual scroll
 > describe the retired DOM renderer and are kept as the ECUC interaction reference.
 
@@ -96,17 +96,16 @@ offsets; the docs view has one horizontal bar, and the scrollbars are native.
 
 ### Search and replace
 
-`Ctrl+F` / `Cmd+F` opens the floating find widget; `Ctrl+H` opens it with the replace row.
-The widget is hidden until one of those shortcuts. `Escape` closes it and returns focus to the
-Document.
+`Ctrl+F` / `Cmd+F` opens Monaco's native find widget inside the editor; `Ctrl+H` opens it with
+the replace row. `Escape` closes it and returns focus to the Document.
 
 - The three toggles are `Aa` case sensitive, `ab|` match whole word and `.*` regular expression.
 - The Rust engine owns the match list, the count, navigation and replace plans. Typing starts a
-  new request; `Enter` jumps to the first/next match, `Shift+Enter` goes back, `F3` / `Shift+F3`
-  cycle. The count reads `1 / N`, `0 / 0`, `Invalid pattern` or is empty before a query runs.
-- All matches are marked; the current row uses the stronger amber tier. The schema/package
-  keyword and value are page-local search candidates; a header jump focuses the header line and
-  posts no `select` message.
+  new request; `Enter` jumps to the next match, `Shift+Enter` goes back, and `F3` / `Shift+F3`
+  cycle. The native count reads `1 of N` or `No results`; an invalid pattern is reported in
+  Details.
+- Every reported match is mapped from its field offsets onto the synthetic line, so only real
+  ARXML matches are marked. Monaco's theme-aware find colours mark all hits and the current one.
 - Replace edits parameter values and container short names only. `Replace` changes the current
   occurrence; `Replace All` plans every replaceable field atomically. Module labels, reference
   targets, meta text and headers refuse with an inline notice. Preserve case (`AB↔`) copies the

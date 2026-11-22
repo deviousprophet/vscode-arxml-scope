@@ -24,6 +24,35 @@ interface PreviewPayload {
 	pan?: number;
 	jump?: number;
 	select?: boolean;
+	find?: string;
+}
+
+interface PreviewCell {
+	label: string;
+	value?: string;
+	shownValue?: string;
+	meta?: Array<{ text: string }>;
+}
+
+interface PreviewRow {
+	id?: string;
+	key?: string;
+	label?: string;
+	value?: string;
+	meta?: Array<{ text: string }>;
+	left?: PreviewCell;
+	right?: PreviewCell;
+}
+
+interface PreviewFindMatch {
+	rowId?: string;
+	key?: string;
+	side?: 'left' | 'right';
+	field: 'label' | 'value' | 'meta';
+	part?: number;
+	start: number;
+	end: number;
+	replaceable?: boolean;
 }
 
 declare global {
@@ -156,6 +185,116 @@ function publishAudit(): void {
 	document.body.appendChild(node);
 }
 
+function findOccurrence(query: string, text: string | undefined): { start: number; end: number } | undefined {
+	if (typeof text !== 'string') {
+		return undefined;
+	}
+	const start = text.toLowerCase().indexOf(query.toLowerCase());
+	return start < 0 ? undefined : { start, end: start + query.length };
+}
+
+function rowMatches(row: PreviewRow, query: string): PreviewFindMatch[] {
+	const out: PreviewFindMatch[] = [];
+	const label = findOccurrence(query, row.label);
+	if (label !== undefined && row.id !== undefined) {
+		out.push({ rowId: row.id, field: 'label', ...label });
+	}
+	const value = findOccurrence(query, row.value);
+	if (value !== undefined && row.id !== undefined) {
+		out.push({ rowId: row.id, field: 'value', replaceable: true, ...value });
+	}
+	for (let part = 0; part < (row.meta?.length ?? 0); part += 1) {
+		const found = findOccurrence(query, row.meta?.[part]?.text);
+		if (found !== undefined && row.id !== undefined) {
+			out.push({ rowId: row.id, field: 'meta', part, ...found });
+		}
+	}
+	return out;
+}
+
+function cellMatches(
+	row: PreviewRow,
+	cell: PreviewCell | undefined,
+	side: 'left' | 'right',
+	query: string
+): PreviewFindMatch[] {
+	const out: PreviewFindMatch[] = [];
+	if (cell === undefined || row.key === undefined) {
+		return out;
+	}
+	const push = (field: PreviewFindMatch['field'], found: { start: number; end: number } | undefined, part?: number): void => {
+		if (found !== undefined) {
+			out.push({ key: row.key, side, field, ...(part !== undefined ? { part } : {}), ...found });
+		}
+	};
+	push('label', findOccurrence(query, cell.label));
+	push('value', findOccurrence(query, cell.shownValue ?? cell.value));
+	for (let part = 0; part < (cell.meta?.length ?? 0); part += 1) {
+		push('meta', findOccurrence(query, cell.meta?.[part]?.text), part);
+	}
+	return out;
+}
+
+function previewFindResult(
+	page: 'diff' | 'editor',
+	query: string
+): { matches: PreviewFindMatch[]; total: number; limited: boolean } {
+	const document = (payload.message as { document?: { rows?: PreviewRow[] } }).document;
+	const rows = document?.rows ?? [];
+	const matches: PreviewFindMatch[] = [];
+	for (const row of rows) {
+		if (page === 'editor') {
+			matches.push(...rowMatches(row, query));
+			continue;
+		}
+		matches.push(...cellMatches(row, row.left, 'left', query));
+		matches.push(...cellMatches(row, row.right, 'right', query));
+	}
+	return { matches, total: matches.length, limited: false };
+}
+
+async function applyFind(): Promise<void> {
+	const query = payload.find;
+	if (query === undefined || query === '') {
+		return;
+	}
+	const previewWindow = window as unknown as {
+		__ARXML_EDITOR__?: { trigger(source: string, id: string, args: unknown): void };
+		__ARXML_DIFF_EDITOR__?: { getModifiedEditor(): { trigger(source: string, id: string, args: unknown): void } };
+	};
+	if (payload.page === 'editor') {
+		previewWindow.__ARXML_EDITOR__?.trigger('preview', 'actions.find', null);
+	} else {
+		previewWindow.__ARXML_DIFF_EDITOR__?.getModifiedEditor().trigger('preview', 'actions.find', null);
+	}
+	await tick();
+	const root = payload.page === 'editor' ? '#tree' : '.modified-in-monaco-diff-editor';
+	const input = document.querySelector(`${root} .find-widget textarea.input`) as HTMLTextAreaElement | null;
+	if (input === null) {
+		return;
+	}
+	input.focus();
+	input.value = query;
+	input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: query }));
+	await tick();
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; query?: string; requestId?: number }>;
+	const request = [...messages]
+		.reverse()
+		.find((message) => message.type === 'find' && message.query === query);
+	if (request?.requestId === undefined) {
+		return;
+	}
+	window.postMessage(
+		{ type: 'findResult', requestId: request.requestId, result: previewFindResult(payload.page, query) },
+		'*'
+	);
+	await tick();
+	const next = document.querySelector(`${root} .find-widget [aria-label^="Next Match"]`) as HTMLElement | null;
+	next?.click();
+	await tick();
+	(input as HTMLTextAreaElement | null)?.focus();
+}
+
 async function run(): Promise<void> {
 	window.postMessage(payload.message, '*');
 	const root = payload.page === 'diff' ? '.monaco-diff-editor' : '#tree .monaco-editor';
@@ -176,6 +315,7 @@ async function run(): Promise<void> {
 	await applyPan();
 	await applyJumps();
 	await applySelect();
+	await applyFind();
 	await settle();
 	document.body.dataset.previewReady = 'true';
 	publishAudit();

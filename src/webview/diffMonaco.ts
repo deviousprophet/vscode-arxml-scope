@@ -10,19 +10,18 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './components/diffView/diffView.css';
 import './monaco/monaco.css';
-import type { DiffCell, DiffDocument, DiffHeader, DiffRow } from '../core/diff/diffModel';import { applyDiffPatch, type DiffPatch } from '../core/diff/diffPatch';
-import { DEFAULT_FIND_OPTIONS, type DiffFindMatch, type FindOptions } from '../core/searchModel';
+import type { DiffCell, DiffDocument, DiffHeader, DiffRow } from '../core/diff/diffModel';
+import { applyDiffPatch, type DiffPatch } from '../core/diff/diffPatch';
+import type { DiffFindMatch, FindOptions } from '../core/searchModel';
 import type { DiffProviderToWebview } from '../diffProtocol';
 import {
 	buildAlignedSyntheticDocuments,
+	searchRangeOnLine,
 	type AlignedSyntheticDocuments,
 	type SyntheticDocument
 } from './monaco/synthetic';
 import { defineEcucTheme, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
 import { DiffToolbar } from './components/toolbar/toolbar';
-import { mountSearchBar, renderSearchCount } from './render/searchState';
-import type { SearchBar } from './components/searchBar/searchBar';
-import { findRanges } from './render/searchPattern';
 import { installNoticeErrors } from './render/pageError';
 import { postToHost } from './vscodeApi';
 
@@ -32,21 +31,43 @@ let leftModel: monaco.editor.ITextModel | undefined;
 let rightModel: monaco.editor.ITextModel | undefined;
 let diffEditor: monaco.editor.IStandaloneDiffEditor | undefined;
 let toolbar: DiffToolbar | undefined;
-let searchBar: SearchBar | undefined;
 let swapped = false;
 let mergeMode = false;
 let changesOnly = false;
 let contextActive = true;
 let semantic = true;
 let selectedKey: string | undefined;
-let searchQuery = '';
-let searchOptions: FindOptions = { ...DEFAULT_FIND_OPTIONS };
-let searchMatches: DiffFindMatch[] = [];
-let searchIndex = -1;
-let searchRequestId = 0;
-let searchRunning = false;
 let originalDecorations: string[] = [];
 let modifiedDecorations: string[] = [];
+type MonacoFindMatch = ReturnType<monaco.editor.ITextModel['findMatches']>[number];
+type DiffSide = 'left' | 'right';
+interface DiffNativeQuery {
+	query: string;
+	options: FindOptions;
+	changesOnly: boolean;
+}
+interface DiffNativeMatches {
+	left: MonacoFindMatch[];
+	right: MonacoFindMatch[];
+}
+interface DiffFindController {
+	getState?(): {
+		isRevealed: boolean;
+		isReplaceRevealed: boolean;
+		searchString: string;
+		replaceString: string;
+		preserveCase: boolean;
+		isRegex: boolean;
+		wholeWord: boolean;
+		matchCase: boolean;
+	};
+	start?(opts: unknown, state?: unknown): Promise<void>;
+}
+let diffFindCache = new Map<string, DiffNativeMatches>();
+let diffFindQueries = new Map<string, DiffNativeQuery>();
+let diffFindRequested = new Set<string>();
+let diffFindRequests = new Map<number, string>();
+let diffFindRequestId = 0;
 let mounted = false;
 const pendingMessages: DiffProviderToWebview[] = [];
 
@@ -100,6 +121,261 @@ function keyAt(editor: monaco.editor.ICodeEditor | undefined, line: number, side
 	return keys[line - 1];
 }
 
+function sideDocument(side: DiffSide): SyntheticDocument | undefined {
+	return side === 'left' ? aligned?.left : aligned?.right;
+}
+
+function diffFindKey(query: string, options: FindOptions, onlyChanges: boolean): string {
+	return `${onlyChanges ? 1 : 0}|${options.caseSensitive ? 1 : 0}|${options.wholeWord ? 1 : 0}|${
+		options.regex ? 1 : 0
+	}|${query}`;
+}
+
+function diffFindOptions(isRegex: boolean, matchCase: boolean, wordSeparators: string | null): FindOptions {
+	return {
+		caseSensitive: matchCase,
+		wholeWord: wordSeparators !== null && wordSeparators !== undefined,
+		regex: isRegex
+	};
+}
+
+function requestDiffFind(query: string, options: FindOptions): void {
+	if (query === '') {
+		return;
+	}
+	const key = diffFindKey(query, options, changesOnly);
+	if (diffFindCache.has(key) || diffFindRequested.has(key)) {
+		return;
+	}
+	diffFindRequested.add(key);
+	diffFindQueries.set(key, { query, options, changesOnly });
+	const requestId = (diffFindRequestId += 1);
+	diffFindRequests.set(requestId, key);
+	postToHost({ type: 'find', requestId, query, options, changesOnly });
+}
+
+function diffMatchesFor(side: DiffSide, query: string, options: FindOptions): MonacoFindMatch[] {
+	return diffFindCache.get(diffFindKey(query, options, changesOnly))?.[side] ?? [];
+}
+
+function mapDiffSideMatches(
+	result: { matches: DiffFindMatch[] },
+	side: DiffSide
+): MonacoFindMatch[] {
+	const doc = sideDocument(side);
+	const out: MonacoFindMatch[] = [];
+	const seen = new Set<string>();
+	if (doc === undefined) {
+		return out;
+	}
+	for (const match of result.matches) {
+		if (match.side !== side) {
+			continue;
+		}
+		const line = lineFor(match.key, doc);
+		const lineText = line === undefined ? undefined : doc.lines[line - 1];
+		if (line === undefined || lineText === undefined) {
+			continue;
+		}
+		const range = searchRangeOnLine(lineText, match);
+		if (range === undefined) {
+			continue;
+		}
+		const key = `${line}:${range.startColumn}:${range.endColumn}`;
+		if (seen.has(key)) {
+			continue;
+		}
+		seen.add(key);
+		out.push({
+			range: new monaco.Range(line, range.startColumn, line, range.endColumn),
+			matches: [lineText.text.slice(range.startColumn - 1, range.endColumn - 1)]
+		} as unknown as MonacoFindMatch);
+	}
+	out.sort((left, right) => monaco.Range.compareRangesUsingStarts(left.range, right.range));
+	return out;
+}
+
+function refreshDiffFind(query: string, options: FindOptions): void {
+	if (query === '') {
+		return;
+	}
+	for (const editor of [originalEditor(), modifiedEditor()]) {
+		const controller = editor?.getContribution('editor.contrib.findController') as DiffFindController | null;
+		const state = controller?.getState?.();
+		if (controller?.start === undefined || state === undefined || !state.isRevealed) {
+			continue;
+		}
+		if (
+			state.searchString !== query ||
+			state.isRegex !== options.regex ||
+			state.wholeWord !== options.wholeWord ||
+			state.matchCase !== options.caseSensitive
+		) {
+			continue;
+		}
+		void controller.start(
+			{
+				forceRevealReplace: false,
+				seedSearchStringFromSelection: 'none',
+				seedSearchStringFromNonEmptySelection: false,
+				seedSearchStringFromGlobalClipboard: false,
+				shouldFocus: 0,
+				shouldAnimate: false,
+				updateSearchScope: false,
+				loop: true
+			},
+			{
+				searchString: query,
+				isRegex: options.regex,
+				matchCase: options.caseSensitive,
+				wholeWord: options.wholeWord,
+				replaceString: state.replaceString,
+				preserveCase: state.preserveCase,
+				isReplaceRevealed: state.isReplaceRevealed
+			}
+		);
+	}
+}
+
+function applyDiffFindResult(requestId: number, result: { matches: DiffFindMatch[] }, error?: string): void {
+	const key = diffFindRequests.get(requestId);
+	if (key === undefined) {
+		return;
+	}
+	diffFindRequests.delete(requestId);
+	diffFindRequested.delete(key);
+	const query = diffFindQueries.get(key);
+	if (query === undefined) {
+		return;
+	}
+	if (error !== undefined) {
+		setNotice(error, 'error');
+	}
+	diffFindCache.set(
+		key,
+		error === undefined
+			? {
+					left: mapDiffSideMatches(result, 'left'),
+					right: mapDiffSideMatches(result, 'right')
+			  }
+			: { left: [], right: [] }
+	);
+	refreshDiffFind(query.query, query.options);
+}
+
+function invalidateDiffFind(): void {
+	diffFindCache.clear();
+	diffFindQueries.clear();
+	diffFindRequested.clear();
+	diffFindRequests.clear();
+	if (aligned === undefined) {
+		return;
+	}
+	for (const editor of [originalEditor(), modifiedEditor()]) {
+		const state = (editor?.getContribution('editor.contrib.findController') as DiffFindController | null)?.getState?.();
+		if (state?.isRevealed === true && state.searchString !== '') {
+			refreshDiffFind(state.searchString, {
+				caseSensitive: state.matchCase,
+				wholeWord: state.wholeWord,
+				regex: state.isRegex
+			});
+		}
+	}
+}
+
+function installDiffFindBridge(target: monaco.editor.ITextModel, side: DiffSide): void {
+	const patched = target as unknown as {
+		findMatches(
+			searchString: string,
+			searchOnlyEditableRange: monaco.Range[] | null,
+			isRegex: boolean,
+			matchCase: boolean,
+			wordSeparators: string | null,
+			captureMatches: boolean,
+			limitResultCount: number
+		): MonacoFindMatch[];
+		findNextMatch(
+			searchString: string,
+			searchStart: monaco.Position,
+			isRegex: boolean,
+			matchCase: boolean,
+			wordSeparators: string | null,
+			captureMatches: boolean
+		): MonacoFindMatch | null;
+		findPreviousMatch(
+			searchString: string,
+			searchStart: monaco.Position,
+			isRegex: boolean,
+			matchCase: boolean,
+			wordSeparators: string | null,
+			captureMatches: boolean
+		): MonacoFindMatch | null;
+	};
+	patched.findMatches = function (
+		searchString,
+		_searchOnlyEditableRange,
+		isRegex,
+		matchCase,
+		wordSeparators,
+		_captureMatches,
+		limitResultCount
+	) {
+		const options = diffFindOptions(isRegex, matchCase, wordSeparators);
+		const matches = diffMatchesFor(side, searchString, options);
+		if (matches.length === 0) {
+			requestDiffFind(searchString, options);
+		}
+		return Number.isFinite(limitResultCount) ? matches.slice(0, limitResultCount) : matches.slice();
+	};
+	patched.findNextMatch = function (
+		searchString,
+		searchStart,
+		isRegex,
+		matchCase,
+		wordSeparators,
+		_captureMatches
+	) {
+		const options = diffFindOptions(isRegex, matchCase, wordSeparators);
+		const matches = diffMatchesFor(side, searchString, options);
+		if (matches.length === 0) {
+			requestDiffFind(searchString, options);
+			return null;
+		}
+		const start = new monaco.Range(
+			searchStart.lineNumber,
+			searchStart.column,
+			searchStart.lineNumber,
+			searchStart.column
+		);
+		return matches.find((match) => monaco.Range.compareRangesUsingStarts(match.range, start) >= 0) ?? matches[0];
+	};
+	patched.findPreviousMatch = function (
+		searchString,
+		searchStart,
+		isRegex,
+		matchCase,
+		wordSeparators,
+		_captureMatches
+	) {
+		const options = diffFindOptions(isRegex, matchCase, wordSeparators);
+		const matches = diffMatchesFor(side, searchString, options);
+		if (matches.length === 0) {
+			requestDiffFind(searchString, options);
+			return null;
+		}
+		for (let at = matches.length - 1; at >= 0; at -= 1) {
+			const end = matches[at].range.getEndPosition();
+			if (
+				end.lineNumber < searchStart.lineNumber ||
+				(end.lineNumber === searchStart.lineNumber && end.column <= searchStart.column)
+			) {
+				return matches[at];
+			}
+		}
+		return matches[matches.length - 1];
+	};
+}
+
 function subtreeKeys(key: string | undefined): Set<string> {
 	const out = new Set<string>();
 	if (documentModel === undefined || key === undefined) {
@@ -127,6 +403,9 @@ function updateDiffOptions(): void {
 			minimumLineCount: 3
 		}
 	});
+	// The Rust diff search is scoped to the current view, so a view toggle
+	// needs a fresh query instead of last view's match set.
+	invalidateDiffFind();
 }
 
 function setNotice(text: string, kind: 'warn' | 'error' = 'warn'): void {
@@ -265,26 +544,31 @@ function renderDecorations(): void {
 	};
 
 	for (const key of selected) {
-		add(originalRanges, lineFor(key, originalDocument()), key === selectedKey ? 'arxml-selected' : 'arxml-subtree');
-		add(modifiedRanges, lineFor(key, modifiedDocument()), key === selectedKey ? 'arxml-selected' : 'arxml-subtree');
+		// The node line gets the selected class; its brace and annotation lines
+		// keep the subtree tint, matching the old Document.
+		const originalLine = lineFor(key, originalDocument());
+		const modifiedLine = lineFor(key, modifiedDocument());
+		if (originalLine !== undefined) {
+			add(originalRanges, originalLine, key === selectedKey ? 'arxml-selected' : 'arxml-subtree');
+		}
+		if (modifiedLine !== undefined) {
+			add(modifiedRanges, modifiedLine, key === selectedKey ? 'arxml-selected' : 'arxml-subtree');
+		}
 	}
-	for (let at = 0; at < searchMatches.length; at += 1) {
-		const match = searchMatches[at];
-		const target = match.side === 'left' ? originalRanges : modifiedRanges;
-		const doc = match.side === 'left' ? originalDocument() : modifiedDocument();
-		const line = lineFor(match.key, doc);
-		const lineText = line === undefined ? undefined : doc?.lines[line - 1]?.text;
-		const ranges = lineText === undefined ? [] : findRanges(lineText, searchQuery, searchOptions);
-		const className = at === searchIndex ? 'arxml-find-current' : 'arxml-find';
-		if (line !== undefined && ranges.length > 0) {
-			for (const range of ranges) {
-				target.push({
-					range: new monaco.Range(line, range.start + 1, line, range.end + 1),
-					options: { inlineClassName: className }
-				});
-			}
-		} else {
-			add(target, line, className, 3);
+	const originalDoc = originalDocument();
+	const modifiedDoc = modifiedDocument();
+	const oldOriginalKeys = originalKeys();
+	const oldModifiedKeys = modifiedKeys();
+	for (let at = 0; at < oldOriginalKeys.length; at += 1) {
+		const key = oldOriginalKeys[at];
+		if (key !== undefined && selected.has(key) && originalDoc?.rowLine.get(key) !== at + 1) {
+			add(originalRanges, at + 1, 'arxml-subtree');
+		}
+	}
+	for (let at = 0; at < oldModifiedKeys.length; at += 1) {
+		const key = oldModifiedKeys[at];
+		if (key !== undefined && selected.has(key) && modifiedDoc?.rowLine.get(key) !== at + 1) {
+			add(modifiedRanges, at + 1, 'arxml-subtree');
 		}
 	}
 
@@ -401,69 +685,6 @@ function navigate(direction: 1 | -1): void {
 	modifiedEditor()?.setPosition({ lineNumber: line, column: 1 });
 }
 
-function renderSearchUi(): void {
-	if (searchBar === undefined) {
-		return;
-	}
-	renderSearchCount(searchBar, searchQuery.trim() !== '', searchQuery, searchMatches.length, searchIndex, searchRunning);
-}
-
-function resetSearch(): void {
-	searchMatches = [];
-	searchIndex = -1;
-	searchQuery = '';
-	searchRunning = false;
-	renderSearchUi();
-	renderDecorations();
-}
-
-function startSearch(query: string): void {
-	const text = (query || '').trim();
-	if (text === '') {
-		resetSearch();
-		return;
-	}
-	searchQuery = query;
-	searchMatches = [];
-	searchIndex = -1;
-	const requestId = (searchRequestId += 1);
-	searchRunning = true;
-	renderSearchUi();
-	postToHost({ type: 'find', requestId, query, options: searchOptions, changesOnly });
-}
-
-function applyFindResult(requestId: number, result: { matches: DiffFindMatch[] }, error?: string): void {
-	if (requestId !== searchRequestId) {
-		return;
-	}
-	if (error !== undefined) {
-		searchMatches = [];
-		searchIndex = -1;
-		searchRunning = false;
-		renderSearchUi();
-		setNotice(error);
-		return;
-	}
-	searchMatches = result.matches;
-	searchIndex = searchMatches.length > 0 ? 0 : -1;
-	searchRunning = false;
-	renderSearchUi();
-	renderDecorations();
-	const match = searchMatches[searchIndex];
-	revealKey(match?.key);
-}
-
-function cycleSearch(direction: number): void {
-	if (searchMatches.length === 0) {
-		return;
-	}
-	const step = direction < 0 ? -1 : 1;
-	searchIndex = (searchIndex + step + searchMatches.length) % searchMatches.length;
-	renderSearchUi();
-	renderDecorations();
-	revealKey(searchMatches[searchIndex]?.key);
-}
-
 function handleMessage(message: DiffProviderToWebview): void {
 	if (!message || typeof message.type !== 'string') {
 		return;
@@ -496,28 +717,18 @@ function handleMessage(message: DiffProviderToWebview): void {
 		}
 		return;
 	}
+	if (message.type === 'findResult') {
+		applyDiffFindResult(message.requestId, message.result, message.error);
+		return;
+	}
 	if (message.type === 'theme') {
 		defineEcucTheme();
 		monaco.editor.setTheme('arxml-ecuc-theme');
 		return;
 	}
-	if (message.type === 'findResult') {
-		applyFindResult(message.requestId, message.result, message.error);
-		return;
-	}
 	if (message.type === 'error') {
 		setNotice(message.message, 'error');
 	}
-}
-
-function openSearch(expandReplace: boolean): void {
-	if (searchBar === undefined) {
-		return;
-	}
-	searchBar.show(expandReplace);
-	requestAnimationFrame(function () {
-		searchBar?.focus();
-	});
 }
 
 function mountToolbar(): void {
@@ -633,6 +844,8 @@ export async function mountDiff(): Promise<void> {
 	defineEcucTheme();
 	leftModel = monaco.editor.createModel('', 'arxml-ecuc');
 	rightModel = monaco.editor.createModel('', 'arxml-ecuc');
+	installDiffFindBridge(leftModel, 'left');
+	installDiffFindBridge(rightModel, 'right');
 	diffEditor = monaco.editor.createDiffEditor(container, {
 		theme: 'arxml-ecuc-theme',
 		automaticLayout: true,
@@ -655,70 +868,26 @@ export async function mountDiff(): Promise<void> {
 		original: leftModel,
 		modified: rightModel
 	});
-	diffEditor.getOriginalEditor().updateOptions({ glyphMargin: true, lineNumbers: 'on', minimap: { enabled: false } });
-	diffEditor.getModifiedEditor().updateOptions({ glyphMargin: true, lineNumbers: 'on', minimap: { enabled: false } });
+	if ((window as unknown as { __PREVIEW__?: unknown }).__PREVIEW__ !== undefined) {
+		(window as unknown as { __ARXML_DIFF_EDITOR__?: unknown }).__ARXML_DIFF_EDITOR__ = diffEditor;
+	}
+	diffEditor.getOriginalEditor().updateOptions({
+		glyphMargin: true,
+		lineNumbers: 'on',
+		minimap: { enabled: false }
+	});
+	diffEditor.getModifiedEditor().updateOptions({
+		glyphMargin: true,
+		lineNumbers: 'on',
+		minimap: { enabled: false }
+	});
 	diffEditor.onDidUpdateDiff(function () {
 		renderDecorations();
 	});
 
 	mountToolbar();
-	searchBar = mountSearchBar(
-		'diff-',
-		function () {
-			return searchQuery;
-		},
-		function () {
-			return searchMatches.length > 0;
-		},
-		resetSearch,
-		startSearch,
-		cycleSearch,
-		renderSearchUi,
-		function () {},
-		false,
-		function () {
-			modifiedEditor()?.focus();
-		},
-		{
-			onOptions: function (options) {
-				searchOptions = options;
-				if (searchQuery.trim() !== '') {
-					startSearch(searchQuery);
-				}
-			}
-		}
-	);
 	wireSelection();
 	wireMergeClicks();
-	document.addEventListener(
-		'keydown',
-		function (event) {
-			const command = event.ctrlKey || event.metaKey;
-			if (command && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
-				event.preventDefault();
-				event.stopPropagation();
-				openSearch(false);
-				return;
-			}
-			if (command && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'h') {
-				event.preventDefault();
-				event.stopPropagation();
-				openSearch(true);
-				return;
-			}
-			if (event.key === 'F3' && searchQuery.trim() !== '') {
-				event.preventDefault();
-				cycleSearch(event.shiftKey ? -1 : 1);
-				return;
-			}
-			if (event.key === 'Escape' && searchBar?.visible === true) {
-				event.preventDefault();
-				searchBar.hide();
-				resetSearch();
-			}
-		},
-		true
-	);
 	mounted = true;
 	for (const message of pendingMessages) {
 		handleMessage(message);

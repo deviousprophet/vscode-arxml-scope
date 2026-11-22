@@ -6,6 +6,7 @@
  * The host passes the bundled worker URI through a meta tag in the shell.
  */
 import * as monaco from 'monaco-editor';
+import { tokenizeEcucLine } from './tokens';
 
 export type ThemeKind = 'dark' | 'light' | 'hc' | 'hc-light';
 
@@ -75,6 +76,15 @@ export function ensureMonacoEnvironment(): Promise<void> {
 	return workerReady;
 }
 
+const TOKEN_STATE: monaco.languages.IState = {
+	clone() {
+		return TOKEN_STATE;
+	},
+	equals(other) {
+		return other === TOKEN_STATE;
+	}
+};
+
 function registerLanguage(): void {
 	monaco.languages.register({ id: 'arxml-ecuc' });
 	monaco.languages.setLanguageConfiguration('arxml-ecuc', {
@@ -86,22 +96,18 @@ function registerLanguage(): void {
 		],
 		autoClosingPairs: []
 	});
-	monaco.languages.setMonarchTokensProvider('arxml-ecuc', {
-		tokenizer: {
-			root: [
-				[/\/\*.*?\*\//, 'comment'],
-				[/^schema\b/, 'keyword'],
-				[/^package\b/, 'keyword'],
-				[/^module\b/, 'keyword'],
-				[/\b(true|false|TRUE|FALSE)\b/, 'keyword'],
-				[/\b0x[0-9a-fA-F]+\b/, 'number.hex'],
-				[/\b\d+(?:\.\d+)?\b/, 'number'],
-				[/"[^"]*"/, 'string'],
-				[/[A-Za-z_][\w./:-]*/, 'identifier'],
-				[/[{}()\[\]]/, 'delimiter.bracket'],
-				[/=/, 'operator'],
-				[/\s+/, 'white']
-			]
+	monaco.languages.setTokensProvider('arxml-ecuc', {
+		getInitialState() {
+			return TOKEN_STATE;
+		},
+		tokenize(line, state) {
+			return {
+				tokens: tokenizeEcucLine(line).map((token) => ({
+					startIndex: token.start,
+					scopes: token.type
+				})),
+				endState: state
+			};
 		}
 	});
 }
@@ -223,23 +229,33 @@ function themeRules(): { token: string; foreground: string; fontStyle?: string }
 	if (kind === 'light' || kind === 'hc-light') {
 		return [
 			{ token: 'keyword', foreground: '0000ff' },
+			{ token: 'type', foreground: '267f99' },
+			{ token: 'variable', foreground: '001080' },
+			{ token: 'function', foreground: '795e26', fontStyle: 'italic' },
+			{ token: 'parameter', foreground: 'af00db' },
+			{ token: 'namespace', foreground: '267f99' },
 			{ token: 'string', foreground: 'a31515' },
 			{ token: 'number', foreground: '098658' },
 			{ token: 'number.hex', foreground: '098658' },
 			{ token: 'comment', foreground: '008000', fontStyle: 'italic' },
 			{ token: 'identifier', foreground: '001080' },
-			{ token: 'delimiter.bracket', foreground: '000000' },
+			{ token: 'delimiter', foreground: '000000' },
 			{ token: 'operator', foreground: '000000' }
 		];
 	}
 	return [
 		{ token: 'keyword', foreground: '569cd6' },
+		{ token: 'type', foreground: '4ec9b0' },
+		{ token: 'variable', foreground: '9cdcfe' },
+		{ token: 'function', foreground: 'dcdcaa', fontStyle: 'italic' },
+		{ token: 'parameter', foreground: 'c586c0' },
+		{ token: 'namespace', foreground: '4ec9b0' },
 		{ token: 'string', foreground: 'ce9178' },
 		{ token: 'number', foreground: 'b5cea8' },
 		{ token: 'number.hex', foreground: 'b5cea8' },
 		{ token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
 		{ token: 'identifier', foreground: '9cdcfe' },
-		{ token: 'delimiter.bracket', foreground: 'd4d4d4' },
+		{ token: 'delimiter', foreground: '808080' },
 		{ token: 'operator', foreground: 'd4d4d4' }
 	];
 }

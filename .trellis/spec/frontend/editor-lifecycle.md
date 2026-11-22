@@ -56,13 +56,16 @@ TypeScript fallback.
 
 ### Find and replace
 
-- Find is a floating `.find-widget` in the page shell, hidden until `Ctrl+F`
+- Find is Monaco's native find widget inside the editor or diff pane, opened with `Ctrl+F`
   (`Ctrl+H` opens the replace row). It is not a toolbar slot; `Escape` closes it and
-  returns focus to the tree/list.
-- `doc.search` and `diff.search` own the match list, count and navigation;
-  `doc.replace` owns the validated edit plans. The page matcher in
-  `render/searchPattern.ts` is only for `<mark>` and schema/package header text.
-- Replace is document-only and targets parameter values and container short names.
+  returns focus to the editor/list.
+- `doc.search` and `diff.search` own the match list, count and navigation. The page patches
+  the model's `findMatches`/`findNextMatch`/`findPreviousMatch` to return Rust matches and
+  maps each field offset through `searchSpans`; a cache miss requests the query and refreshes
+  the open widget when the answer arrives.
+- `doc.replace` owns the validated edit plans. The native Replace/Replace All methods are
+  intercepted and post a Rust replace request; the page never edits the synthetic text
+  locally. Replace is document-only and targets parameter values and container short names.
   All plans are applied in one `WorkspaceEdit`; a refusal writes nothing.
 - Search requests are generation-guarded: a late `findResult` for an older request
   id must be ignored after typing, clearing or closing.

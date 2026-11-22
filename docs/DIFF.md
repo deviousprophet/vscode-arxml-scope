@@ -211,9 +211,9 @@ split line. The split line is a display control only; it never changes the compa
 | Row twisty / `Left` / `Right` | Collapse or expand a subtree. |
 | `Space` | Select the focused row. |
 | `Enter` | Reveal the selected row in its source file. The revealed side follows the displayed pane after a swap. |
-| **Search** | `Ctrl+F` / `Cmd+F` opens the find widget; type a query and press `Enter`; `Shift+Enter` goes backwards. |
+| **Search** | `Ctrl+F` / `Cmd+F` opens Monaco's native find widget in the focused pane; type a query and press `Enter`; `Shift+Enter` goes backwards. |
 | **Search options** | `Aa` case sensitive, `ab|` whole word, `.*` regular expression. The diff has no replace row. |
-| **Search count** | `1 / N`, `0 / 0` or `Invalid pattern`; the busy slot shows a running engine request. |
+| **Search count** | Native `1 of N` / `No results`; the matches come from the Rust diff search, not a local scan. |
 
 Search jumps and marks; it never hides rows. In **Show diff** the search candidates are the
 changed/added/removed rows; in **Show all** they are all rows. Switching the view restarts the committed query

@@ -16,10 +16,11 @@ import type {
 	EditorRowPatch,
 	MonacoSettings
 } from '../webviewProtocol';
-import { DEFAULT_FIND_OPTIONS, type FindMatch, type FindOptions } from '../core/searchModel';
+import type { FindMatch, FindOptions } from '../core/searchModel';
 import {
 	buildSyntheticDocument,
 	rawFieldText,
+	searchRangeOnLine,
 	syntheticRowLine,
 	type SyntheticDocument,
 	type SyntheticLine,
@@ -62,11 +63,8 @@ import {
 	setConditionsErrorReporter,
 	setConditionsStatus
 } from './components/sidebar/conditionsPanel/conditionsPanel';
-import { mountSearchBar, renderSearchCount } from './render/searchState';
-import type { SearchBar } from './components/searchBar/searchBar';
 import { inspectorElement } from './render/dom';
 import { appendConditionTokens } from './render/rowView';
-import { findRanges } from './render/searchPattern';
 import { installConsoleErrors } from './render/pageError';
 import { postToHost, readPageState, resetVsCodeApi, writePageState } from './vscodeApi';
 
@@ -78,17 +76,47 @@ let documentModel: SyntheticDocument = buildSyntheticDocument([]);
 let editor: monaco.editor.IStandaloneCodeEditor | undefined;
 let model: monaco.editor.ITextModel | undefined;
 let editorToolbar: EditorToolbar | undefined;
-let searchBar: SearchBar;
 let selectedId: string | undefined;
 let subtreeIds = new Set<string>();
-let searchQuery = '';
-let searchOptions: FindOptions = { ...DEFAULT_FIND_OPTIONS };
-let searchMatches: FindMatch[] = [];
-let searchIndex = -1;
-let searchRequestId = 0;
-let searchRunning = false;
+type MonacoFindMatch = ReturnType<monaco.editor.ITextModel['findMatches']>[number];
+interface NativeFindQuery {
+	query: string;
+	options: FindOptions;
+}
+interface NativeFindController {
+	getState?(): {
+		isRevealed: boolean;
+		isReplaceRevealed: boolean;
+		searchString: string;
+		replaceString: string;
+		preserveCase: boolean;
+		isRegex: boolean;
+		wholeWord: boolean;
+		matchCase: boolean;
+		matchesPosition: number;
+		matchesCount: number;
+	};
+	start?(opts: unknown, state?: unknown): Promise<void>;
+	replace?(): boolean;
+	replaceAll?(): boolean;
+}
+let nativeFindCache = new Map<string, MonacoFindMatch[]>();
+let nativeFindQueries = new Map<string, NativeFindQuery>();
+let nativeFindRequested = new Set<string>();
+let nativeFindRequests = new Map<number, string>();
+let nativeFindRequestId = 0;
+let nativeReplaceRequestId = 0;
 let applyingModel = false;
-let pendingEdit = false;
+interface QueuedEdit {
+	type: 'edit';
+	nodeId: string;
+	field?: 'value' | 'shortName' | 'definitionRef';
+	value: string;
+}
+let pendingEdits = new Map<string, QueuedEdit>();
+let editTimer: ReturnType<typeof setTimeout> | undefined;
+let awaitingHost = false;
+const EDIT_DEBOUNCE_MS = 120;
 let decorationIds: string[] = [];
 let detailsBody: HTMLElement | null = null;
 let detailsStatus: HTMLElement | null = null;
@@ -365,32 +393,16 @@ function applyDecorations(): void {
 			options: { isWholeLine: true, className, zIndex }
 		});
 	};
-	for (const id of subtreeIds) {
-		if (id !== selectedId) {
-			addWholeLine(lineOf(id), 'arxml-subtree');
+	for (const line of documentModel.lines) {
+		if (line.rowId === undefined || !subtreeIds.has(line.rowId)) {
+			continue;
 		}
+		const structural = line.kind === 'brace' || line.kind === 'annotation';
+		addWholeLine(line.line, line.rowId === selectedId && !structural ? 'arxml-selected' : 'arxml-subtree');
 	}
-	addWholeLine(lineOf(selectedId), 'arxml-selected');
 	for (const row of rows) {
 		if (row.disabled) {
 			addWholeLine(lineOf(row.id), 'arxml-disabled');
-		}
-	}
-	for (let at = 0; at < searchMatches.length; at += 1) {
-		const match = searchMatches[at];
-		const line = lineOf(match.rowId);
-		const lineText = line === undefined ? undefined : documentModel.lines[line - 1]?.text;
-		const ranges = lineText === undefined ? [] : findRanges(lineText, searchQuery, searchOptions);
-		const className = at === searchIndex ? 'arxml-find-current' : 'arxml-find';
-		if (line !== undefined && ranges.length > 0) {
-			for (const range of ranges) {
-				decorations.push({
-					range: new monaco.Range(line, range.start + 1, line, range.end + 1),
-					options: { inlineClassName: className }
-				});
-			}
-		} else {
-			addWholeLine(line, className, 2);
 		}
 	}
 	decorationIds = editor.deltaDecorations(decorationIds, decorations);
@@ -404,6 +416,76 @@ function setSelection(id: string | undefined, reveal = false): void {
 	if (reveal) {
 		revealRow(id);
 	}
+}
+
+interface CursorAnchor {
+	rowId?: string;
+	line: number;
+	column: number;
+}
+
+/** Capture the text cursor by row id so model rebuilds cannot send it to line 1. */
+function captureCursor(): CursorAnchor {
+	const position = editor?.getPosition();
+	if (position === undefined || position === null) {
+		return { line: 1, column: 1 };
+	}
+	return {
+		rowId: rowIdAtLine(position.lineNumber),
+		line: position.lineNumber,
+		column: position.column
+	};
+}
+
+function restoreCursor(anchor: CursorAnchor): void {
+	if (editor === undefined || model === undefined) {
+		return;
+	}
+	const line = anchor.rowId !== undefined ? documentModel.rowLine.get(anchor.rowId) : anchor.line;
+	if (line === undefined) {
+		return;
+	}
+	const safeLine = Math.min(line, model.getLineCount());
+	const maxColumn = model.getLineMaxColumn(safeLine);
+	editor.setPosition({ lineNumber: safeLine, column: Math.min(anchor.column, maxColumn) });
+}
+
+function hasPendingEdits(): boolean {
+	return pendingEdits.size > 0 || editTimer !== undefined;
+}
+
+function clearPendingEdits(): void {
+	if (editTimer !== undefined) {
+		clearTimeout(editTimer);
+		editTimer = undefined;
+	}
+	pendingEdits.clear();
+	awaitingHost = false;
+}
+
+function flushEdits(): void {
+	if (editTimer !== undefined) {
+		clearTimeout(editTimer);
+		editTimer = undefined;
+	}
+	const edits = Array.from(pendingEdits.values());
+	pendingEdits.clear();
+	if (edits.length > 0) {
+		awaitingHost = true;
+	}
+	for (const edit of edits) {
+		postToHost(edit);
+	}
+}
+
+function queueEdit(edit: QueuedEdit): void {
+	// Coalesce a fast typing run into one host write. The local buffer is already
+	// authoritative for the keystroke; the host round-trip only persists it.
+	pendingEdits.set(`${edit.nodeId}|${edit.field ?? ''}`, edit);
+	if (editTimer !== undefined) {
+		clearTimeout(editTimer);
+	}
+	editTimer = setTimeout(flushEdits, EDIT_DEBOUNCE_MS);
 }
 
 function revealRow(id: string | undefined, focus = false, column = 1): void {
@@ -423,14 +505,14 @@ function revealRow(id: string | undefined, focus = false, column = 1): void {
 }
 
 function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
-	pendingEdit = false;
+	clearPendingEdits();
+	const anchor = captureCursor();
 	rows = Array.isArray(nextRows) ? nextRows : [];
 	indexRows();
 	if (nextHeader !== undefined) {
 		header = nextHeader;
 	}
 	documentModel = buildSyntheticDocument(rows, header);
-	const previousColumn = editor?.getPosition()?.column ?? 1;
 	if (model !== undefined) {
 		applyingModel = true;
 		model.setValue(documentModel.text);
@@ -449,9 +531,8 @@ function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextS
 	applyDisabledCount();
 	updateInspector();
 	applyDecorations();
-	if (selectedId !== undefined) {
-		revealRow(selectedId, false, previousColumn);
-	}
+	restoreCursor(anchor);
+	invalidateNativeFind();
 }
 
 function applyPatch(patch: EditorRowPatch, nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
@@ -459,6 +540,7 @@ function applyPatch(patch: EditorRowPatch, nextHeader?: EditorDocumentHeader, ne
 		const existing = rows[patch.at];
 		const incoming = patch.rows[0];
 		if (existing !== undefined && incoming !== undefined && existing.id === incoming.id) {
+			const anchor = captureCursor();
 			const row = { ...existing, ...incoming };
 			rows[patch.at] = row;
 			indexRows();
@@ -470,7 +552,8 @@ function applyPatch(patch: EditorRowPatch, nextHeader?: EditorDocumentHeader, ne
 					rowId: row.id,
 					kind: row.kind,
 					text: built.text,
-					fieldSpans: built.fieldSpans
+					fieldSpans: built.fieldSpans,
+					searchSpans: built.searchSpans
 				};
 				applyingModel = true;
 				model.pushEditOperations(
@@ -492,6 +575,8 @@ function applyPatch(patch: EditorRowPatch, nextHeader?: EditorDocumentHeader, ne
 			applyDisabledCount();
 			updateInspector();
 			applyDecorations();
+			restoreCursor(anchor);
+			invalidateNativeFind();
 			return;
 		}
 	}
@@ -500,113 +585,331 @@ function applyPatch(patch: EditorRowPatch, nextHeader?: EditorDocumentHeader, ne
 	applyRows(next, nextHeader, nextSelectedId);
 }
 
-function currentMatchId(): string | undefined {
-	return searchMatches[searchIndex]?.rowId;
+function nativeFindKey(query: string, options: FindOptions): string {
+	return `${options.caseSensitive ? 1 : 0}|${options.wholeWord ? 1 : 0}|${options.regex ? 1 : 0}|${query}`;
 }
 
-function renderSearchUi(): void {
-	if (!searchBar) {
+function nativeFindOptions(isRegex: boolean, matchCase: boolean, wordSeparators: string | null): FindOptions {
+	return {
+		caseSensitive: matchCase,
+		wholeWord: wordSeparators !== null && wordSeparators !== undefined,
+		regex: isRegex
+	};
+}
+
+function requestNativeFind(query: string, options: FindOptions): void {
+	if (query === '') {
 		return;
 	}
-	renderSearchCount(
-		searchBar,
-		searchQuery.trim() !== '',
-		searchQuery,
-		searchMatches.length,
-		searchIndex,
-		searchRunning
+	const key = nativeFindKey(query, options);
+	if (nativeFindCache.has(key) || nativeFindRequested.has(key)) {
+		return;
+	}
+	nativeFindRequested.add(key);
+	nativeFindQueries.set(key, { query, options });
+	const requestId = (nativeFindRequestId += 1);
+	nativeFindRequests.set(requestId, key);
+	postToHost({ type: 'find', requestId, query, options });
+}
+
+function nativeMatchesFor(query: string, options: FindOptions): MonacoFindMatch[] {
+	return nativeFindCache.get(nativeFindKey(query, options)) ?? [];
+}
+
+function mapNativeMatches(result: { matches: FindMatch[] }): MonacoFindMatch[] {
+	const out: MonacoFindMatch[] = [];
+	const seen = new Set<string>();
+	for (const match of result.matches) {
+		const line = documentModel.rowLine.get(match.rowId);
+		const lineText = line === undefined ? undefined : documentModel.lines[line - 1];
+		if (line === undefined || lineText === undefined) {
+			continue;
+		}
+		const range = searchRangeOnLine(lineText, match);
+		if (range === undefined) {
+			continue;
+		}
+		const key = `${line}:${range.startColumn}:${range.endColumn}`;
+		if (seen.has(key)) {
+			continue;
+		}
+		seen.add(key);
+		out.push({
+			range: new monaco.Range(line, range.startColumn, line, range.endColumn),
+			matches: [lineText.text.slice(range.startColumn - 1, range.endColumn - 1)]
+		} as unknown as MonacoFindMatch);
+	}
+	out.sort((left, right) => monaco.Range.compareRangesUsingStarts(left.range, right.range));
+	return out;
+}
+
+function nativeFindController(): NativeFindController | null {
+	return (editor?.getContribution('editor.contrib.findController') as NativeFindController | null) ?? null;
+}
+
+function refreshNativeFind(query: string, options: FindOptions): void {
+	if (query === '') {
+		return;
+	}
+	const controller = nativeFindController();
+	const state = controller?.getState?.();
+	if (controller?.start === undefined || state === undefined || !state.isRevealed) {
+		return;
+	}
+	// A faster keystroke may already have moved the widget past the result that
+	// just arrived; never replace the newer query with a stale result set.
+	if (
+		state.searchString !== query ||
+		state.isRegex !== options.regex ||
+		state.wholeWord !== options.wholeWord ||
+		state.matchCase !== options.caseSensitive
+	) {
+		return;
+	}
+	void controller.start(
+		{
+			forceRevealReplace: false,
+			seedSearchStringFromSelection: 'none',
+			seedSearchStringFromNonEmptySelection: false,
+			seedSearchStringFromGlobalClipboard: false,
+			shouldFocus: 0,
+			shouldAnimate: false,
+			updateSearchScope: false,
+			loop: true
+		},
+		{
+			searchString: query,
+			isRegex: options.regex,
+			matchCase: options.caseSensitive,
+			wholeWord: options.wholeWord,
+			replaceString: state.replaceString,
+			preserveCase: state.preserveCase,
+			isReplaceRevealed: state.isReplaceRevealed
+		}
 	);
 }
 
-function setSearchBusy(busy: boolean): void {
-	searchRunning = busy;
-	renderSearchUi();
-}
-
-function resetSearchResults(): void {
-	searchMatches = [];
-	searchIndex = -1;
-	searchQuery = '';
-	searchRunning = false;
-	renderSearchUi();
-	applyDecorations();
-}
-
-function startSearch(query: string): void {
-	const text = (query || '').trim();
-	if (text === '') {
-		resetSearchResults();
+function applyNativeFindResult(requestId: number, result: { matches: FindMatch[] }, error?: string): void {
+	const key = nativeFindRequests.get(requestId);
+	if (key === undefined) {
 		return;
 	}
-	searchQuery = query;
-	searchIndex = -1;
-	searchMatches = [];
-	const requestId = (searchRequestId += 1);
-	setSearchBusy(true);
-	postToHost({ type: 'find', requestId, query, options: searchOptions });
-}
-
-function applyFindResult(requestId: number, result: { matches: FindMatch[] }, error?: string): void {
-	if (requestId !== searchRequestId) {
+	nativeFindRequests.delete(requestId);
+	nativeFindRequested.delete(key);
+	const query = nativeFindQueries.get(key);
+	if (query === undefined) {
 		return;
 	}
 	if (error !== undefined) {
-		searchMatches = [];
-		searchIndex = -1;
-		setSearchBusy(false);
 		setDetailsStatus({ message: error, kind: 'warn' });
-		return;
 	}
-	searchMatches = result.matches;
-	searchIndex = searchMatches.length > 0 ? 0 : -1;
-	setSearchBusy(false);
-	applyDecorations();
-	revealRow(currentMatchId());
+	nativeFindCache.set(key, error === undefined ? mapNativeMatches(result) : []);
+	refreshNativeFind(query.query, query.options);
 }
 
-function cycleSearch(direction: number): void {
-	if (searchMatches.length === 0) {
-		return;
+function invalidateNativeFind(): void {
+	nativeFindCache.clear();
+	nativeFindQueries.clear();
+	nativeFindRequested.clear();
+	nativeFindRequests.clear();
+	const state = nativeFindController()?.getState?.();
+	if (state?.isRevealed === true && state.searchString !== '') {
+		refreshNativeFind(state.searchString, {
+			caseSensitive: state.matchCase,
+			wholeWord: state.wholeWord,
+			regex: state.isRegex
+		});
 	}
-	searchIndex = (searchIndex + direction + searchMatches.length) % searchMatches.length;
-	renderSearchUi();
-	applyDecorations();
-	revealRow(currentMatchId());
 }
 
-function requestReplace(replacement: string, all: boolean): void {
-	const match = searchMatches[searchIndex];
-	if (match === undefined) {
-		return;
+/** The row field under one find match, in the offsets the engine compares. */
+function nativeTargetForRange(
+	range: monaco.Range
+): { rowId: string; field: 'label' | 'value' | 'meta'; start: number; end: number } | undefined {
+	const line = documentModel.lines[range.startLineNumber - 1];
+	if (line === undefined) {
+		return undefined;
 	}
-	const requestId = (searchRequestId += 1);
+	const span = line.searchSpans.find(
+		(candidate) =>
+			range.startColumn >= candidate.startColumn && range.endColumn <= candidate.endColumn
+	);
+	if (span === undefined || line.rowId === undefined) {
+		return undefined;
+	}
+	return {
+		rowId: line.rowId,
+		field: span.field,
+		start: range.startColumn - span.startColumn,
+		end: range.endColumn - span.startColumn
+	};
+}
+
+function nativeReplaceTarget(): { rowId: string; field: 'label' | 'value' | 'meta'; start: number; end: number } | undefined {
+	const state = nativeFindController()?.getState?.();
+	if (state !== undefined) {
+		const options: FindOptions = {
+			caseSensitive: state.matchCase,
+			wholeWord: state.wholeWord,
+			regex: state.isRegex
+		};
+		const matches = nativeFindCache.get(nativeFindKey(state.searchString, options)) ?? [];
+		const at = state.matchesPosition - 1;
+		const match = at >= 0 && at < matches.length ? matches[at] : undefined;
+		if (match !== undefined) {
+			const target = nativeTargetForRange(match.range);
+			if (target !== undefined) {
+				return target;
+			}
+		}
+	}
+	const selection = editor?.getSelection();
+	if (selection === undefined || selection === null || selection.isEmpty()) {
+		return undefined;
+	}
+	return nativeTargetForRange(
+		new monaco.Range(
+			selection.startLineNumber,
+			selection.startColumn,
+			selection.endLineNumber,
+			selection.endColumn
+		)
+	);
+}
+
+/** Route the native widget's Replace/Replace All through the Rust replace planner. */
+function requestNativeReplace(all: boolean): boolean {
+	const state = nativeFindController()?.getState?.();
+	if (state === undefined || !state.isRevealed || state.searchString.trim() === '') {
+		return false;
+	}
+	const options: FindOptions = {
+		caseSensitive: state.matchCase,
+		wholeWord: state.wholeWord,
+		regex: state.isRegex
+	};
+	const target = all ? undefined : nativeReplaceTarget();
+	if (!all && target === undefined) {
+		// Container labels, values and numeric spans can carry a Rust plan. If
+		// no span matches, consume the action instead of letting Monaco edit the
+		// synthetic text behind the host.
+		setDetailsStatus({ message: 'This match is search-only', kind: 'warn' });
+		return true;
+	}
+	const requestId = (nativeReplaceRequestId += 1);
 	postToHost({
 		type: 'replace',
 		requestId,
-		query: searchQuery,
-		options: searchOptions,
-		replacement,
-		preserveCase: searchBar?.preserveCase() === true,
+		query: state.searchString,
+		options,
+		replacement: state.replaceString,
+		preserveCase: state.preserveCase,
 		all,
-		match: {
-			rowId: match.rowId,
-			field: match.field,
-			start: match.rawStart !== undefined ? match.rawStart : match.start,
-			end: match.rawEnd !== undefined ? match.rawEnd : match.end
-		}
+		match: target
 	});
+	return true;
 }
 
-function applyReplaceResult(requestId: number, result: { ok: boolean; reason?: string; replacedFields: number }): void {
-	if (requestId !== searchRequestId) {
+function installNativeReplaceBridge(): void {
+	const controller = nativeFindController();
+	if (controller?.replace === undefined || controller.replaceAll === undefined) {
 		return;
 	}
-	if (!result.ok) {
-		setDetailsStatus({ message: result.reason || 'Replace refused', kind: 'warn' });
-		return;
-	}
-	setDetailsStatus({ message: `Replaced ${result.replacedFields} field(s)`, kind: 'info' });
-	startSearch(searchQuery);
+	const nativeReplace = controller.replace.bind(controller);
+	const nativeReplaceAll = controller.replaceAll.bind(controller);
+	controller.replace = function () {
+		return requestNativeReplace(false) || nativeReplace();
+	};
+	controller.replaceAll = function () {
+		return requestNativeReplace(true) || nativeReplaceAll();
+	};
+}
+
+function installNativeFindBridge(target: monaco.editor.ITextModel): void {
+	const patched = target as unknown as {
+		findMatches(
+			searchString: string,
+			searchOnlyEditableRange: monaco.Range[] | null,
+			isRegex: boolean,
+			matchCase: boolean,
+			wordSeparators: string | null,
+			captureMatches: boolean,
+			limitResultCount: number
+		): MonacoFindMatch[];
+		findNextMatch(
+			searchString: string,
+			searchStart: monaco.Position,
+			isRegex: boolean,
+			matchCase: boolean,
+			wordSeparators: string | null,
+			captureMatches: boolean
+		): MonacoFindMatch | null;
+		findPreviousMatch(
+			searchString: string,
+			searchStart: monaco.Position,
+			isRegex: boolean,
+			matchCase: boolean,
+			wordSeparators: string | null,
+			captureMatches: boolean
+		): MonacoFindMatch | null;
+	};
+	patched.findMatches = function (
+		searchString,
+		_searchOnlyEditableRange,
+		isRegex,
+		matchCase,
+		wordSeparators,
+		_captureMatches,
+		limitResultCount
+	) {
+		const options = nativeFindOptions(isRegex, matchCase, wordSeparators);
+		const matches = nativeMatchesFor(searchString, options);
+		if (matches.length === 0) {
+			requestNativeFind(searchString, options);
+		}
+		return Number.isFinite(limitResultCount) ? matches.slice(0, limitResultCount) : matches.slice();
+	};
+	patched.findNextMatch = function (
+		searchString,
+		searchStart,
+		isRegex,
+		matchCase,
+		wordSeparators,
+		_captureMatches
+	) {
+		const options = nativeFindOptions(isRegex, matchCase, wordSeparators);
+		const matches = nativeMatchesFor(searchString, options);
+		if (matches.length === 0) {
+			requestNativeFind(searchString, options);
+			return null;
+		}
+		return matches.find((match) => monaco.Range.compareRangesUsingStarts(match.range, new monaco.Range(searchStart.lineNumber, searchStart.column, searchStart.lineNumber, searchStart.column)) >= 0) ?? matches[0];
+	};
+	patched.findPreviousMatch = function (
+		searchString,
+		searchStart,
+		isRegex,
+		matchCase,
+		wordSeparators,
+		_captureMatches
+	) {
+		const options = nativeFindOptions(isRegex, matchCase, wordSeparators);
+		const matches = nativeMatchesFor(searchString, options);
+		if (matches.length === 0) {
+			requestNativeFind(searchString, options);
+			return null;
+		}
+		for (let at = matches.length - 1; at >= 0; at -= 1) {
+			const end = matches[at].range.getEndPosition();
+			if (
+				end.lineNumber < searchStart.lineNumber ||
+				(end.lineNumber === searchStart.lineNumber && end.column <= searchStart.column)
+			) {
+				return matches[at];
+			}
+		}
+		return matches[matches.length - 1];
+	};
 }
 
 function applySidebarVisibility(hidden: boolean): void {
@@ -682,8 +985,7 @@ function handleMultiChange(event: monaco.editor.IModelContentChangedEvent): void
 		edit.lineText.text = model.getLineContent(edit.lineText.line);
 		edit.span.text = edit.text;
 		edit.span.endColumn = edit.span.startColumn + edit.text.length;
-		pendingEdit = true;
-		postToHost({
+		queueEdit({
 			type: 'edit',
 			nodeId: edit.span.nodeId,
 			field: edit.span.field,
@@ -737,8 +1039,7 @@ function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
 	lineText.text = current;
 	span.text = text;
 	span.endColumn = span.startColumn + text.length;
-	pendingEdit = true;
-	postToHost({
+	queueEdit({
 		type: 'edit',
 		nodeId: span.nodeId,
 		field: span.field,
@@ -746,23 +1047,25 @@ function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
 	});
 }
 
+function revertToAccepted(): void {
+	clearPendingEdits();
+	documentModel = buildSyntheticDocument(rows, header);
+	rebuildModel();
+	updateInspector();
+	applyDecorations();
+}
+
 function rebuildModel(): void {
 	if (model === undefined) {
 		return;
 	}
+	const anchor = captureCursor();
 	documentModel.text = documentModel.lines.map((line) => line.text).join('\n');
 	applyingModel = true;
 	model.setValue(documentModel.text);
 	applyingModel = false;
-}
-
-function openSearch(expandReplace: boolean): void {
-	searchBar.show(expandReplace);
-	// Monaco can take focus back in the same keydown turn; focus the widget
-	// after the editor's own handler has run.
-	requestAnimationFrame(function () {
-		searchBar.focus();
-	});
+	restoreCursor(anchor);
+	invalidateNativeFind();
 }
 
 function installShortcuts(): void {
@@ -770,12 +1073,22 @@ function installShortcuts(): void {
 		return;
 	}
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, function () {
+		if (hasPendingEdits()) {
+			revertToAccepted();
+			return;
+		}
 		postToHost({ type: 'undo' });
 	});
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyZ, function () {
+		if (hasPendingEdits()) {
+			return;
+		}
 		postToHost({ type: 'redo' });
 	});
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY, function () {
+		if (hasPendingEdits()) {
+			return;
+		}
 		postToHost({ type: 'redo' });
 	});
 	editor.addCommand(monaco.KeyCode.F2, function () {
@@ -797,29 +1110,6 @@ function installShortcuts(): void {
 		const current = editor?.getOption(monaco.editor.EditorOption.wordWrap);
 		editor?.updateOptions({ wordWrap: current === 'off' ? 'on' : 'off' });
 	});
-	document.addEventListener(
-		'keydown',
-		function (event) {
-			const command = event.ctrlKey || event.metaKey;
-			if (command && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
-				event.preventDefault();
-				event.stopPropagation();
-				openSearch(false);
-				return;
-			}
-			if (command && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'h') {
-				event.preventDefault();
-				event.stopPropagation();
-				openSearch(true);
-				return;
-			}
-			if (event.key === 'F3' && searchQuery.trim() !== '') {
-				event.preventDefault();
-				cycleSearch(event.shiftKey ? -1 : 1);
-			}
-		},
-		true
-	);
 }
 
 function registerEditorActions(): void {
@@ -868,12 +1158,18 @@ function handleMessage(message: EditorProviderToWebview): void {
 	}
 	handleDetailsEditorMessage(message);
 	if (message.type === 'document') {
+		if (hasPendingEdits()) {
+			return;
+		}
 		applySettings(message.document.settings);
 		applyRows(message.document.rows, message.document.header, message.document.selectedId);
 		return;
 	}
 	if (message.type === 'documentPatch') {
-		pendingEdit = false;
+		if (hasPendingEdits()) {
+			return;
+		}
+		clearPendingEdits();
 		applyPatch(message.patch, message.header, message.selectedId);
 		return;
 	}
@@ -897,11 +1193,19 @@ function handleMessage(message: EditorProviderToWebview): void {
 		return;
 	}
 	if (message.type === 'findResult') {
-		applyFindResult(message.requestId, message.result, message.error);
+		applyNativeFindResult(message.requestId, message.result, message.error);
 		return;
 	}
 	if (message.type === 'replaceResult') {
-		applyReplaceResult(message.requestId, message.result);
+		if (!message.result.ok) {
+			if (message.result.reason !== undefined) {
+				setDetailsStatus({ message: message.result.reason, kind: 'warn' });
+			}
+			return;
+		}
+		// The host applied the Rust plan. Re-run the open query against the new
+		// document instead of the synthetic text Monaco replaced locally.
+		invalidateNativeFind();
 		return;
 	}
 	if (message.type === 'notice') {
@@ -909,9 +1213,8 @@ function handleMessage(message: EditorProviderToWebview): void {
 			setConditionsStatus(message.message || '');
 			return;
 		}
-		if (pendingEdit && message.kind === 'warn') {
-			pendingEdit = false;
-			rebuildModel();
+		if ((hasPendingEdits() || awaitingHost) && message.kind === 'warn') {
+			revertToAccepted();
 		}
 		if (!refusalShownInDetails(message, getSidebarState().tab !== 'details')) {
 			setDetailsStatus(message);
@@ -1030,8 +1333,16 @@ export async function mountEditor(): Promise<void> {
 	defineEcucTheme();
 	model = monaco.editor.createModel('', 'arxml-ecuc');
 	setModelFolding(model, documentModel.foldingRanges);
+	installNativeFindBridge(model);
 	editor = createEcucEditor(container, model);
+	installNativeReplaceBridge();
+	if ((window as unknown as { __PREVIEW__?: unknown }).__PREVIEW__ !== undefined) {
+		(window as unknown as { __ARXML_EDITOR__?: unknown }).__ARXML_EDITOR__ = editor;
+	}
 	editor.onDidChangeModelContent(handleEdit);
+	editor.onDidBlurEditorText(function () {
+		flushEdits();
+	});
 	editor.onDidChangeCursorPosition(function (event) {
 		const id = rowIdAtLine(event.position.lineNumber);
 		if (id !== undefined && id !== selectedId) {
@@ -1053,36 +1364,6 @@ export async function mountEditor(): Promise<void> {
 		postToHost({ type: 'conditions', entries });
 	});
 	setConditionsErrorReporter(reportError);
-
-	searchBar = mountSearchBar(
-		'',
-		function () {
-			return searchQuery;
-		},
-		function () {
-			return searchMatches.length > 0;
-		},
-		resetSearchResults,
-		startSearch,
-		cycleSearch,
-		renderSearchUi,
-		function () {},
-		false,
-		function () {
-			editor?.focus();
-		},
-		{
-			onOptions: function (options) {
-				searchOptions = options;
-				if (searchQuery.trim() !== '') {
-					startSearch(searchQuery);
-				}
-			},
-			onReplace: function (text, all) {
-				requestReplace(text, all);
-			}
-		}
-	);
 
 	installShortcuts();
 	registerEditorActions();

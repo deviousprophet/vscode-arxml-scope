@@ -78,8 +78,8 @@ controls live in the details panel, outside `#tree`, and each owns its own `Ente
 ```text
 details control keys  →  details editor commit/cancel/move
 page row click        →  select / twisty / value-click opens details
-search input keys     →  Enter runs/cycles, Shift+Enter previous, Escape clears, Ctrl+F focuses
-page key handler      →  navigation / F2/Enter opens details / F3 while search is active / type-ahead
+find keys             →  Monaco's native find widget owns Enter/Shift+Enter/Escape/F3
+page key handler      →  navigation / F2/Enter opens details / reveal shortcuts
 ```
 
 The page's `onRowClick` handles the row interactions. One interaction, one effect: the twisty toggles
@@ -104,15 +104,15 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
 
 ## DOM contracts
 
-- **Search is the only query control and runs through the engine.** The floating
-  `.find-widget` is hidden until `Ctrl+F`; `Ctrl+H` opens the replace row and
-  `Escape` closes it. `#search-input` stays `type="search"` for its searchbox role;
-  Chromium's native cancel/decoration pseudo-elements are suppressed so the one
-  custom `#search-clear` X is the only clear control. The three option toggles
-  (`Aa`, `ab|`, `.*`) carry `aria-pressed`; the document page also has the replace
-  row. The engine match list drives the count and navigation; the page matcher is
-  only for `<mark>` and header text. Do not add a second query field or a
-  synchronous full-store scan.
+- **Search is Monaco's native find widget and runs through the engine.** `Ctrl+F` opens the
+  widget inside the editor and `Ctrl+H` opens its replace row; `Escape` closes it. Do not
+  build a second `.find-widget` for the Monaco pages. The native widget owns its `Aa`,
+  `ab|`, `.*` toggles, count and navigation; the page patches the model's `findMatches`,
+  `findNextMatch` and `findPreviousMatch` so the match list comes from `doc.search` /
+  `diff.search`. Replace and Replace All call `doc.replace` with a mapped row/field target
+  instead of editing the synthetic text. Every Rust field offset is mapped through the
+  synthetic line's `searchSpans`; do not count every textual occurrence on the line.
+  Do not add a second query field or a synchronous full-store scan.
 - **Search jumps; it never hides.** The engine searches the whole row store; collapse and any view
   state never remove a candidate. The engine checks the label, value and every visible meta
   fragment (short name, variant, context, condition and annotation). Each answer preserves the

@@ -2,7 +2,7 @@ import * as assert from 'assert';
 
 import type { EcucRow } from '../../core/ecuc/renderRows';
 import type { DiffCell, DiffDocument, DiffRow } from '../../core/diff/diffModel';
-import { buildAlignedSyntheticDocuments, buildSyntheticDocument } from '../../webview/monaco/synthetic';
+import { buildAlignedSyntheticDocuments, buildSyntheticDocument, searchRangeOnLine } from '../../webview/monaco/synthetic';
 
 function moduleRow(): EcucRow {
 	return {
@@ -108,7 +108,7 @@ suite('synthetic ECUC document', () => {
 			'',
 			'module P.Preview "Preview"',
 			'{',
-			'    Items "Items" @/P/Items',
+			'    Items "Items"',
 			'    {',
 			'        P0000 = 0',
 			'    }',
@@ -136,19 +136,37 @@ suite('synthetic ECUC document', () => {
 				startColumn: 12,
 				endColumn: 17,
 				text: 'Items'
-			},
-			{
-				field: 'definitionRef',
-				nodeId: 'container:m#0/c#0',
-				startColumn: 20,
-				endColumn: 28,
-				text: '/P/Items'
 			}
 		]);
 		assert.deepStrictEqual(document.foldingRanges, [
 			{ startLine: 4, endLine: 10 },
 			{ startLine: 6, endLine: 9 }
 		]);
+	});
+
+	test('maps Rust field offsets onto the rendered synthetic line', () => {
+		const document = buildSyntheticDocument(rows(), { schema: '00048', packages: ['P.Preview'] });
+		const containerLine = document.lines[5];
+		assert.deepStrictEqual(
+			searchRangeOnLine(containerLine, { field: 'label', start: 0, end: 5 }),
+			{ startColumn: 5, endColumn: 10 },
+			'the container label maps to the rendered label text'
+		);
+		assert.deepStrictEqual(
+			searchRangeOnLine(containerLine, { field: 'meta', part: 0, start: 1, end: 6 }),
+			{ startColumn: 12, endColumn: 17 },
+			'the short name inside quotes maps inside the meta span'
+		);
+		assert.strictEqual(
+			searchRangeOnLine(containerLine, { field: 'meta', start: 1, end: 6 }),
+			undefined,
+			'a meta match without its part index cannot slice another part'
+		);
+		assert.deepStrictEqual(
+			searchRangeOnLine(document.lines[7], { field: 'value', start: 0, end: 1 }),
+			{ startColumn: 17, endColumn: 18 },
+			'the value maps after the label and separator'
+		);
 	});
 
 	test('the aligned diff documents have equal line counts', () => {
@@ -175,6 +193,16 @@ suite('synthetic ECUC document', () => {
 		assert.strictEqual(right[0], 'module P.Preview "Preview"');
 		assert.strictEqual(left[1], '{');
 		assert.strictEqual(right[1], '{');
+		assert.deepStrictEqual(
+			searchRangeOnLine(aligned.right.lines[0], { field: 'label', start: 0, end: 9 }),
+			{ startColumn: 8, endColumn: 17 },
+			'the diff label span skips the module keyword'
+		);
+		assert.deepStrictEqual(
+			searchRangeOnLine(aligned.right.lines[0], { field: 'meta', part: 0, start: 1, end: 8 }),
+			{ startColumn: 19, endColumn: 26 },
+			'the diff meta span maps inside the quoted short name'
+		);
 		assert.strictEqual(left.length, right.length);
 	});
 });

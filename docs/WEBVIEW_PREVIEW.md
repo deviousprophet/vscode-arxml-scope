@@ -53,12 +53,14 @@ its old bundle.
 | `diff-wide` | diff | 1400×900 | long parameter names; rows overflow horizontally, arrows stay on the pane edges |
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; both arrows stay on the inner edges |
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
+| `editor-find` | editor | 1400×900 | native find widget open on `Items`, with the Rust result count and field highlight |
+| `diff-find` | diff | 1400×900 | native find widget in the modified pane, with the Rust diff match count |
 | `toolbar-1400` | diff | 1400×900 | full labels; Merge active; Swap over the pane divider |
 | `toolbar-1200` | diff | 1200×900 | secondary labels hidden; Context/Semantic/Strict/Merge labels remain |
 | `toolbar-1024` | diff | 1024×900 | icon-only 40px tools; Swap over the divider |
 | `toolbar-900` | diff | 900×900 | 36px tools; dividers hidden |
 | `toolbar-800` | diff | 800×900 | 32px tools; grid still centred |
-| `toolbar-640` | diff | 640×900 | 28px tools; find widget hidden until `Ctrl+F` |
+| `toolbar-640` | diff | 640×900 | 28px tools; native find widget hidden until `Ctrl+F` |
 
 The diff states use a synthetic module with ten changed values; the long states use a
 zero-padded parameter list so the first change is near line 1000.
@@ -75,6 +77,9 @@ strip or the page shell, and check each image before asking for review.
       of the toolbar and opens only on `Ctrl+F`.
 - [ ] **Merge is a toolbar action.** `#diff-merge` is in the strip and is visibly
       pressed (`aria-pressed="true"`) in `diff-merge`.
+- [ ] **Find is the native widget.** `editor-find` and `diff-find` show Monaco's
+      `find-widget` with the `Aa`/`ab|`/`.*` toggles, the native count (`1 of N`) and no
+      custom search strip.
 - [ ] **Copy arrows are visible without hover.** Both panes show an arrow on the
       changed rows; the left arrow points right, the right arrow points left. The audit
       reports an arrow in each pane, on the inner edge, visible and with an opaque
@@ -135,8 +140,8 @@ Record a manual observation with the state name and what changed, for example
   is exactly what pushed the arrow off the pane. A `ResizeObserver` re-runs the offset
   when the shared vertical scrollbar changes a pane's width.
 - The toolbar stays a three-column grid at every width. Secondary labels drop first,
-  then the primary labels; the boxes step 60 → 40 → 36 → 32 → 28px. Find is a
-  floating widget outside the grid and is absent until `Ctrl+F`.
+  then the primary labels; the boxes step 60 → 40 → 36 → 32 → 28px. Find is Monaco's
+  own widget inside the editor pane and is absent until `Ctrl+F`.
 
 ## Adding a state
 

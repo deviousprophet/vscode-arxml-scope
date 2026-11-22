@@ -28,6 +28,8 @@ export interface PreviewState {
 	/** F7 presses after mounting; the long document's first change is near line 1000. */
 	jump?: number;
 	select?: boolean;
+	/** Opens the native find widget and seeds this query, with Rust-shaped results. */
+	find?: string;
 }
 
 export const STATES: PreviewState[] = [
@@ -46,6 +48,8 @@ export const STATES: PreviewState[] = [
 		pan: 600
 	},
 	{ name: 'editor', page: 'editor', width: 1400, height: 900, select: true },
+	{ name: 'editor-find', page: 'editor', width: 1400, height: 900, find: 'Items' },
+	{ name: 'diff-find', page: 'diff', width: 1400, height: 900, merge: true, find: 'Items' },
 	{ name: 'toolbar-1400', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'toolbar-1200', page: 'diff', width: 1200, height: 900, merge: true },
 	{ name: 'toolbar-1024', page: 'diff', width: 1024, height: 900, merge: true },
@@ -186,7 +190,8 @@ function payloadFor(state: PreviewState, document: unknown) {
 		wide: state.wide,
 		pan: state.pan,
 		jump: state.jump,
-		select: state.select
+		select: state.select,
+		find: state.find
 	};
 }
 

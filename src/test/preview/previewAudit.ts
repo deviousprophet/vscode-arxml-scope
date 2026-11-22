@@ -112,6 +112,7 @@ export interface PreviewAudit {
 	content: ContentAudit;
 	selected: string | null;
 	swap: { before: PaneSnapshot; after: PaneSnapshot } | null;
+	syntax?: { text: string; className: string; color: string }[];
 	violations: string[];
 }
 
@@ -621,7 +622,16 @@ export function previewAudit(state: AuditState, swapBefore?: PaneSnapshot): Prev
 		gutter: gutterAudit(),
 		content: contentAudit(),
 		selected: selectedKey(),
-		swap: swapBefore ? { before: swapBefore, after: paneSnapshot() } : null
+		swap: swapBefore ? { before: swapBefore, after: paneSnapshot() } : null,
+		syntax: state.page === 'editor'
+			? Array.from(document.querySelectorAll('.monaco-editor .view-line span'))
+				.slice(0, 40)
+				.map((span) => ({
+					text: span.textContent?.slice(0, 32) ?? '',
+					className: typeof span.className === 'string' ? span.className : '',
+					color: getComputedStyle(span).color
+				}))
+			: undefined
 	};
 	return { ...base, violations: violationsOf(state, base) };
 }
