@@ -26,6 +26,7 @@ interface PreviewPayload {
 	select?: boolean;
 	find?: string;
 	edit?: string;
+	scrollLine?: number;
 }
 
 interface PreviewCell {
@@ -332,6 +333,27 @@ async function applyDirtyEdit(): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, 250));
 }
 
+async function applyScroll(): Promise<void> {
+	const line = payload.scrollLine;
+	if (line === undefined || line <= 0) {
+		return;
+	}
+	const editor = (window as unknown as {
+		__ARXML_EDITOR__?: {
+			revealLineInCenter(line: number): void;
+			getModel(): { getLineCount(): number } | null;
+		};
+	}).__ARXML_EDITOR__;
+	const model = editor?.getModel();
+	if (editor === undefined || model === null || model === undefined) {
+		return;
+	}
+	editor.revealLineInCenter(Math.min(line, model.getLineCount()));
+	// Sticky scroll builds through a 300ms debounce plus the folding model; give
+	// it room before the screenshot and audit read the widget.
+	await new Promise((resolve) => setTimeout(resolve, 1200));
+}
+
 async function run(): Promise<void> {
 	window.postMessage(payload.message, '*');
 	const root = payload.page === 'diff' ? '.monaco-diff-editor' : '#tree .monaco-editor';
@@ -354,6 +376,7 @@ async function run(): Promise<void> {
 	await applySelect();
 	await applyFind();
 	await applyDirtyEdit();
+	await applyScroll();
 	await settle();
 	document.body.dataset.previewReady = 'true';
 	publishAudit();

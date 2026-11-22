@@ -113,6 +113,7 @@ export interface PreviewAudit {
 	selected: string | null;
 	swap: { before: PaneSnapshot; after: PaneSnapshot } | null;
 	syntax?: { text: string; className: string; color: string }[];
+	sticky?: { visible: boolean; display: string; text: string; rect: Rect | null };
 	violations: string[];
 }
 
@@ -457,6 +458,16 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 			issues.push(`the typing run posted ${edits.length} edit messages instead of one`);
 		}
 	}
+	if (state.name === 'editor-sticky') {
+		if (audit.sticky === undefined || !audit.sticky.visible) {
+			issues.push('the sticky-scroll widget is not visible');
+		} else if (!audit.sticky.text.includes('Items')) {
+			issues.push('the sticky-scroll widget does not show the enclosing Items container');
+		}
+	}
+	if (state.name === 'editor' && audit.sticky?.visible === true) {
+		issues.push('the sticky-scroll widget is visible at the top of the document');
+	}
 	if (state.select && !audit.selected) {
 		issues.push('the select gesture left no selected row');
 	}
@@ -713,6 +724,21 @@ function selectedKey(): string | null {
 	return selected.getAttribute('data-key') ?? selected.textContent?.trim().slice(0, 40) ?? labelOf(selected);
 }
 
+function stickyAudit(): NonNullable<PreviewAudit['sticky']> {
+	const widget = document.querySelector('#tree .sticky-widget');
+	if (widget === null) {
+		return { visible: false, display: 'missing', text: '', rect: null };
+	}
+	const display = getComputedStyle(widget).display;
+	const rect = widget.getBoundingClientRect();
+	return {
+		visible: display !== 'none' && rect.height > 0,
+		display,
+		text: widget.textContent?.trim() ?? '',
+		rect: rect.height > 0 ? rectOf(widget) : null
+	};
+}
+
 export function previewAudit(state: AuditState, swapBefore?: PaneSnapshot): PreviewAudit {
 	const base = {
 		state: state.name,
@@ -726,6 +752,7 @@ export function previewAudit(state: AuditState, swapBefore?: PaneSnapshot): Prev
 		content: contentAudit(),
 		selected: selectedKey(),
 		swap: swapBefore ? { before: swapBefore, after: paneSnapshot() } : null,
+		sticky: state.page === 'editor' ? stickyAudit() : undefined,
 		syntax: state.page === 'editor'
 			? Array.from(document.querySelectorAll('.monaco-editor .view-line span'))
 				.slice(0, 40)

@@ -15,7 +15,9 @@ Two independent webview surfaces use the same static-shell + `postMessage` patte
 The rendering surface is `monaco-editor@0.57.0`, pinned exactly and bundled by esbuild. The
 page serializes the existing rows into a synthetic ECUC document (`src/webview/monaco/synthetic.ts`)
 and keeps a line -> row -> field-span map; the Monaco model is not a second source of truth.
-Accepted field edits still become one host `WorkspaceEdit`; Ctrl+Z/Ctrl+Shift+Z are intercepted and
+The Monaco model always has one trailing newline: sticky scroll converts a folding end to
+`end + 1`, so without it a scope ending on the last row is considered invalid and the whole
+sticky model is dropped. Accepted field edits still become one host `WorkspaceEdit`; Ctrl+Z/Ctrl+Shift+Z are intercepted and
 routed to the host document, never Monaco's local stack. The diff page serializes the aligned
 `DiffDocument` rows into two equal-length documents and lets Monaco's diff editor render them.
 The webview CSP additionally allows `style-src 'unsafe-inline'`, `worker-src blob:`, `font-src` and

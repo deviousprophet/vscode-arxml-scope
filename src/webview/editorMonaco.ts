@@ -712,7 +712,10 @@ function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextS
 	overlayLocalEdits(documentModel);
 	if (model !== undefined) {
 		applyingModel = true;
-		model.setValue(documentModel.text);
+		// Monaco sticky scroll converts a folding end to `end + 1`; a document that
+		// ends on its closing brace would make the outermost scope invalid and
+		// drop every sticky candidate. A real editor document ends with a newline.
+		model.setValue(`${documentModel.text}\n`);
 		applyingModel = false;
 		setModelFolding(model, documentModel.foldingRanges);
 	}
@@ -1262,7 +1265,7 @@ function rebuildModel(): void {
 	const anchor = captureCursor();
 	documentModel.text = documentModel.lines.map((line) => line.text).join('\n');
 	applyingModel = true;
-	model.setValue(documentModel.text);
+	model.setValue(`${documentModel.text}\n`);
 	applyingModel = false;
 	restoreCursor(anchor);
 	invalidateNativeFind();

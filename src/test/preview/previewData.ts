@@ -32,6 +32,8 @@ export interface PreviewState {
 	find?: string;
 	/** Types this text into the first parameter to exercise the local dirty state. */
 	edit?: string;
+	/** Scrolls the editor to this 1-based line and waits for sticky scope. */
+	scrollLine?: number;
 }
 
 export const STATES: PreviewState[] = [
@@ -52,6 +54,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'editor', page: 'editor', width: 1400, height: 900, select: true },
 	{ name: 'editor-syntax', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-dirty', page: 'editor', width: 1400, height: 900, edit: '42' },
+	{ name: 'editor-sticky', page: 'editor', width: 1400, height: 900, scrollLine: 40 },
 	{ name: 'editor-find', page: 'editor', width: 1400, height: 900, find: 'Items' },
 	{ name: 'diff-find', page: 'diff', width: 1400, height: 900, merge: true, find: 'Items' },
 	{ name: 'toolbar-1400', page: 'diff', width: 1400, height: 900, merge: true },
@@ -208,7 +211,8 @@ function payloadFor(state: PreviewState, document: unknown) {
 		jump: state.jump,
 		select: state.select,
 		find: state.find,
-		edit: state.edit
+		edit: state.edit,
+		scrollLine: state.scrollLine
 	};
 }
 
