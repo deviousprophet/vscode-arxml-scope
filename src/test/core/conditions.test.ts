@@ -59,7 +59,7 @@ function assertMissingState(row: EcucRow): void {
 
 function assertMissingReason(row: EcucRow): void {
 	const reason = row.condition?.reason;
-	assert.ok(reason?.includes('MISSING_SC'), reason);
+	assert.ok(reason?.includes('MISSING_SC'), reason ?? 'the condition has no reason');
 	assert.notStrictEqual(row.disabled, true, 'unknown never dims');
 	assert.strictEqual(conditionPart(row)?.state, 'unknown');
 }
@@ -78,7 +78,7 @@ function assertPartText(row: EcucRow, text: string): void {
 
 function assertPartTitleIncludes(row: EcucRow, fragment: string): void {
 	const title = conditionPart(row)?.title;
-	assert.ok(title?.includes(fragment), title);
+	assert.ok(title?.includes(fragment), title ?? 'the condition part has no title');
 }
 
 suite('condition rows (design §4)', () => {

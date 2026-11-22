@@ -96,14 +96,14 @@ suite('plan coverage: ID', () => {
 		const beforeIndex = buildNodeIndex(before);
 		const oldParam = before.modules[0].containers[0].parameters[0];
 		const oldId = beforeIndex.idOf(oldParam);
-		assert.ok(oldId!.startsWith('container:P/M/Same#0/param:'), oldId);
+		assert.ok(oldId!.startsWith('container:P/M/Same#0/param:'), oldId ?? 'the parameter has no id');
 
 		const renamed = text.replace(container('Same', '1'), container('Renamed', '1'));
 		const after = modelOf(renamed);
 		const afterIndex = buildNodeIndex(after);
 		const newParam = after.modules[0].containers[0].parameters[0];
 		const newId = afterIndex.idOf(newParam);
-		assert.ok(newId!.startsWith('container:P/M/Renamed#0/param:'), newId);
+		assert.ok(newId!.startsWith('container:P/M/Renamed#0/param:'), newId ?? 'the renamed parameter has no id');
 		assert.strictEqual(afterIndex.byId.get(newId!)?.range, newParam.range);
 	});
 });

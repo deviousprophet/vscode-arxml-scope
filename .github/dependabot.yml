@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # typescript-eslint 8.x peers typescript >=4.8.4 <6.1.0; wait for the lint
+    # stack to widen that range before adopting TypeScript 7.
+    ignore:
+      - dependency-name: "typescript"
+        versions: ["7.x", "8.x"]
     groups:
       npm:
         patterns:
