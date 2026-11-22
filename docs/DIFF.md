@@ -3,6 +3,11 @@
 The semantic diff compares two ECUC-Values files by their **configuration**, not by their XML text. It
 is a read-only view: it never writes, repairs or generates a file.
 
+> **Renderer status.** The two panes are now Monaco's side-by-side diff editor. The schema and
+> package header lines are shown in the pane title tooltip because VS Code diff headers are chrome,
+> not compared lines. Hidden unchanged regions, word-level changes and the diff gutter come from
+> Monaco; Merge keeps the existing whole-element semantics with VS Code-style gutter arrows.
+
 ## Selecting the two files
 
 ### Compare with a first file

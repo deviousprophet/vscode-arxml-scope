@@ -12,6 +12,15 @@ Two independent webview surfaces use the same static-shell + `postMessage` patte
 - the ECUC custom text editor (`EcucEditorProvider`, `VIEW_TYPE = 'vscode-arxml-scope.ecucEditor'`);
 - the read-only semantic diff panel (`DiffPanel.viewType = 'vscode-arxml-scope.diff'`).
 
+The rendering surface is `monaco-editor@0.57.0`, pinned exactly and bundled by esbuild. The
+page serializes the existing rows into a synthetic ECUC document (`src/webview/monaco/synthetic.ts`)
+and keeps a line -> row -> field-span map; the Monaco model is not a second source of truth.
+Accepted field edits still become one host `WorkspaceEdit`; Ctrl+Z/Ctrl+Shift+Z are intercepted and
+routed to the host document, never Monaco's local stack. The diff page serializes the aligned
+`DiffDocument` rows into two equal-length documents and lets Monaco's diff editor render them.
+The webview CSP additionally allows `style-src 'unsafe-inline'`, `worker-src blob:`, `font-src` and
+`connect-src` for the fetched worker; no remote code is loaded.
+
 The host owns documents, scans, writes and persistence. A Rust engine process is
 required at activation (`src/host/engine/engineLoader.ts`, `npm run engine:build`); it
 serves the parity-checked scanner, rows, edit plans, diff and copy plans. The editor

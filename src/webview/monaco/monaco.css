@@ -1,0 +1,78 @@
+/* Monaco host and the ARXML-only decoration classes. */
+#tree.monaco-ecuc-host {
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+	overflow: hidden;
+	position: relative;
+}
+
+#tree.monaco-ecuc-host .monaco-editor,
+#tree.monaco-ecuc-host .monaco-editor .overflow-guard {
+	border-radius: 0;
+}
+
+/* Whole-line decoration layers. They sit under Monaco's selection and current
+ * line overlays, so the editor's own focus treatment keeps working. */
+.monaco-editor .arxml-subtree {
+	background-color: var(--vscode-editor-selectionHighlightBackground, rgba(38, 79, 120, 0.18));
+}
+
+.monaco-editor .arxml-selected {
+	background-color: var(--vscode-editor-selectionHighlightBackground, rgba(38, 79, 120, 0.28));
+	box-shadow: inset 2px 0 0 var(--vscode-focusBorder, #007fd4);
+}
+
+.monaco-editor .arxml-disabled {
+	opacity: 0.55;
+}
+
+.monaco-editor .arxml-find {
+	background-color: var(--match-bg, rgba(234, 179, 8, 0.18));
+}
+
+.monaco-editor .arxml-find-current {
+	background-color: var(--match-hi, rgba(234, 179, 8, 0.36));
+	outline: 1px solid var(--vscode-editor-findMatchBorder, transparent);
+	outline-offset: -1px;
+}
+
+/* The diff page mounts Monaco into the existing scroll surface slot. */
+#diff-list.monaco-diff-host {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	overflow: hidden;
+}
+
+#diff-list.monaco-diff-host > #diff-monaco {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+}
+
+.monaco-diff-editor .arxml-subtree {
+	background-color: var(--vscode-editor-selectionHighlightBackground, rgba(38, 79, 120, 0.18));
+}
+
+.monaco-diff-editor .arxml-selected {
+	background-color: var(--vscode-editor-selectionHighlightBackground, rgba(38, 79, 120, 0.28));
+	box-shadow: inset 2px 0 0 var(--vscode-focusBorder, #007fd4);
+}
+
+.monaco-diff-editor .arxml-merge-arrow-right::after,
+.monaco-diff-editor .arxml-merge-arrow-left::after {
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+	font-size: 14px;
+	line-height: 18px;
+	color: var(--vscode-editorGutter-modifiedBackground, var(--vscode-focusBorder));
+	cursor: pointer;
+}
+
+.monaco-diff-editor .arxml-merge-arrow-right::after {
+	content: "→";
+}
+
+.monaco-diff-editor .arxml-merge-arrow-left::after {
+	content: "←";
+}

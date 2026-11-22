@@ -33,6 +33,7 @@ function shell(): string {
 		cspSource: 'https://webview.test',
 		scriptUri: 'https://webview.test/editorViewer.js',
 		styleUri: 'https://webview.test/editorViewer.css',
+		workerUri: 'https://webview.test/monaco.worker.js',
 		nonce: 'test-nonce',
 	});
 }
@@ -828,14 +829,15 @@ suite('editor Document interactions', () => {
 		}
 	});
 
-	test('no runtime dependency was added and nothing is fetched', () => {
+	test('the pinned editor dependency is the only runtime dependency', () => {
 		const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
 			dependencies?: Record<string, string>;
 		};
-		assert.strictEqual(pkg.dependencies, undefined, 'no runtime dependency');
+		assert.deepStrictEqual(pkg.dependencies, { 'monaco-editor': '0.57.0' }, 'the pinned editor dependency');
 		const html = shell();
 		assert.ok(/<script[^>]+src=/.test(html), 'the bundled page script is loaded');
-		assert.ok(!/fetch\(|XMLHttpRequest|new Worker|serviceWorker/.test(html), 'the shell has no remote/worker path');
+		assert.ok(html.includes('name="arxml-worker-uri"'), 'the worker asset is declared');
+		assert.ok(!/fetch\(|XMLHttpRequest|serviceWorker/.test(html), 'the shell has no inline fetch path');
 	});
 
 	test('X-04 the stylesheet keeps only the documented colour literals', () => {

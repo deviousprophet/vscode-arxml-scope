@@ -160,7 +160,7 @@ const THEME = `<style>:root{
 --vscode-editorError-foreground:#f85149;
 }</style>`;
 
-const ASSETS = { cspSource: '', scriptUri: '/preview.js', styleUri: '/preview.css', nonce: 'preview' };
+const ASSETS = { cspSource: '', scriptUri: '/preview.js', styleUri: '/preview.css', workerUri: '/monaco.worker.js', nonce: 'preview' };
 
 /** The fixture document a state mounts. */
 function documentFor(state: PreviewState) {

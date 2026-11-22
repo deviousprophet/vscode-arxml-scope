@@ -28,6 +28,8 @@ export type DiffProviderToWebview =
 	| { type: 'documentPatch'; patch: DiffPatch }
 	/** The engine answer for one find request. */
 	| { type: 'findResult'; requestId: number; result: DiffFindResult; error?: string }
+	/** The active VS Code colour theme changed. */
+	| { type: 'theme' }
 ;
 
 /** Diff page → host. */
@@ -60,7 +62,8 @@ const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'mergeMode',
 	'labels',
 	'documentPatch',
-	'findResult'
+	'findResult',
+	'theme'
 ]);
 
 /** A host message with the diff protocol's shape; the page ignores anything else. */

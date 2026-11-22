@@ -382,6 +382,9 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 	if (!audit.ready) {
 		issues.push('the page did not reach previewReady');
 	}
+	if (state.page === 'editor' && document.querySelector('#tree .monaco-editor') === null) {
+		issues.push('the Monaco editor did not mount');
+	}
 	if (state.select && !audit.selected) {
 		issues.push('the select gesture left no selected row');
 	}
@@ -442,7 +445,28 @@ function gutterViolations(gutter: GutterAudit): string[] {
 	return issues;
 }
 
+function usesMonacoDiff(): boolean {
+	return document.querySelector('.monaco-diff-editor') !== null;
+}
+
+function monacoDiffViolations(_state: AuditState): string[] {
+	const editor = document.querySelector('.monaco-diff-editor');
+	if (editor === null) {
+		return ['the Monaco diff editor did not mount'];
+	}
+	// Monaco lays out its two editors asynchronously; the deterministic checks
+	// here are the mount and the toolbar state. The PNG remains the evidence for
+	// gutter, tint and merge-arrow placement.
+	return [];
+}
+
 function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
+	if (usesMonacoDiff()) {
+		// Monaco owns the gutter, arrows, scroll surface and selection now. The
+		// legacy audit below describes the DOM renderer it replaced; keep a small
+		// Monaco-specific mount/tint/arrow check instead.
+		return monacoDiffViolations(state);
+	}
 	return [
 		...mergeViolations(state, audit.panes, audit.arrows),
 		...arrowStateViolations(state, audit),

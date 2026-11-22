@@ -15,10 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Find is a VS Code-style floating widget opened with `Ctrl+F`/`Ctrl+H`, with case-sensitive, whole-word and regular-expression options in the document and diff views
 - Replace and Replace All update validated parameter values and container short names in the document view, with preserve case and no write when the engine refuses
 - The diff view searches the same row fields with the same options but has no replace row
+- The ECUC editor and semantic diff now use the real VS Code editor and diff editor, with native selection, scrolling, folding, word wrap, minimap and sticky scroll
 
 ### Changed
 
 - Starting on an unsupported platform now names the packaged engine targets instead of failing with a missing-binary error
+- The ECUC editor inherits the configured VS Code editor font, wrapping, minimap, sticky scroll, guide and cursor settings
+- Parameter values, container short names and container definition refs can be typed directly in the ECUC editor; structural edits remain in the row menu
+- The diff view renders two line-aligned documents in the VS Code diff editor, with hidden unchanged regions, word-level changes and VS Code-style Merge arrows
+- The ECUC find bar keeps the Rust ARXML search, count and replace rules while using the VS Code find widget layout
+
+### Removed
+
+- The custom Document renderer, roving row keyboard, Space-to-select, type-ahead and semantic multi-row copy are replaced by native editor behavior
 
 ### Fixed
 

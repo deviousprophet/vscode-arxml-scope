@@ -9,8 +9,8 @@
 // The production entries auto-mount when their page root is present, exactly as
 // the extension webview does. Importing them is the whole wiring; calling the
 // mount functions again would bind every toolbar action twice.
-import '../../webview/diffViewer';
-import '../../webview/editorViewer';
+import '../../webview/diffMonaco';
+import '../../webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
 import type { PaneSnapshot } from './previewAudit';
 
@@ -42,7 +42,7 @@ function tick(): Promise<void> {
 
 /** A short timer lets the resize observer and the final layout settle. */
 function settle(): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, 50));
+	return new Promise((resolve) => setTimeout(resolve, 200));
 }
 
 function click(id: string): void {
@@ -58,6 +58,15 @@ async function until(predicate: () => boolean): Promise<void> {
 			return;
 		}
 		await tick();
+	}
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+	for (let attempt = 0; attempt < 40; attempt++) {
+		if (predicate()) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
 }
 
@@ -93,12 +102,13 @@ async function applyPan(): Promise<void> {
 	if (!payload.pan) {
 		return;
 	}
-	const bar = document.querySelector('#diff-list .virtual-scroll-hscroll-left') as HTMLElement | null;
-	if (!bar) {
+	const pane = document.querySelector('.monaco-diff-editor .monaco-scrollable-element') as HTMLElement | null;
+	if (!pane) {
 		return;
 	}
-	bar.scrollLeft = payload.pan;
-	bar.dispatchEvent(new Event('scroll', { bubbles: true }));
+	pane.dispatchEvent(
+		new WheelEvent('wheel', { deltaX: payload.pan, deltaY: 0, bubbles: true, cancelable: true })
+	);
 	await tick();
 }
 
@@ -148,8 +158,20 @@ function publishAudit(): void {
 
 async function run(): Promise<void> {
 	window.postMessage(payload.message, '*');
-	await until(() => document.querySelector('#diff-pane-left [role="treeitem"]') !== null);
+	const root = payload.page === 'diff' ? '.monaco-diff-editor' : '#tree .monaco-editor';
+	await until(() => document.querySelector(root) !== null);
+	if (payload.page === 'diff') {
+		await waitFor(
+			() =>
+				document.querySelector(
+					'.monaco-diff-editor .line-insert, .monaco-diff-editor .line-delete, .monaco-diff-editor .char-insert, .monaco-diff-editor .char-delete'
+				) !== null
+		);
+	}
 	await applyMerge();
+	if (payload.page === 'diff' && payload.merge) {
+		await waitFor(() => document.querySelector('[class*="arxml-merge-arrow"]') !== null);
+	}
 	await applySwap();
 	await applyPan();
 	await applyJumps();

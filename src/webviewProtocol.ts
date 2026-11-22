@@ -22,11 +22,30 @@ export interface EditorDocumentHeader {
 	packages: string[];
 }
 
+/** The curated VS Code editor settings the Monaco surface inherits. */
+export interface MonacoSettings {
+	fontFamily?: string;
+	fontSize?: number;
+	lineHeight?: number;
+	fontWeight?: string;
+	wordWrap?: 'on' | 'off' | 'wordWrapColumn' | 'bounded';
+	wordWrapColumn?: number;
+	minimap?: boolean;
+	stickyScroll?: boolean;
+	indentationGuides?: boolean;
+	bracketPairGuides?: boolean | 'active';
+	cursorStyle?: 'block' | 'block-outline' | 'line' | 'line-thin' | 'underline' | 'underline-thin';
+	cursorBlinking?: 'blink' | 'smooth' | 'phase' | 'expand' | 'solid';
+	smoothScrolling?: boolean;
+	renderWhitespace?: 'none' | 'boundary' | 'selection' | 'trailing' | 'all';
+}
+
 /** The row document the page installs: initial load and every re-scan. */
 export interface EditorDocumentPayload {
 	rows: EcucRow[];
 	selectedId?: string;
 	header?: EditorDocumentHeader;
+	settings?: MonacoSettings;
 }
 
 /** One contiguous row replacement the engine computed for a text change. */
@@ -55,12 +74,20 @@ export type EditorProviderToWebview =
 	/** The engine answer for one find request. */
 	| { type: 'findResult'; requestId: number; result: FindResult; error?: string }
 	/** The engine answer for one replace request. */
-	| { type: 'replaceResult'; requestId: number; result: ReplaceResult };
+	| { type: 'replaceResult'; requestId: number; result: ReplaceResult }
+	/** A curated `editor.*` setting changed. */
+	| { type: 'settings'; settings: MonacoSettings }
+	/** The active VS Code colour theme changed. */
+	| { type: 'theme' };
 
 /** Editor page → host. */
 export type EditorWebviewToProvider =
 	/** The page mounted and is listening; the host answers with `document` and `conditions`. */
 	| { type: 'ready' }
+	/** The page asks the host document to undo its last edit. */
+	| { type: 'undo' }
+	/** The page asks the host document to redo its last undone edit. */
+	| { type: 'redo' }
 	| { type: 'select'; nodeId: string }
 	| { type: 'reveal'; nodeId: string }
 	| { type: 'follow'; nodeId: string }
@@ -95,7 +122,9 @@ const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'notice',
 	'error',
 	'findResult',
-	'replaceResult'
+	'replaceResult',
+	'settings',
+	'theme'
 ]);
 
 /** A host message with the editor protocol's shape; the page ignores anything else. */

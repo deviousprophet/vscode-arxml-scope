@@ -36,7 +36,7 @@ import { watchBoot } from './bootWatchdog';
 import type { BootWatchdog } from './bootWatchdog';
 import { editorShell } from './webviewShell';
 import { editorMessageType, documentHeader } from '../webviewProtocol';
-import type { EditorWebviewToProvider } from '../webviewProtocol';
+import type { EditorWebviewToProvider, MonacoSettings } from '../webviewProtocol';
 import type { ReplaceResult } from '../core/searchModel';
 import type { DefinitionInfo } from '../core/index/definitions';
 import type { IndexElement, IndexReference } from '../core/index/indexModel';
@@ -117,6 +117,27 @@ function editorSettings(): { sort: SortMode; sortExcept: readonly string[] } {
 	};
 }
 
+/** The curated `editor.*` values the Monaco surface inherits. */
+function monacoSettings(): MonacoSettings {
+	const config = vscode.workspace.getConfiguration('editor');
+	return {
+		fontFamily: config.get<string>('fontFamily'),
+		fontSize: config.get<number>('fontSize'),
+		lineHeight: config.get<number>('lineHeight'),
+		fontWeight: config.get<string>('fontWeight'),
+		wordWrap: config.get<'on' | 'off' | 'wordWrapColumn' | 'bounded'>('wordWrap', 'off'),
+		wordWrapColumn: config.get<number>('wordWrapColumn'),
+		minimap: config.get<boolean>('minimap.enabled', true),
+		stickyScroll: config.get<boolean>('stickyScroll.enabled', true),
+		indentationGuides: config.get<boolean>('guides.indentation', true),
+		bracketPairGuides: config.get<boolean | 'active'>('guides.bracketPairs', false),
+		cursorStyle: config.get<MonacoSettings['cursorStyle']>('cursorStyle'),
+		cursorBlinking: config.get<MonacoSettings['cursorBlinking']>('cursorBlinking', 'blink'),
+		smoothScrolling: config.get<boolean>('smoothScrolling', true),
+		renderWhitespace: config.get<MonacoSettings['renderWhitespace']>('renderWhitespace', 'selection'),
+	};
+}
+
 export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 	/** Open panels by document, so `selectNode` can reach a panel that already exists. */
 	private readonly panels = new Map<string, vscode.WebviewPanel>();
@@ -167,6 +188,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			cspSource,
 			scriptUri: asset('editorViewer.js'),
 			styleUri: asset('editorViewer.css'),
+			workerUri: asset('monaco.worker.js'),
 			nonce: randomBytes(16).toString('base64'),
 		});
 	}
@@ -251,6 +273,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					rows: rowDocument.rows,
 					selectedId: current,
 					header: documentHeader(model),
+					settings: monacoSettings(),
 				},
 			});
 		};
@@ -290,6 +313,12 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			})
 		);
 
+		disposables.push(
+			vscode.window.onDidChangeActiveColorTheme(() => {
+				void panel.webview.postMessage({ type: 'theme' });
+			})
+		);
+
 		// `arxmlScope.ecuc.editor.sort` / `sortExcept` are read at every render, but
 		// nothing re-renders an open panel on its own, so without this the setting would
 		// only take effect after the document next changed or the editor was reopened.
@@ -297,6 +326,9 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			vscode.workspace.onDidChangeConfiguration((event) => {
 				if (event.affectsConfiguration('arxmlScope.ecuc.editor')) {
 					push();
+				}
+				if (event.affectsConfiguration('editor')) {
+					void panel.webview.postMessage({ type: 'settings', settings: monacoSettings() });
 				}
 			})
 		);
@@ -363,6 +395,10 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 		if (message.type === 'conditions') {
 			this.handleConditions(message, session);
+			return true;
+		}
+		if (message.type === 'undo' || message.type === 'redo') {
+			void vscode.commands.executeCommand(message.type);
 			return true;
 		}
 		return this.handleFindReplaceMessage(message, session);

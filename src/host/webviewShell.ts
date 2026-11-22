@@ -18,23 +18,36 @@ export interface WebviewShellAssets {
 	scriptUri: string;
 	/** The bundled stylesheet URI (component CSS is inside it). */
 	styleUri: string;
+	/** The bundled Monaco worker URI. */
+	workerUri?: string;
 	/** A per-panel nonce for the script tag. */
 	nonce: string;
 }
 
 function csp(assets: WebviewShellAssets): string {
+	const source = assets.cspSource || "'self'";
 	return [
 		"default-src 'none'",
-		`style-src ${assets.cspSource} 'nonce-${assets.nonce}'`,
+		// Monaco injects its styles at runtime and does not accept a nonce.
+		`style-src ${source} 'unsafe-inline'`,
 		`script-src 'nonce-${assets.nonce}'`,
-		`img-src ${assets.cspSource} data:`,
+		`img-src ${source} data:`,
+		// The codicon font is a packaged asset.
+		`font-src ${source} data:`,
+		// The worker source is fetched and started from a blob.
+		`connect-src ${source}`,
+		`worker-src ${source} blob:`,
+		`child-src ${source} blob:`,
 	].join('; ');
 }
 
 function head(assets: WebviewShellAssets, title: string): string {
+	const worker = assets.workerUri
+		? `\n<meta name="arxml-worker-uri" content="${assets.workerUri}">`
+		: '';
 	return `<meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp(assets)}">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">${worker}
 <link rel="stylesheet" href="${assets.styleUri}">
 <title>${title}</title>`;
 }

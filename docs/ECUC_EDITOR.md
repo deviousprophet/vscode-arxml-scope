@@ -6,6 +6,13 @@ only the text of the field the user edited.
 
 The editor is opt-in: a normal open still uses VS Code's text editor.
 
+> **Renderer status.** The Document surface is now a Monaco editor — the same editor and diff
+> editor that VS Code uses. Selection, scrolling, folding, word wrap, minimap, sticky scroll and
+> undo follow the host editor. Parameter values, container short names and container definition refs
+> can be typed directly; everything else is read-only. Sections below that describe roving row focus, Space-to-select,
+> type-ahead, the custom copy planner, the custom collapsible hint or the custom virtual scroll
+> describe the retired DOM renderer and are kept as the ECUC interaction reference.
+
 ## Opening a file
 
 Use any of:

@@ -107,7 +107,8 @@ Record a manual observation with the state name and what changed, for example
 - `scripts/previewWebview.mjs` bundles `src/test/preview/previewData.ts` for Node and
   `src/test/preview/previewPage.ts` for the browser with esbuild, then serves one HTML
   document per state. esbuild emits `dist/preview/preview.js` and `preview.css`; the
-  server deliberately drops the production CSP for this local surface.
+  server also serves the bundled `monaco.worker.js` and hashed font assets. It deliberately
+  drops the production CSP for this local surface.
 - `previewData.ts` calls the production `diffShell`/`editorShell`, injects the supported
   dark-theme token block, seeds a synthetic `DiffDocument` or editor document and inlines the payload.
   The theme block is required: without VS Code's variables the gutter is transparent and the rail can
@@ -151,7 +152,8 @@ Record a manual observation with the state name and what changed, for example
 
 The harness proves geometry and paint in Chromium at the listed sizes. The audit is a
 set of placement invariants, not a taste judgement: still inspect the PNG for colour,
-spacing and clipping the invariants do not encode. It does not prove VS Code theme
-fidelity (tokens are seeded), keyboard focus behaviour, screen-reader output or
-performance. Those still need the Extension Development Host, and a host observation
-belongs in the task notes as a manual check.
+spacing and clipping the invariants do not encode. When Monaco is active the legacy
+DOM diff-geometry checks are skipped; the Monaco editor owns its gutter, arrows, scroll
+surface and selection. It does not prove VS Code theme fidelity (tokens are seeded), keyboard focus
+behaviour, screen-reader output or performance. Those still need the Extension Development
+Host, and a host observation belongs in the task notes as a manual check.

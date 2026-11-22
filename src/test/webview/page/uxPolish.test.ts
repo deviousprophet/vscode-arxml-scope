@@ -118,6 +118,6 @@ suite('editor visual polish', () => {
 		const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
 			dependencies?: Record<string, string>;
 		};
-		assert.strictEqual(pkg.dependencies, undefined, 'no runtime dependency');
+		assert.deepStrictEqual(pkg.dependencies, { 'monaco-editor': '0.57.0' }, 'the pinned editor dependency');
 	});
 });

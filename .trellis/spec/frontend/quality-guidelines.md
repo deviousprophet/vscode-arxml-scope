@@ -8,18 +8,18 @@ that is not obvious from the code.
 | Never | Why |
 |---|---|
 | `import … from 'vscode'` under `src/core/**` | The core is a pure library over text; this is what keeps a future workspace index or language server possible. |
-| A new runtime dependency | The core is dependency-free by design and the extension bundles with esbuild. Reach for the standard library or the platform first. |
+| A new runtime dependency (except the pinned `monaco-editor` editor surface) | The core is dependency-free by design and the extension bundles with esbuild. `monaco-editor` is the approved exception: it is the VS Code editor and diff editor, pinned exactly, and must stay the only runtime dependency. Reach for the standard library or the platform first for everything else. |
 | Writing a derived file, cache or index beside a user's file | The legacy tool did this and it is the main reason it is being replaced. Nothing but the text of the element the user edited (`<VALUE>`, `<SHORT-NAME>` or `<DEFINITION-REF>`) may be written. The workspace index lives in memory only. |
 | Persisting the workspace index or a parse cache | The v0.5 index is rebuilt on activation from the workspace. A cache file, a `.codegraph`-style side directory or an extension-storage blob is not the v0.5 design; add persistence only with an explicit schema and invalidation story. |
 | Resolving an ambiguous definition or element path | Exact path first, then a unique suffix. Two matches must resolve to nothing; a guessed definition would show a wrong type or range as fact. |
 | Reintroducing the ARTEXT text form: a grammar, `Open as ARTEXT`, a text diff | ARTEXT survives only as the name of the information model. Anything that exists only because an external process produced a text file is dropped. |
 | Generating an expected fixture from the code under test | A snapshot agrees with the code by construction. See `testing.md`. |
 | Editing a committed fixture from a test | It passes once, then fails forever and silently rewrites the repository. |
-| Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. The fixed `--container-accent` and the fixed search match tiers (`--match-bg`/`--match-hi`) are the documented dark-pass exceptions. |
+| Hard-coded colours in the webview | Use the `--vscode-*` CSS variables so the editor follows the user's theme. The fixed `--container-accent` and the fixed search match tiers (`--match-bg`/`--match-hi`) are the documented dark-pass exceptions; the fixed ARXML token palette in `src/webview/monaco/setup.ts` is the documented exception for syntax tokens, while editor chrome still follows the theme. |
 | A second renderer or copied markup for a preview | It diverges from the product; wrap the production shell (`editorShell` / `diffShell`) and its bundled page, and assert containment. |
 | Reading a real customer file from a test | The repository is public. Fixtures are synthetic. |
-| Building the whole row list into the DOM | It restores the large-file lag; render the viewport window plus overscan only. |
-| Setting row depth or spacer heights with a style attribute | The CSP blocks inline styles; use `data-level` CSS and the component's scoped CSSOM/spacer properties. |
+| Building the whole row list into the DOM | It restores the large-file lag; render the viewport window plus overscan only. The Monaco model is not DOM, so serializing the whole document into the editor model is the approved renderer path. |
+| Setting row depth or spacer heights with a style attribute | The CSP blocks inline style attributes; use `data-level` CSS and the component's scoped CSSOM/spacer properties. Monaco's runtime style injection is the documented CSP exception; do not add inline style attributes yourself. |
 
 ## Rules the write path must keep
 
@@ -121,8 +121,9 @@ that is not obvious from the code.
   hidden at zero files when the window has a workspace folder; a folder that exists but has no indexed
   `.arxml` still shows the mode so `cross-file checks off (no project)` is visible. Do not show
   `0 files indexed`.
-- **Dark is the supported theme for now.** Do not re-add a light-only selection/token branch or a
-  light preview/capture; high contrast is the accessibility variant. High-contrast/forced-colors
+- **Dark and light editor surfaces are both supported.** The Monaco token palette has fixed dark,
+  light and high-contrast rules; chrome always follows the `--vscode-*` variables. Do not add a
+  third palette or a light-only branch outside `src/webview/monaco/setup.ts`. High-contrast/forced-colors
   subtree rows use a dotted outline, not the fill.
 - **The fold gutter is fixed.** The 26px gutter and 16px chevron are the VS Code geometry; do not
   put the twisty back into the label flow. Expanded chevrons are hover/focus-only and collapsed

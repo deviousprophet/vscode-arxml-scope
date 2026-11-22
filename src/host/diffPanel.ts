@@ -122,6 +122,7 @@ function shellHtml(panel: vscode.WebviewPanel, context: vscode.ExtensionContext)
 		cspSource: panel.webview.cspSource || 'https://webview.test',
 		scriptUri: webviewAsset(panel, context, 'diffViewer.js', 'https://webview.test/diffViewer.js'),
 		styleUri: webviewAsset(panel, context, 'diffViewer.css', 'https://webview.test/diffViewer.css'),
+		workerUri: webviewAsset(panel, context, 'monaco.worker.js', 'https://webview.test/monaco.worker.js'),
 		nonce: randomBytes(16).toString('base64'),
 	});
 }
