@@ -186,10 +186,11 @@ store, then `postToHost({ type: 'ready' })`.
    answers with the current `conditions` entries and then the `document` payload. A reload therefore
    cannot show an empty tree or stale condition values.
 5. **Message dispatch.** `panel.webview.onDidReceiveMessage((raw: unknown))` first checks
-   `editorMessageType(raw)`; anything without a string `type` is ignored. `ready` and `conditions` are
-   handled first; the remaining messages must carry a string `nodeId`. `edit` also requires a string
-   `value`; a missing `field` normalizes to `'value'`, and an unknown field is ignored. `select` only
-   updates the host's selection map.
+   `editorMessageType(raw)`; anything without a string `type` is ignored. `ready`, `conditions`,
+   `undo`/`redo`, `flushed`/`save` are handled first; the remaining messages must carry a string
+   `nodeId`. `edit` also requires a string `value`; a missing `field` normalizes to `'value'`, and
+   an unknown field is answered with a refusal result. `select` only updates the host's selection
+   map.
 6. **One user action, one write.** `editField` validates against the current text (or the engine's
    retained model), then applies exactly one `WorkspaceEdit` through `applyEdit`. Edits carry
    `editId` and `baseRevision`; the host serializes them on `session.editChain` and answers each with
@@ -197,9 +198,16 @@ store, then `postToHost({ type: 'ready' })`.
    carries `revision` and `dirty`, a save posts `dirty`, and the panel title's `•` follows
    `TextDocument.isDirty` after every change, save and edit.
    `onWillSaveTextDocument` asks the page to flush pending edits (`flushEdits`/`flushed`) and waits
-   for the queue before the save. Delete and duplicate go through `planDelete` / `planDuplicate` and
-   `applyStructureEdit` after a modal confirmation. A refusal posts a `notice` (for a field,
-   `inline: true`, `scope: 'details'`) and leaves the bytes untouched.
+   for the queue before the save. The page-level `Ctrl+S` handler first blocks on local invalid
+   fields, then posts `save`; the host drains `editChain` and calls `document.save()`.
+   Delete and duplicate go through `planDelete` / `planDuplicate` and `applyStructureEdit` after a
+   modal confirmation. A refusal posts a `notice` (for a field, `inline: true`, `scope: 'details'`),
+   keeps the visible text marked invalid and leaves the bytes untouched.
+7. **One shared Details/editor draft.** Details input events call `previewEdit`, not `commitEdit`;
+   the page routes both views through `applyLocalField`. `Enter` does not commit, `Tab` leaves
+   focus to the browser, `Escape` restores the field's accepted value. Local syntax markers and
+   the `#editor-error-strip` live in the page; invalid values never enter the `TextDocument` and
+   block save until corrected or reverted.
 7. **Renames follow the id.** A container rename changes its path-based id. Before writing,
    `editField` stores `plan.nextNodeId`; the re-scan that follows the document change carries that
    surviving id. A refused write restores the previous selection entry.

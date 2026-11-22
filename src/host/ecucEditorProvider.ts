@@ -464,6 +464,15 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 	}
 
+	/** Save the real TextDocument after the page's accepted edits have drained. */
+	private async saveDocument(session: EditorSession): Promise<void> {
+		await session.editChain;
+		if (session.document.isDirty) {
+			await session.document.save();
+		}
+		this.postDirty(session);
+	}
+
 	/** Consumes a pending selection for a panel that just opened, or restores the last one. */
 	private resumeSelection(key: string): void {
 		const selectedId = this.pending.get(key) ?? this.selections.get(key);
@@ -503,6 +512,10 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			if (typeof message.requestId === 'number') {
 				this.resolveFlush(session, message.requestId);
 			}
+			return true;
+		}
+		if (message.type === 'save') {
+			void this.saveDocument(session);
 			return true;
 		}
 		return this.handleFindReplaceMessage(message, session);

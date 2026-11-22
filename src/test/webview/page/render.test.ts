@@ -743,16 +743,15 @@ suite('editor bundled page', () => {
 		}
 	});
 
-	test('Enter in the details editor posts one edit and a re-scan keeps the selection', () => {
+	test('Details typing stays local and a re-scan keeps the selection', () => {
 		const { dom, document } = mount();
 		try {
 			clickRow(dom, 'IniValue');
 			const input = dom.document.getElementById('details-value') as HTMLInputElement;
 			input.value = '99';
+			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
 			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-			assert.deepStrictEqual(messagesOf(dom.api, 'edit'), [
-				{ type: 'edit', nodeId: rowFor(document, 'IniValue').id, value: '99' },
-			]);
+			assert.deepStrictEqual(messagesOf(dom.api, 'edit'), [], 'Enter does not commit the live draft');
 			const selected = rowFor(document, 'IniValue').id;
 			dom.post({ type: 'document', document: editorDocument({ selectedId: selected }) });
 			assert.strictEqual(

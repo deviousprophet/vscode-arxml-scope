@@ -53,25 +53,25 @@ export class EditorToolbar {
 		button.title = hidden ? 'Show sidebar' : 'Hide sidebar';
 	}
 
-	/** Show the unsaved marker while the page has a local edit or the host is dirty. */
-	setDirty(dirty: boolean): void {
+	/** Show the unsaved or invalid marker while the page has a local draft. */
+	setDirty(dirty: boolean, invalid?: string): void {
 		const status = document.getElementById('editor-dirty-status');
 		if (!status) {
 			return;
 		}
-		// The page calls this on every keystroke; write only a real change so the
-		// polite live region does not announce the same marker over and over.
-		if (status.hidden !== !dirty) {
-			status.hidden = !dirty;
+		const text = invalid !== undefined ? 'Invalid value — not saved' : dirty ? '● Unsaved changes' : '';
+		const hidden = text === '';
+		if (status.hidden !== hidden) {
+			status.hidden = hidden;
 		}
-		const text = dirty ? '● Unsaved changes' : '';
 		if (status.textContent !== text) {
 			status.textContent = text;
 		}
-		const title = dirty ? 'This ECUC document has unsaved changes' : '';
+		const title = invalid ?? (dirty ? 'This ECUC document has unsaved changes' : '');
 		if (status.title !== title) {
 			status.title = title;
 		}
+		status.classList.toggle('invalid', invalid !== undefined);
 	}
 
 	private bind(id: string, action: () => void): void {

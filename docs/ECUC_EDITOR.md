@@ -206,24 +206,25 @@ collapsed sections and visibility persist across a webview reload.
 ## Editing rules
 
 The Document surface supports direct value and container-short-name typing; definition-ref and
-structural edits stay in Details or the row context menu. The editor is optimistic: the typed text
-is shown immediately, an `Unsaved changes` marker appears in the toolbar and the tab title gets a
-`•`, and the host write happens after a short idle pause. Edits carry an id and document revision;
-the host serializes its `WorkspaceEdit`s and acknowledges each one. A refusal restores the last
-host-accepted text only when no newer local edit is waiting. `Ctrl+S` flushes pending edits before
-the save, so the file cannot save an older value. The tab title and marker clear when the real
-`TextDocument` becomes clean.
+structural edits stay in Details or the row context menu. Details is another view of the same
+in-memory draft: typing there updates the Monaco value and vice versa. The editor is optimistic:
+the typed text and an `Unsaved changes` marker appear immediately, the tab title gets a `•`, and
+the host write happens after a short idle pause. Edits carry an id and document revision; the host
+serializes its `WorkspaceEdit`s and acknowledges each one. A refused or locally invalid value stays
+visible with a red marker and never applies to the `TextDocument`. `Ctrl+S` is the only save action:
+it flushes pending edits, waits for validation, and is blocked while a value is invalid or still
+being validated. The tab title and marker clear when the real `TextDocument` becomes clean.
 
 ### Field edits
 
 - A parameter's `<VALUE>` is edited with a text input (or a `true`/`false` select for a Boolean
   parameter).
 - A container's `<SHORT-NAME>` and `<DEFINITION-REF>` are edited with text inputs.
-- `Enter` commits, `Escape` restores the committed value, and `Tab` moves to the adjacent parameter
-  (value edit) or the container's other field.
-- Integer and Float inputs reject characters that cannot belong to the value; the host still validates
-  the complete value on commit.
-- A refusal keeps the typed text, marks the control invalid and shows the reason beside the field. A
+- Details typing is live; `Enter` does not commit. `Escape` restores the field's accepted value, and
+  `Tab` uses normal browser focus movement without writing.
+- Integer, Float, Boolean and XML-invalid input is marked locally as a problem while typing; the host
+  still validates the complete value against Rust before it reaches the document.
+- A refusal keeps the typed text, marks the field and the page error strip, and blocks save. The
   refused value never reaches the file.
 - A value backed by CDATA is shown but not editable.
 - A module cannot be renamed: its short name is part of every container id.

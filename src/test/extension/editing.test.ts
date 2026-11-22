@@ -583,6 +583,23 @@ suite('editor value editing (AC1–AC9)', () => {
 		});
 	});
 
+	test('AC5: a page save message flushes the edit queue and saves', async () => {
+		await withEditingFixture('numeric.arxml', async (uri, document) => {
+			const original = document.getText();
+			const { stub } = open(document);
+			await stub.send({
+				type: 'edit',
+				editId: 7,
+				nodeId: parameterId(original, 'Count'),
+				value: '42'
+			});
+			await waitFor('the edit', () => document.getText().includes('<VALUE>42</VALUE>'));
+			await stub.send({ type: 'save' });
+			await waitFor('the save to finish', () => !document.isDirty);
+			assert.ok(fs.readFileSync(uri.fsPath, 'utf8').includes('<VALUE>42</VALUE>'));
+		});
+	});
+
 	test('AC6: an invalid numerical value is refused with a reason and no mutation', async () => {
 		await withEditingFixture('numeric.arxml', async (uri, document) => {
 			const before = document.getText();

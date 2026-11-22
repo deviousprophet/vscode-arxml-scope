@@ -41,6 +41,8 @@ export interface DetailsEditorHost {
 	postSelect(id: string): void;
 	focusRow(id: string): boolean;
 	updateInspector(): void;
+	/** Route a live Details value into the shared local draft. */
+	previewEdit?(message: { type: 'edit'; nodeId: string; value: string; field?: string }): void;
 	commitEdit(message: { type: 'edit'; nodeId: string; value: string; field?: string }): void;
 	focusAdjacentParameter(fromId: string, direction: string): string | undefined;
 }
@@ -101,6 +103,7 @@ let detailsEditorHost: DetailsEditorHost = {
 	postSelect: function () {},
 	focusRow: function () { return false; },
 	updateInspector: function () {},
+	previewEdit: function () {},
 	commitEdit: function () {},
 	focusAdjacentParameter: function () { return undefined; }
 };
@@ -184,75 +187,39 @@ function detailsRegisterKeydown(input: any, edit: DetailsEdit): void {
 	});
 	input.addEventListener('input', function () {
 		clearDetailsError(edit);
+		detailsPreview(edit);
 	});
 	input.addEventListener('change', function () {
 		clearDetailsError(edit);
+		detailsPreview(edit);
+	});
+}
+
+/** Feed the live Details value into the shared draft without committing a host write. */
+function detailsPreview(edit: DetailsEdit): void {
+	detailsEditorHost.previewEdit?.({
+		type: 'edit',
+		nodeId: edit.rowId,
+		...(edit.field === 'value' ? {} : { field: edit.field }),
+		value: edit.input.value
 	});
 }
 
 function detailsKeydown(edit: DetailsEdit, event: DetailsKeyEvent): void {
 	if (event.key === 'Enter') {
-		detailsCommitKey(edit, event);
+		// Enter no longer commits: Details is the same draft as the editor and Ctrl+S
+		// is the only save command.
+		event.preventDefault();
+		event.stopPropagation();
 	} else if (event.key === 'Escape') {
 		detailsCancelKey(edit, event);
-	} else if (event.key === 'Tab') {
-		detailsTabKey(edit, event);
 	}
-}
-
-function detailsCommitKey(edit: DetailsEdit, event: DetailsKeyEvent): void {
-	event.preventDefault();
-	event.stopPropagation();
-	commitDetailsEdit(edit.field);
 }
 
 function detailsCancelKey(edit: DetailsEdit, event: DetailsKeyEvent): void {
 	event.preventDefault();
 	event.stopPropagation();
 	cancelDetailsEdit(edit.field);
-}
-
-function detailsTabKey(edit: DetailsEdit, event: DetailsKeyEvent): void {
-	const current = detailsEdits[edit.field];
-	if (!isPendingDetailsEdit(current)) {
-		return;
-	}
-	const dir = event.shiftKey ? 'prev' : 'next';
-	const sibling = detailsTabSibling(edit.field, dir);
-	if (detailsTabLeavesPanel(edit, sibling)) {
-		// There is no other container field to move to. Commit, but let Tab move
-		// focus out of the panel instead of trapping it in a control the re-scan
-		// is about to replace.
-		commitDetailsEdit(edit.field);
-		return;
-	}
-	event.preventDefault();
-	event.stopPropagation();
-	detailsQueueTabMove(edit, dir);
-	commitDetailsEdit(edit.field);
-}
-
-function isPendingDetailsEdit(edit: DetailsEdit | undefined): edit is DetailsEdit {
-	return !!edit && !edit.pending;
-}
-
-function detailsTabSibling(field: string, dir: 'prev' | 'next'): string | undefined {
-	return field === 'value' ? undefined : detailsFieldSibling(field, dir);
-}
-
-function detailsTabLeavesPanel(edit: DetailsEdit, sibling: string | undefined): boolean {
-	if (edit.field === 'value') {
-		return false;
-	}
-	return !sibling || !document.getElementById(detailsFieldId(sibling));
-}
-
-function detailsQueueTabMove(edit: DetailsEdit, dir: 'prev' | 'next'): void {
-	if (edit.field === 'value') {
-		pendingMove = { dir: dir, from: edit.rowId };
-	} else {
-		pendingFieldFocus = { rowId: edit.rowId, field: edit.field, dir: dir };
-	}
 }
 
 /** A page reload starts from a clean draft state. */
@@ -277,7 +244,13 @@ function detailsDraft(
 ): DetailsEdit {
 	const previous = detailsStoredEdit(row, field);
 	if (previous) {
-		input.value = previous.input.value;
+		// Keep an unsaved draft, but adopt a newly accepted host value when there
+		// is no local difference.
+		if (previous.input.value !== previous.original) {
+			input.value = previous.input.value;
+		} else {
+			input.value = original;
+		}
 	}
 	const restored = restoredDetailsDraft(previous, original);
 	const edit: DetailsEdit = {
@@ -287,7 +260,7 @@ function detailsDraft(
 		error: error,
 		pending: restored.pending,
 		...(type === undefined ? {} : { type }),
-		original: restored.original
+		original: original
 	};
 	detailsEdits[field] = edit;
 	restoreDetailsError(edit, previous);
@@ -469,6 +442,22 @@ function detailsFirstContainerField(row: DetailsRowFields): string | undefined {
 	return row.definitionRef ? 'definitionRef' : undefined;
 }
 
+/** Update one Details input from the editor's shared draft, preserving its caret. */
+export function syncDetailsField(nodeId: string, field: string, value: string): void {
+	const edit = detailsEdits[field];
+	if (!edit || edit.rowId !== nodeId || edit.input.value === value) {
+		return;
+	}
+	const focused = document.activeElement === edit.input;
+	const start = typeof edit.input.selectionStart === 'number' ? edit.input.selectionStart : undefined;
+	const end = typeof edit.input.selectionEnd === 'number' ? edit.input.selectionEnd : undefined;
+	edit.input.value = value;
+	if (focused && start !== undefined && typeof edit.input.setSelectionRange === 'function') {
+		const position = Math.min(start, value.length);
+		edit.input.setSelectionRange(position, Math.min(end ?? position, value.length));
+	}
+}
+
 /** Open the first field of a row (or one named field) in the Details panel. */
 export function beginDetailsEdit(rowId: string, field?: string): boolean {
 	const row = detailsEditorHost.getRow(rowId);
@@ -525,22 +514,8 @@ function cancelDetailsEdit(field: string): void {
 	}
 	edit.input.value = edit.original;
 	clearDetailsError(edit);
+	detailsPreview(edit);
 	edit.input.focus();
-}
-
-function commitDetailsEdit(field: string): void {
-	const edit = detailsEdits[field];
-	if (!edit || edit.pending) {
-		return;
-	}
-	edit.pending = true;
-	clearDetailsError(edit);
-	flashId = edit.rowId;
-	if (edit.field === 'value') {
-		detailsEditorHost.commitEdit({ type: 'edit', nodeId: edit.rowId, value: edit.input.value });
-	} else {
-		detailsEditorHost.commitEdit({ type: 'edit', nodeId: edit.rowId, field: edit.field, value: edit.input.value });
-	}
 }
 
 function flashRow(nodeId: string | undefined): void {
@@ -615,7 +590,6 @@ function takePendingDetailsRun(): PendingDetailsRun {
 	flashId = null;
 	pendingMove = null;
 	pendingFieldFocus = null;
-	detailsEdits = {};
 	return { flash: flash, move: move, focus: focus };
 }
 
@@ -640,7 +614,8 @@ function applyDetailsNotice(message: DetailsNotice): void {
 	if (message.kind !== 'warn') {
 		return;
 	}
-	const edit = pendingDetailsEdit();
+	const focused = Object.values(detailsEdits).find((edit) => document.activeElement === edit.input);
+	const edit = pendingDetailsEdit() ?? focused ?? Object.values(detailsEdits)[0];
 	if (!edit) {
 		return;
 	}

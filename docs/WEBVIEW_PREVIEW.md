@@ -55,6 +55,7 @@ its old bundle.
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
 | `editor-syntax` | editor | 1400×900 | decimal, binary, text, reference and system-condition values; binary matches the numeric colour, references use the reference colour, and condition names/operators/numbers stay distinct |
 | `editor-dirty` | editor | 1400×900 | a typed parameter shows the `● Unsaved changes` toolbar marker |
+| `editor-invalid` | editor | 1400×900 | invalid direct input shows the red marker/error and a `Ctrl+S` attempt is blocked |
 | `editor-sticky` | editor | 1400×900 | deep scroll into the `Items` container; its header stays pinned by Monaco sticky scroll |
 | `editor-find` | editor | 1400×900 | native find widget open on `Items`, with the Rust result count and field highlight |
 | `diff-find` | diff | 1400×900 | native find widget in the modified pane, with the Rust diff match count |
@@ -91,6 +92,8 @@ strip or the page shell, and check each image before asking for review.
       `CANIPCORETYPE_SC==0` with distinct name, operator and number colours.
 - [ ] **Dirty typing is visible and coalesced.** `editor-dirty` shows `● Unsaved changes`
       after a multi-character typing run and posts exactly one edit message.
+- [ ] **Invalid input blocks save.** `editor-invalid` shows the page error, posts no edit and
+      no save after the `Ctrl+S` attempt.
 - [ ] **Sticky scroll keeps the scope.** `editor-sticky` shows the enclosing `Items` header
       pinned while the viewport is deep in its parameter list.
 - [ ] **The dirty marker is visible.** `editor-dirty` shows `● Unsaved changes` in the editor

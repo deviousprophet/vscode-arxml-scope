@@ -458,6 +458,19 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 			issues.push(`the typing run posted ${edits.length} edit messages instead of one`);
 		}
 	}
+	if (state.name === 'editor-invalid') {
+		const strip = document.getElementById('editor-error-strip');
+		if (strip === null || strip.hidden || !/Invalid value/.test(strip.textContent ?? '')) {
+			issues.push('the invalid edit did not show the page error');
+		}
+		const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
+		if (messages.some((message) => message.type === 'edit')) {
+			issues.push('an invalid edit was posted to the host');
+		}
+		if (messages.some((message) => message.type === 'save')) {
+			issues.push('an invalid edit allowed the document to save');
+		}
+	}
 	if (state.name === 'editor-sticky') {
 		if (audit.sticky === undefined || !audit.sticky.visible) {
 			issues.push('the sticky-scroll widget is not visible');

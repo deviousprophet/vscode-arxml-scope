@@ -110,6 +110,8 @@ export type EditorWebviewToProvider =
 	| { type: 'follow'; nodeId: string }
 	| { type: 'references'; nodeId: string }
 	| { type: 'edit'; editId?: number; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string; baseRevision?: number }
+	/** The page asks the host to save the TextDocument after pending edits settle. */
+	| { type: 'save' }
 	| { type: 'flushed'; requestId: number }
 	| { type: 'delete'; nodeId: string }
 	| { type: 'duplicate'; nodeId: string }

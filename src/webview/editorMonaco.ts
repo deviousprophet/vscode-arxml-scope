@@ -51,7 +51,8 @@ import {
 	detailsValueInput,
 	handleDetailsEditorMessage,
 	resetDetailsEditorState,
-	setDetailsEditorHost
+	setDetailsEditorHost,
+	syncDetailsField
 } from './components/detailsEditor/detailsEditor';
 import {
 	applyDisabledCount,
@@ -127,6 +128,16 @@ let hostAcks = false;
 let editTimer: ReturnType<typeof setTimeout> | undefined;
 const EDIT_DEBOUNCE_MS = 160;
 const flushRequests = new Set<number>();
+interface InvalidEdit {
+	nodeId: string;
+	field: 'value' | 'shortName' | 'definitionRef';
+	message: string;
+	display: string;
+	editId: number;
+}
+let invalidEdits = new Map<string, InvalidEdit>();
+let saveRequested = false;
+let errorStrip: HTMLElement | null = null;
 let decorationIds: string[] = [];
 let detailsBody: HTMLElement | null = null;
 let detailsStatus: HTMLElement | null = null;
@@ -501,8 +512,187 @@ function hasPendingEdits(): boolean {
 	return localEditPending();
 }
 
+function localDraftExists(): boolean {
+	return pendingEdits.size > 0 || inflightEdits.size > 0 || editTimer !== undefined || invalidEdits.size > 0;
+}
+
 function updateDirtyStatus(): void {
-	editorToolbar?.setDirty(localEditPending() || hostDirty);
+	const first = invalidEdits.values().next().value as InvalidEdit | undefined;
+	editorToolbar?.setDirty(localEditPending() || hostDirty, first?.message);
+}
+
+function maybeRequestSave(): void {
+	if (
+		!saveRequested ||
+		invalidEdits.size > 0 ||
+		pendingEdits.size > 0 ||
+		inflightEdits.size > 0 ||
+		editTimer !== undefined
+	) {
+		return;
+	}
+	saveRequested = false;
+	postToHost({ type: 'save' });
+}
+
+function requestSave(): void {
+	if (invalidEdits.size > 0) {
+		saveRequested = false;
+		const first = invalidEdits.values().next().value as InvalidEdit;
+		setSelection(first.nodeId);
+		revealRow(first.nodeId, true);
+		updateErrorState();
+		return;
+	}
+	saveRequested = true;
+	flushEdits();
+	maybeRequestSave();
+}
+
+function fieldKey(nodeId: string, field: string): string {
+	return `${nodeId}|${field}`;
+}
+
+function xmlInvalid(text: string): boolean {
+	return /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
+}
+
+function localValueError(row: EcucRow, field: string, value: string): string | undefined {
+	if (xmlInvalid(value)) {
+		return 'XML cannot represent this character';
+	}
+	if (field !== 'value' || row.kind !== 'parameter') {
+		return undefined;
+	}
+	const type = row.parameterType;
+	if (type === 'Integer' && !/^[+-]?(?:\d+|0[xX][0-9a-fA-F]+|0[bB][01]+)$/.test(value)) {
+		return 'Invalid integer value';
+	}
+	if (
+		type === 'Float' &&
+		!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) &&
+		!/^[+-]?(?:INF|NaN)$/.test(value)
+	) {
+		return 'Invalid float value';
+	}
+	if (type === 'Boolean' && !/^(?:true|false)$/i.test(value)) {
+		return 'Invalid boolean value';
+	}
+	return undefined;
+}
+
+function displayForRaw(row: EcucRow, field: string, raw: string): string {
+	if (field !== 'value') {
+		return raw;
+	}
+	const shown = row.shownValue ?? row.value ?? '';
+	const quoted = shown.length >= 2 && shown.startsWith('"') && shown.endsWith('"');
+	return quoted ? `"${raw.replace(/\r\n|\r|\n/g, '\\n')}"` : raw;
+}
+
+function markerForInvalid(invalid: InvalidEdit): monaco.editor.IMarkerData | undefined {
+	const line = documentModel.rowLine.get(invalid.nodeId);
+	const lineText = line === undefined ? undefined : documentModel.lines[line - 1];
+	if (line === undefined || lineText === undefined) {
+		return undefined;
+	}
+	const span = lineText.fieldSpans.find((candidate) => candidate.field === invalid.field);
+	return {
+		severity: monaco.MarkerSeverity.Error,
+		message: invalid.message,
+		startLineNumber: line,
+		startColumn: span?.startColumn ?? 1,
+		endLineNumber: line,
+		endColumn: span?.endColumn ?? Math.max(lineText.text.length + 1, 2)
+	};
+}
+
+function updateErrorState(): void {
+	const first = invalidEdits.values().next().value as InvalidEdit | undefined;
+	if (errorStrip !== null) {
+		errorStrip.hidden = first === undefined;
+		errorStrip.textContent = first === undefined ? '' : `Invalid value — ${first.message}`;
+	}
+	if (model !== undefined) {
+		const markers = Array.from(invalidEdits.values())
+			.map(markerForInvalid)
+			.filter((marker): marker is monaco.editor.IMarkerData => marker !== undefined);
+		monaco.editor.setModelMarkers(model, 'arxml-ecuc', markers);
+	}
+	if (first !== undefined) {
+		setDetailsStatus({ message: first.message, kind: 'warn' });
+	}
+	updateDirtyStatus();
+}
+
+function replaceSyntheticLine(line: number, row: EcucRow, display: string): void {
+	if (model === undefined) {
+		return;
+	}
+	const built = syntheticRowLine({
+		...row,
+		...(row.kind === 'parameter' ? { value: rawFieldText(row, display), shownValue: display } : {}),
+		...(row.kind === 'container' ? { shortName: display } : {})
+	});
+	const anchor = captureCursor();
+	documentModel.lines[line - 1] = {
+		line,
+		rowId: row.id,
+		kind: row.kind,
+		text: built.text,
+		fieldSpans: built.fieldSpans,
+		searchSpans: built.searchSpans
+	};
+	documentModel.text = documentModel.lines.map((candidate) => candidate.text).join('\n');
+	applyingModel = true;
+	model.pushEditOperations(
+		[],
+		[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text: built.text }],
+		function () {
+			return null;
+		}
+	);
+	applyingModel = false;
+	restoreCursor(anchor);
+}
+
+function syncDetails(nodeId: string, field: string, raw: string): void {
+	syncDetailsField(nodeId, field, raw);
+}
+
+/** The single mutation path for a live field value from Monaco or Details. */
+function applyLocalField(
+	nodeId: string,
+	field: 'value' | 'shortName' | 'definitionRef',
+	raw: string,
+	display = raw
+): void {
+	const row = rowById.get(nodeId);
+	const line = documentModel.rowLine.get(nodeId);
+	if (row === undefined || line === undefined) {
+		return;
+	}
+	const key = fieldKey(nodeId, field);
+	const error = localValueError(row, field, raw);
+	const shown = displayForRaw(row, field, display);
+	replaceSyntheticLine(line, row, shown);
+	const detailsValue = field === 'value' ? raw : display;
+	syncDetails(nodeId, field, detailsValue);
+	if (error !== undefined) {
+		// The invalid text stays visible, but it never enters the host document.
+		pendingEdits.delete(key);
+		invalidEdits.set(key, { nodeId, field, message: error, display: shown, editId: (editSequence += 1) });
+		updateErrorState();
+		return;
+	}
+	invalidEdits.delete(key);
+	queueEdit({
+		nodeId,
+		field,
+		value: field === 'value' ? rawFieldText(row, raw) : raw,
+		display: shown
+	});
+	updateErrorState();
 }
 
 function maybeAcknowledgeFlush(): void {
@@ -579,44 +769,12 @@ function hasNewerLocalEdit(edit: QueuedEdit): boolean {
 	const key = editKey(edit);
 	return (
 		Array.from(pendingEdits.values()).some((candidate) => editKey(candidate) === key && candidate.editId > edit.editId) ||
-		Array.from(inflightEdits.values()).some((candidate) => editKey(candidate) === key && candidate.editId > edit.editId)
+		Array.from(inflightEdits.values()).some((candidate) => editKey(candidate) === key && candidate.editId > edit.editId) ||
+		(invalidEdits.get(key)?.editId ?? 0) > edit.editId
 	);
 }
 
 /** Put the host-accepted row text back after a refusal with no newer local edit. */
-function revertRejectedEdit(edit: QueuedEdit): void {
-	const row = rowById.get(edit.nodeId);
-	const line = documentModel.rowLine.get(edit.nodeId);
-	if (row === undefined || line === undefined || model === undefined) {
-		return;
-	}
-	const built = syntheticRowLine(row);
-	const anchor = captureCursor();
-	documentModel.lines[line - 1] = {
-		line,
-		rowId: row.id,
-		kind: row.kind,
-		text: built.text,
-		fieldSpans: built.fieldSpans,
-		searchSpans: built.searchSpans
-	};
-	overlayLocalOnLine(documentModel.lines[line - 1]);
-	documentModel.text = documentModel.lines.map((candidate) => candidate.text).join('\n');
-	applyingModel = true;
-	model.pushEditOperations(
-		[],
-		[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text: documentModel.lines[line - 1].text }],
-		function () {
-			return null;
-		}
-	);
-	applyingModel = false;
-	restoreCursor(anchor);
-	updateInspector();
-	applyDecorations();
-	invalidateNativeFind();
-}
-
 function handleEditResult(message: { editId: number; ok: boolean; reason?: string; revision: number }): void {
 	if (typeof message.editId !== 'number' || typeof message.revision !== 'number' || typeof message.ok !== 'boolean') {
 		return;
@@ -630,11 +788,25 @@ function handleEditResult(message: { editId: number; ok: boolean; reason?: strin
 	hostRevision = Math.max(hostRevision, message.revision);
 	if (message.ok) {
 		hostDirty = true;
+		const invalid = invalidEdits.get(editKey(edit));
+		if (invalid === undefined || invalid.editId <= edit.editId) {
+			invalidEdits.delete(editKey(edit));
+		}
 	} else if (!hasNewerLocalEdit(edit)) {
+		// Keep the refused text visible and marked instead of silently restoring the
+		// old value; Ctrl+S stays blocked until the user corrects or reverts it.
+		saveRequested = false;
+		invalidEdits.set(editKey(edit), {
+			nodeId: edit.nodeId,
+			field: edit.field ?? 'value',
+			message: message.reason ?? 'the edit was refused',
+			display: edit.display,
+			editId: edit.editId
+		});
 		if (message.reason !== undefined && message.reason !== '') {
 			setDetailsStatus({ message: message.reason, kind: 'warn' });
 		}
-		revertRejectedEdit(edit);
+		updateErrorState();
 	}
 	updateDirtyStatus();
 	if (pendingEdits.size > 0) {
@@ -642,6 +814,7 @@ function handleEditResult(message: { editId: number; ok: boolean; reason?: strin
 	} else {
 		maybeAcknowledgeFlush();
 	}
+	maybeRequestSave();
 }
 
 function revealRow(id: string | undefined, focus = false, column = 1): void {
@@ -670,6 +843,16 @@ function latestLocalEdits(): QueuedEdit[] {
 		if (current === undefined || edit.editId > current.editId) {
 			latest.set(editKey(edit), edit);
 		}
+	}
+	for (const [key, invalid] of invalidEdits) {
+		latest.set(key, {
+			type: 'edit',
+			editId: Number.MAX_SAFE_INTEGER,
+			nodeId: invalid.nodeId,
+			field: invalid.field,
+			value: invalid.display,
+			display: invalid.display
+		});
 	}
 	return Array.from(latest.values());
 }
@@ -703,6 +886,7 @@ function overlayLocalEdits(doc: SyntheticDocument): void {
 
 function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
 	const anchor = captureCursor();
+	const viewState = editor?.saveViewState();
 	rows = Array.isArray(nextRows) ? nextRows : [];
 	indexRows();
 	if (nextHeader !== undefined) {
@@ -717,6 +901,9 @@ function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextS
 		// drop every sticky candidate. A real editor document ends with a newline.
 		model.setValue(`${documentModel.text}\n`);
 		applyingModel = false;
+		if (viewState !== undefined && viewState !== null) {
+			editor?.restoreViewState(viewState);
+		}
 		setModelFolding(model, documentModel.foldingRanges);
 	}
 	if (nextSelectedId !== undefined) {
@@ -1185,15 +1372,12 @@ function handleMultiChange(event: monaco.editor.IModelContentChangedEvent): void
 		return;
 	}
 	for (const edit of edits) {
-		edit.lineText.text = model.getLineContent(edit.lineText.line);
-		edit.span.text = edit.text;
-		edit.span.endColumn = edit.span.startColumn + edit.text.length;
-		queueEdit({
-			nodeId: edit.span.nodeId,
-			field: edit.span.field,
-			value: edit.span.field === 'value' ? rawFieldText(edit.row, edit.text) : edit.text,
-			display: edit.text
-		});
+		applyLocalField(
+			edit.span.nodeId,
+			edit.span.field,
+			edit.span.field === 'value' ? rawFieldText(edit.row, edit.text) : edit.text,
+			edit.text
+		);
 	}
 }
 
@@ -1211,6 +1395,23 @@ function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
 		return;
 	}
 	const line = change.range.startLineNumber;
+	const restored = (): void => {
+		const text = documentModel.lines[line - 1]?.text;
+		if (text === undefined || model === undefined) {
+			return;
+		}
+		const anchor = captureCursor();
+		applyingModel = true;
+		model.pushEditOperations(
+			[],
+			[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text }],
+			function () {
+				return null;
+			}
+		);
+		applyingModel = false;
+		restoreCursor(anchor);
+	};
 	const spans = documentModel.lines[line - 1]?.fieldSpans ?? [];
 	const span = spans.find(
 		(candidate) =>
@@ -1218,44 +1419,38 @@ function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
 			change.range.endColumn <= candidate.endColumn
 	);
 	if (span === undefined || model === undefined) {
-		rebuildModel();
+		restored();
 		return;
 	}
 	const lineText = documentModel.lines[line - 1];
 	if (lineText === undefined) {
-		rebuildModel();
 		return;
 	}
 	const current = model.getLineContent(line);
 	const suffix = lineText.text.slice(span.endColumn - 1);
 	const text = current.slice(span.startColumn - 1, current.length - suffix.length);
 	if (text === '' || /[\r\n]/.test(text)) {
-		rebuildModel();
+		restored();
 		return;
 	}
 	const row = rowById.get(span.nodeId);
 	if (row === undefined) {
-		rebuildModel();
+		restored();
 		return;
 	}
 	// Keep the local map in sync while the host round-trip is in flight.
-	lineText.text = current;
-	span.text = text;
-	span.endColumn = span.startColumn + text.length;
-	queueEdit({
-		nodeId: span.nodeId,
-		field: span.field,
-		value: span.field === 'value' ? rawFieldText(row, text) : text,
-		display: text
-	});
+	applyLocalField(span.nodeId, span.field, span.field === 'value' ? rawFieldText(row, text) : text, text);
 }
 
 function revertToAccepted(): void {
 	clearPendingEdits();
+	invalidEdits.clear();
+	saveRequested = false;
 	documentModel = buildSyntheticDocument(rows, header);
 	rebuildModel();
 	updateInspector();
 	applyDecorations();
+	updateErrorState();
 }
 
 function rebuildModel(): void {
@@ -1263,10 +1458,14 @@ function rebuildModel(): void {
 		return;
 	}
 	const anchor = captureCursor();
+	const viewState = editor?.saveViewState();
 	documentModel.text = documentModel.lines.map((line) => line.text).join('\n');
 	applyingModel = true;
 	model.setValue(`${documentModel.text}\n`);
 	applyingModel = false;
+	if (viewState !== undefined && viewState !== null) {
+		editor?.restoreViewState(viewState);
+	}
 	restoreCursor(anchor);
 	invalidateNativeFind();
 }
@@ -1276,20 +1475,22 @@ function installShortcuts(): void {
 		return;
 	}
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, function () {
-		if (hasPendingEdits()) {
-			revertToAccepted();
+		if (localDraftExists()) {
+			editor?.trigger('api', 'undo', null);
 			return;
 		}
 		postToHost({ type: 'undo' });
 	});
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyZ, function () {
-		if (hasPendingEdits()) {
+		if (localDraftExists()) {
+			editor?.trigger('api', 'redo', null);
 			return;
 		}
 		postToHost({ type: 'redo' });
 	});
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY, function () {
-		if (hasPendingEdits()) {
+		if (localDraftExists()) {
+			editor?.trigger('api', 'redo', null);
 			return;
 		}
 		postToHost({ type: 'redo' });
@@ -1374,7 +1575,7 @@ function handleMessage(message: EditorProviderToWebview): void {
 		}
 		applySettings(message.document.settings);
 		applyRows(message.document.rows, message.document.header, message.document.selectedId);
-		updateDirtyStatus();
+		updateErrorState();
 		return;
 	}
 	if (message.type === 'documentPatch') {
@@ -1390,7 +1591,7 @@ function handleMessage(message: EditorProviderToWebview): void {
 			hostDirty = message.dirty;
 		}
 		applyPatch(message.patch, message.header, message.selectedId);
-		updateDirtyStatus();
+		updateErrorState();
 		return;
 	}
 	if (message.type === 'editResult') {
@@ -1555,6 +1756,9 @@ function mountDetails(): void {
 			return true;
 		},
 		updateInspector,
+		previewEdit: function (message) {
+			applyLocalField(message.nodeId, (message.field ?? 'value') as 'value' | 'shortName' | 'definitionRef', message.value);
+		},
 		commitEdit: function (message) {
 			postToHost(message);
 		},
@@ -1590,6 +1794,12 @@ export async function mountEditor(): Promise<void> {
 		flushEdits();
 	});
 	window.addEventListener('pagehide', flushEdits);
+	window.addEventListener('beforeunload', function (event) {
+		if (localDraftExists()) {
+			event.preventDefault();
+			event.returnValue = '';
+		}
+	});
 	editor.onDidChangeCursorPosition(function (event) {
 		const id = rowIdAtLine(event.position.lineNumber);
 		if (id !== undefined && id !== selectedId) {
@@ -1606,6 +1816,19 @@ export async function mountEditor(): Promise<void> {
 	mountToolbar();
 	mountDetails();
 	mountConditionsPanel();
+	errorStrip = document.getElementById('editor-error-strip');
+	document.addEventListener(
+		'keydown',
+		function (event) {
+			const command = event.ctrlKey || event.metaKey;
+			if (command && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 's') {
+				event.preventDefault();
+				event.stopPropagation();
+				requestSave();
+			}
+		},
+		true
+	);
 	setConditionRows([]);
 	setConditionsCallback(function (entries) {
 		postToHost({ type: 'conditions', entries });

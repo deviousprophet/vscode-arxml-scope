@@ -60,6 +60,9 @@
 .editor-dirty-status[hidden] {
 	display: none;
 }
+.editor-dirty-status.invalid {
+	color: var(--vscode-errorForeground, var(--vscode-editorError-foreground));
+}
 .tool {
 	display: inline-flex;
 	align-items: center;

@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Direct and Details ECUC edits now share one draft: typing in either view updates the other, invalid values show Monaco/page/Details errors, and `Ctrl+S` is blocked until the value is valid
 - ECUC sticky scroll now pins the enclosing module and container headers while scrolling; the synthetic model's trailing newline keeps full-document folding scopes valid
 - The ECUC editor now shows an `Unsaved changes` marker in the toolbar and a `•` on the tab title, flushes pending typing before save, and acknowledges each edit with its document revision
 - System-condition expressions color their names, comparison operators, numbers, literals and punctuation separately instead of one purple span

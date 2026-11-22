@@ -27,6 +27,7 @@ interface PreviewPayload {
 	find?: string;
 	edit?: string;
 	scrollLine?: number;
+	trySave?: boolean;
 }
 
 interface PreviewCell {
@@ -331,6 +332,12 @@ async function applyDirtyEdit(): Promise<void> {
 		await new Promise((resolve) => setTimeout(resolve, 40));
 	}
 	await new Promise((resolve) => setTimeout(resolve, 250));
+	if (payload.trySave === true) {
+		document.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true })
+		);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
 }
 
 async function applyScroll(): Promise<void> {

@@ -34,6 +34,8 @@ export interface PreviewState {
 	edit?: string;
 	/** Scrolls the editor to this 1-based line and waits for sticky scope. */
 	scrollLine?: number;
+	/** Attempts Ctrl+S after the edit, exercising the save guard. */
+	trySave?: boolean;
 }
 
 export const STATES: PreviewState[] = [
@@ -54,6 +56,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'editor', page: 'editor', width: 1400, height: 900, select: true },
 	{ name: 'editor-syntax', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-dirty', page: 'editor', width: 1400, height: 900, edit: '42' },
+	{ name: 'editor-invalid', page: 'editor', width: 1400, height: 900, edit: 'abc', trySave: true },
 	{ name: 'editor-sticky', page: 'editor', width: 1400, height: 900, scrollLine: 40 },
 	{ name: 'editor-find', page: 'editor', width: 1400, height: 900, find: 'Items' },
 	{ name: 'diff-find', page: 'diff', width: 1400, height: 900, merge: true, find: 'Items' },
@@ -212,7 +215,8 @@ function payloadFor(state: PreviewState, document: unknown) {
 		select: state.select,
 		find: state.find,
 		edit: state.edit,
-		scrollLine: state.scrollLine
+		scrollLine: state.scrollLine,
+		trySave: state.trySave
 	};
 }
 
