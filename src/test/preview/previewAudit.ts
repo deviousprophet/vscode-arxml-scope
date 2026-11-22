@@ -461,8 +461,8 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 	if (state.name === 'editor-sticky') {
 		if (audit.sticky === undefined || !audit.sticky.visible) {
 			issues.push('the sticky-scroll widget is not visible');
-		} else if (!audit.sticky.text.includes('Items')) {
-			issues.push('the sticky-scroll widget does not show the enclosing Items container');
+		} else if (!audit.sticky.text.includes('Items') || !audit.sticky.text.includes('P.Preview')) {
+			issues.push('the sticky-scroll widget does not show the enclosing module and Items container');
 		}
 	}
 	if (state.name === 'editor' && audit.sticky?.visible === true) {
