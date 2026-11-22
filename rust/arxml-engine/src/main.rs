@@ -19,6 +19,7 @@ use arxml_core::diff::{
     build_diff_document, DiffDocument, DiffHeader, DiffOptions, DiffSide, FileLabel,
 };
 use arxml_core::ecuc::{edit, Document, RowOptions};
+use arxml_core::search::{plan_replace, search_diff, search_rows, ReplaceRequest, SearchOptions};
 use serde_json::{json, Value};
 
 const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -181,6 +182,12 @@ fn main() {
 
 /// The error envelope, with a machine code for the failures a client can act on.
 fn failure_frame(id: u64, error: String) -> Value {
+    if let Some(reason) = error.strip_prefix("invalid_regex: ") {
+        return json!({"id": id, "ok": false, "code": "invalid_regex", "reason": reason});
+    }
+    if let Some(reason) = error.strip_prefix("no_baseline: ") {
+        return json!({"id": id, "ok": false, "code": "no_baseline", "reason": reason});
+    }
     let code = error.starts_with("document exceeds").then_some("too_large");
     match code {
         Some(code) => json!({"id": id, "ok": false, "code": code, "reason": error}),
@@ -225,7 +232,10 @@ impl Engine {
             "doc.model" => self.model(id, &mut out, header),
             "diff.compute" => self.diff_compute(id, &mut out, header),
             "diff.patch" => self.diff_patch(id, &mut out, header),
+            "diff.search" => self.diff_search(id, &mut out, header),
             "copy.plan" => self.copy_plan(id, &mut out, header),
+            "doc.search" => self.doc_search(id, &mut out, header),
+            "doc.replace" => self.doc_replace(id, &mut out, header),
             other => Err(format!("unknown operation {other}")),
         }
     }
@@ -645,6 +655,61 @@ impl Engine {
         write_frame(out, &json!({"id": id, "ok": true}), &body).map_err(|error| error.to_string())
     }
 
+    fn doc_search(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let document_id = doc_id(header)?;
+        let document = self.documents.get(&document_id).ok_or("unknown document")?;
+        let query = header
+            .get("query")
+            .and_then(Value::as_str)
+            .ok_or("query is required")?;
+        let options = search_options(header)?;
+        let result = search_rows(document.rows(), query, &options).map_err(search_error)?;
+        let body = serde_json::to_vec(&result).map_err(|error| error.to_string())?;
+        write_frame(out, &json!({"id": id, "ok": true}), &body).map_err(|error| error.to_string())
+    }
+
+    fn doc_replace(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let document_id = doc_id(header)?;
+        let document = self.documents.get(&document_id).ok_or("unknown document")?;
+        let request: ReplaceRequest =
+            serde_json::from_value(header.clone()).map_err(|error| error.to_string())?;
+        let result = plan_replace(document, &request);
+        let body = serde_json::to_vec(&result).map_err(|error| error.to_string())?;
+        write_frame(out, &json!({"id": id, "ok": true}), &body).map_err(|error| error.to_string())
+    }
+
+    fn diff_search(&mut self, id: u64, out: &mut impl Write, header: &Value) -> Result<(), String> {
+        let left = header.get("left").ok_or("left is required")?;
+        let right = header.get("right").ok_or("right is required")?;
+        let left_id = left
+            .get("docId")
+            .and_then(Value::as_u64)
+            .ok_or("left.docId is required")? as u32;
+        let right_id = right
+            .get("docId")
+            .and_then(Value::as_u64)
+            .ok_or("right.docId is required")? as u32;
+        let query = header
+            .get("query")
+            .and_then(Value::as_str)
+            .ok_or("query is required")?;
+        let options = search_options(header)?;
+        let changes_only = header
+            .get("changesOnly")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let Some(baseline) = self.last_diff.as_ref() else {
+            return Err("no_baseline: no comparison has been computed".to_string());
+        };
+        if baseline.left_id != left_id || baseline.right_id != right_id {
+            return Err("no_baseline: the comparison changed; reload it".to_string());
+        }
+        let result =
+            search_diff(&baseline.document, query, &options, changes_only).map_err(search_error)?;
+        let body = serde_json::to_vec(&result).map_err(|error| error.to_string())?;
+        write_frame(out, &json!({"id": id, "ok": true}), &body).map_err(|error| error.to_string())
+    }
+
     fn diff_compute(
         &mut self,
         id: u64,
@@ -841,6 +906,20 @@ fn upload_id(header: &Value) -> Result<u32, String> {
         .and_then(Value::as_u64)
         .map(|value| value as u32)
         .ok_or_else(|| "uploadId is required".to_string())
+}
+
+fn search_options(header: &Value) -> Result<SearchOptions, String> {
+    header
+        .get("options")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|error| error.to_string())
+        .map(|options| options.unwrap_or_default())
+}
+
+fn search_error(error: arxml_core::search::SearchError) -> String {
+    format!("invalid_regex: {}", error.message)
 }
 
 fn row_options(header: &Value) -> Result<RowOptions, String> {

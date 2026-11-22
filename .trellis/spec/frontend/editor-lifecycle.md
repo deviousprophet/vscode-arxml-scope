@@ -45,6 +45,19 @@ TypeScript fallback.
   `planCopy`/`planDelete`/`wrapWithAncestors` from production code. Those stay as the
   parity oracle only.
 
+### Find and replace
+
+- Find is a floating `.find-widget` in the page shell, hidden until `Ctrl+F`
+  (`Ctrl+H` opens the replace row). It is not a toolbar slot; `Escape` closes it and
+  returns focus to the tree/list.
+- `doc.search` and `diff.search` own the match list, count and navigation;
+  `doc.replace` owns the validated edit plans. The page matcher in
+  `render/searchPattern.ts` is only for `<mark>` and schema/package header text.
+- Replace is document-only and targets parameter values and container short names.
+  All plans are applied in one `WorkspaceEdit`; a refusal writes nothing.
+- Search requests are generation-guarded: a late `findResult` for an older request
+  id must be ignored after typing, clearing or closing.
+
 ## Scenario: Open and coordinate one ECUC custom editor
 
 ### 1. Scope / Trigger

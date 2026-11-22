@@ -276,8 +276,8 @@ function isOutsideMatches(current: number, count: number): boolean {
 	return current < 0 || current >= count;
 }
 
-export function stepMatch(
-	matches: readonly number[],
+export function stepMatch<T>(
+	matches: readonly T[],
 	current: number,
 	direction: 1 | -1
 ): number {

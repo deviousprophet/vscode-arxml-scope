@@ -870,7 +870,41 @@ export class DiffPanel {
 				onMatchMode(message.semantic);
 				return true;
 			}
+			if (message.type === 'find') {
+				void handleFind(message);
+				return true;
+			}
 			return false;
+		};
+
+		const handleFind = async (message: Extract<DiffWebviewToProvider, { type: 'find' }>): Promise<void> => {
+			const empty = { matches: [], total: 0, limited: false };
+			if (engine.searchDiff === undefined) {
+				await panel.webview.postMessage({
+					type: 'findResult',
+					requestId: message.requestId,
+					result: empty,
+					error: 'Search is unavailable in this engine'
+				});
+				return;
+			}
+			try {
+				const result = await engine.searchDiff(
+					engineSide(preparedLeft, leftLabel),
+					engineSide(preparedRight, rightLabel),
+					message.query,
+					message.options,
+					message.changesOnly
+				);
+				await panel.webview.postMessage({ type: 'findResult', requestId: message.requestId, result });
+			} catch (error) {
+				await panel.webview.postMessage({
+					type: 'findResult',
+					requestId: message.requestId,
+					result: empty,
+					error: errorMessage(error)
+				});
+			}
 		};
 
 		const handleMessage = (message: DiffWebviewToProvider): void => {

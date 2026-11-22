@@ -13,13 +13,12 @@ import {
 import { installMarkup } from '../pageTestUtils';
 
 suite('Toolbar component', () => {
-	test('the editor strip is grow, Collapse, Expand, Sidebar, then the Search slot', () => {
-		const html = renderEditorToolbarHtml('<div class="search-box"></div>');
+	test('the editor strip is grow, Collapse, Expand, then Sidebar', () => {
+		const html = renderEditorToolbarHtml();
 		assert.ok(html.startsWith('<div class="toolbar">'));
 		assert.ok(html.indexOf('class="grow"') < html.indexOf('id="collapse-all"'));
 		assert.ok(html.indexOf('id="collapse-all"') < html.indexOf('id="expand-all"'));
 		assert.ok(html.indexOf('id="expand-all"') < html.indexOf('id="toggle-sidebar"'));
-		assert.ok(html.indexOf('id="toggle-sidebar"') < html.indexOf('class="search-box"'));
 		const buttons = html.match(/<button[^>]*class="tool diff-tool"[\s\S]*?<\/button>/g) ?? [];
 		assert.strictEqual(buttons.length, 3, 'three icon-over-label actions');
 		for (const button of buttons) {
@@ -45,7 +44,7 @@ suite('Toolbar component', () => {
 	});
 
 	test('the diff strip groups view, context, matching and navigation with dividers', () => {
-		const html = renderDiffToolbarHtml('<div class="search-box"></div>');
+		const html = renderDiffToolbarHtml();
 		assert.ok(html.indexOf('class="toolbar-left"') < html.indexOf('class="toolbar-center"'));
 		assert.ok(html.indexOf('class="toolbar-center"') < html.indexOf('class="toolbar-right"'));
 		const left = html.slice(html.indexOf('class="toolbar-left"'), html.indexOf('class="toolbar-center"'));
@@ -65,14 +64,14 @@ suite('Toolbar component', () => {
 		assert.ok(!centre.includes('id="diff-prev"'));
 		assert.ok(!centre.includes('id="diff-context"'));
 		const right = html.slice(html.indexOf('class="toolbar-right"'));
-		assert.ok(right.indexOf('id="diff-match-status"') < right.indexOf('class="search-box"'));
+		assert.ok(right.includes('id="diff-match-status"'));
 		assert.ok(/id="diff-swap"[^>]*aria-label="Swap sides"/.test(html));
 		assert.ok(/id="diff-swap"[^>]*aria-pressed="false"/.test(html));
 		assert.ok(!html.includes('diff-summary'), 'the count summary is gone');
 	});
 
 	test('every main diff toolbar button has an icon over a label', () => {
-		const html = renderDiffToolbarHtml('<div class="search-box"></div>');
+		const html = renderDiffToolbarHtml();
 		const buttons = html.match(/<button[^>]*class="tool diff-tool[^"]*"[\s\S]*?<\/button>/g) ?? [];
 		assert.strictEqual(buttons.length, 11);
 		for (const button of buttons) {
@@ -88,7 +87,7 @@ suite('Toolbar component', () => {
 	});
 
 	test('mount is idempotent and reports one action per click', () => {
-		const dom = installMarkup(`<body>${renderEditorToolbarHtml('<div class="search-box"></div>')}</body>`);
+		const dom = installMarkup(`<body>${renderEditorToolbarHtml()}</body>`);
 		try {
 			let collapsed = 0;
 			let expanded = 0;
@@ -113,7 +112,7 @@ suite('Toolbar component', () => {
 	});
 
 	test('setSidebarHidden carries the pressed state, label and title both ways', () => {
-		const dom = installMarkup(`<body>${renderEditorToolbarHtml('<div class="search-box"></div>')}</body>`);
+		const dom = installMarkup(`<body>${renderEditorToolbarHtml()}</body>`);
 		try {
 			const toolbar = new EditorToolbar();
 			const toggle = dom.document.getElementById('toggle-sidebar')!;
@@ -134,7 +133,7 @@ suite('Toolbar component', () => {
 	});
 
 	test('setViewMode writes the context disabled state, labels and titles both ways', () => {
-		const dom = installMarkup(`<body>${renderDiffToolbarHtml('<div class="search-box"></div>')}</body>`);
+		const dom = installMarkup(`<body>${renderDiffToolbarHtml()}</body>`);
 		try {
 			const toolbar = new DiffToolbar();
 			const context = dom.document.getElementById('diff-context')!;
@@ -154,7 +153,7 @@ suite('Toolbar component', () => {
 	});
 
 	test('setMatchMode carries the semantic pending state and tolerates missing buttons', () => {
-		const dom = installMarkup(`<body>${renderDiffToolbarHtml('<div class="search-box"></div>')}</body>`);
+		const dom = installMarkup(`<body>${renderDiffToolbarHtml()}</body>`);
 		try {
 			const toolbar = new DiffToolbar();
 			toolbar.setMatchMode(true, true);
@@ -172,7 +171,7 @@ suite('Toolbar component', () => {
 	});
 
 	test('the diff toolbar reports view, mode, navigation, swap and context state', () => {
-		const dom = installMarkup(`<body>${renderDiffToolbarHtml('<div class="search-box"></div>')}</body>`);
+		const dom = installMarkup(`<body>${renderDiffToolbarHtml()}</body>`);
 		try {
 			const calls: string[] = [];
 			const toolbar = new DiffToolbar({

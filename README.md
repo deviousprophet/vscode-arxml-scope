@@ -7,8 +7,8 @@
 
 Browse and edit AUTOSAR ECUC-Values files without reading raw XML. The ECUC editor presents modules,
 containers, parameters and references as a keyboard-navigable document, with a tabbed sidebar for
-details, conditions and definition-derived type/range/default data, whole-tree search, and a read-only
-semantic diff. The custom editor is opt-in: a plain open still uses the text editor.
+details, conditions and definition-derived type/range/default data, VS Code-style find and replace, and a
+read-only semantic diff. The custom editor is opt-in: a plain open still uses the text editor.
 
 ## Quick start
 
@@ -16,7 +16,8 @@ semantic diff. The custom editor is opt-in: a plain open still uses the text edi
 2. Right-click an ECUC-Values file and choose **ARXML Scope → Open with ECUC Editor**, or use *Open With…*.
 3. Select a row to inspect it; edit a parameter value or a container field in **Details** and press
    `Enter`.
-4. Type a query in **Search** and press `Enter`; use the **Conditions** tab for `SW-SYSCOND` values.
+4. Press `Ctrl+F` to find, `Ctrl+H` to replace, and toggle `Aa`, `ab|` or `.*`; use the **Conditions**
+   tab for `SW-SYSCOND` values.
 5. To compare, choose **ARXML Scope → Select as First File to Compare** on one file, then
    **ARXML Scope → Compare with First File** on the other.
 

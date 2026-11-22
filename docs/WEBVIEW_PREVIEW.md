@@ -58,7 +58,7 @@ its old bundle.
 | `toolbar-1024` | diff | 1024×900 | icon-only 40px tools; Swap over the divider |
 | `toolbar-900` | diff | 900×900 | 36px tools; dividers hidden |
 | `toolbar-800` | diff | 800×900 | 32px tools; grid still centred |
-| `toolbar-640` | diff | 640×900 | 28px tools; Search count hidden, match arrows kept |
+| `toolbar-640` | diff | 640×900 | 28px tools; find widget hidden until `Ctrl+F` |
 
 The diff states use a synthetic module with ten changed values; the long states use a
 zero-padded parameter list so the first change is near line 1000.
@@ -71,7 +71,8 @@ strip or the page shell, and check each image before asking for review.
 - [ ] **Toolbar never overlaps.** The audit reports no overlapping controls, no control
       outside the viewport, no control clipped by its group, and the Swap action within
       12px of the pane divider at 1400/1200/1024/900/800/640. Check the screenshots too:
-      secondary labels drop first, then the primary labels, and Search stays reachable.
+      secondary labels drop first, then the primary labels; the find widget is not part
+      of the toolbar and opens only on `Ctrl+F`.
 - [ ] **Merge is a toolbar action.** `#diff-merge` is in the strip and is visibly
       pressed (`aria-pressed="true"`) in `diff-merge`.
 - [ ] **Copy arrows are visible without hover.** Both panes show an arrow on the
@@ -133,8 +134,8 @@ Record a manual observation with the state name and what changed, for example
   is exactly what pushed the arrow off the pane. A `ResizeObserver` re-runs the offset
   when the shared vertical scrollbar changes a pane's width.
 - The toolbar stays a three-column grid at every width. Secondary labels drop first,
-  then the primary labels; the boxes step 60 → 40 → 36 → 32 → 28px and the Search count
-  drops at 940px while the match arrows stay.
+  then the primary labels; the boxes step 60 → 40 → 36 → 32 → 28px. Find is a
+  floating widget outside the grid and is absent until `Ctrl+F`.
 
 ## Adding a state
 

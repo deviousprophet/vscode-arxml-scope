@@ -560,7 +560,7 @@ suite('editor bundled page', () => {
 				'true',
 				'the new focused row is marked'
 			);
-			(dom.document.getElementById('search-input') as HTMLElement).focus();
+			(dom.document.getElementById('toggle-sidebar') as HTMLElement).focus();
 			assert.strictEqual(
 				lineCell(dom, Number(other.dataset.documentIndex)).dataset.focused,
 				undefined,

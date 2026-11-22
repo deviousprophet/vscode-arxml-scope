@@ -34,6 +34,13 @@ The VSIX ships `linux-x64`, `win32-x64`, `darwin-x64` and `darwin-arm64`. Any ot
 target fails activation with that list. Large documents use the chunked upload path
 (8 MiB chunks, 512 MiB cap); single-frame open refuses above 64 MiB.
 
+## Find and replace
+
+The engine owns find: `doc.search` and `diff.search` apply case-sensitive,
+whole-word and regex options over the visible row fields, and `doc.replace` returns
+validated plans for parameter values and container short names. The page matcher in
+`src/webview/render/searchPattern.ts` only draws highlight marks.
+
 ## Limits
 
 - Cancelling a long diff is not supported yet; restarting the engine is the coarse

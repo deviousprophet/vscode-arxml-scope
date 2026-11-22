@@ -1406,6 +1406,43 @@ suite('plan coverage: EDIT through the engine', () => {
 		}
 	});
 
+	test('REPLACE-01 replace writes one value through the engine and reports it', async () => {
+		assert.ok(fs.existsSync(enginePath(repoRoot)), 'run npm run engine:build before the suite');
+		const resolved = await resolveEngine(repoRoot);
+		const copies = await twoCopies('textual.arxml');
+		try {
+			const panel = stubPanel();
+			new EcucEditorProvider(undefined, undefined, undefined, resolved).resolveCustomTextEditor(
+				copies.engineDocument,
+				panel.panel,
+				new vscode.CancellationTokenSource().token
+			);
+			await panel.send({ type: 'ready' });
+			await waitFor('the initial engine document', () => panel.messages.some((message) => message.type === 'document'));
+			const nodeId = parameterId(copies.engineDocument.getText(), 'Label');
+			await panel.send({
+				type: 'replace',
+				requestId: 1,
+				query: 'bee',
+				options: { caseSensitive: false, wholeWord: false, regex: false },
+				replacement: 'see',
+				preserveCase: false,
+				all: false,
+				match: { rowId: nodeId, field: 'value', start: 1, end: 4 }
+			});
+			await waitFor('the value replace', () => copies.engineDocument.getText().includes('<VALUE>see</VALUE>'));
+			const answer = panel.messages.find((message) => message.type === 'replaceResult') as
+				| { result?: { ok?: boolean; replacedFields?: number } }
+				| undefined;
+			assert.strictEqual(answer?.result?.ok, true);
+			assert.strictEqual(answer?.result?.replacedFields, 1);
+		} finally {
+			resolved.dispose();
+			await sleep(50);
+			fs.rmSync(copies.dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+		}
+	});
+
 	test('EDIT-08 undo and redo after an engine-path edit restore bytes and rows', async () => {
 		assert.ok(fs.existsSync(enginePath(repoRoot)), 'run npm run engine:build before the suite');
 		await withEditingFixture('numeric.arxml', async (_uri, document) => {

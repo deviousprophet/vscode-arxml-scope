@@ -1,91 +1,123 @@
-/* Search field, count, busy spinner and match navigation. */
-.search-input {
-	box-sizing: border-box;
-	height: 26px;
-	min-width: 70px;
-	width: 180px;
-	padding: 0 7px;
-	font-family: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
-	font-size: 12px;
-	color: var(--vscode-input-foreground);
-	background: var(--vscode-input-background);
-	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-	border-radius: 3px;
+/* Floating find widget: query row, option toggles, count, navigation and replace. */
+.find-widget {
+	position: fixed;
+	top: 60px;
+	right: 18px;
+	z-index: 40;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	width: 430px;
+	max-width: calc(100vw - 36px);
+	padding: 4px;
+	background: var(--vscode-editorWidget-background, var(--vscode-panel-background));
+	border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+	border-radius: 5px;
+	box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
 }
-.search-input:focus {
-	border-color: var(--vscode-focusBorder);
-	outline: 1px solid var(--vscode-focusBorder);
-	outline-offset: -1px;
-}
-/* The Search field keeps one custom clear X; Chromium's native cancel button
- * would paint a second one, so it is suppressed. */
-input[type="search"]::-webkit-search-cancel-button,
-input[type="search"]::-webkit-search-decoration {
-	-webkit-appearance: none;
-	appearance: none;
+.find-widget[hidden] {
 	display: none;
 }
-.search-box {
+.find-row {
 	display: flex;
 	align-items: center;
 	gap: 3px;
-	flex: 0 1 auto;
 	min-width: 0;
 }
-.search-field {
+.find-row[hidden] {
+	display: none;
+}
+.search-input {
+	height: 26px;
+	padding: 0 6px;
+}
+.replace-input {
+	flex: 1 1 auto;
+}
+.find-widget .search-input {
+	flex: 1 1 auto;
+}
+.find-field {
 	position: relative;
 	display: flex;
-	align-items: center;
-	flex: 0 1 180px;
+	flex: 1 1 auto;
 	min-width: 0;
 }
-.search-field .search-input {
+.find-field .search-input {
 	width: 100%;
-	min-width: 0;
-	padding: 0 22px 0 25px;
-}
-.search-icon {
-	position: absolute;
-	left: 7px;
-	top: 50%;
-	transform: translateY(-50%);
-	display: inline-flex;
-	color: var(--vscode-descriptionForeground, var(--tok-dim));
-	pointer-events: none;
+	padding-right: 22px;
 }
 .search-clear {
 	position: absolute;
 	right: 3px;
 	top: 50%;
 	transform: translateY(-50%);
+}
+.replace-input {
+	flex: 1 1 auto;
+}
+.find-widget .search-input:focus,
+.replace-input:focus {
+	border-color: var(--vscode-focusBorder);
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+.find-widget .search-input[aria-invalid="true"] {
+	border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+}
+/* One custom clear X; Chromium's native cancel/decoration would paint a second. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+	-webkit-appearance: none;
+	appearance: none;
+	display: none;
+}
+.find-toggle,
+.find-action {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 18px;
-	height: 18px;
+	height: 22px;
+	flex: none;
 	padding: 0;
 	font: inherit;
+	font-size: 11px;
 	line-height: 1;
-	cursor: pointer;
-	color: var(--tok-dim);
+	color: var(--vscode-foreground);
 	background: transparent;
-	border: 0;
+	border: 1px solid transparent;
 	border-radius: 2px;
+	cursor: pointer;
+}
+.find-toggle {
+	width: 22px;
+}
+.find-toggle:hover,
+.find-action:hover:not(:disabled) {
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+.find-toggle[aria-pressed="true"] {
+	color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+	background: var(--vscode-inputOption-activeBackground, var(--vscode-inputValidation-infoBackground));
+	border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
+}
+.find-expand {
+	width: 18px;
+}
+.find-expand svg {
+	transition: transform 80ms ease;
+}
+.find-expand[aria-expanded="true"] svg {
+	transform: rotate(90deg);
+}
+.find-close {
+	margin-left: 2px;
 }
 .search-clear[hidden] {
 	display: none;
 }
-.search-clear:hover {
-	color: var(--vscode-foreground);
-	background: var(--vscode-toolbar-hoverBackground, transparent);
-}
-.search-box .search-nav {
-	width: 28px;
-	height: 26px;
-	flex: none;
-}
 .search-count {
-	width: 14ch;
+	min-width: 8ch;
 	flex: none;
 	overflow: hidden;
 	text-align: right;
@@ -95,8 +127,6 @@ input[type="search"]::-webkit-search-decoration {
 	font-variant-numeric: tabular-nums;
 	color: var(--vscode-descriptionForeground, var(--tok-dim));
 }
-/* The count and the busy spinner keep their boxes at all times: reserving the
- * space is what stops the Search field from moving when a run starts or ends. */
 .search-progress {
 	width: 16px;
 	height: 16px;
@@ -117,24 +147,36 @@ input[type="search"]::-webkit-search-decoration {
 	border-radius: 50%;
 	animation: ecuc-search-spin 0.8s linear infinite;
 }
+.find-action {
+	padding: 0 6px;
+	white-space: nowrap;
+}
+.find-action:disabled {
+	color: var(--vscode-disabledForeground);
+	cursor: default;
+}
+.replace-row {
+	padding-left: 18px;
+}
 @keyframes ecuc-search-spin {
 	from { transform: rotate(0deg); }
 	to { transform: rotate(360deg); }
 }
-@media (max-width: 940px) {
-	/* Status, not an action: the count is the first thing to drop when the
-	 * toolbar needs room for the actual controls. */
+@media (max-width: 720px) {
+	.find-widget {
+		left: 8px;
+		right: 8px;
+		width: auto;
+	}
 	.search-count {
 		display: none;
-	}
-}
-@media (max-width: 720px) {
-	.search-box {
-		flex: 1 1 0;
 	}
 }
 @media (prefers-reduced-motion: reduce) {
 	.search-progress::before {
 		animation: none;
+	}
+	.find-expand svg {
+		transition: none;
 	}
 }
