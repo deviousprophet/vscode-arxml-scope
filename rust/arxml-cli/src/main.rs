@@ -304,6 +304,17 @@ fn words_command(args: &[String]) -> ExitCode {
     }
 }
 
+/// Lower-case hex for a digest. `digest` 0.11 dropped the `LowerHex` impl that
+/// `format!("{:x}", Sha256::digest(..))` used to rely on.
+fn hex_digest(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut text = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(text, "{byte:02x}");
+    }
+    text
+}
+
 fn fixture_manifest(args: &[String]) -> ExitCode {
     let dir = option(args, "--dir").unwrap_or("src/test/fixtures");
     let root = PathBuf::from(dir);
@@ -319,7 +330,7 @@ fn fixture_manifest(args: &[String]) -> ExitCode {
             Some(FixtureEntry {
                 path: relative(&root, path),
                 bytes: bytes.len() as u64,
-                sha256: format!("{:x}", Sha256::digest(&bytes)),
+                sha256: hex_digest(&Sha256::digest(&bytes)),
             })
         })
         .collect();
