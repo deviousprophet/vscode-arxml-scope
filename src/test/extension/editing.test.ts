@@ -467,7 +467,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Count'), value: 'abc' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
 
-			assert.ok(lastRefusal(stub).message?.includes('integer'), lastRefusal(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('integer'), lastRefusal(stub).message ?? 'the refusal has no message');
 			assert.strictEqual(document.getText(), before, 'the document is untouched');
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false, 'a refusal does not dirty the document');
@@ -483,7 +483,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Label'), value: 'bad\u0001char' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
 
-			assert.ok(lastRefusal(stub).message?.includes('XML cannot represent'), lastRefusal(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('XML cannot represent'), lastRefusal(stub).message ?? 'the refusal has no message');
 			assert.strictEqual(document.getText(), before);
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false);
@@ -500,7 +500,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Pattern'), value: '42' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
 
-			assert.ok(lastRefusal(stub).message?.includes('CDATA'), lastRefusal(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('CDATA'), lastRefusal(stub).message ?? 'the refusal has no message');
 			assert.strictEqual(document.getText(), before, 'the document is untouched');
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false, 'a refusal does not dirty the document');
@@ -562,7 +562,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			await stub.send({ type: 'edit', nodeId: parameterId(before, 'Count'), value: '7' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
 
-			assert.ok(lastRefusal(stub).message?.includes('unchanged'), lastRefusal(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('unchanged'), lastRefusal(stub).message ?? 'the refusal has no message');
 			assert.strictEqual(document.getText(), before);
 			assert.strictEqual(document.isDirty, false);
 		});
@@ -969,7 +969,7 @@ suite('editor container field editing (R1–R5)', () => {
 
 			await stub.send({ type: 'edit', nodeId: id, field: 'shortName', value: 'First Cont' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
-			assert.ok(lastRefusal(stub).message?.includes('not a valid short name'), lastRefusal(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('not a valid short name'), lastRefusal(stub).message ?? 'the refusal has no message');
 			assert.strictEqual(document.getText(), before, 'the document is untouched');
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), onDisk, 'the file is untouched');
 			assert.strictEqual(document.isDirty, false, 'a refusal does not dirty the document');
@@ -990,7 +990,7 @@ suite('editor container field editing (R1–R5)', () => {
 
 			await stub.send({ type: 'edit', nodeId: id, field: 'shortName', value: 'FirstCont' });
 			await waitFor('the refusal', () => notices(stub).length > 0);
-			assert.ok(lastRefusal(stub).message?.includes('unchanged'), lastRefusal(stub).message);
+			assert.ok(lastRefusal(stub).message?.includes('unchanged'), lastRefusal(stub).message ?? 'the refusal has no message');
 			assert.strictEqual(document.getText(), before);
 			assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), before);
 			assert.strictEqual(document.isDirty, false);
@@ -1267,7 +1267,7 @@ suite('plan coverage: FIELD', () => {
 		assert.strictEqual(next.modules[0].containers[0].containers[0].shortName, 'Renamed');
 		const index = buildNodeIndex(next);
 		const id = index.idOf(next.modules[0].containers[0].containers[0]);
-		assert.ok(id?.includes('Renamed'), id);
+		assert.ok(id?.includes('Renamed'), id ?? 'the renamed node has no id');
 		assert.strictEqual(plan.nextNodeId, id, 'the predicted id is the re-scanned id');
 	});
 

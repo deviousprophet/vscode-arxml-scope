@@ -74,7 +74,9 @@ async function withScratch(
 	try {
 		await run(uri, await vscode.workspace.openTextDocument(uri));
 	} finally {
-		fs.rmSync(dir, { recursive: true, force: true });
+		// Windows can hold a handle briefly after the editor closes; retry like
+		// the other scratch helpers (editing.test.ts, engine.test.ts).
+		fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	}
 }
 

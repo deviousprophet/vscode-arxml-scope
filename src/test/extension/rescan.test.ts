@@ -95,7 +95,7 @@ async function withScratchText(
 	try {
 		await run(uri, await vscode.workspace.openTextDocument(uri));
 	} finally {
-		fs.rmSync(dir, { recursive: true, force: true });
+		fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	}
 }
 

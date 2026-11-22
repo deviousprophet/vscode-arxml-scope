@@ -153,7 +153,7 @@ suite('SW-SYSCOND evaluator (design §2)', () => {
 
 		const textOrder = evaluateSyscond('("a" < "b")', values({}));
 		assert.strictEqual(textOrder.state, 'unknown');
-		assert.ok(textOrder.error!.includes('requires numbers'), textOrder.error);
+		assert.ok(textOrder.error!.includes('requires numbers'), textOrder.error ?? 'the comparison has no reason');
 	});
 
 	test('design §2.1: malformed and empty expressions are unknown with a reason', () => {

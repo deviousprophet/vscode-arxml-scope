@@ -31,7 +31,7 @@ read-only semantic diff. The custom editor is opt-in: a plain open still uses th
 
 ## Contributing
 
-Use Node 24 and npm 11+. The core engine is Rust; the TypeScript side is the VS Code
+Use Node 26 and npm 11+. The core engine is Rust; the TypeScript side is the VS Code
 host and UI layer.
 
 ```bash

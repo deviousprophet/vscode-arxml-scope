@@ -113,6 +113,6 @@ suite('provider definitions (extension)', () => {
 		assertRepushedDescription(stub.messages);
 
 		stub.dispose();
-		fs.rmSync(path.dirname(file), { recursive: true, force: true });
+		fs.rmSync(path.dirname(file), { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 	});
 });

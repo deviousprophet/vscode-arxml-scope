@@ -52,11 +52,11 @@ suite('workspace index (extension)', function () {
 	function removeFixtures(): void {
 		for (const file of [values, moduleDef, extra]) {
 			if (file !== '') {
-				fs.rmSync(file, { force: true });
+				fs.rmSync(file, { force: true, maxRetries: 10, retryDelay: 50 });
 			}
 		}
 		for (let index = 0; index <= run; index++) {
-			fs.rmSync(path.join(root, `index-test-${index}-excluded`), { recursive: true, force: true });
+			fs.rmSync(path.join(root, `index-test-${index}-excluded`), { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	}
 
@@ -123,7 +123,7 @@ suite('workspace index (extension)', function () {
 		);
 		assert.ok(extension.statusBarText().includes('2 files indexed'), extension.statusBarText());
 
-		fs.rmSync(extra);
+		fs.rmSync(extra, { force: true, maxRetries: 10, retryDelay: 50 });
 		await waitFor('the deleted file to be dropped', () => extension.indexStats().files === 1);
 		await waitFor('the status bar to show one file', () =>
 			extension.statusBarText().includes('1 file indexed')

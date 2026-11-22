@@ -246,7 +246,7 @@ suite('core engine process', () => {
 				all: false,
 				match: { rowId: match.rowId, field: match.field, start: match.start, end: match.end }
 			});
-			assert.strictEqual(replaced.ok, true, replaced.reason);
+			assert.strictEqual(replaced.ok, true, replaced.reason ?? 'the replace succeeds');
 			assert.strictEqual(replaced.plans[0].record.newText, 'see');
 			const invalid = await engine.searchDocument(docId, '(', { ...options, regex: true }).catch((error) => error);
 			assert.match(String(invalid), /regex|pattern/i);

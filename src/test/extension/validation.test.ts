@@ -50,7 +50,7 @@ suite('validation (extension)', function () {
 
 	teardown(() => {
 		for (const file of [values, definitions]) {
-			fs.rmSync(file, { force: true });
+			fs.rmSync(file, { force: true, maxRetries: 10, retryDelay: 50 });
 		}
 	});
 
@@ -92,7 +92,7 @@ suite('validation (extension)', function () {
 	});
 
 	test('fragment mode suppresses cross-file diagnostics and always restores them', async () => {
-		fs.rmSync(definitions, { force: true });
+		fs.rmSync(definitions, { force: true, maxRetries: 10, retryDelay: 50 });
 		const fragment = VALUES.replace(
 			'</PARAMETER-VALUES>',
 			'</PARAMETER-VALUES><REFERENCE-VALUES><ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/Synthetic/SampleModuleDef/Main/PeerRef</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">/Missing/Target</VALUE-REF></ECUC-REFERENCE-VALUE></REFERENCE-VALUES>'
