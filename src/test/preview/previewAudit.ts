@@ -396,6 +396,28 @@ function violationsOf(state: AuditState, audit: Omit<PreviewAudit, 'violations'>
 	return issues;
 }
 
+function syntaxColorViolations(audit: Omit<PreviewAudit, 'violations'>): string[] {
+	const spans = audit.syntax ?? [];
+	const colorOf = (text: string): string | undefined =>
+		spans.find((span) => span.text.trim() === text)?.color;
+	const decimal = colorOf('42');
+	const binary = colorOf('0b1010');
+	const text = colorOf('"hello"');
+	const reference = colorOf('P.Syn.Syntax.Target');
+	const issues: string[] = [];
+	if (binary === undefined || decimal === undefined) {
+		issues.push('the syntax preview did not render the decimal and binary values');
+	} else if (binary !== decimal) {
+		issues.push('a binary value is not using the numeric colour');
+	}
+	if (reference === undefined || text === undefined) {
+		issues.push('the syntax preview did not render the text and reference values');
+	} else if (reference === text) {
+		issues.push('a reference value is not using the reference colour');
+	}
+	return issues;
+}
+
 function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
 	const issues: string[] = [];
 	if (!audit.ready) {
@@ -403,6 +425,9 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 	}
 	if (state.page === 'editor' && document.querySelector('#tree .monaco-editor') === null) {
 		issues.push('the Monaco editor did not mount');
+	}
+	if (state.name === 'editor-syntax') {
+		issues.push(...syntaxColorViolations(audit));
 	}
 	if (state.select && !audit.selected) {
 		issues.push('the select gesture left no selected row');

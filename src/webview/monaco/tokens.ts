@@ -94,11 +94,26 @@ function labelEnd(text: string, start: number): number {
 }
 
 function isNumber(word: string): boolean {
-	return /^(?:[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|0x[0-9a-fA-F]+|[+-]?INF|NaN)$/.test(word);
+	return /^(?:[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|0[xX][0-9a-fA-F]+|0[bB][01]+|[+-]?INF|NaN)$/.test(word);
 }
 
 function isBoolean(word: string): boolean {
 	return /^(?:true|false|TRUE|FALSE)$/.test(word);
+}
+
+/** A reference target is absolute, or a dotted instance path like `Pkg.Mod.Row`. */
+function isReference(word: string): boolean {
+	return word.startsWith('/') || /^[A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)+$/.test(word);
+}
+
+function valueType(word: string): EcucTokenType {
+	if (isNumber(word)) {
+		return 'number';
+	}
+	if (isBoolean(word)) {
+		return 'keyword';
+	}
+	return isReference(word) ? 'function' : 'string';
 }
 
 /** Tokenize one synthetic ECUC line. */
@@ -215,7 +230,7 @@ export function tokenizeEcucLine(text: string): EcucToken[] {
 		const close = wordEnd(text, at);
 		const word = text.slice(at, close);
 		if (afterEquals) {
-			push(at, close, isNumber(word) ? 'number' : isBoolean(word) ? 'keyword' : word.startsWith('/') ? 'function' : 'string');
+			push(at, close, valueType(word));
 			afterEquals = false;
 		} else {
 			push(at, close, 'parameter');

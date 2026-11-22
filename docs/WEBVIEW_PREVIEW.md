@@ -53,6 +53,7 @@ its old bundle.
 | `diff-wide` | diff | 1400×900 | long parameter names; rows overflow horizontally, arrows stay on the pane edges |
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; both arrows stay on the inner edges |
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
+| `editor-syntax` | editor | 1400×900 | decimal, binary, text and reference values; binary matches the numeric colour and references use the reference colour |
 | `editor-find` | editor | 1400×900 | native find widget open on `Items`, with the Rust result count and field highlight |
 | `diff-find` | diff | 1400×900 | native find widget in the modified pane, with the Rust diff match count |
 | `toolbar-1400` | diff | 1400×900 | full labels; Merge active; Swap over the pane divider |
@@ -83,6 +84,8 @@ strip or the page shell, and check each image before asking for review.
       tooltip to paint over the toolbar while the widget is open.
 - [ ] **Diff fills stay translucent.** Changed rows keep readable text; the audit rejects
       opaque line or word fills in the dark preview.
+- [ ] **Value kinds keep their colours.** `editor-syntax` shows `0b1010` in the same colour as
+      decimal `42`, and `P.Syn.Syntax.Target` in the reference colour rather than the string colour.
 - [ ] **Copy arrows are visible without hover.** Both panes show an arrow on the
       changed rows; the left arrow points right, the right arrow points left. The audit
       reports an arrow in each pane, on the inner edge, visible and with an opaque

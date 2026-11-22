@@ -48,6 +48,7 @@ export const STATES: PreviewState[] = [
 		pan: 600
 	},
 	{ name: 'editor', page: 'editor', width: 1400, height: 900, select: true },
+	{ name: 'editor-syntax', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-find', page: 'editor', width: 1400, height: 900, find: 'Items' },
 	{ name: 'diff-find', page: 'diff', width: 1400, height: 900, merge: true, find: 'Items' },
 	{ name: 'toolbar-1400', page: 'diff', width: 1400, height: 900, merge: true },
@@ -128,6 +129,15 @@ function editorDocument(): { rows: EcucRow[]; selectedId?: string } {
 	return { rows, selectedId: rows[0]?.id };
 }
 
+/** A small editor document that exercises numeric, binary, text and reference colors. */
+function syntaxDocument(): { rows: EcucRow[]; selectedId?: string } {
+	const text = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>Syn</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/Syn</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>Syntax</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/Syn/Syntax</DEFINITION-REF><PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Syn/Syntax/Decimal</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Syn/Syntax/Binary</DEFINITION-REF><VALUE>0b1010</VALUE></ECUC-NUMERICAL-PARAM-VALUE><ECUC-TEXTUAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/P/Syn/Syntax/Text</DEFINITION-REF><VALUE>hello</VALUE></ECUC-TEXTUAL-PARAM-VALUE></PARAMETER-VALUES><REFERENCE-VALUES><ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/P/Syn/Syntax/Next</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">P.Syn.Syntax.Target</VALUE-REF></ECUC-REFERENCE-VALUE></REFERENCE-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+	const rows = rowsOf(text).rows;
+	const selected = rows.find((row) => row.label === 'Binary') ?? rows[0];
+	return { rows, selectedId: selected?.id };
+}
+
 /** The supported dark-theme variables the extension gets from VS Code; without
  * them the gutter is transparent and the rail can be mistaken for a stray edge. */
 const THEME = `<style>:root{
@@ -172,7 +182,7 @@ const ASSETS = { cspSource: '', scriptUri: '/preview.js', styleUri: '/preview.cs
 /** The fixture document a state mounts. */
 function documentFor(state: PreviewState) {
 	if (state.page !== 'diff') {
-		return editorDocument();
+		return state.name === 'editor-syntax' ? syntaxDocument() : editorDocument();
 	}
 	return state.wide ? widePair() : state.name === 'diff-rail' ? railPair() : mergePair();
 }

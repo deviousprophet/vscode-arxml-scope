@@ -17,6 +17,18 @@ suite('semantic tokens for the synthetic ECUC document', () => {
 
 	test('values, comments, headers, braces and meta stay separate', () => {
 		assert.deepStrictEqual(types('        Text = hello "quoted"'), ['variable', 'operator', 'string', 'string']);
+		assert.deepStrictEqual(types('        Flags = 0b00000001'), ['variable', 'operator', 'number']);
+		assert.deepStrictEqual(types('        Flags = 0B1010'), ['variable', 'operator', 'number']);
+		assert.deepStrictEqual(types('        Next = PkgManual.ManualMod.Row002'), [
+			'variable',
+			'operator',
+			'function'
+		]);
+		assert.deepStrictEqual(types('        Next = /PkgManual/ManualMod/Row002'), [
+			'variable',
+			'operator',
+			'function'
+		]);
 		assert.deepStrictEqual(types('    /* note */'), ['comment']);
 		assert.deepStrictEqual(types('schema 00048'), ['keyword', 'number']);
 		assert.deepStrictEqual(types('package PkgA.Mod'), ['keyword', 'namespace']);
