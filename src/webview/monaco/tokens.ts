@@ -8,6 +8,8 @@
  * colour. That is what stops the editor looking like one blue column.
  */
 
+import { conditionTokens } from '../render/rowView';
+
 export type EcucTokenType =
 	| 'keyword'
 	| 'type'
@@ -116,12 +118,38 @@ function valueType(word: string): EcucTokenType {
 	return isReference(word) ? 'function' : 'string';
 }
 
+/** The shared condition lexer classes mapped onto the editor token types. */
+const CONDITION_TYPES: Readonly<Record<string, EcucTokenType>> = {
+	'syscond-name': 'variable',
+	'syscond-number': 'number',
+	'syscond-string': 'string',
+	'syscond-operator': 'keyword',
+	'syscond-literal': 'keyword',
+	'syscond-punct': 'delimiter'
+};
+
 /** Tokenize one synthetic ECUC line. */
 export function tokenizeEcucLine(text: string): EcucToken[] {
 	const tokens: EcucToken[] = [];
 	const push = (start: number, end: number, type: EcucTokenType): void => {
 		if (end > start) {
 			tokens.push({ start, length: end - start, type });
+		}
+	};
+	/** Split a bracketed syscond into names, operators, numbers and punctuation. */
+	const pushCondition = (start: number, close: number, closer: string): void => {
+		const contentStart = start + 1;
+		const hasClose = close > contentStart && text[close - 1] === closer;
+		const contentEnd = hasClose ? close - 1 : close;
+		push(start, start + 1, 'delimiter');
+		for (const token of conditionTokens(text.slice(contentStart, contentEnd))) {
+			const type = token.cls === '' ? undefined : CONDITION_TYPES[token.cls];
+			if (type !== undefined) {
+				push(contentStart + token.start, contentStart + token.end, type);
+			}
+		}
+		if (hasClose) {
+			push(contentEnd, close, 'delimiter');
 		}
 	};
 	let at = 0;
@@ -197,13 +225,13 @@ export function tokenizeEcucLine(text: string): EcucToken[] {
 		}
 		if (character === '(') {
 			const close = bracketedEnd(text, at, '(', ')');
-			push(at, close, 'parameter');
+			pushCondition(at, close, ')');
 			at = close;
 			continue;
 		}
 		if (character === '[') {
 			const close = bracketedEnd(text, at, '[', ']');
-			push(at, close, 'parameter');
+			pushCondition(at, close, ']');
 			at = close;
 			continue;
 		}

@@ -404,6 +404,9 @@ function syntaxColorViolations(audit: Omit<PreviewAudit, 'violations'>): string[
 	const binary = colorOf('0b1010');
 	const text = colorOf('"hello"');
 	const reference = colorOf('P.Syn.Syntax.Target');
+	const conditionName = colorOf('CANIPCORETYPE_SC');
+	const conditionOperator = colorOf('==');
+	const conditionNumber = colorOf('0');
 	const issues: string[] = [];
 	if (binary === undefined || decimal === undefined) {
 		issues.push('the syntax preview did not render the decimal and binary values');
@@ -414,6 +417,19 @@ function syntaxColorViolations(audit: Omit<PreviewAudit, 'violations'>): string[
 		issues.push('the syntax preview did not render the text and reference values');
 	} else if (reference === text) {
 		issues.push('a reference value is not using the reference colour');
+	}
+	if (
+		conditionName === undefined ||
+		conditionOperator === undefined ||
+		conditionNumber === undefined
+	) {
+		issues.push('the syntax preview did not render the condition tokens');
+	} else if (
+		conditionName === conditionOperator ||
+		conditionOperator === conditionNumber ||
+		conditionName === conditionNumber
+	) {
+		issues.push('a system-condition token is not using its own colour');
 	}
 	return issues;
 }

@@ -251,6 +251,15 @@ function scanHex(text: string, at: number): number {
 	return cursor;
 }
 
+/** The end of a binary literal (the `0b` prefix is already consumed). */
+function scanBinary(text: string, at: number): number {
+	let cursor = at;
+	while (cursor < text.length && (text[cursor] === '0' || text[cursor] === '1')) {
+		cursor++;
+	}
+	return cursor;
+}
+
 function isSignedNumberStart(text: string, at: number): boolean {
 	return isSign(text[at]) && isDigit(text[at + 1] ?? '');
 }
@@ -267,10 +276,18 @@ function isHexStart(text: string, at: number): boolean {
 	return text[at] === '0' && (text[at + 1] === 'x' || text[at + 1] === 'X');
 }
 
-/** One number token, including a sign, a decimal part or a hex body. */
+function isBinaryStart(text: string, at: number): boolean {
+	return text[at] === '0' && (text[at + 1] === 'b' || text[at + 1] === 'B');
+}
+
+/** One number token, including a sign, a decimal part, a hex or binary body. */
 function scanNumber(text: string, at: number): ConditionToken {
 	const start = isSign(text[at]) ? at + 1 : at;
-	const end = isHexStart(text, start) ? scanHex(text, start + 2) : scanDecimal(text, start);
+	const end = isHexStart(text, start)
+		? scanHex(text, start + 2)
+		: isBinaryStart(text, start)
+			? scanBinary(text, start + 2)
+			: scanDecimal(text, start);
 	return { cls: 'syscond-number', start: at, end };
 }
 

@@ -177,11 +177,13 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
   ordinary numbered display row, not a height or padding predicate on a node or comment.
 - **Conditions are token-coloured.** `conditionTokens` preserves every character and assigns
   `syscond-name`, `syscond-number`, `syscond-string`, `syscond-operator`, `syscond-literal` and
-  `syscond-punct`, all backed by the existing `--tok-*` variables. A false condition marks its chip
-  with a border edge only; the tokens keep their colours. The tree chip is bounded with ellipsis and
-  its `title` is `conditionTooltip`: one `NAME = value` line per symbol, `(not set)` for a missing
-  value, no `true`/`false`. Details renders `Condition`/`Conditions` through `conditionCodeRow` in a
-  wrapped `.condition-code` block.
+  `syscond-punct`, all backed by the existing `--tok-*` variables. The Monaco token provider
+  reuses this lexer and maps those classes to `variable`, `number`, `string`, `keyword` and
+  `delimiter`, so a condition like `CANIPCORETYPE_SC==0` keeps the name, operator and number
+  distinct. A false condition marks its chip with a border edge only; the tokens keep their
+  colours. The tree chip is bounded with ellipsis and its `title` is `conditionTooltip`: one
+  `NAME = value` line per symbol, `(not set)` for a missing value, no `true`/`false`. Details
+  renders `Condition`/`Conditions` through `conditionCodeRow` in a wrapped `.condition-code` block.
 - Rows are built with `document.createElement` / `textContent`; the only `innerHTML`-like SVG is the
   inline twisty created with `createElementNS`. Brace rows are `aria-hidden`.
 - The details control is `<input class="details-value">` for numeric/text types and a

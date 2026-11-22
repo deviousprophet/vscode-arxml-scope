@@ -38,7 +38,41 @@ suite('semantic tokens for the synthetic ECUC document', () => {
 			'variable',
 			'operator',
 			'number',
-			'parameter'
+			'delimiter',
+			'variable',
+			'keyword',
+			'keyword',
+			'delimiter'
+		]);
+		assert.deepStrictEqual(types('        Condition = 1 [CANIPCORETYPE_SC==0]'), [
+			'variable',
+			'operator',
+			'number',
+			'delimiter',
+			'variable',
+			'keyword',
+			'number',
+			'delimiter'
+		]);
+		assert.deepStrictEqual(types('        Condition = 1 (CANIPCORETYPE_SC == 0)'), [
+			'variable',
+			'operator',
+			'number',
+			'delimiter',
+			'variable',
+			'keyword',
+			'number',
+			'delimiter'
+		]);
+		assert.deepStrictEqual(types('        Condition = 1 [FLAG==0b1010]'), [
+			'variable',
+			'operator',
+			'number',
+			'delimiter',
+			'variable',
+			'keyword',
+			'number',
+			'delimiter'
 		]);
 	});
 
