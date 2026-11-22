@@ -79,7 +79,10 @@ strip or the page shell, and check each image before asking for review.
       pressed (`aria-pressed="true"`) in `diff-merge`.
 - [ ] **Find is the native widget.** `editor-find` and `diff-find` show Monaco's
       `find-widget` with the `Aa`/`ab|`/`.*` toggles, the native count (`1 of N`) and no
-      custom search strip.
+      custom search strip. The audit also requires the editor/tree/diff hosts to allow the
+      tooltip to paint over the toolbar while the widget is open.
+- [ ] **Diff fills stay translucent.** Changed rows keep readable text; the audit rejects
+      opaque line or word fills in the dark preview.
 - [ ] **Copy arrows are visible without hover.** Both panes show an arrow on the
       changed rows; the left arrow points right, the right arrow points left. The audit
       reports an arrow in each pane, on the inner edge, visible and with an opaque

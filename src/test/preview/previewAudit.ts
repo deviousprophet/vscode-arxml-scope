@@ -363,11 +363,29 @@ function contentAudit(): ContentAudit {
 	};
 }
 
+function findHostViolations(): string[] {
+	const widget = document.querySelector('.find-widget.visible');
+	if (widget === null) {
+		return [];
+	}
+	const issues: string[] = [];
+	const host = widget.closest('#tree, #diff-list');
+	if (host !== null && getComputedStyle(host).overflow !== 'visible') {
+		issues.push('the find-widget host clips the native tooltip');
+	}
+	const main = document.getElementById('main');
+	if (main !== null && getComputedStyle(main).overflow !== 'visible') {
+		issues.push('the editor column clips the native find tooltip');
+	}
+	return issues;
+}
+
 function violationsOf(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
 	const issues = [
 		...stateViolations(state, audit),
 		...toolbarViolations(audit.toolbar),
-		...gutterViolations(audit.gutter)
+		...gutterViolations(audit.gutter),
+		...findHostViolations()
 	];
 	if (audit.content.pageOverflow) {
 		issues.push('the document scrolls horizontally');
@@ -450,15 +468,47 @@ function usesMonacoDiff(): boolean {
 	return document.querySelector('.monaco-diff-editor') !== null;
 }
 
+function colorAlpha(color: string): number | undefined {
+	const rgba = /^rgba\(\s*[\d.]+[,\s]+[\d.]+[,\s]+[\d.]+[,\s/]+([\d.]+)\)$/i.exec(color);
+	if (rgba !== null) {
+		return Number(rgba[1]);
+	}
+	const hex = /^#(?:[0-9a-f]{6})([0-9a-f]{2})$/i.exec(color);
+	if (hex !== null) {
+		return parseInt(hex[1], 16) / 255;
+	}
+	if (/^#[0-9a-f]{6}$/i.test(color) || /^rgb\(/i.test(color)) {
+		return 1;
+	}
+	return undefined;
+}
+
+function translucentDiffViolations(): string[] {
+	const issues: string[] = [];
+	for (const selector of [
+		'.monaco-diff-editor .line-insert',
+		'.monaco-diff-editor .line-delete',
+		'.monaco-diff-editor .char-insert',
+		'.monaco-diff-editor .char-delete'
+	]) {
+		const element = document.querySelector(selector);
+		const alpha = element === null ? undefined : colorAlpha(getComputedStyle(element).backgroundColor);
+		if (alpha !== undefined && alpha >= 1) {
+			issues.push(`${selector} is opaque; diff fills must stay translucent`);
+		}
+	}
+	return issues;
+}
+
 function monacoDiffViolations(_state: AuditState): string[] {
 	const editor = document.querySelector('.monaco-diff-editor');
 	if (editor === null) {
 		return ['the Monaco diff editor did not mount'];
 	}
 	// Monaco lays out its two editors asynchronously; the deterministic checks
-	// here are the mount and the toolbar state. The PNG remains the evidence for
-	// gutter, tint and merge-arrow placement.
-	return [];
+	// here are the mount, readable diff fills and the toolbar state. The PNG
+	// remains the evidence for gutter, tint and merge-arrow placement.
+	return document.body.classList.contains('vscode-light') ? [] : translucentDiffViolations();
 }
 
 function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {

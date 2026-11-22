@@ -7,6 +7,17 @@
 	position: relative;
 }
 
+/* Monaco renders find-button tooltips in a context view inside the editor
+ * host. Clipping that host cuts the tooltip off at the toolbar and makes the
+ * hover lose its pointer target. While the find widget is open, let only the
+ * host overflow so the tooltip can paint over the toolbar; the editor itself
+ * still clips its content. */
+#main:has(.find-widget.visible),
+#tree.monaco-ecuc-host:has(.find-widget.visible),
+#diff-list.monaco-diff-host:has(.find-widget.visible) {
+	overflow: visible;
+}
+
 #tree.monaco-ecuc-host .monaco-editor,
 #tree.monaco-ecuc-host .monaco-editor .overflow-guard {
 	border-radius: 0;

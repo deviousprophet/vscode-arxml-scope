@@ -302,6 +302,11 @@ ARXML matches. Typing starts a new Rust request; an open query is re-run after a
 an accepted replace or a view change. Replace and Replace All are intercepted and sent to the
 Rust replace planner instead of editing the synthetic text.
 
+Native find buttons use Monaco context-view tooltips. While the widget is visible, the editor
+column, tree host and diff host must allow overflow so the tooltip can paint over the toolbar;
+clipping it drops the hover's pointer target and makes the tooltip blink. The preview audit
+checks that those hosts are not clipping when a find widget is visible.
+
 ### Diff
 
 Each pane is its own surface inside the shared scroller. Status is a background tint plus a 3px rail:

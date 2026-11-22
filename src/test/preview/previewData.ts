@@ -151,8 +151,11 @@ const THEME = `<style>:root{
 --vscode-button-foreground:#ffffff;
 --vscode-button-secondaryBackground:#3a3d41;
 --vscode-button-secondaryForeground:#ffffff;
---vscode-diffEditor-insertedLineBackground:#1b3a24;
---vscode-diffEditor-removedLineBackground:#4a1f1f;
+/* Deliberately no line backgrounds: older VS Code themes omit them, so the
+ * preview exercises the readable dark fallbacks. Text fills use rgba() so the
+ * alpha-preserving conversion is exercised too. */
+--vscode-diffEditor-insertedTextBackground:rgba(87, 171, 90, 0.30);
+--vscode-diffEditor-removedTextBackground:rgba(244, 112, 103, 0.30);
 --vscode-diffEditor-modifiedTextBackground:#3a3320;
 --vscode-diffEditorGutter-insertedLineBackground:#244b2e;
 --vscode-diffEditorGutter-removedLineBackground:#5a2b2b;

@@ -63,7 +63,9 @@ compared, not just the bytes on disk.
 - Annotations, braces and bracket guides follow each side of the comparison. Both panes use the same
   Document view as the editor, so annotations, braces, guides, colours and typography match.
 - A **read-only** status tint marks added, removed and changed cells; changed words are highlighted
-  inside changed rows. Syntax tokens keep their colours.
+  inside changed rows. Syntax tokens keep their colours. Diff fills keep the theme colour's alpha;
+  when a theme does not define the diff line colours, the page uses VS Code's subtle dark fallbacks
+  instead of opaque blocks.
 - Selecting a container or module tints its whole subtree in both panes, including the annotation rows
   of descendant containers. An added or removed row highlights only the pane that owns its cell; the
   blank side stays blank. The highlight spans a stable width: at least the pane and the full content

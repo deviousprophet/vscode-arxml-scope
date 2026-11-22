@@ -112,6 +112,8 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
   `diff.search`. Replace and Replace All call `doc.replace` with a mapped row/field target
   instead of editing the synthetic text. Every Rust field offset is mapped through the
   synthetic line's `searchSpans`; do not count every textual occurrence on the line.
+  The editor/tree/diff hosts must allow overflow while the native widget is visible so its
+  button tooltips are not clipped at the toolbar.
   Do not add a second query field or a synchronous full-store scan.
 - **Search jumps; it never hides.** The engine searches the whole row store; collapse and any view
   state never remove a candidate. The engine checks the label, value and every visible meta

@@ -6,6 +6,7 @@
  * The host passes the bundled worker URI through a meta tag in the shell.
  */
 import * as monaco from 'monaco-editor';
+import { toMonacoColor } from './colors';
 import { tokenizeEcucLine } from './tokens';
 
 export type ThemeKind = 'dark' | 'light' | 'hc' | 'hc-light';
@@ -139,16 +140,7 @@ function css(name: string, fallback: string): string {
 }
 
 function toHex(value: string, fallback: string): string {
-	const text = value.trim();
-	if (/^#[0-9a-fA-F]{3,8}$/.test(text)) {
-		return text;
-	}
-	const match = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(text);
-	if (match === null) {
-		return fallback;
-	}
-	const part = (raw: string): string => Number(raw).toString(16).padStart(2, '0');
-	return `#${part(match[1])}${part(match[2])}${part(match[3])}`;
+	return toMonacoColor(value, fallback);
 }
 
 function themeColors(): Record<string, string> {
@@ -207,19 +199,19 @@ function themeColors(): Record<string, string> {
 		),
 		'diffEditor.insertedLineBackground': color(
 			'--vscode-diffEditor-insertedLineBackground',
-			dark ? '#264f7840' : '#e2f7e2'
+			dark ? '#347d3926' : '#e2f7e2'
 		),
 		'diffEditor.removedLineBackground': color(
 			'--vscode-diffEditor-removedLineBackground',
-			dark ? '#4b181880' : '#ffeaea'
+			dark ? '#c93c3726' : '#ffeaea'
 		),
 		'diffEditor.insertedTextBackground': color(
 			'--vscode-diffEditor-insertedTextBackground',
-			dark ? '#9bb95533' : '#9bb95533'
+			dark ? '#57ab5a4d' : '#587c0c26'
 		),
 		'diffEditor.removedTextBackground': color(
 			'--vscode-diffEditor-removedTextBackground',
-			dark ? '#ff000033' : '#ff000033'
+			dark ? '#f470674d' : '#ad070726'
 		)
 	};
 }

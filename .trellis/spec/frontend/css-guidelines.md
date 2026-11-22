@@ -53,6 +53,12 @@ Rules:
 
 - Every colour is a `--vscode-*` variable, or one of the documented tokens. A literal colour may appear
   only as a fallback **inside** `var(...)`, never as a standalone declaration value.
+- CSS colours passed into Monaco's theme go through `toMonacoColor` in
+  `src/webview/monaco/colors.ts`; it preserves `rgba()` alpha and expands shorthand hex. Never
+  reimplement a hex conversion that drops alpha: diff line and word fills become opaque blocks.
+- Monaco paints find-button tooltips in a context view inside the editor host. While the find
+  widget is visible, `#main`, `#tree.monaco-ecuc-host` and `#diff-list.monaco-diff-host` must
+  allow overflow so the tooltip can paint over the toolbar; clipping it makes the hover blink.
 - Do not reach for `--vscode-editor-findMatch*` for search marks: a theme may resolve it to transparent.
   The page has one highlight implementation and exactly two fixed amber tiers (`--match-bg` 0.18 for
   every hit, `--match-hi` 0.36 for the current match); the current tier must stay visibly stronger

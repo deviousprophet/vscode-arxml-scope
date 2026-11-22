@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Diff line and word fills preserve the theme color's alpha and use VS Code's readable dark fallbacks, so changed rows no longer become opaque blocks
+- Native find-widget tooltips are no longer clipped by the editor host or toolbar; they stay visible long enough to read and click
 - A bulk rename whose names share no token now pairs containers in the semantic diff, including when new containers sort before the renamed block
 
 ## [0.10.0] - 2026-11-15
