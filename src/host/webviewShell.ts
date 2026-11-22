@@ -7,7 +7,6 @@
  */
 import { renderContextMenuHtml, renderContextMenuStyleTag } from '../webview/components/contextMenu/contextMenu';
 import { renderDiffViewHtml } from '../webview/components/diffView/diffView';
-import { renderSearchBarHtml } from '../webview/components/searchBar/searchBar';
 import { renderSidebarHtml } from '../webview/components/sidebar/sidebar';
 import { renderDiffToolbarHtml, renderEditorToolbarHtml } from '../webview/components/toolbar/toolbar';
 
@@ -56,9 +55,8 @@ function script(assets: WebviewShellAssets): string {
 	return `<script nonce="${assets.nonce}" src="${assets.scriptUri}"></script>`;
 }
 
-/** The editor page shell: toolbar, find widget, Document tree region, sidebar and row menu. */
+/** The editor page shell: toolbar, Document tree region, sidebar and row menu. */
 export function editorShell(assets: WebviewShellAssets): string {
-	const searchHtml = renderSearchBarHtml('', 'Find in the ECUC tree', true);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -66,7 +64,6 @@ ${head(assets, 'ARXML Scope')}
 </head>
 <body data-view="document">
 ${renderEditorToolbarHtml()}
-${searchHtml}
 <div id="content">
 <div id="main">
 <div id="tree-measure" aria-hidden="true"><span id="tree-ch-probe" class="ch-probe">${'0'.repeat(100)}</span><div class="probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>
@@ -81,9 +78,8 @@ ${script(assets)}
 </html>`;
 }
 
-/** The diff page shell: toolbar, find widget, notice strip and the two-pane grid. */
+/** The diff page shell: toolbar, notice strip and the two-pane grid. */
 export function diffShell(assets: WebviewShellAssets): string {
-	const searchHtml = renderSearchBarHtml('diff-', 'Find in the diff', false);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -91,7 +87,6 @@ ${head(assets, 'ARXML Scope Diff')}
 </head>
 <body data-view="document" data-page="diff">
 ${renderDiffToolbarHtml()}
-${searchHtml}
 <div id="diff-notice" class="notice" role="status" aria-live="polite"></div>
 ${renderDiffViewHtml()}
 ${script(assets)}
