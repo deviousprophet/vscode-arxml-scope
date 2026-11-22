@@ -137,6 +137,7 @@ interface InvalidEdit {
 }
 let invalidEdits = new Map<string, InvalidEdit>();
 let saveRequested = false;
+let localErrorShown = false;
 let errorStrip: HTMLElement | null = null;
 let decorationIds: string[] = [];
 let detailsBody: HTMLElement | null = null;
@@ -621,6 +622,10 @@ function updateErrorState(): void {
 	}
 	if (first !== undefined) {
 		setDetailsStatus({ message: first.message, kind: 'warn' });
+		localErrorShown = true;
+	} else if (localErrorShown) {
+		clearDetailsStatus();
+		localErrorShown = false;
 	}
 	updateDirtyStatus();
 }
