@@ -1,0 +1,30 @@
+{
+  "id": "ecuc-diff-builtin-parity",
+  "name": "ecuc-diff-builtin-parity",
+  "title": "Match the ECUC diff content body to VS Code's built-in diff",
+  "description": "The shipped Monaco diff page renders a pre-aligned synthetic row document with custom placeholders, fills and merge arrows, so its content body does not behave like VS Code's built-in diff editor. Investigate the gap against the VS Code/Monaco diff editor, decide whether to keep the synthetic semantic document or move to real file text with semantic metadata, and plan visual/interaction parity plus independently verifiable child tasks.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "--help",
+  "assignee": "--help",
+  "createdAt": "2026-11-23",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-23-ecuc-diff-body-surface",
+    "11-23-ecuc-diff-unchanged-ruler",
+    "11-23-ecuc-diff-visual-proof"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
