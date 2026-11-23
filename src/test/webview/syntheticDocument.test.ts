@@ -149,6 +149,30 @@ function diffRow(row: EcucRow, status: DiffRow['status'], key: string): DiffRow 
 	};
 }
 
+/** One side only, the shape the merged list produces for an added/removed subtree. */
+function oneSidedDiffRow(
+	row: EcucRow,
+	status: 'added' | 'removed',
+	key: string,
+	side: 'left' | 'right'
+): DiffRow {
+	return {
+		key,
+		parentKey: row.parentId,
+		level: row.level,
+		posinset: row.posinset,
+		setsize: row.setsize,
+		kind: row.kind,
+		hasChildren: row.hasChildren,
+		subtreeSize: row.subtreeSize,
+		status,
+		left: side === 'left' ? diffCell(row) : undefined,
+		right: side === 'right' ? diffCell(row) : undefined,
+		changes: [],
+		haystack: row.haystack
+	};
+}
+
 suite('synthetic ECUC document', () => {
 	test('serializes the Document rows, edits spans and folding ranges', () => {
 		const document = buildSyntheticDocument(rows(), { schema: '00048', packages: ['P.Preview'] });
@@ -586,6 +610,205 @@ suite('synthetic ECUC document', () => {
 			'the diff meta span maps inside the quoted short name'
 		);
 		assert.strictEqual(left.length, right.length);
+	});
+
+	test('a one-sided module and container leave the missing side blank', () => {
+		const removedModule: EcucRow = {
+			...moduleRow(),
+			id: 'module:removed#0',
+			subtreeSize: 2,
+			label: 'P.RemovedMod',
+			shortName: 'RemovedMod',
+			definitionRef: '/P/RemovedMod',
+			title: '/P/RemovedMod',
+			meta: [{ cls: 'short', text: '"RemovedMod"', title: 'RemovedMod' }],
+			haystack: 'p.removedmod removedmod'
+		};
+		const removedContainer: EcucRow = {
+			...containerRow(),
+			id: 'container:removed#0',
+			parentId: 'module:removed#0',
+			label: 'RemovedItems',
+			shortName: 'RemovedItems',
+			definitionRef: '/P/RemovedMod/RemovedItems',
+			title: '/P/RemovedMod/RemovedItems',
+			meta: [{ cls: 'short', text: '"RemovedItems"', title: 'RemovedItems' }],
+			haystack: 'removeditems removeditems'
+		};
+		const removedParameter: EcucRow = {
+			...parameterRow(),
+			id: 'container:removed#0/param:RemovedValue#0',
+			parentId: 'container:removed#0',
+			label: 'RemovedValue',
+			definitionRef: '/P/RemovedMod/RemovedItems/RemovedValue'
+		};
+		const addedModule: EcucRow = {
+			...moduleRow(),
+			id: 'module:added#0',
+			subtreeSize: 2,
+			label: 'P.AddedMod',
+			shortName: 'AddedMod',
+			definitionRef: '/P/AddedMod',
+			title: '/P/AddedMod',
+			meta: [{ cls: 'short', text: '"AddedMod"', title: 'AddedMod' }],
+			haystack: 'p.addedmod addedmod'
+		};
+		const addedContainer: EcucRow = {
+			...containerRow(),
+			id: 'container:added#0',
+			parentId: 'module:added#0',
+			label: 'AddedItems',
+			shortName: 'AddedItems',
+			definitionRef: '/P/AddedMod/AddedItems',
+			title: '/P/AddedMod/AddedItems',
+			meta: [{ cls: 'short', text: '"AddedItems"', title: 'AddedItems' }],
+			haystack: 'addeditems addeditems'
+		};
+		const addedParameter: EcucRow = {
+			...parameterRow(),
+			id: 'container:added#0/param:AddedValue#0',
+			parentId: 'container:added#0',
+			label: 'AddedValue',
+			definitionRef: '/P/AddedMod/AddedItems/AddedValue'
+		};
+		const sharedModule: EcucRow = {
+			...moduleRow(),
+			id: 'module:shared#0',
+			subtreeSize: 2,
+			label: 'P.Shared',
+			shortName: 'Shared',
+			definitionRef: '/P/Shared',
+			title: '/P/Shared',
+			meta: [{ cls: 'short', text: '"Shared"', title: 'Shared' }],
+			haystack: 'p.shared shared'
+		};
+		const sharedContainer: EcucRow = {
+			...containerRow(),
+			id: 'container:shared#0',
+			parentId: 'module:shared#0',
+			label: 'SharedItems',
+			shortName: 'SharedItems',
+			definitionRef: '/P/Shared/SharedItems',
+			title: '/P/Shared/SharedItems',
+			meta: [{ cls: 'short', text: '"SharedItems"', title: 'SharedItems' }],
+			haystack: 'shareditems shareditems'
+		};
+		const sharedParameter: EcucRow = {
+			...parameterRow(),
+			id: 'container:shared#0/param:SharedValue#0',
+			parentId: 'container:shared#0',
+			label: 'SharedValue',
+			definitionRef: '/P/Shared/SharedItems/SharedValue'
+		};
+		const document: DiffDocument = {
+			left: { name: 'left.arxml', path: 'left.arxml' },
+			right: { name: 'right.arxml', path: 'right.arxml' },
+			leftHeader: { packages: ['P.Preview'] },
+			rightHeader: { packages: ['P.Preview'] },
+			labels: ['left.arxml', 'right.arxml'],
+			rows: [
+				oneSidedDiffRow(removedModule, 'removed', 'module:removed#0', 'left'),
+				oneSidedDiffRow(removedContainer, 'removed', 'container:removed#0', 'left'),
+				oneSidedDiffRow(removedParameter, 'removed', 'container:removed#0/param:RemovedValue#0', 'left'),
+				oneSidedDiffRow(addedModule, 'added', 'module:added#0', 'right'),
+				oneSidedDiffRow(addedContainer, 'added', 'container:added#0', 'right'),
+				oneSidedDiffRow(addedParameter, 'added', 'container:added#0/param:AddedValue#0', 'right'),
+				diffRow(sharedModule, 'unchanged', 'module:shared#0'),
+				diffRow(sharedContainer, 'unchanged', 'container:shared#0'),
+				diffRow(sharedParameter, 'unchanged', 'container:shared#0/param:SharedValue#0')
+			],
+			summary: { changed: 0, added: 3, removed: 3, unchanged: 3, renamed: 0 },
+			semanticSkipped: 0
+		};
+
+		const aligned = buildAlignedSyntheticDocuments(document);
+		const left = aligned.left.text.split('\n');
+		const right = aligned.right.text.split('\n');
+
+		assert.strictEqual(left.length, right.length, 'the aligned models stay line-for-line equal');
+
+		const removedAt = left.indexOf('module P.RemovedMod "RemovedMod"');
+		assert.ok(removedAt >= 0, 'the removed module renders on the left');
+		let removedEnd = removedAt;
+		while (removedEnd < left.length && left[removedEnd] !== '') {
+			removedEnd += 1;
+		}
+		assert.deepStrictEqual(
+			left.slice(removedAt, removedEnd),
+			[
+				'module P.RemovedMod "RemovedMod"',
+				'{',
+				'    RemovedItems "RemovedItems"',
+				'    {',
+				'        RemovedValue = 0',
+				'    }',
+				'}'
+			],
+			'the owning side keeps its node line and both brace pairs'
+		);
+		for (let at = removedAt; at < removedEnd; at += 1) {
+			assert.strictEqual(right[at], '', `the missing side of line ${at + 1} stays blank`);
+			assert.ok(
+				!right[at].includes('{') && !right[at].includes('}'),
+				`the missing side of line ${at + 1} has no synthesized brace`
+			);
+		}
+
+		const addedAt = right.indexOf('module P.AddedMod "AddedMod"');
+		assert.ok(addedAt >= 0, 'the added module renders on the right');
+		assert.strictEqual(left[addedAt], '', 'the added module leaves the left node line blank');
+		let addedEnd = addedAt;
+		while (addedEnd < right.length && right[addedEnd] !== '') {
+			addedEnd += 1;
+		}
+		assert.deepStrictEqual(
+			right.slice(addedAt, addedEnd),
+			[
+				'module P.AddedMod "AddedMod"',
+				'{',
+				'    AddedItems "AddedItems"',
+				'    {',
+				'        AddedValue = 0',
+				'    }',
+				'}'
+			],
+			'the added module keeps its node line and both brace pairs'
+		);
+		for (let at = addedAt; at < addedEnd; at += 1) {
+			assert.strictEqual(left[at], '', `the missing side of line ${at + 1} stays blank`);
+			assert.ok(
+				!left[at].includes('{') && !left[at].includes('}'),
+				`the missing side of line ${at + 1} has no synthesized brace`
+			);
+		}
+
+		const sharedAt = left.indexOf('module P.Shared "Shared"');
+		assert.ok(sharedAt > addedEnd, 'the shared module follows both one-sided blocks');
+		assert.deepStrictEqual(
+			left.slice(sharedAt, sharedAt + 7),
+			right.slice(sharedAt, sharedAt + 7),
+			'the shared subtree is identical on both sides'
+		);
+
+		assert.strictEqual(aligned.left.rowLine.get('module:removed#0'), removedAt + 1);
+		assert.strictEqual(aligned.right.rowLine.get('module:removed#0'), removedAt + 1);
+		assert.strictEqual(aligned.left.rowLine.get('module:added#0'), addedAt + 1);
+		assert.strictEqual(aligned.right.rowLine.get('module:added#0'), addedAt + 1);
+		assert.strictEqual(aligned.leftLineKeys[removedAt], 'module:removed#0');
+		assert.strictEqual(aligned.rightLineKeys[removedAt], 'module:removed#0');
+		assert.strictEqual(aligned.leftLineKeys[addedAt], 'module:added#0');
+		assert.strictEqual(aligned.rightLineKeys[addedAt], 'module:added#0');
+
+		assert.deepStrictEqual(
+			aligned.left.foldingRanges.map((range) => range.startLine),
+			[removedAt + 1, removedAt + 3, sharedAt + 1, sharedAt + 3],
+			'the left folds its own module/container and the shared ones'
+		);
+		assert.deepStrictEqual(
+			aligned.right.foldingRanges.map((range) => range.startLine),
+			[addedAt + 1, addedAt + 3, sharedAt + 1, sharedAt + 3],
+			'the right never folds a missing-side placeholder'
+		);
 	});
 
 	test('a diff row with no label keeps its quoted short name as a string token', () => {

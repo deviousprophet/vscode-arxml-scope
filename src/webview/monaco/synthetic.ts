@@ -515,14 +515,17 @@ export function buildAlignedSyntheticDocuments(document: DiffDocument): AlignedS
 
 		const leftStart = leftLine;
 		const rightStart = rightLine;
-		emit(`${indent(row.level)}{`, `${indent(row.level)}{`, row.key);
+		const pad = indent(row.level);
+		// A one-sided row owns no line on the missing side: its braces stay blank
+		// there, so the block never reads as a valid empty container.
+		emit(row.left !== undefined ? `${pad}{` : '', row.right !== undefined ? `${pad}{` : '', row.key);
 		const end = at + row.subtreeSize;
 		while (at < end) {
 			walk();
 		}
 		const leftEnd = leftText.length + 1;
 		const rightEnd = rightText.length + 1;
-		emit(`${indent(row.level)}}`, `${indent(row.level)}}`, row.key);
+		emit(row.left !== undefined ? `${pad}}` : '', row.right !== undefined ? `${pad}}` : '', row.key);
 		if (row.left !== undefined) {
 			leftFolding.push({ startLine: leftStart, endLine: leftEnd });
 		}

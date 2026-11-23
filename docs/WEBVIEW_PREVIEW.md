@@ -50,6 +50,7 @@ its old bundle.
 | `diff-merge` | diff | 1400×900 | Merge pressed; copy arrows on both panes |
 | `diff-swap` | diff | 1400×900 | Swap pressed; headers and values mirror, arrows follow |
 | `diff-rail` | diff | 1400×900 | long document; F7 jumps to the change near line 1000 and scrolls |
+| `diff-one-sided` | diff | 1400×900 | a right-only and a left-only module/container; the missing side stays blank and neutral, the owning side keeps its braces and change fill |
 | `diff-wide` | diff | 1400×900 | long parameter names; rows overflow horizontally, arrows stay on the pane edges |
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; both arrows stay on the inner edges |
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
@@ -100,6 +101,12 @@ strip or the page shell, and check each image before asking for review.
       tooltip to paint over the toolbar while the widget is open.
 - [ ] **Diff fills stay translucent.** Changed rows keep readable text; the audit rejects
       opaque line or word fills in the dark preview.
+- [ ] **A one-sided block stays blank on the missing side.** `diff-one-sided` has a
+      right-only added module and a left-only removed module. The audit reads both aligned
+      models and the rendered layers: equal line counts, no `{`/`}` on the missing side, a
+      placeholder for every blank line (including the module gap), the editor-background fill
+      over Monaco's inserted/deleted line and char fills, and the owning side's braces and
+      change fill intact. The `oneSided` object in the audit JSON records the measured values.
 - [ ] **Value kinds keep their colours.** `editor-syntax` shows `0b1010` in the same colour as
       decimal `42`, `P.Syn.Syntax.Target` in the reference colour, and
       `CANIPCORETYPE_SC==0` with distinct name, operator and number colours.
@@ -242,4 +249,8 @@ preview. It does prove focus and caret in the Details panel across a local repai
 the registered Undo/Redo actions after a Details edit; the Ctrl+Z/Ctrl+Shift+Z keybindings
 themselves cannot be driven from the harness, so that route still needs the Extension Development
 Host. The paste probe dispatches a clipboard-shaped event to the editor's capture guard; it does
-not exercise the OS clipboard or Monaco's own paste handler.
+not exercise the OS clipboard or Monaco's own paste handler. A one-sided placeholder neutralizes
+Monaco's line, char and gutter fills; the overview ruler still marks the change region, which is
+the scrollbar's job, not a line fill. Monaco may also show its diagonal alignment padding opposite
+a longer one-sided run; that padding is a view zone, not a model line, and carries no added or
+removed tint.

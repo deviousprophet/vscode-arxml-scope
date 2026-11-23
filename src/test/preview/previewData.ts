@@ -65,6 +65,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-merge', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
+	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-wide', page: 'diff', width: 1400, height: 900, merge: true, wide: true },
 	{
 		name: 'diff-wide-panned',
@@ -166,6 +167,59 @@ function widePair(): DiffDocument {
 /** 1,100 parameters; only the last few change, so F7 lands on a four-digit line. */
 function railPair(): DiffDocument {
 	return diffPair(values(1100, () => false), values(1100, (at) => at >= 1000, 500));
+}
+
+/** A module/container/parameter block for the one-sided preview fixture. */
+function oneSidedModule(shortName: string, containers: string): string {
+	return `<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>${shortName}</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/${shortName}</DEFINITION-REF><CONTAINERS>${containers}</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES>`;
+}
+
+function oneSidedContainer(module: string, shortName: string, parameters: string): string {
+	return `<ECUC-CONTAINER-VALUE><SHORT-NAME>${shortName}</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/${module}/${shortName}</DEFINITION-REF><PARAMETER-VALUES>${parameters}</PARAMETER-VALUES></ECUC-CONTAINER-VALUE>`;
+}
+
+function oneSidedValue(module: string, container: string, name: string, value: string): string {
+	return `<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/${module}/${container}/${name}</DEFINITION-REF><VALUE>${value}</VALUE></ECUC-NUMERICAL-PARAM-VALUE>`;
+}
+
+/** One module tree exists on only one side; a shared module/container/value aligns. */
+function oneSidedDocument(side: 'left' | 'right'): string {
+	const module = side === 'left' ? 'RemovedMod' : 'AddedMod';
+	const container = side === 'left' ? 'RemovedItems' : 'AddedItems';
+	const value = side === 'left' ? 'RemovedValue' : 'AddedValue';
+	const modules = [
+		oneSidedModule(
+			module,
+			oneSidedContainer(module, container, oneSidedValue(module, container, value, side === 'left' ? '1' : '2'))
+		),
+		oneSidedModule(
+			'Shared',
+			oneSidedContainer(
+				'Shared',
+				'SharedItems',
+				oneSidedValue('Shared', 'SharedItems', 'SharedValue', '5') +
+					oneSidedValue('Shared', 'SharedItems', 'ChangedValue', side === 'left' ? '6' : '7')
+			)
+		)
+	];
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${modules.join('')}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+/** A left-only and a right-only module/container, plus a shared subtree with one change. */
+function oneSidedPair(): DiffDocument {
+	const leftSide = rowsOf(oneSidedDocument('left'));
+	const rightSide = rowsOf(oneSidedDocument('right'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
 }
 
 function editorDocument(): { rows: EcucRow[]; selectedId?: string } {
@@ -293,6 +347,9 @@ function documentFor(state: PreviewState) {
 			state.name === 'editor-stale-save'
 			? syntaxDocument('Text')
 			: editorDocument();
+	}
+	if (state.name === 'diff-one-sided') {
+		return oneSidedPair();
 	}
 	return state.wide ? widePair() : state.name === 'diff-rail' ? railPair() : mergePair();
 }

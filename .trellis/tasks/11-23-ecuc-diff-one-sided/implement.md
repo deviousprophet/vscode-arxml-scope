@@ -57,6 +57,29 @@
 - [ ] `node esbuild.js --production`
 - [ ] `git diff --check`
 
+## Result
+
+One-sided diff fix implemented and checked on 2026-11-23.
+
+- `buildAlignedSyntheticDocuments` emits braces only on the side that owns the row; the missing
+  side keeps equal-length blank lines. Keys, rowLine, folding, selection and line counts stay
+  aligned.
+- `diffMonaco` marks every missing-side line (including module-gap blank lines) with
+  `arxml-diff-placeholder`; the CSS neutralizes Monaco's inserted/deleted line, char, gutter and
+  sign paints. The owning side keeps its change fill. Selection tint is skipped on placeholders;
+  merge arrows remain the host's delete/copy affordance.
+- `diff-one-sided` fixture/audit reads the actual aligned models and computed styles. It fails on
+  fake braces, green/red placeholder fill, missing owning-side fill, or an unavailable model.
+  Negative controls: reverting the brace guard fails with fake braces; disabling the placeholder
+  CSS fails five fill/gutter/sign checks; transparenting all fills fails the owning-fill check.
+- Local sample pair: 12,422 aligned lines per side, 10 one-sided rows, 0 non-empty missing-side
+  lines. `RemovedMod`/`SharedContainerDef "Inner"`, `AddedContainer`, `DiffExtraMod`, renamed
+  modules and `EmptyDef`/`MissingDef` verified. No sample files/scripts entered the repo.
+- Full suite: 977 passing; 33/33 preview states; `check-types`, `lint`, production bundle pass.
+- Limitations: placeholder CSS is coupled to Monaco 0.57's line DOM and `:has()`; the audit
+  fails if that DOM changes. The overview ruler still marks the change, and the preview audit is
+  dark-only. Monaco's diagonal alignment padding is neutral and documented.
+
 ## Review gates
 
 - [ ] One-sided containers/modules have blank missing-side lines, no braces.

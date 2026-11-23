@@ -39,6 +39,9 @@ let semantic = true;
 let selectedKey: string | undefined;
 let originalDecorations: string[] = [];
 let modifiedDecorations: string[] = [];
+/** Model lines whose cell is missing on that side; the whole one-sided block. */
+let leftPlaceholderLines = new Set<number>();
+let rightPlaceholderLines = new Set<number>();
 type MonacoFindMatch = ReturnType<monaco.editor.ITextModel['findMatches']>[number];
 type DiffSide = 'left' | 'right';
 interface DiffNativeQuery {
@@ -111,6 +114,47 @@ function lineFor(key: string | undefined, doc: SyntheticDocument | undefined): n
 		return undefined;
 	}
 	return doc.rowLine.get(key);
+}
+
+/**
+ * Every model line belonging to a row that has no cell on `side`: the node line,
+ * its brace lines and a one-sided subtree's children. The line counts stay
+ * aligned, so these are the blank placeholder lines Monaco sees as an insertion
+ * or deletion.
+ */
+function placeholderLines(
+	document: DiffDocument,
+	keys: readonly (string | undefined)[],
+	side: 'left' | 'right'
+): Set<number> {
+	const byKey = new Map<string, DiffRow>();
+	for (const row of document.rows) {
+		byKey.set(row.key, row);
+	}
+	const lines = new Set<number>();
+	for (let at = 0; at < keys.length; at += 1) {
+		const key = keys[at];
+		if (key === undefined) {
+			// A module gap is a display-only blank line with no owning cell. Treat
+			// it as neutral on both sides so Monaco's blank-line alignment cannot
+			// turn it into an added/removed row.
+			lines.add(at + 1);
+			continue;
+		}
+		const row = byKey.get(key);
+		if (row !== undefined && (side === 'left' ? row.left === undefined : row.right === undefined)) {
+			lines.add(at + 1);
+		}
+	}
+	return lines;
+}
+
+/** True when this model line carries no cell on its own side. */
+function placeholderOn(doc: SyntheticDocument | undefined, line: number | undefined): boolean {
+	if (aligned === undefined || doc === undefined || line === undefined) {
+		return false;
+	}
+	return (doc === aligned.left ? leftPlaceholderLines : rightPlaceholderLines).has(line);
 }
 
 function keyAt(editor: monaco.editor.ICodeEditor | undefined, line: number, side: 'original' | 'modified'): string | undefined {
@@ -475,6 +519,8 @@ function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
 	documentModel = next;
 	semantic = nextSemantic;
 	aligned = buildAlignedSyntheticDocuments(next);
+	leftPlaceholderLines = placeholderLines(next, aligned.leftLineKeys, 'left');
+	rightPlaceholderLines = placeholderLines(next, aligned.rightLineKeys, 'right');
 	if (leftModel !== undefined) {
 		leftModel.setValue(aligned.left.text);
 		setModelFolding(leftModel, aligned.left.foldingRanges);
@@ -543,34 +589,73 @@ function renderDecorations(): void {
 		});
 	};
 
+	const originalDoc = originalDocument();
+	const modifiedDoc = modifiedDocument();
 	for (const key of selected) {
 		// The node line gets the selected class; its brace and annotation lines
-		// keep the subtree tint, matching the old Document.
-		const originalLine = lineFor(key, originalDocument());
-		const modifiedLine = lineFor(key, modifiedDocument());
-		if (originalLine !== undefined) {
+		// keep the subtree tint, matching the old Document. A placeholder line has
+		// no cell, so it stays neutral instead of joining the selection tint.
+		const originalLine = lineFor(key, originalDoc);
+		const modifiedLine = lineFor(key, modifiedDoc);
+		if (originalLine !== undefined && !placeholderOn(originalDoc, originalLine)) {
 			add(originalRanges, originalLine, key === selectedKey ? 'arxml-selected' : 'arxml-subtree');
 		}
-		if (modifiedLine !== undefined) {
+		if (modifiedLine !== undefined && !placeholderOn(modifiedDoc, modifiedLine)) {
 			add(modifiedRanges, modifiedLine, key === selectedKey ? 'arxml-selected' : 'arxml-subtree');
 		}
 	}
-	const originalDoc = originalDocument();
-	const modifiedDoc = modifiedDocument();
 	const oldOriginalKeys = originalKeys();
 	const oldModifiedKeys = modifiedKeys();
 	for (let at = 0; at < oldOriginalKeys.length; at += 1) {
 		const key = oldOriginalKeys[at];
-		if (key !== undefined && selected.has(key) && originalDoc?.rowLine.get(key) !== at + 1) {
+		if (
+			key !== undefined &&
+			selected.has(key) &&
+			originalDoc?.rowLine.get(key) !== at + 1 &&
+			!placeholderOn(originalDoc, at + 1)
+		) {
 			add(originalRanges, at + 1, 'arxml-subtree');
 		}
 	}
 	for (let at = 0; at < oldModifiedKeys.length; at += 1) {
 		const key = oldModifiedKeys[at];
-		if (key !== undefined && selected.has(key) && modifiedDoc?.rowLine.get(key) !== at + 1) {
+		if (
+			key !== undefined &&
+			selected.has(key) &&
+			modifiedDoc?.rowLine.get(key) !== at + 1 &&
+			!placeholderOn(modifiedDoc, at + 1)
+		) {
 			add(modifiedRanges, at + 1, 'arxml-subtree');
 		}
 	}
+
+	// Monaco's line diff still classifies a blank placeholder opposite a real
+	// line as inserted/deleted. An opaque editor-background layer outranks that
+	// fill (zIndex above Monaco's default 0), so the missing side reads blank;
+	// the real side keeps its own change fill. The margin class neutralizes the
+	// gutter fill and sign in the stylesheet.
+	const addPlaceholders = (
+		target: monaco.editor.IModelDeltaDecoration[],
+		doc: SyntheticDocument | undefined
+	): void => {
+		if (doc === undefined) {
+			return;
+		}
+		const lines = doc === aligned?.left ? leftPlaceholderLines : rightPlaceholderLines;
+		for (const line of lines) {
+			target.push({
+				range: new monaco.Range(line, 1, line, 1),
+				options: {
+					isWholeLine: true,
+					className: 'arxml-diff-placeholder',
+					marginClassName: 'arxml-diff-placeholder-margin',
+					zIndex: 2
+				}
+			});
+		}
+	};
+	addPlaceholders(originalRanges, originalDoc);
+	addPlaceholders(modifiedRanges, modifiedDoc);
 
 	if (mergeMode && documentModel !== undefined) {
 		for (const row of documentModel.rows) {

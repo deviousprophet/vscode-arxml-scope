@@ -112,11 +112,59 @@ interface SyscondAudit {
 	panelState: string | null;
 }
 
+/** Actual aligned models and placeholder paint for the one-sided diff fixture. */
+export interface OneSidedAudit {
+	originalLines: number;
+	modifiedLines: number;
+	missingSideBlank: boolean;
+	missingSideBraces: string[];
+	owningSideBraces: number;
+	gapLines: number;
+	placeholderLines: number;
+	placeholderExpected: number;
+	realSidePlaceholder: boolean;
+	placeholderFill: string;
+	neutralFill: string;
+	fillsNeutral: boolean;
+	diffFillNeutral: boolean;
+	owningFill: boolean;
+	gutterNeutral: boolean;
+	signHidden: boolean;
+	lineChanges: number;
+	owningArrows: number;
+	removedNavigable: boolean;
+	addedNavigable: boolean;
+}
+
 interface PaneBounds {
 	side: string;
 	rect?: Rect;
 	left: number;
 	right: number;
+}
+
+interface PreviewModelDecoration {
+	range: { startLineNumber: number; endLineNumber: number };
+	options: { className?: string | null; marginClassName?: string | null; glyphMarginClassName?: string | null };
+}
+
+interface PreviewDiffModel {
+	getLineCount(): number;
+	getLinesContent(): string[];
+	getAllDecorations(): PreviewModelDecoration[];
+}
+
+interface PreviewLineChange {
+	originalStartLineNumber: number;
+	originalEndLineNumber: number;
+	modifiedStartLineNumber: number;
+	modifiedEndLineNumber: number;
+}
+
+interface PreviewDiffEditor {
+	getOriginalEditor(): { getModel(): PreviewDiffModel | null; getDomNode(): HTMLElement | null };
+	getModifiedEditor(): { getModel(): PreviewDiffModel | null; getDomNode(): HTMLElement | null };
+	getLineChanges(): PreviewLineChange[] | null;
 }
 
 export interface PaneSnapshot {
@@ -140,6 +188,7 @@ export interface PreviewAudit {
 	swap: { before: PaneSnapshot; after: PaneSnapshot } | null;
 	syntax?: { text: string; className: string; color: string }[];
 	syscond?: SyscondAudit;
+	oneSided?: OneSidedAudit;
 	sticky?: { visible: boolean; display: string; text: string; rect: Rect | null };
 	violations: string[];
 }
@@ -417,6 +466,13 @@ function violationsOf(state: AuditState, audit: Omit<PreviewAudit, 'violations'>
 	];
 	if (audit.content.pageOverflow) {
 		issues.push('the document scrolls horizontally');
+	}
+	if (state.name === 'diff-one-sided') {
+		issues.push(
+			...(audit.oneSided === undefined
+				? ['the one-sided audit could not read the aligned diff models']
+				: oneSidedViolations(audit.oneSided))
+		);
 	}
 	if (state.page === 'diff') {
 		issues.push(...diffViolations(state, audit));
@@ -1110,6 +1166,296 @@ function monacoDiffViolations(_state: AuditState): string[] {
 	return document.body.classList.contains('vscode-light') ? [] : translucentDiffViolations();
 }
 
+/** The first non-empty run after `start`: one node line, its braces and children. */
+function blockEnd(lines: readonly string[], start: number): number {
+	let at = start;
+	while (at < lines.length && lines[at] !== '') {
+		at += 1;
+	}
+	return at;
+}
+
+function braceCount(lines: readonly string[], start: number, end: number): number {
+	let count = 0;
+	for (let at = Math.max(0, start); at < end; at += 1) {
+		if (lines[at].includes('{') || lines[at].includes('}')) {
+			count += 1;
+		}
+	}
+	return count;
+}
+
+function decorationHasClass(options: PreviewModelDecoration['options'], name: string): boolean {
+	const value = options.className;
+	return typeof value === 'string' && value.split(/\s+/).includes(name);
+}
+
+/** Resolves a theme variable through a hidden probe, e.g. `var(--vscode-editor-background)`. */
+function resolvedColor(expression: string): string {
+	const probe = document.createElement('div');
+	probe.style.color = expression;
+	probe.style.display = 'none';
+	document.body.appendChild(probe);
+	const color = getComputedStyle(probe).color;
+	probe.remove();
+	return color;
+}
+
+/**
+ * Reads the actual aligned models and the rendered placeholder layers. The fake
+ * brace regression lived in the model text, so this audit cannot pass on geometry
+ * alone: it walks the exact lines of both one-sided blocks.
+ */
+function oneSidedAudit(): OneSidedAudit | undefined {
+	const editor = (window as unknown as { __ARXML_DIFF_EDITOR__?: PreviewDiffEditor }).__ARXML_DIFF_EDITOR__;
+	if (editor === undefined) {
+		return undefined;
+	}
+	const originalEditor = editor.getOriginalEditor();
+	const modifiedEditor = editor.getModifiedEditor();
+	const originalModel = originalEditor.getModel();
+	const modifiedModel = modifiedEditor.getModel();
+	if (originalModel === null || modifiedModel === null) {
+		return undefined;
+	}
+	const left = originalModel.getLinesContent();
+	const right = modifiedModel.getLinesContent();
+	const removedAt = left.indexOf('module P.RemovedMod "RemovedMod"');
+	const addedAt = right.indexOf('module P.AddedMod "AddedMod"');
+	const removedEnd = removedAt < 0 ? 0 : blockEnd(left, removedAt);
+	const addedEnd = addedAt < 0 ? 0 : blockEnd(right, addedAt);
+
+	const missingSideBraces: string[] = [];
+	let missingSideBlank = removedAt >= 0 && addedAt >= 0;
+	for (let at = Math.max(0, removedAt); removedAt >= 0 && at < removedEnd; at += 1) {
+		const line = right[at] ?? '';
+		if (line !== '') {
+			missingSideBlank = false;
+		}
+		if (line.includes('{') || line.includes('}')) {
+			missingSideBraces.push(`right ${at + 1}: ${line}`);
+		}
+	}
+	for (let at = Math.max(0, addedAt); addedAt >= 0 && at < addedEnd; at += 1) {
+		const line = left[at] ?? '';
+		if (line !== '') {
+			missingSideBlank = false;
+		}
+		if (line.includes('{') || line.includes('}')) {
+			missingSideBraces.push(`left ${at + 1}: ${line}`);
+		}
+	}
+
+	const placeholderOf = (model: PreviewDiffModel): number[] =>
+		model
+			.getAllDecorations()
+			.filter((decoration) => decorationHasClass(decoration.options, 'arxml-diff-placeholder'))
+			.map((decoration) => decoration.range.startLineNumber);
+	const leftPlaceholders = placeholderOf(originalModel);
+	const rightPlaceholders = placeholderOf(modifiedModel);
+	const realSidePlaceholder =
+		rightPlaceholders.some((line) => addedAt >= 0 && line > addedAt && line <= addedEnd) ||
+		leftPlaceholders.some((line) => removedAt >= 0 && line > removedAt && line <= removedEnd);
+
+	const originalRoot = originalEditor.getDomNode();
+	const modifiedRoot = modifiedEditor.getDomNode();
+	const sampleElement =
+		originalRoot?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
+		modifiedRoot?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
+		null;
+	const placeholderFill = sampleElement === null ? '' : getComputedStyle(sampleElement).backgroundColor;
+	const neutralFill = resolvedColor('var(--vscode-editor-background)');
+
+	let gapLines = 0;
+	const lineCount = Math.min(left.length, right.length);
+	for (let at = 0; at < lineCount; at += 1) {
+		if (left[at] === '' && right[at] === '') {
+			gapLines += 1;
+		}
+	}
+
+	const roots = [originalRoot, modifiedRoot].filter((root): root is HTMLElement => root !== null);
+	let placeholderElements = 0;
+	let fillsNeutral = true;
+	let diffFillNeutral = true;
+	let gutterWrappers = 0;
+	let gutterNeutral = true;
+	let signHidden = true;
+	for (const root of roots) {
+		for (const element of Array.from(root.querySelectorAll('.cdr.arxml-diff-placeholder'))) {
+			placeholderElements += 1;
+			if (getComputedStyle(element).backgroundColor !== neutralFill) {
+				fillsNeutral = false;
+			}
+		}
+		for (const fill of Array.from(
+			root.querySelectorAll(
+				'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-insert, ' +
+					'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-delete, ' +
+					'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-insert, ' +
+					'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-delete'
+			)
+		)) {
+			const alpha = colorAlpha(getComputedStyle(fill).backgroundColor);
+			if (alpha !== undefined && alpha > 0) {
+				diffFillNeutral = false;
+			}
+		}
+		for (const wrapper of Array.from(
+			root.querySelectorAll('.margin-view-overlays > div:has(> .arxml-diff-placeholder-margin)')
+		)) {
+			gutterWrappers += 1;
+			const fill = wrapper.querySelector('.gutter-insert, .gutter-delete');
+			if (fill !== null) {
+				const alpha = colorAlpha(getComputedStyle(fill).backgroundColor);
+				if (alpha !== undefined && alpha > 0) {
+					gutterNeutral = false;
+				}
+			}
+			for (const sign of Array.from(wrapper.querySelectorAll('.insert-sign, .delete-sign'))) {
+				if (getComputedStyle(sign).display !== 'none') {
+					signHidden = false;
+				}
+			}
+		}
+	}
+
+	/** The owning side must keep its own removed/added fill; only placeholders go neutral. */
+	const owningFillVisible = (root: HTMLElement | null, className: 'line-delete' | 'line-insert'): boolean => {
+		if (root === null) {
+			return false;
+		}
+		for (const fill of Array.from(root.querySelectorAll(`.view-overlays > div > .${className}`))) {
+			const wrapper = fill.parentElement;
+			if (wrapper === null) {
+				continue;
+			}
+			const placeholder = Array.from(wrapper.children).some((child) =>
+				child.classList.contains('arxml-diff-placeholder')
+			);
+			if (placeholder) {
+				continue;
+			}
+			const alpha = colorAlpha(getComputedStyle(fill).backgroundColor);
+			if (alpha !== undefined && alpha > 0) {
+				return true;
+			}
+		}
+		return false;
+	};
+	const owningFill = owningFillVisible(originalRoot, 'line-delete') && owningFillVisible(modifiedRoot, 'line-insert');
+
+	const changes = editor.getLineChanges() ?? [];
+	const covers = (start: number, end: number, line: number): boolean =>
+		start > 0 && line >= start && line <= Math.max(start, end);
+	const glyphArrowOn = (model: PreviewDiffModel, line: number): boolean =>
+		model
+			.getAllDecorations()
+			.some(
+				(decoration) =>
+					decoration.range.startLineNumber === line &&
+					typeof decoration.options.glyphMarginClassName === 'string' &&
+					decoration.options.glyphMarginClassName.includes('arxml-merge-arrow')
+			);
+
+	return {
+		originalLines: originalModel.getLineCount(),
+		modifiedLines: modifiedModel.getLineCount(),
+		missingSideBlank,
+		missingSideBraces,
+		owningSideBraces: braceCount(left, removedAt, removedEnd) + braceCount(right, addedAt, addedEnd),
+		gapLines,
+		placeholderLines: leftPlaceholders.length + rightPlaceholders.length,
+		placeholderExpected:
+			(removedEnd - Math.max(0, removedAt)) +
+			(addedEnd - Math.max(0, addedAt)) +
+			2 * gapLines,
+		realSidePlaceholder,
+		placeholderFill,
+		neutralFill,
+		fillsNeutral: placeholderElements > 0 && fillsNeutral && placeholderElements === leftPlaceholders.length + rightPlaceholders.length,
+		diffFillNeutral,
+		owningFill,
+		gutterNeutral: gutterWrappers > 0 && gutterNeutral,
+		signHidden: gutterWrappers > 0 && signHidden,
+		lineChanges: changes.length,
+		owningArrows:
+			(removedAt >= 0 && glyphArrowOn(originalModel, removedAt + 1) ? 1 : 0) +
+			(addedAt >= 0 && glyphArrowOn(modifiedModel, addedAt + 1) ? 1 : 0),
+		removedNavigable:
+			removedAt >= 0 &&
+			changes.some((change) =>
+				covers(change.originalStartLineNumber, change.originalEndLineNumber, removedAt + 1)
+			),
+		addedNavigable:
+			addedAt >= 0 &&
+			changes.some((change) =>
+				covers(change.modifiedStartLineNumber, change.modifiedEndLineNumber, addedAt + 1)
+			)
+	};
+}
+
+function oneSidedViolations(audit: OneSidedAudit): string[] {
+	const issues: string[] = [];
+	if (audit.originalLines !== audit.modifiedLines) {
+		issues.push(`the aligned models have ${audit.originalLines} and ${audit.modifiedLines} lines`);
+	}
+	if (!audit.missingSideBlank) {
+		issues.push('a missing-side placeholder still has content');
+	}
+	if (audit.missingSideBraces.length > 0) {
+		issues.push(`the missing side synthesized braces (${audit.missingSideBraces.join('; ')})`);
+	}
+	if (audit.owningSideBraces !== 8) {
+		issues.push(
+			`the owning side has ${audit.owningSideBraces} brace lines, not the 8 module/container braces`
+		);
+	}
+	if (audit.placeholderLines !== audit.placeholderExpected) {
+		issues.push(
+			`expected ${audit.placeholderExpected} placeholder lines, found ${audit.placeholderLines}`
+		);
+	}
+	if (audit.realSidePlaceholder) {
+		issues.push('a placeholder decoration covers a line that owns a cell');
+	}
+	if (audit.placeholderFill === '' || audit.placeholderFill !== audit.neutralFill) {
+		issues.push(
+			`the placeholder fill is ${audit.placeholderFill || '<none>'}, not the editor background ${audit.neutralFill}`
+		);
+	}
+	if (!audit.fillsNeutral) {
+		issues.push('a placeholder layer is not painted with the editor background');
+	}
+	if (!audit.diffFillNeutral) {
+		issues.push('a placeholder wrapper keeps Monaco inserted/deleted line or char fill');
+	}
+	if (!audit.owningFill) {
+		issues.push('the owning side lost its inserted/deleted line fill');
+	}
+	if (!audit.gutterNeutral) {
+		issues.push('the placeholder gutter keeps the inserted/deleted line fill');
+	}
+	if (!audit.signHidden) {
+		issues.push('the placeholder gutter keeps the inserted/deleted sign');
+	}
+	if (audit.lineChanges < 3) {
+		issues.push(
+			`the diff has ${audit.lineChanges} line changes, not the added, removed and changed blocks`
+		);
+	}
+	if (audit.owningArrows !== 2) {
+		issues.push(`the owning side has ${audit.owningArrows} merge arrows, not one per one-sided module`);
+	}
+	if (!audit.removedNavigable) {
+		issues.push('the removed block is missing from the navigation change list');
+	}
+	if (!audit.addedNavigable) {
+		issues.push('the added block is missing from the navigation change list');
+	}
+	return issues;
+}
+
 function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
 	if (usesMonacoDiff()) {
 		// Monaco owns the gutter, arrows, scroll surface and selection now. The
@@ -1312,7 +1658,8 @@ export function previewAudit(state: AuditState, swapBefore?: PaneSnapshot): Prev
 					color: getComputedStyle(span).color
 				}))
 			: undefined,
-		syscond: state.page === 'editor' ? syscondAudit() : undefined
+		syscond: state.page === 'editor' ? syscondAudit() : undefined,
+		oneSided: state.name === 'diff-one-sided' ? oneSidedAudit() : undefined
 	};
 	return { ...base, violations: violationsOf(state, base) };
 }
