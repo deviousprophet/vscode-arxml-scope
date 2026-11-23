@@ -211,6 +211,25 @@ Rules:
 - The header gap is one blank row with no rule child or border, numbered on both sides. The module gap
   shares that treatment, adds no cell and never carries a status attribute.
 
+### Monaco diff body
+
+- `src/webview/monaco/monaco.css` owns the shipped Monaco body paint. The host and both editor roots
+  carry `arxml-diff-body`, `arxml-diff-gutter`, `arxml-diff-status` and
+  `arxml-diff-merge-margin`; these are the stable hooks the preview audit and the visual-proof child
+  read. Do not move them into the legacy `diffView.css` selectors.
+- The semantic status is one layer: `.arxml-diff-line-added` / `.arxml-diff-line-removed` whole-line
+  fills, `.arxml-diff-word-added` / `.arxml-diff-word-removed` inline spans, and the built-in
+  `insert-sign` / `delete-sign` codicons. Monaco's own `.line-insert` / `.line-delete` /
+  `.char-insert` / `.char-delete` fills are neutralized in the body so the pre-aligned text cannot
+  paint a second, disagreeing diff. The placeholder neutralizer still uses `!important` (the
+  documented exception).
+- The merge affordance is the `.cgmr.arxml-merge-arrow` codicon in the glyph margin, one arrow per
+  owning pane, pointing at the other pane. It replaces the legacy 22px text-arrow strip in the
+  shipped page; `--diff-arrow-strip` remains only for the legacy DOM page.
+- Word spans use `--vscode-diffEditor-insertedTextBackground` / `removedTextBackground` and the
+  `--diff-added-edge` / `--diff-removed-edge` outline. High contrast replaces the fills with a dotted
+  outline; forced colours do the same.
+
 ## Build and Bundle
 
 - `esbuild.js` builds three outputs: the Node `dist/extension.js` and the browser entries

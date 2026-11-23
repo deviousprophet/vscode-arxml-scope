@@ -2,7 +2,11 @@
  * The optional scenario switches shared by the preview server state and the
  * browser payload. One declaration keeps the two protocol halves in sync.
  */
+import type { MonacoSettings } from '../../webviewProtocol';
+
 export interface PreviewStateFields {
+	/** The curated editor settings the diff page inherits, when the state posts them. */
+	settings?: MonacoSettings;
 	merge?: boolean;
 	swap?: boolean;
 	/** Long parameter names force horizontal overflow; the copy arrows must survive it. */

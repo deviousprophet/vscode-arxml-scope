@@ -71,21 +71,19 @@
 	box-shadow: inset 2px 0 0 var(--vscode-focusBorder, #007fd4);
 }
 
-.monaco-diff-editor .arxml-merge-arrow-right::after,
-.monaco-diff-editor .arxml-merge-arrow-left::after {
-	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-	font-size: 14px;
-	line-height: 18px;
-	color: var(--vscode-editorGutter-modifiedBackground, var(--vscode-focusBorder));
+/* Merge mode is the only place the copy affordance exists. The glyph margin
+ * decoration renders `cgmr codicon codicon-arrow-*`, so the control keeps the
+ * VS Code diff margin geometry (a full line-height lane, centered codicon) while
+ * the class names stay the stable `arxml-merge-arrow-*` contract. */
+.monaco-diff-editor .cgmr.arxml-merge-arrow {
+	color: var(--vscode-editor-foreground, currentColor);
 	cursor: pointer;
+	border-radius: 4px;
 }
 
-.monaco-diff-editor .arxml-merge-arrow-right::after {
-	content: "→";
-}
-
-.monaco-diff-editor .arxml-merge-arrow-left::after {
-	content: "←";
+.monaco-diff-editor .cgmr.arxml-merge-arrow:hover {
+	color: var(--vscode-editor-foreground, currentColor);
+	background-color: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground, transparent));
 }
 
 /* A row that exists on only one side keeps a blank placeholder line on the
@@ -117,4 +115,72 @@
 .monaco-diff-editor .margin-view-overlays > div:has(> .arxml-diff-placeholder-margin) > .insert-sign,
 .monaco-diff-editor .margin-view-overlays > div:has(> .arxml-diff-placeholder-margin) > .delete-sign {
 	display: none !important;
+}
+
+/* ------------------------------------------------------------------ *
+ * Diff body surface.
+ *
+ * The semantic body paints its own status: a whole-line fill and a gutter sign
+ * per owning side, and word spans inside a changed line. Monaco's text-diff
+ * line/char fills are neutralized so the two never disagree on the pre-aligned
+ * body; the gutter fill still comes from Monaco's own margin classes, which
+ * keeps the VS Code gutter geometry. `arxml-diff-body`, `arxml-diff-gutter`,
+ * `arxml-diff-status` and `arxml-diff-merge-margin` are the stable class
+ * contract on the host and both editor roots.
+ * ------------------------------------------------------------------ */
+.monaco-diff-editor .view-overlays > div > .line-insert,
+.monaco-diff-editor .view-overlays > div > .line-delete,
+.monaco-diff-editor .view-overlays > div > .char-insert,
+.monaco-diff-editor .view-overlays > div > .char-delete {
+	background-color: transparent;
+	border-color: transparent;
+}
+
+.monaco-diff-editor .view-overlays > div > .char-insert.diff-range-empty,
+.monaco-diff-editor .view-overlays > div > .char-delete.diff-range-empty {
+	border-left-color: transparent;
+}
+
+.monaco-diff-editor .arxml-diff-line-added {
+	background-color: var(--diff-added-bg, var(--vscode-diffEditor-insertedLineBackground, transparent));
+}
+
+.monaco-diff-editor .arxml-diff-line-removed {
+	background-color: var(--diff-removed-bg, var(--vscode-diffEditor-removedLineBackground, transparent));
+}
+
+.monaco-diff-editor .arxml-diff-word-added {
+	background-color: var(--vscode-diffEditor-insertedTextBackground, var(--diff-added-bg, transparent));
+	outline: 1px solid var(--diff-added-edge, transparent);
+	outline-offset: -1px;
+}
+
+.monaco-diff-editor .arxml-diff-word-removed {
+	background-color: var(--vscode-diffEditor-removedTextBackground, var(--diff-removed-bg, transparent));
+	outline: 1px solid var(--diff-removed-edge, transparent);
+	outline-offset: -1px;
+}
+
+/* The +/− glyph reuses Monaco's built-in line-decoration sizing, so its box and
+ * opacity match the diff indicators; this marker only carries the contract. */
+.monaco-diff-editor .arxml-diff-sign {
+	pointer-events: none;
+}
+
+/* High contrast replaces the translucent word fills with an outline, matching the
+ * legacy diff treatment. The tokens stay the same; only the paint changes. */
+body.vscode-high-contrast .monaco-diff-editor .arxml-diff-word-added,
+body.vscode-high-contrast .monaco-diff-editor .arxml-diff-word-removed,
+body.vscode-high-contrast-light .monaco-diff-editor .arxml-diff-word-added,
+body.vscode-high-contrast-light .monaco-diff-editor .arxml-diff-word-removed {
+	background-color: transparent;
+	outline: 1px dotted currentColor;
+}
+
+@media (forced-colors: active) {
+	.monaco-diff-editor .arxml-diff-word-added,
+	.monaco-diff-editor .arxml-diff-word-removed {
+		background-color: transparent;
+		outline: 1px dotted currentColor;
+	}
 }

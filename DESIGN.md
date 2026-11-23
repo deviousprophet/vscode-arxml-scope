@@ -319,6 +319,18 @@ selection, search or F7. The pane window spans at least the pane width and the f
 including header lines, so the selection and subtree tints fill a stable width. Syntax tokens keep
 their own colours.
 
+The shipped Monaco body keeps the pre-aligned semantic rows as the source of truth. It paints one
+semantic layer per owning side: `diffEditor-insertedLineBackground` / `diffEditor-removedLineBackground`
+whole-line fills, the same `insertedTextBackground` / `removedTextBackground` roles on the changed
+words, and the built-in `+` / `−` codicons in the line-decoration column. The original pane is the
+removed role and the modified pane is the added role; a missing-side placeholder never receives a
+sign, fill or word span. Merge mode puts one codicon copy arrow on the owning pane's glyph margin
+(the margin affordance), with no separate revert icon; the host copy/delete path is unchanged. The
+`arxml-diff-body` class on the host and both editor roots, plus `arxml-diff-gutter`,
+`arxml-diff-status` and `arxml-diff-merge-margin`, is the stable hook the preview audit reads. Font,
+line height, whitespace, indent guides and wrapping come from the inherited `MonacoSettings`; the
+minimap is always off and the line-number/decorations columns use the Monaco diff defaults.
+
 ### Diagnostics and overlay
 
 Problems and validation messages use the `error`, `warning` and `info` foregrounds without coloured

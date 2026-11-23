@@ -77,6 +77,8 @@ suite('webview protocol', () => {
 			{ type: 'error', message: 'refresh failed' },
 			{ type: 'matchModeState', semantic: true },
 			{ type: 'labels', labels: ['a •', 'b'] },
+			{ type: 'mergeMode', enabled: true },
+			{ type: 'settings', settings: { fontSize: 13, lineHeight: 20, renderWhitespace: 'selection' } },
 			{
 				type: 'documentPatch',
 				patch: {

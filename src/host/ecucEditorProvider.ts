@@ -36,7 +36,8 @@ import { watchBoot } from './bootWatchdog';
 import type { BootWatchdog } from './bootWatchdog';
 import { editorShell } from './webviewShell';
 import { editorMessageType, documentHeader } from '../webviewProtocol';
-import type { EditorWebviewToProvider, MonacoSettings } from '../webviewProtocol';
+import type { EditorWebviewToProvider } from '../webviewProtocol';
+import { monacoSettings } from './monacoSettings';
 import type { ReplaceResult } from '../core/searchModel';
 import type { DefinitionInfo } from '../core/index/definitions';
 import type { IndexElement, IndexReference } from '../core/index/indexModel';
@@ -131,27 +132,6 @@ function editorSettings(): { sort: SortMode; sortExcept: readonly string[] } {
 	return {
 		sort: sort === 'declaration' ? 'declaration' : 'all',
 		sortExcept: config.get<string[]>('sortExcept', [...SORT_EXCEPTIONS]),
-	};
-}
-
-/** The curated `editor.*` values the Monaco surface inherits. */
-function monacoSettings(): MonacoSettings {
-	const config = vscode.workspace.getConfiguration('editor');
-	return {
-		fontFamily: config.get<string>('fontFamily'),
-		fontSize: config.get<number>('fontSize'),
-		lineHeight: config.get<number>('lineHeight'),
-		fontWeight: config.get<string>('fontWeight'),
-		wordWrap: config.get<'on' | 'off' | 'wordWrapColumn' | 'bounded'>('wordWrap', 'off'),
-		wordWrapColumn: config.get<number>('wordWrapColumn'),
-		minimap: config.get<boolean>('minimap.enabled', true),
-		stickyScroll: config.get<boolean>('stickyScroll.enabled', true),
-		indentationGuides: config.get<boolean>('guides.indentation', true),
-		bracketPairGuides: config.get<boolean | 'active'>('guides.bracketPairs', false),
-		cursorStyle: config.get<MonacoSettings['cursorStyle']>('cursorStyle'),
-		cursorBlinking: config.get<MonacoSettings['cursorBlinking']>('cursorBlinking', 'blink'),
-		smoothScrolling: config.get<boolean>('smoothScrolling', true),
-		renderWhitespace: config.get<MonacoSettings['renderWhitespace']>('renderWhitespace', 'selection'),
 	};
 }
 

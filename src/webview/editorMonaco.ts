@@ -44,6 +44,7 @@ import { fieldTextFromWholeLine } from '../core/ecuc/lineEdit';
 import { localValueError } from '../core/ecuc/valueValidation';
 import { createEcucEditor, defineEcucTheme, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
 import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
+import { settingsOptions } from './monaco/settings';
 import { EditorToolbar } from './components/toolbar/toolbar';
 import {
 	getSidebarState,
@@ -2597,105 +2598,11 @@ function handleErrorMessage(message: EditorMessage<'error'>): void {
 	setDetailsStatus({ message: message.message, kind: 'warn' });
 }
 
-type EditorOptionsUpdate = Parameters<monaco.editor.IStandaloneCodeEditor['updateOptions']>[0];
-
 function applySettings(settings: MonacoSettings | undefined): void {
 	if (editor === undefined || settings === undefined) {
 		return;
 	}
 	editor.updateOptions(settingsOptions(settings));
-}
-
-function settingsOptions(settings: MonacoSettings): EditorOptionsUpdate {
-	return {
-		...fontSettings(settings),
-		...wrapSettings(settings),
-		...guideSettings(settings),
-		...cursorSettings(settings),
-		...renderSettings(settings)
-	};
-}
-
-function fontSettings(settings: MonacoSettings): EditorOptionsUpdate {
-	return {
-		...fontFamilySetting(settings),
-		...fontSizeSetting(settings),
-		...lineHeightSetting(settings),
-		...fontWeightSetting(settings)
-	};
-}
-
-function fontFamilySetting(settings: MonacoSettings): EditorOptionsUpdate {
-	return settings.fontFamily !== undefined ? { fontFamily: settings.fontFamily } : {};
-}
-
-function fontSizeSetting(settings: MonacoSettings): EditorOptionsUpdate {
-	return settings.fontSize !== undefined ? { fontSize: settings.fontSize } : {};
-}
-
-function lineHeightSetting(settings: MonacoSettings): EditorOptionsUpdate {
-	return settings.lineHeight !== undefined && settings.lineHeight > 0 ? { lineHeight: settings.lineHeight } : {};
-}
-
-function fontWeightSetting(settings: MonacoSettings): EditorOptionsUpdate {
-	return settings.fontWeight !== undefined ? { fontWeight: settings.fontWeight } : {};
-}
-
-function wrapSettings(settings: MonacoSettings): EditorOptionsUpdate {
-	return {
-		...(settings.wordWrap !== undefined ? { wordWrap: settings.wordWrap } : {}),
-		...(settings.wordWrapColumn !== undefined ? { wordWrapColumn: settings.wordWrapColumn } : {})
-	};
-}
-
-function guideSettings(settings: MonacoSettings): EditorOptionsUpdate {
-	return {
-		...(settings.minimap !== undefined ? { minimap: { enabled: settings.minimap } } : {}),
-		...stickyScrollSetting(settings),
-		...indentationGuideSetting(settings)
-	};
-}
-
-function stickyScrollSetting(settings: MonacoSettings): EditorOptionsUpdate {
-	return settings.stickyScroll !== undefined
-		? { stickyScroll: { enabled: settings.stickyScroll, defaultModel: 'foldingProviderModel' } }
-		: {};
-}
-
-function indentationGuideSetting(settings: MonacoSettings): EditorOptionsUpdate {
-	if (!hasGuideSetting(settings)) {
-		return {};
-	}
-	return {
-		guides: {
-			indentation: indentationGuides(settings),
-			bracketPairs: bracketPairGuides(settings)
-		}
-	};
-}
-
-function hasGuideSetting(settings: MonacoSettings): boolean {
-	return settings.indentationGuides !== undefined || settings.bracketPairGuides !== undefined;
-}
-
-function indentationGuides(settings: MonacoSettings): boolean {
-	return settings.indentationGuides ?? true;
-}
-
-function bracketPairGuides(settings: MonacoSettings): boolean | 'active' {
-	return settings.bracketPairGuides ?? false;
-}
-
-function cursorSettings(settings: MonacoSettings): EditorOptionsUpdate {
-	return {
-		...(settings.cursorStyle !== undefined ? { cursorStyle: settings.cursorStyle } : {}),
-		...(settings.cursorBlinking !== undefined ? { cursorBlinking: settings.cursorBlinking } : {}),
-		...(settings.smoothScrolling !== undefined ? { smoothScrolling: settings.smoothScrolling } : {})
-	};
-}
-
-function renderSettings(settings: MonacoSettings): EditorOptionsUpdate {
-	return settings.renderWhitespace !== undefined ? { renderWhitespace: settings.renderWhitespace } : {};
 }
 
 function mountToolbar(): void {

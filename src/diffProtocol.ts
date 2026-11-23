@@ -9,6 +9,7 @@
 import type { DiffDocument } from './core/diff/diffModel';
 import type { DiffPatch } from './core/diff/diffPatch';
 import type { DiffFindResult, FindOptions } from './core/searchModel';
+import type { MonacoSettings } from './webviewProtocol';
 
 export type { DiffDocument } from './core/diff/diffModel';
 
@@ -30,6 +31,8 @@ export type DiffProviderToWebview =
 	| { type: 'findResult'; requestId: number; result: DiffFindResult; error?: string }
 	/** The active VS Code colour theme changed. */
 	| { type: 'theme' }
+	/** A curated `editor.*` setting changed; both diff editors inherit it. */
+	| { type: 'settings'; settings: MonacoSettings }
 ;
 
 /** Diff page → host. */
@@ -63,7 +66,8 @@ const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'labels',
 	'documentPatch',
 	'findResult',
-	'theme'
+	'theme',
+	'settings'
 ]);
 
 /** A host message with the diff protocol's shape; the page ignores anything else. */

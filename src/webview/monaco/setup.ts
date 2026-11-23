@@ -331,7 +331,7 @@ function positiveNumber(text: string, fallback: number): number {
 	return parsed > 0 ? parsed : fallback;
 }
 
-function editorFontOptions(): {
+export function editorFontOptions(): {
 	fontFamily: string;
 	fontSize: number;
 	lineHeight: number;

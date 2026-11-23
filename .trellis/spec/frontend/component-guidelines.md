@@ -353,19 +353,20 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
   horizontal padding; the pane layer is the clip boundary. Keep the fixed file-name strip and the diff
   status tints.
-- **Both panes are `DocumentTreeView` windows.** The diff mounts one shared `VirtualScroll` and one
-  window renderer per pane. Header rows are the first virtual rows; they are padded to the longer side
-  and are content, not pinned chrome. Annotations and `{` / `}` rows follow each side; colours, font,
-  gutter, indentation and meta typography match Document. Only the status tint and edge marker are
-  diff-specific, and they sit on the cell without recolouring tokens. Status is an optional render
-  input; the editor never sets it.
+- **Both panes are Monaco editors over pre-aligned synthetic documents.** `diffMonaco` mounts one
+  `IStandaloneDiffEditor`; header, comment and brace lines are model lines and the semantic `DiffRow`
+  key maps every one of them. Only the semantic status paint is diff-specific, and it never recolours
+  tokens. `11-23-ecuc-diff-body-surface` owns the `arxml-diff-body` / `arxml-diff-gutter` /
+  `arxml-diff-status` / `arxml-diff-merge-margin` class contract on the host and both editor roots,
+  plus the semantic sign, line-fill and word-span decorations.
 - **One-sided rows keep their structure on the owning side.** `buildAlignedSyntheticDocuments` emits
   a container/module brace only when that side has the cell; the missing side keeps blank lines of
   the same count. `diffMonaco` decorates every missing-side line with `arxml-diff-placeholder`, and
-  the diff CSS neutralizes Monaco's inserted/deleted line, char, gutter and sign paints; the owning
-  side keeps its change fill. The placeholder side keeps its host delete/copy arrow intentionally;
-  only the selection tint is skipped. The `diff-one-sided` preview audit reads the actual aligned
-  models and computed styles, so a reappearing fake brace or placeholder fill fails the capture.
+  the diff CSS neutralizes Monaco's inserted/deleted line, char, gutter and sign paints. The semantic
+  body never paints a placeholder: no sign, line fill, word span or copy arrow. The owning side keeps
+  its change fill and merge arrow; only the selection tint is skipped. The `diff-one-sided` preview
+  audit reads the actual aligned models and computed styles, so a reappearing fake brace, a
+  placeholder sign/fill, or a missing owning fill fails the capture.
 - **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the fixed

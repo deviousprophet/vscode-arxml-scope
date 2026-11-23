@@ -23,6 +23,7 @@ import { fileName } from './compareSelection';
 import { gateReason } from './ecucEditorProvider';
 import { revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
+import { monacoSettings } from './monacoSettings';
 import { diffMessageType } from '../diffProtocol';
 import type { DiffWebviewToProvider } from '../diffProtocol';
 
@@ -423,6 +424,7 @@ export class DiffPanel {
 			boot.settle();
 			void postDocument();
 			void panel.webview.postMessage({ type: 'mergeMode', enabled: mergeMode });
+			void panel.webview.postMessage({ type: 'settings', settings: monacoSettings() });
 		};
 
 		/** One cell of a row by side. */
@@ -939,6 +941,16 @@ export class DiffPanel {
 				const uri = saved.uri.toString();
 				if (uri === leftUri.toString() || uri === rightUri.toString()) {
 					void postLabels();
+				}
+			})
+		);
+
+		// The diff body inherits the same curated `editor.*` values as the ECUC
+		// editor; a change repaints both Monaco editors without a new document.
+		disposables.push(
+			vscode.workspace.onDidChangeConfiguration((event) => {
+				if (event.affectsConfiguration('editor')) {
+					void panel.webview.postMessage({ type: 'settings', settings: monacoSettings() });
 				}
 			})
 		);

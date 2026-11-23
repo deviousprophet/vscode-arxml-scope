@@ -7,7 +7,7 @@
  */
 import * as assert from 'assert';
 
-import { diffWords } from '../../core/diff/wordDiff';
+import { diffWords, wordDiffSpans } from '../../core/diff/wordDiff';
 
 function text(segments: readonly { text: string; changed: boolean }[]): string {
 	return segments.map((segment) => segment.text).join('');
@@ -109,5 +109,74 @@ suite('word diff', () => {
 			{ text: 'a  ', changed: false },
 			{ text: 'b', changed: true },
 		]);
+	});
+});
+
+suite('word diff spans', () => {
+	test('an identical or empty pair has no spans', () => {
+		assert.deepStrictEqual(wordDiffSpans('Timeout', 'Timeout'), { left: [], right: [] });
+		assert.deepStrictEqual(wordDiffSpans('', ''), { left: [], right: [] });
+	});
+
+	test('an added value spans the whole right side', () => {
+		assert.deepStrictEqual(wordDiffSpans('', 'Added'), {
+			left: [],
+			right: [{ start: 0, end: 5 }],
+		});
+	});
+
+	test('a removed value spans the whole left side', () => {
+		assert.deepStrictEqual(wordDiffSpans('Gone', ''), {
+			left: [{ start: 0, end: 4 }],
+			right: [],
+		});
+	});
+
+	test('a replacement spans only the changed run', () => {
+		assert.deepStrictEqual(wordDiffSpans('Timeout 100', 'Timeout 200'), {
+			left: [{ start: 8, end: 11 }],
+			right: [{ start: 8, end: 11 }],
+		});
+	});
+
+	test('a shared prefix stays unchanged', () => {
+		assert.deepStrictEqual(wordDiffSpans('/Pkg/Diff', '/Pkg/Other'), {
+			left: [{ start: 5, end: 9 }],
+			right: [{ start: 5, end: 10 }],
+		});
+	});
+
+	test('a shared suffix stays unchanged', () => {
+		assert.deepStrictEqual(wordDiffSpans('old value', 'new value'), {
+			left: [{ start: 0, end: 3 }],
+			right: [{ start: 0, end: 3 }],
+		});
+	});
+
+	test('multiple changed runs stay separate and ordered', () => {
+		assert.deepStrictEqual(wordDiffSpans('a.10.c', 'b.10.d'), {
+			left: [
+				{ start: 0, end: 1 },
+				{ start: 5, end: 6 },
+			],
+			right: [
+				{ start: 0, end: 1 },
+				{ start: 5, end: 6 },
+			],
+		});
+	});
+
+	test('the spans reconstruct the changed segments exactly', () => {
+		const pair = diffWords('a  b c', 'a  x c');
+		const spans = wordDiffSpans('a  b c', 'a  x c');
+		const changed = (segments: typeof pair.left): string =>
+			segments
+				.filter((segment) => segment.changed)
+				.map((segment) => segment.text)
+				.join('');
+		assert.strictEqual(changed(pair.left), 'b');
+		assert.strictEqual(changed(pair.right), 'x');
+		assert.deepStrictEqual(spans.left, [{ start: 3, end: 4 }]);
+		assert.deepStrictEqual(spans.right, [{ start: 3, end: 4 }]);
 	});
 });

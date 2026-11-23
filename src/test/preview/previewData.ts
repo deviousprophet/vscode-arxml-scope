@@ -13,6 +13,7 @@ import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { buildDiffDocument } from '../../core/diff/diffModel';
 import type { DiffDocument } from '../../core/diff/diffModel';
 import type { EcucRow } from '../../core/ecuc/renderRows';
+import type { MonacoSettings } from '../../webviewProtocol';
 import type { PreviewStateFields } from './previewStateFields';
 
 export interface PreviewState extends PreviewStateFields {
@@ -22,12 +23,27 @@ export interface PreviewState extends PreviewStateFields {
 	height: number;
 }
 
+/** The curated editor settings the diff preview posts, matching the host payload. */
+const DIFF_SETTINGS: MonacoSettings = {
+	fontFamily: "Consolas, 'Courier New', monospace",
+	fontSize: 13,
+	lineHeight: 20,
+	fontWeight: 'normal',
+	wordWrap: 'off',
+	minimap: false,
+	stickyScroll: false,
+	indentationGuides: true,
+	bracketPairGuides: false,
+	renderWhitespace: 'selection'
+};
+
 export const STATES: PreviewState[] = [
 	{ name: 'diff-off', page: 'diff', width: 1400, height: 900 },
 	{ name: 'diff-merge', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-body', page: 'diff', width: 1400, height: 900, merge: true, settings: DIFF_SETTINGS },
 	{ name: 'diff-wide', page: 'diff', width: 1400, height: 900, merge: true, wide: true },
 	{
 		name: 'diff-wide-panned',
@@ -216,6 +232,59 @@ function oneSidedPair(): DiffDocument {
 	);
 }
 
+/** One `BodyMod` document for the diff-body state; the two sides differ by design. */
+function bodyDocument(side: 'left' | 'right'): string {
+	const items =
+		side === 'left'
+			? bodyValue('Items', 'P0000', '0') + bodyValue('Items', 'P0001', '1') + bodyValue('Items', 'RemovedParam', '4')
+			: bodyValue('Items', 'P0000', '0') + bodyValue('Items', 'P0001', '101') + bodyValue('Items', 'AddedParam', '2');
+	const containers = [
+		bodyContainer('Items', items),
+		side === 'left'
+			? bodyContainer('Legacy', bodyValue('Legacy', 'LegacyValue', '9'))
+			: bodyContainer('Extra', bodyValue('Extra', 'ExtraValue', '7')),
+		side === 'left' ? bodyRenamedContainer('NMH_Empty') : bodyRenamedContainer('NM_Empty')
+	].join('');
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${oneSidedModule(
+		'BodyMod',
+		containers
+	)}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+function bodyValue(container: string, name: string, value: string): string {
+	return oneSidedValue('BodyMod', container, name, value);
+}
+
+function bodyContainer(name: string, parameters: string): string {
+	return oneSidedContainer('BodyMod', name, parameters);
+}
+
+/** A childless container whose DEFINITION-REF stays stable across the rename. */
+function bodyRenamedContainer(shortName: string): string {
+	return `<ECUC-CONTAINER-VALUE><SHORT-NAME>${shortName}</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/BodyMod/Renamed</DEFINITION-REF></ECUC-CONTAINER-VALUE>`;
+}
+
+/**
+ * The fixed body state: unchanged rows, a word-level value change, an added and
+ * a removed parameter/container, a semantic rename and a one-sided block, so a
+ * capture can inspect every status the body paints.
+ */
+function bodyPair(): DiffDocument {
+	const leftSide = rowsOf(bodyDocument('left'));
+	const rightSide = rowsOf(bodyDocument('right'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
 function editorDocument(): { rows: EcucRow[]; selectedId?: string } {
 	const rows = rowsOf(synthetic(values(1100, () => false))).rows;
 	return { rows, selectedId: rows[0]?.id };
@@ -347,8 +416,17 @@ function diffFixtureFor(state: PreviewState): DiffDocument {
 	if (state.name === 'diff-one-sided') {
 		return oneSidedPair();
 	}
-	const fixture = state.wide ? widePair : state.name === 'diff-rail' ? railPair : mergePair;
-	return fixture();
+	if (state.name === 'diff-body') {
+		return bodyPair();
+	}
+	return pairFixtureFor(state);
+}
+
+function pairFixtureFor(state: PreviewState): DiffDocument {
+	if (state.wide) {
+		return widePair();
+	}
+	return state.name === 'diff-rail' ? railPair() : mergePair();
 }
 
 /** The fixture document a state mounts. */
@@ -374,6 +452,9 @@ function payloadFor(state: PreviewState, document: unknown) {
 		jump: state.jump,
 		select: state.select,
 		find: state.find,
+		// Every diff state inherits the same production settings payload; a state
+		// may pin its own values, as `diff-body` does.
+		settings: state.page === 'diff' ? (state.settings ?? DIFF_SETTINGS) : state.settings,
 		edit: state.edit,
 		detailsEdit: state.detailsEdit,
 		detailsSave: state.detailsSave,

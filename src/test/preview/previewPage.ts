@@ -949,15 +949,11 @@ async function waitForMergeArrows(): Promise<void> {
 }
 
 async function run(): Promise<void> {
-	window.postMessage(payload.message, '*');
+	postPayloadMessages();
 	await until(() => document.querySelector(pageRoot(payload.page)) !== null);
-	if (payload.page === 'diff') {
-		await waitForDiffRender();
-	}
+	await waitForPageRender();
 	await applyMerge();
-	if (payload.page === 'diff' && payload.merge) {
-		await waitForMergeArrows();
-	}
+	await waitForMergeSurface();
 	await applySwap();
 	await applyPan();
 	await applyJumps();
@@ -974,6 +970,25 @@ async function run(): Promise<void> {
 	await settle();
 	document.body.dataset.previewReady = 'true';
 	publishAudit();
+}
+
+function postPayloadMessages(): void {
+	window.postMessage(payload.message, '*');
+	if (payload.settings !== undefined) {
+		window.postMessage({ type: 'settings', settings: payload.settings }, '*');
+	}
+}
+
+async function waitForPageRender(): Promise<void> {
+	if (payload.page === 'diff') {
+		await waitForDiffRender();
+	}
+}
+
+async function waitForMergeSurface(): Promise<void> {
+	if (payload.page === 'diff' && payload.merge) {
+		await waitForMergeArrows();
+	}
 }
 
 void run();

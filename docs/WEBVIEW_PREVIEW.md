@@ -51,6 +51,7 @@ its old bundle.
 | `diff-swap` | diff | 1400×900 | Swap pressed; headers and values mirror, arrows follow |
 | `diff-rail` | diff | 1400×900 | long document; F7 jumps to the change near line 1000 and scrolls |
 | `diff-one-sided` | diff | 1400×900 | a right-only and a left-only module/container; the missing side stays blank and neutral, the owning side keeps its braces and change fill |
+| `diff-body` | diff | 1400×900 | the fixed body state: unchanged rows, a changed value and rename, added/removed parameters and containers, one-sided blocks, merge arrows and semantic signs/fills/word spans |
 | `diff-wide` | diff | 1400×900 | long parameter names; rows overflow horizontally, arrows stay on the pane edges |
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; both arrows stay on the inner edges |
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
@@ -107,6 +108,16 @@ strip or the page shell, and check each image before asking for review.
       placeholder for every blank line (including the module gap), the editor-background fill
       over Monaco's inserted/deleted line and char fills, and the owning side's braces and
       change fill intact. The `oneSided` object in the audit JSON records the measured values.
+      It also reports `placeholderSigns` and `placeholderBodyFills`: any semantic sign or
+      line/word fill on a placeholder is a failure.
+- [ ] **The body contract is present.** Every diff state's audit has `body.host`,
+      `body.gutter`, `body.status` and `body.mergeMargin` true: `#diff-monaco` carries
+      `arxml-diff-body`, and both Monaco editor roots carry `arxml-diff-body`,
+      `arxml-diff-gutter`, `arxml-diff-status` and `arxml-diff-merge-margin`.
+- [ ] **The `diff-body` state exercises every status.** Its `body.statuses` has changed,
+      added, removed and renamed rows; `body.signs`, `body.lineFills` and `body.wordSpans`
+      each report the removed and added role on the owning pane; `body.arrows` is non-zero
+      in merge mode. Placeholder signs/arrows must stay zero.
 - [ ] **Value kinds keep their colours.** `editor-syntax` shows `0b1010` in the same colour as
       decimal `42`, `P.Syn.Syntax.Target` in the reference colour, and
       `CANIPCORETYPE_SC==0` with distinct name, operator and number colours.

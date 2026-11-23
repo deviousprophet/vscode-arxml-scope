@@ -21,6 +21,18 @@ export interface WordPair {
 	right: WordSegment[];
 }
 
+/** One changed run inside a field, as 0-based character offsets (end exclusive). */
+export interface WordSpan {
+	start: number;
+	end: number;
+}
+
+/** The changed runs of one compared field, per side. */
+export interface WordSpanPair {
+	left: WordSpan[];
+	right: WordSpan[];
+}
+
 const IDENTIFIER = /[A-Za-z0-9_]/;
 const WHITESPACE = /[ \t\r\n]/;
 
@@ -184,4 +196,28 @@ export function diffWords(left: string, right: string): WordPair {
 		left: segmentsOf(leftTokens, match.left),
 		right: segmentsOf(rightTokens, match.right),
 	};
+}
+
+/** The character spans of the changed segments, in display order. */
+function spansOf(segments: readonly WordSegment[]): WordSpan[] {
+	const spans: WordSpan[] = [];
+	let at = 0;
+	for (const segment of segments) {
+		const end = at + segment.text.length;
+		if (segment.changed && segment.text !== '') {
+			spans.push({ start: at, end });
+		}
+		at = end;
+	}
+	return spans;
+}
+
+/**
+ * The changed runs of one compared field as character offsets. A renderer can
+ * paint exactly these ranges with the semantic word-diff classes; unchanged
+ * text is omitted, and an empty or identical pair has no span on either side.
+ */
+export function wordDiffSpans(left: string, right: string): WordSpanPair {
+	const pair = diffWords(left, right);
+	return { left: spansOf(pair.left), right: spansOf(pair.right) };
 }
