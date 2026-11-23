@@ -607,6 +607,10 @@ suite('editor value editing (AC1–AC9)', () => {
 			await waitFor('the edit', () => document.getText().includes('<VALUE>42</VALUE>'));
 			await stub.send({ type: 'save' });
 			await waitFor('the save to finish', () => !document.isDirty);
+			// `isDirty` can clear before the file-system write is visible.
+			await waitFor('the saved value on disk', () =>
+				fs.readFileSync(uri.fsPath, 'utf8').includes('<VALUE>42</VALUE>')
+			);
 			assert.ok(fs.readFileSync(uri.fsPath, 'utf8').includes('<VALUE>42</VALUE>'));
 		});
 	});
