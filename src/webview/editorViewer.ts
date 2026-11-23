@@ -49,7 +49,7 @@ import {
 	showSidebarTab,
 	SidebarUiState,
 } from './components/sidebar/sidebar';
-import { inspectorFields, refusalShownInDetails, definitionRows } from './components/sidebar/detailsPanel/detailsPanel';
+import { refusalShownInDetails } from './components/sidebar/detailsPanel/detailsPanel';
 import type { InspectorFields } from './components/sidebar/detailsPanel/detailsPanel';
 import {
 	applyDisabledCount,
@@ -64,16 +64,17 @@ import {
 import {
 	beginDetailsEdit,
 	detailsContainerFields,
-	detailsSelectionChanged,
+	detailsEditorHostBase,
 	detailsValueInput,
 	handleDetailsEditorMessage,
 	resetDetailsEditorState,
 	setDetailsEditorHost,
 } from './components/detailsEditor/detailsEditor';
+import { createInspectorRows } from './components/detailsEditor/inspectorRows';
 import { EditorToolbar } from './components/toolbar/toolbar';
 import type { SearchBar } from './components/searchBar/searchBar';
 import { hideRowMenu, mountContextMenu } from './components/contextMenu/contextMenu';
-import { appendConditionTokens, appendHighlighted, setHighlightQuery } from './render/rowView';
+import { appendHighlighted, setHighlightQuery } from './render/rowView';
 import { installConsoleErrors } from './render/pageError';
 import { postToHost, readPageState, resetVsCodeApi, writePageState } from './vscodeApi';
 import type { EditorDocumentHeader, EditorProviderToWebview, EditorRowPatch } from '../webviewProtocol';
@@ -87,6 +88,19 @@ let inspector: any;
 let detailsStatus: any;
 let editorToolbar: EditorToolbar | undefined;
 let detailsBody: any;
+
+const inspectorRows = createInspectorRows({
+	body: function () {
+		return detailsBody;
+	},
+	emptyHint: 'Click a line or press Space.',
+	containerFields: function (row, data) {
+		return detailsContainerFields(row, data);
+	},
+	valueInput: function (row, data) {
+		return detailsValueInput(row, data);
+	}
+});
 
 let rows: EcucRow[] = [];
 let rowById = new Map<string, EcucRow>();
@@ -1513,31 +1527,7 @@ function syncSearchToSelection(id: string): void {
 	}
 }
 
-/** One inspector row: a label span and a code/empty container. */
-function inspectorRow(key: string, value: string): HTMLElement {
-	const row = inspectorElement('div', 'inspector-row');
-	row.appendChild(inspectorElement('span', 'inspector-key', key));
-	row.appendChild(inspectorElement('div', 'inspector-code', value));
-	return row;
-}
-
-/** A Details row whose value is a token-coloured, wrapped condition expression. */
-function conditionCodeRow(key: string, text: string): HTMLElement {
-	const row = inspectorElement('div', 'inspector-row');
-	row.appendChild(inspectorElement('span', 'inspector-key', key));
-	const code = inspectorElement('div', 'inspector-code condition-code');
-	appendConditionTokens(code, text, '');
-	row.appendChild(code);
-	return row;
-}
-
-function paneActions(body: HTMLElement): HTMLElement {
-	const actions = inspectorElement('div', 'inspector-actions');
-	body.appendChild(actions);
-	return actions;
-}
-
-function clearDetailsStatus() {
+function clearDetailsStatus(): void {
 	if (!detailsStatus) {
 		return;
 	}
@@ -1557,153 +1547,6 @@ function setDetailsStatus(message: any): void {
 	}
 }
 
-function appendInspectorField(key: string, value: string): void {
-	detailsBody.appendChild(inspectorRow(key, value));
-}
-
-function renderEmptyInspector(): void {
-	detailsSelectionChanged(undefined);
-	const emptyPanel = inspectorElement('div', 'inspector-empty');
-	emptyPanel.appendChild(inspectorElement('p', '', 'Select a line to see its details.'));
-	emptyPanel.appendChild(inspectorElement('p', 'inspector-hint', 'Click a line or press Space.'));
-	detailsBody.appendChild(emptyPanel);
-}
-
-function renderIdentityFields(row: EcucRow, data: InspectorFields): void {
-	detailsBody.appendChild(inspectorElement('div', 'inspector-kind', data.kind));
-	detailsBody.appendChild(inspectorElement('div', 'inspector-label', data.label));
-	if (row.kind === 'container') {
-		// A container's short name and definition ref are editable here, so the panel
-		// never shows the same fact twice.
-		detailsBody.appendChild(detailsContainerFields(row, data));
-		return;
-	}
-	if (data.definitionRef) {
-		appendInspectorField('Definition', data.definitionRef);
-	}
-	if (data.shortName) {
-		appendInspectorField('Short name', data.shortName);
-	}
-}
-
-function renderTypeFields(data: InspectorFields): void {
-	if (data.variant) {
-		appendInspectorField('Variant', data.variant);
-	}
-	if (data.type) {
-		appendInspectorField('Type', data.type);
-	}
-}
-
-function renderParameterValue(row: EcucRow, data: InspectorFields): void {
-	if (data.kind === 'parameter') {
-		detailsBody.appendChild(detailsValueInput(row, data));
-	}
-	for (const format of data.formats) {
-		appendInspectorField(format.label, format.value);
-	}
-}
-
-function renderReferenceFields(row: EcucRow, data: InspectorFields): void {
-	if (data.target) {
-		appendInspectorField('Target', data.target);
-	}
-	if (row.followReason !== undefined) {
-		appendInspectorField('Target note', row.followReason);
-	}
-	if (data.context) {
-		appendInspectorField('Context', data.context);
-	}
-}
-
-function renderValueFields(row: EcucRow, data: InspectorFields): void {
-	renderParameterValue(row, data);
-	renderReferenceFields(row, data);
-}
-
-function renderCondition(condition: RowCondition): void {
-	detailsBody.appendChild(conditionCodeRow('Condition', condition.text));
-	appendInspectorField('Condition state', condition.state);
-	if (condition.reason) {
-		appendInspectorField('Condition note', condition.reason);
-	}
-}
-
-function renderConditionFields(row: EcucRow, data: InspectorFields): void {
-	if (data.condition) {
-		renderCondition(data.condition);
-	} else if (row.disabled && row.disabledBy === 'ancestor') {
-		appendInspectorField('Disabled', 'Disabled by an ancestor condition.');
-	}
-}
-
-function renderConditionSummary(data: InspectorFields): void {
-	if (data.conditions) {
-		detailsBody.appendChild(conditionCodeRow('Conditions', data.conditions));
-	}
-	if (data.annotations) {
-		appendInspectorField('Annotations', data.annotations);
-	}
-}
-
-function isAmbiguousDefinitionCount(count: number | undefined): boolean {
-	return count !== undefined && count >= 2;
-}
-
-function renderDefinitionFields(data: InspectorFields): void {
-	if (data.definition) {
-		for (const field of definitionRows(data.definition)) {
-			appendInspectorField(field.label, field.value);
-		}
-		return;
-	}
-	if (isAmbiguousDefinitionCount(data.definitionCount)) {
-		appendInspectorField('Definition type', `${data.definitionCount} definitions found`);
-	}
-}
-
-function isFollowableReference(row: EcucRow): boolean {
-	return row.kind === 'reference' && row.followable === true;
-}
-
-function isReferenceContainer(row: EcucRow): boolean {
-	return row.kind === 'module' || row.kind === 'container';
-}
-
-function appendJumpAction(actions: HTMLElement, row: EcucRow): void {
-	if (!isFollowableReference(row)) {
-		return;
-	}
-	const jump = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Jump to target') as HTMLButtonElement;
-	jump.type = 'button';
-	jump.addEventListener('click', function () { followItem(row.id); });
-	actions.appendChild(jump);
-}
-
-function appendReferencesAction(actions: HTMLElement, row: EcucRow): void {
-	if (!isReferenceContainer(row)) {
-		return;
-	}
-	const references = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Find references') as HTMLButtonElement;
-	references.type = 'button';
-	references.addEventListener('click', function () { postToHost({ type: 'references', nodeId: row.id }); });
-	actions.appendChild(references);
-}
-
-function appendRevealAction(actions: HTMLElement, row: EcucRow): void {
-	const reveal = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Reveal in source') as HTMLButtonElement;
-	reveal.type = 'button';
-	reveal.addEventListener('click', function () { revealItem(row.id); });
-	actions.appendChild(reveal);
-}
-
-function renderInspectorActions(row: EcucRow): void {
-	const actions = paneActions(detailsBody);
-	appendJumpAction(actions, row);
-	appendReferencesAction(actions, row);
-	appendRevealAction(actions, row);
-}
-
 function selectedRowForInspector(): EcucRow | undefined {
 	return selectedId === undefined ? undefined : rowById.get(selectedId);
 }
@@ -1714,25 +1557,17 @@ function selectedRowForInspector(): EcucRow | undefined {
  * section shell (header, body) is static, so a re-scan only replaces body content
  * and never resets the pane layout.
  */
-function updateInspector() {
+function updateInspector(): void {
 	if (!inspector || !detailsBody) {
 		return;
 	}
 	detailsBody.textContent = '';
 	const row = selectedRowForInspector();
-	if (!row) {
-		renderEmptyInspector();
+	if (row === undefined) {
+		inspectorRows.renderEmpty();
 		return;
 	}
-	detailsSelectionChanged(row.id);
-	const data = inspectorFields(row);
-	renderIdentityFields(row, data);
-	renderTypeFields(data);
-	renderValueFields(row, data);
-	renderConditionFields(row, data);
-	renderConditionSummary(data);
-	renderDefinitionFields(data);
-	renderInspectorActions(row);
+	inspectorRows.renderSelected(row);
 }
 
 function clearGuideHover(): void {
@@ -2263,12 +2098,11 @@ setConditionRows([]);
 setConditionsCallback(function (entries) { postToHost({ type: 'conditions', entries }); });
 setConditionsErrorReporter(reportError);
 setDetailsEditorHost({
-	getRow: function (id) { return rowById.get(id); },
-	getSelectedId: function () { return selectedId; },
-	isDetailsTab: function () { return getSidebarState().tab === 'details'; },
-	showSidebar: function () { applySidebarVisibility(false); },
-	showTab: showSidebarTab,
-	showSection: showSidebarSection,
+	...detailsEditorHostBase(
+		function (id) { return rowById.get(id); },
+		function () { return selectedId; },
+		function () { applySidebarVisibility(false); }
+	),
 	renderedItem: renderedItemFor,
 	selectItem: selectItem,
 	setSelection: setSelection,

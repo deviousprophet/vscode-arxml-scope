@@ -68,7 +68,7 @@ async function main() {
 	// dist/editorViewer.css next to the script and loaded through asWebviewUri.
 	const ctxEditor = await esbuild.context({
 		entryPoints: [
-			'src/webview/editorViewer.ts'
+			'src/webview/editorMonaco.ts'
 		],
 		bundle: true,
 		format: 'iife',
@@ -77,6 +77,8 @@ async function main() {
 		sourcesContent: false,
 		platform: 'browser',
 		outfile: 'dist/editorViewer.js',
+		loader: { '.ttf': 'file' },
+		assetNames: 'assets/[name]-[hash]',
 		logLevel: 'silent',
 		plugins: [
 			esbuildProblemMatcherPlugin,
@@ -86,7 +88,7 @@ async function main() {
 	// Diff webview bundle: independent page, same shared components and CSS.
 	const ctxDiff = await esbuild.context({
 		entryPoints: [
-			'src/webview/diffViewer.ts'
+			'src/webview/diffMonaco.ts'
 		],
 		bundle: true,
 		format: 'iife',
@@ -95,6 +97,26 @@ async function main() {
 		sourcesContent: false,
 		platform: 'browser',
 		outfile: 'dist/diffViewer.js',
+		loader: { '.ttf': 'file' },
+		assetNames: 'assets/[name]-[hash]',
+		logLevel: 'silent',
+		plugins: [
+			esbuildProblemMatcherPlugin,
+		],
+	});
+
+	// Monaco worker bundle. The page fetches it once and creates a blob worker.
+	const ctxWorker = await esbuild.context({
+		entryPoints: [
+			'src/webview/monaco/worker.ts'
+		],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: !production,
+		sourcesContent: false,
+		platform: 'browser',
+		outfile: 'dist/monaco.worker.js',
 		logLevel: 'silent',
 		plugins: [
 			esbuildProblemMatcherPlugin,
@@ -102,12 +124,13 @@ async function main() {
 	});
 
 	if (watch) {
-		await Promise.all([ctx.watch(), ctxEditor.watch(), ctxDiff.watch()]);
+		await Promise.all([ctx.watch(), ctxEditor.watch(), ctxDiff.watch(), ctxWorker.watch()]);
 	} else {
 		await ctx.rebuild();
 		await ctxEditor.rebuild();
 		await ctxDiff.rebuild();
-		await Promise.all([ctx.dispose(), ctxEditor.dispose(), ctxDiff.dispose()]);
+		await ctxWorker.rebuild();
+		await Promise.all([ctx.dispose(), ctxEditor.dispose(), ctxDiff.dispose(), ctxWorker.dispose()]);
 	}
 }
 

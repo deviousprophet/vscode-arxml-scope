@@ -132,6 +132,27 @@ suite('Toolbar component', () => {
 		}
 	});
 
+	test('setDirty shows and hides the unsaved marker', () => {
+		const dom = installMarkup(`<body>${renderEditorToolbarHtml()}</body>`);
+		try {
+			const toolbar = new EditorToolbar();
+			const status = dom.document.getElementById('editor-dirty-status')!;
+			assert.strictEqual(status.hidden, true, 'the marker starts hidden');
+			assert.strictEqual(status.getAttribute('role'), 'status');
+			assert.strictEqual(status.getAttribute('aria-live'), 'polite');
+			toolbar.setDirty(true);
+			assert.strictEqual(status.hidden, false);
+			assert.ok(status.textContent?.includes('Unsaved changes'), 'the marker names the state');
+			toolbar.setDirty(false);
+			assert.strictEqual(status.hidden, true);
+			assert.strictEqual(status.textContent, '');
+			status.remove();
+			toolbar.setDirty(true);
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('setViewMode writes the context disabled state, labels and titles both ways', () => {
 		const dom = installMarkup(`<body>${renderDiffToolbarHtml()}</body>`);
 		try {

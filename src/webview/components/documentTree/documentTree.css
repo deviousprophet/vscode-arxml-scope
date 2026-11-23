@@ -118,7 +118,7 @@
 	padding: 0 4px;
 	border: 1px solid transparent;
 	border-radius: 3px;
-	color: var(--tok-meta);
+	color: var(--tok-syscond);
 }
 /* A false condition is marked by its edge; the tokens keep their own colours. */
 .condition[data-state="false"] {
@@ -132,24 +132,6 @@
 	font-style: italic;
 }
 .punct {
-	color: var(--tok-punct);
-}
-.syscond-name {
-	color: var(--tok-key);
-}
-.syscond-number {
-	color: var(--tok-number);
-}
-.syscond-string {
-	color: var(--tok-string);
-}
-.syscond-operator {
-	color: var(--tok-keyword);
-}
-.syscond-literal {
-	color: var(--tok-keyword);
-}
-.syscond-punct {
 	color: var(--tok-punct);
 }
 .comment-text {
@@ -409,9 +391,11 @@ body[data-view="document"] .row-meta > span {
 	white-space: pre;
 	margin: 0;
 }
-body[data-view="document"] .variant,
-body[data-view="document"] .condition {
+body[data-view="document"] .variant {
 	color: var(--tok-meta);
+}
+body[data-view="document"] .condition {
+	color: var(--tok-syscond);
 }
 body[data-view="document"] .annotation {
 	color: var(--tok-comment);

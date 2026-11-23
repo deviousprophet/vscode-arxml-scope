@@ -543,9 +543,9 @@ suite('semantic diff page', () => {
 		});
 		assert.ok(
 			html.includes(
-				"default-src 'none'; style-src https://webview.test 'nonce-test-nonce'; script-src 'nonce-test-nonce'; img-src https://webview.test data:"
+				"default-src 'none'; style-src https://webview.test 'unsafe-inline'; script-src 'nonce-test-nonce'; img-src https://webview.test data:; font-src https://webview.test data:; connect-src https://webview.test; worker-src https://webview.test blob:; child-src https://webview.test blob:"
 			),
-			'a strict CSP'
+			'a strict CSP with the Monaco worker and style allowances'
 		);
 		assert.ok(html.includes('src="https://webview.test/diffViewer.js"'), 'the bundled script');
 		assert.ok(html.includes('href="https://webview.test/diffViewer.css"'), 'the bundled stylesheet');

@@ -23,12 +23,14 @@
 	justify-content: flex-start;
 	gap: 6px;
 	min-width: 0;
+	flex: 0 0 auto;
 }
 .toolbar-center {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	min-width: 0;
+	flex: 0 0 auto;
 }
 .toolbar-divider {
 	align-self: center;
@@ -45,6 +47,21 @@
 	justify-content: flex-end;
 	gap: 6px;
 	min-width: 0;
+}
+.editor-dirty-status {
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	padding: 0 6px;
+	color: var(--vscode-editorWarning-foreground, var(--vscode-gitDecoration-modifiedResourceForeground, var(--tok-dim)));
+	font-size: 11px;
+	white-space: nowrap;
+}
+.editor-dirty-status[hidden] {
+	display: none;
+}
+.editor-dirty-status.invalid {
+	color: var(--vscode-errorForeground, var(--vscode-editorError-foreground));
 }
 .tool {
 	display: inline-flex;
@@ -219,6 +236,6 @@
 		min-width: 28px;
 	}
 	body[data-page="diff"] .toolbar-left {
-		gap: 1px;
+		gap: 0;
 	}
 }

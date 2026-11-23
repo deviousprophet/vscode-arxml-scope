@@ -410,4 +410,26 @@ suite('ConditionsPanel component', () => {
 			dom.restore();
 		}
 	});
+
+	test('boolean condition values carry the value-kind hook', () => {
+		const dom = panel();
+		try {
+			renderConditionEntries([
+				{ name: 'BOOL_SC', value: 'true' },
+				{ name: 'NUM_SC', value: '3' }
+			]);
+			assert.strictEqual(
+				row(dom, 0).querySelector('.condition-value-text').dataset.valueKind,
+				'boolean',
+				'a true/false value uses the boolean value-kind hook'
+			);
+			assert.strictEqual(
+				row(dom, 1).querySelector('.condition-value-text').dataset.valueKind,
+				undefined,
+				'a non-boolean value keeps the normal foreground'
+			);
+		} finally {
+			dom.restore();
+		}
+	});
 });

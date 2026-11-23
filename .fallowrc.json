@@ -3,6 +3,7 @@
   "entry": [
     "src/webview/editorViewer.ts",
     "src/webview/diffViewer.ts",
+    "src/webview/monaco/worker.ts",
     "src/test/**/*.test.ts",
     "src/test/benchmarks/*.ts",
     "src/test/parity/oracle*.ts",

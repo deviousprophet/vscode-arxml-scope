@@ -13,21 +13,13 @@ import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { buildDiffDocument } from '../../core/diff/diffModel';
 import type { DiffDocument } from '../../core/diff/diffModel';
 import type { EcucRow } from '../../core/ecuc/renderRows';
+import type { PreviewStateFields } from './previewStateFields';
 
-export interface PreviewState {
+export interface PreviewState extends PreviewStateFields {
 	name: string;
 	page: 'diff' | 'editor';
 	width: number;
 	height: number;
-	merge?: boolean;
-	swap?: boolean;
-	/** Long parameter names force horizontal overflow; the copy arrows must survive it. */
-	wide?: boolean;
-	/** Horizontal scroll offset applied after the page renders. */
-	pan?: number;
-	/** F7 presses after mounting; the long document's first change is near line 1000. */
-	jump?: number;
-	select?: boolean;
 }
 
 export const STATES: PreviewState[] = [
@@ -35,6 +27,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-merge', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
+	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-wide', page: 'diff', width: 1400, height: 900, merge: true, wide: true },
 	{
 		name: 'diff-wide-panned',
@@ -46,6 +39,25 @@ export const STATES: PreviewState[] = [
 		pan: 600
 	},
 	{ name: 'editor', page: 'editor', width: 1400, height: 900, select: true },
+	{ name: 'editor-syntax', page: 'editor', width: 1400, height: 900 },
+	{ name: 'editor-syscond', page: 'editor', width: 1400, height: 900 },
+	{ name: 'editor-labels', page: 'editor', width: 1400, height: 900 },
+	{ name: 'editor-dirty', page: 'editor', width: 1400, height: 900, edit: '42' },
+	{ name: 'editor-invalid', page: 'editor', width: 1400, height: 900, edit: 'abc', trySave: true },
+	{ name: 'editor-details', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated' },
+	{ name: 'editor-details-save', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated', detailsSave: true },
+	{ name: 'editor-details-undo', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated', detailsUndo: true },
+	{ name: 'editor-details-redo', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated', detailsUndo: true, detailsRedo: true },
+	{ name: 'editor-delete', page: 'editor', width: 1400, height: 900, deleteEdit: true },
+	{ name: 'editor-details-rename', page: 'editor', width: 1400, height: 900, detailsRename: true },
+	{ name: 'editor-rename-refusal', page: 'editor', width: 1400, height: 900, detailsRename: true, renameRefusal: true },
+	{ name: 'editor-rename-late-ack', page: 'editor', width: 1400, height: 900, detailsRename: true, renameLateAck: true },
+	{ name: 'editor-multi-save', page: 'editor', width: 1400, height: 900, multiSave: true },
+	{ name: 'editor-paste', page: 'editor', width: 1400, height: 900, pasteEdit: true },
+	{ name: 'editor-stale-save', page: 'editor', width: 1400, height: 900, staleSave: true },
+	{ name: 'editor-sticky', page: 'editor', width: 1400, height: 900, scrollLine: 40 },
+	{ name: 'editor-find', page: 'editor', width: 1400, height: 900, find: 'Items' },
+	{ name: 'diff-find', page: 'diff', width: 1400, height: 900, merge: true, find: 'Items' },
 	{ name: 'toolbar-1400', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'toolbar-1200', page: 'diff', width: 1200, height: 900, merge: true },
 	{ name: 'toolbar-1024', page: 'diff', width: 1024, height: 900, merge: true },
@@ -119,9 +131,139 @@ function railPair(): DiffDocument {
 	return diffPair(values(1100, () => false), values(1100, (at) => at >= 1000, 500));
 }
 
+/** A module/container/parameter block for the one-sided preview fixture. */
+function oneSidedModule(shortName: string, containers: string): string {
+	return `<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>${shortName}</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/${shortName}</DEFINITION-REF><CONTAINERS>${containers}</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES>`;
+}
+
+function oneSidedContainer(module: string, shortName: string, parameters: string): string {
+	return `<ECUC-CONTAINER-VALUE><SHORT-NAME>${shortName}</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/${module}/${shortName}</DEFINITION-REF><PARAMETER-VALUES>${parameters}</PARAMETER-VALUES></ECUC-CONTAINER-VALUE>`;
+}
+
+function oneSidedValue(module: string, container: string, name: string, value: string): string {
+	return `<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/${module}/${container}/${name}</DEFINITION-REF><VALUE>${value}</VALUE></ECUC-NUMERICAL-PARAM-VALUE>`;
+}
+
+interface OneSidedNames {
+	module: string;
+	container: string;
+	value: string;
+	own: string;
+	changed: string;
+}
+
+const ONE_SIDED_NAMES: Record<'left' | 'right', OneSidedNames> = {
+	left: {
+		module: 'RemovedMod',
+		container: 'RemovedItems',
+		value: 'RemovedValue',
+		own: '1',
+		changed: '6'
+	},
+	right: {
+		module: 'AddedMod',
+		container: 'AddedItems',
+		value: 'AddedValue',
+		own: '2',
+		changed: '7'
+	}
+};
+
+/** The shared subtree both sides carry: one value changes, the rest aligns. */
+function oneSidedShared(changed: string): string {
+	return oneSidedModule(
+		'Shared',
+		oneSidedContainer(
+			'Shared',
+			'SharedItems',
+			oneSidedValue('Shared', 'SharedItems', 'SharedValue', '5') +
+				oneSidedValue('Shared', 'SharedItems', 'ChangedValue', changed)
+		)
+	);
+}
+
+/** One module tree exists on only one side; a shared module/container/value aligns. */
+function oneSidedDocument(side: 'left' | 'right'): string {
+	const names = ONE_SIDED_NAMES[side];
+	const modules = [
+		oneSidedModule(
+			names.module,
+			oneSidedContainer(
+				names.module,
+				names.container,
+				oneSidedValue(names.module, names.container, names.value, names.own)
+			)
+		),
+		oneSidedShared(names.changed)
+	];
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${modules.join('')}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+/** A left-only and a right-only module/container, plus a shared subtree with one change. */
+function oneSidedPair(): DiffDocument {
+	const leftSide = rowsOf(oneSidedDocument('left'));
+	const rightSide = rowsOf(oneSidedDocument('right'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
 function editorDocument(): { rows: EcucRow[]; selectedId?: string } {
 	const rows = rowsOf(synthetic(values(1100, () => false))).rows;
 	return { rows, selectedId: rows[0]?.id };
+}
+
+/** The small ECUC document used by the editor states; renaming its container re-keys every descendant. */
+const SYNTAX_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>Syn</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/Syn</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>Syntax</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/Syn/Syntax</DEFINITION-REF><PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Syn/Syntax/Decimal</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Syn/Syntax/Binary</DEFINITION-REF><VALUE>0b1010</VALUE></ECUC-NUMERICAL-PARAM-VALUE><ECUC-TEXTUAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-STRING-PARAM-DEF">/P/Syn/Syntax/Text</DEFINITION-REF><VALUE>hello</VALUE></ECUC-TEXTUAL-PARAM-VALUE><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Syn/Syntax/Condition</DEFINITION-REF><VALUE>1</VALUE><SW-SYSCOND BINDING-TIME="CODE-GENERATION-TIME">(<SYSC-REF DEST="SW-SYSTEMCONST">/P/SwSystemconsts/CANIPCORETYPE_SC</SYSC-REF>==0)</SW-SYSCOND></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES><REFERENCE-VALUES><ECUC-REFERENCE-VALUE><DEFINITION-REF DEST="ECUC-REFERENCE-DEF">/P/Syn/Syntax/Next</DEFINITION-REF><VALUE-REF DEST="ECUC-CONTAINER-VALUE">P.Syn.Syntax.Target</VALUE-REF></ECUC-REFERENCE-VALUE></REFERENCE-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+
+/** A small editor document that exercises numeric, binary, text and reference colors. */
+function syntaxDocument(selectedLabel = 'Binary'): { rows: EcucRow[]; selectedId?: string } {
+	const rows = rowsOf(SYNTAX_XML).rows;
+	const selected = rows.find((row) => row.label === selectedLabel) ?? rows[0];
+	return { rows, selectedId: selected?.id };
+}
+
+/** The syntax document with a boolean literal in the condition expression. */
+const SYSCOND_XML = SYNTAX_XML.replace(
+	'==0)</SW-SYSCOND>',
+	'==0)||(FEATURE==true)&amp;&amp;(MODE==&quot;A&quot;)</SW-SYSCOND>'
+);
+
+/** The condition-bearing row selected, so Details shows the whole palette. */
+function syscondDocument(): { rows: EcucRow[]; selectedId?: string } {
+	const rows = rowsOf(SYSCOND_XML).rows;
+	const selected = rows.find((row) => row.label === 'Condition') ?? rows[0];
+	return { rows, selectedId: selected?.id };
+}
+
+/** A module with a normal container, a parameter and a container with no DEFINITION-REF. */
+const LABELS_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>Labels</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/Labels</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>Items</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/Labels/Items</DEFINITION-REF><PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Labels/Items/P0000</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES></ECUC-CONTAINER-VALUE><ECUC-CONTAINER-VALUE><SHORT-NAME>EmptyDef</SHORT-NAME></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+
+/** The no-label container selected: its line starts with the quoted short name. */
+function labelsDocument(): { rows: EcucRow[]; selectedId?: string } {
+	const rows = rowsOf(LABELS_XML).rows;
+	const selected = rows.find((row) => row.shortName === 'EmptyDef') ?? rows[0];
+	return { rows, selectedId: selected?.id };
+}
+
+/** The same document after the container rename the page echoed: real new ids. */
+function renamedSyntaxDocument(): { rows: EcucRow[]; selectedId?: string } {
+	const renamed = SYNTAX_XML.replace('<SHORT-NAME>Syntax</SHORT-NAME>', '<SHORT-NAME>Syntax2</SHORT-NAME>');
+	const rows = rowsOf(renamed).rows;
+	// A rename does not change the DEFINITION-REF, so the row label stays "Syntax";
+	// the short name and the path-based id are what moved.
+	const selected = rows.find((row) => row.shortName === 'Syntax2') ?? rows[0];
+	return { rows, selectedId: selected?.id };
 }
 
 /** The supported dark-theme variables the extension gets from VS Code; without
@@ -147,8 +289,11 @@ const THEME = `<style>:root{
 --vscode-button-foreground:#ffffff;
 --vscode-button-secondaryBackground:#3a3d41;
 --vscode-button-secondaryForeground:#ffffff;
---vscode-diffEditor-insertedLineBackground:#1b3a24;
---vscode-diffEditor-removedLineBackground:#4a1f1f;
+/* Deliberately no line backgrounds: older VS Code themes omit them, so the
+ * preview exercises the readable dark fallbacks. Text fills use rgba() so the
+ * alpha-preserving conversion is exercised too. */
+--vscode-diffEditor-insertedTextBackground:rgba(87, 171, 90, 0.30);
+--vscode-diffEditor-removedTextBackground:rgba(244, 112, 103, 0.30);
 --vscode-diffEditor-modifiedTextBackground:#3a3320;
 --vscode-diffEditorGutter-insertedLineBackground:#244b2e;
 --vscode-diffEditorGutter-removedLineBackground:#5a2b2b;
@@ -158,16 +303,57 @@ const THEME = `<style>:root{
 --vscode-editorInfo-foreground:#3794ff;
 --vscode-editorWarning-foreground:#cca700;
 --vscode-editorError-foreground:#f85149;
+/* The Dark+ number/string scopes the Details condition code reuses; the
+ * condition palette itself is fixed per theme class in tokens.css. */
+--vscode-debugTokenExpression-number:#B5CEA8;
+--vscode-debugTokenExpression-string:#CE9178;
 }</style>`;
 
-const ASSETS = { cspSource: '', scriptUri: '/preview.js', styleUri: '/preview.css', nonce: 'preview' };
+const ASSETS = { cspSource: '', scriptUri: '/preview.js', styleUri: '/preview.css', workerUri: '/monaco.worker.js', nonce: 'preview' };
+
+type EditorFixture = { rows: EcucRow[]; selectedId?: string };
+
+function syntaxContainer(): EditorFixture {
+	return syntaxDocument('Syntax');
+}
+
+function syntaxText(): EditorFixture {
+	return syntaxDocument('Text');
+}
+
+/** Editor fixtures keyed by state name; unlisted editor states mount the long document. */
+const EDITOR_FIXTURES: Record<string, () => EditorFixture> = {
+	'editor-syntax': syntaxDocument,
+	'editor-syscond': syscondDocument,
+	'editor-labels': labelsDocument,
+	'editor-details-rename': syntaxContainer,
+	'editor-rename-refusal': syntaxContainer,
+	'editor-rename-late-ack': syntaxContainer,
+	'editor-details': syntaxText,
+	'editor-details-save': syntaxText,
+	'editor-details-undo': syntaxText,
+	'editor-details-redo': syntaxText,
+	'editor-delete': syntaxText,
+	'editor-multi-save': syntaxText,
+	'editor-paste': syntaxText,
+	'editor-stale-save': syntaxText
+};
+
+function editorFixtureFor(state: PreviewState): EditorFixture {
+	return EDITOR_FIXTURES[state.name]?.() ?? editorDocument();
+}
+
+function diffFixtureFor(state: PreviewState): DiffDocument {
+	if (state.name === 'diff-one-sided') {
+		return oneSidedPair();
+	}
+	const fixture = state.wide ? widePair : state.name === 'diff-rail' ? railPair : mergePair;
+	return fixture();
+}
 
 /** The fixture document a state mounts. */
 function documentFor(state: PreviewState) {
-	if (state.page !== 'diff') {
-		return editorDocument();
-	}
-	return state.wide ? widePair() : state.name === 'diff-rail' ? railPair() : mergePair();
+	return state.page === 'diff' ? diffFixtureFor(state) : editorFixtureFor(state);
 }
 
 function messageFor(state: PreviewState, document: unknown) {
@@ -186,7 +372,23 @@ function payloadFor(state: PreviewState, document: unknown) {
 		wide: state.wide,
 		pan: state.pan,
 		jump: state.jump,
-		select: state.select
+		select: state.select,
+		find: state.find,
+		edit: state.edit,
+		detailsEdit: state.detailsEdit,
+		detailsSave: state.detailsSave,
+		detailsUndo: state.detailsUndo,
+		detailsRedo: state.detailsRedo,
+		deleteEdit: state.deleteEdit,
+		detailsRename: state.detailsRename,
+		renameRefusal: state.renameRefusal,
+		renameLateAck: state.renameLateAck,
+		renameDocument: state.detailsRename === true ? renamedSyntaxDocument() : undefined,
+		multiSave: state.multiSave,
+		pasteEdit: state.pasteEdit,
+		staleSave: state.staleSave,
+		scrollLine: state.scrollLine,
+		trySave: state.trySave
 	};
 }
 

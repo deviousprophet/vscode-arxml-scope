@@ -1,132 +1,184 @@
-/* Floating find widget: query row, option toggles, count, navigation and replace. */
+/* VS Code find-widget geometry and colours, kept as a compact 34px bar. */
 .find-widget {
-	position: fixed;
-	top: 60px;
-	right: 18px;
-	z-index: 40;
+	position: absolute;
+	top: 4px;
+	right: 14px;
+	z-index: 35;
 	display: flex;
 	flex-direction: column;
-	gap: 3px;
-	width: 430px;
-	max-width: calc(100vw - 36px);
-	padding: 4px;
+	width: 351px;
+	max-width: calc(100% - 28px);
+	padding: 0 4px 0 9px;
+	box-sizing: border-box;
+	overflow: hidden;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+	font-size: 12px;
+	line-height: 19px;
+	color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
 	background: var(--vscode-editorWidget-background, var(--vscode-panel-background));
-	border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
-	border-radius: 5px;
-	box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+	border: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border, var(--vscode-panel-border)));
+	border-radius: var(--vscode-cornerRadius-large, 6px);
+	box-shadow: var(--vscode-shadow-lg, 0 2px 8px rgba(0, 0, 0, 0.36));
 }
-.find-widget[hidden] {
+
+.find-widget[hidden],
+.find-row[hidden],
+.find-toggle[hidden],
+.search-clear[hidden] {
 	display: none;
 }
+
+/* The widget lives inside the Monaco editor so it inherits the editor font and
+ * stacking context. Monaco's own find-widget CSS is in the bundle; these id
+ * selectors keep the VS Code chrome even when the host does not define every
+ * optional widget variable. */
+#tree .find-widget,
+#diff-list .find-widget {
+	height: auto;
+	min-height: 34px;
+	overflow: hidden;
+	transform: none;
+	border: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border, #454545));
+	border-radius: 6px;
+	box-shadow: var(--vscode-shadow-lg, 0 2px 8px rgba(0, 0, 0, 0.36));
+}
+
 .find-row {
 	display: flex;
 	align-items: center;
-	gap: 3px;
+	height: 34px;
 	min-width: 0;
+	flex: none;
+	gap: 3px;
 }
-.find-row[hidden] {
-	display: none;
+
+.replace-row {
+	padding-left: 26px;
 }
-.search-input {
-	height: 26px;
-	padding: 0 6px;
-}
-.replace-input {
-	flex: 1 1 auto;
-}
-.find-widget .search-input {
-	flex: 1 1 auto;
-}
+
 .find-field {
 	position: relative;
 	display: flex;
 	flex: 1 1 auto;
 	min-width: 0;
 }
-.find-field .search-input {
+
+.search-input {
+	box-sizing: border-box;
 	width: 100%;
-	padding-right: 22px;
+	height: 25px;
+	min-width: 0;
+	padding: 2px 22px 2px 6px;
+	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+	font-size: 13px;
+	color: var(--vscode-input-foreground, var(--vscode-foreground));
+	background: var(--vscode-input-background, var(--vscode-editor-background));
+	border: 1px solid var(--vscode-input-border, transparent);
+	border-radius: 2px;
 }
-.search-clear {
-	position: absolute;
-	right: 3px;
-	top: 50%;
-	transform: translateY(-50%);
-}
-.replace-input {
-	flex: 1 1 auto;
-}
-.find-widget .search-input:focus,
-.replace-input:focus {
-	border-color: var(--vscode-focusBorder);
-	outline: 1px solid var(--vscode-focusBorder);
+
+.search-input:focus {
+	border-color: var(--vscode-focusBorder, #007fd4);
+	outline: 1px solid var(--vscode-focusBorder, #007fd4);
 	outline-offset: -1px;
 }
-.find-widget .search-input[aria-invalid="true"] {
+
+.search-input[aria-invalid="true"] {
 	border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
 }
-/* One custom clear X; Chromium's native cancel/decoration would paint a second. */
-input[type="search"]::-webkit-search-cancel-button,
-input[type="search"]::-webkit-search-decoration {
+
+/* The widget draws its own clear button; keep Chrome's search decoration out. */
+input[type="search"]::-webkit-search-cancel-button {
 	-webkit-appearance: none;
 	appearance: none;
-	display: none;
 }
+
+.replace-input {
+	padding-right: 6px;
+}
+
+.search-clear {
+	position: absolute;
+	right: 2px;
+	top: 50%;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	transform: translateY(-50%);
+}
+
 .find-toggle,
 .find-action {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	height: 22px;
 	flex: none;
-	padding: 0;
+	box-sizing: border-box;
 	font: inherit;
-	font-size: 11px;
-	line-height: 1;
 	color: var(--vscode-foreground);
 	background: transparent;
 	border: 1px solid transparent;
-	border-radius: 2px;
+	border-radius: 5px;
 	cursor: pointer;
 }
+
 .find-toggle {
 	width: 22px;
+	height: 22px;
+	padding: 3px;
+	font-size: 11px;
+	line-height: 1;
 }
+
+.find-toggle .codicon {
+	font-size: 16px;
+	line-height: 1;
+}
+
 .find-toggle:hover,
 .find-action:hover:not(:disabled) {
+	color: var(--vscode-foreground);
 	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
 }
+
 .find-toggle[aria-pressed="true"] {
 	color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
 	background: var(--vscode-inputOption-activeBackground, var(--vscode-inputValidation-infoBackground));
 	border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
 }
+
 .find-expand {
 	width: 18px;
+	height: 34px;
+	padding: 0;
+	border-radius: 0;
 }
-.find-expand svg {
+
+.find-expand .codicon {
 	transition: transform 80ms ease;
 }
-.find-expand[aria-expanded="true"] svg {
+
+.find-expand[aria-expanded="true"] .codicon {
 	transform: rotate(90deg);
 }
+
 .find-close {
 	margin-left: 2px;
 }
-.search-clear[hidden] {
-	display: none;
-}
+
 .search-count {
-	min-width: 8ch;
+	min-width: 42px;
+	padding: 0 2px;
 	flex: none;
 	overflow: hidden;
 	text-align: right;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: 11px;
+	font-size: 12px;
 	font-variant-numeric: tabular-nums;
-	color: var(--vscode-descriptionForeground, var(--tok-dim));
+	color: var(--vscode-descriptionForeground, var(--vscode-editorWidget-foreground));
 }
+
 .search-progress {
 	width: 16px;
 	height: 16px;
@@ -135,9 +187,11 @@ input[type="search"]::-webkit-search-decoration {
 	align-items: center;
 	justify-content: center;
 }
+
 .search-progress[data-busy="false"] {
 	visibility: hidden;
 }
+
 .search-progress::before {
 	content: '';
 	width: 11px;
@@ -147,21 +201,26 @@ input[type="search"]::-webkit-search-decoration {
 	border-radius: 50%;
 	animation: ecuc-search-spin 0.8s linear infinite;
 }
+
 .find-action {
+	height: 25px;
 	padding: 0 6px;
-	white-space: nowrap;
+	font-size: 12px;
+	background: var(--vscode-button-secondaryBackground, transparent);
+	color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+	border-color: var(--vscode-button-border, transparent);
 }
+
 .find-action:disabled {
-	color: var(--vscode-disabledForeground);
+	color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
 	cursor: default;
 }
-.replace-row {
-	padding-left: 18px;
-}
+
 @keyframes ecuc-search-spin {
 	from { transform: rotate(0deg); }
 	to { transform: rotate(360deg); }
 }
+
 @media (max-width: 720px) {
 	.find-widget {
 		left: 8px;
@@ -172,11 +231,12 @@ input[type="search"]::-webkit-search-decoration {
 		display: none;
 	}
 }
+
 @media (prefers-reduced-motion: reduce) {
 	.search-progress::before {
 		animation: none;
 	}
-	.find-expand svg {
+	.find-expand .codicon {
 		transition: none;
 	}
 }

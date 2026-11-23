@@ -11,6 +11,7 @@ import { JSDOM } from 'jsdom';
 import './cssImportHook';
 
 import { editorShell, diffShell } from '../../host/webviewShell';
+import { renderSearchBarHtml } from '../../webview/components/searchBar/searchBar';
 import type { EditorProviderToWebview } from '../../webviewProtocol';
 import type { DiffProviderToWebview } from '../../diffProtocol';
 import { findRanges } from '../../webview/render/searchPattern';
@@ -83,7 +84,15 @@ function boundingWidth(element: any): number {
 
 /** Install jsdom globals and the VS Code API stub for one page. */
 export function installDom(kind: 'editor' | 'diff'): InstalledDom {
-	return installMarkup(shell(kind));
+	// The Monaco shells use Monaco's own find widget. The legacy DOM pages that
+	// these tests still mount need their custom widget markup, injected here so
+	// production markup stays free of it.
+	const search =
+		kind === 'diff'
+			? renderSearchBarHtml('diff-', 'Find in the diff', false)
+			: renderSearchBarHtml('', 'Find in the ECUC tree', true);
+	const html = shell(kind).replace('</body>', `${search}</body>`);
+	return installMarkup(html);
 }
 
 /** Install jsdom globals for arbitrary page markup. */
@@ -96,6 +105,9 @@ export function installMarkup(html: string): InstalledDom {
 		'document',
 		'Element',
 		'HTMLElement',
+		'HTMLInputElement',
+		'HTMLSelectElement',
+		'HTMLTextAreaElement',
 		'SVGElement',
 		'Node',
 		'getComputedStyle',
@@ -111,6 +123,9 @@ export function installMarkup(html: string): InstalledDom {
 	globals.document = window.document;
 	globals.Element = window.Element;
 	globals.HTMLElement = window.HTMLElement;
+	globals.HTMLInputElement = window.HTMLInputElement;
+	globals.HTMLSelectElement = window.HTMLSelectElement;
+	globals.HTMLTextAreaElement = window.HTMLTextAreaElement;
 	globals.SVGElement = window.SVGElement;
 	globals.Node = window.Node;
 	globals.getComputedStyle = window.getComputedStyle.bind(window);

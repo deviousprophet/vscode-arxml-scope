@@ -6,6 +6,13 @@ only the text of the field the user edited.
 
 The editor is opt-in: a normal open still uses VS Code's text editor.
 
+> **Renderer status.** The Document surface is now a Monaco editor — the same editor and diff
+> editor that VS Code uses. Selection, scrolling, folding, word wrap, minimap, sticky scroll and
+> undo follow the host editor. Parameter values and container short names can be typed directly;
+> definition refs are edited in Details; everything else is read-only. Sections below that describe roving row focus, Space-to-select,
+> type-ahead, the custom copy planner, the custom collapsible hint or the custom virtual scroll
+> describe the retired DOM renderer and are kept as the ECUC interaction reference.
+
 ## Opening a file
 
 Use any of:
@@ -89,17 +96,16 @@ offsets; the docs view has one horizontal bar, and the scrollbars are native.
 
 ### Search and replace
 
-`Ctrl+F` / `Cmd+F` opens the floating find widget; `Ctrl+H` opens it with the replace row.
-The widget is hidden until one of those shortcuts. `Escape` closes it and returns focus to the
-Document.
+`Ctrl+F` / `Cmd+F` opens Monaco's native find widget inside the editor; `Ctrl+H` opens it with
+the replace row. `Escape` closes it and returns focus to the Document.
 
 - The three toggles are `Aa` case sensitive, `ab|` match whole word and `.*` regular expression.
 - The Rust engine owns the match list, the count, navigation and replace plans. Typing starts a
-  new request; `Enter` jumps to the first/next match, `Shift+Enter` goes back, `F3` / `Shift+F3`
-  cycle. The count reads `1 / N`, `0 / 0`, `Invalid pattern` or is empty before a query runs.
-- All matches are marked; the current row uses the stronger amber tier. The schema/package
-  keyword and value are page-local search candidates; a header jump focuses the header line and
-  posts no `select` message.
+  new request; `Enter` jumps to the next match, `Shift+Enter` goes back, and `F3` / `Shift+F3`
+  cycle. The native count reads `1 of N` or `No results`; an invalid pattern is reported in
+  Details.
+- Every reported match is mapped from its field offsets onto the synthetic line, so only real
+  ARXML matches are marked. Monaco's theme-aware find colours mark all hits and the current one.
 - Replace edits parameter values and container short names only. `Replace` changes the current
   occurrence; `Replace All` plans every replaceable field atomically. Module labels, reference
   targets, meta text and headers refuse with an inline notice. Preserve case (`AB↔`) copies the
@@ -199,21 +205,31 @@ collapsed sections and visibility persist across a webview reload.
 
 ## Editing rules
 
-The Document surface is read-only. Editing happens in Details or through the row context menu.
+The Document surface supports direct value and container-short-name typing; definition-ref and
+structural edits stay in Details or the row context menu. Details is another view of the same
+in-memory draft: typing there updates the Monaco value and vice versa. The editor is optimistic:
+the typed text and an `Unsaved changes` marker appear immediately, the tab title gets a `•`, and
+the host write happens after a short idle pause. Edits carry an id and document revision; the host
+serializes its `WorkspaceEdit`s and acknowledges each one. A refused or locally invalid value stays
+visible with a red marker and never applies to the `TextDocument`. `Ctrl+S` is the only save action:
+it flushes pending edits, waits for validation, and is blocked while a value is invalid or still
+being validated. The tab title and marker clear when the real `TextDocument` becomes clean.
 
 ### Field edits
 
 - A parameter's `<VALUE>` is edited with a text input (or a `true`/`false` select for a Boolean
   parameter).
 - A container's `<SHORT-NAME>` and `<DEFINITION-REF>` are edited with text inputs.
-- `Enter` commits, `Escape` restores the committed value, and `Tab` moves to the adjacent parameter
-  (value edit) or the container's other field.
-- Integer and Float inputs reject characters that cannot belong to the value; the host still validates
-  the complete value on commit.
-- A refusal keeps the typed text, marks the control invalid and shows the reason beside the field. A
+- Details typing is live; `Enter` does not commit. `Escape` restores the field's accepted value, and
+  `Tab` uses normal browser focus movement without writing.
+- Integer, Float, Boolean and XML-invalid input is marked locally as a problem while typing; the host
+  still validates the complete value against Rust before it reaches the document.
+- A refusal keeps the typed text, marks the field and the page error strip, and blocks save. The
   refused value never reaches the file.
 - A value backed by CDATA is shown but not editable.
 - A module cannot be renamed: its short name is part of every container id.
+- Direct typing is local-first: the value stays visible while the host write is in flight, and a
+  host re-scan cannot overwrite a newer local field.
 
 Each accepted edit is exactly one `WorkspaceEdit` on the real text document, so it is one undo step.
 
