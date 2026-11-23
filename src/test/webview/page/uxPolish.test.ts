@@ -14,7 +14,7 @@ import { inspectorFields } from '../../../webview/components/sidebar/detailsPane
 import { editorShell } from '../../../host/webviewShell';
 import { fixtureText } from '../../core/modelTestUtils';
 import { repoRoot } from '../../extension/testUtils';
-import { webviewCss } from '../cssTestUtils';
+import { allowedViewHex, webviewCss } from '../cssTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
@@ -112,7 +112,7 @@ suite('editor visual polish', () => {
 		const hexes = [...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
 		assert.deepStrictEqual(
 			hexes.sort(),
-			['#4EC9B0', '#80808040', '#DCDCAA', '#569cd6', '#c586c0', '#4fc1ff', '#0000ff', '#af00db', '#0070c1'].sort(),
+			allowedViewHex(),
 			'the semantic guide/colour fallbacks are the only literals'
 		);
 		const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {

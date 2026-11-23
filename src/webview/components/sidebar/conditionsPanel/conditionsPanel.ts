@@ -231,7 +231,7 @@ function appendConditionValueText(row: HTMLElement, value: string): void {
 	valueText.textContent = value;
 	valueText.title = 'Value: ' + value;
 	if (isConditionLiteral(value)) {
-		valueText.dataset.kind = 'literal';
+		valueText.dataset.valueKind = 'boolean';
 	}
 	row.appendChild(valueText);
 }

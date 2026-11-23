@@ -696,18 +696,6 @@ function renderDecorations(): void {
 	modifiedDecorations = modified.deltaDecorations(modifiedDecorations, modifiedRanges);
 }
 
-function revealKey(key: string | undefined): void {
-	if (key === undefined) {
-		return;
-	}
-	const line = lineFor(key, modifiedDocument());
-	if (line === undefined) {
-		return;
-	}
-	modifiedEditor()?.revealLineInCenter(line);
-	modifiedEditor()?.setPosition({ lineNumber: line, column: 1 });
-}
-
 function selectKey(key: string | undefined): void {
 	if (key === selectedKey) {
 		return;

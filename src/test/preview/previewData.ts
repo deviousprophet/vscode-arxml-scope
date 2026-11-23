@@ -239,7 +239,10 @@ function syntaxDocument(selectedLabel = 'Binary'): { rows: EcucRow[]; selectedId
 }
 
 /** The syntax document with a boolean literal in the condition expression. */
-const SYSCOND_XML = SYNTAX_XML.replace('==0)</SW-SYSCOND>', '==0)||(FEATURE==true)</SW-SYSCOND>');
+const SYSCOND_XML = SYNTAX_XML.replace(
+	'==0)</SW-SYSCOND>',
+	'==0)||(FEATURE==true)&amp;&amp;(MODE==&quot;A&quot;)</SW-SYSCOND>'
+);
 
 /** The condition-bearing row selected, so Details shows the whole palette. */
 function syscondDocument(): { rows: EcucRow[]; selectedId?: string } {

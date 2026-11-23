@@ -60,7 +60,10 @@ function quotedEnd(text: string, start: number): number {
 			return at + 1;
 		}
 	}
-	return text.length;
+	// No unescaped close. The synthetic display does not escape a trailing
+	// backslash, so a quote preceded by one is still the closing quote.
+	const fallback = text.lastIndexOf('"');
+	return fallback > start ? fallback + 1 : text.length;
 }
 
 function bracketedEnd(text: string, start: number, open: string, close: string): number {

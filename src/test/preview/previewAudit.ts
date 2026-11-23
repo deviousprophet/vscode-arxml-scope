@@ -523,8 +523,16 @@ const SYSCOND_COLORS = {
 	name: 'rgb(86, 156, 214)',
 	operator: 'rgb(197, 134, 192)',
 	literal: 'rgb(79, 193, 255)',
-	number: 'rgb(181, 206, 168)'
+	number: 'rgb(181, 206, 168)',
+	string: 'rgb(206, 145, 120)'
 };
+
+/** The `diff-one-sided` fixture contract, so a fixture edit names the failing expectation. */
+const ONE_SIDED_FIXTURE = {
+	owningBraces: 8,
+	minLineChanges: 3,
+	owningArrows: 2
+} as const;
 
 /** The Dark+ definition and string colours the label preview resolves. */
 const LABEL_COLORS = {
@@ -571,12 +579,15 @@ function labelColorViolations(audit: Omit<PreviewAudit, 'violations'>): string[]
 	return issues;
 }
 
-/** The six condition classes and their expected resolved colours. */
+/** The condition classes present in the fixture and their expected resolved colours.
+ * Punctuation is surface-specific (the CSS theme mix vs Monaco's delimiter), so the
+ * token-mapping and stylesheet tests cover it rather than this cross-surface audit. */
 const SYSCOND_CLASSES: ReadonlyArray<readonly [string, string]> = [
 	['syscond-name', SYSCOND_COLORS.name],
 	['syscond-operator', SYSCOND_COLORS.operator],
 	['syscond-literal', SYSCOND_COLORS.literal],
-	['syscond-number', SYSCOND_COLORS.number]
+	['syscond-number', SYSCOND_COLORS.number],
+	['syscond-string', SYSCOND_COLORS.string]
 ];
 
 /** The text each condition class carries in the `editor-syscond` fixture. */
@@ -584,7 +595,8 @@ const SYSCOND_TEXT: Readonly<Record<string, string>> = {
 	'syscond-name': 'CANIPCORETYPE_SC',
 	'syscond-operator': '==',
 	'syscond-literal': 'true',
-	'syscond-number': '0'
+	'syscond-number': '0',
+	'syscond-string': '"A"'
 };
 
 /** One palette mismatch, or `undefined` when every class resolves as expected. */
@@ -623,8 +635,8 @@ function syscondViolations(audit: Omit<PreviewAudit, 'violations'>): string[] {
 	if (syscond.panelName !== SYSCOND_COLORS.name) {
 		issues.push(`the Conditions panel name is ${String(syscond.panelName)}, not the syscond colour`);
 	}
-	if (syscond.panelState !== SYSCOND_COLORS.operator) {
-		issues.push(`the Conditions panel state is ${String(syscond.panelState)}, not the operator colour`);
+	if (syscond.panelState !== SYSCOND_COLORS.literal) {
+		issues.push(`the Conditions panel state is ${String(syscond.panelState)}, not the literal colour`);
 	}
 	return issues;
 }
@@ -1406,9 +1418,9 @@ function oneSidedViolations(audit: OneSidedAudit): string[] {
 	if (audit.missingSideBraces.length > 0) {
 		issues.push(`the missing side synthesized braces (${audit.missingSideBraces.join('; ')})`);
 	}
-	if (audit.owningSideBraces !== 8) {
+	if (audit.owningSideBraces !== ONE_SIDED_FIXTURE.owningBraces) {
 		issues.push(
-			`the owning side has ${audit.owningSideBraces} brace lines, not the 8 module/container braces`
+			`the owning side has ${audit.owningSideBraces} brace lines, not the ${ONE_SIDED_FIXTURE.owningBraces} in the diff-one-sided fixture`
 		);
 	}
 	if (audit.placeholderLines !== audit.placeholderExpected) {
@@ -1439,13 +1451,15 @@ function oneSidedViolations(audit: OneSidedAudit): string[] {
 	if (!audit.signHidden) {
 		issues.push('the placeholder gutter keeps the inserted/deleted sign');
 	}
-	if (audit.lineChanges < 3) {
+	if (audit.lineChanges < ONE_SIDED_FIXTURE.minLineChanges) {
 		issues.push(
-			`the diff has ${audit.lineChanges} line changes, not the added, removed and changed blocks`
+			`the diff has ${audit.lineChanges} line changes, fewer than the ${ONE_SIDED_FIXTURE.minLineChanges} in the diff-one-sided fixture`
 		);
 	}
-	if (audit.owningArrows !== 2) {
-		issues.push(`the owning side has ${audit.owningArrows} merge arrows, not one per one-sided module`);
+	if (audit.owningArrows !== ONE_SIDED_FIXTURE.owningArrows) {
+		issues.push(
+			`the owning side has ${audit.owningArrows} merge arrows, not the ${ONE_SIDED_FIXTURE.owningArrows} in the diff-one-sided fixture`
+		);
 	}
 	if (!audit.removedNavigable) {
 		issues.push('the removed block is missing from the navigation change list');

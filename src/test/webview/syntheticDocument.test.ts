@@ -80,6 +80,27 @@ function parameterRow(): EcucRow {
 	};
 }
 
+function referenceRow(): EcucRow {
+	return {
+		id: 'container:m#0/c#0/ref:R0000#0',
+		kind: 'reference',
+		level: 3,
+		parentId: 'container:m#0/c#0',
+		subtreeSize: 0,
+		posinset: 2,
+		setsize: 2,
+		hasChildren: false,
+		label: 'R0000',
+		definitionRef: '/P/R0000',
+		value: '/P/Target',
+		shownValue: '/P/Target',
+		target: '/P/Target',
+		title: '/P/R0000',
+		meta: [],
+		haystack: 'r0000 /p/target'
+	};
+}
+
 /** A container with no DEFINITION-REF: no label, so the line starts with its short name. */
 function noLabelContainerRow(): EcucRow {
 	return {
@@ -126,6 +147,9 @@ function diffCell(row: EcucRow): DiffCell {
 		definitionRef: row.definitionRef,
 		shownValue: row.shownValue,
 		value: row.value,
+		valueKind: row.valueKind,
+		target: row.target,
+		contextPaths: row.contextPaths,
 		meta: row.meta,
 		range: { start: 0, end: 0 }
 	};
@@ -616,7 +640,7 @@ suite('synthetic ECUC document', () => {
 		const removedModule: EcucRow = {
 			...moduleRow(),
 			id: 'module:removed#0',
-			subtreeSize: 2,
+			subtreeSize: 3,
 			label: 'P.RemovedMod',
 			shortName: 'RemovedMod',
 			definitionRef: '/P/RemovedMod',
@@ -628,6 +652,7 @@ suite('synthetic ECUC document', () => {
 			...containerRow(),
 			id: 'container:removed#0',
 			parentId: 'module:removed#0',
+			subtreeSize: 2,
 			label: 'RemovedItems',
 			shortName: 'RemovedItems',
 			definitionRef: '/P/RemovedMod/RemovedItems',
@@ -642,10 +667,20 @@ suite('synthetic ECUC document', () => {
 			label: 'RemovedValue',
 			definitionRef: '/P/RemovedMod/RemovedItems/RemovedValue'
 		};
+		const removedReference: EcucRow = {
+			...referenceRow(),
+			id: 'container:removed#0/ref:RemovedRef#0',
+			parentId: 'container:removed#0',
+			label: 'RemovedRef',
+			definitionRef: '/P/RemovedMod/RemovedItems/RemovedRef',
+			value: '/P/Target',
+			shownValue: '/P/Target',
+			target: '/P/Target'
+		};
 		const addedModule: EcucRow = {
 			...moduleRow(),
 			id: 'module:added#0',
-			subtreeSize: 2,
+			subtreeSize: 3,
 			label: 'P.AddedMod',
 			shortName: 'AddedMod',
 			definitionRef: '/P/AddedMod',
@@ -657,6 +692,7 @@ suite('synthetic ECUC document', () => {
 			...containerRow(),
 			id: 'container:added#0',
 			parentId: 'module:added#0',
+			subtreeSize: 2,
 			label: 'AddedItems',
 			shortName: 'AddedItems',
 			definitionRef: '/P/AddedMod/AddedItems',
@@ -670,6 +706,16 @@ suite('synthetic ECUC document', () => {
 			parentId: 'container:added#0',
 			label: 'AddedValue',
 			definitionRef: '/P/AddedMod/AddedItems/AddedValue'
+		};
+		const addedReference: EcucRow = {
+			...referenceRow(),
+			id: 'container:added#0/ref:AddedRef#0',
+			parentId: 'container:added#0',
+			label: 'AddedRef',
+			definitionRef: '/P/AddedMod/AddedItems/AddedRef',
+			value: '/P/Target',
+			shownValue: '/P/Target',
+			target: '/P/Target'
 		};
 		const sharedModule: EcucRow = {
 			...moduleRow(),
@@ -710,14 +756,16 @@ suite('synthetic ECUC document', () => {
 				oneSidedDiffRow(removedModule, 'removed', 'module:removed#0', 'left'),
 				oneSidedDiffRow(removedContainer, 'removed', 'container:removed#0', 'left'),
 				oneSidedDiffRow(removedParameter, 'removed', 'container:removed#0/param:RemovedValue#0', 'left'),
+				oneSidedDiffRow(removedReference, 'removed', 'container:removed#0/ref:RemovedRef#0', 'left'),
 				oneSidedDiffRow(addedModule, 'added', 'module:added#0', 'right'),
 				oneSidedDiffRow(addedContainer, 'added', 'container:added#0', 'right'),
 				oneSidedDiffRow(addedParameter, 'added', 'container:added#0/param:AddedValue#0', 'right'),
+				oneSidedDiffRow(addedReference, 'added', 'container:added#0/ref:AddedRef#0', 'right'),
 				diffRow(sharedModule, 'unchanged', 'module:shared#0'),
 				diffRow(sharedContainer, 'unchanged', 'container:shared#0'),
 				diffRow(sharedParameter, 'unchanged', 'container:shared#0/param:SharedValue#0')
 			],
-			summary: { changed: 0, added: 3, removed: 3, unchanged: 3, renamed: 0 },
+			summary: { changed: 0, added: 4, removed: 4, unchanged: 3, renamed: 0 },
 			semanticSkipped: 0
 		};
 
@@ -741,6 +789,7 @@ suite('synthetic ECUC document', () => {
 				'    RemovedItems "RemovedItems"',
 				'    {',
 				'        RemovedValue = 0',
+				'        RemovedRef = /P/Target',
 				'    }',
 				'}'
 			],
@@ -769,6 +818,7 @@ suite('synthetic ECUC document', () => {
 				'    AddedItems "AddedItems"',
 				'    {',
 				'        AddedValue = 0',
+				'        AddedRef = /P/Target',
 				'    }',
 				'}'
 			],

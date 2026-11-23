@@ -1,7 +1,6 @@
 import * as assert from 'assert';
-import * as fs from 'fs';
-import * as path from 'path';
 
+import { webviewSource } from './cssTestUtils';
 import { tokenizeEcucLine } from '../../webview/monaco/tokens';
 
 function types(line: string): string[] {
@@ -19,11 +18,7 @@ function expectTokens(line: string, expected: ExpectedToken[]): void {
 	);
 }
 
-const WEBVIEW_ROOT = path.resolve(__dirname, '..', '..', '..', 'src', 'webview');
 
-function source(...segments: string[]): string {
-	return fs.readFileSync(path.join(WEBVIEW_ROOT, ...segments), 'utf8');
-}
 
 suite('semantic tokens for the synthetic ECUC document', () => {
 	test('module, container and parameter labels use distinct token types', () => {
@@ -172,6 +167,12 @@ suite('semantic tokens for the synthetic ECUC document', () => {
 		}
 	});
 
+	test('a trailing backslash before the closing quote stays in the string', () => {
+		// The synthetic display does not escape a trailing backslash; the quote
+		// after it is still the closing quote, not an escaped character.
+		assert.deepStrictEqual(types('Text = "C:\\"'), ['variable', 'operator', 'string']);
+	});
+
 	test('a parameter named context stays a label, not a context keyword', () => {
 		// The leading-context branch must not swallow a value row whose label
 		// happens to be `context`.
@@ -182,12 +183,12 @@ suite('semantic tokens for the synthetic ECUC document', () => {
 		// Both pages create models with the `arxml-ecuc` language; only
 		// `monaco/setup.ts` registers the provider, and it maps every line through
 		// `tokenizeEcucLine`. There is no second tokenizer for the diff to drift.
-		const setup = source('monaco', 'setup.ts');
+		const setup = webviewSource('monaco', 'setup.ts');
 		assert.ok(/setTokensProvider\('arxml-ecuc'/.test(setup), 'the shared setup owns the provider');
 		assert.ok(/tokens:\s*tokenizeEcucLine\(line\)\.map/.test(setup), 'the provider maps the shared lexer');
 		for (const page of ['editorMonaco.ts', 'diffMonaco.ts']) {
-			assert.ok(source(page).includes("from './monaco/setup'"), `${page} imports the shared setup`);
-			assert.ok(source(page).includes("createModel('', 'arxml-ecuc')"), `${page} uses the shared language`);
+			assert.ok(webviewSource(page).includes("from './monaco/setup'"), `${page} imports the shared setup`);
+			assert.ok(webviewSource(page).includes("createModel('', 'arxml-ecuc')"), `${page} uses the shared language`);
 		}
 	});
 });

@@ -3,20 +3,13 @@
  *
  * `tokens.css` owns the variables and the `.syscond-*` colour classes; every
  * page imports it. `documentTree.css` keeps only the condition-chip layout and
- * state rules, and the Conditions panel consumes the same tokens.
+ * state rules, and the Conditions panel consumes the same tokens. The Monaco
+ * theme rules repeat the hex values by necessity, so a test pins them to the
+ * CSS values.
  */
 import * as assert from 'assert';
-import * as fs from 'fs';
-import * as path from 'path';
 
-import { webviewCss } from './cssTestUtils';
-
-const WEBVIEW_ROOT = path.resolve(__dirname, '..', '..', '..', 'src', 'webview');
-
-/** The source text of one webview module, for the shared-load assertion. */
-function source(...segments: string[]): string {
-	return fs.readFileSync(path.join(WEBVIEW_ROOT, ...segments), 'utf8');
-}
+import { webviewCss, webviewSource } from './cssTestUtils';
 
 suite('shared system-condition palette', () => {
 	test('tokens.css defines the three condition variables with Dark+/Light+ values', () => {
@@ -30,6 +23,23 @@ suite('shared system-condition palette', () => {
 		assert.ok(/--tok-syscond:\s*#0000ff/.test(lightBlock), 'light uses the Light+ preprocessor blue');
 		assert.ok(/--tok-syscond-op:\s*#af00db/.test(lightBlock), 'light uses the Light+ parameter magenta');
 		assert.ok(/--tok-syscond-literal:\s*#0070c1/.test(lightBlock), 'light uses the Light+ constant blue');
+	});
+
+	test('the Monaco theme rules repeat the same palette', () => {
+		const setup = webviewSource('monaco', 'setup.ts');
+		for (const [token, dark, light] of [
+			['syscond', '569cd6', '0000ff'],
+			['constant', '4fc1ff', '0070c1']
+		]) {
+			assert.ok(
+				new RegExp(`\\{ token: '${token}', foreground: '${dark}' \\}`).test(setup),
+				`the dark ${token} rule matches tokens.css`
+			);
+			assert.ok(
+				new RegExp(`\\{ token: '${token}', foreground: '${light}' \\}`).test(setup),
+				`the light ${token} rule matches tokens.css`
+			);
+		}
 	});
 
 	test('tokens.css owns every syscond colour class', () => {
@@ -60,7 +70,7 @@ suite('shared system-condition palette', () => {
 	test('every page loads the shared stylesheet', () => {
 		for (const page of ['editorMonaco.ts', 'editorViewer.ts', 'diffMonaco.ts', 'diffViewer.ts']) {
 			assert.ok(
-				source(page).includes("import './styles/tokens.css';"),
+				webviewSource(page).includes("import './styles/tokens.css';"),
 				`${page} imports the shared tokens`
 			);
 		}
@@ -70,9 +80,11 @@ suite('shared system-condition palette', () => {
 		const css = webviewCss('components', 'sidebar', 'conditionsPanel', 'conditionsPanel.css');
 		assert.ok(/\.condition-name-text\s*\{[^}]*color:\s*var\(--tok-syscond\)/.test(css));
 		assert.ok(/\.condition-name\s*\{[^}]*color:\s*var\(--tok-syscond\)/.test(css));
-		assert.ok(/\.condition-state\s*\{[^}]*color:\s*var\(--tok-syscond-op\)/.test(css));
+		assert.ok(/\.condition-state\s*\{[^}]*color:\s*var\(--tok-syscond-literal\)/.test(css));
 		assert.ok(
-			/\.condition-value-text\[data-kind="literal"\]\s*\{[^}]*color:\s*var\(--tok-syscond-literal\)/.test(css)
+			/\.condition-value-text\[data-value-kind="boolean"\]\s*\{[^}]*color:\s*var\(--tok-syscond-literal\)/.test(
+				css
+			)
 		);
 		assert.ok(
 			/\.condition-state\s*\{[^}]*border:\s*1px dashed/.test(css),

@@ -101,7 +101,7 @@
 	flex-basis: 18ch;
 }
 /* A boolean value reads as a condition literal; other values stay foreground. */
-.condition-value-text[data-kind="literal"] {
+.condition-value-text[data-value-kind="boolean"] {
 	color: var(--tok-syscond-literal);
 }
 .condition-state {
@@ -109,7 +109,7 @@
 	padding: 0 5px;
 	border: 1px dashed var(--vscode-descriptionForeground);
 	border-radius: 3px;
-	color: var(--tok-syscond-op);
+	color: var(--tok-syscond-literal);
 	font-size: 11px;
 	line-height: 18px;
 }

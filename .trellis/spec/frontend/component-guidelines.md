@@ -363,8 +363,9 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   a container/module brace only when that side has the cell; the missing side keeps blank lines of
   the same count. `diffMonaco` decorates every missing-side line with `arxml-diff-placeholder`, and
   the diff CSS neutralizes Monaco's inserted/deleted line, char, gutter and sign paints; the owning
-  side keeps its change fill. The `diff-one-sided` preview audit reads the actual aligned models and
-  computed styles, so a reappearing fake brace or placeholder fill fails the capture.
+  side keeps its change fill. The placeholder side keeps its host delete/copy arrow intentionally;
+  only the selection tint is skipped. The `diff-one-sided` preview audit reads the actual aligned
+  models and computed styles, so a reappearing fake brace or placeholder fill fails the capture.
 - **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the fixed

@@ -55,7 +55,7 @@ its old bundle.
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; both arrows stay on the inner edges |
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
 | `editor-syntax` | editor | 1400×900 | decimal, binary, text, reference and system-condition values; binary matches the numeric colour, references use the reference colour, and condition names/operators/numbers stay distinct |
-| `editor-syscond` | editor | 1400×900 | the `Condition` row selected; the tree chip and Details Condition code share the macro-blue name, magenta operator, cyan literal and number, and the Conditions panel uses the same name/state colours |
+| `editor-syscond` | editor | 1400×900 | the `Condition` row selected; the Monaco editor condition line and Details Condition code share the macro-blue name, magenta operator, cyan literal and number, and the Conditions panel uses the same name/state colours |
 | `editor-labels` | editor | 1400×900 | a module, a normal container, a parameter and a container with no `DEFINITION-REF`; the no-label line starts with its quoted short name in the string colour, and the normal container keeps the label in the type colour and the short name in the string colour |
 | `editor-dirty` | editor | 1400×900 | a typed parameter shows the `● Unsaved changes` toolbar marker and posts no host edit before `Ctrl+S` |
 | `editor-invalid` | editor | 1400×900 | invalid direct input shows the red marker/error and a `Ctrl+S` attempt is blocked |
@@ -110,11 +110,12 @@ strip or the page shell, and check each image before asking for review.
 - [ ] **Value kinds keep their colours.** `editor-syntax` shows `0b1010` in the same colour as
       decimal `42`, `P.Syn.Syntax.Target` in the reference colour, and
       `CANIPCORETYPE_SC==0` with distinct name, operator and number colours.
-- [ ] **The condition palette is shared.** `editor-syscond` shows the tree chip and Details
-      `Condition` code with the macro-blue name, magenta operator, cyan literal and unchanged
-      numbers; the Conditions panel constant name and state use the same colours and the state
-      keeps its dashed border. The audit rejects an editor or Details token that falls back to
-      the foreground or a panel colour that drifts from the shared tokens.
+- [ ] **The condition palette is shared.** `editor-syscond` shows the Monaco editor condition line
+      and Details `Condition` code with the macro-blue name, magenta operator, cyan literal and
+      unchanged numbers; the Conditions panel constant name and state use the same colours and the
+      state keeps its dashed border. The legacy tree chip shares the same stylesheet and is covered
+      by the CSS/load tests. The audit rejects an editor or Details token that falls back to the
+      foreground or a panel colour that drifts from the shared tokens.
 - [ ] **A short name is never a definition label.** `editor-labels` shows the no-label
       container line as `"EmptyDef" { }` with the quoted short name in the string colour, and
       the normal container as `Items "Items"` with the label in the type colour and the short

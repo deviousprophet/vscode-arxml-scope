@@ -92,6 +92,10 @@ Rules:
   high-contrast/selection rules go deeper only because they must scope to a view, a tree and a state at
   once. Do not add a deeper chain for a new feature.
 - Do not use `!important`. There are none in the shipped stylesheets; keep it that way.
+  The one documented exception is the `.arxml-diff-placeholder` neutralizer in
+  `src/webview/monaco/monaco.css`, which must outrank Monaco's internal inserted/deleted line,
+  gutter and sign fills. Keep it scoped to `.monaco-diff-editor`; the `diff-one-sided` audit fails
+  if the placeholder fill regresses.
 - Do not style through `innerHTML` or inject markup. Rows are created with `createElement` /
   `textContent`; the only namespace-built SVG is the inline twisty.
 
