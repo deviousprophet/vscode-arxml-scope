@@ -41,7 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A draft whose row disappeared from the file blocks `Ctrl+S` instead of saving without it
 - ECUC sticky scroll now pins the enclosing module and container headers while scrolling; the synthetic model's trailing newline keeps full-document folding scopes valid
 - The ECUC editor now shows an `Unsaved changes` marker in the toolbar and a `•` on the tab title, flushes pending drafts before save, and acknowledges each edit with its document revision
-- System-condition expressions color their names, comparison operators, numbers, literals and punctuation separately instead of one purple span
+- System-condition names use the C macro/preprocessor colour, with distinct operator and literal colours, across the Monaco editor and diff, the Document tree, Details and the Conditions panel
+- Container short names without a definition label use the string colour instead of the definition colour
+- A container or module that exists on only one side of the diff leaves the other side blank instead of showing fake empty braces or an inserted-line fill
 - Binary ECUC values use the numeric colour and dotted reference targets use the reference colour instead of the string colour
 - Diff line and word fills preserve the theme color's alpha and use VS Code's readable dark fallbacks, so changed rows no longer become opaque blocks
 - Native find-widget tooltips are no longer clipped by the editor host or toolbar; they stay visible long enough to read and click
