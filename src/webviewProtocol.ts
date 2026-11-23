@@ -22,11 +22,34 @@ export interface EditorDocumentHeader {
 	packages: string[];
 }
 
+/** The curated VS Code editor settings the Monaco surface inherits. */
+export interface MonacoSettings {
+	fontFamily?: string;
+	fontSize?: number;
+	lineHeight?: number;
+	fontWeight?: string;
+	wordWrap?: 'on' | 'off' | 'wordWrapColumn' | 'bounded';
+	wordWrapColumn?: number;
+	minimap?: boolean;
+	stickyScroll?: boolean;
+	indentationGuides?: boolean;
+	bracketPairGuides?: boolean | 'active';
+	cursorStyle?: 'block' | 'block-outline' | 'line' | 'line-thin' | 'underline' | 'underline-thin';
+	cursorBlinking?: 'blink' | 'smooth' | 'phase' | 'expand' | 'solid';
+	smoothScrolling?: boolean;
+	renderWhitespace?: 'none' | 'boundary' | 'selection' | 'trailing' | 'all';
+}
+
 /** The row document the page installs: initial load and every re-scan. */
 export interface EditorDocumentPayload {
 	rows: EcucRow[];
 	selectedId?: string;
 	header?: EditorDocumentHeader;
+	settings?: MonacoSettings;
+	/** Host TextDocument version after the payload was built. */
+	revision?: number;
+	/** True when the TextDocument has unsaved changes. */
+	dirty?: boolean;
 }
 
 /** One contiguous row replacement the engine computed for a text change. */
@@ -43,7 +66,28 @@ export type EditorProviderToWebview =
 	/** Replace the row store (first load and every re-scan). */
 	| { type: 'document'; document: EditorDocumentPayload }
 	/** Replace a contiguous row span after one edit; the rest of the store is untouched. */
-	| { type: 'documentPatch'; patch: EditorRowPatch; header?: EditorDocumentHeader; selectedId?: string }
+	| {
+			type: 'documentPatch';
+			patch: EditorRowPatch;
+			header?: EditorDocumentHeader;
+			selectedId?: string;
+			revision?: number;
+			dirty?: boolean;
+	  }
+	/** The host confirms or refuses one optimistic edit. */
+	| {
+			type: 'editResult';
+			editId: number;
+			ok: boolean;
+			reason?: string;
+			revision: number;
+			/** The host's id for the edited node after the write; only a rename changes it. */
+			nextNodeId?: string;
+	  }
+	/** The TextDocument's dirty state changed. */
+	| { type: 'dirty'; dirty: boolean; revision: number }
+	/** The host asks the page to submit pending edits before saving. */
+	| { type: 'flushEdits'; requestId: number }
 	/** Replace the workspace condition values (first load and a page reload). */
 	| { type: 'conditions'; entries: ConditionEntry[] }
 	/** Select one row, expanding its ancestors when needed. */
@@ -55,17 +99,28 @@ export type EditorProviderToWebview =
 	/** The engine answer for one find request. */
 	| { type: 'findResult'; requestId: number; result: FindResult; error?: string }
 	/** The engine answer for one replace request. */
-	| { type: 'replaceResult'; requestId: number; result: ReplaceResult };
+	| { type: 'replaceResult'; requestId: number; result: ReplaceResult }
+	/** A curated `editor.*` setting changed. */
+	| { type: 'settings'; settings: MonacoSettings }
+	/** The active VS Code colour theme changed. */
+	| { type: 'theme' };
 
 /** Editor page → host. */
 export type EditorWebviewToProvider =
 	/** The page mounted and is listening; the host answers with `document` and `conditions`. */
 	| { type: 'ready' }
+	/** The page asks the host document to undo its last edit. */
+	| { type: 'undo' }
+	/** The page asks the host document to redo its last undone edit. */
+	| { type: 'redo' }
 	| { type: 'select'; nodeId: string }
 	| { type: 'reveal'; nodeId: string }
 	| { type: 'follow'; nodeId: string }
 	| { type: 'references'; nodeId: string }
-	| { type: 'edit'; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string }
+	| { type: 'edit'; editId?: number; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string; baseRevision?: number }
+	/** The page asks the host to save the TextDocument after pending edits settle. */
+	| { type: 'save' }
+	| { type: 'flushed'; requestId: number }
 	| { type: 'delete'; nodeId: string }
 	| { type: 'duplicate'; nodeId: string }
 	| { type: 'conditions'; entries: ConditionEntry[] }
@@ -90,12 +145,17 @@ export function editorMessageType(message: unknown): string | undefined {
 const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'document',
 	'documentPatch',
+	'editResult',
+	'dirty',
+	'flushEdits',
 	'conditions',
 	'select',
 	'notice',
 	'error',
 	'findResult',
-	'replaceResult'
+	'replaceResult',
+	'settings',
+	'theme'
 ]);
 
 /** A host message with the editor protocol's shape; the page ignores anything else. */

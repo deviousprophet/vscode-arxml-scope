@@ -297,6 +297,15 @@ Covered: manifest, activation, engine binary path, VSIX engine verification.
 | PKG-02 | VSIX contains every platform's engine | verify step passes for all four targets |
 | PKG-03 | no `dist/native` artifact remains | absent from the VSIX |
 
+## MONACO — editor and diff surface
+
+| ID | Case | Expected |
+|---|---|---|
+| MON-01 | `buildSyntheticDocument` from the row store | text, row lines, field spans and folding ranges match the Current Document; parameter values and container short names are the editable spans |
+| MON-02 | `buildAlignedSyntheticDocuments` from a `DiffDocument` | both sides have equal line counts and a row present on one side leaves a blank line on the other |
+| MON-03 | editor and diff shells | the CSP allows the Monaco worker, injected styles and packaged font; the worker URI meta is present; the script nonce is unchanged |
+| MON-04 | `npm run shots:webview` | all seeded states capture without a geometry violation; Monaco states skip the retired DOM diff audit |
+
 ## PERF — benchmarks
 
 Covered: scan/rows/diff/index/validation/rename/edit-latency.

@@ -14,7 +14,7 @@ import { inspectorFields } from '../../../webview/components/sidebar/detailsPane
 import { editorShell } from '../../../host/webviewShell';
 import { fixtureText } from '../../core/modelTestUtils';
 import { repoRoot } from '../../extension/testUtils';
-import { webviewCss } from '../cssTestUtils';
+import { allowedViewHex, webviewCss } from '../cssTestUtils';
 
 const FIXTURE = 'editor/render.arxml';
 
@@ -112,12 +112,12 @@ suite('editor visual polish', () => {
 		const hexes = [...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
 		assert.deepStrictEqual(
 			hexes.sort(),
-			['#4EC9B0', '#80808040', '#DCDCAA'].sort(),
+			allowedViewHex(),
 			'the semantic guide/colour fallbacks are the only literals'
 		);
 		const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
 			dependencies?: Record<string, string>;
 		};
-		assert.strictEqual(pkg.dependencies, undefined, 'no runtime dependency');
+		assert.deepStrictEqual(pkg.dependencies, { 'monaco-editor': '0.57.0' }, 'the pinned editor dependency');
 	});
 });

@@ -40,12 +40,20 @@ function buildPage() {
 		platform: 'browser',
 		format: 'iife',
 		outfile: path.join(previewDir, 'preview.js'),
+		loader: { '.ttf': 'file' },
+		assetNames: 'assets/[name]-[hash]',
 		logLevel: 'silent'
 	});
 }
 
 function contentType(file) {
-	return file.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8';
+	if (file.endsWith('.css')) {
+		return 'text/css; charset=utf-8';
+	}
+	if (file.endsWith('.ttf')) {
+		return 'font/ttf';
+	}
+	return 'text/javascript; charset=utf-8';
 }
 
 function sendFile(response, file) {
@@ -59,11 +67,20 @@ function sendFile(response, file) {
 }
 
 function isAsset(url) {
-	return url.pathname === '/preview.js' || url.pathname === '/preview.css';
+	return (
+		url.pathname === '/preview.js' ||
+		url.pathname === '/preview.css' ||
+		url.pathname === '/monaco.worker.js' ||
+		url.pathname.startsWith('/assets/')
+	);
 }
 
 function sendAsset(response, url) {
-	sendFile(response, path.join(previewDir, url.pathname.slice(1)));
+	const file =
+		url.pathname === '/monaco.worker.js'
+			? path.join(root, 'dist', 'monaco.worker.js')
+			: path.join(previewDir, url.pathname.slice(1));
+	sendFile(response, file);
 }
 
 function sendState(response, data, states, name) {

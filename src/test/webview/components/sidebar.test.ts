@@ -336,7 +336,7 @@ suite('sidebar shell', () => {
 		assert.ok(/\.nav-btn\s*\{[^}]*width:\s*28px[^}]*height:\s*28px/.test(style));
 		assert.ok(/\.act-btn\s*\{[^}]*width:\s*18px[^}]*height:\s*18px[^}]*opacity:\s*0/.test(style));
 		assert.ok(/\.parent:hover \.act-btn/.test(style), 'row actions appear on row hover');
-		assert.ok(/\.search-input\s*\{[^}]*height:\s*26px/.test(style));
+		assert.ok(/\.search-input\s*\{[^}]*height:\s*25px/.test(style));
 		assert.ok(/\.field-input\s*\{[^}]*--vscode-input-background/.test(style));
 		assert.ok(/\.field-input\s*\{[^}]*--vscode-input-border/.test(style));
 		assert.ok(/input\[type="search"\]::-webkit-search-cancel-button/.test(style));
@@ -655,7 +655,8 @@ suite('sidebar shell', () => {
 		assert.ok(/id="collapse-all" class="tool diff-tool"/.test(html));
 		assert.ok(/id="expand-all" class="tool diff-tool"/.test(html));
 		assert.ok(/id="toggle-sidebar" class="tool diff-tool"/.test(html));
-		assert.ok(html.includes('class="search-input field-input"'));
+		assert.ok(/id="editor-dirty-status"[^>]*role="status"/.test(html));
+		assert.ok(!html.includes('id="find-widget"'), 'Monaco paints its own find widget');
 		assert.ok(!html.includes('id="conditions-toggle"'));
 		assert.ok(!html.includes('id="details-toggle"'));
 	});

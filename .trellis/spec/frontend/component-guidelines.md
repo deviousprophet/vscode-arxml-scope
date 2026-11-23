@@ -78,8 +78,8 @@ controls live in the details panel, outside `#tree`, and each owns its own `Ente
 ```text
 details control keys  →  details editor commit/cancel/move
 page row click        →  select / twisty / value-click opens details
-search input keys     →  Enter runs/cycles, Shift+Enter previous, Escape clears, Ctrl+F focuses
-page key handler      →  navigation / F2/Enter opens details / F3 while search is active / type-ahead
+find keys             →  Monaco's native find widget owns Enter/Shift+Enter/Escape/F3
+page key handler      →  navigation / F2/Enter opens details / reveal shortcuts
 ```
 
 The page's `onRowClick` handles the row interactions. One interaction, one effect: the twisty toggles
@@ -104,15 +104,17 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
 
 ## DOM contracts
 
-- **Search is the only query control and runs through the engine.** The floating
-  `.find-widget` is hidden until `Ctrl+F`; `Ctrl+H` opens the replace row and
-  `Escape` closes it. `#search-input` stays `type="search"` for its searchbox role;
-  Chromium's native cancel/decoration pseudo-elements are suppressed so the one
-  custom `#search-clear` X is the only clear control. The three option toggles
-  (`Aa`, `ab|`, `.*`) carry `aria-pressed`; the document page also has the replace
-  row. The engine match list drives the count and navigation; the page matcher is
-  only for `<mark>` and header text. Do not add a second query field or a
-  synchronous full-store scan.
+- **Search is Monaco's native find widget and runs through the engine.** `Ctrl+F` opens the
+  widget inside the editor and `Ctrl+H` opens its replace row; `Escape` closes it. Do not
+  build a second `.find-widget` for the Monaco pages. The native widget owns its `Aa`,
+  `ab|`, `.*` toggles, count and navigation; the page patches the model's `findMatches`,
+  `findNextMatch` and `findPreviousMatch` so the match list comes from `doc.search` /
+  `diff.search`. Replace and Replace All call `doc.replace` with a mapped row/field target
+  instead of editing the synthetic text. Every Rust field offset is mapped through the
+  synthetic line's `searchSpans`; do not count every textual occurrence on the line.
+  The editor/tree/diff hosts must allow overflow while the native widget is visible so its
+  button tooltips are not clipped at the toolbar.
+  Do not add a second query field or a synchronous full-store scan.
 - **Search jumps; it never hides.** The engine searches the whole row store; collapse and any view
   state never remove a candidate. The engine checks the label, value and every visible meta
   fragment (short name, variant, context, condition and annotation). Each answer preserves the
@@ -175,11 +177,21 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
   ordinary numbered display row, not a height or padding predicate on a node or comment.
 - **Conditions are token-coloured.** `conditionTokens` preserves every character and assigns
   `syscond-name`, `syscond-number`, `syscond-string`, `syscond-operator`, `syscond-literal` and
-  `syscond-punct`, all backed by the existing `--tok-*` variables. A false condition marks its chip
-  with a border edge only; the tokens keep their colours. The tree chip is bounded with ellipsis and
-  its `title` is `conditionTooltip`: one `NAME = value` line per symbol, `(not set)` for a missing
-  value, no `true`/`false`. Details renders `Condition`/`Conditions` through `conditionCodeRow` in a
-  wrapped `.condition-code` block.
+  `syscond-punct`, backed by the shared `--tok-*` variables (`--tok-syscond`, `--tok-syscond-op`
+  and `--tok-syscond-literal` for the condition colours). The Monaco token provider reuses this
+  lexer and maps those classes to `syscond`, `number`, `string`, `parameter`, `constant` and
+  `delimiter`, so a condition like `CANIPCORETYPE_SC==0` keeps the name, operator and number
+  distinct. A false condition marks its chip with a border edge only; the tokens keep their
+  colours. The tree chip is bounded with ellipsis and its `title` is `conditionTooltip`: one
+  `NAME = value` line per symbol, `(not set)` for a missing value, no `true`/`false`. Details
+  renders `Condition`/`Conditions` through `conditionCodeRow` in a wrapped `.condition-code` block.
+- **Synthetic line tokens follow the row shape.** A container line with a definition label is
+  `type` for the label and `string` for the quoted short name. A container with an empty or
+  missing definition ref starts with the quoted short name and must emit `string` for that
+  leading token, never `type`. Module labels are `variable`, parameter/reference labels are
+  `variable`, quoted values are `string`, reference targets are the reference/function token,
+  and braces/conditions/annotations use the delimiter/syscond/comment tokens. The aligned diff
+  line follows the same tokenizer.
 - Rows are built with `document.createElement` / `textContent`; the only `innerHTML`-like SVG is the
   inline twisty created with `createElementNS`. Brace rows are `aria-hidden`.
 - The details control is `<input class="details-value">` for numeric/text types and a
@@ -347,6 +359,13 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   gutter, indentation and meta typography match Document. Only the status tint and edge marker are
   diff-specific, and they sit on the cell without recolouring tokens. Status is an optional render
   input; the editor never sets it.
+- **One-sided rows keep their structure on the owning side.** `buildAlignedSyntheticDocuments` emits
+  a container/module brace only when that side has the cell; the missing side keeps blank lines of
+  the same count. `diffMonaco` decorates every missing-side line with `arxml-diff-placeholder`, and
+  the diff CSS neutralizes Monaco's inserted/deleted line, char, gutter and sign paints; the owning
+  side keeps its change fill. The placeholder side keeps its host delete/copy arrow intentionally;
+  only the selection tint is skipped. The `diff-one-sided` preview audit reads the actual aligned
+  models and computed styles, so a reappearing fake brace or placeholder fill fails the capture.
 - **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the fixed

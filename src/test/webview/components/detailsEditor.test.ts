@@ -13,6 +13,7 @@ import {
 	handleDetailsEditorMessage,
 	resetDetailsEditorState,
 	setDetailsEditorHost,
+	syncDetailsField,
 } from '../../../webview/components/detailsEditor/detailsEditor';
 import { definitionRows } from '../../../webview/components/sidebar/detailsPanel/detailsPanel';
 import { webviewCss } from '../cssTestUtils';
@@ -77,13 +78,13 @@ suite('DetailsEditor component', () => {
 		const dom = installMarkup('<body></body>');
 		try {
 			const integer = detailsValueInput(row(), { type: 'Integer' });
-			const input = integer.querySelector('input');
+			const input = integer.querySelector('input')!;
 			assert.ok(input, 'an input for a numeric parameter');
 			assert.strictEqual(input.id, 'details-value');
 			assert.strictEqual(input.getAttribute('data-field'), 'value');
-			assert.ok(input.getAttribute('aria-label').includes('IniValue'));
+			assert.ok(input.getAttribute('aria-label')!.includes('IniValue'));
 			const bool = detailsValueInput(row({ parameterType: 'Boolean', value: 'true' }), { type: 'Boolean' });
-			const select = bool.querySelector('select');
+			const select = bool.querySelector('select')!;
 			assert.ok(select, 'Boolean uses a select');
 			assert.deepStrictEqual(
 				Array.from(select.options).map((option: any) => option.value),
@@ -94,23 +95,29 @@ suite('DetailsEditor component', () => {
 		}
 	});
 
-	test('Enter commits through the host and Escape restores the original text', () => {
+	test('Enter leaves the live draft and Escape restores the original text', () => {
 		const dom = installMarkup('<body></body>');
 		try {
+			const previews: any[] = [];
 			const commits: any[] = [];
-			setDetailsEditorHost(host({ commitEdit: (message: any) => commits.push(message) }));
+			setDetailsEditorHost(
+				host({
+					previewEdit: (message: any) => previews.push(message),
+					commitEdit: (message: any) => commits.push(message)
+				})
+			);
 			const container = detailsValueInput(row(), { type: 'Integer' });
-			const input = container.querySelector('input');
+			const input = container.querySelector('input')!;
 			input.value = '99';
-			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-			assert.deepStrictEqual(commits, [{ type: 'edit', nodeId: 'p1', value: '99' }]);
-			// A committed edit waits for the host's next document message; emulate that
-			// re-scan, then Escape on a fresh field restores the committed row value.
-			handleDetailsEditorMessage({ type: 'document', document: { rows: [] } });
-			const fresh = detailsValueInput(row(), { type: 'Integer' }).querySelector('input');
-			fresh.value = 'broken';
-			fresh.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-			assert.strictEqual(fresh.value, '63', 'Escape restores the row value');
+			input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+			assert.deepStrictEqual(previews, [{ type: 'edit', nodeId: 'p1', value: '99' }]);
+			const enter = new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+			input.dispatchEvent(enter);
+			assert.strictEqual(enter.defaultPrevented, true, 'Enter is consumed');
+			assert.deepStrictEqual(commits, [], 'Enter does not commit');
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+			assert.strictEqual(input.value, '63', 'Escape restores the row value');
+			assert.deepStrictEqual(previews.at(-1), { type: 'edit', nodeId: 'p1', value: '63' });
 		} finally {
 			dom.restore();
 		}
@@ -121,12 +128,12 @@ suite('DetailsEditor component', () => {
 		try {
 			setDetailsEditorHost(host());
 			const container = detailsValueInput(row(), { type: 'Integer' });
-			const input = container.querySelector('input');
+			const input = container.querySelector('input')!;
 			input.value = 'x';
 			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
 			handleDetailsEditorMessage({ type: 'notice', message: 'Not an integer.', kind: 'warn', inline: true });
 			assert.strictEqual(input.getAttribute('aria-invalid'), 'true');
-			assert.strictEqual(container.querySelector('.details-value-error').textContent, '/* Not an integer. */');
+			assert.strictEqual(container.querySelector('.details-value-error')!.textContent, '/* Not an integer. */');
 		} finally {
 			dom.restore();
 		}
@@ -197,39 +204,25 @@ suite('DetailsEditor component', () => {
 		}
 	});
 
-	test('Tab from the value commits and moves to the adjacent parameter after the re-scan', async () => {
+	test('Tab leaves the value without committing', () => {
 		const dom = installMarkup('<body></body>');
 		try {
 			resetDetailsEditorState();
 			const commits: unknown[] = [];
-			const moves: string[] = [];
-			setDetailsEditorHost(
-				host({
-					getRow: (id: string) => (id === 'p1' ? row() : id === 'p2' ? row({ id: 'p2', label: 'Other' }) : undefined),
-					commitEdit: (message: unknown) => commits.push(message),
-					focusAdjacentParameter: (from: string, dir: string) => {
-						moves.push(from + ':' + dir);
-						return 'p2';
-					},
-				})
-			);
+			setDetailsEditorHost(host({ commitEdit: (message: unknown) => commits.push(message) }));
 			const container = detailsValueInput(row(), { type: 'Integer' });
 			dom.document.body.appendChild(container);
-			const input = container.querySelector('input');
+			const input = container.querySelector('input')!;
 			const tab = new dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
 			input.dispatchEvent(tab);
-			assert.strictEqual(tab.defaultPrevented, true);
-			assert.deepStrictEqual(commits, [{ type: 'edit', nodeId: 'p1', value: '63' }]);
-			handleDetailsEditorMessage({ type: 'document', document: { rows: [] } });
-			await new Promise((resolve) => setTimeout(resolve, 0));
-			assert.deepStrictEqual(moves, ['p1:prev']);
-			assert.strictEqual(dom.document.activeElement, input, 'the adjacent parameter field takes focus');
+			assert.strictEqual(tab.defaultPrevented, false, 'the browser owns Tab focus');
+			assert.deepStrictEqual(commits, []);
 		} finally {
 			dom.restore();
 		}
 	});
 
-	test('Tab between container fields commits and focuses the sibling after the re-scan', async () => {
+	test('Tab between container fields leaves the draft to the shared model', () => {
 		const dom = installMarkup('<body></body>');
 		try {
 			resetDetailsEditorState();
@@ -254,17 +247,14 @@ suite('DetailsEditor component', () => {
 			const shortName = dom.document.getElementById('details-short-name');
 			const tab = new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
 			shortName.dispatchEvent(tab);
-			assert.strictEqual(tab.defaultPrevented, true);
-			assert.deepStrictEqual(commits, [{ type: 'edit', nodeId: 'c1', field: 'shortName', value: 'C' }]);
-			handleDetailsEditorMessage({ type: 'document', document: { rows: [] } });
-			await new Promise((resolve) => setTimeout(resolve, 0));
-			assert.strictEqual(dom.document.activeElement?.id, 'details-definition-ref');
+			assert.strictEqual(tab.defaultPrevented, false);
+			assert.deepStrictEqual(commits, []);
 		} finally {
 			dom.restore();
 		}
 	});
 
-	test('DETAIL-03 Tab from the last container field commits without trapping focus', () => {
+	test('DETAIL-03 Tab from the last container field does not commit or trap focus', () => {
 		const dom = installMarkup('<body></body>');
 		try {
 			resetDetailsEditorState();
@@ -290,7 +280,7 @@ suite('DetailsEditor component', () => {
 			const tab = new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
 			definition.dispatchEvent(tab);
 			assert.strictEqual(tab.defaultPrevented, false, 'the browser moves focus out of the panel');
-			assert.deepStrictEqual(commits, [{ type: 'edit', nodeId: 'c1', field: 'definitionRef', value: '/P/M/C' }]);
+			assert.deepStrictEqual(commits, []);
 		} finally {
 			dom.restore();
 		}
@@ -338,7 +328,7 @@ suite('DetailsEditor component', () => {
 		);
 	});
 
-	test('DETAIL-04 a selection change cancels the open draft and never writes its text', () => {
+	test('DETAIL-04 a selection change drops the old bindings and never writes the draft', () => {
 		const dom = installMarkup('<body></body>');
 		try {
 			resetDetailsEditorState();
@@ -347,42 +337,157 @@ suite('DetailsEditor component', () => {
 
 			const container = detailsValueInput(row(), { type: 'Integer' });
 			dom.document.body.appendChild(container);
-			const input = container.querySelector('input');
+			const input = container.querySelector('input')!;
 			input.value = '999';
 			assert.strictEqual(input.value, '999', 'the draft is open');
 
 			detailsSelectionChanged('p2');
 			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-			assert.deepStrictEqual(commits, [], 'the cancelled draft never reaches commitEdit');
+			assert.deepStrictEqual(commits, [], 'the dropped binding never reaches commitEdit');
 
-			const fresh = detailsValueInput(row(), { type: 'Integer' }).querySelector('input');
-			assert.strictEqual(fresh.value, '63', 'a new control starts from the committed value, not the ghost draft');
+			const fresh = detailsValueInput(row(), { type: 'Integer' }).querySelector('input')!;
+			assert.strictEqual(fresh.value, '63', 'a control without a shared draft starts from the host value');
 
-			fresh.value = '77';
-			detailsSelectionChanged('p1');
-			const kept = detailsValueInput(row(), { type: 'Integer' }).querySelector('input');
-			assert.strictEqual(kept.value, '77', 'a selection that stays on the row keeps its draft');
+			// The page owns the shared draft; selecting the row again seeds it back.
+			const reseeded = detailsValueInput(row(), { type: 'Integer' }, '999').querySelector('input')!;
+			assert.strictEqual(reseeded.value, '999', 'a selection that returns to the row reseeds its draft');
 		} finally {
 			dom.restore();
 		}
 	});
 
-	test('an info notice leaves the pending draft waiting; an empty warning uses the default reason', () => {
+	test('a shared draft seeds the control and Escape still restores the host value', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			setDetailsEditorHost(host());
+			const container = detailsValueInput(row(), { type: 'Integer' }, '99');
+			const input = container.querySelector('input')!;
+			assert.strictEqual(input.value, '99', 'the control starts from the shared draft, not the host value');
+			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+			assert.strictEqual(input.value, '63', 'Escape restores the host-accepted value');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a container draft seeds both fields and survives a selection change', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			const container = row({
+				id: 'c1',
+				kind: 'container',
+				label: 'Container',
+				value: '',
+				shortName: 'C',
+				definitionRef: '/P/M/C',
+			});
+			setDetailsEditorHost(host({ getRow: (id: string) => (id === 'c1' ? container : undefined) }));
+			const fields = detailsContainerFields(container, { shortName: 'C', definitionRef: '/P/M/C' }, {
+				shortName: 'Renamed',
+				definitionRef: '/P/M/Renamed',
+			});
+			dom.document.body.appendChild(fields);
+			assert.strictEqual(dom.document.getElementById('details-short-name').value, 'Renamed');
+			assert.strictEqual(dom.document.getElementById('details-definition-ref').value, '/P/M/Renamed');
+
+			// The page keeps the draft; only the old DOM bindings are dropped.
+			detailsSelectionChanged('c2');
+			const again = detailsContainerFields(container, { shortName: 'C', definitionRef: '/P/M/C' }, {
+				shortName: 'Renamed',
+			});
+			assert.strictEqual(again.querySelector<HTMLInputElement>('#details-short-name')!.value, 'Renamed');
+			assert.strictEqual(again.querySelector<HTMLInputElement>('#details-definition-ref')!.value, '/P/M/C', 'an untouched field starts from the host value');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('syncDetailsField sets and clears the inline error even when the text is unchanged', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			setDetailsEditorHost(host());
+			const container = detailsValueInput(row(), { type: 'Integer' }, 'x');
+			const input = container.querySelector('input')!;
+			assert.strictEqual(input.value, 'x');
+
+			syncDetailsField('p1', 'value', 'x', 'Invalid integer value');
+			assert.strictEqual(input.value, 'x', 'an unchanged draft keeps its text');
+			assert.strictEqual(input.getAttribute('aria-invalid'), 'true');
+			assert.strictEqual(container.querySelector('.details-value-error')!.textContent, '/* Invalid integer value */');
+
+			syncDetailsField('p1', 'value', 'x');
+			assert.strictEqual(input.hasAttribute('aria-invalid'), false, 'the error clears when the draft is valid');
+			assert.strictEqual(container.querySelector('.details-value-error')!.textContent, '');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('syncDetailsField keeps an end caret at the end when a local undo or redo changes the draft', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			setDetailsEditorHost(host());
+			const container = detailsValueInput(row(), { type: 'Text' }, 'hello');
+			dom.document.body.appendChild(container);
+			const input = container.querySelector('input')!;
+			input.focus();
+			input.setSelectionRange(5, 5);
+
+			syncDetailsField('p1', 'value', 'hello updated');
+			assert.strictEqual(input.value, 'hello updated', 'the redo restores the draft');
+			assert.strictEqual(input.selectionStart, 13, 'an end caret follows the grown draft');
+
+			input.setSelectionRange(13, 13);
+			syncDetailsField('p1', 'value', 'hello');
+			assert.strictEqual(input.selectionStart, 5, 'an end caret clamps to the shrunk draft');
+
+			input.setSelectionRange(2, 2);
+			syncDetailsField('p1', 'value', 'hello updated');
+			assert.strictEqual(input.selectionStart, 2, 'a caret inside the text keeps its position');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('a rebuild carries the open refusal onto the seeded control', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			resetDetailsEditorState();
+			setDetailsEditorHost(host());
+			const first = detailsValueInput(row(), { type: 'Integer' }, 'x');
+			syncDetailsField('p1', 'value', 'x', 'Invalid integer value');
+			assert.strictEqual(first.querySelector('.details-value-error')!.textContent, '/* Invalid integer value */');
+
+			const rebuilt = detailsValueInput(row(), { type: 'Integer' }, 'x');
+			const input = rebuilt.querySelector('input')!;
+			assert.strictEqual(input.value, 'x');
+			assert.strictEqual(input.getAttribute('aria-invalid'), 'true');
+			assert.strictEqual(rebuilt.querySelector('.details-value-error')!.textContent, '/* Invalid integer value */');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('Enter never commits, an info notice is ignored, and an empty warning uses the default reason', () => {
 		const dom = installMarkup('<body></body>');
 		try {
 			resetDetailsEditorState();
 			const commits: unknown[] = [];
 			setDetailsEditorHost(host({ commitEdit: (message: unknown) => commits.push(message) }));
 			const container = detailsValueInput(row(), { type: 'Integer' });
-			const input = container.querySelector('input');
+			const input = container.querySelector('input')!;
 			const enter = () => input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
 			enter();
 			handleDetailsEditorMessage({ type: 'notice', kind: 'info', message: 'Saved.' });
 			enter();
-			assert.strictEqual(commits.length, 1, 'a pending draft is not committed twice');
+			assert.strictEqual(commits.length, 0, 'Enter does not commit the live draft');
 			handleDetailsEditorMessage({ type: 'notice', kind: 'warn', message: '', inline: true });
 			assert.strictEqual(input.getAttribute('aria-invalid'), 'true');
-			assert.strictEqual(container.querySelector('.details-value-error').textContent, '/* The value was refused. */');
+			assert.strictEqual(container.querySelector('.details-value-error')!.textContent, '/* The value was refused. */');
 		} finally {
 			dom.restore();
 		}
