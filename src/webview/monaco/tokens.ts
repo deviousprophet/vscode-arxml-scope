@@ -25,22 +25,6 @@ export type EcucTokenType =
 	| 'syscond'
 	| 'constant';
 
-export const ECUC_TOKEN_TYPES: readonly EcucTokenType[] = [
-	'keyword',
-	'type',
-	'variable',
-	'function',
-	'parameter',
-	'string',
-	'number',
-	'comment',
-	'operator',
-	'delimiter',
-	'namespace',
-	'syscond',
-	'constant'
-];
-
 export interface EcucToken {
 	/** 0-based column in the line. */
 	start: number;

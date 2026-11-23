@@ -360,16 +360,6 @@ export function buildSyntheticDocument(
 	return { text, lines, rowLine, foldingRanges: folding };
 }
 
-/** Find the synthetic line for one row id. */
-export function lineForRow(document: SyntheticDocument, rowId: string): number | undefined {
-	return document.rowLine.get(rowId);
-}
-
-/** Find the row id for one model line, if it is a node line. */
-export function rowForLine(document: SyntheticDocument, line: number): string | undefined {
-	return document.lines[line - 1]?.rowId;
-}
-
 /** Build one node line and its spans; used for a one-row host patch. */
 export function syntheticRowLine(row: EcucRow): {
 	text: string;
@@ -378,11 +368,6 @@ export function syntheticRowLine(row: EcucRow): {
 } {
 	const builder = buildNodeLine(row);
 	return { text: builder.parts.join(''), fieldSpans: builder.spans, searchSpans: builder.searchSpans };
-}
-
-/** All editable spans on a line. */
-export function fieldSpansForLine(document: SyntheticDocument, line: number): readonly FieldSpan[] {
-	return document.lines[line - 1]?.fieldSpans ?? [];
 }
 
 /** Map one Rust match's field offsets to 1-based columns on a synthetic line. */

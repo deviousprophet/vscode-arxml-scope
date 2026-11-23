@@ -9,7 +9,7 @@ import * as monaco from 'monaco-editor';
 import { toMonacoColor } from './colors';
 import { tokenizeEcucLine } from './tokens';
 
-export type ThemeKind = 'dark' | 'light' | 'hc' | 'hc-light';
+type ThemeKind = 'dark' | 'light' | 'hc' | 'hc-light';
 
 let workerReady: Promise<void> | undefined;
 const foldingByModel = new WeakMap<monaco.editor.ITextModel, { startLine: number; endLine: number }[]>();
@@ -115,7 +115,7 @@ function registerLanguage(): void {
 
 registerLanguage();
 
-export function currentThemeKind(): ThemeKind {
+function currentThemeKind(): ThemeKind {
 	const body = document.body;
 	if (body.classList.contains('vscode-high-contrast-light')) {
 		return 'hc-light';
@@ -278,7 +278,7 @@ export function defineEcucTheme(): string {
 	return 'arxml-ecuc-theme';
 }
 
-export function editorFontOptions(): {
+function editorFontOptions(): {
 	fontFamily: string;
 	fontSize: number;
 	lineHeight: number;

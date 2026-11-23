@@ -2210,7 +2210,7 @@ function mountDetails(): void {
 	});
 }
 
-export async function mountEditor(): Promise<void> {
+async function mountEditor(): Promise<void> {
 	resetVsCodeApi();
 	resetDetailsEditorState();
 	reportError = installConsoleErrors(window, console, 'ECUC editor').report;
@@ -2300,8 +2300,6 @@ function handleThemeChanges(): void {
 	});
 	observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 }
-
-export { handleMessage };
 
 if (typeof document !== 'undefined' && document.getElementById('tree')) {
 	void mountEditor();

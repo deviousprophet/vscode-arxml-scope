@@ -914,7 +914,7 @@ function wireSelection(): void {
 	});
 }
 
-export async function mountDiff(): Promise<void> {
+async function mountDiff(): Promise<void> {
 	const host = document.getElementById('diff-list');
 	if (host === null) {
 		return;
