@@ -232,7 +232,11 @@ function themeRules(): { token: string; foreground: string; fontStyle?: string }
 			{ token: 'comment', foreground: '008000', fontStyle: 'italic' },
 			{ token: 'identifier', foreground: '001080' },
 			{ token: 'delimiter', foreground: '000000' },
-			{ token: 'operator', foreground: '000000' }
+			{ token: 'operator', foreground: '000000' },
+			// The condition palette: the preprocessor blue for names and the
+			// constant cyan for literals. Operators reuse `parameter` above.
+			{ token: 'syscond', foreground: '0000ff' },
+			{ token: 'constant', foreground: '0070c1' }
 		];
 	}
 	return [
@@ -248,7 +252,11 @@ function themeRules(): { token: string; foreground: string; fontStyle?: string }
 		{ token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
 		{ token: 'identifier', foreground: '9cdcfe' },
 		{ token: 'delimiter', foreground: '808080' },
-		{ token: 'operator', foreground: 'd4d4d4' }
+		{ token: 'operator', foreground: 'd4d4d4' },
+		// The condition palette: the preprocessor blue for names and the
+		// constant cyan for literals. Operators reuse `parameter` above.
+		{ token: 'syscond', foreground: '569cd6' },
+		{ token: 'constant', foreground: '4fc1ff' }
 	];
 }
 

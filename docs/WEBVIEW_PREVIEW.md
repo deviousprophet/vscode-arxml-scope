@@ -54,6 +54,7 @@ its old bundle.
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; both arrows stay on the inner edges |
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
 | `editor-syntax` | editor | 1400×900 | decimal, binary, text, reference and system-condition values; binary matches the numeric colour, references use the reference colour, and condition names/operators/numbers stay distinct |
+| `editor-syscond` | editor | 1400×900 | the `Condition` row selected; the tree chip and Details Condition code share the macro-blue name, magenta operator, cyan literal and number, and the Conditions panel uses the same name/state colours |
 | `editor-dirty` | editor | 1400×900 | a typed parameter shows the `● Unsaved changes` toolbar marker and posts no host edit before `Ctrl+S` |
 | `editor-invalid` | editor | 1400×900 | invalid direct input shows the red marker/error and a `Ctrl+S` attempt is blocked |
 | `editor-details` | editor | 1400×900 | typing in the Details value stays local; focus/caret kept, the line repainted, no host edit |
@@ -101,6 +102,11 @@ strip or the page shell, and check each image before asking for review.
 - [ ] **Value kinds keep their colours.** `editor-syntax` shows `0b1010` in the same colour as
       decimal `42`, `P.Syn.Syntax.Target` in the reference colour, and
       `CANIPCORETYPE_SC==0` with distinct name, operator and number colours.
+- [ ] **The condition palette is shared.** `editor-syscond` shows the tree chip and Details
+      `Condition` code with the macro-blue name, magenta operator, cyan literal and unchanged
+      numbers; the Conditions panel constant name and state use the same colours and the state
+      keeps its dashed border. The audit rejects an editor or Details token that falls back to
+      the foreground or a panel colour that drifts from the shared tokens.
 - [ ] **Dirty typing is visible and coalesced.** `editor-dirty` shows `● Unsaved changes`
       after a multi-character typing run and posts no host edit before `Ctrl+S`.
 - [ ] **Invalid input blocks save.** `editor-invalid` shows the page error, posts no edit and
@@ -222,8 +228,10 @@ spacing and clipping the invariants do not encode. When Monaco is active the leg
 DOM diff-geometry checks are skipped; the Monaco editor owns its gutter, arrows, scroll
 surface and selection. It does not prove VS Code theme fidelity (tokens are seeded), real
 keyboard/IME input, screen-reader output or performance; those still need the Extension
-Development Host, and a host observation belongs in the task notes as a manual check. It does
-prove focus and caret in the Details panel across a local repaint and a host echo, and it invokes
+Development Host, and a host observation belongs in the task notes as a manual check. The
+condition palette is fixed per VS Code theme class, so the screenshot proves the dark
+palette; the light and high-contrast values are asserted by the stylesheet tests, not by the
+preview. It does prove focus and caret in the Details panel across a local repaint and a host echo, and it invokes
 the registered Undo/Redo actions after a Details edit; the Ctrl+Z/Ctrl+Shift+Z keybindings
 themselves cannot be driven from the harness, so that route still needs the Extension Development
 Host. The paste probe dispatches a clipboard-shaped event to the editor's capture guard; it does

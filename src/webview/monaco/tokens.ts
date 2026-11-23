@@ -21,7 +21,9 @@ export type EcucTokenType =
 	| 'comment'
 	| 'operator'
 	| 'delimiter'
-	| 'namespace';
+	| 'namespace'
+	| 'syscond'
+	| 'constant';
 
 export const ECUC_TOKEN_TYPES: readonly EcucTokenType[] = [
 	'keyword',
@@ -34,7 +36,9 @@ export const ECUC_TOKEN_TYPES: readonly EcucTokenType[] = [
 	'comment',
 	'operator',
 	'delimiter',
-	'namespace'
+	'namespace',
+	'syscond',
+	'constant'
 ];
 
 export interface EcucToken {
@@ -120,11 +124,11 @@ function valueType(word: string): EcucTokenType {
 
 /** The shared condition lexer classes mapped onto the editor token types. */
 const CONDITION_TYPES: Readonly<Record<string, EcucTokenType>> = {
-	'syscond-name': 'variable',
+	'syscond-name': 'syscond',
 	'syscond-number': 'number',
 	'syscond-string': 'string',
-	'syscond-operator': 'keyword',
-	'syscond-literal': 'keyword',
+	'syscond-operator': 'parameter',
+	'syscond-literal': 'constant',
 	'syscond-punct': 'delimiter'
 };
 

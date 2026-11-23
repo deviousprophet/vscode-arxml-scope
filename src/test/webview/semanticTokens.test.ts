@@ -39,9 +39,9 @@ suite('semantic tokens for the synthetic ECUC document', () => {
 			'operator',
 			'number',
 			'delimiter',
-			'variable',
-			'keyword',
-			'keyword',
+			'syscond',
+			'parameter',
+			'constant',
 			'delimiter'
 		]);
 		assert.deepStrictEqual(types('        Condition = 1 [CANIPCORETYPE_SC==0]'), [
@@ -49,8 +49,8 @@ suite('semantic tokens for the synthetic ECUC document', () => {
 			'operator',
 			'number',
 			'delimiter',
-			'variable',
-			'keyword',
+			'syscond',
+			'parameter',
 			'number',
 			'delimiter'
 		]);
@@ -59,8 +59,8 @@ suite('semantic tokens for the synthetic ECUC document', () => {
 			'operator',
 			'number',
 			'delimiter',
-			'variable',
-			'keyword',
+			'syscond',
+			'parameter',
 			'number',
 			'delimiter'
 		]);
@@ -69,9 +69,30 @@ suite('semantic tokens for the synthetic ECUC document', () => {
 			'operator',
 			'number',
 			'delimiter',
-			'variable',
-			'keyword',
+			'syscond',
+			'parameter',
 			'number',
+			'delimiter'
+		]);
+	});
+
+	test('every condition lexer class maps to its own editor token type', () => {
+		// Name, operator, string, punctuation, number and literal each keep a
+		// distinct token type, so no condition expression collapses to one colour.
+		assert.deepStrictEqual(types('        Condition = 1 [NAME != "x" && (FLAG) == true]'), [
+			'variable',
+			'operator',
+			'number',
+			'delimiter',
+			'syscond',
+			'parameter',
+			'string',
+			'parameter',
+			'delimiter',
+			'syscond',
+			'delimiter',
+			'parameter',
+			'constant',
 			'delimiter'
 		]);
 	});

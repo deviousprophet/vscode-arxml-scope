@@ -98,6 +98,20 @@ interface ContentAudit {
 	clientWidth: number;
 }
 
+interface SyscondTokenAudit {
+	text: string;
+	className: string;
+	color: string;
+}
+
+interface SyscondAudit {
+	/** The Details Condition/Conditions code spans, with their resolved colours. */
+	details: SyscondTokenAudit[];
+	/** The Conditions panel constant name and state colours. */
+	panelName: string | null;
+	panelState: string | null;
+}
+
 interface PaneBounds {
 	side: string;
 	rect?: Rect;
@@ -125,6 +139,7 @@ export interface PreviewAudit {
 	selected: string | null;
 	swap: { before: PaneSnapshot; after: PaneSnapshot } | null;
 	syntax?: { text: string; className: string; color: string }[];
+	syscond?: SyscondAudit;
 	sticky?: { visible: boolean; display: string; text: string; rect: Rect | null };
 	violations: string[];
 }
@@ -447,6 +462,72 @@ function syntaxColorViolations(audit: Omit<PreviewAudit, 'violations'>): string[
 	return issues;
 }
 
+/** The Dark+ palette the preview resolves; Chromium reports resolved rgb(). */
+const SYSCOND_COLORS = {
+	name: 'rgb(86, 156, 214)',
+	operator: 'rgb(197, 134, 192)',
+	literal: 'rgb(79, 193, 255)',
+	number: 'rgb(181, 206, 168)'
+};
+
+/** The six condition classes and their expected resolved colours. */
+const SYSCOND_CLASSES: ReadonlyArray<readonly [string, string]> = [
+	['syscond-name', SYSCOND_COLORS.name],
+	['syscond-operator', SYSCOND_COLORS.operator],
+	['syscond-literal', SYSCOND_COLORS.literal],
+	['syscond-number', SYSCOND_COLORS.number]
+];
+
+/** The text each condition class carries in the `editor-syscond` fixture. */
+const SYSCOND_TEXT: Readonly<Record<string, string>> = {
+	'syscond-name': 'CANIPCORETYPE_SC',
+	'syscond-operator': '==',
+	'syscond-literal': 'true',
+	'syscond-number': '0'
+};
+
+/** One palette mismatch, or `undefined` when every class resolves as expected. */
+function syscondPaletteIssue(
+	label: string,
+	colorOfClass: (className: string) => string | undefined
+): string | undefined {
+	const actual = SYSCOND_CLASSES.map(([className]) => colorOfClass(className));
+	const matches = SYSCOND_CLASSES.every(([, expected], at) => actual[at] === expected);
+	return matches ? undefined : `${label} palette is ${actual.map((color) => color ?? 'missing').join(' / ')}`;
+}
+
+function syscondViolations(audit: Omit<PreviewAudit, 'violations'>): string[] {
+	const syscond = audit.syscond;
+	if (syscond === undefined) {
+		return ['the syscond preview did not record the condition palette'];
+	}
+	const issues: string[] = [];
+	const detailsIssue = syscondPaletteIssue('the Details Condition', (className) => {
+		const token = syscond.details.find((span) => span.className.split(/\s+/).includes(className));
+		return token?.color;
+	});
+	if (detailsIssue !== undefined) {
+		issues.push(detailsIssue);
+	}
+	// The Monaco page paints the Document tree with the same tokenizer; its spans
+	// are the editor's view-line spans, already captured by the syntax audit.
+	const editor = audit.syntax ?? [];
+	const editorIssue = syscondPaletteIssue('the editor condition', (className) => {
+		const text = SYSCOND_TEXT[className];
+		return editor.find((span) => span.text.trim() === text)?.color;
+	});
+	if (editorIssue !== undefined) {
+		issues.push(editorIssue);
+	}
+	if (syscond.panelName !== SYSCOND_COLORS.name) {
+		issues.push(`the Conditions panel name is ${String(syscond.panelName)}, not the syscond colour`);
+	}
+	if (syscond.panelState !== SYSCOND_COLORS.operator) {
+		issues.push(`the Conditions panel state is ${String(syscond.panelState)}, not the operator colour`);
+	}
+	return issues;
+}
+
 function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
 	const issues: string[] = [];
 	if (!audit.ready) {
@@ -457,6 +538,9 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 	}
 	if (state.name === 'editor-syntax') {
 		issues.push(...syntaxColorViolations(audit));
+	}
+	if (state.name === 'editor-syscond') {
+		issues.push(...syscondViolations(audit));
 	}
 	if (state.name === 'editor-dirty') {
 		const status = document.getElementById('editor-dirty-status');
@@ -1142,6 +1226,21 @@ function stickyAudit(): NonNullable<PreviewAudit['sticky']> {
 	};
 }
 
+function syscondAudit(): SyscondAudit {
+	const tokenOf = (span: Element): SyscondTokenAudit => ({
+		text: span.textContent?.slice(0, 48) ?? '',
+		className: typeof span.className === 'string' ? span.className : '',
+		color: getComputedStyle(span).color
+	});
+	const panelName = document.querySelector('#conditions-list .condition-name-text');
+	const panelState = document.querySelector('#conditions-list .condition-state');
+	return {
+		details: Array.from(document.querySelectorAll('#sb-details-body .condition-code span')).map(tokenOf),
+		panelName: panelName === null ? null : getComputedStyle(panelName).color,
+		panelState: panelState === null ? null : getComputedStyle(panelState).color
+	};
+}
+
 export function previewAudit(state: AuditState, swapBefore?: PaneSnapshot): PreviewAudit {
 	const base = {
 		state: state.name,
@@ -1164,7 +1263,8 @@ export function previewAudit(state: AuditState, swapBefore?: PaneSnapshot): Prev
 					className: typeof span.className === 'string' ? span.className : '',
 					color: getComputedStyle(span).color
 				}))
-			: undefined
+			: undefined,
+		syscond: state.page === 'editor' ? syscondAudit() : undefined
 	};
 	return { ...base, violations: violationsOf(state, base) };
 }

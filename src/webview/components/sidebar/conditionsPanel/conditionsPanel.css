@@ -73,6 +73,7 @@
 }
 .condition-name {
 	flex: 0 1 26ch;
+	color: var(--tok-syscond);
 }
 .condition-value {
 	flex: 0 1 18ch;
@@ -94,16 +95,21 @@
 }
 .condition-name-text {
 	flex-basis: 26ch;
+	color: var(--tok-syscond);
 }
 .condition-value-text {
 	flex-basis: 18ch;
+}
+/* A boolean value reads as a condition literal; other values stay foreground. */
+.condition-value-text[data-kind="literal"] {
+	color: var(--tok-syscond-literal);
 }
 .condition-state {
 	flex: none;
 	padding: 0 5px;
 	border: 1px dashed var(--vscode-descriptionForeground);
 	border-radius: 3px;
-	color: var(--vscode-descriptionForeground);
+	color: var(--tok-syscond-op);
 	font-size: 11px;
 	line-height: 18px;
 }

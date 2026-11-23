@@ -15,6 +15,13 @@ body[data-view] {
 	--tok-key: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
 	--tok-punct: var(--vscode-editor-foreground);
 	--tok-dim: var(--vscode-editor-foreground);
+	/* System-condition palette. VS Code exposes no theme colour for a TextMate
+	 * scope, and the nearest debug/terminal colours resolve to different hues
+	 * with weaker contrast, so the Dark+/Light+ preprocessor palette is fixed
+	 * per theme class. */
+	--tok-syscond: #569cd6;
+	--tok-syscond-op: #c586c0;
+	--tok-syscond-literal: #4fc1ff;
 	--hover-bg: var(--vscode-list-hoverBackground, transparent);
 	--sel-bg: var(--vscode-editor-background);
 	--sel-bg-focus: var(--vscode-editor-background);
@@ -31,6 +38,13 @@ body[data-view] {
 	--content-pad: calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad));
 	--rail: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground)));
 }
+/* Light+/high-contrast-light use the same preprocessor/parameter/constant scopes. */
+body.vscode-light[data-view],
+body.vscode-high-contrast-light[data-view] {
+	--tok-syscond: #0000ff;
+	--tok-syscond-op: #af00db;
+	--tok-syscond-literal: #0070c1;
+}
 @supports (color: color-mix(in srgb, currentColor 50%, transparent)) {
 	body[data-view] {
 		--tok-comment: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-editor-foreground)) 85%, var(--vscode-editor-background));
@@ -42,4 +56,25 @@ body[data-view] {
 		--sel-container-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 45%, transparent);
 		--sel-outline: color-mix(in srgb, var(--rail) 55%, transparent);
 	}
+}
+
+/* The shared system-condition classes. The Document tree, the Details
+ * Condition/Conditions rows and every other page consume this one palette. */
+.syscond-name {
+	color: var(--tok-syscond);
+}
+.syscond-operator {
+	color: var(--tok-syscond-op);
+}
+.syscond-literal {
+	color: var(--tok-syscond-literal);
+}
+.syscond-number {
+	color: var(--tok-number);
+}
+.syscond-string {
+	color: var(--tok-string);
+}
+.syscond-punct {
+	color: var(--tok-punct);
 }

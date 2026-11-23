@@ -44,6 +44,7 @@ also sets `data-page="diff"`, which scopes its own surface tokens. Plain declara
 |---|---|---|
 | Typography | `--ecuc-fs`, `--ecuc-lh` | `--ecuc-lh` is `calc(var(--ecuc-fs) * 1.55)`; the CSS and the page's `heightFn` must agree. |
 | Syntax | `--tok-keyword`, `--tok-string`, `--tok-number`, `--tok-meta`, `--tok-comment`, `--tok-key`, `--tok-punct`, `--tok-dim` | Every value resolves from a `--vscode-*` token, with the editor foreground as the fallback. |
+| Condition | `--tok-syscond`, `--tok-syscond-op`, `--tok-syscond-literal` | Fixed Dark+/Light+ preprocessor, parameter and constant palette keyed off the body theme class (see the exception log). |
 | Surfaces | `--hover-bg`, `--sel-bg`, `--sel-bg-focus`, `--subtree-bg`, `--sel-container-bg`, `--sel-outline`, `--rail` | Selection uses tint + rail; it never recolours syntax. |
 | Geometry | `--fold-gutter: 26px`, `--line-numbers-width: 0px`, `--doc-pad: 3ch`, `--indent: 4ch`, `--content-pad`, `--diff-arrow-strip` | `--content-pad` is `calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad))`; depth is generated from it. `--line-numbers-width` is written per pane as `<chars>ch` (the diff panes add 4px for the status rail) and defaults to `0px`. `--diff-arrow-strip` is the diff pane's reserved 22px inner edge. |
 | Search | `--match-bg`, `--match-hi` | Fixed amber tiers: 0.18 alpha for every hit, 0.36 for the current hit (see the exception log). |
@@ -234,6 +235,7 @@ Documented deviations from the token/fallback rules. Add an entry before introdu
 | No standalone literal colour | `tokens.css` `--match-bg: rgba(234, 179, 8, 0.18)` and `--match-hi: rgba(234, 179, 8, 0.36)` | Fixed two-tier search highlight; theme find-match variables may resolve to transparent. The tiers are deliberately independent of the theme, and the current tier stays stronger. |
 | Literal only inside `var(...)` | `documentTree.css` `.guide` fallback `#80808040` | `--vscode-tree-indentGuidesStroke` may be absent; the translucent grey keeps guides visible without inventing a theme colour. |
 | Literal only inside `var(...)` | `documentTree.css` reference target fallback `#DCDCAA` | `--vscode-symbolIcon-functionForeground` carries the reference yellow when the theme defines it; the fixed fallback preserves the distinction otherwise. |
+| No standalone literal colour | `tokens.css` `--tok-syscond` `#569cd6` / `#0000ff`, `--tok-syscond-op` `#c586c0` / `#af00db`, `--tok-syscond-literal` `#4fc1ff` / `#0070c1` | VS Code has no theme colour for a TextMate scope. The nearest debug/terminal colours resolve to different hues with weaker contrast (`#4e94ce` / `#bc3fbc` / `#11a8cd` dark, `#bc05bc` / `#0598bc` light), so the fixed Dark+/Light+ preprocessor palette is keyed off the body theme class. |
 | No literal colour for diff status | `diffView.css` uses `--vscode-diffEditor-*` and `--vscode-gitDecoration-*` with `transparent` / `currentColor` fallbacks | Diff status is theme-owned; the fallbacks are non-colours, not a palette. |
 
 ## Wrong vs Correct

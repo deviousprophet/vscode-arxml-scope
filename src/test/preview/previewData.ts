@@ -77,6 +77,7 @@ export const STATES: PreviewState[] = [
 	},
 	{ name: 'editor', page: 'editor', width: 1400, height: 900, select: true },
 	{ name: 'editor-syntax', page: 'editor', width: 1400, height: 900 },
+	{ name: 'editor-syscond', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-dirty', page: 'editor', width: 1400, height: 900, edit: '42' },
 	{ name: 'editor-invalid', page: 'editor', width: 1400, height: 900, edit: 'abc', trySave: true },
 	{ name: 'editor-details', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated' },
@@ -182,6 +183,16 @@ function syntaxDocument(selectedLabel = 'Binary'): { rows: EcucRow[]; selectedId
 	return { rows, selectedId: selected?.id };
 }
 
+/** The syntax document with a boolean literal in the condition expression. */
+const SYSCOND_XML = SYNTAX_XML.replace('==0)</SW-SYSCOND>', '==0)||(FEATURE==true)</SW-SYSCOND>');
+
+/** The condition-bearing row selected, so Details shows the whole palette. */
+function syscondDocument(): { rows: EcucRow[]; selectedId?: string } {
+	const rows = rowsOf(SYSCOND_XML).rows;
+	const selected = rows.find((row) => row.label === 'Condition') ?? rows[0];
+	return { rows, selectedId: selected?.id };
+}
+
 /** The same document after the container rename the page echoed: real new ids. */
 function renamedSyntaxDocument(): { rows: EcucRow[]; selectedId?: string } {
 	const renamed = SYNTAX_XML.replace('<SHORT-NAME>Syntax</SHORT-NAME>', '<SHORT-NAME>Syntax2</SHORT-NAME>');
@@ -229,6 +240,10 @@ const THEME = `<style>:root{
 --vscode-editorInfo-foreground:#3794ff;
 --vscode-editorWarning-foreground:#cca700;
 --vscode-editorError-foreground:#f85149;
+/* The Dark+ number/string scopes the Details condition code reuses; the
+ * condition palette itself is fixed per theme class in tokens.css. */
+--vscode-debugTokenExpression-number:#B5CEA8;
+--vscode-debugTokenExpression-string:#CE9178;
 }</style>`;
 
 const ASSETS = { cspSource: '', scriptUri: '/preview.js', styleUri: '/preview.css', workerUri: '/monaco.worker.js', nonce: 'preview' };
@@ -238,6 +253,10 @@ function documentFor(state: PreviewState) {
 	if (state.page !== 'diff') {
 		if (state.name === 'editor-syntax') {
 			return syntaxDocument();
+		}
+		if (state.name === 'editor-syscond') {
+			// The host selects the condition-bearing row; Details shows its Condition code.
+			return syscondDocument();
 		}
 		if (state.name === 'editor-details-rename') {
 			return syntaxDocument('Syntax');

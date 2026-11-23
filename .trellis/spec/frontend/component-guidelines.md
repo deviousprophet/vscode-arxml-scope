@@ -177,8 +177,9 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
   ordinary numbered display row, not a height or padding predicate on a node or comment.
 - **Conditions are token-coloured.** `conditionTokens` preserves every character and assigns
   `syscond-name`, `syscond-number`, `syscond-string`, `syscond-operator`, `syscond-literal` and
-  `syscond-punct`, all backed by the existing `--tok-*` variables. The Monaco token provider
-  reuses this lexer and maps those classes to `variable`, `number`, `string`, `keyword` and
+  `syscond-punct`, backed by the shared `--tok-*` variables (`--tok-syscond`, `--tok-syscond-op`
+  and `--tok-syscond-literal` for the condition colours). The Monaco token provider reuses this
+  lexer and maps those classes to `syscond`, `number`, `string`, `parameter`, `constant` and
   `delimiter`, so a condition like `CANIPCORETYPE_SC==0` keeps the name, operator and number
   distinct. A false condition marks its chip with a border edge only; the tokens keep their
   colours. The tree chip is bounded with ellipsis and its `title` is `conditionTooltip`: one

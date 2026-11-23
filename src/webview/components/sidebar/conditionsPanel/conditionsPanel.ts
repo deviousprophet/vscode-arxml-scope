@@ -230,7 +230,15 @@ function appendConditionValueText(row: HTMLElement, value: string): void {
 	valueText.className = 'condition-value-text';
 	valueText.textContent = value;
 	valueText.title = 'Value: ' + value;
+	if (isConditionLiteral(value)) {
+		valueText.dataset.kind = 'literal';
+	}
 	row.appendChild(valueText);
+}
+
+/** A boolean system-constant value reads in the condition literal colour. */
+function isConditionLiteral(value: string): boolean {
+	return /^(?:true|false)$/i.test(value.trim());
 }
 
 function appendConditionViewActions(row: HTMLElement, name: string, auto: boolean): void {

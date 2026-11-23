@@ -101,7 +101,7 @@ suite('editor semantic colours (AC14)', () => {
 		const hexes = [...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0]);
 		assert.deepStrictEqual(
 			hexes.sort(),
-			['#4EC9B0', '#80808040', '#DCDCAA'].sort(),
+			['#4EC9B0', '#80808040', '#DCDCAA', '#569cd6', '#c586c0', '#4fc1ff', '#0000ff', '#af00db', '#0070c1'].sort(),
 			'the semantic guide/colour fallbacks are the only literals'
 		);
 	});
