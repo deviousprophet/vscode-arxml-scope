@@ -2368,30 +2368,96 @@ function registerEditorActions(): void {
 	});
 }
 
-type MessageHandler = (message: EditorProviderToWebview) => void;
+function dispatchDocumentMessage(message: EditorProviderToWebview): boolean {
+	if (message.type === 'document') {
+		handleDocumentMessage(message);
+		return true;
+	}
+	if (message.type === 'documentPatch') {
+		handleDocumentPatchMessage(message);
+		return true;
+	}
+	if (message.type === 'conditions') {
+		handleConditionsMessage(message);
+		return true;
+	}
+	return false;
+}
 
-const messageHandlers: Readonly<Record<EditorProviderToWebview['type'], MessageHandler>> = {
-	document: asMessageHandler(handleDocumentMessage),
-	documentPatch: asMessageHandler(handleDocumentPatchMessage),
-	editResult: asMessageHandler(handleEditResult),
-	dirty: asMessageHandler(handleDirtyMessage),
-	flushEdits: asMessageHandler(handleFlushEditsMessage),
-	conditions: asMessageHandler(handleConditionsMessage),
-	select: asMessageHandler(handleSelectMessage),
-	notice: asMessageHandler(handleNoticeMessage),
-	error: asMessageHandler(handleErrorMessage),
-	findResult: asMessageHandler(handleFindResultMessage),
-	replaceResult: asMessageHandler(handleReplaceResultMessage),
-	settings: asMessageHandler(handleSettingsMessage),
-	theme: asMessageHandler(handleThemeMessage)
-};
+function dispatchEditMessage(message: EditorProviderToWebview): boolean {
+	if (message.type === 'editResult') {
+		handleEditResult(message);
+		return true;
+	}
+	if (message.type === 'dirty') {
+		handleDirtyMessage(message);
+		return true;
+	}
+	if (message.type === 'flushEdits') {
+		handleFlushEditsMessage(message);
+		return true;
+	}
+	return false;
+}
 
-/**
- * Each entry is typed for its own union member; the dispatcher has already read
- * the discriminator, so the narrow handler is safe to call with the payload.
- */
-function asMessageHandler<T>(handler: (message: T) => void): MessageHandler {
-	return handler as unknown as MessageHandler;
+function dispatchSearchMessage(message: EditorProviderToWebview): boolean {
+	if (message.type === 'select') {
+		handleSelectMessage(message);
+		return true;
+	}
+	if (message.type === 'findResult') {
+		handleFindResultMessage(message);
+		return true;
+	}
+	if (message.type === 'replaceResult') {
+		handleReplaceResultMessage(message);
+		return true;
+	}
+	return false;
+}
+
+function dispatchStatusMessage(message: EditorProviderToWebview): boolean {
+	if (message.type === 'notice') {
+		handleNoticeMessage(message);
+		return true;
+	}
+	if (message.type === 'error') {
+		handleErrorMessage(message);
+		return true;
+	}
+	return false;
+}
+
+function dispatchUiMessage(message: EditorProviderToWebview): boolean {
+	if (message.type === 'settings') {
+		handleSettingsMessage(message);
+		return true;
+	}
+	if (message.type === 'theme') {
+		handleThemeMessage(message);
+		return true;
+	}
+	return false;
+}
+
+function dispatchChromeMessage(message: EditorProviderToWebview): void {
+	if (dispatchStatusMessage(message)) {
+		return;
+	}
+	dispatchUiMessage(message);
+}
+
+function dispatchEditorMessage(message: EditorProviderToWebview): void {
+	if (dispatchDocumentMessage(message)) {
+		return;
+	}
+	if (dispatchEditMessage(message)) {
+		return;
+	}
+	if (dispatchSearchMessage(message)) {
+		return;
+	}
+	dispatchChromeMessage(message);
 }
 
 function handleMessage(message: EditorProviderToWebview): void {
@@ -2399,7 +2465,7 @@ function handleMessage(message: EditorProviderToWebview): void {
 		return;
 	}
 	handleDetailsEditorMessage(message);
-	messageHandlers[message.type]?.(message);
+	dispatchEditorMessage(message);
 }
 
 function acceptRevision(revision: unknown): boolean {

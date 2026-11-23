@@ -959,68 +959,85 @@ function navigate(direction: 1 | -1): void {
 	revealChange(changes[changeIndex(changes, currentModifiedLine(), direction)]);
 }
 
-type DiffMessageHandler = (message: DiffProviderToWebview) => void;
-
-/**
- * A map instead of an object so a message named after an inherited member
- * (`toString`, `constructor`) cannot resolve to a handler.
- */
-function createMessageHandlers(): Map<string, DiffMessageHandler> {
-	const handlers = new Map<string, DiffMessageHandler>();
-	handlers.set('document', function (message) {
-		const typed = message as Extract<DiffProviderToWebview, { type: 'document' }>;
-		applyDocument(typed.document, typed.semantic);
-	});
-	handlers.set('documentPatch', function (message) {
-		const typed = message as Extract<DiffProviderToWebview, { type: 'documentPatch' }>;
-		if (documentModel !== undefined) {
-			applyDocument(applyDiffPatch(documentModel, typed.patch), semantic);
-		}
-	});
-	handlers.set('matchModeState', function (message) {
-		const typed = message as Extract<DiffProviderToWebview, { type: 'matchModeState' }>;
-		semantic = typed.semantic;
-		toolbar?.setMatchMode(semantic, false);
-	});
-	handlers.set('mergeMode', function (message) {
-		const typed = message as Extract<DiffProviderToWebview, { type: 'mergeMode' }>;
-		mergeMode = typed.enabled;
-		toolbar?.setMergeMode(mergeMode);
-		renderDecorations();
-	});
-	handlers.set('labels', function (message) {
-		const typed = message as Extract<DiffProviderToWebview, { type: 'labels' }>;
-		if (documentModel !== undefined) {
-			documentModel = { ...documentModel, labels: typed.labels };
-			setTitles();
-		}
-	});
-	handlers.set('findResult', function (message) {
-		const typed = message as Extract<DiffProviderToWebview, { type: 'findResult' }>;
-		applyDiffFindResult(typed.requestId, typed.result, typed.error);
-	});
-	handlers.set('theme', function () {
-		defineEcucTheme();
-		monaco.editor.setTheme('arxml-ecuc-theme');
-	});
-	handlers.set('error', function (message) {
-		const typed = message as Extract<DiffProviderToWebview, { type: 'error' }>;
-		setNotice(typed.message, 'error');
-	});
-	return handlers;
+function applyLabelsMessage(labels: DiffDocument['labels']): void {
+	if (documentModel !== undefined) {
+		documentModel = { ...documentModel, labels };
+		setTitles();
+	}
 }
 
-const messageHandlers = createMessageHandlers();
+function dispatchDocumentMessage(message: DiffProviderToWebview): boolean {
+	if (message.type === 'document') {
+		applyDocument(message.document, message.semantic);
+		return true;
+	}
+	if (message.type === 'documentPatch') {
+		if (documentModel !== undefined) {
+			applyDocument(applyDiffPatch(documentModel, message.patch), semantic);
+		}
+		return true;
+	}
+	return false;
+}
+
+function dispatchViewMessage(message: DiffProviderToWebview): boolean {
+	if (message.type === 'matchModeState') {
+		semantic = message.semantic;
+		toolbar?.setMatchMode(semantic, false);
+		return true;
+	}
+	if (message.type === 'mergeMode') {
+		mergeMode = message.enabled;
+		toolbar?.setMergeMode(mergeMode);
+		renderDecorations();
+		return true;
+	}
+	if (message.type === 'labels') {
+		applyLabelsMessage(message.labels);
+		return true;
+	}
+	return false;
+}
+
+function dispatchFindMessage(message: DiffProviderToWebview): boolean {
+	if (message.type === 'findResult') {
+		applyDiffFindResult(message.requestId, message.result, message.error);
+		return true;
+	}
+	return false;
+}
+
+function dispatchChromeMessage(message: DiffProviderToWebview): boolean {
+	if (message.type === 'theme') {
+		defineEcucTheme();
+		monaco.editor.setTheme('arxml-ecuc-theme');
+		return true;
+	}
+	if (message.type === 'error') {
+		setNotice(message.message, 'error');
+		return true;
+	}
+	return false;
+}
+
+function dispatchDiffMessage(message: DiffProviderToWebview): void {
+	if (dispatchDocumentMessage(message)) {
+		return;
+	}
+	if (dispatchViewMessage(message)) {
+		return;
+	}
+	if (dispatchFindMessage(message)) {
+		return;
+	}
+	dispatchChromeMessage(message);
+}
 
 function handleMessage(message: DiffProviderToWebview): void {
 	if (!message || typeof message.type !== 'string') {
 		return;
 	}
-	const handler = messageHandlers.get(message.type);
-	if (handler === undefined) {
-		return;
-	}
-	handler(message);
+	dispatchDiffMessage(message);
 }
 
 function mountToolbar(): void {
