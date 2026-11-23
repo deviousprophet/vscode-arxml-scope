@@ -26,7 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The ECUC find widget is Monaco's native widget; its match list, count and replace plans still come from the Rust ARXML search
 - The ECUC syntax palette separates container types, parameter and reference names, values, metadata and comments so the Document reads like the previous renderer
 - Search highlights map each Rust field offset onto the synthetic line, so the native count, navigation and Replace target only real ARXML matches
-- Fast typing is coalesced into one host write, and rejected or refreshed edits keep the cursor on its row instead of sending it to the top
+- Typing and deleting in the ECUC editor or Details stay local until `Ctrl+S`; a save writes one coalesced edit per changed field, waits for every acknowledgement and then saves
+- A multi-line paste into an ECUC value is inserted as one line with `\n` escapes instead of being discarded
 
 ### Removed
 
@@ -34,9 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Direct and Details ECUC edits now share one draft: typing in either view updates the other, invalid values show Monaco/page/Details errors, and `Ctrl+S` is blocked until the value is valid
+- Direct and Details ECUC edits share one local draft: typing in either view updates the other, quoted values keep exactly one pair of quotes, Details keeps focus and caret, and invalid values block `Ctrl+S` until corrected
+- Container short-name renames keep the renamed node selected when the host acknowledges the new id, even when more characters are typed before the re-scan
+- Local undo/redo restores ECUC drafts before the first save
+- A draft whose row disappeared from the file blocks `Ctrl+S` instead of saving without it
 - ECUC sticky scroll now pins the enclosing module and container headers while scrolling; the synthetic model's trailing newline keeps full-document folding scopes valid
-- The ECUC editor now shows an `Unsaved changes` marker in the toolbar and a `•` on the tab title, flushes pending typing before save, and acknowledges each edit with its document revision
+- The ECUC editor now shows an `Unsaved changes` marker in the toolbar and a `•` on the tab title, flushes pending drafts before save, and acknowledges each edit with its document revision
 - System-condition expressions color their names, comparison operators, numbers, literals and punctuation separately instead of one purple span
 - Binary ECUC values use the numeric colour and dotted reference targets use the reference colour instead of the string colour
 - Diff line and word fills preserve the theme color's alpha and use VS Code's readable dark fallbacks, so changed rows no longer become opaque blocks
