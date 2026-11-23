@@ -55,6 +55,7 @@ its old bundle.
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
 | `editor-syntax` | editor | 1400×900 | decimal, binary, text, reference and system-condition values; binary matches the numeric colour, references use the reference colour, and condition names/operators/numbers stay distinct |
 | `editor-syscond` | editor | 1400×900 | the `Condition` row selected; the tree chip and Details Condition code share the macro-blue name, magenta operator, cyan literal and number, and the Conditions panel uses the same name/state colours |
+| `editor-labels` | editor | 1400×900 | a module, a normal container, a parameter and a container with no `DEFINITION-REF`; the no-label line starts with its quoted short name in the string colour, and the normal container keeps the label in the type colour and the short name in the string colour |
 | `editor-dirty` | editor | 1400×900 | a typed parameter shows the `● Unsaved changes` toolbar marker and posts no host edit before `Ctrl+S` |
 | `editor-invalid` | editor | 1400×900 | invalid direct input shows the red marker/error and a `Ctrl+S` attempt is blocked |
 | `editor-details` | editor | 1400×900 | typing in the Details value stays local; focus/caret kept, the line repainted, no host edit |
@@ -107,6 +108,12 @@ strip or the page shell, and check each image before asking for review.
       numbers; the Conditions panel constant name and state use the same colours and the state
       keeps its dashed border. The audit rejects an editor or Details token that falls back to
       the foreground or a panel colour that drifts from the shared tokens.
+- [ ] **A short name is never a definition label.** `editor-labels` shows the no-label
+      container line as `"EmptyDef" { }` with the quoted short name in the string colour, and
+      the normal container as `Items "Items"` with the label in the type colour and the short
+      name in the string colour. The audit rejects a no-label first token that is not the
+      string colour, a normal container whose label/short-name colours swapped, and a preview
+      that did not select the no-label container.
 - [ ] **Dirty typing is visible and coalesced.** `editor-dirty` shows `● Unsaved changes`
       after a multi-character typing run and posts no host edit before `Ctrl+S`.
 - [ ] **Invalid input blocks save.** `editor-invalid` shows the page error, posts no edit and

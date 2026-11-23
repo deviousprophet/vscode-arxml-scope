@@ -67,8 +67,16 @@ function wordEnd(text: string, start: number): number {
 }
 
 function quotedEnd(text: string, start: number): number {
-	const close = text.indexOf('"', start + 1);
-	return close < 0 ? text.length : close + 1;
+	for (let at = start + 1; at < text.length; at += 1) {
+		if (text[at] === '\\') {
+			at += 1;
+			continue;
+		}
+		if (text[at] === '"') {
+			return at + 1;
+		}
+	}
+	return text.length;
 }
 
 function bracketedEnd(text: string, start: number, open: string, close: string): number {
@@ -185,19 +193,37 @@ export function tokenizeEcucLine(text: string): EcucToken[] {
 		return tokens;
 	}
 
-	let labelType: EcucTokenType = 'type';
-	if (text.startsWith('module ', at)) {
-		push(at, at + 'module'.length, 'keyword');
-		at += 'module '.length;
-		labelType = 'variable';
+	if (text[at] === '"') {
+		// A container with an empty or missing definition ref has no label: the
+		// quoted short name is the first thing on the line. It is a short name,
+		// never the definition type, so it must not fall through to `labelEnd`.
+		const close = quotedEnd(text, at);
+		push(at, close, 'string');
+		at = close;
+	} else if (text[at] === '@') {
+		push(at, text.length, 'comment');
+		return tokens;
+	} else if (text.startsWith('context ', at) && text[at + 'context '.length] !== '=') {
+		push(at, at + 'context'.length, 'keyword');
+		at += 'context '.length;
+		const close = wordEnd(text, at);
+		push(at, close, 'variable');
+		at = close;
+	} else {
+		let labelType: EcucTokenType = 'type';
+		if (text.startsWith('module ', at)) {
+			push(at, at + 'module'.length, 'keyword');
+			at += 'module '.length;
+			labelType = 'variable';
+		}
+		const start = at;
+		const end = labelEnd(text, at);
+		if (end > start) {
+			const isValueLine = text.indexOf(' = ', start) >= 0;
+			push(start, end, isValueLine ? 'variable' : labelType);
+		}
+		at = end === start ? wordEnd(text, at) : end;
 	}
-	const start = at;
-	const end = labelEnd(text, at);
-	if (end > start) {
-		const isValueLine = text.indexOf(' = ', start) >= 0;
-		push(start, end, isValueLine ? 'variable' : labelType);
-	}
-	at = end === start ? wordEnd(text, at) : end;
 
 	let afterEquals = false;
 	while (at < text.length) {

@@ -51,6 +51,25 @@
 - [ ] `git diff --check`
 - [ ] `git status --short` shows only intended repo changes.
 
+## Result
+
+Label/short-name token fix implemented and checked on 2026-11-23.
+
+- A line beginning with a quoted short name (container/module with no definition label) emits
+  `string` for that leading token; labelled containers remain `type` + `string`.
+- Escape-aware quote scanning, empty short names/values, module/parameter/reference/condition/
+  annotation/context/header/brace shapes are covered by an exact start/length/type matrix.
+- Synthetic no-label container and aligned diff-line tests, a DOM tree row guard, and the
+  `editor-labels` preview (computed string/type colors) are in place.
+- Local `sample_edge.arxml` check: `EmptyDef`/`MissingDef` are `[string, delimiter]`,
+  `MissingDefOnRight` is `[type, string, delimiter]`, normal containers/parameters/modules keep
+  their classes. No sample files entered the repo.
+- Full suite: 976 passing; 32/32 preview states; `check-types`, `lint` and the production bundle
+  pass.
+- Limitation: no interactive Extension Development Host pass; the production scanner→rows→
+  synthetic→tokenizer pipeline and the headless screenshot cover the behavior. The synthetic
+  backslash-before-quote display ambiguity is pre-existing and does not occur in the sample.
+
 ## Review gates
 
 - [ ] `"EmptyDef" { }` and `"MissingDef" { }` use the string color.

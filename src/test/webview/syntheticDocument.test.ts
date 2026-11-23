@@ -19,6 +19,7 @@ import {
 	searchRangeOnLine,
 	spanTextForRaw
 } from '../../webview/monaco/synthetic';
+import { tokenizeEcucLine } from '../../webview/monaco/tokens';
 
 function moduleRow(): EcucRow {
 	return {
@@ -76,6 +77,27 @@ function parameterRow(): EcucRow {
 		title: '/P/P0000',
 		meta: [],
 		haystack: 'p0000 0'
+	};
+}
+
+/** A container with no DEFINITION-REF: no label, so the line starts with its short name. */
+function noLabelContainerRow(): EcucRow {
+	return {
+		id: 'container:m#0/c#1',
+		kind: 'container',
+		level: 2,
+		parentId: 'module:m#0',
+		subtreeSize: 0,
+		posinset: 2,
+		setsize: 2,
+		hasChildren: false,
+		label: '',
+		shortName: 'EmptyDef',
+		definitionRef: '',
+		title: '',
+		meta: [{ cls: 'short', text: '"EmptyDef"', title: 'EmptyDef' }],
+		empty: true,
+		haystack: 'emptydef'
 	};
 }
 
@@ -171,6 +193,31 @@ suite('synthetic ECUC document', () => {
 			{ startLine: 4, endLine: 10 },
 			{ startLine: 6, endLine: 9 }
 		]);
+	});
+
+	test('a container with no definition label starts with its quoted short name', () => {
+		const row = noLabelContainerRow();
+		const document = buildSyntheticDocument([moduleRow(), row]);
+		const line = document.lines[2];
+		assert.strictEqual(line.text, '     "EmptyDef" { }');
+		assert.deepStrictEqual(line.fieldSpans, [
+			{
+				field: 'shortName',
+				nodeId: row.id,
+				startColumn: 7,
+				endColumn: 15,
+				text: 'EmptyDef'
+			}
+		]);
+		const tokens = tokenizeEcucLine(line.text);
+		assert.deepStrictEqual(tokens, [
+			{ start: 5, length: 10, type: 'string' },
+			{ start: 16, length: 3, type: 'delimiter' }
+		]);
+		assert.ok(
+			tokens.every((token) => token.type !== 'type'),
+			'the quoted short name is never the definition type'
+		);
 	});
 
 	test('a textual value keeps its quotes outside the editable span', () => {
@@ -539,5 +586,29 @@ suite('synthetic ECUC document', () => {
 			'the diff meta span maps inside the quoted short name'
 		);
 		assert.strictEqual(left.length, right.length);
+	});
+
+	test('a diff row with no label keeps its quoted short name as a string token', () => {
+		const rowsModel = [{ ...moduleRow(), subtreeSize: 1 }, noLabelContainerRow()];
+		const document: DiffDocument = {
+			left: { name: 'left.arxml', path: 'left.arxml' },
+			right: { name: 'right.arxml', path: 'right.arxml' },
+			leftHeader: { packages: ['P.Preview'] },
+			rightHeader: { packages: ['P.Preview'] },
+			labels: ['left.arxml', 'right.arxml'],
+			rows: [
+				diffRow(rowsModel[0], 'unchanged', 'module:m#0'),
+				diffRow(rowsModel[1], 'changed', 'container:m#0/c#1')
+			],
+			summary: { changed: 1, added: 0, removed: 0, unchanged: 1, renamed: 0 },
+			semanticSkipped: 0
+		};
+		const aligned = buildAlignedSyntheticDocuments(document);
+		const line = aligned.left.text.split('\n')[2];
+		assert.strictEqual(line, '     "EmptyDef" { }');
+		assert.deepStrictEqual(tokenizeEcucLine(line), [
+			{ start: 5, length: 10, type: 'string' },
+			{ start: 16, length: 3, type: 'delimiter' }
+		]);
 	});
 });

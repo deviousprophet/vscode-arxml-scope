@@ -470,6 +470,51 @@ const SYSCOND_COLORS = {
 	number: 'rgb(181, 206, 168)'
 };
 
+/** The Dark+ definition and string colours the label preview resolves. */
+const LABEL_COLORS = {
+	type: 'rgb(78, 201, 176)',
+	string: 'rgb(206, 145, 120)'
+};
+
+/** `editor-labels`: a no-label container starts with a string, a labelled one keeps type + string. */
+function labelColorViolations(audit: Omit<PreviewAudit, 'violations'>): string[] {
+	const spans = audit.syntax ?? [];
+	const colorOf = (text: string): string | undefined =>
+		spans.find((span) => span.text.trim() === text)?.color;
+	const issues: string[] = [];
+	const emptyShort = colorOf('"EmptyDef"');
+	if (emptyShort === undefined) {
+		issues.push('the labels preview did not render the no-label container');
+	} else if (emptyShort !== LABEL_COLORS.string) {
+		issues.push(`the no-label short name is ${emptyShort}, not the string colour`);
+	}
+	const label = colorOf('Items');
+	const short = colorOf('"Items"');
+	if (label === undefined || short === undefined) {
+		issues.push('the labels preview did not render the normal container label and short name');
+	} else {
+		if (label !== LABEL_COLORS.type) {
+			issues.push(`the container label is ${label}, not the type colour`);
+		}
+		if (short !== LABEL_COLORS.string) {
+			issues.push(`the container short name is ${short}, not the string colour`);
+		}
+	}
+	const shortNameInput = document.getElementById('details-short-name') as HTMLInputElement | null;
+	if (shortNameInput === null || shortNameInput.value !== 'EmptyDef') {
+		issues.push('the labels preview did not select the no-label container');
+	} else if (document.getElementById('details-definition-ref') !== null) {
+		issues.push('the no-label container shows a definition field');
+	}
+	const inspectorLabel = document.querySelector('#sb-details-body .inspector-label');
+	if (inspectorLabel === null || inspectorLabel.textContent !== '') {
+		issues.push('the no-label container shows a definition label');
+	}
+	issues.push(...editorLineViolations('"EmptyDef"', '"EmptyDef" { }'));
+	issues.push(...editorLineViolations('Items "Items"', 'Items "Items"'));
+	return issues;
+}
+
 /** The six condition classes and their expected resolved colours. */
 const SYSCOND_CLASSES: ReadonlyArray<readonly [string, string]> = [
 	['syscond-name', SYSCOND_COLORS.name],
@@ -541,6 +586,9 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 	}
 	if (state.name === 'editor-syscond') {
 		issues.push(...syscondViolations(audit));
+	}
+	if (state.name === 'editor-labels') {
+		issues.push(...labelColorViolations(audit));
 	}
 	if (state.name === 'editor-dirty') {
 		const status = document.getElementById('editor-dirty-status');

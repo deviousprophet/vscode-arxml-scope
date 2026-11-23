@@ -166,6 +166,40 @@ suite('Document row builder', () => {
 		}
 	});
 
+	test('a container with no definition label shows only its quoted short name', () => {
+		const dom = installMarkup('<body></body>');
+		try {
+			const node = buildDocumentNodeRow(
+				row({
+					id: 'c-empty',
+					kind: 'container',
+					level: 2,
+					label: '',
+					shortName: 'EmptyDef',
+					definitionRef: '',
+					title: '',
+					shownValue: undefined,
+					value: undefined,
+					meta: [{ cls: 'short', text: '"EmptyDef"', title: 'EmptyDef' }],
+				}),
+				context()
+			);
+			const shell = firstShell(node);
+			assert.deepStrictEqual(childClasses(shell), ['label', 'row-meta']);
+			const [label, meta] = childElements(shell);
+			assert.strictEqual(label.className, 'label');
+			assert.strictEqual(label.textContent, '', 'an empty label contributes no definition text');
+			assert.strictEqual(label.children.length, 0, 'the label never falls back to the short name');
+			assert.strictEqual(meta.className, 'row-meta');
+			assert.deepStrictEqual(childClasses(meta), ['short']);
+			assert.strictEqual(meta.children[0].textContent, '"EmptyDef"', 'the short name keeps its quotes');
+			assert.strictEqual(node.dataset.shortName, 'EmptyDef');
+			assert.strictEqual(node.dataset.definitionRef, '');
+		} finally {
+			dom.restore();
+		}
+	});
+
 	test('a subtree row and a leaf row keep the remaining node flags independent', () => {
 		const dom = installMarkup('<body></body>');
 		try {

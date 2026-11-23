@@ -78,6 +78,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'editor', page: 'editor', width: 1400, height: 900, select: true },
 	{ name: 'editor-syntax', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-syscond', page: 'editor', width: 1400, height: 900 },
+	{ name: 'editor-labels', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-dirty', page: 'editor', width: 1400, height: 900, edit: '42' },
 	{ name: 'editor-invalid', page: 'editor', width: 1400, height: 900, edit: 'abc', trySave: true },
 	{ name: 'editor-details', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated' },
@@ -193,6 +194,17 @@ function syscondDocument(): { rows: EcucRow[]; selectedId?: string } {
 	return { rows, selectedId: selected?.id };
 }
 
+/** A module with a normal container, a parameter and a container with no DEFINITION-REF. */
+const LABELS_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>Labels</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/Labels</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>Items</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/Labels/Items</DEFINITION-REF><PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Labels/Items/P0000</DEFINITION-REF><VALUE>42</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES></ECUC-CONTAINER-VALUE><ECUC-CONTAINER-VALUE><SHORT-NAME>EmptyDef</SHORT-NAME></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+
+/** The no-label container selected: its line starts with the quoted short name. */
+function labelsDocument(): { rows: EcucRow[]; selectedId?: string } {
+	const rows = rowsOf(LABELS_XML).rows;
+	const selected = rows.find((row) => row.shortName === 'EmptyDef') ?? rows[0];
+	return { rows, selectedId: selected?.id };
+}
+
 /** The same document after the container rename the page echoed: real new ids. */
 function renamedSyntaxDocument(): { rows: EcucRow[]; selectedId?: string } {
 	const renamed = SYNTAX_XML.replace('<SHORT-NAME>Syntax</SHORT-NAME>', '<SHORT-NAME>Syntax2</SHORT-NAME>');
@@ -257,6 +269,10 @@ function documentFor(state: PreviewState) {
 		if (state.name === 'editor-syscond') {
 			// The host selects the condition-bearing row; Details shows its Condition code.
 			return syscondDocument();
+		}
+		if (state.name === 'editor-labels') {
+			// The no-label container is selected; its line starts with the short name.
+			return labelsDocument();
 		}
 		if (state.name === 'editor-details-rename') {
 			return syntaxDocument('Syntax');

@@ -185,6 +185,13 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
   colours. The tree chip is bounded with ellipsis and its `title` is `conditionTooltip`: one
   `NAME = value` line per symbol, `(not set)` for a missing value, no `true`/`false`. Details
   renders `Condition`/`Conditions` through `conditionCodeRow` in a wrapped `.condition-code` block.
+- **Synthetic line tokens follow the row shape.** A container line with a definition label is
+  `type` for the label and `string` for the quoted short name. A container with an empty or
+  missing definition ref starts with the quoted short name and must emit `string` for that
+  leading token, never `type`. Module labels are `variable`, parameter/reference labels are
+  `variable`, quoted values are `string`, reference targets are the reference/function token,
+  and braces/conditions/annotations use the delimiter/syscond/comment tokens. The aligned diff
+  line follows the same tokenizer.
 - Rows are built with `document.createElement` / `textContent`; the only `innerHTML`-like SVG is the
   inline twisty created with `createElementNS`. Brace rows are `aria-hidden`.
 - The details control is `<input class="details-value">` for numeric/text types and a
