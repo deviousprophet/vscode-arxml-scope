@@ -46,28 +46,28 @@ interface WidgetInput {
 export function renderSearchBarHtml(prefix: string, ariaLabel: string, withReplace = true): string {
 	const id = (name: string): string => `${prefix}${name}`;
 	const toggle = (name: string, label: string, title: string, glyph: string): string =>
-		`<button id="${id(name)}" class="find-toggle" type="button" aria-pressed="false" title="${title}" aria-label="${label}">${glyph}</button>`;
+		`<button id="${id(name)}" class="find-toggle find-option" type="button" aria-pressed="false" title="${title}" aria-label="${label}">${glyph}</button>`;
 	const replaceRow = withReplace
 		? `<div id="${id('search-replace-row')}" class="find-row replace-row" hidden>
 <input id="${id('search-replace-input')}" class="search-input replace-input field-input" type="text" placeholder="Replace" aria-label="Replace" autocomplete="off" spellcheck="false">
-<button id="${id('search-preserve-case')}" class="find-toggle" type="button" aria-pressed="true" title="Preserve case" aria-label="Preserve case">AB</button>
+<button id="${id('search-preserve-case')}" class="find-toggle find-option" type="button" aria-pressed="true" title="Preserve case" aria-label="Preserve case">AB</button>
 <button id="${id('search-replace')}" class="find-action" type="button" title="Replace" aria-label="Replace" disabled>Replace</button>
 <button id="${id('search-replace-all')}" class="find-action" type="button" title="Replace All" aria-label="Replace All" disabled>Replace All</button>
 </div>`
 		: '';
 	return `<div id="${id('find-widget')}" class="find-widget" role="dialog" aria-label="${ariaLabel}" hidden>
 <div class="find-row query-row">
-<button id="${id('search-replace-toggle')}" class="find-toggle find-expand" type="button" aria-expanded="false" title="Toggle Replace" aria-label="Toggle Replace"${withReplace ? '' : ' hidden'}><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button>
+<button id="${id('search-replace-toggle')}" class="find-toggle find-expand" type="button" aria-expanded="false" title="Toggle Replace" aria-label="Toggle Replace"${withReplace ? '' : ' hidden'}><span class="codicon codicon-chevron-right" aria-hidden="true"></span></button>
 <div class="find-field"><input id="${id('search-input')}" class="search-input field-input" type="search" placeholder="Find" aria-label="${ariaLabel}" autocomplete="off" spellcheck="false">
-<button id="${id('search-clear')}" class="find-toggle search-clear" type="button" title="Clear search" aria-label="Clear search" hidden><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+<button id="${id('search-clear')}" class="find-toggle search-clear" type="button" title="Clear search" aria-label="Clear search" hidden><span class="codicon codicon-close" aria-hidden="true"></span></button></div>
 ${toggle('search-match-case', 'Match Case', 'Match Case (Alt+C)', 'Aa')}
 ${toggle('search-whole-word', 'Match Whole Word', 'Match Whole Word (Alt+W)', 'ab|')}
 ${toggle('search-regex', 'Use Regular Expression', 'Use Regular Expression (Alt+R)', '.*')}
 <span id="${id('search-count')}" class="search-count" role="status" aria-live="polite"></span>
 <span id="${id('search-busy')}" class="search-progress" role="status" aria-label="Searching" data-busy="false"></span>
-<button id="${id('search-prev')}" class="find-toggle find-nav" type="button" title="Previous match (Shift+F3)" aria-label="Previous match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.75l4-4 4 4"/></svg></button>
-<button id="${id('search-next')}" class="find-toggle find-nav" type="button" title="Next match (F3)" aria-label="Next match" disabled><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.25l4 4 4-4"/></svg></button>
-<button id="${id('search-close')}" class="find-toggle find-close" type="button" title="Close (Escape)" aria-label="Close find"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+<button id="${id('search-prev')}" class="find-toggle find-nav" type="button" title="Previous match (Shift+F3)" aria-label="Previous match" disabled><span class="codicon codicon-arrow-up" aria-hidden="true"></span></button>
+<button id="${id('search-next')}" class="find-toggle find-nav" type="button" title="Next match (F3)" aria-label="Next match" disabled><span class="codicon codicon-arrow-down" aria-hidden="true"></span></button>
+<button id="${id('search-close')}" class="find-toggle find-close" type="button" title="Close (Escape)" aria-label="Close find"><span class="codicon codicon-close" aria-hidden="true"></span></button>
 </div>
 ${replaceRow}
 </div>`;

@@ -8,6 +8,11 @@ Owns `src/webview/components/searchBar/` (`searchBar.ts`, `searchBar.css`): the 
 icon, clear, previous/next, fixed count slot and busy slot. Hosts own the search engine, candidates
 and match index.
 
+The Monaco editor and diff pages do **not** use this component; they use Monaco's native
+`.find-widget` and patch its search methods to the Rust engine (see
+[`editor-lifecycle.md`](../editor-lifecycle.md#find-and-replace)). The component below remains for
+the legacy DOM renderers and their page tests.
+
 ## Layout
 
 ```text

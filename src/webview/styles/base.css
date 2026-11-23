@@ -32,6 +32,19 @@ body {
 	flex: 1 1 auto;
 	min-height: 0;
 }
+.editor-error-strip {
+	flex: none;
+	padding: 4px 10px;
+	color: var(--vscode-inputValidation-errorForeground, var(--vscode-errorForeground));
+	background: var(--vscode-inputValidation-errorBackground, transparent);
+	border-bottom: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+	font-size: 12px;
+	line-height: 18px;
+	white-space: pre-wrap;
+}
+.editor-error-strip[hidden] {
+	display: none;
+}
 #main {
 	display: flex;
 	flex-direction: column;

@@ -377,24 +377,16 @@ suite('editor viewer characterization', () => {
 		}
 	});
 
-	test('Tab from the parameter value focuses the adjacent parameter after the re-scan', async () => {
-		const { dom, document } = mount();
+	test('Tab from the parameter value does not commit the Details draft', () => {
+		const { dom } = mount();
 		try {
 			clickRow(dom, 'IniValue');
 			const input = dom.document.getElementById('details-value') as HTMLInputElement;
 			input.focus();
-			input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
-			assert.deepStrictEqual(messagesOf(dom.api, 'edit'), [
-				{ type: 'edit', nodeId: rowFor(document, 'IniValue').id, value: '63' },
-			]);
-
-			dom.post({ type: 'document', document });
-			await new Promise((resolve) => setTimeout(resolve, 0));
-			assert.strictEqual(
-				dom.document.activeElement?.dataset?.nodeId,
-				rowFor(document, 'Title').id,
-				'the next visible parameter takes the edit focus'
-			);
+			const tab = new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+			input.dispatchEvent(tab);
+			assert.strictEqual(tab.defaultPrevented, false, 'the browser owns Tab focus');
+			assert.deepStrictEqual(messagesOf(dom.api, 'edit'), []);
 		} finally {
 			dom.restore();
 		}

@@ -163,6 +163,36 @@ export function isNumericLiteral(input: string): boolean {
 	);
 }
 
+/** True when `input` is a literal the eCUC Integer grammar accepts. */
+export function isIntegerLiteral(input: string): boolean {
+	return INTEGER_LITERAL.test(input);
+}
+
+/** True when `input` is a literal the eCUC Float grammar accepts. */
+export function isFloatLiteral(input: string): boolean {
+	return FLOAT_LITERAL.test(input);
+}
+
+/** True when `input` is the lowercase boolean the eCUC grammar accepts. */
+export function isBooleanLiteral(input: string): boolean {
+	return BOOLEAN.test(input);
+}
+
+/** True when `input` is an AUTOSAR identifier, the container short-name grammar. */
+export function isShortNameLiteral(input: string): boolean {
+	return SHORT_NAME.test(input);
+}
+
+/** True when `input` is the absolute definition-reference path grammar. */
+export function isDefinitionRefPath(input: string): boolean {
+	return ABSOLUTE_PATH.test(input);
+}
+
+/** True when every character of `input` is representable in XML 1.0. */
+export function isXmlRepresentable(input: string): boolean {
+	return !ILLEGAL_XML.test(input);
+}
+
 /** `&`→`&amp;`, `<`→`&lt;`, `>`→`&gt;`, in that order. */
 export function escapeXml(input: string): string {
 	return input.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

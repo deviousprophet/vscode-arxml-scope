@@ -13,9 +13,10 @@ export interface EditorToolbarCallbacks {
 	onToggleSidebar?(): void;
 }
 
-/** Editor strip: flexible slot, sidebar toggle, Collapse, Expand. */
+/** Editor strip: flexible slot, dirty status, sidebar toggle, Collapse, Expand. */
 export function renderEditorToolbarHtml(): string {
 	return `<div class="toolbar">
+<span id="editor-dirty-status" class="editor-dirty-status" role="status" aria-live="polite" hidden></span>
 <span class="grow"></span>
 <button id="collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
 <button id="expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
@@ -52,11 +53,64 @@ export class EditorToolbar {
 		button.title = hidden ? 'Show sidebar' : 'Hide sidebar';
 	}
 
+	/** Show the unsaved or invalid marker while the page has a local draft. */
+	setDirty(dirty: boolean, invalid?: string): void {
+		const status = document.getElementById('editor-dirty-status');
+		if (!status) {
+			return;
+		}
+		const next = dirtyStatus(dirty, invalid);
+		writeHidden(status, next.hidden);
+		writeText(status, next.text);
+		writeTitle(status, next.title);
+		status.classList.toggle('invalid', next.invalid);
+	}
+
 	private bind(id: string, action: () => void): void {
 		const button = document.getElementById(id);
 		if (button) {
 			button.addEventListener('click', action);
 		}
+	}
+}
+
+interface DirtyStatus {
+	text: string;
+	title: string;
+	hidden: boolean;
+	invalid: boolean;
+}
+
+function dirtyStatus(dirty: boolean, invalid?: string): DirtyStatus {
+	if (invalid !== undefined) {
+		return { text: 'Invalid value — not saved', title: invalid, hidden: false, invalid: true };
+	}
+	if (dirty) {
+		return {
+			text: '● Unsaved changes',
+			title: 'This ECUC document has unsaved changes',
+			hidden: false,
+			invalid: false
+		};
+	}
+	return { text: '', title: '', hidden: true, invalid: false };
+}
+
+function writeHidden(status: HTMLElement, hidden: boolean): void {
+	if (status.hidden !== hidden) {
+		status.hidden = hidden;
+	}
+}
+
+function writeText(status: HTMLElement, text: string): void {
+	if (status.textContent !== text) {
+		status.textContent = text;
+	}
+}
+
+function writeTitle(status: HTMLElement, title: string): void {
+	if (status.title !== title) {
+		status.title = title;
 	}
 }
 

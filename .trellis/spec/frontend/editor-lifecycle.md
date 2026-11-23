@@ -12,6 +12,17 @@ Two independent webview surfaces use the same static-shell + `postMessage` patte
 - the ECUC custom text editor (`EcucEditorProvider`, `VIEW_TYPE = 'vscode-arxml-scope.ecucEditor'`);
 - the read-only semantic diff panel (`DiffPanel.viewType = 'vscode-arxml-scope.diff'`).
 
+The rendering surface is `monaco-editor@0.57.0`, pinned exactly and bundled by esbuild. The
+page serializes the existing rows into a synthetic ECUC document (`src/webview/monaco/synthetic.ts`)
+and keeps a line -> row -> field-span map; the Monaco model is not a second source of truth.
+The editor's Monaco model always has one trailing newline: sticky scroll converts a folding
+end to `end + 1`, so without it a scope ending on the last row is considered invalid and the
+whole sticky model is dropped. The aligned diff models keep their exact synthetic text because
+the diff editor's sticky scroll is disabled. Accepted field edits still become one host `WorkspaceEdit`, but they are written only when the user presses `Ctrl+S`; typing, deletion and Escape stay in the page's shared draft. With a local draft or an active local undo, Ctrl+Z/Ctrl+Shift+Z undo/redo Monaco's local stack (redo can restore a draft that an undo returned to the host value); otherwise they are routed to the host document. The diff page serializes the aligned
+`DiffDocument` rows into two equal-length documents and lets Monaco's diff editor render them.
+The webview CSP additionally allows `style-src 'unsafe-inline'`, `worker-src blob:`, `font-src` and
+`connect-src` for the fetched worker; no remote code is loaded.
+
 The host owns documents, scans, writes and persistence. A Rust engine process is
 required at activation (`src/host/engine/engineLoader.ts`, `npm run engine:build`); it
 serves the parity-checked scanner, rows, edit plans, diff and copy plans. The editor
@@ -47,13 +58,16 @@ TypeScript fallback.
 
 ### Find and replace
 
-- Find is a floating `.find-widget` in the page shell, hidden until `Ctrl+F`
+- Find is Monaco's native find widget inside the editor or diff pane, opened with `Ctrl+F`
   (`Ctrl+H` opens the replace row). It is not a toolbar slot; `Escape` closes it and
-  returns focus to the tree/list.
-- `doc.search` and `diff.search` own the match list, count and navigation;
-  `doc.replace` owns the validated edit plans. The page matcher in
-  `render/searchPattern.ts` is only for `<mark>` and schema/package header text.
-- Replace is document-only and targets parameter values and container short names.
+  returns focus to the editor/list.
+- `doc.search` and `diff.search` own the match list, count and navigation. The page patches
+  the model's `findMatches`/`findNextMatch`/`findPreviousMatch` to return Rust matches and
+  maps each field offset through `searchSpans`; a cache miss requests the query and refreshes
+  the open widget when the answer arrives.
+- `doc.replace` owns the validated edit plans. The native Replace/Replace All methods are
+  intercepted and post a Rust replace request; the page never edits the synthetic text
+  locally. Replace is document-only and targets parameter values and container short names.
   All plans are applied in one `WorkspaceEdit`; a refusal writes nothing.
 - Search requests are generation-guarded: a late `findResult` for an older request
   id must be ignored after typing, clearing or closing.
@@ -98,7 +112,11 @@ export function editorShell(assets: WebviewShellAssets): string;
 
 // src/webviewProtocol.ts
 export type EditorProviderToWebview =
-  | { type: 'document'; document: EditorDocumentPayload }
+  | { type: 'document'; document: EditorDocumentPayload } // rows, selectedId, header, settings, revision, dirty
+  | { type: 'documentPatch'; patch: EditorRowPatch; header?: EditorDocumentHeader; selectedId?: string; revision?: number; dirty?: boolean }
+  | { type: 'editResult'; editId: number; ok: boolean; reason?: string; revision: number }
+  | { type: 'dirty'; dirty: boolean; revision: number }
+  | { type: 'flushEdits'; requestId: number }
   | { type: 'conditions'; entries: ConditionEntry[] }
   | { type: 'select'; nodeId: string }
   | { type: 'notice'; message: string; kind?: 'warn' | 'info'; inline?: boolean; scope?: 'details' | 'conditions' }
@@ -108,7 +126,8 @@ export type EditorWebviewToProvider =
   | { type: 'select'; nodeId: string }
   | { type: 'reveal'; nodeId: string }
   | { type: 'follow'; nodeId: string }
-  | { type: 'edit'; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string }
+  | { type: 'edit'; editId?: number; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string; baseRevision?: number }
+  | { type: 'flushed'; requestId: number }
   | { type: 'delete'; nodeId: string }
   | { type: 'duplicate'; nodeId: string }
   | { type: 'conditions'; entries: ConditionEntry[] };
@@ -166,27 +185,56 @@ store, then `postToHost({ type: 'ready' })`.
    answers with the current `conditions` entries and then the `document` payload. A reload therefore
    cannot show an empty tree or stale condition values.
 5. **Message dispatch.** `panel.webview.onDidReceiveMessage((raw: unknown))` first checks
-   `editorMessageType(raw)`; anything without a string `type` is ignored. `ready` and `conditions` are
-   handled first; the remaining messages must carry a string `nodeId`. `edit` also requires a string
-   `value`; a missing `field` normalizes to `'value'`, and an unknown field is ignored. `select` only
-   updates the host's selection map.
-6. **One user action, one write.** `editField` scans the current text, builds an `EditPlan` with
-   `buildEdit` (parameter `<VALUE>`) or `buildFieldEdit` (container `<SHORT-NAME>` /
-   `<DEFINITION-REF>`), and applies exactly one `WorkspaceEdit` through `applyEdit`. Delete and
-   duplicate go through `planDelete` / `planDuplicate` and `applyStructureEdit` after a modal
-   confirmation. A refusal posts a `notice` (for a field, `inline: true`, `scope: 'details'`) and leaves
-   the bytes untouched.
-7. **Renames follow the id.** A container rename changes its path-based id. Before writing,
-   `editField` stores `plan.nextNodeId`; the re-scan that follows the document change carries that
-   surviving id. A refused write restores the previous selection entry.
-8. **Reveal and follow are navigation only.** `reveal` maps the node id through
+   `editorMessageType(raw)`; anything without a string `type` is ignored. `ready`, `conditions`,
+   `undo`/`redo`, `flushed`/`save` are handled first; the remaining messages must carry a string
+   `nodeId`. `edit` also requires a string `value`; a missing `field` normalizes to `'value'`, and
+   an unknown field is answered with a refusal result. `select` only updates the host's selection
+   map.
+6. **One user action, one write.** `editField` validates against the current text (or the engine's
+   retained model), then applies exactly one `WorkspaceEdit` through `applyEdit`. Edits carry
+   `editId` and `baseRevision`; the host serializes them on `session.editChain` and answers each with
+   `{ type: 'editResult', editId, ok, reason?, revision, nextNodeId? }`; `nextNodeId` is present only
+   when the write renumbers the node (a container rename). Every `document` / `documentPatch` push
+   carries `revision` and `dirty`, a save posts `dirty`, and the panel title's `•` follows
+   `TextDocument.isDirty` after every change, save and edit.
+   `onWillSaveTextDocument` asks the page to flush pending edits (`flushEdits`/`flushed`) and waits
+   for the queue before the save. Typing, backspace, Delete, word-delete, cut/paste and a
+   selection replace post no `edit`; `queueEdit` only stores the shared draft. The page-level
+   `Ctrl+S` handler is the only commit trigger: it first blocks on local invalid fields, then
+   flushes one coalesced edit per field (values first, short names deepest-first, no-ops pruned),
+   waits for every `editResult`, and posts `save`; the host drains `editChain` and calls
+   `document.save()`. A draft whose row is no longer in the row store stays queued but stops the
+   save: the status says the node is gone and neither `edit` nor `save` is posted. Enter is a no-op
+   and blur/page hide never write.
+   Delete and duplicate go through `planDelete` / `planDuplicate` and `applyStructureEdit` after a
+   modal confirmation. A refusal posts a `notice` (for a field, `inline: true`, `scope: 'details'`),
+   keeps the visible text marked invalid and leaves the bytes untouched.
+7. **One shared Details/editor draft.** Details input events call `previewEdit`, not `commitEdit`;
+   the page routes both views through `applyLocalField`. `Enter` does not commit, `Tab` leaves
+   focus to the browser, `Escape` restores the field's accepted value. The shared draft survives a
+   selection change, so edits on several rows save together. Each inspector rebuild seeds its
+   controls from the shared draft and restores the focused control's caret; an inspector rebuild
+   must not drop focus. Local syntax markers and the `#editor-error-strip` live in the page;
+   invalid values never enter the `TextDocument` and block save until corrected or reverted.
+8. **Renames follow the id.** A container rename changes its path-based id. Before writing,
+   `editField` stores `plan.nextNodeId` for the host selection, and the `editResult` carries the same
+   id as its optional `nextNodeId` field; the re-scan that follows the document change carries that
+   surviving id. A refused write restores the previous selection entry. The page records every
+   posted short-name write as a durable rename intent. The host may answer `editResult` before its
+   re-scan, so the next `document`/`documentPatch` resolves the intent from that host pair — never
+   by deriving an id from the short name or its ordinal. It then re-keys pending, invalid and
+   in-flight drafts plus the Details caret from the old id to the new id, and defers a second
+   `Ctrl+S` until that happens. Nested intents resolve deepest-first from the same pairs. A refusal
+   clears the intent; an intent whose old row is gone without the host's row leaves its drafts
+   stale, blocks the save and never addresses the dead id.
+9. **Reveal and follow are navigation only.** `reveal` maps the node id through
    `buildNodeIndex(model).byId` and calls `revealRangeInTextEditor` with the panel's column;
    `arxmlScope.ecuc.editor.revealMode` (`beside`, `focus`, `replace`) decides where the source opens.
    `follow` resolves a same-file reference through `followReference`; the resolved range is mapped back
    to a node id and posted as `select`. Failure is a Details notice, never a write.
-9. **Dispose everything.** The panel's `onDidDispose` disposes the boot watchdog and every subscription
-   and deletes the document's panel, selection and pending entries (`forget`).
-10. **Layout survives a re-scan.** The toolbar, sidebar, tabs, inspector and Conditions panel are
+10. **Dispose everything.** The panel's `onDidDispose` disposes the boot watchdog and every subscription
+    and deletes the document's panel, selection and pending entries (`forget`).
+11. **Layout survives a re-scan.** The toolbar, sidebar, tabs, inspector and Conditions panel are
     outside the row window. The row store, flattened display list, virtual range and selected subtree
     are rebuilt in place; the shell and panels are not replaced.
 

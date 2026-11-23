@@ -3,6 +3,11 @@
 The semantic diff compares two ECUC-Values files by their **configuration**, not by their XML text. It
 is a read-only view: it never writes, repairs or generates a file.
 
+> **Renderer status.** The two panes are now Monaco's side-by-side diff editor. The schema and
+> package header lines are shown in the pane title tooltip because VS Code diff headers are chrome,
+> not compared lines. Hidden unchanged regions, word-level changes and the diff gutter come from
+> Monaco; Merge keeps the existing whole-element semantics with VS Code-style gutter arrows.
+
 ## Selecting the two files
 
 ### Compare with a first file
@@ -58,7 +63,9 @@ compared, not just the bytes on disk.
 - Annotations, braces and bracket guides follow each side of the comparison. Both panes use the same
   Document view as the editor, so annotations, braces, guides, colours and typography match.
 - A **read-only** status tint marks added, removed and changed cells; changed words are highlighted
-  inside changed rows. Syntax tokens keep their colours.
+  inside changed rows. Syntax tokens keep their colours. Diff fills keep the theme colour's alpha;
+  when a theme does not define the diff line colours, the page uses VS Code's subtle dark fallbacks
+  instead of opaque blocks.
 - Selecting a container or module tints its whole subtree in both panes, including the annotation rows
   of descendant containers. An added or removed row highlights only the pane that owns its cell; the
   blank side stays blank. The highlight spans a stable width: at least the pane and the full content
@@ -206,9 +213,9 @@ split line. The split line is a display control only; it never changes the compa
 | Row twisty / `Left` / `Right` | Collapse or expand a subtree. |
 | `Space` | Select the focused row. |
 | `Enter` | Reveal the selected row in its source file. The revealed side follows the displayed pane after a swap. |
-| **Search** | `Ctrl+F` / `Cmd+F` opens the find widget; type a query and press `Enter`; `Shift+Enter` goes backwards. |
+| **Search** | `Ctrl+F` / `Cmd+F` opens Monaco's native find widget in the focused pane; type a query and press `Enter`; `Shift+Enter` goes backwards. |
 | **Search options** | `Aa` case sensitive, `ab|` whole word, `.*` regular expression. The diff has no replace row. |
-| **Search count** | `1 / N`, `0 / 0` or `Invalid pattern`; the busy slot shows a running engine request. |
+| **Search count** | Native `1 of N` / `No results`; the matches come from the Rust diff search, not a local scan. |
 
 Search jumps and marks; it never hides rows. In **Show diff** the search candidates are the
 changed/added/removed rows; in **Show all** they are all rows. Switching the view restarts the committed query
