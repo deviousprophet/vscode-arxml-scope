@@ -9,7 +9,9 @@ import {
 	remapDraftNodeId,
 	remapNodeId,
 	resolveRenameIntents,
-	type RenameIntent
+	type DraftEntry,
+	type RenameIntent,
+	type RenameResolution
 } from '../../core/ecuc/editOrder';
 import { fieldTextFromWholeLine } from '../../core/ecuc/lineEdit';
 import {
@@ -195,6 +197,178 @@ function oneSidedDiffRow(
 		changes: [],
 		haystack: row.haystack
 	};
+}
+
+/** A removed subtree, an added one and a shared one, as the merged list produces them. */
+function oneSidedDiffDocument(): DiffDocument {
+	const removedModule: EcucRow = {
+		...moduleRow(),
+		id: 'module:removed#0',
+		subtreeSize: 3,
+		label: 'P.RemovedMod',
+		shortName: 'RemovedMod',
+		definitionRef: '/P/RemovedMod',
+		title: '/P/RemovedMod',
+		meta: [{ cls: 'short', text: '"RemovedMod"', title: 'RemovedMod' }],
+		haystack: 'p.removedmod removedmod'
+	};
+	const removedContainer: EcucRow = {
+		...containerRow(),
+		id: 'container:removed#0',
+		parentId: 'module:removed#0',
+		subtreeSize: 2,
+		label: 'RemovedItems',
+		shortName: 'RemovedItems',
+		definitionRef: '/P/RemovedMod/RemovedItems',
+		title: '/P/RemovedMod/RemovedItems',
+		meta: [{ cls: 'short', text: '"RemovedItems"', title: 'RemovedItems' }],
+		haystack: 'removeditems removeditems'
+	};
+	const removedParameter: EcucRow = {
+		...parameterRow(),
+		id: 'container:removed#0/param:RemovedValue#0',
+		parentId: 'container:removed#0',
+		label: 'RemovedValue',
+		definitionRef: '/P/RemovedMod/RemovedItems/RemovedValue'
+	};
+	const removedReference: EcucRow = {
+		...referenceRow(),
+		id: 'container:removed#0/ref:RemovedRef#0',
+		parentId: 'container:removed#0',
+		label: 'RemovedRef',
+		definitionRef: '/P/RemovedMod/RemovedItems/RemovedRef',
+		value: '/P/Target',
+		shownValue: '/P/Target',
+		target: '/P/Target'
+	};
+	const addedModule: EcucRow = {
+		...moduleRow(),
+		id: 'module:added#0',
+		subtreeSize: 3,
+		label: 'P.AddedMod',
+		shortName: 'AddedMod',
+		definitionRef: '/P/AddedMod',
+		title: '/P/AddedMod',
+		meta: [{ cls: 'short', text: '"AddedMod"', title: 'AddedMod' }],
+		haystack: 'p.addedmod addedmod'
+	};
+	const addedContainer: EcucRow = {
+		...containerRow(),
+		id: 'container:added#0',
+		parentId: 'module:added#0',
+		subtreeSize: 2,
+		label: 'AddedItems',
+		shortName: 'AddedItems',
+		definitionRef: '/P/AddedMod/AddedItems',
+		title: '/P/AddedMod/AddedItems',
+		meta: [{ cls: 'short', text: '"AddedItems"', title: 'AddedItems' }],
+		haystack: 'addeditems addeditems'
+	};
+	const addedParameter: EcucRow = {
+		...parameterRow(),
+		id: 'container:added#0/param:AddedValue#0',
+		parentId: 'container:added#0',
+		label: 'AddedValue',
+		definitionRef: '/P/AddedMod/AddedItems/AddedValue'
+	};
+	const addedReference: EcucRow = {
+		...referenceRow(),
+		id: 'container:added#0/ref:AddedRef#0',
+		parentId: 'container:added#0',
+		label: 'AddedRef',
+		definitionRef: '/P/AddedMod/AddedItems/AddedRef',
+		value: '/P/Target',
+		shownValue: '/P/Target',
+		target: '/P/Target'
+	};
+	const sharedModule: EcucRow = {
+		...moduleRow(),
+		id: 'module:shared#0',
+		subtreeSize: 2,
+		label: 'P.Shared',
+		shortName: 'Shared',
+		definitionRef: '/P/Shared',
+		title: '/P/Shared',
+		meta: [{ cls: 'short', text: '"Shared"', title: 'Shared' }],
+		haystack: 'p.shared shared'
+	};
+	const sharedContainer: EcucRow = {
+		...containerRow(),
+		id: 'container:shared#0',
+		parentId: 'module:shared#0',
+		label: 'SharedItems',
+		shortName: 'SharedItems',
+		definitionRef: '/P/Shared/SharedItems',
+		title: '/P/Shared/SharedItems',
+		meta: [{ cls: 'short', text: '"SharedItems"', title: 'SharedItems' }],
+		haystack: 'shareditems shareditems'
+	};
+	const sharedParameter: EcucRow = {
+		...parameterRow(),
+		id: 'container:shared#0/param:SharedValue#0',
+		parentId: 'container:shared#0',
+		label: 'SharedValue',
+		definitionRef: '/P/Shared/SharedItems/SharedValue'
+	};
+	return {
+		left: { name: 'left.arxml', path: 'left.arxml' },
+		right: { name: 'right.arxml', path: 'right.arxml' },
+		leftHeader: { packages: ['P.Preview'] },
+		rightHeader: { packages: ['P.Preview'] },
+		labels: ['left.arxml', 'right.arxml'],
+		rows: [
+			oneSidedDiffRow(removedModule, 'removed', 'module:removed#0', 'left'),
+			oneSidedDiffRow(removedContainer, 'removed', 'container:removed#0', 'left'),
+			oneSidedDiffRow(removedParameter, 'removed', 'container:removed#0/param:RemovedValue#0', 'left'),
+			oneSidedDiffRow(removedReference, 'removed', 'container:removed#0/ref:RemovedRef#0', 'left'),
+			oneSidedDiffRow(addedModule, 'added', 'module:added#0', 'right'),
+			oneSidedDiffRow(addedContainer, 'added', 'container:added#0', 'right'),
+			oneSidedDiffRow(addedParameter, 'added', 'container:added#0/param:AddedValue#0', 'right'),
+			oneSidedDiffRow(addedReference, 'added', 'container:added#0/ref:AddedRef#0', 'right'),
+			diffRow(sharedModule, 'unchanged', 'module:shared#0'),
+			diffRow(sharedContainer, 'unchanged', 'container:shared#0'),
+			diffRow(sharedParameter, 'unchanged', 'container:shared#0/param:SharedValue#0')
+		],
+		summary: { changed: 0, added: 4, removed: 4, unchanged: 3, renamed: 0 },
+		semanticSkipped: 0
+	};
+}
+
+/** The first blank line at or after `start`: the end of one rendered subtree block. */
+function blockEnd(lines: string[], start: number): number {
+	let end = start;
+	while (end < lines.length && lines[end] !== '') {
+		end += 1;
+	}
+	return end;
+}
+
+/** The side without the block holds blank placeholders and no synthesized braces. */
+function assertBlockMissing(lines: string[], start: number, end: number): void {
+	for (let at = start; at < end; at += 1) {
+		assert.strictEqual(lines[at], '', `the missing side of line ${at + 1} stays blank`);
+		assert.ok(
+			!lines[at].includes('{') && !lines[at].includes('}'),
+			`the missing side of line ${at + 1} has no synthesized brace`
+		);
+	}
+}
+
+/** Re-key the pending draft and the in-flight edit with each proved host pair. */
+function rekeyAfterRename(
+	pending: Map<string, DraftEntry>,
+	inflight: Map<number, DraftEntry & { editId: number }>,
+	pairs: readonly RenameResolution[]
+): void {
+	for (const pair of pairs) {
+		remapDraftMap(pending, pair.oldId, pair.newId);
+		for (const [editId, edit] of Array.from(inflight)) {
+			const next = remapDraftNodeId(edit, pair.oldId, pair.newId);
+			if (next !== undefined) {
+				inflight.set(editId, next);
+			}
+		}
+	}
 }
 
 suite('synthetic ECUC document', () => {
@@ -434,17 +608,11 @@ suite('synthetic ECUC document', () => {
 		assert.deepStrictEqual(afterScan.resolved, [{ oldId, newId }]);
 		assert.deepStrictEqual(afterScan.kept, []);
 		assert.deepStrictEqual(afterScan.dropped, []);
-		for (const pair of afterScan.resolved) {
-			remapDraftMap(pending, pair.oldId, pair.newId);
-			for (const [editId, edit] of Array.from(inflight)) {
-				const next = remapDraftNodeId(edit, pair.oldId, pair.newId);
-				if (next !== undefined) {
-					inflight.set(editId, next);
-				}
-			}
-		}
+		rekeyAfterRename(pending, inflight, afterScan.resolved);
 		assert.deepStrictEqual([...pending.keys()], [draftKey(`${newId}/param:Note#0`, 'value')]);
-		assert.strictEqual(inflight.get(9)?.nodeId, `${newId}/param:Note#0`, 'the in-flight entry moves too');
+		const moved = inflight.get(9);
+		assert.ok(moved, 'the in-flight entry survives the rename');
+		assert.strictEqual(moved.nodeId, `${newId}/param:Note#0`, 'the in-flight entry moves too');
 	});
 
 	test('a refusal after the rename document lands is recorded at the new id', () => {
@@ -637,137 +805,7 @@ suite('synthetic ECUC document', () => {
 	});
 
 	test('a one-sided module and container leave the missing side blank', () => {
-		const removedModule: EcucRow = {
-			...moduleRow(),
-			id: 'module:removed#0',
-			subtreeSize: 3,
-			label: 'P.RemovedMod',
-			shortName: 'RemovedMod',
-			definitionRef: '/P/RemovedMod',
-			title: '/P/RemovedMod',
-			meta: [{ cls: 'short', text: '"RemovedMod"', title: 'RemovedMod' }],
-			haystack: 'p.removedmod removedmod'
-		};
-		const removedContainer: EcucRow = {
-			...containerRow(),
-			id: 'container:removed#0',
-			parentId: 'module:removed#0',
-			subtreeSize: 2,
-			label: 'RemovedItems',
-			shortName: 'RemovedItems',
-			definitionRef: '/P/RemovedMod/RemovedItems',
-			title: '/P/RemovedMod/RemovedItems',
-			meta: [{ cls: 'short', text: '"RemovedItems"', title: 'RemovedItems' }],
-			haystack: 'removeditems removeditems'
-		};
-		const removedParameter: EcucRow = {
-			...parameterRow(),
-			id: 'container:removed#0/param:RemovedValue#0',
-			parentId: 'container:removed#0',
-			label: 'RemovedValue',
-			definitionRef: '/P/RemovedMod/RemovedItems/RemovedValue'
-		};
-		const removedReference: EcucRow = {
-			...referenceRow(),
-			id: 'container:removed#0/ref:RemovedRef#0',
-			parentId: 'container:removed#0',
-			label: 'RemovedRef',
-			definitionRef: '/P/RemovedMod/RemovedItems/RemovedRef',
-			value: '/P/Target',
-			shownValue: '/P/Target',
-			target: '/P/Target'
-		};
-		const addedModule: EcucRow = {
-			...moduleRow(),
-			id: 'module:added#0',
-			subtreeSize: 3,
-			label: 'P.AddedMod',
-			shortName: 'AddedMod',
-			definitionRef: '/P/AddedMod',
-			title: '/P/AddedMod',
-			meta: [{ cls: 'short', text: '"AddedMod"', title: 'AddedMod' }],
-			haystack: 'p.addedmod addedmod'
-		};
-		const addedContainer: EcucRow = {
-			...containerRow(),
-			id: 'container:added#0',
-			parentId: 'module:added#0',
-			subtreeSize: 2,
-			label: 'AddedItems',
-			shortName: 'AddedItems',
-			definitionRef: '/P/AddedMod/AddedItems',
-			title: '/P/AddedMod/AddedItems',
-			meta: [{ cls: 'short', text: '"AddedItems"', title: 'AddedItems' }],
-			haystack: 'addeditems addeditems'
-		};
-		const addedParameter: EcucRow = {
-			...parameterRow(),
-			id: 'container:added#0/param:AddedValue#0',
-			parentId: 'container:added#0',
-			label: 'AddedValue',
-			definitionRef: '/P/AddedMod/AddedItems/AddedValue'
-		};
-		const addedReference: EcucRow = {
-			...referenceRow(),
-			id: 'container:added#0/ref:AddedRef#0',
-			parentId: 'container:added#0',
-			label: 'AddedRef',
-			definitionRef: '/P/AddedMod/AddedItems/AddedRef',
-			value: '/P/Target',
-			shownValue: '/P/Target',
-			target: '/P/Target'
-		};
-		const sharedModule: EcucRow = {
-			...moduleRow(),
-			id: 'module:shared#0',
-			subtreeSize: 2,
-			label: 'P.Shared',
-			shortName: 'Shared',
-			definitionRef: '/P/Shared',
-			title: '/P/Shared',
-			meta: [{ cls: 'short', text: '"Shared"', title: 'Shared' }],
-			haystack: 'p.shared shared'
-		};
-		const sharedContainer: EcucRow = {
-			...containerRow(),
-			id: 'container:shared#0',
-			parentId: 'module:shared#0',
-			label: 'SharedItems',
-			shortName: 'SharedItems',
-			definitionRef: '/P/Shared/SharedItems',
-			title: '/P/Shared/SharedItems',
-			meta: [{ cls: 'short', text: '"SharedItems"', title: 'SharedItems' }],
-			haystack: 'shareditems shareditems'
-		};
-		const sharedParameter: EcucRow = {
-			...parameterRow(),
-			id: 'container:shared#0/param:SharedValue#0',
-			parentId: 'container:shared#0',
-			label: 'SharedValue',
-			definitionRef: '/P/Shared/SharedItems/SharedValue'
-		};
-		const document: DiffDocument = {
-			left: { name: 'left.arxml', path: 'left.arxml' },
-			right: { name: 'right.arxml', path: 'right.arxml' },
-			leftHeader: { packages: ['P.Preview'] },
-			rightHeader: { packages: ['P.Preview'] },
-			labels: ['left.arxml', 'right.arxml'],
-			rows: [
-				oneSidedDiffRow(removedModule, 'removed', 'module:removed#0', 'left'),
-				oneSidedDiffRow(removedContainer, 'removed', 'container:removed#0', 'left'),
-				oneSidedDiffRow(removedParameter, 'removed', 'container:removed#0/param:RemovedValue#0', 'left'),
-				oneSidedDiffRow(removedReference, 'removed', 'container:removed#0/ref:RemovedRef#0', 'left'),
-				oneSidedDiffRow(addedModule, 'added', 'module:added#0', 'right'),
-				oneSidedDiffRow(addedContainer, 'added', 'container:added#0', 'right'),
-				oneSidedDiffRow(addedParameter, 'added', 'container:added#0/param:AddedValue#0', 'right'),
-				oneSidedDiffRow(addedReference, 'added', 'container:added#0/ref:AddedRef#0', 'right'),
-				diffRow(sharedModule, 'unchanged', 'module:shared#0'),
-				diffRow(sharedContainer, 'unchanged', 'container:shared#0'),
-				diffRow(sharedParameter, 'unchanged', 'container:shared#0/param:SharedValue#0')
-			],
-			summary: { changed: 0, added: 4, removed: 4, unchanged: 3, renamed: 0 },
-			semanticSkipped: 0
-		};
+		const document = oneSidedDiffDocument();
 
 		const aligned = buildAlignedSyntheticDocuments(document);
 		const left = aligned.left.text.split('\n');
@@ -777,10 +815,7 @@ suite('synthetic ECUC document', () => {
 
 		const removedAt = left.indexOf('module P.RemovedMod "RemovedMod"');
 		assert.ok(removedAt >= 0, 'the removed module renders on the left');
-		let removedEnd = removedAt;
-		while (removedEnd < left.length && left[removedEnd] !== '') {
-			removedEnd += 1;
-		}
+		const removedEnd = blockEnd(left, removedAt);
 		assert.deepStrictEqual(
 			left.slice(removedAt, removedEnd),
 			[
@@ -795,21 +830,12 @@ suite('synthetic ECUC document', () => {
 			],
 			'the owning side keeps its node line and both brace pairs'
 		);
-		for (let at = removedAt; at < removedEnd; at += 1) {
-			assert.strictEqual(right[at], '', `the missing side of line ${at + 1} stays blank`);
-			assert.ok(
-				!right[at].includes('{') && !right[at].includes('}'),
-				`the missing side of line ${at + 1} has no synthesized brace`
-			);
-		}
+		assertBlockMissing(right, removedAt, removedEnd);
 
 		const addedAt = right.indexOf('module P.AddedMod "AddedMod"');
 		assert.ok(addedAt >= 0, 'the added module renders on the right');
 		assert.strictEqual(left[addedAt], '', 'the added module leaves the left node line blank');
-		let addedEnd = addedAt;
-		while (addedEnd < right.length && right[addedEnd] !== '') {
-			addedEnd += 1;
-		}
+		const addedEnd = blockEnd(right, addedAt);
 		assert.deepStrictEqual(
 			right.slice(addedAt, addedEnd),
 			[
@@ -824,13 +850,7 @@ suite('synthetic ECUC document', () => {
 			],
 			'the added module keeps its node line and both brace pairs'
 		);
-		for (let at = addedAt; at < addedEnd; at += 1) {
-			assert.strictEqual(left[at], '', `the missing side of line ${at + 1} stays blank`);
-			assert.ok(
-				!left[at].includes('{') && !left[at].includes('}'),
-				`the missing side of line ${at + 1} has no synthesized brace`
-			);
-		}
+		assertBlockMissing(left, addedAt, addedEnd);
 
 		const sharedAt = left.indexOf('module P.Shared "Shared"');
 		assert.ok(sharedAt > addedEnd, 'the shared module follows both one-sided blocks');

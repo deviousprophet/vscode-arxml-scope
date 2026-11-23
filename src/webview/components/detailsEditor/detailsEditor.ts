@@ -9,6 +9,7 @@
 import './detailsEditor.css';
 import { inspectorElement } from '../../render/dom';
 import type { EditorProviderToWebview } from '../../../webviewProtocol';
+import { getSidebarState, showSidebarSection, showSidebarTab } from '../sidebar/sidebar';
 
 /**
  * True when `data` contains only characters the details control may accept for
@@ -118,6 +119,33 @@ let detailsEditorHost: DetailsEditorHost = {
 
 export function setDetailsEditorHost(host: DetailsEditorHost): void {
 	detailsEditorHost = host || detailsEditorHost;
+}
+
+export interface DetailsEditorHostBase {
+	getRow(id: string): any;
+	getSelectedId(): string | undefined;
+	isDetailsTab(): boolean;
+	showSidebar(): void;
+	showTab(name: string): void;
+	showSection(id: string): void;
+}
+
+/** The selection/tab callbacks every editor page shares. */
+export function detailsEditorHostBase(
+	getRow: (id: string) => any,
+	selectedId: () => string | undefined,
+	showSidebar: () => void
+): DetailsEditorHostBase {
+	return {
+		getRow,
+		getSelectedId: selectedId,
+		isDetailsTab: function () {
+			return getSidebarState().tab === 'details';
+		},
+		showSidebar,
+		showTab: showSidebarTab,
+		showSection: showSidebarSection
+	};
 }
 
 function clearDetailsError(edit: DetailsEdit | null): void {
@@ -406,13 +434,23 @@ export function detailsContainerFields(row: any, data: any, draft?: DetailsConta
 	fields.className = 'inspector-fields';
 	// An absent element has no text range to write; showing an editor for it would offer
 	// an edit the host must refuse (adding an element is out of scope).
-	if (data.shortName) {
-		fields.appendChild(detailsFieldInput(row, 'shortName', 'Short name', data.shortName, draft?.shortName));
-	}
-	if (data.definitionRef) {
-		fields.appendChild(detailsFieldInput(row, 'definitionRef', 'Definition', data.definitionRef, draft?.definitionRef));
-	}
+	appendContainerField(fields, row, 'shortName', 'Short name', data.shortName, draft?.shortName);
+	appendContainerField(fields, row, 'definitionRef', 'Definition', data.definitionRef, draft?.definitionRef);
 	return fields;
+}
+
+function appendContainerField(
+	fields: HTMLDivElement,
+	row: any,
+	field: string,
+	label: string,
+	value: string | undefined,
+	draft: string | undefined
+): void {
+	if (!value) {
+		return;
+	}
+	fields.appendChild(detailsFieldInput(row, field, label, value, draft));
 }
 
 function focusDetailsInput(): boolean {
@@ -455,38 +493,98 @@ function detailsFirstContainerField(row: DetailsRowFields): string | undefined {
 
 /** Update one Details input from the editor's shared draft, preserving its caret. */
 export function syncDetailsField(nodeId: string, field: string, value: string, error?: string): void {
-	const edit = detailsEdits[field];
-	if (!edit || edit.rowId !== nodeId) {
+	const edit = matchingEdit(nodeId, field);
+	if (edit === undefined) {
 		return;
 	}
 	// The error follows the draft, so correcting the text clears it even when the
 	// displayed characters did not change (a refusal, a re-scan, a redundant edit).
-	if (error !== undefined && error !== '') {
-		setDetailsError(edit, error);
-	} else {
-		clearDetailsError(edit);
-	}
+	syncDetailsError(edit, error);
 	// A Boolean select has no option for an invalid draft; keep its last real
 	// option and let the inline error carry the invalid text.
-	if (edit.input instanceof HTMLSelectElement && ![...edit.input.options].some((option) => option.value === value)) {
+	if (selectRejectsValue(edit.input, value)) {
 		return;
 	}
 	if (edit.input.value === value) {
 		return;
 	}
-	const focused = document.activeElement === edit.input;
-	const control = edit.input instanceof HTMLInputElement ? edit.input : undefined;
-	const start = control?.selectionStart ?? undefined;
-	const end = control?.selectionEnd ?? undefined;
+	writeDetailsValue(edit.input, value);
+}
+
+function matchingEdit(nodeId: string, field: string): DetailsEdit | undefined {
+	const edit = detailsEdits[field];
+	if (edit === undefined) {
+		return undefined;
+	}
+	return edit.rowId === nodeId ? edit : undefined;
+}
+
+function selectRejectsValue(input: HTMLInputElement | HTMLSelectElement, value: string): boolean {
+	if (!(input instanceof HTMLSelectElement)) {
+		return false;
+	}
+	return !selectHasOption(input, value);
+}
+
+function syncDetailsError(edit: DetailsEdit, error?: string): void {
+	if (error !== undefined && error !== '') {
+		setDetailsError(edit, error);
+	} else {
+		clearDetailsError(edit);
+	}
+}
+
+function selectHasOption(select: HTMLSelectElement, value: string): boolean {
+	return [...select.options].some((option) => option.value === value);
+}
+
+interface CaretSnapshot {
+	focused: boolean;
+	start: number;
+	end: number;
+	atEnd: boolean;
+}
+
+function writeDetailsValue(input: HTMLInputElement | HTMLSelectElement, value: string): void {
+	const caret = caretSnapshot(input);
+	input.value = value;
+	if (caret === undefined || !caret.focused) {
+		return;
+	}
+	restoreCaret(input, value, caret);
+}
+
+function caretSnapshot(input: HTMLInputElement | HTMLSelectElement): CaretSnapshot | undefined {
+	if (!(input instanceof HTMLInputElement)) {
+		return undefined;
+	}
+	const start = input.selectionStart;
+	if (start === null) {
+		return undefined;
+	}
+	const end = selectedEnd(input, start);
+	return {
+		focused: document.activeElement === input,
+		start,
+		end,
+		atEnd: start === input.value.length && end === start
+	};
+}
+
+function selectedEnd(input: HTMLInputElement, start: number): number {
+	const end = input.selectionEnd;
+	return end === null ? start : end;
+}
+
+function restoreCaret(input: HTMLInputElement | HTMLSelectElement, value: string, caret: CaretSnapshot): void {
+	if (!(input instanceof HTMLInputElement)) {
+		return;
+	}
 	// A caret at the end of the old text follows the draft's end, so a local undo
 	// clamps it and a local redo restores the caret the undone edits ended at.
-	const atEnd = start !== undefined && start === edit.input.value.length && (end === undefined || end === start);
-	edit.input.value = value;
-	if (focused && control !== undefined && start !== undefined) {
-		const position = atEnd === true ? value.length : Math.min(start, value.length);
-		const tail = atEnd === true ? value.length : Math.min(end ?? position, value.length);
-		control.setSelectionRange(position, tail);
-	}
+	const position = caret.atEnd ? value.length : Math.min(caret.start, value.length);
+	const tail = caret.atEnd ? value.length : Math.min(caret.end, value.length);
+	input.setSelectionRange(position, tail);
 }
 
 /** Open the first field of a row (or one named field) in the Details panel. */
@@ -645,12 +743,23 @@ function applyDetailsNotice(message: DetailsNotice): void {
 	if (message.kind !== 'warn') {
 		return;
 	}
-	const focused = Object.values(detailsEdits).find((edit) => document.activeElement === edit.input);
-	const edit = pendingDetailsEdit() ?? focused ?? Object.values(detailsEdits)[0];
+	const edit = noticeTargetEdit();
 	if (!edit) {
 		return;
 	}
 	rejectDetailsEdit(edit, message.message);
+}
+
+function noticeTargetEdit(): DetailsEdit | undefined {
+	return pendingDetailsEdit() ?? focusedDetailsEdit() ?? firstDetailsEdit();
+}
+
+function focusedDetailsEdit(): DetailsEdit | undefined {
+	return Object.values(detailsEdits).find((edit) => document.activeElement === edit.input);
+}
+
+function firstDetailsEdit(): DetailsEdit | undefined {
+	return Object.values(detailsEdits)[0];
 }
 
 function pendingDetailsEdit(): DetailsEdit | undefined {

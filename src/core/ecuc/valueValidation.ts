@@ -16,6 +16,56 @@ import {
 	isXmlRepresentable
 } from './validate';
 
+/** One literal grammar the host applies to a fixed field. */
+interface FieldRule {
+	test(value: string): boolean;
+	error: string;
+}
+
+const FIELD_RULES: Record<string, FieldRule> = {
+	shortName: { test: isShortNameLiteral, error: 'Invalid short name' },
+	definitionRef: { test: isDefinitionRefPath, error: 'Invalid definition reference' }
+};
+
+/**
+ * The parameter-type grammars. These mirror the host's `validate_value`
+ * grammar so an invalid draft never leaves the page; see `validate.ts`.
+ */
+const TYPE_RULES: Record<string, FieldRule> = {
+	Integer: { test: isIntegerLiteral, error: 'Invalid integer value' },
+	Float: { test: isFloatLiteral, error: 'Invalid float value' },
+	Boolean: { test: isBooleanLiteral, error: 'Invalid boolean value' }
+};
+
+function isParameterValue(row: Pick<EcucRow, 'kind' | 'parameterType'>, field: string): boolean {
+	return field === 'value' && row.kind === 'parameter';
+}
+
+function ruleError(rule: FieldRule, value: string): string | undefined {
+	return rule.test(value) ? undefined : rule.error;
+}
+
+function literalFieldError(field: string, value: string): string | undefined {
+	const rule = FIELD_RULES[field];
+	return rule === undefined ? undefined : ruleError(rule, value);
+}
+
+function typeRuleFor(type: string | undefined): FieldRule | undefined {
+	return type === undefined ? undefined : TYPE_RULES[type];
+}
+
+function parameterValueError(
+	row: Pick<EcucRow, 'kind' | 'parameterType'>,
+	field: string,
+	value: string
+): string | undefined {
+	if (!isParameterValue(row, field)) {
+		return undefined;
+	}
+	const rule = typeRuleFor(row.parameterType);
+	return rule === undefined ? undefined : ruleError(rule, value);
+}
+
 /** The reason a draft cannot become a host edit, or `undefined` when it can. */
 export function localValueError(
 	row: Pick<EcucRow, 'kind' | 'parameterType'>,
@@ -25,26 +75,9 @@ export function localValueError(
 	if (!isXmlRepresentable(value)) {
 		return 'XML cannot represent this character';
 	}
-	if (field === 'shortName') {
-		return isShortNameLiteral(value) ? undefined : 'Invalid short name';
+	const literalError = literalFieldError(field, value);
+	if (literalError !== undefined) {
+		return literalError;
 	}
-	if (field === 'definitionRef') {
-		return isDefinitionRefPath(value) ? undefined : 'Invalid definition reference';
-	}
-	if (field !== 'value' || row.kind !== 'parameter') {
-		return undefined;
-	}
-	const type = row.parameterType;
-	// These mirror the host's `validate_value` grammar so an invalid draft never
-	// leaves the page; see `validate.ts`.
-	if (type === 'Integer' && !isIntegerLiteral(value)) {
-		return 'Invalid integer value';
-	}
-	if (type === 'Float' && !isFloatLiteral(value)) {
-		return 'Invalid float value';
-	}
-	if (type === 'Boolean' && !isBooleanLiteral(value)) {
-		return 'Invalid boolean value';
-	}
-	return undefined;
+	return parameterValueError(row, field, value);
 }

@@ -161,9 +161,14 @@ interface PreviewLineChange {
 	modifiedEndLineNumber: number;
 }
 
+interface PreviewDiffSideEditor {
+	getModel(): PreviewDiffModel | null;
+	getDomNode(): HTMLElement | null;
+}
+
 interface PreviewDiffEditor {
-	getOriginalEditor(): { getModel(): PreviewDiffModel | null; getDomNode(): HTMLElement | null };
-	getModifiedEditor(): { getModel(): PreviewDiffModel | null; getDomNode(): HTMLElement | null };
+	getOriginalEditor(): PreviewDiffSideEditor;
+	getModifiedEditor(): PreviewDiffSideEditor;
 	getLineChanges(): PreviewLineChange[] | null;
 }
 
@@ -213,6 +218,51 @@ function labelOf(element: Element): string {
 function isVisible(element: Element): boolean {
 	const style = getComputedStyle(element);
 	return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+}
+
+/** One message the preview page posted to its fake VS Code host. */
+interface PreviewMessage {
+	type?: string;
+	field?: string;
+	value?: string;
+	nodeId?: string;
+	message?: string;
+}
+
+function previewMessages(): PreviewMessage[] {
+	return window.__PREVIEW_MESSAGES__ as PreviewMessage[];
+}
+
+function messagesOfType(type: string): PreviewMessage[] {
+	return previewMessages().filter((posted) => posted.type === type);
+}
+
+function isEditMessage(posted: PreviewMessage): boolean {
+	return posted.type === 'edit';
+}
+
+function isSaveMessage(posted: PreviewMessage): boolean {
+	return posted.type === 'save';
+}
+
+/** `[message]` when `condition` holds, otherwise no issue. */
+function issueWhen(condition: boolean, message: string): string[] {
+	return condition ? [message] : [];
+}
+
+/** The element's trimmed text, or an empty string when it rendered none. */
+function textOf(element: Element): string {
+	return element.textContent?.trim() ?? '';
+}
+
+/** Whether the element exists, is shown and its text matches `expected`. */
+function elementShows(id: string, expected: RegExp): boolean {
+	const element = document.getElementById(id);
+	return element !== null && !element.hidden && expected.test(element.textContent ?? '');
+}
+
+function statusTextOf(id: string): string {
+	return document.getElementById(id)?.textContent ?? '';
 }
 
 function paneAudits(): PaneAudit[] {
@@ -445,77 +495,99 @@ function findHostViolations(): string[] {
 	if (widget === null) {
 		return [];
 	}
-	const issues: string[] = [];
 	const host = widget.closest('#tree, #diff-list');
-	if (host !== null && getComputedStyle(host).overflow !== 'visible') {
-		issues.push('the find-widget host clips the native tooltip');
-	}
 	const main = document.getElementById('main');
-	if (main !== null && getComputedStyle(main).overflow !== 'visible') {
-		issues.push('the editor column clips the native find tooltip');
-	}
-	return issues;
+	return [
+		...issueWhen(
+			host !== null && getComputedStyle(host).overflow !== 'visible',
+			'the find-widget host clips the native tooltip'
+		),
+		...issueWhen(
+			main !== null && getComputedStyle(main).overflow !== 'visible',
+			'the editor column clips the native find tooltip'
+		)
+	];
 }
 
 function violationsOf(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
-	const issues = [
+	return [
 		...stateViolations(state, audit),
 		...toolbarViolations(audit.toolbar),
 		...gutterViolations(audit.gutter),
-		...findHostViolations()
+		...findHostViolations(),
+		...issueWhen(audit.content.pageOverflow, 'the document scrolls horizontally'),
+		...oneSidedStateIssues(state, audit),
+		...pageIssues(state, audit)
 	];
-	if (audit.content.pageOverflow) {
-		issues.push('the document scrolls horizontally');
+}
+
+function oneSidedStateIssues(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
+	if (state.name !== 'diff-one-sided') {
+		return [];
 	}
-	if (state.name === 'diff-one-sided') {
-		issues.push(
-			...(audit.oneSided === undefined
-				? ['the one-sided audit could not read the aligned diff models']
-				: oneSidedViolations(audit.oneSided))
-		);
-	}
-	if (state.page === 'diff') {
-		issues.push(...diffViolations(state, audit));
-	}
-	return issues;
+	return audit.oneSided === undefined
+		? ['the one-sided audit could not read the aligned diff models']
+		: oneSidedViolations(audit.oneSided);
+}
+
+function pageIssues(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
+	return state.page === 'diff' ? diffViolations(state, audit) : [];
+}
+
+type SyntaxSpan = NonNullable<PreviewAudit['syntax']>[number];
+
+function syntaxColor(spans: SyntaxSpan[], text: string): string | undefined {
+	return spans.find((span) => span.text.trim() === text)?.color;
 }
 
 function syntaxColorViolations(audit: Omit<PreviewAudit, 'violations'>): string[] {
 	const spans = audit.syntax ?? [];
-	const colorOf = (text: string): string | undefined =>
-		spans.find((span) => span.text.trim() === text)?.color;
-	const decimal = colorOf('42');
-	const binary = colorOf('0b1010');
-	const text = colorOf('"hello"');
-	const reference = colorOf('P.Syn.Syntax.Target');
-	const conditionName = colorOf('CANIPCORETYPE_SC');
-	const conditionOperator = colorOf('==');
-	const conditionNumber = colorOf('0');
-	const issues: string[] = [];
+	return [
+		...numericColorIssues(syntaxColor(spans, '42'), syntaxColor(spans, '0b1010')),
+		...referenceColorIssues(syntaxColor(spans, '"hello"'), syntaxColor(spans, 'P.Syn.Syntax.Target')),
+		...conditionTokenColorIssues(
+			syntaxColor(spans, 'CANIPCORETYPE_SC'),
+			syntaxColor(spans, '=='),
+			syntaxColor(spans, '0')
+		)
+	];
+}
+
+function numericColorIssues(decimal: string | undefined, binary: string | undefined): string[] {
 	if (binary === undefined || decimal === undefined) {
-		issues.push('the syntax preview did not render the decimal and binary values');
-	} else if (binary !== decimal) {
-		issues.push('a binary value is not using the numeric colour');
+		return ['the syntax preview did not render the decimal and binary values'];
 	}
+	return binary === decimal ? [] : ['a binary value is not using the numeric colour'];
+}
+
+function referenceColorIssues(text: string | undefined, reference: string | undefined): string[] {
 	if (reference === undefined || text === undefined) {
-		issues.push('the syntax preview did not render the text and reference values');
-	} else if (reference === text) {
-		issues.push('a reference value is not using the reference colour');
+		return ['the syntax preview did not render the text and reference values'];
 	}
-	if (
-		conditionName === undefined ||
-		conditionOperator === undefined ||
-		conditionNumber === undefined
-	) {
-		issues.push('the syntax preview did not render the condition tokens');
-	} else if (
-		conditionName === conditionOperator ||
-		conditionOperator === conditionNumber ||
-		conditionName === conditionNumber
-	) {
-		issues.push('a system-condition token is not using its own colour');
+	return reference === text ? ['a reference value is not using the reference colour'] : [];
+}
+
+function conditionTokenColorIssues(
+	name: string | undefined,
+	operator: string | undefined,
+	number: string | undefined
+): string[] {
+	const tokens = [name, operator, number];
+	if (!allDefined(tokens)) {
+		return ['the syntax preview did not render the condition tokens'];
 	}
-	return issues;
+	return conditionTokensDistinct(tokens[0], tokens[1], tokens[2])
+		? []
+		: ['a system-condition token is not using its own colour'];
+}
+
+function allDefined(values: Array<string | undefined>): values is string[] {
+	return values.every((value) => value !== undefined);
+}
+
+function conditionTokensDistinct(name: string, operator: string, number: string): boolean {
+	const doubled = name === operator || operator === number;
+	return !doubled && name !== number;
 }
 
 /** The Dark+ palette the preview resolves; Chromium reports resolved rgb(). */
@@ -543,40 +615,53 @@ const LABEL_COLORS = {
 /** `editor-labels`: a no-label container starts with a string, a labelled one keeps type + string. */
 function labelColorViolations(audit: Omit<PreviewAudit, 'violations'>): string[] {
 	const spans = audit.syntax ?? [];
-	const colorOf = (text: string): string | undefined =>
-		spans.find((span) => span.text.trim() === text)?.color;
-	const issues: string[] = [];
-	const emptyShort = colorOf('"EmptyDef"');
-	if (emptyShort === undefined) {
-		issues.push('the labels preview did not render the no-label container');
-	} else if (emptyShort !== LABEL_COLORS.string) {
-		issues.push(`the no-label short name is ${emptyShort}, not the string colour`);
+	return [
+		...noLabelColorIssues(syntaxColor(spans, '"EmptyDef"')),
+		...labelPairColorIssues(syntaxColor(spans, 'Items'), syntaxColor(spans, '"Items"')),
+		...emptiedSelectionIssues(),
+		...inspectorLabelIssues(),
+		...editorLineViolations('"EmptyDef"', '"EmptyDef" { }'),
+		...editorLineViolations('Items "Items"', 'Items "Items"')
+	];
+}
+
+function noLabelColorIssues(short: string | undefined): string[] {
+	if (short === undefined) {
+		return ['the labels preview did not render the no-label container'];
 	}
-	const label = colorOf('Items');
-	const short = colorOf('"Items"');
+	return short === LABEL_COLORS.string ? [] : [`the no-label short name is ${short}, not the string colour`];
+}
+
+function labelPairColorIssues(label: string | undefined, short: string | undefined): string[] {
 	if (label === undefined || short === undefined) {
-		issues.push('the labels preview did not render the normal container label and short name');
-	} else {
-		if (label !== LABEL_COLORS.type) {
-			issues.push(`the container label is ${label}, not the type colour`);
-		}
-		if (short !== LABEL_COLORS.string) {
-			issues.push(`the container short name is ${short}, not the string colour`);
-		}
+		return ['the labels preview did not render the normal container label and short name'];
 	}
+	return [...labelTypeIssues(label), ...labelShortNameIssues(short)];
+}
+
+function labelTypeIssues(label: string): string[] {
+	return label === LABEL_COLORS.type ? [] : [`the container label is ${label}, not the type colour`];
+}
+
+function labelShortNameIssues(short: string): string[] {
+	return short === LABEL_COLORS.string ? [] : [`the container short name is ${short}, not the string colour`];
+}
+
+function emptiedSelectionIssues(): string[] {
 	const shortNameInput = document.getElementById('details-short-name') as HTMLInputElement | null;
 	if (shortNameInput === null || shortNameInput.value !== 'EmptyDef') {
-		issues.push('the labels preview did not select the no-label container');
-	} else if (document.getElementById('details-definition-ref') !== null) {
-		issues.push('the no-label container shows a definition field');
+		return ['the labels preview did not select the no-label container'];
 	}
+	return document.getElementById('details-definition-ref') !== null
+		? ['the no-label container shows a definition field']
+		: [];
+}
+
+function inspectorLabelIssues(): string[] {
 	const inspectorLabel = document.querySelector('#sb-details-body .inspector-label');
-	if (inspectorLabel === null || inspectorLabel.textContent !== '') {
-		issues.push('the no-label container shows a definition label');
-	}
-	issues.push(...editorLineViolations('"EmptyDef"', '"EmptyDef" { }'));
-	issues.push(...editorLineViolations('Items "Items"', 'Items "Items"'));
-	return issues;
+	return inspectorLabel === null || inspectorLabel.textContent !== ''
+		? ['the no-label container shows a definition label']
+		: [];
 }
 
 /** The condition classes present in the fixture and their expected resolved colours.
@@ -614,339 +699,440 @@ function syscondViolations(audit: Omit<PreviewAudit, 'violations'>): string[] {
 	if (syscond === undefined) {
 		return ['the syscond preview did not record the condition palette'];
 	}
-	const issues: string[] = [];
-	const detailsIssue = syscondPaletteIssue('the Details Condition', (className) => {
-		const token = syscond.details.find((span) => span.className.split(/\s+/).includes(className));
-		return token?.color;
-	});
-	if (detailsIssue !== undefined) {
-		issues.push(detailsIssue);
-	}
+	const editor = audit.syntax ?? [];
 	// The Monaco page paints the Document tree with the same tokenizer; its spans
 	// are the editor's view-line spans, already captured by the syntax audit.
-	const editor = audit.syntax ?? [];
-	const editorIssue = syscondPaletteIssue('the editor condition', (className) => {
-		const text = SYSCOND_TEXT[className];
-		return editor.find((span) => span.text.trim() === text)?.color;
-	});
-	if (editorIssue !== undefined) {
-		issues.push(editorIssue);
-	}
-	if (syscond.panelName !== SYSCOND_COLORS.name) {
-		issues.push(`the Conditions panel name is ${String(syscond.panelName)}, not the syscond colour`);
-	}
-	if (syscond.panelState !== SYSCOND_COLORS.literal) {
-		issues.push(`the Conditions panel state is ${String(syscond.panelState)}, not the literal colour`);
-	}
-	return issues;
+	return [
+		...definedIssue(syscondPaletteIssue('the Details Condition', detailsClassNameColor(syscond))),
+		...definedIssue(syscondPaletteIssue('the editor condition', editorClassNameColor(editor))),
+		...panelNameIssues(syscond.panelName),
+		...panelStateIssues(syscond.panelState)
+	];
 }
 
+function definedIssue(issue: string | undefined): string[] {
+	return issue === undefined ? [] : [issue];
+}
+
+function detailsClassNameColor(syscond: SyscondAudit): (className: string) => string | undefined {
+	return (className) => {
+		const token = syscond.details.find((span) => span.className.split(/\s+/).includes(className));
+		return token?.color;
+	};
+}
+
+function editorClassNameColor(editor: SyntaxSpan[]): (className: string) => string | undefined {
+	return (className) => editor.find((span) => span.text.trim() === SYSCOND_TEXT[className])?.color;
+}
+
+function panelNameIssues(name: string | null): string[] {
+	return name === SYSCOND_COLORS.name
+		? []
+		: [`the Conditions panel name is ${String(name)}, not the syscond colour`];
+}
+
+function panelStateIssues(state: string | null): string[] {
+	return state === SYSCOND_COLORS.literal
+		? []
+		: [`the Conditions panel state is ${String(state)}, not the literal colour`];
+}
+
+type EditorStateIssues = (state: AuditState) => string[];
+
+/** The per-state checks, in the order the audit reports them. */
+const EDITOR_STATE_ISSUES: ReadonlyArray<readonly [string, EditorStateIssues]> = [
+	['editor-dirty', dirtyViolations],
+	['editor-invalid', invalidViolations],
+	['editor-details', (state) => detailsTypingViolations(state, true)],
+	['editor-details-save', (state) => [...detailsTypingViolations(state, false), ...detailsSaveViolations()]],
+	['editor-details-rename', detailsRenameViolations],
+	['editor-rename-refusal', renameRefusalViolations],
+	['editor-rename-late-ack', detailsRenameViolations],
+	['editor-details-undo', detailsUndoViolations],
+	['editor-details-redo', detailsRedoViolations],
+	['editor-delete', deleteEditViolations],
+	['editor-multi-save', multiSaveViolations],
+	['editor-paste', pasteViolations],
+	['editor-stale-save', staleSaveViolations]
+];
+
 function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
-	const issues: string[] = [];
-	if (!audit.ready) {
-		issues.push('the page did not reach previewReady');
-	}
-	if (state.page === 'editor' && document.querySelector('#tree .monaco-editor') === null) {
-		issues.push('the Monaco editor did not mount');
-	}
+	return [
+		...issueWhen(!audit.ready, 'the page did not reach previewReady'),
+		...monacoMountIssues(state),
+		...syntaxStateIssues(state, audit),
+		...editorStateIssues(state),
+		...stickyStateIssues(state, audit),
+		...selectIssues(state, audit),
+		...swapViolations(state, audit.swap)
+	];
+}
+
+function monacoMountIssues(state: AuditState): string[] {
+	const missing = state.page === 'editor' && document.querySelector('#tree .monaco-editor') === null;
+	return issueWhen(missing, 'the Monaco editor did not mount');
+}
+
+function syntaxStateIssues(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
 	if (state.name === 'editor-syntax') {
-		issues.push(...syntaxColorViolations(audit));
+		return syntaxColorViolations(audit);
 	}
 	if (state.name === 'editor-syscond') {
-		issues.push(...syscondViolations(audit));
+		return syscondViolations(audit);
 	}
 	if (state.name === 'editor-labels') {
-		issues.push(...labelColorViolations(audit));
+		return labelColorViolations(audit);
 	}
-	if (state.name === 'editor-dirty') {
-		const status = document.getElementById('editor-dirty-status');
-		if (status === null || status.hidden || !/Unsaved changes/.test(status.textContent ?? '')) {
-			issues.push('the dirty edit did not show the Unsaved changes marker');
-		}
-		const edits = (window.__PREVIEW_MESSAGES__ as Array<{ type?: string; value?: string }>).filter(
-			(message) => message.type === 'edit'
-		);
-		if (edits.length !== 0) {
-			issues.push(`the typing run posted ${edits.length} host edits before Ctrl+S`);
-		}
-	}
-	if (state.name === 'editor-invalid') {
-		const strip = document.getElementById('editor-error-strip');
-		if (strip === null || strip.hidden || !/Invalid value/.test(strip.textContent ?? '')) {
-			issues.push('the invalid edit did not show the page error');
-		}
-		const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
-		if (messages.some((message) => message.type === 'edit')) {
-			issues.push('an invalid edit was posted to the host');
-		}
-		if (messages.some((message) => message.type === 'save')) {
-			issues.push('an invalid edit allowed the document to save');
-		}
-	}
-	if (state.name === 'editor-details') {
-		issues.push(...detailsTypingViolations(state, true));
-	}
-	if (state.name === 'editor-details-save') {
-		issues.push(...detailsTypingViolations(state, false), ...detailsSaveViolations());
-	}
-	if (state.name === 'editor-details-rename') {
-		issues.push(...detailsRenameViolations());
-	}
-	if (state.name === 'editor-rename-refusal') {
-		issues.push(...renameRefusalViolations());
-	}
-	if (state.name === 'editor-rename-late-ack') {
-		issues.push(...detailsRenameViolations());
-	}
-	if (state.name === 'editor-details-undo') {
-		issues.push(...detailsUndoViolations());
-	}
-	if (state.name === 'editor-details-redo') {
-		issues.push(...detailsRedoViolations());
-	}
-	if (state.name === 'editor-delete') {
-		issues.push(...deleteEditViolations());
-	}
-	if (state.name === 'editor-multi-save') {
-		issues.push(...multiSaveViolations());
-	}
-	if (state.name === 'editor-paste') {
-		issues.push(...pasteViolations());
-	}
-	if (state.name === 'editor-stale-save') {
-		issues.push(...staleSaveViolations());
-	}
+	return [];
+}
+
+function editorStateIssues(state: AuditState): string[] {
+	const entry = EDITOR_STATE_ISSUES.find(([name]) => name === state.name);
+	return entry === undefined ? [] : entry[1](state);
+}
+
+function dirtyViolations(): string[] {
+	const edits = messagesOfType('edit');
+	return [
+		...issueWhen(
+			!elementShows('editor-dirty-status', /Unsaved changes/),
+			'the dirty edit did not show the Unsaved changes marker'
+		),
+		...issueWhen(edits.length !== 0, `the typing run posted ${edits.length} host edits before Ctrl+S`)
+	];
+}
+
+function invalidViolations(): string[] {
+	const messages = previewMessages();
+	return [
+		...issueWhen(
+			!elementShows('editor-error-strip', /Invalid value/),
+			'the invalid edit did not show the page error'
+		),
+		...issueWhen(messages.some(isEditMessage), 'an invalid edit was posted to the host'),
+		...issueWhen(messages.some(isSaveMessage), 'an invalid edit allowed the document to save')
+	];
+}
+
+function stickyStateIssues(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
 	if (state.name === 'editor-sticky') {
-		if (audit.sticky === undefined || !audit.sticky.visible) {
-			issues.push('the sticky-scroll widget is not visible');
-		} else if (!audit.sticky.text.includes('Items') || !audit.sticky.text.includes('P.Preview')) {
-			issues.push('the sticky-scroll widget does not show the enclosing module and Items container');
-		}
+		return stickyViolations(audit.sticky);
 	}
-	if (state.name === 'editor' && audit.sticky?.visible === true) {
-		issues.push('the sticky-scroll widget is visible at the top of the document');
+	return hiddenStickyIssues(state, audit.sticky);
+}
+
+function stickyViolations(sticky: PreviewAudit['sticky']): string[] {
+	if (sticky === undefined || !sticky.visible) {
+		return ['the sticky-scroll widget is not visible'];
 	}
-	if (state.select && !audit.selected) {
-		issues.push('the select gesture left no selected row');
-	}
-	issues.push(...swapViolations(state, audit.swap));
-	return issues;
+	return stickyTextIssues(sticky.text);
+}
+
+function stickyTextIssues(text: string): string[] {
+	return issueWhen(
+		!text.includes('Items') || !text.includes('P.Preview'),
+		'the sticky-scroll widget does not show the enclosing module and Items container'
+	);
+}
+
+function hiddenStickyIssues(state: AuditState, sticky: PreviewAudit['sticky']): string[] {
+	const atTop = state.name === 'editor' && sticky?.visible === true;
+	return issueWhen(atTop, 'the sticky-scroll widget is visible at the top of the document');
+}
+
+function selectIssues(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
+	return issueWhen(state.select === true && !audit.selected, 'the select gesture left no selected row');
+}
+
+function detailsValueInput(): HTMLInputElement | null {
+	return document.getElementById('details-value') as HTMLInputElement | null;
+}
+
+function missingDetailsValueIssues(input: HTMLInputElement | null): string[] {
+	return issueWhen(input === null, 'the Details value control did not render');
+}
+
+function detailsFocusIssues(input: HTMLInputElement | null, message: string): string[] {
+	return issueWhen(input !== null && document.activeElement !== input, message);
+}
+
+function detailsCaretIssues(input: HTMLInputElement | null, expected: number, message: string): string[] {
+	return issueWhen(input !== null && input.selectionStart !== expected, message);
+}
+
+function detailsCaretAtEndIssues(input: HTMLInputElement | null, message: string): string[] {
+	return issueWhen(input !== null && input.selectionStart !== input.value.length, message);
+}
+
+function detailsValueIssues(
+	input: HTMLInputElement | null,
+	expected: string,
+	message: (actual: string) => string
+): string[] {
+	return input === null || input.value === expected ? [] : [message(input.value)];
+}
+
+function unsavedMarkerIssues(message: string): string[] {
+	return issueWhen(!elementShows('editor-dirty-status', /Unsaved changes/), message);
+}
+
+function lingeringMarkerIssues(message: string): string[] {
+	return issueWhen(elementShows('editor-dirty-status', /Unsaved changes/), message);
 }
 
 /** The Details state typed locally: focus, caret, one exact repaint and no host edit. */
 function detailsTypingViolations(state: AuditState, expectNoEdit: boolean): string[] {
-	const issues: string[] = [];
-	const input = document.getElementById('details-value') as HTMLInputElement | null;
-	if (input === null) {
-		issues.push('the Details value control did not render');
-	} else {
-		if (document.activeElement !== input) {
-			issues.push('typing in Details dropped focus');
-		}
-		if (input.selectionStart !== input.value.length) {
-			issues.push('typing in Details lost the caret');
-		}
-		if (input.value !== `hello${state.detailsEdit ?? ''}`) {
-			issues.push(`the Details control shows "${input.value}" instead of the typed draft`);
-		}
-	}
-	const status = document.getElementById('editor-dirty-status');
-	if (status === null || status.hidden || !/Unsaved changes/.test(status.textContent ?? '')) {
-		issues.push('the Details draft did not show the Unsaved changes marker');
-	}
-	issues.push(...textLineViolations(`Text = "hello${state.detailsEdit ?? ''}"`));
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
-	if (expectNoEdit && messages.some((message) => message.type === 'edit')) {
-		issues.push('typing in Details posted a host edit before Ctrl+S');
-	}
-	return issues;
+	const draft = `hello${state.detailsEdit ?? ''}`;
+	const input = detailsValueInput();
+	return [
+		...missingDetailsValueIssues(input),
+		...detailsFocusIssues(input, 'typing in Details dropped focus'),
+		...detailsCaretAtEndIssues(input, 'typing in Details lost the caret'),
+		...detailsValueIssues(
+			input,
+			draft,
+			(actual) => `the Details control shows "${actual}" instead of the typed draft`
+		),
+		...unsavedMarkerIssues('the Details draft did not show the Unsaved changes marker'),
+		...textLineViolations(`Text = "${draft}"`),
+		...issueWhen(
+			expectNoEdit && messagesOfType('edit').length > 0,
+			'typing in Details posted a host edit before Ctrl+S'
+		)
+	];
 }
 
 /** A local undo after a Details edit restores the host value and clears the draft. */
 function detailsUndoViolations(): string[] {
-	const issues: string[] = [];
-	const input = document.getElementById('details-value') as HTMLInputElement | null;
-	if (input === null) {
-		issues.push('the Details value control did not render');
-	} else {
-		if (document.activeElement !== input) {
-			issues.push('undo in Details dropped focus');
-		}
-		if (input.value !== 'hello') {
-			issues.push(`undo left the Details control at "${input.value}" instead of the host value`);
-		}
-		if (input.selectionStart !== 5) {
-			issues.push('undo did not clamp the Details caret to the restored value');
-		}
-	}
-	const status = document.getElementById('editor-dirty-status');
-	if (status !== null && !status.hidden && /Unsaved changes/.test(status.textContent ?? '')) {
-		issues.push('undo left the Unsaved changes marker behind');
-	}
-	issues.push(...textLineViolations('Text = "hello"'));
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
-	if (messages.some((message) => message.type === 'edit')) {
-		issues.push('undo posted a host edit');
-	}
-	return issues;
+	const input = detailsValueInput();
+	return [
+		...missingDetailsValueIssues(input),
+		...detailsFocusIssues(input, 'undo in Details dropped focus'),
+		...detailsValueIssues(
+			input,
+			'hello',
+			(actual) => `undo left the Details control at "${actual}" instead of the host value`
+		),
+		...detailsCaretIssues(input, 5, 'undo did not clamp the Details caret to the restored value'),
+		...lingeringMarkerIssues('undo left the Unsaved changes marker behind'),
+		...textLineViolations('Text = "hello"'),
+		...issueWhen(messagesOfType('edit').length > 0, 'undo posted a host edit')
+	];
 }
 
 /** Redo after a local undo restores the draft from Monaco's model stack. */
 function detailsRedoViolations(): string[] {
-	const issues: string[] = [];
-	const input = document.getElementById('details-value') as HTMLInputElement | null;
-	if (input === null) {
-		issues.push('the Details value control did not render');
-	} else {
-		if (document.activeElement !== input) {
-			issues.push('redo in Details dropped focus');
-		}
-		if (input.value !== 'hello updated') {
-			issues.push(`redo left the Details control at "${input.value}" instead of the draft`);
-		}
-		if (input.selectionStart !== 13) {
-			issues.push('redo did not restore the Details caret to the draft end');
-		}
-	}
-	const status = document.getElementById('editor-dirty-status');
-	if (status === null || status.hidden || !/Unsaved changes/.test(status.textContent ?? '')) {
-		issues.push('redo did not restore the Unsaved changes marker');
-	}
-	issues.push(...textLineViolations('Text = "hello updated"'));
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
-	if (messages.some((message) => message.type === 'edit')) {
-		issues.push('redo posted a host edit');
-	}
-	return issues;
+	const input = detailsValueInput();
+	return [
+		...missingDetailsValueIssues(input),
+		...detailsFocusIssues(input, 'redo in Details dropped focus'),
+		...detailsValueIssues(
+			input,
+			'hello updated',
+			(actual) => `redo left the Details control at "${actual}" instead of the draft`
+		),
+		...detailsCaretIssues(input, 13, 'redo did not restore the Details caret to the draft end'),
+		...unsavedMarkerIssues('redo did not restore the Unsaved changes marker'),
+		...textLineViolations('Text = "hello updated"'),
+		...issueWhen(messagesOfType('edit').length > 0, 'redo posted a host edit')
+	];
 }
 
 /** The direct-editor delete scenario ends at one bare textual value and no host edit. */
 function deleteEditViolations(): string[] {
-	const issues: string[] = [];
-	const status = document.getElementById('editor-dirty-status');
-	if (status === null || status.hidden || !/Unsaved changes/.test(status.textContent ?? '')) {
-		issues.push('the delete scenario did not show the Unsaved changes marker');
-	}
-	issues.push(...textLineViolations('Text = "R"'));
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
-	if (messages.some((message) => message.type === 'edit')) {
-		issues.push('a delete/backspace keystroke posted a host edit');
-	}
-	return issues;
+	return [
+		...unsavedMarkerIssues('the delete scenario did not show the Unsaved changes marker'),
+		...textLineViolations('Text = "R"'),
+		...issueWhen(messagesOfType('edit').length > 0, 'a delete/backspace keystroke posted a host edit')
+	];
+}
+
+function shortNameInput(): HTMLInputElement | null {
+	return document.getElementById('details-short-name') as HTMLInputElement | null;
+}
+
+function editCountIssues(count: number, expected: number, message: (count: number) => string): string[] {
+	return count === expected ? [] : [message(count)];
+}
+
+function expectedFieldEditIssues(
+	edit: PreviewMessage,
+	field: string,
+	value: string,
+	message: (pair: string) => string
+): string[] {
+	const actualField = edit.field ?? 'value';
+	const matches = actualField === field && edit.value === value;
+	return matches ? [] : [message(`${String(edit.field)}="${String(edit.value)}"`)];
+}
+
+function newNodeIdIssues(edit: PreviewMessage, message: (nodeId: string) => string): string[] {
+	const nodeId = edit.nodeId;
+	const addressed = nodeId !== undefined && nodeId.includes('/Syntax2#');
+	return addressed ? [] : [message(String(nodeId))];
 }
 
 /** A rename ack arrived before the re-scan: the post-flush keystroke must survive. */
 function detailsRenameViolations(): string[] {
-	const issues: string[] = [];
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{
-		type?: string;
-		field?: string;
-		value?: string;
-		nodeId?: string;
-		message?: string;
-	}>;
-	const edits = messages.filter((message) => message.type === 'edit');
+	const messages = previewMessages();
+	const edits = messagesOfType('edit');
+	return [
+		...editCountIssues(
+			edits.length,
+			2,
+			(count) => `the rename sequence posted ${count} host edits instead of two`
+		),
+		...renameEditIssues(edits),
+		...remapSaveIssues(messages, edits),
+		...issueWhen(
+			messages.some((posted) => (posted.message ?? '').includes('no longer in the file')),
+			'the rename produced a stale-node refusal'
+		),
+		...renameShortNameIssues(shortNameInput())
+	];
+}
+
+function renameEditIssues(edits: PreviewMessage[]): string[] {
 	if (edits.length !== 2) {
-		issues.push(`the rename sequence posted ${edits.length} host edits instead of two`);
-	} else {
-		const first = edits[0];
-		const second = edits[1];
-		if ((first.field ?? 'value') !== 'shortName' || first.value !== 'Syntax2') {
-			issues.push(`the first edit was ${String(first.field)}="${String(first.value)}" instead of the rename`);
-		}
-		if ((second.field ?? 'value') !== 'shortName' || second.value !== 'Syntax23') {
-			issues.push(`the deferred edit was ${String(second.field)}="${String(second.value)}" instead of the full name`);
-		}
-		if (first.nodeId === second.nodeId) {
-			issues.push('the post-flush draft was sent at the pre-rename id');
-		}
-		if (second.nodeId === undefined || !second.nodeId.includes('/Syntax2#')) {
-			issues.push(`the post-flush draft was not addressed at the host's new id (${String(second.nodeId)})`);
-		}
+		return [];
 	}
-	const saves = messages.filter((message) => message.type === 'save');
+	const [first, second] = edits;
+	return [
+		...expectedFieldEditIssues(
+			first,
+			'shortName',
+			'Syntax2',
+			(pair) => `the first edit was ${pair} instead of the rename`
+		),
+		...expectedFieldEditIssues(
+			second,
+			'shortName',
+			'Syntax23',
+			(pair) => `the deferred edit was ${pair} instead of the full name`
+		),
+		...issueWhen(first.nodeId === second.nodeId, 'the post-flush draft was sent at the pre-rename id'),
+		...newNodeIdIssues(
+			second,
+			(nodeId) => `the post-flush draft was not addressed at the host's new id (${nodeId})`
+		)
+	];
+}
+
+function remapSaveIssues(messages: PreviewMessage[], edits: PreviewMessage[]): string[] {
+	if (edits.length !== 2) {
+		return [];
+	}
+	const saves = messages.filter(isSaveMessage);
 	const lastSave = saves[saves.length - 1];
-	if (edits.length === 2 && (lastSave === undefined || messages.indexOf(lastSave) < messages.indexOf(edits[1]))) {
-		issues.push('the save did not follow the remapped edit acknowledgement');
-	}
-	if (messages.some((message) => (message.message ?? '').includes('no longer in the file'))) {
-		issues.push('the rename produced a stale-node refusal');
-	}
-	const input = document.getElementById('details-short-name') as HTMLInputElement | null;
+	const followed = lastSave !== undefined && messages.indexOf(lastSave) > messages.indexOf(edits[1]);
+	return issueWhen(!followed, 'the save did not follow the remapped edit acknowledgement');
+}
+
+function renameShortNameIssues(input: HTMLInputElement | null): string[] {
+	return [
+		...shortNameValueIssues(input, 'Syntax23', {
+			missing: 'the rename state lost the short-name control',
+			value: (actual) => `the post-flush keystroke was lost ("${actual}")`,
+			focus: 'the rename echo dropped Details focus'
+		}),
+		...detailsCaretAtEndIssues(input, 'the rename echo lost the caret')
+	];
+}
+
+function shortNameValueIssues(
+	input: HTMLInputElement | null,
+	expected: string,
+	messages: { missing: string; value: (actual: string) => string; focus: string }
+): string[] {
 	if (input === null) {
-		issues.push('the rename state lost the short-name control');
-	} else {
-		if (input.value !== 'Syntax23') {
-			issues.push(`the post-flush keystroke was lost ("${input.value}")`);
-		}
-		if (document.activeElement !== input) {
-			issues.push('the rename echo dropped Details focus');
-		}
-		if (input.selectionStart !== input.value.length) {
-			issues.push('the rename echo lost the caret');
-		}
+		return [messages.missing];
 	}
-	return issues;
+	return [
+		...detailsValueIssues(input, expected, messages.value),
+		...detailsFocusIssues(input, messages.focus)
+	];
 }
 
 /** A refusal after the rename document landed is recorded at the host's new id. */
 function renameRefusalViolations(): string[] {
-	const issues: string[] = [];
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{
-		type?: string;
-		field?: string;
-		value?: string;
-		nodeId?: string;
-	}>;
-	const edits = messages.filter((message) => message.type === 'edit');
+	const messages = previewMessages();
+	const edits = messagesOfType('edit');
+	const input = shortNameInput();
+	return [
+		...editCountIssues(
+			edits.length,
+			2,
+			(count) => `the rename-refusal sequence posted ${count} host edits instead of two`
+		),
+		...refusalEditIssues(edits),
+		...refusalSaveIssues(messages, edits),
+		...refusalShortNameIssues(input),
+		...inlineRefusalIssues(input),
+		...refusalStatusIssues(),
+		...staleRefusalStatusIssues()
+	];
+}
+
+function refusalEditIssues(edits: PreviewMessage[]): string[] {
 	if (edits.length !== 2) {
-		issues.push(`the rename-refusal sequence posted ${edits.length} host edits instead of two`);
-	} else {
-		const first = edits[0];
-		const second = edits[1];
-		if (second.nodeId === undefined || !second.nodeId.includes('/Syntax2#')) {
-			issues.push(`the refused draft was not addressed at the host's new id (${String(second.nodeId)})`);
-		}
-		if (first.nodeId === second.nodeId) {
-			issues.push('the post-flush draft kept the dead pre-rename id');
-		}
-		if ((second.field ?? 'value') !== 'shortName' || second.value !== 'Syntax23') {
-			issues.push(`the refused edit was ${String(second.field)}="${String(second.value)}" instead of the full name`);
-		}
+		return [];
 	}
-	if (edits.length === 2) {
-		const refusedAt = messages.indexOf(edits[1]);
-		const laterSave = messages.filter((message) => message.type === 'save').some((save) => messages.indexOf(save) > refusedAt);
-		if (laterSave) {
-			issues.push('a refused edit still allowed the document to save');
-		}
+	const [first, second] = edits;
+	return [
+		...newNodeIdIssues(
+			second,
+			(nodeId) => `the refused draft was not addressed at the host's new id (${nodeId})`
+		),
+		...issueWhen(first.nodeId === second.nodeId, 'the post-flush draft kept the dead pre-rename id'),
+		...expectedFieldEditIssues(
+			second,
+			'shortName',
+			'Syntax23',
+			(pair) => `the refused edit was ${pair} instead of the full name`
+		)
+	];
+}
+
+function refusalSaveIssues(messages: PreviewMessage[], edits: PreviewMessage[]): string[] {
+	if (edits.length !== 2) {
+		return [];
 	}
-	const input = document.getElementById('details-short-name') as HTMLInputElement | null;
-	if (input === null) {
-		issues.push('the refusal state lost the short-name control');
-	} else {
-		if (input.value !== 'Syntax23') {
-			issues.push(`the refused draft is not visible ("${input.value}")`);
-		}
-		if (document.activeElement !== input) {
-			issues.push('the refusal dropped Details focus');
-		}
-		if (input.getAttribute('aria-invalid') !== 'true') {
-			issues.push('the refused control is not marked invalid');
-		}
-	}
+	const refusedAt = messages.indexOf(edits[1]);
+	const savedLater = messages.filter(isSaveMessage).some((save) => messages.indexOf(save) > refusedAt);
+	return issueWhen(savedLater, 'a refused edit still allowed the document to save');
+}
+
+function refusalShortNameIssues(input: HTMLInputElement | null): string[] {
+	return [
+		...shortNameValueIssues(input, 'Syntax23', {
+			missing: 'the refusal state lost the short-name control',
+			value: (actual) => `the refused draft is not visible ("${actual}")`,
+			focus: 'the refusal dropped Details focus'
+		}),
+		...ariaInvalidIssues(input)
+	];
+}
+
+function ariaInvalidIssues(input: HTMLInputElement | null): string[] {
+	const invalid = input !== null && input.getAttribute('aria-invalid') !== 'true';
+	return issueWhen(invalid, 'the refused control is not marked invalid');
+}
+
+function inlineRefusalIssues(input: HTMLInputElement | null): string[] {
 	const inline = input?.parentElement?.querySelector('.details-value-error');
-	if (inline === null || inline === undefined || !/refused by the test host/.test(inline.textContent ?? '')) {
-		issues.push('the refusal reason is not shown beside the field');
-	}
-	const status = document.getElementById('details-status');
-	if (status === null || !/refused by the test host/.test(status.textContent ?? '')) {
-		issues.push('the refusal reason is not in the Details status');
-	}
-	if (/no longer in the file/.test(status?.textContent ?? '')) {
-		issues.push('the refusal was reported as a stale node');
-	}
-	return issues;
+	const shown =
+		inline !== null && inline !== undefined && /refused by the test host/.test(inline.textContent ?? '');
+	return issueWhen(!shown, 'the refusal reason is not shown beside the field');
+}
+
+function refusalStatusIssues(): string[] {
+	const shown = /refused by the test host/.test(statusTextOf('details-status'));
+	return issueWhen(!shown, 'the refusal reason is not in the Details status');
+}
+
+function staleRefusalStatusIssues(): string[] {
+	const stale = /no longer in the file/.test(statusTextOf('details-status'));
+	return issueWhen(stale, 'the refusal was reported as a stale node');
 }
 
 /** The rendered `Text = …` line, trimmed, must match exactly. */
@@ -954,71 +1140,107 @@ function textLineViolations(expected: string): string[] {
 	return editorLineViolations('Text = ', expected);
 }
 
-/** The rendered line whose trimmed text starts with `prefix`, compared exactly. */
-function editorLineViolations(prefix: string, expected: string): string[] {
-	const model = (window as unknown as {
-		__ARXML_EDITOR__?: { getModel(): { getLineCount(): number; getLineContent(line: number): string } | null };
-	}).__ARXML_EDITOR__?.getModel();
-	if (model === null || model === undefined) {
-		return ['the Details preview has no Monaco model'];
-	}
+interface PreviewEditorModel {
+	getLineCount(): number;
+	getLineContent(line: number): string;
+}
+
+function previewEditorModel(): PreviewEditorModel | null {
+	const editor = (window as unknown as { __ARXML_EDITOR__?: { getModel(): PreviewEditorModel | null } })
+		.__ARXML_EDITOR__;
+	return editor?.getModel() ?? null;
+}
+
+function findModelLine(model: PreviewEditorModel, prefix: string): string | undefined {
 	for (let line = 1; line <= model.getLineCount(); line += 1) {
 		const text = model.getLineContent(line).trim();
-		if (!text.startsWith(prefix)) {
-			continue;
+		if (text.startsWith(prefix)) {
+			return text;
 		}
-		return text === expected ? [] : [`the editor line shows "${text}" instead of "${expected}"`];
 	}
-	return [`the Details preview has no ${prefix.trim()} line`];
+	return undefined;
+}
+
+/** The rendered line whose trimmed text starts with `prefix`, compared exactly. */
+function editorLineViolations(prefix: string, expected: string): string[] {
+	const model = previewEditorModel();
+	if (model === null) {
+		return ['the Details preview has no Monaco model'];
+	}
+	return lineTextIssues(findModelLine(model, prefix), prefix, expected);
+}
+
+function lineTextIssues(text: string | undefined, prefix: string, expected: string): string[] {
+	if (text === undefined) {
+		return [`the Details preview has no ${prefix.trim()} line`];
+	}
+	return text === expected ? [] : [`the editor line shows "${text}" instead of "${expected}"`];
 }
 
 /** Ctrl+S over two row drafts: two host edits, then one save after both acks. */
 function multiSaveViolations(): string[] {
-	const issues: string[] = [];
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{
-		type?: string;
-		field?: string;
-		value?: string;
-	}>;
-	const edits = messages.filter((message) => message.type === 'edit');
-	const saves = messages.filter((message) => message.type === 'save');
+	const messages = previewMessages();
+	const edits = messages.filter(isEditMessage);
+	const saves = messages.filter(isSaveMessage);
+	return [
+		...editCountIssues(edits.length, 2, (count) => `Ctrl+S posted ${count} edits instead of two`),
+		...twoFieldEditsIssues(edits),
+		...editCountIssues(saves.length, 1, (count) => `Ctrl+S posted ${count} saves instead of one`),
+		...singleSaveOrderIssues(
+			messages,
+			saves,
+			edits[edits.length - 1],
+			'the save was posted before both edits were acknowledged'
+		),
+		...editorLineViolations('Decimal = ', 'Decimal = 427'),
+		...editorLineViolations('Text = ', 'Text = "hello!"'),
+		...shownStripIssues('the multi-row save left an invalid-value error')
+	];
+}
+
+function twoFieldEditsIssues(edits: PreviewMessage[]): string[] {
 	if (edits.length !== 2) {
-		issues.push(`Ctrl+S posted ${edits.length} edits instead of two`);
-	} else {
-		assertFieldEdit(edits[0], '427', 'Decimal', issues);
-		assertFieldEdit(edits[1], 'hello!', 'Text', issues);
+		return [];
 	}
-	if (saves.length !== 1) {
-		issues.push(`Ctrl+S posted ${saves.length} saves instead of one`);
-	} else if (edits.length > 0 && messages.indexOf(saves[0]) < messages.indexOf(edits[edits.length - 1])) {
-		issues.push('the save was posted before both edits were acknowledged');
-	}
-	issues.push(...editorLineViolations('Decimal = ', 'Decimal = 427'));
-	issues.push(...editorLineViolations('Text = ', 'Text = "hello!"'));
-	const strip = document.getElementById('editor-error-strip');
-	if (strip !== null && !strip.hidden) {
-		issues.push('the multi-row save left an invalid-value error');
-	}
-	return issues;
+	return [...fieldEditIssues(edits[0], '427', 'Decimal'), ...fieldEditIssues(edits[1], 'hello!', 'Text')];
 }
 
 /** One value edit carries the row's accepted value and nothing else. */
-function assertFieldEdit(
-	edit: { field?: string; value?: string } | undefined,
-	value: string,
-	label: string,
-	issues: string[]
-): void {
+function fieldEditIssues(edit: PreviewMessage | undefined, value: string, label: string): string[] {
 	if (edit === undefined) {
-		issues.push(`the ${label} edit is missing`);
-		return;
+		return [`the ${label} edit is missing`];
 	}
-	if ((edit.field ?? 'value') !== 'value') {
-		issues.push(`the ${label} edit did not carry the value field`);
+	return [...fieldNameIssues(edit, label), ...fieldValueIssues(edit, value, label)];
+}
+
+function fieldNameIssues(edit: PreviewMessage, label: string): string[] {
+	const field = edit.field ?? 'value';
+	return issueWhen(field !== 'value', `the ${label} edit did not carry the value field`);
+}
+
+function fieldValueIssues(edit: PreviewMessage, value: string, label: string): string[] {
+	return issueWhen(
+		edit.value !== value,
+		`the ${label} edit carried "${String(edit.value)}" instead of "${value}"`
+	);
+}
+
+function singleSaveOrderIssues(
+	messages: PreviewMessage[],
+	saves: PreviewMessage[],
+	lastEdit: PreviewMessage | undefined,
+	message: string
+): string[] {
+	if (saves.length !== 1 || lastEdit === undefined) {
+		return [];
 	}
-	if (edit.value !== value) {
-		issues.push(`the ${label} edit carried "${String(edit.value)}" instead of "${value}"`);
-	}
+	const early = messages.indexOf(saves[0]) < messages.indexOf(lastEdit);
+	return issueWhen(early, message);
+}
+
+function shownStripIssues(message: string): string[] {
+	const strip = document.getElementById('editor-error-strip');
+	return issueWhen(strip !== null && !strip.hidden, message);
 }
 
 /** A newline-containing paste becomes one escaped line and never reaches the host. */
@@ -1034,48 +1256,49 @@ function pasteViolations(): string[] {
 
 /** A draft whose row vanished blocks Ctrl+S and says why. */
 function staleSaveViolations(): string[] {
-	const issues: string[] = [];
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
-	if (messages.some((message) => message.type === 'edit')) {
-		issues.push('the stale draft was posted to the host');
-	}
-	if (messages.some((message) => message.type === 'save')) {
-		issues.push('a stale draft allowed the document to save');
-	}
-	const status = document.getElementById('details-status');
-	if (status === null || !/no longer in the file/.test(status.textContent ?? '')) {
-		issues.push(`the status does not explain the missing node ("${status?.textContent ?? ''}")`);
-	}
-	const strip = document.getElementById('editor-error-strip');
-	if (strip !== null && !strip.hidden) {
-		issues.push('the stale draft was reported as an invalid value');
-	}
-	return issues;
+	const messages = previewMessages();
+	return [
+		...issueWhen(messages.some(isEditMessage), 'the stale draft was posted to the host'),
+		...issueWhen(messages.some(isSaveMessage), 'a stale draft allowed the document to save'),
+		...staleStatusIssues(),
+		...shownStripIssues('the stale draft was reported as an invalid value')
+	];
+}
+
+function staleStatusIssues(): string[] {
+	const text = statusTextOf('details-status');
+	return issueWhen(
+		!/no longer in the file/.test(text),
+		`the status does not explain the missing node ("${text}")`
+	);
 }
 
 /** Ctrl+S sent one raw edit for the textual field, waited for its ack, then saved. */
 function detailsSaveViolations(): string[] {
-	const issues: string[] = [];
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; field?: string; value?: string }>;
-	const edits = messages.filter((message) => message.type === 'edit');
-	const saves = messages.filter((message) => message.type === 'save');
+	const messages = previewMessages();
+	const edits = messages.filter(isEditMessage);
+	const saves = messages.filter(isSaveMessage);
+	return [
+		...editCountIssues(edits.length, 1, (count) => `Ctrl+S posted ${count} edits instead of one`),
+		...detailsEditIssues(edits),
+		...editCountIssues(saves.length, 1, (count) => `Ctrl+S posted ${count} saves after the acknowledgement`),
+		...singleSaveOrderIssues(messages, saves, edits[0], 'the save was posted before the edit acknowledgement')
+	];
+}
+
+function detailsEditIssues(edits: PreviewMessage[]): string[] {
 	if (edits.length !== 1) {
-		issues.push(`Ctrl+S posted ${edits.length} edits instead of one`);
-	} else {
-		const edit = edits[0];
-		if ((edit.field ?? 'value') !== 'value') {
-			issues.push('the Details edit did not carry the value field');
-		}
-		if (edit.value !== 'hello updated') {
-			issues.push(`the Details edit carried "${edit.value}" instead of the raw value`);
-		}
+		return [];
 	}
-	if (saves.length !== 1) {
-		issues.push(`Ctrl+S posted ${saves.length} saves after the acknowledgement`);
-	} else if (edits.length > 0 && messages.indexOf(saves[0]) < messages.indexOf(edits[0])) {
-		issues.push('the save was posted before the edit acknowledgement');
-	}
-	return issues;
+	const edit = edits[0];
+	return [...fieldNameIssues(edit, 'Details'), ...detailsRawValueIssues(edit)];
+}
+
+function detailsRawValueIssues(edit: PreviewMessage): string[] {
+	return issueWhen(
+		edit.value !== 'hello updated',
+		`the Details edit carried "${String(edit.value)}" instead of the raw value`
+	);
 }
 
 function swapViolations(
@@ -1135,36 +1358,51 @@ function usesMonacoDiff(): boolean {
 	return document.querySelector('.monaco-diff-editor') !== null;
 }
 
+const RGBA_COLOR = /^rgba\(\s*[\d.]+[,\s]+[\d.]+[,\s]+[\d.]+[,\s/]+([\d.]+)\)$/i;
+const HEX_ALPHA_COLOR = /^#(?:[0-9a-f]{6})([0-9a-f]{2})$/i;
+const OPAQUE_HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const OPAQUE_RGB_COLOR = /^rgb\(/i;
+
 function colorAlpha(color: string): number | undefined {
-	const rgba = /^rgba\(\s*[\d.]+[,\s]+[\d.]+[,\s]+[\d.]+[,\s/]+([\d.]+)\)$/i.exec(color);
+	const rgba = RGBA_COLOR.exec(color);
 	if (rgba !== null) {
 		return Number(rgba[1]);
 	}
-	const hex = /^#(?:[0-9a-f]{6})([0-9a-f]{2})$/i.exec(color);
-	if (hex !== null) {
-		return parseInt(hex[1], 16) / 255;
-	}
-	if (/^#[0-9a-f]{6}$/i.test(color) || /^rgb\(/i.test(color)) {
-		return 1;
-	}
-	return undefined;
+	return hexAlpha(color) ?? opaqueAlpha(color);
 }
 
+function hexAlpha(color: string): number | undefined {
+	const hex = HEX_ALPHA_COLOR.exec(color);
+	return hex === null ? undefined : parseInt(hex[1], 16) / 255;
+}
+
+function opaqueAlpha(color: string): number | undefined {
+	const opaque = OPAQUE_HEX_COLOR.test(color) || OPAQUE_RGB_COLOR.test(color);
+	return opaque ? 1 : undefined;
+}
+
+const TRANSLUCENT_DIFF_SELECTORS = [
+	'.monaco-diff-editor .line-insert',
+	'.monaco-diff-editor .line-delete',
+	'.monaco-diff-editor .char-insert',
+	'.monaco-diff-editor .char-delete'
+] as const;
+
 function translucentDiffViolations(): string[] {
-	const issues: string[] = [];
-	for (const selector of [
-		'.monaco-diff-editor .line-insert',
-		'.monaco-diff-editor .line-delete',
-		'.monaco-diff-editor .char-insert',
-		'.monaco-diff-editor .char-delete'
-	]) {
-		const element = document.querySelector(selector);
-		const alpha = element === null ? undefined : colorAlpha(getComputedStyle(element).backgroundColor);
-		if (alpha !== undefined && alpha >= 1) {
-			issues.push(`${selector} is opaque; diff fills must stay translucent`);
-		}
-	}
-	return issues;
+	return TRANSLUCENT_DIFF_SELECTORS.flatMap(opaqueFillIssues);
+}
+
+function opaqueFillIssues(selector: string): string[] {
+	const alpha = elementAlpha(selector);
+	return issueWhen(
+		alpha !== undefined && alpha >= 1,
+		`${selector} is opaque; diff fills must stay translucent`
+	);
+}
+
+function elementAlpha(selector: string): number | undefined {
+	const element = document.querySelector(selector);
+	return element === null ? undefined : colorAlpha(getComputedStyle(element).backgroundColor);
 }
 
 function monacoDiffViolations(_state: AuditState): string[] {
@@ -1213,16 +1451,42 @@ function resolvedColor(expression: string): string {
 	return color;
 }
 
-/**
- * Reads the actual aligned models and the rendered placeholder layers. The fake
- * brace regression lived in the model text, so this audit cannot pass on geometry
- * alone: it walks the exact lines of both one-sided blocks.
- */
-function oneSidedAudit(): OneSidedAudit | undefined {
-	const editor = (window as unknown as { __ARXML_DIFF_EDITOR__?: PreviewDiffEditor }).__ARXML_DIFF_EDITOR__;
-	if (editor === undefined) {
-		return undefined;
-	}
+interface OneSidedContext {
+	editor: PreviewDiffEditor;
+	originalEditor: PreviewDiffSideEditor;
+	modifiedEditor: PreviewDiffSideEditor;
+	originalModel: PreviewDiffModel;
+	modifiedModel: PreviewDiffModel;
+	left: string[];
+	right: string[];
+	removedAt: number;
+	addedAt: number;
+	removedEnd: number;
+	addedEnd: number;
+}
+
+interface SideScan {
+	present: boolean;
+	blank: boolean;
+	braces: string[];
+}
+
+interface GutterScan {
+	wrappers: number;
+	neutral: boolean;
+	signsHidden: boolean;
+}
+
+function previewDiffEditor(): PreviewDiffEditor | undefined {
+	return (window as unknown as { __ARXML_DIFF_EDITOR__?: PreviewDiffEditor }).__ARXML_DIFF_EDITOR__;
+}
+
+function diffModels(editor: PreviewDiffEditor): {
+	originalEditor: PreviewDiffSideEditor;
+	modifiedEditor: PreviewDiffSideEditor;
+	originalModel: PreviewDiffModel;
+	modifiedModel: PreviewDiffModel;
+} | undefined {
 	const originalEditor = editor.getOriginalEditor();
 	const modifiedEditor = editor.getModifiedEditor();
 	const originalModel = originalEditor.getModel();
@@ -1230,244 +1494,360 @@ function oneSidedAudit(): OneSidedAudit | undefined {
 	if (originalModel === null || modifiedModel === null) {
 		return undefined;
 	}
-	const left = originalModel.getLinesContent();
-	const right = modifiedModel.getLinesContent();
+	return { originalEditor, modifiedEditor, originalModel, modifiedModel };
+}
+
+function blockEndAt(lines: readonly string[], at: number): number {
+	return at < 0 ? 0 : blockEnd(lines, at);
+}
+
+function oneSidedContext(): OneSidedContext | undefined {
+	const editor = previewDiffEditor();
+	if (editor === undefined) {
+		return undefined;
+	}
+	const models = diffModels(editor);
+	if (models === undefined) {
+		return undefined;
+	}
+	const left = models.originalModel.getLinesContent();
+	const right = models.modifiedModel.getLinesContent();
 	const removedAt = left.indexOf('module P.RemovedMod "RemovedMod"');
 	const addedAt = right.indexOf('module P.AddedMod "AddedMod"');
-	const removedEnd = removedAt < 0 ? 0 : blockEnd(left, removedAt);
-	const addedEnd = addedAt < 0 ? 0 : blockEnd(right, addedAt);
+	return {
+		editor,
+		...models,
+		left,
+		right,
+		removedAt,
+		addedAt,
+		removedEnd: blockEndAt(left, removedAt),
+		addedEnd: blockEndAt(right, addedAt)
+	};
+}
 
-	const missingSideBraces: string[] = [];
-	let missingSideBlank = removedAt >= 0 && addedAt >= 0;
-	for (let at = Math.max(0, removedAt); removedAt >= 0 && at < removedEnd; at += 1) {
-		const line = right[at] ?? '';
-		if (line !== '') {
-			missingSideBlank = false;
-		}
-		if (line.includes('{') || line.includes('}')) {
-			missingSideBraces.push(`right ${at + 1}: ${line}`);
+function scanMissingSide(lines: readonly string[], start: number, end: number, label: string): SideScan {
+	if (start < 0) {
+		return { present: false, blank: true, braces: [] };
+	}
+	return {
+		present: true,
+		blank: equallyBlank(lines, start, end),
+		braces: braceLines(lines, start, end, label)
+	};
+}
+
+function equallyBlank(lines: readonly string[], start: number, end: number): boolean {
+	for (let at = start; at < end; at += 1) {
+		if (lines[at] !== '') {
+			return false;
 		}
 	}
-	for (let at = Math.max(0, addedAt); addedAt >= 0 && at < addedEnd; at += 1) {
-		const line = left[at] ?? '';
-		if (line !== '') {
-			missingSideBlank = false;
-		}
+	return true;
+}
+
+function braceLines(lines: readonly string[], start: number, end: number, label: string): string[] {
+	const braces: string[] = [];
+	for (let at = start; at < end; at += 1) {
+		const line = lines[at];
 		if (line.includes('{') || line.includes('}')) {
-			missingSideBraces.push(`left ${at + 1}: ${line}`);
+			braces.push(`${label} ${at + 1}: ${line}`);
 		}
 	}
+	return braces;
+}
 
-	const placeholderOf = (model: PreviewDiffModel): number[] =>
-		model
-			.getAllDecorations()
-			.filter((decoration) => decorationHasClass(decoration.options, 'arxml-diff-placeholder'))
-			.map((decoration) => decoration.range.startLineNumber);
-	const leftPlaceholders = placeholderOf(originalModel);
-	const rightPlaceholders = placeholderOf(modifiedModel);
-	const realSidePlaceholder =
-		rightPlaceholders.some((line) => addedAt >= 0 && line > addedAt && line <= addedEnd) ||
-		leftPlaceholders.some((line) => removedAt >= 0 && line > removedAt && line <= removedEnd);
+function missingSideScan(c: OneSidedContext): { blank: boolean; braces: string[] } {
+	const right = scanMissingSide(c.right, c.removedAt, c.removedEnd, 'right');
+	const left = scanMissingSide(c.left, c.addedAt, c.addedEnd, 'left');
+	return {
+		blank: right.present && left.present && right.blank && left.blank,
+		braces: [...right.braces, ...left.braces]
+	};
+}
 
-	const originalRoot = originalEditor.getDomNode();
-	const modifiedRoot = modifiedEditor.getDomNode();
-	const sampleElement =
-		originalRoot?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
-		modifiedRoot?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
+function placeholderOf(model: PreviewDiffModel): number[] {
+	return model
+		.getAllDecorations()
+		.filter((decoration) => decorationHasClass(decoration.options, 'arxml-diff-placeholder'))
+		.map((decoration) => decoration.range.startLineNumber);
+}
+
+function realSidePlaceholder(c: OneSidedContext, left: number[], right: number[]): boolean {
+	const onRight = right.some((line) => c.addedAt >= 0 && line > c.addedAt && line <= c.addedEnd);
+	const onLeft = left.some((line) => c.removedAt >= 0 && line > c.removedAt && line <= c.removedEnd);
+	return onRight || onLeft;
+}
+
+function diffRoots(c: OneSidedContext): HTMLElement[] {
+	return [c.originalEditor.getDomNode(), c.modifiedEditor.getDomNode()].filter(
+		(root): root is HTMLElement => root !== null
+	);
+}
+
+function placeholderFill(c: OneSidedContext): string {
+	const sample =
+		c.originalEditor.getDomNode()?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
+		c.modifiedEditor.getDomNode()?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
 		null;
-	const placeholderFill = sampleElement === null ? '' : getComputedStyle(sampleElement).backgroundColor;
-	const neutralFill = resolvedColor('var(--vscode-editor-background)');
+	return sample === null ? '' : getComputedStyle(sample).backgroundColor;
+}
 
-	let gapLines = 0;
+function countGapLines(left: readonly string[], right: readonly string[]): number {
+	let gaps = 0;
 	const lineCount = Math.min(left.length, right.length);
 	for (let at = 0; at < lineCount; at += 1) {
 		if (left[at] === '' && right[at] === '') {
-			gapLines += 1;
+			gaps += 1;
 		}
 	}
+	return gaps;
+}
 
-	const roots = [originalRoot, modifiedRoot].filter((root): root is HTMLElement => root !== null);
-	let placeholderElements = 0;
-	let fillsNeutral = true;
-	let diffFillNeutral = true;
-	let gutterWrappers = 0;
-	let gutterNeutral = true;
-	let signHidden = true;
-	for (const root of roots) {
-		for (const element of Array.from(root.querySelectorAll('.cdr.arxml-diff-placeholder'))) {
-			placeholderElements += 1;
-			if (getComputedStyle(element).backgroundColor !== neutralFill) {
-				fillsNeutral = false;
-			}
-		}
-		for (const fill of Array.from(
-			root.querySelectorAll(
-				'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-insert, ' +
-					'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-delete, ' +
-					'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-insert, ' +
-					'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-delete'
-			)
-		)) {
-			const alpha = colorAlpha(getComputedStyle(fill).backgroundColor);
-			if (alpha !== undefined && alpha > 0) {
-				diffFillNeutral = false;
-			}
-		}
-		for (const wrapper of Array.from(
-			root.querySelectorAll('.margin-view-overlays > div:has(> .arxml-diff-placeholder-margin)')
-		)) {
-			gutterWrappers += 1;
-			const fill = wrapper.querySelector('.gutter-insert, .gutter-delete');
-			if (fill !== null) {
-				const alpha = colorAlpha(getComputedStyle(fill).backgroundColor);
-				if (alpha !== undefined && alpha > 0) {
-					gutterNeutral = false;
-				}
-			}
-			for (const sign of Array.from(wrapper.querySelectorAll('.insert-sign, .delete-sign'))) {
-				if (getComputedStyle(sign).display !== 'none') {
-					signHidden = false;
-				}
-			}
-		}
-	}
+function hasVisibleFill(element: Element): boolean {
+	const alpha = colorAlpha(getComputedStyle(element).backgroundColor);
+	return alpha !== undefined && alpha > 0;
+}
 
-	/** The owning side must keep its own removed/added fill; only placeholders go neutral. */
-	const owningFillVisible = (root: HTMLElement | null, className: 'line-delete' | 'line-insert'): boolean => {
-		if (root === null) {
-			return false;
-		}
-		for (const fill of Array.from(root.querySelectorAll(`.view-overlays > div > .${className}`))) {
-			const wrapper = fill.parentElement;
-			if (wrapper === null) {
-				continue;
-			}
-			const placeholder = Array.from(wrapper.children).some((child) =>
-				child.classList.contains('arxml-diff-placeholder')
-			);
-			if (placeholder) {
-				continue;
-			}
-			const alpha = colorAlpha(getComputedStyle(fill).backgroundColor);
-			if (alpha !== undefined && alpha > 0) {
-				return true;
-			}
-		}
-		return false;
-	};
-	const owningFill = owningFillVisible(originalRoot, 'line-delete') && owningFillVisible(modifiedRoot, 'line-insert');
+function placeholderPaintScan(
+	roots: HTMLElement[],
+	neutralFill: string
+): { elements: number; neutral: boolean } {
+	const elements = roots.flatMap((root) => Array.from(root.querySelectorAll('.cdr.arxml-diff-placeholder')));
+	const neutral = elements.every((element) => getComputedStyle(element).backgroundColor === neutralFill);
+	return { elements: elements.length, neutral };
+}
 
-	const changes = editor.getLineChanges() ?? [];
-	const covers = (start: number, end: number, line: number): boolean =>
-		start > 0 && line >= start && line <= Math.max(start, end);
-	const glyphArrowOn = (model: PreviewDiffModel, line: number): boolean =>
-		model
-			.getAllDecorations()
-			.some(
-				(decoration) =>
-					decoration.range.startLineNumber === line &&
-					typeof decoration.options.glyphMarginClassName === 'string' &&
-					decoration.options.glyphMarginClassName.includes('arxml-merge-arrow')
-			);
+const PLACEHOLDER_DIFF_FILL_SELECTOR =
+	'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-insert, ' +
+	'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-delete, ' +
+	'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-insert, ' +
+	'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-delete';
+const PLACEHOLDER_GUTTER_SELECTOR = '.margin-view-overlays > div:has(> .arxml-diff-placeholder-margin)';
 
+function diffFillNeutral(roots: HTMLElement[]): boolean {
+	return roots.every((root) =>
+		Array.from(root.querySelectorAll(PLACEHOLDER_DIFF_FILL_SELECTOR)).every((fill) => !hasVisibleFill(fill))
+	);
+}
+
+function gutterScan(roots: HTMLElement[]): GutterScan {
+	const scans = roots.flatMap((root) =>
+		Array.from(root.querySelectorAll(PLACEHOLDER_GUTTER_SELECTOR)).map(gutterWrapperScan)
+	);
 	return {
-		originalLines: originalModel.getLineCount(),
-		modifiedLines: modifiedModel.getLineCount(),
-		missingSideBlank,
-		missingSideBraces,
-		owningSideBraces: braceCount(left, removedAt, removedEnd) + braceCount(right, addedAt, addedEnd),
+		wrappers: scans.reduce((total, scan) => total + scan.wrappers, 0),
+		neutral: scans.every((scan) => scan.neutral),
+		signsHidden: scans.every((scan) => scan.signsHidden)
+	};
+}
+
+function gutterWrapperScan(wrapper: Element): GutterScan {
+	const fill = wrapper.querySelector('.gutter-insert, .gutter-delete');
+	const neutral = fill === null || !hasVisibleFill(fill);
+	const signs = Array.from(wrapper.querySelectorAll('.insert-sign, .delete-sign'));
+	return {
+		wrappers: 1,
+		neutral,
+		signsHidden: signs.every((sign) => getComputedStyle(sign).display === 'none')
+	};
+}
+
+/** The owning side must keep its own removed/added fill; only placeholders go neutral. */
+function owningFillVisible(root: HTMLElement | null, className: 'line-delete' | 'line-insert'): boolean {
+	if (root === null) {
+		return false;
+	}
+	return Array.from(root.querySelectorAll(`.view-overlays > div > .${className}`)).some(isOwningFill);
+}
+
+function isOwningFill(fill: Element): boolean {
+	const wrapper = fill.parentElement;
+	if (wrapper === null || hasPlaceholderChild(wrapper)) {
+		return false;
+	}
+	return hasVisibleFill(fill);
+}
+
+function hasPlaceholderChild(wrapper: Element): boolean {
+	return Array.from(wrapper.children).some((child) => child.classList.contains('arxml-diff-placeholder'));
+}
+
+function owningFills(c: OneSidedContext): boolean {
+	return (
+		owningFillVisible(c.originalEditor.getDomNode(), 'line-delete') &&
+		owningFillVisible(c.modifiedEditor.getDomNode(), 'line-insert')
+	);
+}
+
+function lineChangesOf(editor: PreviewDiffEditor): PreviewLineChange[] {
+	return editor.getLineChanges() ?? [];
+}
+
+function covers(start: number, end: number, line: number): boolean {
+	return start > 0 && line >= start && line <= Math.max(start, end);
+}
+
+function isGlyphArrow(decoration: PreviewModelDecoration, line: number): boolean {
+	const glyph = decoration.options.glyphMarginClassName;
+	return (
+		decoration.range.startLineNumber === line &&
+		typeof glyph === 'string' &&
+		glyph.includes('arxml-merge-arrow')
+	);
+}
+
+function glyphArrowOn(model: PreviewDiffModel, line: number): boolean {
+	return model.getAllDecorations().some((decoration) => isGlyphArrow(decoration, line));
+}
+
+function arrowAt(at: number, model: PreviewDiffModel): number {
+	return at >= 0 && glyphArrowOn(model, at + 1) ? 1 : 0;
+}
+
+function owningArrowCount(c: OneSidedContext): number {
+	return arrowAt(c.removedAt, c.originalModel) + arrowAt(c.addedAt, c.modifiedModel);
+}
+
+function removedNavigable(c: OneSidedContext, changes: PreviewLineChange[]): boolean {
+	if (c.removedAt < 0) {
+		return false;
+	}
+	const line = c.removedAt + 1;
+	return changes.some((change) => covers(change.originalStartLineNumber, change.originalEndLineNumber, line));
+}
+
+function addedNavigable(c: OneSidedContext, changes: PreviewLineChange[]): boolean {
+	if (c.addedAt < 0) {
+		return false;
+	}
+	const line = c.addedAt + 1;
+	return changes.some((change) => covers(change.modifiedStartLineNumber, change.modifiedEndLineNumber, line));
+}
+
+function placeholderExpected(c: OneSidedContext, gapLines: number): number {
+	return (
+		c.removedEnd - Math.max(0, c.removedAt) + (c.addedEnd - Math.max(0, c.addedAt)) + 2 * gapLines
+	);
+}
+
+function fillsNeutralScan(scan: { elements: number; neutral: boolean }, expected: number): boolean {
+	return scan.elements > 0 && scan.neutral && scan.elements === expected;
+}
+
+function countedAnd(count: number, value: boolean): boolean {
+	return count > 0 && value;
+}
+
+/**
+ * Reads the actual aligned models and the rendered placeholder layers. The fake
+ * brace regression lived in the model text, so this audit cannot pass on geometry
+ * alone: it walks the exact lines of both one-sided blocks.
+ */
+function oneSidedAudit(): OneSidedAudit | undefined {
+	const context = oneSidedContext();
+	return context === undefined ? undefined : oneSidedValues(context);
+}
+
+function oneSidedValues(c: OneSidedContext): OneSidedAudit {
+	const missing = missingSideScan(c);
+	const leftPlaceholders = placeholderOf(c.originalModel);
+	const rightPlaceholders = placeholderOf(c.modifiedModel);
+	const roots = diffRoots(c);
+	const neutralFill = resolvedColor('var(--vscode-editor-background)');
+	const placeholderPaint = placeholderPaintScan(roots, neutralFill);
+	const gutter = gutterScan(roots);
+	const changes = lineChangesOf(c.editor);
+	const gapLines = countGapLines(c.left, c.right);
+	return {
+		originalLines: c.originalModel.getLineCount(),
+		modifiedLines: c.modifiedModel.getLineCount(),
+		missingSideBlank: missing.blank,
+		missingSideBraces: missing.braces,
+		owningSideBraces:
+			braceCount(c.left, c.removedAt, c.removedEnd) + braceCount(c.right, c.addedAt, c.addedEnd),
 		gapLines,
 		placeholderLines: leftPlaceholders.length + rightPlaceholders.length,
-		placeholderExpected:
-			(removedEnd - Math.max(0, removedAt)) +
-			(addedEnd - Math.max(0, addedAt)) +
-			2 * gapLines,
-		realSidePlaceholder,
-		placeholderFill,
+		placeholderExpected: placeholderExpected(c, gapLines),
+		realSidePlaceholder: realSidePlaceholder(c, leftPlaceholders, rightPlaceholders),
+		placeholderFill: placeholderFill(c),
 		neutralFill,
-		fillsNeutral: placeholderElements > 0 && fillsNeutral && placeholderElements === leftPlaceholders.length + rightPlaceholders.length,
-		diffFillNeutral,
-		owningFill,
-		gutterNeutral: gutterWrappers > 0 && gutterNeutral,
-		signHidden: gutterWrappers > 0 && signHidden,
+		fillsNeutral: fillsNeutralScan(
+			placeholderPaint,
+			leftPlaceholders.length + rightPlaceholders.length
+		),
+		diffFillNeutral: diffFillNeutral(roots),
+		owningFill: owningFills(c),
+		gutterNeutral: countedAnd(gutter.wrappers, gutter.neutral),
+		signHidden: countedAnd(gutter.wrappers, gutter.signsHidden),
 		lineChanges: changes.length,
-		owningArrows:
-			(removedAt >= 0 && glyphArrowOn(originalModel, removedAt + 1) ? 1 : 0) +
-			(addedAt >= 0 && glyphArrowOn(modifiedModel, addedAt + 1) ? 1 : 0),
-		removedNavigable:
-			removedAt >= 0 &&
-			changes.some((change) =>
-				covers(change.originalStartLineNumber, change.originalEndLineNumber, removedAt + 1)
-			),
-		addedNavigable:
-			addedAt >= 0 &&
-			changes.some((change) =>
-				covers(change.modifiedStartLineNumber, change.modifiedEndLineNumber, addedAt + 1)
-			)
+		owningArrows: owningArrowCount(c),
+		removedNavigable: removedNavigable(c, changes),
+		addedNavigable: addedNavigable(c, changes)
 	};
 }
 
 function oneSidedViolations(audit: OneSidedAudit): string[] {
-	const issues: string[] = [];
-	if (audit.originalLines !== audit.modifiedLines) {
-		issues.push(`the aligned models have ${audit.originalLines} and ${audit.modifiedLines} lines`);
-	}
-	if (!audit.missingSideBlank) {
-		issues.push('a missing-side placeholder still has content');
-	}
-	if (audit.missingSideBraces.length > 0) {
-		issues.push(`the missing side synthesized braces (${audit.missingSideBraces.join('; ')})`);
-	}
-	if (audit.owningSideBraces !== ONE_SIDED_FIXTURE.owningBraces) {
-		issues.push(
+	return [
+		...oneSidedModelIssues(audit),
+		...oneSidedPaintIssues(audit),
+		...oneSidedNavigationIssues(audit)
+	];
+}
+
+function oneSidedModelIssues(audit: OneSidedAudit): string[] {
+	return [
+		...issueWhen(
+			audit.originalLines !== audit.modifiedLines,
+			`the aligned models have ${audit.originalLines} and ${audit.modifiedLines} lines`
+		),
+		...issueWhen(!audit.missingSideBlank, 'a missing-side placeholder still has content'),
+		...issueWhen(
+			audit.missingSideBraces.length > 0,
+			`the missing side synthesized braces (${audit.missingSideBraces.join('; ')})`
+		),
+		...issueWhen(
+			audit.owningSideBraces !== ONE_SIDED_FIXTURE.owningBraces,
 			`the owning side has ${audit.owningSideBraces} brace lines, not the ${ONE_SIDED_FIXTURE.owningBraces} in the diff-one-sided fixture`
-		);
-	}
-	if (audit.placeholderLines !== audit.placeholderExpected) {
-		issues.push(
+		),
+		...issueWhen(
+			audit.placeholderLines !== audit.placeholderExpected,
 			`expected ${audit.placeholderExpected} placeholder lines, found ${audit.placeholderLines}`
-		);
-	}
-	if (audit.realSidePlaceholder) {
-		issues.push('a placeholder decoration covers a line that owns a cell');
-	}
-	if (audit.placeholderFill === '' || audit.placeholderFill !== audit.neutralFill) {
-		issues.push(
+		),
+		...issueWhen(audit.realSidePlaceholder, 'a placeholder decoration covers a line that owns a cell')
+	];
+}
+
+function oneSidedPaintIssues(audit: OneSidedAudit): string[] {
+	return [
+		...issueWhen(
+			audit.placeholderFill === '' || audit.placeholderFill !== audit.neutralFill,
 			`the placeholder fill is ${audit.placeholderFill || '<none>'}, not the editor background ${audit.neutralFill}`
-		);
-	}
-	if (!audit.fillsNeutral) {
-		issues.push('a placeholder layer is not painted with the editor background');
-	}
-	if (!audit.diffFillNeutral) {
-		issues.push('a placeholder wrapper keeps Monaco inserted/deleted line or char fill');
-	}
-	if (!audit.owningFill) {
-		issues.push('the owning side lost its inserted/deleted line fill');
-	}
-	if (!audit.gutterNeutral) {
-		issues.push('the placeholder gutter keeps the inserted/deleted line fill');
-	}
-	if (!audit.signHidden) {
-		issues.push('the placeholder gutter keeps the inserted/deleted sign');
-	}
-	if (audit.lineChanges < ONE_SIDED_FIXTURE.minLineChanges) {
-		issues.push(
+		),
+		...issueWhen(!audit.fillsNeutral, 'a placeholder layer is not painted with the editor background'),
+		...issueWhen(
+			!audit.diffFillNeutral,
+			'a placeholder wrapper keeps Monaco inserted/deleted line or char fill'
+		),
+		...issueWhen(!audit.owningFill, 'the owning side lost its inserted/deleted line fill'),
+		...issueWhen(!audit.gutterNeutral, 'the placeholder gutter keeps the inserted/deleted line fill'),
+		...issueWhen(!audit.signHidden, 'the placeholder gutter keeps the inserted/deleted sign')
+	];
+}
+
+function oneSidedNavigationIssues(audit: OneSidedAudit): string[] {
+	return [
+		...issueWhen(
+			audit.lineChanges < ONE_SIDED_FIXTURE.minLineChanges,
 			`the diff has ${audit.lineChanges} line changes, fewer than the ${ONE_SIDED_FIXTURE.minLineChanges} in the diff-one-sided fixture`
-		);
-	}
-	if (audit.owningArrows !== ONE_SIDED_FIXTURE.owningArrows) {
-		issues.push(
+		),
+		...issueWhen(
+			audit.owningArrows !== ONE_SIDED_FIXTURE.owningArrows,
 			`the owning side has ${audit.owningArrows} merge arrows, not the ${ONE_SIDED_FIXTURE.owningArrows} in the diff-one-sided fixture`
-		);
-	}
-	if (!audit.removedNavigable) {
-		issues.push('the removed block is missing from the navigation change list');
-	}
-	if (!audit.addedNavigable) {
-		issues.push('the added block is missing from the navigation change list');
-	}
-	return issues;
+		),
+		...issueWhen(!audit.removedNavigable, 'the removed block is missing from the navigation change list'),
+		...issueWhen(!audit.addedNavigable, 'the added block is missing from the navigation change list')
+	];
 }
 
 function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
@@ -1603,12 +1983,12 @@ export function paneSnapshot(): PaneSnapshot {
 
 function titleOf(id: string): string {
 	const element = document.getElementById(id);
-	return element ? element.textContent?.trim() ?? '' : '';
+	return element === null ? '' : textOf(element);
 }
 
 function changedValue(side: 'left' | 'right'): string {
 	const cell = document.querySelector(`#diff-pane-${side} .diff-row[data-status="changed"] .diff-cell`);
-	return cell ? cell.textContent?.trim() ?? '' : '';
+	return cell === null ? '' : textOf(cell);
 }
 
 function selectedKey(): string | null {
@@ -1626,12 +2006,17 @@ function stickyAudit(): NonNullable<PreviewAudit['sticky']> {
 	}
 	const display = getComputedStyle(widget).display;
 	const rect = widget.getBoundingClientRect();
+	const visible = stickyVisible(display, rect);
 	return {
-		visible: display !== 'none' && rect.height > 0,
+		visible,
 		display,
-		text: widget.textContent?.trim() ?? '',
-		rect: rect.height > 0 ? rectOf(widget) : null
+		text: textOf(widget),
+		rect: visible ? rectOf(widget) : null
 	};
+}
+
+function stickyVisible(display: string, rect: { height: number }): boolean {
+	return display !== 'none' && rect.height > 0;
 }
 
 function syscondAudit(): SyscondAudit {
@@ -1650,7 +2035,12 @@ function syscondAudit(): SyscondAudit {
 }
 
 export function previewAudit(state: AuditState, swapBefore?: PaneSnapshot): PreviewAudit {
-	const base = {
+	const base = auditBase(state, swapBefore);
+	return { ...base, violations: violationsOf(state, base) };
+}
+
+function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAudit, 'violations'> {
+	return {
 		state: state.name,
 		page: state.page,
 		ready: document.body.dataset.previewReady === 'true',
@@ -1661,19 +2051,39 @@ export function previewAudit(state: AuditState, swapBefore?: PaneSnapshot): Prev
 		gutter: gutterAudit(),
 		content: contentAudit(),
 		selected: selectedKey(),
-		swap: swapBefore ? { before: swapBefore, after: paneSnapshot() } : null,
-		sticky: state.page === 'editor' ? stickyAudit() : undefined,
-		syntax: state.page === 'editor'
-			? Array.from(document.querySelectorAll('.monaco-editor .view-line span'))
-				.slice(0, 40)
-				.map((span) => ({
-					text: span.textContent?.slice(0, 32) ?? '',
-					className: typeof span.className === 'string' ? span.className : '',
-					color: getComputedStyle(span).color
-				}))
-			: undefined,
-		syscond: state.page === 'editor' ? syscondAudit() : undefined,
-		oneSided: state.name === 'diff-one-sided' ? oneSidedAudit() : undefined
+		swap: swapSnapshot(swapBefore),
+		sticky: stickyOf(state),
+		syntax: syntaxOf(state),
+		syscond: syscondOf(state),
+		oneSided: oneSidedOf(state)
 	};
-	return { ...base, violations: violationsOf(state, base) };
+}
+
+function swapSnapshot(swapBefore: PaneSnapshot | undefined): { before: PaneSnapshot; after: PaneSnapshot } | null {
+	return swapBefore === undefined ? null : { before: swapBefore, after: paneSnapshot() };
+}
+
+function stickyOf(state: AuditState): PreviewAudit['sticky'] {
+	return state.page === 'editor' ? stickyAudit() : undefined;
+}
+
+function syscondOf(state: AuditState): SyscondAudit | undefined {
+	return state.page === 'editor' ? syscondAudit() : undefined;
+}
+
+function oneSidedOf(state: AuditState): OneSidedAudit | undefined {
+	return state.name === 'diff-one-sided' ? oneSidedAudit() : undefined;
+}
+
+function syntaxOf(state: AuditState): PreviewAudit['syntax'] {
+	if (state.page !== 'editor') {
+		return undefined;
+	}
+	return Array.from(document.querySelectorAll('.monaco-editor .view-line span'))
+		.slice(0, 40)
+		.map((span) => ({
+			text: span.textContent?.slice(0, 32) ?? '',
+			className: typeof span.className === 'string' ? span.className : '',
+			color: getComputedStyle(span).color
+		}));
 }

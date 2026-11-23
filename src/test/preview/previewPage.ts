@@ -13,33 +13,13 @@ import '../../webview/diffMonaco';
 import '../../webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
 import type { PaneSnapshot } from './previewAudit';
+import type { PreviewStateFields } from './previewStateFields';
 
-interface PreviewPayload {
+interface PreviewPayload extends PreviewStateFields {
 	state: string;
 	page: 'diff' | 'editor';
 	message: unknown;
-	merge?: boolean;
-	swap?: boolean;
-	wide?: boolean;
-	pan?: number;
-	jump?: number;
-	select?: boolean;
-	find?: string;
-	edit?: string;
-	detailsEdit?: string;
-	detailsSave?: boolean;
-	detailsUndo?: boolean;
-	detailsRedo?: boolean;
-	deleteEdit?: boolean;
-	detailsRename?: boolean;
-	renameRefusal?: boolean;
-	renameLateAck?: boolean;
 	renameDocument?: { rows: PreviewRow[]; selectedId?: string };
-	multiSave?: boolean;
-	pasteEdit?: boolean;
-	staleSave?: boolean;
-	scrollLine?: number;
-	trySave?: boolean;
 }
 
 interface PreviewCell {
@@ -73,6 +53,38 @@ interface PreviewFindMatch {
 	replaceable?: boolean;
 }
 
+interface PreviewEdit {
+	type?: string;
+	editId?: number;
+	nodeId?: string;
+	value?: string;
+}
+
+interface PreviewModel {
+	getLineCount(): number;
+	getLineContent(line: number): string;
+}
+
+interface PreviewEditorHandle {
+	focus(): void;
+	getModel(): PreviewModel | null;
+	setPosition(position: { lineNumber: number; column: number }): void;
+	setSelection(selection: {
+		startLineNumber: number;
+		startColumn: number;
+		endLineNumber: number;
+		endColumn: number;
+	}): void;
+	trigger(source: string, id: string, args: unknown): void;
+	revealLineInCenter(line: number): void;
+}
+
+interface EditTarget {
+	editor: PreviewEditorHandle;
+	model: PreviewModel;
+	line: number;
+}
+
 declare global {
 	interface Window {
 		__PREVIEW__: PreviewPayload;
@@ -87,9 +99,13 @@ function tick(): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function delay(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** A short timer lets the resize observer and the final layout settle. */
 function settle(): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, 200));
+	return delay(200);
 }
 
 function click(id: string): void {
@@ -217,21 +233,71 @@ function findOccurrence(query: string, text: string | undefined): { start: numbe
 	return start < 0 ? undefined : { start, end: start + query.length };
 }
 
+/** A payload text field that is present and non-empty. */
+function hasText(value: string | undefined): value is string {
+	return value !== undefined && value !== '';
+}
+
+/** Adds a row match only when the row has an id and the text was found. */
+function pushRowMatch(
+	out: PreviewFindMatch[],
+	row: PreviewRow,
+	field: PreviewFindMatch['field'],
+	found: { start: number; end: number } | undefined,
+	extra: Partial<PreviewFindMatch>
+): void {
+	if (row.id === undefined || found === undefined) {
+		return;
+	}
+	out.push({ rowId: row.id, field, ...extra, ...found });
+}
+
+function partCount(meta: Array<{ text: string }> | undefined): number {
+	return meta?.length ?? 0;
+}
+
+function pushMetaMatches(out: PreviewFindMatch[], row: PreviewRow, query: string): void {
+	for (let part = 0; part < partCount(row.meta); part += 1) {
+		pushRowMatch(out, row, 'meta', findOccurrence(query, row.meta?.[part]?.text), { part });
+	}
+}
+
 function rowMatches(row: PreviewRow, query: string): PreviewFindMatch[] {
 	const out: PreviewFindMatch[] = [];
-	const label = findOccurrence(query, row.label);
-	if (label !== undefined && row.id !== undefined) {
-		out.push({ rowId: row.id, field: 'label', ...label });
+	pushRowMatch(out, row, 'label', findOccurrence(query, row.label), {});
+	pushRowMatch(out, row, 'value', findOccurrence(query, row.value), { replaceable: true });
+	pushMetaMatches(out, row, query);
+	return out;
+}
+
+/** Adds a side-cell match only when the text was found. */
+function pushCellMatch(
+	out: PreviewFindMatch[],
+	row: PreviewRow,
+	side: 'left' | 'right',
+	field: PreviewFindMatch['field'],
+	found: { start: number; end: number } | undefined,
+	part?: number
+): void {
+	if (found === undefined) {
+		return;
 	}
-	const value = findOccurrence(query, row.value);
-	if (value !== undefined && row.id !== undefined) {
-		out.push({ rowId: row.id, field: 'value', replaceable: true, ...value });
-	}
-	for (let part = 0; part < (row.meta?.length ?? 0); part += 1) {
-		const found = findOccurrence(query, row.meta?.[part]?.text);
-		if (found !== undefined && row.id !== undefined) {
-			out.push({ rowId: row.id, field: 'meta', part, ...found });
-		}
+	out.push({ key: row.key, side, field, ...(part === undefined ? {} : { part }), ...found });
+}
+
+function shownText(cell: PreviewCell): string | undefined {
+	return cell.shownValue ?? cell.value;
+}
+
+function cellMetaMatches(
+	row: PreviewRow,
+	cell: PreviewCell,
+	side: 'left' | 'right',
+	query: string
+): PreviewFindMatch[] {
+	const out: PreviewFindMatch[] = [];
+	for (let part = 0; part < partCount(cell.meta); part += 1) {
+		pushCellMatch(out, row, side, 'meta', findOccurrence(query, cell.meta?.[part]?.text), part);
 	}
 	return out;
 }
@@ -246,119 +312,170 @@ function cellMatches(
 	if (cell === undefined || row.key === undefined) {
 		return out;
 	}
-	const push = (field: PreviewFindMatch['field'], found: { start: number; end: number } | undefined, part?: number): void => {
-		if (found !== undefined) {
-			out.push({ key: row.key, side, field, ...(part !== undefined ? { part } : {}), ...found });
-		}
-	};
-	push('label', findOccurrence(query, cell.label));
-	push('value', findOccurrence(query, cell.shownValue ?? cell.value));
-	for (let part = 0; part < (cell.meta?.length ?? 0); part += 1) {
-		push('meta', findOccurrence(query, cell.meta?.[part]?.text), part);
-	}
+	pushCellMatch(out, row, side, 'label', findOccurrence(query, cell.label));
+	pushCellMatch(out, row, side, 'value', findOccurrence(query, shownText(cell)));
+	out.push(...cellMetaMatches(row, cell, side, query));
 	return out;
+}
+
+function matchesForRow(row: PreviewRow, page: 'diff' | 'editor', query: string): PreviewFindMatch[] {
+	return page === 'editor'
+		? rowMatches(row, query)
+		: [...cellMatches(row, row.left, 'left', query), ...cellMatches(row, row.right, 'right', query)];
 }
 
 function previewFindResult(
 	page: 'diff' | 'editor',
 	query: string
 ): { matches: PreviewFindMatch[]; total: number; limited: boolean } {
-	const document = (payload.message as { document?: { rows?: PreviewRow[] } }).document;
-	const rows = document?.rows ?? [];
-	const matches: PreviewFindMatch[] = [];
-	for (const row of rows) {
-		if (page === 'editor') {
-			matches.push(...rowMatches(row, query));
-			continue;
-		}
-		matches.push(...cellMatches(row, row.left, 'left', query));
-		matches.push(...cellMatches(row, row.right, 'right', query));
-	}
+	const matches = payloadRows().flatMap((row) => matchesForRow(row, page, query));
 	return { matches, total: matches.length, limited: false };
 }
 
-async function applyFind(): Promise<void> {
-	const query = payload.find;
-	if (query === undefined || query === '') {
-		return;
-	}
+function findRoot(page: 'diff' | 'editor'): string {
+	return page === 'editor' ? '#tree' : '.modified-in-monaco-diff-editor';
+}
+
+function openFindWidget(page: 'diff' | 'editor'): void {
 	const previewWindow = window as unknown as {
 		__ARXML_EDITOR__?: { trigger(source: string, id: string, args: unknown): void };
 		__ARXML_DIFF_EDITOR__?: { getModifiedEditor(): { trigger(source: string, id: string, args: unknown): void } };
 	};
-	if (payload.page === 'editor') {
+	if (page === 'editor') {
 		previewWindow.__ARXML_EDITOR__?.trigger('preview', 'actions.find', null);
-	} else {
-		previewWindow.__ARXML_DIFF_EDITOR__?.getModifiedEditor().trigger('preview', 'actions.find', null);
+		return;
 	}
-	await tick();
-	const root = payload.page === 'editor' ? '#tree' : '.modified-in-monaco-diff-editor';
+	previewWindow.__ARXML_DIFF_EDITOR__?.getModifiedEditor().trigger('preview', 'actions.find', null);
+}
+
+function seedFindInput(root: string, query: string): HTMLTextAreaElement | null {
 	const input = document.querySelector(`${root} .find-widget textarea.input`) as HTMLTextAreaElement | null;
 	if (input === null) {
-		return;
+		return null;
 	}
 	input.focus();
 	input.value = query;
 	input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: query }));
-	await tick();
+	return input;
+}
+
+function findRequestId(query: string): number | undefined {
 	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; query?: string; requestId?: number }>;
-	const request = [...messages]
-		.reverse()
-		.find((message) => message.type === 'find' && message.query === query);
-	if (request?.requestId === undefined) {
-		return;
+	const request = [...messages].reverse().find((message) => message.type === 'find' && message.query === query);
+	return request?.requestId;
+}
+
+/** Posts the find result; false when the page made no find request. */
+function postFindResult(page: 'diff' | 'editor', query: string): boolean {
+	const requestId = findRequestId(query);
+	if (requestId === undefined) {
+		return false;
 	}
-	window.postMessage(
-		{ type: 'findResult', requestId: request.requestId, result: previewFindResult(payload.page, query) },
-		'*'
-	);
-	await tick();
+	window.postMessage({ type: 'findResult', requestId, result: previewFindResult(page, query) }, '*');
+	return true;
+}
+
+function clickNextMatch(root: string): void {
 	const next = document.querySelector(`${root} .find-widget [aria-label^="Next Match"]`) as HTMLElement | null;
 	next?.click();
+}
+
+async function runFind(page: 'diff' | 'editor', query: string): Promise<void> {
+	const root = findRoot(page);
+	openFindWidget(page);
 	await tick();
-	(input as HTMLTextAreaElement | null)?.focus();
+	const input = seedFindInput(root, query);
+	if (input === null || !postFindResult(page, query)) {
+		return;
+	}
+	await tick();
+	clickNextMatch(root);
+	await tick();
+	input.focus();
+}
+
+async function applyFind(): Promise<void> {
+	if (!hasText(payload.find)) {
+		return;
+	}
+	await runFind(payload.page, payload.find);
 }
 
 async function applyDirtyEdit(): Promise<void> {
 	const edit = payload.edit;
-	if (edit === undefined || edit === '') {
+	if (!hasText(edit)) {
 		return;
 	}
-	const editor = (window as unknown as {
-		__ARXML_EDITOR__?: {
-			focus(): void;
-			getModel(): { getLineCount(): number; getLineContent(line: number): string } | null;
-			setPosition(position: { lineNumber: number; column: number }): void;
-			trigger(source: string, id: string, args: unknown): void;
-		};
-	}).__ARXML_EDITOR__;
-	const model = editor?.getModel();
-	if (editor === undefined || model === null || model === undefined) {
+	const target = editTarget('P0000 = ');
+	if (target === undefined) {
 		return;
 	}
-	let line = 0;
-	for (let at = 1; at <= model.getLineCount(); at += 1) {
-		if (model.getLineContent(at).includes('P0000 = ')) {
-			line = at;
-			break;
-		}
-	}
-	if (line === 0) {
-		return;
-	}
-	editor.focus();
-	editor.setPosition({ lineNumber: line, column: model.getLineContent(line).length + 1 });
-	for (const character of edit) {
-		editor.trigger('preview', 'type', { text: character });
-		await new Promise((resolve) => setTimeout(resolve, 40));
-	}
-	await new Promise((resolve) => setTimeout(resolve, 250));
+	target.editor.focus();
+	target.editor.setPosition({ lineNumber: target.line, column: target.model.getLineContent(target.line).length + 1 });
+	await typeSlowly(target.editor, edit);
+	await delay(250);
 	if (payload.trySave === true) {
-		document.dispatchEvent(
-			new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true })
-		);
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		dispatchCtrlS();
+		await delay(50);
 	}
+}
+
+/** Types one character at a time, letting the page apply each keystroke. */
+async function typeSlowly(editor: PreviewEditorHandle, text: string): Promise<void> {
+	for (const character of text) {
+		editor.trigger('preview', 'type', { text: character });
+		await delay(40);
+	}
+}
+
+function typeAll(editor: PreviewEditorHandle, text: string): void {
+	for (const character of text) {
+		editor.trigger('preview', 'type', { text: character });
+	}
+}
+
+function canTypeIn(input: HTMLInputElement | null): input is HTMLInputElement {
+	return input !== null && typeof input.setSelectionRange === 'function';
+}
+
+function insertCharacter(input: HTMLInputElement, character: string): void {
+	const start = input.selectionStart ?? input.value.length;
+	const end = input.selectionEnd ?? start;
+	input.value = input.value.slice(0, start) + character + input.value.slice(end);
+	input.setSelectionRange(start + character.length, start + character.length);
+	input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: character }));
+}
+
+async function typeIntoInput(input: HTMLInputElement, text: string): Promise<void> {
+	input.focus();
+	input.setSelectionRange(input.value.length, input.value.length);
+	for (const character of text) {
+		insertCharacter(input, character);
+		await tick();
+	}
+}
+
+/** The registered Undo/Redo actions route a local draft to the model stack. */
+async function applyDetailsUndo(): Promise<void> {
+	const editor = previewEditor();
+	editor?.trigger('api', 'undo', null);
+	await tick();
+	if (payload.detailsRedo === true) {
+		editor?.trigger('api', 'redo', null);
+		await tick();
+	}
+}
+
+async function saveDetailsEdits(): Promise<void> {
+	if (payload.detailsSave !== true) {
+		return;
+	}
+	dispatchCtrlS();
+	await tick();
+	const edits = postedEdits();
+	await acknowledgeEdits(edits);
+	echoAcceptedValue(edits[0], edits.length + 1);
+	await tick();
 }
 
 /**
@@ -367,68 +484,167 @@ async function applyDirtyEdit(): Promise<void> {
  */
 async function applyDetailsEdit(): Promise<void> {
 	const text = payload.detailsEdit;
-	if (text === undefined || text === '') {
+	if (!hasText(text)) {
 		return;
 	}
 	await tick();
 	const input = document.getElementById('details-value') as HTMLInputElement | null;
-	if (input === null || typeof input.setSelectionRange !== 'function') {
+	if (!canTypeIn(input)) {
 		return;
 	}
-	input.focus();
-	input.setSelectionRange(input.value.length, input.value.length);
-	for (const character of text) {
-		const start = input.selectionStart ?? input.value.length;
-		const end = input.selectionEnd ?? start;
-		input.value = input.value.slice(0, start) + character + input.value.slice(end);
-		input.setSelectionRange(start + character.length, start + character.length);
-		input.dispatchEvent(
-			new InputEvent('input', { bubbles: true, inputType: 'insertText', data: character })
-		);
-		await tick();
-	}
+	await typeIntoInput(input, text);
 	if (payload.detailsUndo === true) {
-		// The registered Undo/Redo actions route a local draft to the model stack.
-		const editor = (window as unknown as {
-			__ARXML_EDITOR__?: { trigger(source: string, id: string, args: unknown): void };
-		}).__ARXML_EDITOR__;
-		editor?.trigger('api', 'undo', null);
-		await tick();
-		if (payload.detailsRedo === true) {
-			editor?.trigger('api', 'redo', null);
-			await tick();
-		}
+		await applyDetailsUndo();
 		return;
 	}
-	if (payload.detailsSave !== true) {
-		return;
-	}
-	document.dispatchEvent(
-		new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true })
-	);
-	await tick();
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; editId?: number; nodeId?: string; value?: string }>;
-	const edits = messages.filter((message) => message.type === 'edit');
-	for (let index = 0; index < edits.length; index += 1) {
-		window.postMessage({ type: 'editResult', editId: edits[index].editId, ok: true, revision: index + 1 }, '*');
-	}
-	await tick();
-	echoAcceptedValue(edits[0], edits.length + 1);
-	await tick();
+	await saveDetailsEdits();
+}
+
+/** The fixture document embedded in the state payload. */
+function messageDocument(): (Record<string, unknown> & { rows?: PreviewRow[] }) | undefined {
+	const message = payload.message as { document?: Record<string, unknown> & { rows?: PreviewRow[] } } | undefined;
+	return message?.document;
+}
+
+function documentRows(): PreviewRow[] | undefined {
+	const rows = messageDocument()?.rows;
+	return Array.isArray(rows) ? rows : undefined;
+}
+
+function payloadRows(): PreviewRow[] {
+	return documentRows() ?? [];
+}
+
+function editValue(edit: { value?: string } | undefined): string {
+	return typeof edit?.value === 'string' ? edit.value : '';
+}
+
+function editNodeId(edit: { nodeId?: string } | undefined): string | undefined {
+	return typeof edit?.nodeId === 'string' ? edit.nodeId : undefined;
+}
+
+function replaceValue(rows: PreviewRow[], nodeId: string, value: string): PreviewRow[] {
+	return rows.map((row) => (row.id === nodeId ? { ...row, value, shownValue: `"${value}"` } : row));
 }
 
 /** The re-scan after an accepted edit: the host posts the row with its new value. */
 function echoAcceptedValue(edit: { nodeId?: string; value?: string } | undefined, revision: number): void {
-	const message = payload.message as { document?: Record<string, unknown> & { rows?: PreviewRow[] } } | undefined;
-	const document = message?.document;
-	if (document === undefined || !Array.isArray(document.rows) || typeof edit?.nodeId !== 'string') {
+	const documentPayload = messageDocument();
+	const rows = documentRows();
+	const nodeId = editNodeId(edit);
+	if (documentPayload === undefined || rows === undefined || nodeId === undefined) {
 		return;
 	}
-	const value = typeof edit.value === 'string' ? edit.value : '';
-	const rows = document.rows.map((row) =>
-		row.id === edit.nodeId ? { ...row, value, shownValue: `"${value}"` } : row
+	const value = editValue(edit);
+	window.postMessage(
+		{ type: 'document', document: { ...documentPayload, rows: replaceValue(rows, nodeId, value), revision, dirty: true } },
+		'*'
 	);
-	window.postMessage({ type: 'document', document: { ...document, rows, revision, dirty: true } }, '*');
+}
+
+function postedEdits(): PreviewEdit[] {
+	const messages = window.__PREVIEW_MESSAGES__ as PreviewEdit[];
+	return messages.filter((message) => message.type === 'edit');
+}
+
+async function acknowledgeEdits(edits: PreviewEdit[]): Promise<void> {
+	for (let index = 0; index < edits.length; index += 1) {
+		window.postMessage({ type: 'editResult', editId: edits[index].editId, ok: true, revision: index + 1 }, '*');
+	}
+	await tick();
+}
+
+function renameInput(): HTMLInputElement | undefined {
+	const input = document.getElementById('details-short-name') as HTMLInputElement | null;
+	return canTypeIn(input) ? input : undefined;
+}
+
+function typeAtCaret(input: HTMLInputElement, text: string): void {
+	const start = input.selectionStart ?? input.value.length;
+	input.value = input.value.slice(0, start) + text + input.value.slice(start);
+	input.setSelectionRange(start + text.length, start + text.length);
+	input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+}
+
+function caretAtEnd(input: HTMLInputElement): void {
+	input.focus();
+	input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function acknowledgeRename(first: PreviewEdit | undefined, echo: { selectedId?: string }): void {
+	if (first?.editId === undefined) {
+		return;
+	}
+	// The host owns the id: the ack carries the renamed container's new id so the
+	// page never re-derives it from the short name.
+	window.postMessage(
+		{
+			type: 'editResult',
+			editId: first.editId,
+			ok: true,
+			revision: 1,
+			...(echo.selectedId === undefined ? {} : { nextNodeId: echo.selectedId })
+		},
+		'*'
+	);
+}
+
+async function renameFirstSave(input: HTMLInputElement, echo: { selectedId?: string }): Promise<PreviewEdit | undefined> {
+	caretAtEnd(input);
+	typeAtCaret(input, '2');
+	await tick();
+	// First Ctrl+S: one rename edit.
+	dispatchCtrlS();
+	await tick();
+	const first = postedEdits()[0];
+	// The host normally answers before its re-scan; the late-ack state reverses that
+	// to prove the page keeps the caret across a document-first rebuild.
+	if (payload.renameLateAck !== true) {
+		acknowledgeRename(first, echo);
+		await tick();
+	}
+	return first;
+}
+
+async function renameSecondSave(input: HTMLInputElement): Promise<void> {
+	// The new id has not arrived yet. Keep typing and save again: this draft must
+	// wait for the re-scan instead of being sent at the pre-rename id.
+	caretAtEnd(input);
+	typeAtCaret(input, '3');
+	await tick();
+	dispatchCtrlS();
+	await tick();
+}
+
+async function renameRescan(echo: { selectedId?: string }, first: PreviewEdit | undefined): Promise<void> {
+	window.postMessage({ type: 'document', document: { ...echo, revision: 2, dirty: true } }, '*');
+	await tick();
+	if (payload.renameLateAck === true) {
+		acknowledgeRename(first, echo);
+		await tick();
+	}
+}
+
+function postRenameResult(second: PreviewEdit | undefined): void {
+	if (second?.editId === undefined) {
+		return;
+	}
+	if (payload.renameRefusal === true) {
+		// The host refuses the post-flush rename: the draft is now addressed at the
+		// new id, so the refusal and the inline error must be recorded there.
+		window.postMessage(
+			{
+				type: 'editResult',
+				editId: second.editId,
+				ok: false,
+				reason: 'the short name is refused by the test host',
+				revision: 3
+			},
+			'*'
+		);
+		return;
+	}
+	window.postMessage({ type: 'editResult', editId: second.editId, ok: true, revision: 3 }, '*');
 }
 
 /**
@@ -443,85 +659,30 @@ async function applyDetailsRename(): Promise<void> {
 		return;
 	}
 	await tick();
-	const input = document.getElementById('details-short-name') as HTMLInputElement | null;
-	if (input === null || typeof input.setSelectionRange !== 'function') {
+	const input = renameInput();
+	if (input === undefined) {
 		return;
 	}
-	const type = (text: string): void => {
-		const start = input.selectionStart ?? input.value.length;
-		input.value = input.value.slice(0, start) + text + input.value.slice(start);
-		input.setSelectionRange(start + text.length, start + text.length);
-		input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
-	};
-	input.focus();
-	input.setSelectionRange(input.value.length, input.value.length);
-	type('2');
+	const first = await renameFirstSave(input, echo);
+	await renameSecondSave(input);
+	await renameRescan(echo, first);
+	postRenameResult(postedEdits()[1]);
 	await tick();
-	// First Ctrl+S: one rename edit.
-	dispatchCtrlS();
-	await tick();
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; editId?: number }>;
-	const first = messages.find((message) => message.type === 'edit');
-	const acknowledgeRename = (): void => {
-		if (first?.editId === undefined) {
-			return;
-		}
-		// The host owns the id: the ack carries the renamed container's new id so the
-		// page never re-derives it from the short name.
-		window.postMessage(
-			{
-				type: 'editResult',
-				editId: first.editId,
-				ok: true,
-				revision: 1,
-				...(echo.selectedId === undefined ? {} : { nextNodeId: echo.selectedId })
-			},
-			'*'
-		);
-	};
-	// The host normally answers before its re-scan; the late-ack state reverses that
-	// to prove the page keeps the caret across a document-first rebuild.
-	if (payload.renameLateAck !== true) {
-		acknowledgeRename();
-		await tick();
-	}
-	// The new id has not arrived yet. Keep typing and save again: this draft must
-	// wait for the re-scan instead of being sent at the pre-rename id.
-	input.focus();
-	input.setSelectionRange(input.value.length, input.value.length);
-	type('3');
-	await tick();
-	dispatchCtrlS();
-	await tick();
-	window.postMessage({ type: 'document', document: { ...echo, revision: 2, dirty: true } }, '*');
-	await tick();
-	if (payload.renameLateAck === true) {
-		acknowledgeRename();
-		await tick();
-	}
-	const edits = (window.__PREVIEW_MESSAGES__ as Array<{ type?: string; editId?: number }>).filter(
-		(message) => message.type === 'edit'
-	);
-	const second = edits[1];
-	if (second?.editId !== undefined) {
-		if (payload.renameRefusal === true) {
-			// The host refuses the post-flush rename: the draft is now addressed at the
-			// new id, so the refusal and the inline error must be recorded there.
-			window.postMessage(
-				{
-					type: 'editResult',
-					editId: second.editId,
-					ok: false,
-					reason: 'the short name is refused by the test host',
-					revision: 3
-				},
-				'*'
-			);
-		} else {
-			window.postMessage({ type: 'editResult', editId: second.editId, ok: true, revision: 3 }, '*');
-		}
-	}
-	await tick();
+}
+
+function rawRangeAt(model: PreviewModel, line: number): { start: number; end: number } {
+	const text = model.getLineContent(line);
+	return { start: text.indexOf('"') + 2, end: text.lastIndexOf('"') + 1 };
+}
+
+function replaceRaw(editor: PreviewEditorHandle, model: PreviewModel, line: number): void {
+	const range = rawRangeAt(model, line);
+	editor.setSelection({
+		startLineNumber: line,
+		startColumn: range.start,
+		endLineNumber: line,
+		endColumn: range.end
+	});
 }
 
 /**
@@ -532,96 +693,37 @@ async function applyDeleteEdit(): Promise<void> {
 	if (payload.deleteEdit !== true) {
 		return;
 	}
-	const editor = (window as unknown as {
-		__ARXML_EDITOR__?: {
-			focus(): void;
-			getModel(): { getLineCount(): number; getLineContent(line: number): string } | null;
-			setPosition(position: { lineNumber: number; column: number }): void;
-			setSelection(selection: {
-				startLineNumber: number;
-				startColumn: number;
-				endLineNumber: number;
-				endColumn: number;
-			}): void;
-			trigger(source: string, id: string, args: unknown): void;
-		};
-	}).__ARXML_EDITOR__;
-	const model = editor?.getModel();
-	if (editor === undefined || model === null || model === undefined) {
+	const target = editTarget('Text = ');
+	if (target === undefined) {
 		return;
 	}
-	let line = 0;
-	for (let at = 1; at <= model.getLineCount(); at += 1) {
-		if (model.getLineContent(at).includes('Text = ')) {
-			line = at;
-			break;
-		}
-	}
-	if (line === 0) {
-		return;
-	}
-	const rawRange = (): { start: number; end: number } => {
-		const text = model.getLineContent(line);
-		const open = text.indexOf('"');
-		const close = text.lastIndexOf('"');
-		return { start: open + 2, end: close + 1 };
-	};
-	const placeAtEnd = (): void => {
-		const range = rawRange();
-		editor.setPosition({ lineNumber: line, column: range.end });
-	};
-	const replaceRaw = (): void => {
-		const range = rawRange();
-		editor.setSelection({
-			startLineNumber: line,
-			startColumn: range.start,
-			endLineNumber: line,
-			endColumn: range.end
-		});
-	};
+	const { editor, model, line } = target;
 	editor.focus();
-	placeAtEnd();
-	for (const character of 'XYZ') {
-		editor.trigger('preview', 'type', { text: character });
-	}
+	placeAtRawEnd(line);
+	typeAll(editor, 'XYZ');
 	editor.trigger('preview', 'deleteLeft', {});
 	editor.trigger('preview', 'deleteWordLeft', {});
-	for (const character of 'new') {
-		editor.trigger('preview', 'type', { text: character });
-	}
+	typeAll(editor, 'new');
 	await tick();
-	replaceRaw();
+	replaceRaw(editor, model, line);
 	editor.trigger('preview', 'type', { text: 'Q' });
 	await tick();
-	replaceRaw();
+	replaceRaw(editor, model, line);
 	editor.trigger('preview', 'deleteLeft', {});
 	await tick();
 	editor.trigger('preview', 'type', { text: 'R' });
 	await tick();
 }
 
-interface PreviewEditorHandle {
-	focus(): void;
-	getModel(): { getLineCount(): number; getLineContent(line: number): string } | null;
-	setPosition(position: { lineNumber: number; column: number }): void;
-	setSelection(selection: {
-		startLineNumber: number;
-		startColumn: number;
-		endLineNumber: number;
-		endColumn: number;
-	}): void;
-	trigger(source: string, id: string, args: unknown): void;
-}
-
 function previewEditor(): PreviewEditorHandle | undefined {
 	return (window as unknown as { __ARXML_EDITOR__?: PreviewEditorHandle }).__ARXML_EDITOR__;
 }
 
-function modelLineStartingWith(prefix: string): number {
-	const model = previewEditor()?.getModel();
-	if (model === null || model === undefined) {
-		return 0;
-	}
+function currentModel(): PreviewModel | undefined {
+	return previewEditor()?.getModel() ?? undefined;
+}
+
+function lineNumberIn(model: PreviewModel, prefix: string): number {
 	for (let line = 1; line <= model.getLineCount(); line += 1) {
 		if (model.getLineContent(line).includes(prefix)) {
 			return line;
@@ -630,20 +732,61 @@ function modelLineStartingWith(prefix: string): number {
 	return 0;
 }
 
+function modelLine(prefix: string): { model: PreviewModel; line: number } | undefined {
+	const model = currentModel();
+	if (model === undefined) {
+		return undefined;
+	}
+	const line = lineNumberIn(model, prefix);
+	return line === 0 ? undefined : { model, line };
+}
+
+/** The editor, model and first line containing `prefix`, when all exist. */
+function editTarget(prefix: string): EditTarget | undefined {
+	const editor = previewEditor();
+	const at = modelLine(prefix);
+	if (editor === undefined || at === undefined) {
+		return undefined;
+	}
+	return { editor, model: at.model, line: at.line };
+}
+
 /** Caret at the end of the raw field text, before a closing syntax quote. */
 function placeAtRawEnd(line: number): void {
 	const editor = previewEditor();
-	const model = editor?.getModel();
-	if (editor === undefined || model === null || model === undefined) {
+	const model = currentModel();
+	if (editor === undefined || model === undefined) {
 		return;
 	}
-	const text = model.getLineContent(line);
+	editor.setPosition({ lineNumber: line, column: rawEndColumn(model.getLineContent(line)) });
+}
+
+function rawEndColumn(text: string): number {
 	const close = text.lastIndexOf('"');
-	editor.setPosition({ lineNumber: line, column: close < 0 ? text.length + 1 : close + 1 });
+	return close < 0 ? text.length + 1 : close + 1;
 }
 
 function dispatchCtrlS(): void {
 	document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true }));
+}
+
+function editsToValues(edits: Array<{ nodeId?: string; value?: string }>): Map<string, string> {
+	const values = new Map<string, string>();
+	for (const edit of edits) {
+		const nodeId = editNodeId(edit);
+		if (nodeId !== undefined) {
+			values.set(nodeId, editValue(edit));
+		}
+	}
+	return values;
+}
+
+function revalueRow(row: PreviewRow, values: Map<string, string>): PreviewRow {
+	const value = row.id === undefined ? undefined : values.get(row.id);
+	if (value === undefined) {
+		return row;
+	}
+	return { ...row, value, shownValue: row.valueKind === 'textual' ? `"${value}"` : value };
 }
 
 /** The host's re-scan after accepted edits: both rows carry their new values. */
@@ -651,25 +794,17 @@ function echoAcceptedEdits(
 	edits: Array<{ nodeId?: string; value?: string }>,
 	revision: number
 ): void {
-	const message = payload.message as { document?: Record<string, unknown> & { rows?: PreviewRow[] } } | undefined;
-	const documentPayload = message?.document;
-	if (documentPayload === undefined || !Array.isArray(documentPayload.rows)) {
+	const documentPayload = messageDocument();
+	const rows = documentRows();
+	if (documentPayload === undefined || rows === undefined) {
 		return;
 	}
-	const values = new Map<string, string>();
-	for (const edit of edits) {
-		if (typeof edit.nodeId === 'string') {
-			values.set(edit.nodeId, typeof edit.value === 'string' ? edit.value : '');
-		}
-	}
-	const rows = documentPayload.rows.map((row) => {
-		const value = row.id === undefined ? undefined : values.get(row.id);
-		if (value === undefined) {
-			return row;
-		}
-		return { ...row, value, shownValue: row.valueKind === 'textual' ? `"${value}"` : value };
-	});
-	window.postMessage({ type: 'document', document: { ...documentPayload, rows, revision, dirty: true } }, '*');
+	const values = editsToValues(edits);
+	const revalued = rows.map((row) => revalueRow(row, values));
+	window.postMessage(
+		{ type: 'document', document: { ...documentPayload, rows: revalued, revision, dirty: true } },
+		'*'
+	);
 }
 
 /**
@@ -680,37 +815,40 @@ async function applyMultiSave(): Promise<void> {
 	if (payload.multiSave !== true) {
 		return;
 	}
-	const editor = previewEditor();
-	const model = editor?.getModel();
-	if (editor === undefined || model === null || model === undefined) {
+	const decimal = editTarget('Decimal = ');
+	const text = editTarget('Text = ');
+	if (decimal === undefined || text === undefined) {
 		return;
 	}
-	const decimal = modelLineStartingWith('Decimal = ');
-	const text = modelLineStartingWith('Text = ');
-	if (decimal === 0 || text === 0) {
-		return;
-	}
-	editor.focus();
-	editor.setPosition({ lineNumber: decimal, column: model.getLineContent(decimal).length + 1 });
-	editor.trigger('preview', 'type', { text: '7' });
-	placeAtRawEnd(text);
-	editor.trigger('preview', 'type', { text: '!' });
+	decimal.editor.focus();
+	decimal.editor.setPosition({
+		lineNumber: decimal.line,
+		column: decimal.model.getLineContent(decimal.line).length + 1
+	});
+	decimal.editor.trigger('preview', 'type', { text: '7' });
+	placeAtRawEnd(text.line);
+	text.editor.trigger('preview', 'type', { text: '!' });
 	await tick();
 	dispatchCtrlS();
 	await tick();
-	const messages = window.__PREVIEW_MESSAGES__ as Array<{
-		type?: string;
-		editId?: number;
-		nodeId?: string;
-		value?: string;
-	}>;
-	const edits = messages.filter((message) => message.type === 'edit');
-	for (let index = 0; index < edits.length; index += 1) {
-		window.postMessage({ type: 'editResult', editId: edits[index].editId, ok: true, revision: index + 1 }, '*');
-	}
-	await tick();
+	const edits = postedEdits();
+	await acknowledgeEdits(edits);
 	echoAcceptedEdits(edits, edits.length + 1);
 	await tick();
+}
+
+function pasteEvent(): Event {
+	const paste = new Event('paste', { bubbles: true, cancelable: true });
+	Object.defineProperty(paste, 'clipboardData', {
+		value: { getData: (type: string) => (type === 'text/plain' ? '\nsecond' : '') }
+	});
+	return paste;
+}
+
+function dispatchPaste(paste: Event): void {
+	const area = document.querySelector('#tree .monaco-editor textarea');
+	const target = area ?? document.getElementById('tree');
+	target?.dispatchEvent(paste);
 }
 
 /**
@@ -722,25 +860,30 @@ async function applyPasteEdit(): Promise<void> {
 	if (payload.pasteEdit !== true) {
 		return;
 	}
-	const editor = previewEditor();
-	const model = editor?.getModel();
-	if (editor === undefined || model === null || model === undefined) {
+	const target = editTarget('Text = ');
+	if (target === undefined) {
 		return;
 	}
-	const line = modelLineStartingWith('Text = ');
-	if (line === 0) {
+	target.editor.focus();
+	placeAtRawEnd(target.line);
+	await tick();
+	dispatchPaste(pasteEvent());
+	await tick();
+}
+
+function postStaleRescan(): void {
+	const documentPayload = messageDocument();
+	const rows = documentRows();
+	if (documentPayload === undefined || rows === undefined) {
 		return;
 	}
-	editor.focus();
-	placeAtRawEnd(line);
-	await tick();
-	const paste = new Event('paste', { bubbles: true, cancelable: true });
-	Object.defineProperty(paste, 'clipboardData', {
-		value: { getData: (type: string) => (type === 'text/plain' ? '\nsecond' : '') }
-	});
-	const target = document.querySelector('#tree .monaco-editor textarea') ?? document.getElementById('tree');
-	target?.dispatchEvent(paste);
-	await tick();
+	// Another client removed the edited parameter; the host re-scan no longer has it.
+	const remaining = rows.filter((row) => row.label !== 'Text');
+	const selectedId = remaining.find((row) => row.kind === 'container')?.id;
+	window.postMessage(
+		{ type: 'document', document: { ...documentPayload, rows: remaining, selectedId, revision: 2, dirty: true } },
+		'*'
+	);
 }
 
 /**
@@ -751,31 +894,15 @@ async function applyStaleSave(): Promise<void> {
 	if (payload.staleSave !== true) {
 		return;
 	}
-	const editor = previewEditor();
-	const model = editor?.getModel();
-	if (editor === undefined || model === null || model === undefined) {
+	const target = editTarget('Text = ');
+	if (target === undefined) {
 		return;
 	}
-	const line = modelLineStartingWith('Text = ');
-	if (line === 0) {
-		return;
-	}
-	editor.focus();
-	placeAtRawEnd(line);
-	editor.trigger('preview', 'type', { text: '!' });
+	target.editor.focus();
+	placeAtRawEnd(target.line);
+	target.editor.trigger('preview', 'type', { text: '!' });
 	await tick();
-	const message = payload.message as { document?: Record<string, unknown> & { rows?: PreviewRow[] } } | undefined;
-	const documentPayload = message?.document;
-	if (documentPayload === undefined || !Array.isArray(documentPayload.rows)) {
-		return;
-	}
-	// Another client removed the edited parameter; the host re-scan no longer has it.
-	const rows = documentPayload.rows.filter((row) => row.label !== 'Text');
-	const selectedId = rows.find((row) => row.kind === 'container')?.id;
-	window.postMessage(
-		{ type: 'document', document: { ...documentPayload, rows, selectedId, revision: 2, dirty: true } },
-		'*'
-	);
+	postStaleRescan();
 	await tick();
 	dispatchCtrlS();
 	await tick();
@@ -786,37 +913,50 @@ async function applyScroll(): Promise<void> {
 	if (line === undefined || line <= 0) {
 		return;
 	}
-	const editor = (window as unknown as {
-		__ARXML_EDITOR__?: {
-			revealLineInCenter(line: number): void;
-			getModel(): { getLineCount(): number } | null;
-		};
-	}).__ARXML_EDITOR__;
-	const model = editor?.getModel();
-	if (editor === undefined || model === null || model === undefined) {
-		return;
-	}
-	editor.revealLineInCenter(Math.min(line, model.getLineCount()));
+	revealLine(line);
 	// Sticky scroll builds through a 300ms debounce plus the folding model; give
 	// it room before the screenshot and audit read the widget.
-	await new Promise((resolve) => setTimeout(resolve, 1200));
+	await delay(1200);
+}
+
+function revealLine(line: number): void {
+	const editor = previewEditor();
+	if (editor === undefined) {
+		return;
+	}
+	const count = editor.getModel()?.getLineCount();
+	if (count === undefined) {
+		return;
+	}
+	editor.revealLineInCenter(Math.min(line, count));
+}
+
+function pageRoot(page: 'diff' | 'editor'): string {
+	return page === 'diff' ? '.monaco-diff-editor' : '#tree .monaco-editor';
+}
+
+async function waitForDiffRender(): Promise<void> {
+	await waitFor(
+		() =>
+			document.querySelector(
+				'.monaco-diff-editor .line-insert, .monaco-diff-editor .line-delete, .monaco-diff-editor .char-insert, .monaco-diff-editor .char-delete'
+			) !== null
+	);
+}
+
+async function waitForMergeArrows(): Promise<void> {
+	await waitFor(() => document.querySelector('[class*="arxml-merge-arrow"]') !== null);
 }
 
 async function run(): Promise<void> {
 	window.postMessage(payload.message, '*');
-	const root = payload.page === 'diff' ? '.monaco-diff-editor' : '#tree .monaco-editor';
-	await until(() => document.querySelector(root) !== null);
+	await until(() => document.querySelector(pageRoot(payload.page)) !== null);
 	if (payload.page === 'diff') {
-		await waitFor(
-			() =>
-				document.querySelector(
-					'.monaco-diff-editor .line-insert, .monaco-diff-editor .line-delete, .monaco-diff-editor .char-insert, .monaco-diff-editor .char-delete'
-				) !== null
-		);
+		await waitForDiffRender();
 	}
 	await applyMerge();
 	if (payload.page === 'diff' && payload.merge) {
-		await waitFor(() => document.querySelector('[class*="arxml-merge-arrow"]') !== null);
+		await waitForMergeArrows();
 	}
 	await applySwap();
 	await applyPan();

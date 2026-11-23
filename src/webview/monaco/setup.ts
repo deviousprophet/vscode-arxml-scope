@@ -43,24 +43,36 @@ function readMeta(name: string): string | undefined {
 	return value !== undefined && value !== null && value !== '' ? value : undefined;
 }
 
-async function installEnvironment(): Promise<void> {
-	const workerUri = readMeta('arxml-worker-uri');
-	let workerUrl: string | undefined;
-	if (workerUri !== undefined) {
-		try {
-			const response = await fetch(workerUri);
-			if (response.ok) {
-				const source = await response.text();
-				workerUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
-			}
-		} catch {
-			// Reported below; the editor can still render, but the diff worker is gone.
+async function fetchWorkerUrl(workerUri: string): Promise<string | undefined> {
+	try {
+		const response = await fetch(workerUri);
+		if (!response.ok) {
+			return undefined;
 		}
+		const source = await response.text();
+		return workerBlobUrl(source);
+	} catch {
+		// Reported below; the editor can still render, but the diff worker is gone.
+		return undefined;
 	}
-	if (workerUrl === undefined) {
-		console.error('ARXML Scope: the Monaco worker asset did not load');
-		workerUrl = URL.createObjectURL(new Blob(['self.onmessage = function () {};'], { type: 'text/javascript' }));
+}
+
+function workerBlobUrl(source: string): string {
+	return URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+}
+
+async function resolveWorkerUrl(): Promise<string> {
+	const workerUri = readMeta('arxml-worker-uri');
+	const workerUrl = workerUri === undefined ? undefined : await fetchWorkerUrl(workerUri);
+	if (workerUrl !== undefined) {
+		return workerUrl;
 	}
+	console.error('ARXML Scope: the Monaco worker asset did not load');
+	return workerBlobUrl('self.onmessage = function () {};');
+}
+
+async function installEnvironment(): Promise<void> {
+	const workerUrl = await resolveWorkerUrl();
 	Object.assign(globalThis, {
 		MonacoEnvironment: {
 			getWorker(): Worker {
@@ -143,77 +155,110 @@ function toHex(value: string, fallback: string): string {
 	return toMonacoColor(value, fallback);
 }
 
+interface ThemeFallbacks {
+	background: string;
+	foreground: string;
+	lineNumber: string;
+	lineNumberActive: string;
+	selection: string;
+	inactiveSelection: string;
+	lineHighlight: string;
+	cursor: string;
+	widget: string;
+	widgetBorder: string;
+	input: string;
+	inputBorder: string;
+	focus: string;
+	scrollbar: string;
+	scrollbarHover: string;
+	insertedLine: string;
+	removedLine: string;
+	insertedText: string;
+	removedText: string;
+}
+
+const DARK_FALLBACKS: ThemeFallbacks = {
+	background: '#1e1e1e',
+	foreground: '#d4d4d4',
+	lineNumber: '#858585',
+	lineNumberActive: '#c6c6c6',
+	selection: '#264f78',
+	inactiveSelection: '#3a3d41',
+	lineHighlight: '#2a2d2e',
+	cursor: '#aeafad',
+	widget: '#252526',
+	widgetBorder: '#454545',
+	input: '#3c3c3c',
+	inputBorder: '#3c3c3c',
+	focus: '#007fd4',
+	scrollbar: '#79797966',
+	scrollbarHover: '#646464b3',
+	insertedLine: '#347d3926',
+	removedLine: '#c93c3726',
+	insertedText: '#57ab5a4d',
+	removedText: '#f470674d'
+};
+
+const LIGHT_FALLBACKS: ThemeFallbacks = {
+	background: '#ffffff',
+	foreground: '#000000',
+	lineNumber: '#237893',
+	lineNumberActive: '#0b216f',
+	selection: '#add6ff',
+	inactiveSelection: '#e5ebf1',
+	lineHighlight: '#f3f3f3',
+	cursor: '#000000',
+	widget: '#f3f3f3',
+	widgetBorder: '#c8c8c8',
+	input: '#ffffff',
+	inputBorder: '#cecece',
+	focus: '#0090f1',
+	scrollbar: '#64646466',
+	scrollbarHover: '#646464b3',
+	insertedLine: '#e2f7e2',
+	removedLine: '#ffeaea',
+	insertedText: '#587c0c26',
+	removedText: '#ad070726'
+};
+
+type FallbackSlot = keyof ThemeFallbacks;
+
+/** Theme color key, CSS variable, and the fallback used when the variable is absent. */
+const THEME_COLOR_RULES: readonly (readonly [string, string, FallbackSlot])[] = [
+	['editor.background', '--vscode-editor-background', 'background'],
+	['editor.foreground', '--vscode-editor-foreground', 'foreground'],
+	['editorLineNumber.foreground', '--vscode-editorLineNumber-foreground', 'lineNumber'],
+	['editorLineNumber.activeForeground', '--vscode-editorLineNumber-activeForeground', 'lineNumberActive'],
+	['editor.selectionBackground', '--vscode-editor-selectionBackground', 'selection'],
+	['editor.inactiveSelectionBackground', '--vscode-editor-inactiveSelectionBackground', 'inactiveSelection'],
+	['editor.lineHighlightBackground', '--vscode-editor-lineHighlightBackground', 'lineHighlight'],
+	['editorCursor.foreground', '--vscode-editorCursor-foreground', 'cursor'],
+	['editorWidget.background', '--vscode-editorWidget-background', 'widget'],
+	['editorWidget.border', '--vscode-editorWidget-border', 'widgetBorder'],
+	['input.background', '--vscode-input-background', 'input'],
+	['input.border', '--vscode-input-border', 'inputBorder'],
+	['focusBorder', '--vscode-focusBorder', 'focus'],
+	['scrollbarSlider.background', '--vscode-scrollbarSlider-background', 'scrollbar'],
+	['scrollbarSlider.hoverBackground', '--vscode-scrollbarSlider-hoverBackground', 'scrollbarHover'],
+	['scrollbarSlider.activeBackground', '--vscode-scrollbarSlider-activeBackground', 'scrollbarHover'],
+	['diffEditor.insertedLineBackground', '--vscode-diffEditor-insertedLineBackground', 'insertedLine'],
+	['diffEditor.removedLineBackground', '--vscode-diffEditor-removedLineBackground', 'removedLine'],
+	['diffEditor.insertedTextBackground', '--vscode-diffEditor-insertedTextBackground', 'insertedText'],
+	['diffEditor.removedTextBackground', '--vscode-diffEditor-removedTextBackground', 'removedText']
+];
+
+function fallbacksFor(kind: ThemeKind): ThemeFallbacks {
+	return kind === 'dark' || kind === 'hc' ? DARK_FALLBACKS : LIGHT_FALLBACKS;
+}
+
 function themeColors(): Record<string, string> {
-	const kind = currentThemeKind();
-	const dark = kind === 'dark' || kind === 'hc';
-	const fallback = {
-		background: dark ? '#1e1e1e' : '#ffffff',
-		foreground: dark ? '#d4d4d4' : '#000000',
-		lineNumber: dark ? '#858585' : '#237893',
-		lineNumberActive: dark ? '#c6c6c6' : '#0b216f',
-		selection: dark ? '#264f78' : '#add6ff',
-		inactiveSelection: dark ? '#3a3d41' : '#e5ebf1',
-		lineHighlight: dark ? '#2a2d2e' : '#f3f3f3',
-		cursor: dark ? '#aeafad' : '#000000',
-		widget: dark ? '#252526' : '#f3f3f3',
-		widgetBorder: dark ? '#454545' : '#c8c8c8',
-		input: dark ? '#3c3c3c' : '#ffffff',
-		inputBorder: dark ? '#3c3c3c' : '#cecece',
-		focus: dark ? '#007fd4' : '#0090f1',
-		scrollbar: dark ? '#79797966' : '#64646466',
-		scrollbarHover: dark ? '#646464b3' : '#646464b3'
-	};
-	const color = (name: string, fallbackValue: string): string =>
-		toHex(css(name, fallbackValue), fallbackValue);
-	return {
-		'editor.background': color('--vscode-editor-background', fallback.background),
-		'editor.foreground': color('--vscode-editor-foreground', fallback.foreground),
-		'editorLineNumber.foreground': color('--vscode-editorLineNumber-foreground', fallback.lineNumber),
-		'editorLineNumber.activeForeground': color(
-			'--vscode-editorLineNumber-activeForeground',
-			fallback.lineNumberActive
-		),
-		'editor.selectionBackground': color('--vscode-editor-selectionBackground', fallback.selection),
-		'editor.inactiveSelectionBackground': color(
-			'--vscode-editor-inactiveSelectionBackground',
-			fallback.inactiveSelection
-		),
-		'editor.lineHighlightBackground': color(
-			'--vscode-editor-lineHighlightBackground',
-			fallback.lineHighlight
-		),
-		'editorCursor.foreground': color('--vscode-editorCursor-foreground', fallback.cursor),
-		'editorWidget.background': color('--vscode-editorWidget-background', fallback.widget),
-		'editorWidget.border': color('--vscode-editorWidget-border', fallback.widgetBorder),
-		'input.background': color('--vscode-input-background', fallback.input),
-		'input.border': color('--vscode-input-border', fallback.inputBorder),
-		'focusBorder': color('--vscode-focusBorder', fallback.focus),
-		'scrollbarSlider.background': color('--vscode-scrollbarSlider-background', fallback.scrollbar),
-		'scrollbarSlider.hoverBackground': color(
-			'--vscode-scrollbarSlider-hoverBackground',
-			fallback.scrollbarHover
-		),
-		'scrollbarSlider.activeBackground': color(
-			'--vscode-scrollbarSlider-activeBackground',
-			fallback.scrollbarHover
-		),
-		'diffEditor.insertedLineBackground': color(
-			'--vscode-diffEditor-insertedLineBackground',
-			dark ? '#347d3926' : '#e2f7e2'
-		),
-		'diffEditor.removedLineBackground': color(
-			'--vscode-diffEditor-removedLineBackground',
-			dark ? '#c93c3726' : '#ffeaea'
-		),
-		'diffEditor.insertedTextBackground': color(
-			'--vscode-diffEditor-insertedTextBackground',
-			dark ? '#57ab5a4d' : '#587c0c26'
-		),
-		'diffEditor.removedTextBackground': color(
-			'--vscode-diffEditor-removedTextBackground',
-			dark ? '#f470674d' : '#ad070726'
-		)
-	};
+	const fallback = fallbacksFor(currentThemeKind());
+	const colors: Record<string, string> = {};
+	for (const [key, variable, slot] of THEME_COLOR_RULES) {
+		const fallbackValue = fallback[slot];
+		colors[key] = toHex(css(variable, fallbackValue), fallbackValue);
+	}
+	return colors;
 }
 
 function themeRules(): { token: string; foreground: string; fontStyle?: string }[] {
@@ -278,21 +323,24 @@ export function defineEcucTheme(): string {
 	return 'arxml-ecuc-theme';
 }
 
+function positiveNumber(text: string, fallback: number): number {
+	const parsed = Number.parseFloat(text.replace('px', ''));
+	if (!Number.isFinite(parsed)) {
+		return fallback;
+	}
+	return parsed > 0 ? parsed : fallback;
+}
+
 function editorFontOptions(): {
 	fontFamily: string;
 	fontSize: number;
 	lineHeight: number;
 	fontWeight: string;
 } {
-	const family = css('--vscode-editor-font-family', "'Consolas', 'Courier New', monospace");
-	const sizeText = css('--vscode-editor-font-size', '14px');
-	const size = Number.parseFloat(sizeText.replace('px', ''));
-	const heightText = css('--vscode-editor-line-height', '0');
-	const height = Number.parseFloat(heightText.replace('px', ''));
 	return {
-		fontFamily: family,
-		fontSize: Number.isFinite(size) && size > 0 ? size : 14,
-		lineHeight: Number.isFinite(height) && height > 0 ? height : 0,
+		fontFamily: css('--vscode-editor-font-family', "'Consolas', 'Courier New', monospace"),
+		fontSize: positiveNumber(css('--vscode-editor-font-size', '14px'), 14),
+		lineHeight: positiveNumber(css('--vscode-editor-line-height', '0'), 0),
 		fontWeight: css('--vscode-editor-font-weight', 'normal')
 	};
 }

@@ -31,9 +31,23 @@ export function fieldTextFromWholeLine(
 	const span = spans[0];
 	const prefix = lineText.slice(0, span.startColumn - 1);
 	const suffix = lineText.slice(span.endColumn - 1);
-	if (current.length < prefix.length + suffix.length || !current.startsWith(prefix) || !current.endsWith(suffix)) {
+	if (!wrapsWith(current, prefix, suffix)) {
 		return undefined;
 	}
 	const text = current.slice(prefix.length, current.length - suffix.length);
-	return /[\r\n]/.test(text) ? undefined : text;
+	return hasLineBreak(text) ? undefined : text;
+}
+
+function wrapsWith(current: string, prefix: string, suffix: string): boolean {
+	if (current.length < prefix.length + suffix.length) {
+		return false;
+	}
+	if (!current.startsWith(prefix)) {
+		return false;
+	}
+	return current.endsWith(suffix);
+}
+
+function hasLineBreak(text: string): boolean {
+	return /[\r\n]/.test(text);
 }

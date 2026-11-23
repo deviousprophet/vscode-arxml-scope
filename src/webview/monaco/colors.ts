@@ -14,17 +14,33 @@ function channel(value: string): number {
 	return Math.max(0, Math.min(255, Number(value)));
 }
 
-function alphaChannel(value: string | undefined): string {
-	if (value === undefined || value === '') {
-		return '';
-	}
-	const alpha = value.endsWith('%') ? Number(value.slice(0, -1)) / 100 : Number(value);
-	if (!Number.isFinite(alpha) || alpha >= 1) {
-		return '';
-	}
+function parseAlpha(value: string): number {
+	return value.endsWith('%') ? Number(value.slice(0, -1)) / 100 : Number(value);
+}
+
+/** A channel Monaco can use: finite and not fully opaque. */
+function isVisibleAlpha(alpha: number): boolean {
+	return Number.isFinite(alpha) && alpha < 1;
+}
+
+function toAlphaHex(alpha: number): string {
 	return Math.round(Math.max(0, alpha) * 255)
 		.toString(16)
 		.padStart(2, '0');
+}
+
+function alphaChannel(value: string | undefined): string {
+	if (value === undefined) {
+		return '';
+	}
+	if (value === '') {
+		return '';
+	}
+	const alpha = parseAlpha(value);
+	if (!isVisibleAlpha(alpha)) {
+		return '';
+	}
+	return toAlphaHex(alpha);
 }
 
 /** Expand shorthand hex so Monaco always receives six or eight digits. */

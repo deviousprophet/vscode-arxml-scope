@@ -32,33 +32,67 @@ export interface EcucToken {
 	type: EcucTokenType;
 }
 
+type PushToken = (start: number, end: number, type: EcucTokenType) => void;
+
+interface TailResult {
+	at: number;
+	afterEquals: boolean;
+}
+
 function isSpace(character: string): boolean {
 	return character === ' ' || character === '\t';
 }
 
-function wordEnd(text: string, start: number): number {
+/** Characters that end an unquoted word. */
+const WORD_DELIMITERS = ' \t"()[]{}<>=@';
+
+function isWordDelimiter(character: string): boolean {
+	return WORD_DELIMITERS.includes(character);
+}
+
+function skipSpaces(text: string, start: number): number {
 	let at = start;
-	while (at < text.length) {
-		const character = text[at];
-		if (isSpace(character) || character === '"' || character === '(' || character === ')' ||
-			character === '[' || character === ']' || character === '{' || character === '}' ||
-			character === '<' || character === '>' || character === '=' || character === '@') {
-			break;
-		}
+	while (at < text.length && isSpace(text[at])) {
 		at += 1;
 	}
 	return at;
 }
 
+function wordEnd(text: string, start: number): number {
+	let at = start;
+	while (at < text.length && !isWordDelimiter(text[at])) {
+		at += 1;
+	}
+	return at;
+}
+
+function isQuoteEscaped(text: string, index: number): boolean {
+	let backslashes = 0;
+	for (let at = index - 1; at >= 0 && text[at] === '\\'; at -= 1) {
+		backslashes += 1;
+	}
+	return backslashes % 2 === 1;
+}
+
+function findUnescapedQuote(text: string, start: number): number {
+	let at = start;
+	while (at < text.length) {
+		const quote = text.indexOf('"', at);
+		if (quote < 0) {
+			return -1;
+		}
+		if (!isQuoteEscaped(text, quote)) {
+			return quote;
+		}
+		at = quote + 1;
+	}
+	return -1;
+}
+
 function quotedEnd(text: string, start: number): number {
-	for (let at = start + 1; at < text.length; at += 1) {
-		if (text[at] === '\\') {
-			at += 1;
-			continue;
-		}
-		if (text[at] === '"') {
-			return at + 1;
-		}
+	const close = findUnescapedQuote(text, start + 1);
+	if (close >= 0) {
+		return close + 1;
 	}
 	// No unescaped close. The synthetic display does not escape a trailing
 	// backslash, so a quote preceded by one is still the closing quote.
@@ -71,24 +105,23 @@ function bracketedEnd(text: string, start: number, open: string, close: string):
 	return end < 0 ? text.length : end + 1;
 }
 
+/** A character that ends the container label and starts a field. */
+function isLabelBoundary(text: string, at: number): boolean {
+	return '="([<@{'.includes(text[at]) || text.startsWith('context ', at);
+}
+
+/** True when this position is whitespace followed by a boundary or the end. */
+function labelGapEndsAt(text: string, at: number): boolean {
+	if (!isSpace(text[at])) {
+		return false;
+	}
+	const next = skipSpaces(text, at);
+	return next >= text.length || isLabelBoundary(text, next);
+}
+
 function labelEnd(text: string, start: number): number {
 	let at = start;
-	while (at < text.length) {
-		if (isSpace(text[at])) {
-			let next = at;
-			while (next < text.length && isSpace(text[next])) {
-				next += 1;
-			}
-			if (next >= text.length) {
-				break;
-			}
-			const character = text[next];
-			if (character === '=' || character === '"' || character === '(' ||
-				character === '[' || character === '<' || character === '@' ||
-				character === '{' || text.startsWith('context ', next)) {
-				break;
-			}
-		}
+	while (at < text.length && !labelGapEndsAt(text, at)) {
 		at += 1;
 	}
 	return at;
@@ -127,160 +160,255 @@ const CONDITION_TYPES: Readonly<Record<string, EcucTokenType>> = {
 	'syscond-punct': 'delimiter'
 };
 
+function pushConditionTokens(
+	text: string,
+	contentStart: number,
+	contentEnd: number,
+	push: PushToken
+): void {
+	for (const token of conditionTokens(text.slice(contentStart, contentEnd))) {
+		const type = token.cls === '' ? undefined : CONDITION_TYPES[token.cls];
+		if (type !== undefined) {
+			push(contentStart + token.start, contentStart + token.end, type);
+		}
+	}
+}
+
+/** Split a bracketed syscond into names, operators, numbers and punctuation. */
+function pushCondition(
+	text: string,
+	start: number,
+	close: number,
+	closer: string,
+	push: PushToken
+): void {
+	const contentStart = start + 1;
+	const hasClose = close > contentStart && text[close - 1] === closer;
+	const contentEnd = hasClose ? close - 1 : close;
+	push(start, start + 1, 'delimiter');
+	pushConditionTokens(text, contentStart, contentEnd, push);
+	if (hasClose) {
+		push(contentEnd, close, 'delimiter');
+	}
+}
+
+function pushBraceLine(text: string, at: number, push: PushToken): void {
+	for (let index = at; index < text.length; index += 1) {
+		if (text[index] === '{' || text[index] === '}') {
+			push(index, index + 1, 'delimiter');
+		}
+	}
+}
+
+function pushHeader(text: string, at: number, push: PushToken): boolean {
+	const header = /^(schema|package)\s+/.exec(text.slice(at));
+	if (header === null) {
+		return false;
+	}
+	push(at, at + header[1].length, 'keyword');
+	const valueAt = at + header[0].length;
+	push(valueAt, text.length, header[1] === 'schema' ? 'number' : 'namespace');
+	return true;
+}
+
+function pushWholeLine(text: string, at: number, push: PushToken): boolean {
+	if (text.startsWith('/*', at)) {
+		push(at, text.length, 'comment');
+		return true;
+	}
+	if ('{}'.includes(text[at])) {
+		pushBraceLine(text, at, push);
+		return true;
+	}
+	return pushHeader(text, at, push);
+}
+
+function pushQuoted(text: string, at: number, push: PushToken): number {
+	const close = quotedEnd(text, at);
+	push(at, close, 'string');
+	return close;
+}
+
+function pushCommentWord(text: string, at: number, push: PushToken): number {
+	const close = wordEnd(text, at + 1);
+	push(at, close, 'comment');
+	return close;
+}
+
+function pushBracketed(
+	text: string,
+	at: number,
+	open: string,
+	closeCharacter: string,
+	type: EcucTokenType,
+	push: PushToken
+): number {
+	const close = bracketedEnd(text, at, open, closeCharacter);
+	push(at, close, type);
+	return close;
+}
+
+function pushConditionAt(
+	text: string,
+	at: number,
+	open: string,
+	closer: string,
+	push: PushToken
+): number {
+	const close = bracketedEnd(text, at, open, closer);
+	pushCondition(text, at, close, closer, push);
+	return close;
+}
+
+function isContextStart(text: string, at: number): boolean {
+	return text.startsWith('context ', at) && text[at + 'context '.length] !== '=';
+}
+
+function pushContext(text: string, at: number, push: PushToken): number {
+	push(at, at + 'context'.length, 'keyword');
+	const start = at + 'context '.length;
+	const close = wordEnd(text, start);
+	push(start, close, 'variable');
+	return close;
+}
+
+function modulePrefix(
+	text: string,
+	at: number,
+	push: PushToken
+): { at: number; labelType: EcucTokenType } {
+	if (!text.startsWith('module ', at)) {
+		return { at, labelType: 'type' };
+	}
+	push(at, at + 'module'.length, 'keyword');
+	return { at: at + 'module '.length, labelType: 'variable' };
+}
+
+function pushLabelRange(
+	text: string,
+	start: number,
+	end: number,
+	labelType: EcucTokenType,
+	push: PushToken
+): void {
+	if (end > start) {
+		push(start, end, text.includes(' = ', start) ? 'variable' : labelType);
+	}
+}
+
+function pushLabel(text: string, at: number, push: PushToken): number {
+	const prefix = modulePrefix(text, at, push);
+	const end = labelEnd(text, prefix.at);
+	pushLabelRange(text, prefix.at, end, prefix.labelType, push);
+	return end === prefix.at ? wordEnd(text, prefix.at) : end;
+}
+
+function pushLeadingToken(text: string, at: number, push: PushToken): number {
+	if (text[at] === '"') {
+		return pushQuoted(text, at, push);
+	}
+	if (text[at] === '@') {
+		push(at, text.length, 'comment');
+		return text.length;
+	}
+	if (isContextStart(text, at)) {
+		return pushContext(text, at, push);
+	}
+	return pushLabel(text, at, push);
+}
+
+type TailHandler = (
+	text: string,
+	at: number,
+	push: PushToken,
+	afterEquals: boolean
+) => TailResult;
+
+const TAIL_HANDLERS: Readonly<Record<string, TailHandler>> = {
+	'=': (_text, at, push) => {
+		push(at, at + 1, 'operator');
+		return { at: at + 1, afterEquals: true };
+	},
+	'"': (text, at, push) => ({ at: pushQuoted(text, at, push), afterEquals: false }),
+	'@': (text, at, push, afterEquals) => ({
+		at: pushCommentWord(text, at, push),
+		afterEquals
+	}),
+	'(': (text, at, push, afterEquals) => ({
+		at: pushConditionAt(text, at, '(', ')', push),
+		afterEquals
+	}),
+	'[': (text, at, push, afterEquals) => ({
+		at: pushConditionAt(text, at, '[', ']', push),
+		afterEquals
+	}),
+	'<': (text, at, push, afterEquals) =>
+		afterEquals
+			? { at: at + 1, afterEquals: false }
+			: { at: pushBracketed(text, at, '<', '>', 'parameter', push), afterEquals },
+	'{': (text, at, push, afterEquals) => ({
+		at: pushBracketed(text, at, '{', '}', 'delimiter', push),
+		afterEquals
+	})
+};
+
+function pushWordToken(
+	text: string,
+	at: number,
+	afterEquals: boolean,
+	push: PushToken
+): TailResult {
+	const close = wordEnd(text, at);
+	const word = text.slice(at, close);
+	push(at, close, afterEquals ? valueType(word) : 'parameter');
+	return { at: close === at ? at + 1 : close, afterEquals: false };
+}
+
+function pushTailToken(
+	text: string,
+	at: number,
+	afterEquals: boolean,
+	push: PushToken
+): TailResult {
+	const handler = TAIL_HANDLERS[text[at]];
+	if (handler !== undefined) {
+		return handler(text, at, push, afterEquals);
+	}
+	if (isContextStart(text, at)) {
+		return { at: pushContext(text, at, push), afterEquals };
+	}
+	return pushWordToken(text, at, afterEquals, push);
+}
+
+function pushTailTokens(text: string, at: number, push: PushToken): void {
+	let afterEquals = false;
+	while (at < text.length) {
+		at = skipSpaces(text, at);
+		if (at >= text.length) {
+			return;
+		}
+		const result = pushTailToken(text, at, afterEquals, push);
+		at = result.at;
+		afterEquals = result.afterEquals;
+	}
+}
+
 /** Tokenize one synthetic ECUC line. */
 export function tokenizeEcucLine(text: string): EcucToken[] {
 	const tokens: EcucToken[] = [];
-	const push = (start: number, end: number, type: EcucTokenType): void => {
+	const push: PushToken = (start, end, type) => {
 		if (end > start) {
 			tokens.push({ start, length: end - start, type });
 		}
 	};
-	/** Split a bracketed syscond into names, operators, numbers and punctuation. */
-	const pushCondition = (start: number, close: number, closer: string): void => {
-		const contentStart = start + 1;
-		const hasClose = close > contentStart && text[close - 1] === closer;
-		const contentEnd = hasClose ? close - 1 : close;
-		push(start, start + 1, 'delimiter');
-		for (const token of conditionTokens(text.slice(contentStart, contentEnd))) {
-			const type = token.cls === '' ? undefined : CONDITION_TYPES[token.cls];
-			if (type !== undefined) {
-				push(contentStart + token.start, contentStart + token.end, type);
-			}
-		}
-		if (hasClose) {
-			push(contentEnd, close, 'delimiter');
-		}
-	};
-	let at = 0;
-	while (at < text.length && isSpace(text[at])) {
-		at += 1;
-	}
+	let at = skipSpaces(text, 0);
 	if (at >= text.length) {
 		return tokens;
 	}
-
-	if (text.startsWith('/*', at)) {
-		push(at, text.length, 'comment');
+	if (pushWholeLine(text, at, push)) {
 		return tokens;
 	}
-	if (text[at] === '{' || text[at] === '}') {
-		for (let index = at; index < text.length; index += 1) {
-			if (text[index] === '{' || text[index] === '}') {
-				push(index, index + 1, 'delimiter');
-			}
-		}
-		return tokens;
-	}
-
-	const header = /^(schema|package)\s+/.exec(text.slice(at));
-	if (header !== null) {
-		push(at, at + header[1].length, 'keyword');
-		at += header[0].length;
-		push(at, text.length, header[1] === 'schema' ? 'number' : 'namespace');
-		return tokens;
-	}
-
-	if (text[at] === '"') {
-		// A container with an empty or missing definition ref has no label: the
-		// quoted short name is the first thing on the line. It is a short name,
-		// never the definition type, so it must not fall through to `labelEnd`.
-		const close = quotedEnd(text, at);
-		push(at, close, 'string');
-		at = close;
-	} else if (text[at] === '@') {
-		push(at, text.length, 'comment');
-		return tokens;
-	} else if (text.startsWith('context ', at) && text[at + 'context '.length] !== '=') {
-		push(at, at + 'context'.length, 'keyword');
-		at += 'context '.length;
-		const close = wordEnd(text, at);
-		push(at, close, 'variable');
-		at = close;
-	} else {
-		let labelType: EcucTokenType = 'type';
-		if (text.startsWith('module ', at)) {
-			push(at, at + 'module'.length, 'keyword');
-			at += 'module '.length;
-			labelType = 'variable';
-		}
-		const start = at;
-		const end = labelEnd(text, at);
-		if (end > start) {
-			const isValueLine = text.indexOf(' = ', start) >= 0;
-			push(start, end, isValueLine ? 'variable' : labelType);
-		}
-		at = end === start ? wordEnd(text, at) : end;
-	}
-
-	let afterEquals = false;
-	while (at < text.length) {
-		while (at < text.length && isSpace(text[at])) {
-			at += 1;
-		}
-		if (at >= text.length) {
-			break;
-		}
-		const character = text[at];
-		if (character === '=') {
-			push(at, at + 1, 'operator');
-			at += 1;
-			afterEquals = true;
-			continue;
-		}
-		if (character === '"') {
-			const close = quotedEnd(text, at);
-			push(at, close, 'string');
-			at = close;
-			afterEquals = false;
-			continue;
-		}
-		if (character === '@') {
-			const close = wordEnd(text, at + 1);
-			push(at, close, 'comment');
-			at = close;
-			continue;
-		}
-		if (character === '(') {
-			const close = bracketedEnd(text, at, '(', ')');
-			pushCondition(at, close, ')');
-			at = close;
-			continue;
-		}
-		if (character === '[') {
-			const close = bracketedEnd(text, at, '[', ']');
-			pushCondition(at, close, ']');
-			at = close;
-			continue;
-		}
-		if (character === '<' && !afterEquals) {
-			const close = bracketedEnd(text, at, '<', '>');
-			push(at, close, 'parameter');
-			at = close;
-			continue;
-		}
-		if (character === '{') {
-			const close = bracketedEnd(text, at, '{', '}');
-			push(at, close, 'delimiter');
-			at = close;
-			continue;
-		}
-		if (text.startsWith('context ', at)) {
-			push(at, at + 'context'.length, 'keyword');
-			at += 'context '.length;
-			const close = wordEnd(text, at);
-			push(at, close, 'variable');
-			at = close;
-			continue;
-		}
-		const close = wordEnd(text, at);
-		const word = text.slice(at, close);
-		if (afterEquals) {
-			push(at, close, valueType(word));
-			afterEquals = false;
-		} else {
-			push(at, close, 'parameter');
-		}
-		at = close === at ? at + 1 : close;
-	}
+	at = pushLeadingToken(text, at, push);
+	pushTailTokens(text, at, push);
 	return tokens;
 }

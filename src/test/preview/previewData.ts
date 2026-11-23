@@ -13,51 +13,13 @@ import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { buildDiffDocument } from '../../core/diff/diffModel';
 import type { DiffDocument } from '../../core/diff/diffModel';
 import type { EcucRow } from '../../core/ecuc/renderRows';
+import type { PreviewStateFields } from './previewStateFields';
 
-export interface PreviewState {
+export interface PreviewState extends PreviewStateFields {
 	name: string;
 	page: 'diff' | 'editor';
 	width: number;
 	height: number;
-	merge?: boolean;
-	swap?: boolean;
-	/** Long parameter names force horizontal overflow; the copy arrows must survive it. */
-	wide?: boolean;
-	/** Horizontal scroll offset applied after the page renders. */
-	pan?: number;
-	/** F7 presses after mounting; the long document's first change is near line 1000. */
-	jump?: number;
-	select?: boolean;
-	/** Opens the native find widget and seeds this query, with Rust-shaped results. */
-	find?: string;
-	/** Types this text into the first parameter to exercise the local dirty state. */
-	edit?: string;
-	/** Types this text into the Details value control of a textual parameter. */
-	detailsEdit?: string;
-	/** Presses Ctrl+S after the Details typing and answers the edit acknowledgements. */
-	detailsSave?: boolean;
-	/** Runs one local undo after the Details typing. */
-	detailsUndo?: boolean;
-	/** Runs one local redo after that undo. */
-	detailsRedo?: boolean;
-	/** Runs the direct-editor delete/word-delete/replace typing scenario. */
-	deleteEdit?: boolean;
-	/** Renames the selected container, then types again before the re-scan echo. */
-	detailsRename?: boolean;
-	/** With `detailsRename`, refuses the post-flush rename edit after the re-scan. */
-	renameRefusal?: boolean;
-	/** With `detailsRename`, delivers the re-scan before the rename acknowledgement. */
-	renameLateAck?: boolean;
-	/** Edits the textual and decimal values, then Ctrl+S with both acknowledgements. */
-	multiSave?: boolean;
-	/** Pastes text containing a newline into the textual value span. */
-	pasteEdit?: boolean;
-	/** Types a draft, removes its row from the re-scan, then attempts Ctrl+S. */
-	staleSave?: boolean;
-	/** Scrolls the editor to this 1-based line and waits for sticky scope. */
-	scrollLine?: number;
-	/** Attempts Ctrl+S after the edit, exercising the save guard. */
-	trySave?: boolean;
 }
 
 export const STATES: PreviewState[] = [
@@ -182,25 +144,57 @@ function oneSidedValue(module: string, container: string, name: string, value: s
 	return `<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/${module}/${container}/${name}</DEFINITION-REF><VALUE>${value}</VALUE></ECUC-NUMERICAL-PARAM-VALUE>`;
 }
 
+interface OneSidedNames {
+	module: string;
+	container: string;
+	value: string;
+	own: string;
+	changed: string;
+}
+
+const ONE_SIDED_NAMES: Record<'left' | 'right', OneSidedNames> = {
+	left: {
+		module: 'RemovedMod',
+		container: 'RemovedItems',
+		value: 'RemovedValue',
+		own: '1',
+		changed: '6'
+	},
+	right: {
+		module: 'AddedMod',
+		container: 'AddedItems',
+		value: 'AddedValue',
+		own: '2',
+		changed: '7'
+	}
+};
+
+/** The shared subtree both sides carry: one value changes, the rest aligns. */
+function oneSidedShared(changed: string): string {
+	return oneSidedModule(
+		'Shared',
+		oneSidedContainer(
+			'Shared',
+			'SharedItems',
+			oneSidedValue('Shared', 'SharedItems', 'SharedValue', '5') +
+				oneSidedValue('Shared', 'SharedItems', 'ChangedValue', changed)
+		)
+	);
+}
+
 /** One module tree exists on only one side; a shared module/container/value aligns. */
 function oneSidedDocument(side: 'left' | 'right'): string {
-	const module = side === 'left' ? 'RemovedMod' : 'AddedMod';
-	const container = side === 'left' ? 'RemovedItems' : 'AddedItems';
-	const value = side === 'left' ? 'RemovedValue' : 'AddedValue';
+	const names = ONE_SIDED_NAMES[side];
 	const modules = [
 		oneSidedModule(
-			module,
-			oneSidedContainer(module, container, oneSidedValue(module, container, value, side === 'left' ? '1' : '2'))
-		),
-		oneSidedModule(
-			'Shared',
+			names.module,
 			oneSidedContainer(
-				'Shared',
-				'SharedItems',
-				oneSidedValue('Shared', 'SharedItems', 'SharedValue', '5') +
-					oneSidedValue('Shared', 'SharedItems', 'ChangedValue', side === 'left' ? '6' : '7')
+				names.module,
+				names.container,
+				oneSidedValue(names.module, names.container, names.value, names.own)
 			)
-		)
+		),
+		oneSidedShared(names.changed)
 	];
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${modules.join('')}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
@@ -317,44 +311,49 @@ const THEME = `<style>:root{
 
 const ASSETS = { cspSource: '', scriptUri: '/preview.js', styleUri: '/preview.css', workerUri: '/monaco.worker.js', nonce: 'preview' };
 
-/** The fixture document a state mounts. */
-function documentFor(state: PreviewState) {
-	if (state.page !== 'diff') {
-		if (state.name === 'editor-syntax') {
-			return syntaxDocument();
-		}
-		if (state.name === 'editor-syscond') {
-			// The host selects the condition-bearing row; Details shows its Condition code.
-			return syscondDocument();
-		}
-		if (state.name === 'editor-labels') {
-			// The no-label container is selected; its line starts with the short name.
-			return labelsDocument();
-		}
-		if (state.name === 'editor-details-rename') {
-			return syntaxDocument('Syntax');
-		}
-		if (state.name === 'editor-rename-refusal') {
-			return syntaxDocument('Syntax');
-		}
-		if (state.name === 'editor-rename-late-ack') {
-			return syntaxDocument('Syntax');
-		}
-		return state.name === 'editor-details' ||
-			state.name === 'editor-details-save' ||
-			state.name === 'editor-details-undo' ||
-			state.name === 'editor-details-redo' ||
-			state.name === 'editor-delete' ||
-			state.name === 'editor-multi-save' ||
-			state.name === 'editor-paste' ||
-			state.name === 'editor-stale-save'
-			? syntaxDocument('Text')
-			: editorDocument();
-	}
+type EditorFixture = { rows: EcucRow[]; selectedId?: string };
+
+function syntaxContainer(): EditorFixture {
+	return syntaxDocument('Syntax');
+}
+
+function syntaxText(): EditorFixture {
+	return syntaxDocument('Text');
+}
+
+/** Editor fixtures keyed by state name; unlisted editor states mount the long document. */
+const EDITOR_FIXTURES: Record<string, () => EditorFixture> = {
+	'editor-syntax': syntaxDocument,
+	'editor-syscond': syscondDocument,
+	'editor-labels': labelsDocument,
+	'editor-details-rename': syntaxContainer,
+	'editor-rename-refusal': syntaxContainer,
+	'editor-rename-late-ack': syntaxContainer,
+	'editor-details': syntaxText,
+	'editor-details-save': syntaxText,
+	'editor-details-undo': syntaxText,
+	'editor-details-redo': syntaxText,
+	'editor-delete': syntaxText,
+	'editor-multi-save': syntaxText,
+	'editor-paste': syntaxText,
+	'editor-stale-save': syntaxText
+};
+
+function editorFixtureFor(state: PreviewState): EditorFixture {
+	return EDITOR_FIXTURES[state.name]?.() ?? editorDocument();
+}
+
+function diffFixtureFor(state: PreviewState): DiffDocument {
 	if (state.name === 'diff-one-sided') {
 		return oneSidedPair();
 	}
-	return state.wide ? widePair() : state.name === 'diff-rail' ? railPair() : mergePair();
+	const fixture = state.wide ? widePair : state.name === 'diff-rail' ? railPair : mergePair;
+	return fixture();
+}
+
+/** The fixture document a state mounts. */
+function documentFor(state: PreviewState) {
+	return state.page === 'diff' ? diffFixtureFor(state) : editorFixtureFor(state);
 }
 
 function messageFor(state: PreviewState, document: unknown) {

@@ -37,11 +37,13 @@ import {
 	remapNodeId,
 	resolveRenameIntents,
 	type EditField,
-	type RenameIntent
+	type RenameIntent,
+	type RenameResolution
 } from '../core/ecuc/editOrder';
 import { fieldTextFromWholeLine } from '../core/ecuc/lineEdit';
 import { localValueError } from '../core/ecuc/valueValidation';
 import { createEcucEditor, defineEcucTheme, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
+import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
 import { EditorToolbar } from './components/toolbar/toolbar';
 import {
 	getSidebarState,
@@ -53,22 +55,19 @@ import {
 	showSidebarTab,
 	type SidebarUiState
 } from './components/sidebar/sidebar';
-import {
-	definitionRows,
-	inspectorFields,
-	refusalShownInDetails
-} from './components/sidebar/detailsPanel/detailsPanel';
+import { refusalShownInDetails } from './components/sidebar/detailsPanel/detailsPanel';
 import type { InspectorFields } from './components/sidebar/detailsPanel/detailsPanel';
 import {
 	beginDetailsEdit,
 	detailsContainerFields,
-	detailsSelectionChanged,
+	detailsEditorHostBase,
 	detailsValueInput,
 	handleDetailsEditorMessage,
 	resetDetailsEditorState,
 	setDetailsEditorHost,
 	syncDetailsField
 } from './components/detailsEditor/detailsEditor';
+import { createInspectorRows } from './components/detailsEditor/inspectorRows';
 import {
 	applyDisabledCount,
 	ensureDiscoveredConditionRows,
@@ -79,8 +78,6 @@ import {
 	setConditionsErrorReporter,
 	setConditionsStatus
 } from './components/sidebar/conditionsPanel/conditionsPanel';
-import { inspectorElement } from './render/dom';
-import { appendConditionTokens } from './render/rowView';
 import { installConsoleErrors } from './render/pageError';
 import { postToHost, readPageState, resetVsCodeApi, writePageState } from './vscodeApi';
 
@@ -94,28 +91,35 @@ let model: monaco.editor.ITextModel | undefined;
 let editorToolbar: EditorToolbar | undefined;
 let selectedId: string | undefined;
 let subtreeIds = new Set<string>();
-type MonacoFindMatch = ReturnType<monaco.editor.ITextModel['findMatches']>[number];
 interface NativeFindQuery {
 	query: string;
 	options: FindOptions;
 }
+interface NativeFindState {
+	isRevealed: boolean;
+	isReplaceRevealed: boolean;
+	searchString: string;
+	replaceString: string;
+	preserveCase: boolean;
+	isRegex: boolean;
+	wholeWord: boolean;
+	matchCase: boolean;
+	matchesPosition: number;
+	matchesCount: number;
+}
 interface NativeFindController {
-	getState?(): {
-		isRevealed: boolean;
-		isReplaceRevealed: boolean;
-		searchString: string;
-		replaceString: string;
-		preserveCase: boolean;
-		isRegex: boolean;
-		wholeWord: boolean;
-		matchCase: boolean;
-		matchesPosition: number;
-		matchesCount: number;
-	};
+	getState?(): NativeFindState;
 	start?(opts: unknown, state?: unknown): Promise<void>;
 	replace?(): boolean;
 	replaceAll?(): boolean;
 }
+interface ReplaceTarget {
+	rowId: string;
+	field: 'label' | 'value' | 'meta';
+	start: number;
+	end: number;
+}
+type EditorMessage<T extends EditorProviderToWebview['type']> = Extract<EditorProviderToWebview, { type: T }>;
 let nativeFindCache = new Map<string, MonacoFindMatch[]>();
 let nativeFindQueries = new Map<string, NativeFindQuery>();
 let nativeFindRequested = new Set<string>();
@@ -175,6 +179,22 @@ let reportError: (text: string) => void = function () {};
 let mounted = false;
 const pendingMessages: EditorProviderToWebview[] = [];
 
+const inspectorRows = createInspectorRows({
+	body: function () {
+		return detailsBody;
+	},
+	emptyHint: 'Use the arrow keys to move through the document.',
+	containerFields: function (row, data) {
+		return detailsContainerFields(row, data, {
+			shortName: localValueFor(row.id, 'shortName'),
+			definitionRef: localValueFor(row.id, 'definitionRef')
+		});
+	},
+	valueInput: function (row, data) {
+		return detailsValueInput(row, data, localValueFor(row.id, 'value'));
+	}
+});
+
 if (typeof window !== 'undefined') {
 	window.addEventListener('message', function (event) {
 		const message = event.data as EditorProviderToWebview;
@@ -196,16 +216,20 @@ function indexRows(): void {
 }
 
 function subtreeRowIdsOf(id: string | undefined): Set<string> {
-	const out = new Set<string>();
 	if (id === undefined) {
-		return out;
+		return new Set();
 	}
 	const at = rowIndexById.get(id);
 	const row = rowById.get(id);
 	if (at === undefined || row === undefined) {
-		return out;
+		return new Set();
 	}
-	for (let index = at; index <= at + row.subtreeSize && index < rows.length; index += 1) {
+	return rowIdsInRange(at, row.subtreeSize);
+}
+
+function rowIdsInRange(at: number, size: number): Set<string> {
+	const out = new Set<string>();
+	for (let index = at; index <= at + size && index < rows.length; index += 1) {
 		out.add(rows[index].id);
 	}
 	return out;
@@ -243,176 +267,6 @@ function clearDetailsStatus(): void {
 	delete detailsStatus.dataset.kind;
 }
 
-function inspectorRow(key: string, value: string): HTMLElement {
-	const row = inspectorElement('div', 'inspector-row');
-	row.appendChild(inspectorElement('span', 'inspector-key', key));
-	row.appendChild(inspectorElement('div', 'inspector-code', value));
-	return row;
-}
-
-function conditionCodeRow(key: string, text: string): HTMLElement {
-	const row = inspectorElement('div', 'inspector-row');
-	row.appendChild(inspectorElement('span', 'inspector-key', key));
-	const code = inspectorElement('div', 'inspector-code condition-code');
-	appendConditionTokens(code, text, '');
-	row.appendChild(code);
-	return row;
-}
-
-function paneActions(body: HTMLElement): HTMLElement {
-	const actions = inspectorElement('div', 'inspector-actions');
-	body.appendChild(actions);
-	return actions;
-}
-
-function appendInspectorField(key: string, value: string): void {
-	detailsBody?.appendChild(inspectorRow(key, value));
-}
-
-function renderEmptyInspector(): void {
-	detailsSelectionChanged(undefined);
-	const emptyPanel = inspectorElement('div', 'inspector-empty');
-	emptyPanel.appendChild(inspectorElement('p', '', 'Select a line to see its details.'));
-	emptyPanel.appendChild(inspectorElement('p', 'inspector-hint', 'Use the arrow keys to move through the document.'));
-	detailsBody?.appendChild(emptyPanel);
-}
-
-function renderIdentityFields(row: EcucRow, data: InspectorFields): void {
-	detailsBody?.appendChild(inspectorElement('div', 'inspector-kind', data.kind));
-	detailsBody?.appendChild(inspectorElement('div', 'inspector-label', data.label));
-	if (row.kind === 'container') {
-		if (detailsBody) {
-			detailsBody.appendChild(
-				detailsContainerFields(row, data, {
-					shortName: localValueFor(row.id, 'shortName'),
-					definitionRef: localValueFor(row.id, 'definitionRef')
-				})
-			);
-		}
-		return;
-	}
-	if (data.definitionRef) {
-		appendInspectorField('Definition', data.definitionRef);
-	}
-	if (data.shortName) {
-		appendInspectorField('Short name', data.shortName);
-	}
-}
-
-function renderTypeFields(data: InspectorFields): void {
-	if (data.variant) {
-		appendInspectorField('Variant', data.variant);
-	}
-	if (data.type) {
-		appendInspectorField('Type', data.type);
-	}
-}
-
-function renderParameterValue(row: EcucRow, data: InspectorFields): void {
-	if (data.kind === 'parameter' && detailsBody) {
-		detailsBody.appendChild(detailsValueInput(row, data, localValueFor(row.id, 'value')));
-	}
-	for (const format of data.formats) {
-		appendInspectorField(format.label, format.value);
-	}
-}
-
-function renderReferenceFields(row: EcucRow, data: InspectorFields): void {
-	if (data.target) {
-		appendInspectorField('Target', data.target);
-	}
-	if (row.followReason !== undefined) {
-		appendInspectorField('Target note', row.followReason);
-	}
-	if (data.context) {
-		appendInspectorField('Context', data.context);
-	}
-}
-
-function renderCondition(condition: RowCondition): void {
-	detailsBody?.appendChild(conditionCodeRow('Condition', condition.text));
-	appendInspectorField('Condition state', condition.state);
-	if (condition.reason) {
-		appendInspectorField('Condition note', condition.reason);
-	}
-}
-
-function renderConditionFields(row: EcucRow, data: InspectorFields): void {
-	if (data.condition) {
-		renderCondition(data.condition);
-	} else if (row.disabled && row.disabledBy === 'ancestor') {
-		appendInspectorField('Disabled', 'Disabled by an ancestor condition.');
-	}
-}
-
-function renderConditionSummary(data: InspectorFields): void {
-	if (data.conditions && detailsBody) {
-		detailsBody.appendChild(conditionCodeRow('Conditions', data.conditions));
-	}
-	if (data.annotations) {
-		appendInspectorField('Annotations', data.annotations);
-	}
-}
-
-function renderDefinitionFields(data: InspectorFields): void {
-	if (data.definition) {
-		for (const field of definitionRows(data.definition)) {
-			appendInspectorField(field.label, field.value);
-		}
-		return;
-	}
-	if (data.definitionCount !== undefined && data.definitionCount >= 2) {
-		appendInspectorField('Definition type', `${data.definitionCount} definitions found`);
-	}
-}
-
-function isFollowableReference(row: EcucRow): boolean {
-	return row.kind === 'reference' && row.followable === true;
-}
-
-function appendJumpAction(actions: HTMLElement, row: EcucRow): void {
-	if (!isFollowableReference(row)) {
-		return;
-	}
-	const jump = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Jump to target') as HTMLButtonElement;
-	jump.type = 'button';
-	jump.addEventListener('click', function () {
-		postToHost({ type: 'follow', nodeId: row.id });
-	});
-	actions.appendChild(jump);
-}
-
-function appendReferencesAction(actions: HTMLElement, row: EcucRow): void {
-	if (row.kind !== 'module' && row.kind !== 'container') {
-		return;
-	}
-	const references = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Find references') as HTMLButtonElement;
-	references.type = 'button';
-	references.addEventListener('click', function () {
-		postToHost({ type: 'references', nodeId: row.id });
-	});
-	actions.appendChild(references);
-}
-
-function appendRevealAction(actions: HTMLElement, row: EcucRow): void {
-	const reveal = inspectorElement('button', 'sb-btn sb-btn-secondary', 'Reveal in source') as HTMLButtonElement;
-	reveal.type = 'button';
-	reveal.addEventListener('click', function () {
-		postToHost({ type: 'reveal', nodeId: row.id });
-	});
-	actions.appendChild(reveal);
-}
-
-function renderInspectorActions(row: EcucRow): void {
-	if (!detailsBody) {
-		return;
-	}
-	const actions = paneActions(detailsBody);
-	appendJumpAction(actions, row);
-	appendReferencesAction(actions, row);
-	appendRevealAction(actions, row);
-}
-
 interface DetailsFocusAnchor {
 	rowId: string;
 	field: string;
@@ -427,37 +281,70 @@ interface DetailsFocusAnchor {
 let pendingRenameFocus: DetailsFocusAnchor | undefined;
 
 function detailsControl(rowId: string, field: string): HTMLInputElement | HTMLSelectElement | null {
+	return detailControls().find(isDetailsControlFor(rowId, field)) ?? null;
+}
+
+function detailControls(): Array<HTMLInputElement | HTMLSelectElement> {
 	const controls = detailsBody?.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-field]') ?? [];
-	for (const control of Array.from(controls)) {
-		if (control.dataset.nodeId === rowId && control.dataset.field === field) {
-			return control;
-		}
-	}
-	return null;
+	return Array.from(controls);
+}
+
+function isDetailsControlFor(
+	rowId: string,
+	field: string
+): (control: HTMLInputElement | HTMLSelectElement) => boolean {
+	return function (control) {
+		return control.dataset.nodeId === rowId && control.dataset.field === field;
+	};
 }
 
 /** Remember the focused Details control so a rebuild does not drop the caret. */
 function captureDetailsFocus(): DetailsFocusAnchor | undefined {
+	const active = activeDetailsElement();
+	return active === undefined ? undefined : detailsFocusAnchor(active);
+}
+
+function activeDetailsElement(): HTMLElement | undefined {
 	const active = document.activeElement;
 	// Only a control inside the Details body counts; focus in the tree, search or
 	// editor must not be moved by an inspector rebuild.
-	if (detailsBody === null || active === null || !detailsBody.contains(active)) {
+	if (!detailsContainsFocus(active)) {
 		return undefined;
 	}
-	if (!(active instanceof HTMLElement)) {
-		return undefined;
-	}
+	return active instanceof HTMLElement ? active : undefined;
+}
+
+function detailsContainsFocus(active: Element | null): boolean {
+	return detailsBody !== null && active !== null && detailsBody.contains(active);
+}
+
+function detailsFocusAnchor(active: HTMLElement): DetailsFocusAnchor | undefined {
 	const rowId = active.dataset.nodeId;
 	const field = active.dataset.field;
 	if (rowId === undefined || field === undefined) {
 		return undefined;
 	}
-	const control = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : undefined;
-	const start = control?.selectionStart ?? undefined;
-	const end = control?.selectionEnd ?? undefined;
+	return { rowId, field, ...detailsCaret(active) };
+}
+
+function detailsCaret(active: HTMLElement): { start?: number; end?: number } {
+	const control = textControl(active);
+	return anchorCaret(caretEdge(control, 'selectionStart'), caretEdge(control, 'selectionEnd'));
+}
+
+function textControl(active: HTMLElement): HTMLInputElement | HTMLTextAreaElement | undefined {
+	return active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : undefined;
+}
+
+function caretEdge(
+	control: HTMLInputElement | HTMLTextAreaElement | undefined,
+	edge: 'selectionStart' | 'selectionEnd'
+): number | undefined {
+	return control === undefined ? undefined : control[edge] ?? undefined;
+}
+
+function anchorCaret(start: number | undefined, end: number | undefined): { start?: number; end?: number } {
 	return {
-		rowId,
-		field,
 		...(start === undefined ? {} : { start }),
 		...(end === undefined ? {} : { end })
 	};
@@ -486,28 +373,46 @@ function restoreDetailsFocus(anchor: DetailsFocusAnchor | undefined): boolean {
 	if (anchor === undefined || detailsBody === null) {
 		return false;
 	}
-	let control = detailsControl(anchor.rowId, anchor.field);
-	if (control === null) {
-		for (const [oldId, newId] of resolvedRenames) {
-			const mapped = remapNodeId(anchor.rowId, oldId, newId);
-			if (mapped === undefined) {
-				continue;
-			}
-			control = detailsControl(mapped, anchor.field);
-			if (control !== null) {
-				break;
-			}
-		}
-	}
+	const control = findDetailsControl(anchor);
 	if (control === null) {
 		return false;
 	}
 	control.focus();
-	if (anchor.start !== undefined && 'setSelectionRange' in control) {
-		const max = control.value.length;
-		control.setSelectionRange(Math.min(anchor.start, max), Math.min(anchor.end ?? anchor.start, max));
-	}
+	selectAnchorRange(control, anchor);
 	return true;
+}
+
+function findDetailsControl(anchor: DetailsFocusAnchor): HTMLInputElement | HTMLSelectElement | null {
+	const direct = detailsControl(anchor.rowId, anchor.field);
+	if (direct !== null || resolvedRenames.size === 0) {
+		return direct;
+	}
+	return remappedDetailsControl(anchor);
+}
+
+function remappedDetailsControl(anchor: DetailsFocusAnchor): HTMLInputElement | HTMLSelectElement | null {
+	for (const [oldId, newId] of resolvedRenames) {
+		const mapped = remapNodeId(anchor.rowId, oldId, newId);
+		if (mapped === undefined) {
+			continue;
+		}
+		const control = detailsControl(mapped, anchor.field);
+		if (control !== null) {
+			return control;
+		}
+	}
+	return null;
+}
+
+function selectAnchorRange(control: HTMLInputElement | HTMLSelectElement, anchor: DetailsFocusAnchor): void {
+	if (!('setSelectionRange' in control)) {
+		return;
+	}
+	if (anchor.start === undefined) {
+		return;
+	}
+	const max = control.value.length;
+	control.setSelectionRange(Math.min(anchor.start, max), Math.min(anchor.end ?? anchor.start, max));
 }
 
 /** Re-seed every invalid draft's text and inline error after the panel is rebuilt. */
@@ -521,32 +426,32 @@ function updateInspector(): void {
 	if (!detailsBody) {
 		return;
 	}
+	const focus = captureInspectorFocus();
+	detailsBody.textContent = '';
+	const row = selectedRow();
+	if (row === undefined) {
+		inspectorRows.renderEmpty();
+		deferRenameFocus(focus);
+		return;
+	}
+	inspectorRows.renderSelected(row);
+	syncInvalidDetails();
+	if (!restoreDetailsFocus(focus)) {
+		deferRenameFocus(focus);
+	}
+}
+
+function captureInspectorFocus(): DetailsFocusAnchor | undefined {
 	const active = captureDetailsFocus();
 	// A rebuild that proves a rename may restore a caret captured before the host's
 	// pair arrived; any other rebuild drops it rather than stealing focus later.
 	const focus = active ?? (resolvedRenames.size > 0 ? pendingRenameFocus : undefined);
 	pendingRenameFocus = undefined;
-	detailsBody.textContent = '';
-	const row = selectedRow();
-	if (row === undefined) {
-		renderEmptyInspector();
-		if (focus !== undefined && renameIntents.size > 0) {
-			pendingRenameFocus = focus;
-		}
-		return;
-	}
-	detailsSelectionChanged(row.id);
-	const data = inspectorFields(row);
-	renderIdentityFields(row, data);
-	renderTypeFields(data);
-	renderParameterValue(row, data);
-	renderReferenceFields(row, data);
-	renderConditionFields(row, data);
-	renderConditionSummary(data);
-	renderDefinitionFields(data);
-	renderInspectorActions(row);
-	syncInvalidDetails();
-	if (!restoreDetailsFocus(focus) && focus !== undefined && renameIntents.size > 0) {
+	return focus;
+}
+
+function deferRenameFocus(focus: DetailsFocusAnchor | undefined): void {
+	if (focus !== undefined && renameIntents.size > 0) {
 		// The row id is waiting for the rename acknowledgement; the rebuild that
 		// consumes the host pair will move this caret to the new id.
 		pendingRenameFocus = focus;
@@ -557,29 +462,59 @@ function applyDecorations(): void {
 	if (editor === undefined) {
 		return;
 	}
+	decorationIds = editor.deltaDecorations(decorationIds, buildDecorations());
+}
+
+function buildDecorations(): monaco.editor.IModelDeltaDecoration[] {
 	const decorations: monaco.editor.IModelDeltaDecoration[] = [];
-	const addWholeLine = (line: number | undefined, className: string, zIndex = 1): void => {
-		if (line === undefined) {
-			return;
-		}
-		decorations.push({
-			range: new monaco.Range(line, 1, line, 1),
-			options: { isWholeLine: true, className, zIndex }
-		});
-	};
+	appendSubtreeDecorations(decorations);
+	appendDisabledDecorations(decorations);
+	return decorations;
+}
+
+function appendSubtreeDecorations(decorations: monaco.editor.IModelDeltaDecoration[]): void {
 	for (const line of documentModel.lines) {
-		if (line.rowId === undefined || !subtreeIds.has(line.rowId)) {
+		if (!subtreeLine(line)) {
 			continue;
 		}
-		const structural = line.kind === 'brace' || line.kind === 'annotation';
-		addWholeLine(line.line, line.rowId === selectedId && !structural ? 'arxml-selected' : 'arxml-subtree');
+		decorations.push(wholeLineStyle(line.line, lineClassName(line)));
 	}
+}
+
+function subtreeLine(line: SyntheticLine): boolean {
+	return line.rowId !== undefined && subtreeIds.has(line.rowId);
+}
+
+function lineClassName(line: SyntheticLine): string {
+	const structural = line.kind === 'brace' || line.kind === 'annotation';
+	return line.rowId === selectedId && !structural ? 'arxml-selected' : 'arxml-subtree';
+}
+
+function appendDisabledDecorations(decorations: monaco.editor.IModelDeltaDecoration[]): void {
 	for (const row of rows) {
-		if (row.disabled) {
-			addWholeLine(lineOf(row.id), 'arxml-disabled');
+		const decoration = row.disabled ? wholeLineDecoration(lineOf(row.id), 'arxml-disabled') : undefined;
+		if (decoration !== undefined) {
+			decorations.push(decoration);
 		}
 	}
-	decorationIds = editor.deltaDecorations(decorationIds, decorations);
+}
+
+function wholeLineDecoration(
+	line: number | undefined,
+	className: string,
+	zIndex = 1
+): monaco.editor.IModelDeltaDecoration | undefined {
+	if (line === undefined) {
+		return undefined;
+	}
+	return wholeLineStyle(line, className, zIndex);
+}
+
+function wholeLineStyle(line: number, className: string, zIndex = 1): monaco.editor.IModelDeltaDecoration {
+	return {
+		range: new monaco.Range(line, 1, line, 1),
+		options: { isWholeLine: true, className, zIndex }
+	};
 }
 
 function setSelection(id: string | undefined, reveal = false): void {
@@ -608,49 +543,88 @@ interface CursorAnchor {
 function captureCursor(): CursorAnchor {
 	const position = editor?.getPosition();
 	if (editor === undefined || position === undefined || position === null) {
-		return { line: 1, column: 1, selectionEndLine: 1, selectionEndColumn: 1, scrollTop: 0, scrollLeft: 0 };
+		return emptyCursorAnchor();
 	}
 	const selection = editor.getSelection();
-	const startLine = selection?.selectionStartLineNumber ?? position.lineNumber;
-	const startColumn = selection?.selectionStartColumn ?? position.column;
-	const endLine = selection?.positionLineNumber ?? position.lineNumber;
-	const endColumn = selection?.positionColumn ?? position.column;
+	const start = selectionStartPoint(selection, position);
+	const end = selectionEndPoint(selection, position);
 	return {
-		rowId: rowIdAtLine(startLine),
-		line: startLine,
-		column: startColumn,
-		selectionEndRowId: rowIdAtLine(endLine),
-		selectionEndLine: endLine,
-		selectionEndColumn: endColumn,
+		rowId: rowIdAtLine(start.line),
+		line: start.line,
+		column: start.column,
+		selectionEndRowId: rowIdAtLine(end.line),
+		selectionEndLine: end.line,
+		selectionEndColumn: end.column,
 		scrollTop: editor.getScrollTop(),
 		scrollLeft: editor.getScrollLeft()
 	};
+}
+
+function emptyCursorAnchor(): CursorAnchor {
+	return { line: 1, column: 1, selectionEndLine: 1, selectionEndColumn: 1, scrollTop: 0, scrollLeft: 0 };
+}
+
+function selectionStartPoint(
+	selection: monaco.Selection | null,
+	position: monaco.Position
+): { line: number; column: number } {
+	return {
+		line: pickNumber(selection?.selectionStartLineNumber, position.lineNumber),
+		column: pickNumber(selection?.selectionStartColumn, position.column)
+	};
+}
+
+function selectionEndPoint(
+	selection: monaco.Selection | null,
+	position: monaco.Position
+): { line: number; column: number } {
+	return {
+		line: pickNumber(selection?.positionLineNumber, position.lineNumber),
+		column: pickNumber(selection?.positionColumn, position.column)
+	};
+}
+
+function pickNumber(value: number | null | undefined, fallback: number): number {
+	return value ?? fallback;
+}
+
+function stringOrUndefined(value: unknown): string | undefined {
+	return typeof value === 'string' ? value : undefined;
 }
 
 function restoreCursor(anchor: CursorAnchor): void {
 	if (editor === undefined || model === undefined) {
 		return;
 	}
-	const line = anchor.rowId !== undefined ? documentModel.rowLine.get(anchor.rowId) : anchor.line;
-	const endLine =
-		anchor.selectionEndRowId !== undefined
-			? documentModel.rowLine.get(anchor.selectionEndRowId) ?? anchor.selectionEndLine
-			: anchor.selectionEndLine;
+	const line = anchorLine(anchor.rowId, anchor.line);
 	if (line === undefined) {
 		return;
 	}
+	const endLine = resolvedEndLine(anchor);
 	const safeLine = Math.min(line, model.getLineCount());
 	const safeEndLine = Math.min(endLine, model.getLineCount());
 	editor.setSelection(
 		new monaco.Selection(
 			safeLine,
-			Math.min(anchor.column, model.getLineMaxColumn(safeLine)),
+			clampColumn(safeLine, anchor.column),
 			safeEndLine,
-			Math.min(anchor.selectionEndColumn, model.getLineMaxColumn(safeEndLine))
+			clampColumn(safeEndLine, anchor.selectionEndColumn)
 		)
 	);
 	editor.setScrollTop(anchor.scrollTop);
 	editor.setScrollLeft(anchor.scrollLeft);
+}
+
+function anchorLine(rowId: string | undefined, fallback: number): number | undefined {
+	return rowId === undefined ? fallback : documentModel.rowLine.get(rowId);
+}
+
+function resolvedEndLine(anchor: CursorAnchor): number {
+	return anchorLine(anchor.selectionEndRowId, anchor.selectionEndLine) ?? anchor.selectionEndLine;
+}
+
+function clampColumn(line: number, column: number): number {
+	return Math.min(column, model?.getLineMaxColumn(line) ?? column);
 }
 
 function localEditPending(): boolean {
@@ -671,11 +645,15 @@ function updateDirtyStatus(): void {
 }
 
 function maybeRequestSave(): void {
-	if (!saveRequested || invalidEdits.size > 0 || pendingEdits.size > 0 || inflightEdits.size > 0) {
+	if (!saveRequested || hasBlockingLocalEdits()) {
 		return;
 	}
 	saveRequested = false;
 	postToHost({ type: 'save' });
+}
+
+function hasBlockingLocalEdits(): boolean {
+	return invalidEdits.size > 0 || localEditPending();
 }
 
 function requestSave(): void {
@@ -701,41 +679,84 @@ function requestSave(): void {
 
 function markerForInvalid(invalid: InvalidEdit): monaco.editor.IMarkerData | undefined {
 	const line = documentModel.rowLine.get(invalid.nodeId);
-	const lineText = line === undefined ? undefined : documentModel.lines[line - 1];
+	const lineText = syntheticLineAt(line);
 	if (line === undefined || lineText === undefined) {
 		return undefined;
 	}
-	const span = lineText.fieldSpans.find((candidate) => candidate.field === invalid.field);
+	const span = fieldSpanAt(lineText, invalid.field);
 	return {
 		severity: monaco.MarkerSeverity.Error,
 		message: invalid.message,
 		startLineNumber: line,
-		startColumn: span?.startColumn ?? 1,
+		startColumn: spanStartColumn(span),
 		endLineNumber: line,
-		endColumn: span?.endColumn ?? Math.max(lineText.text.length + 1, 2)
+		endColumn: spanEndColumn(span, lineText)
 	};
 }
 
+function syntheticLineAt(line: number | undefined): SyntheticLine | undefined {
+	return line === undefined ? undefined : documentModel.lines[line - 1];
+}
+
+function fieldSpanAt(lineText: SyntheticLine, field: EditField): FieldSpan | undefined {
+	return lineText.fieldSpans.find((candidate) => candidate.field === field);
+}
+
+function spanStartColumn(span: FieldSpan | undefined): number {
+	return span?.startColumn ?? 1;
+}
+
+function spanEndColumn(span: FieldSpan | undefined, lineText: SyntheticLine): number {
+	return span?.endColumn ?? Math.max(lineText.text.length + 1, 2);
+}
+
 function updateErrorState(): void {
-	const first = invalidEdits.values().next().value as InvalidEdit | undefined;
-	if (errorStrip !== null) {
-		errorStrip.hidden = first === undefined;
-		errorStrip.textContent = first === undefined ? '' : `Invalid value — ${first.message}`;
+	const first = firstInvalidEdit();
+	renderErrorStrip(first);
+	applyErrorMarkers();
+	updateDetailsError(first);
+	updateDirtyStatus();
+}
+
+function firstInvalidEdit(): InvalidEdit | undefined {
+	return invalidEdits.values().next().value as InvalidEdit | undefined;
+}
+
+function renderErrorStrip(first: InvalidEdit | undefined): void {
+	if (errorStrip === null) {
+		return;
 	}
-	if (model !== undefined) {
-		const markers = Array.from(invalidEdits.values())
-			.map(markerForInvalid)
-			.filter((marker): marker is monaco.editor.IMarkerData => marker !== undefined);
-		monaco.editor.setModelMarkers(model, 'arxml-ecuc', markers);
+	errorStrip.hidden = first === undefined;
+	errorStrip.textContent = first === undefined ? '' : `Invalid value — ${first.message}`;
+}
+
+function applyErrorMarkers(): void {
+	if (model === undefined) {
+		return;
 	}
+	monaco.editor.setModelMarkers(model, 'arxml-ecuc', errorMarkers());
+}
+
+function errorMarkers(): monaco.editor.IMarkerData[] {
+	return Array.from(invalidEdits.values())
+		.map(markerForInvalid)
+		.filter(isMarker);
+}
+
+function isMarker(marker: monaco.editor.IMarkerData | undefined): marker is monaco.editor.IMarkerData {
+	return marker !== undefined;
+}
+
+function updateDetailsError(first: InvalidEdit | undefined): void {
 	if (first !== undefined) {
 		setDetailsStatus({ message: first.message, kind: 'warn' });
 		localErrorShown = true;
-	} else if (localErrorShown) {
+		return;
+	}
+	if (localErrorShown) {
 		clearDetailsStatus();
 		localErrorShown = false;
 	}
-	updateDirtyStatus();
 }
 
 function replaceSyntheticLine(
@@ -748,9 +769,30 @@ function replaceSyntheticLine(
 	if (model === undefined) {
 		return;
 	}
-	// The patched row is the one but last source of the line; the host row stays
-	// untouched until its re-scan accepts the draft.
-	const built = syntheticRowLine({
+	const built = buildFieldLine(row, field, raw, display);
+	documentModel.lines[line - 1] = syntheticLineOf(line, row, built);
+	syncDocumentText();
+	if (model.getLineContent(line) === built.text) {
+		// Direct typing already produced the rendered line. Re-pushing it would add
+		// a second undo entry and can interrupt an IME composition; only the span
+		// metadata needs the new value.
+		return;
+	}
+	pushLineText(line, built.text);
+}
+
+/**
+ * The line a row renders with one field replaced by the local draft. The patched
+ * row is the one but last source of the line; the host row stays untouched until
+ * its re-scan accepts the draft.
+ */
+function buildFieldLine(
+	row: EcucRow,
+	field: EditField,
+	raw: string,
+	display: string
+): ReturnType<typeof syntheticRowLine> {
+	return syntheticRowLine({
 		...row,
 		...(field === 'value' ? { value: raw, shownValue: display } : {}),
 		...(field === 'shortName' ? { shortName: raw } : {}),
@@ -758,7 +800,14 @@ function replaceSyntheticLine(
 		// must repaint it now instead of waiting for the host's re-scan.
 		...(field === 'definitionRef' ? { definitionRef: raw, label: lastShortName(raw) } : {})
 	});
-	documentModel.lines[line - 1] = {
+}
+
+function syntheticLineOf(
+	line: number,
+	row: EcucRow,
+	built: ReturnType<typeof syntheticRowLine>
+): SyntheticLine {
+	return {
 		line,
 		rowId: row.id,
 		kind: row.kind,
@@ -766,24 +815,31 @@ function replaceSyntheticLine(
 		fieldSpans: built.fieldSpans,
 		searchSpans: built.searchSpans
 	};
+}
+
+function syncDocumentText(): void {
 	documentModel.text = documentModel.lines.map((candidate) => candidate.text).join('\n');
-	if (model.getLineContent(line) === built.text) {
-		// Direct typing already produced the rendered line. Re-pushing it would add
-		// a second undo entry and can interrupt an IME composition; only the span
-		// metadata needs the new value.
+}
+
+function pushLineText(line: number, text: string): void {
+	const anchor = captureCursor();
+	pushModelLine(line, text);
+	restoreCursor(anchor);
+}
+
+function pushModelLine(line: number, text: string): void {
+	if (model === undefined) {
 		return;
 	}
-	const anchor = captureCursor();
 	applyingModel = true;
 	model.pushEditOperations(
 		[],
-		[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text: built.text }],
+		[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text }],
 		function () {
 			return null;
 		}
 	);
 	applyingModel = false;
-	restoreCursor(anchor);
 }
 
 /** The host-accepted raw value for one field, matching the edit payload's `value`. */
@@ -798,11 +854,15 @@ function acceptedFieldValue(row: EcucRow, field: EditField): string | undefined 
 function newestLocalEdit(key: string): QueuedEdit | undefined {
 	let newest = pendingEdits.get(key);
 	for (const edit of inflightEdits.values()) {
-		if (draftKey(edit.nodeId, edit.field) === key && (newest === undefined || edit.editId > newest.editId)) {
+		if (isNewerForKey(edit, key, newest)) {
 			newest = edit;
 		}
 	}
 	return newest;
+}
+
+function isNewerForKey(edit: QueuedEdit, key: string, newest: QueuedEdit | undefined): boolean {
+	return draftKey(edit.nodeId, edit.field) === key && (newest === undefined || edit.editId > newest.editId);
 }
 
 function inflightFor(key: string): QueuedEdit | undefined {
@@ -822,19 +882,20 @@ function inflightFor(key: string): QueuedEdit | undefined {
  */
 function isRedundantEdit(key: string, value: string, accepted: string | undefined): boolean {
 	const newest = newestLocalEdit(key);
-	if (newest !== undefined && newest.value === value) {
+	if (queuedValueMatches(newest, value)) {
 		return true;
 	}
-	if (value !== accepted) {
-		return false;
-	}
-	if (inflightFor(key) !== undefined) {
+	if (value !== accepted || inflightFor(key) !== undefined) {
 		return false;
 	}
 	// The host already holds this value, so drop a queued revert instead of
 	// writing it and dirtying the document for nothing.
 	pendingEdits.delete(key);
 	return true;
+}
+
+function queuedValueMatches(newest: QueuedEdit | undefined, value: string): boolean {
+	return newest !== undefined && newest.value === value;
 }
 
 /** The single mutation path for a live field value from Monaco or Details. */
@@ -849,6 +910,16 @@ function applyLocalField(
 	if (row === undefined || line === undefined) {
 		return;
 	}
+	updateFieldDraft(nodeId, field, raw, row, line);
+}
+
+function updateFieldDraft(
+	nodeId: string,
+	field: EditField,
+	raw: string,
+	row: EcucRow,
+	line: number
+): void {
 	const key = draftKey(nodeId, field);
 	const error = localValueError(row, field, raw);
 	const display = displayForRaw(row, field, raw);
@@ -857,12 +928,33 @@ function applyLocalField(
 	syncDetailsField(nodeId, field, spanText, error);
 	if (error !== undefined) {
 		// The invalid text stays visible, but it never enters the host document.
-		pendingEdits.delete(key);
-		invalidEdits.set(key, { nodeId, field, message: error, display: spanText, editId: (editSequence += 1) });
-		updateErrorState();
+		storeInvalidDraft(key, nodeId, field, error, spanText);
 		return;
 	}
 	invalidEdits.delete(key);
+	queueValidDraft(key, nodeId, field, raw, spanText, row);
+}
+
+function storeInvalidDraft(
+	key: string,
+	nodeId: string,
+	field: EditField,
+	error: string,
+	spanText: string
+): void {
+	pendingEdits.delete(key);
+	invalidEdits.set(key, { nodeId, field, message: error, display: spanText, editId: (editSequence += 1) });
+	updateErrorState();
+}
+
+function queueValidDraft(
+	key: string,
+	nodeId: string,
+	field: EditField,
+	raw: string,
+	spanText: string,
+	row: EcucRow
+): void {
 	if (isRedundantEdit(key, raw, acceptedFieldValue(row, field))) {
 		updateErrorState();
 		return;
@@ -882,13 +974,17 @@ function localValueFor(nodeId: string, field: EditField): string | undefined {
 }
 
 function maybeAcknowledgeFlush(): void {
-	if (pendingEdits.size > 0 || inflightEdits.size > 0 || flushRequests.size === 0) {
+	if (flushBlocked()) {
 		return;
 	}
 	for (const requestId of flushRequests) {
 		postToHost({ type: 'flushed', requestId });
 	}
 	flushRequests.clear();
+}
+
+function flushBlocked(): boolean {
+	return pendingEdits.size > 0 || inflightEdits.size > 0 || flushRequests.size === 0;
 }
 
 function clearPendingEdits(): void {
@@ -905,15 +1001,20 @@ function clearPendingEdits(): void {
 /** Drop local no-ops so Ctrl+S never sends a value the host already holds. */
 function pruneRedundantPending(): void {
 	for (const [key, edit] of Array.from(pendingEdits)) {
-		const row = rowById.get(edit.nodeId);
-		if (row === undefined || inflightFor(key) !== undefined) {
-			continue;
-		}
-		if (edit.value === acceptedFieldValue(row, edit.field ?? 'value')) {
+		if (isRedundantPending(key, edit)) {
 			pendingEdits.delete(key);
 		}
 	}
 	updateDirtyStatus();
+}
+
+function isRedundantPending(key: string, edit: QueuedEdit): boolean {
+	const row = rowById.get(edit.nodeId);
+	if (row === undefined || inflightFor(key) !== undefined) {
+		return false;
+	}
+	const field = edit.field ?? 'value';
+	return edit.value === acceptedFieldValue(row, field);
 }
 
 /**
@@ -933,45 +1034,7 @@ function flushEdits(): boolean {
 		maybeAcknowledgeFlush();
 		return false;
 	}
-	let stale = false;
-	const entries = Array.from(pendingEdits.entries()).sort((left, right) =>
-		compareEditFlushOrder(left[1], right[1], function (nodeId) {
-			return rowById.get(nodeId)?.level;
-		})
-	);
-	for (const [key, edit] of entries) {
-		const row = rowById.get(edit.nodeId);
-		if (row === undefined) {
-			// A previous re-scan removed the row; sending it would only earn a refusal.
-			// Keep the draft and report it, so the status explains the blocked save and
-			// the draft can still be submitted if the row returns.
-			stale = true;
-			setDetailsStatus({ message: 'The node is no longer in the file.', kind: 'warn' });
-			continue;
-		}
-		// One edit per field may be in flight. A newer value waits for its ack so
-		// a refusal cannot be confused with the value that superseded it.
-		if (inflightFor(key) !== undefined) {
-			continue;
-		}
-		pendingEdits.delete(key);
-		inflightEdits.set(edit.editId, edit);
-		if (edit.field === 'shortName') {
-			// The re-scan may arrive before or after `editResult`; keep this intent
-			// until the host pair proves the renamed container, so a draft cannot be
-			// addressed at the dead id in between.
-			renameIntents.set(edit.editId, { editId: edit.editId, nodeId: edit.nodeId, shortName: edit.value });
-		}
-		hostAcks = true;
-		postToHost({
-			type: 'edit',
-			editId: edit.editId,
-			nodeId: edit.nodeId,
-			field: edit.field,
-			value: edit.value,
-			baseRevision: hostRevision
-		});
-	}
+	const stale = flushPendingEdits();
 	if (stale) {
 		// A stale draft makes any outstanding host flush unsatisfiable; that save
 		// times out and the host writes the document as it stands. Drop the request
@@ -981,6 +1044,61 @@ function flushEdits(): boolean {
 	updateDirtyStatus();
 	maybeAcknowledgeFlush();
 	return stale;
+}
+
+function flushPendingEdits(): boolean {
+	let stale = false;
+	for (const [key, edit] of pendingFlushOrder()) {
+		stale = flushOneEdit(key, edit) || stale;
+	}
+	return stale;
+}
+
+function flushOneEdit(key: string, edit: QueuedEdit): boolean {
+	const row = rowById.get(edit.nodeId);
+	if (row === undefined) {
+		// A previous re-scan removed the row; sending it would only earn a refusal.
+		// Keep the draft and report it, so the status explains the blocked save and
+		// the draft can still be submitted if the row returns.
+		setDetailsStatus({ message: 'The node is no longer in the file.', kind: 'warn' });
+		return true;
+	}
+	// One edit per field may be in flight. A newer value waits for its ack so
+	// a refusal cannot be confused with the value that superseded it.
+	if (inflightFor(key) === undefined) {
+		sendPendingEdit(key, edit);
+	}
+	return false;
+}
+
+function sendPendingEdit(key: string, edit: QueuedEdit): void {
+	pendingEdits.delete(key);
+	inflightEdits.set(edit.editId, edit);
+	if (edit.field === 'shortName') {
+		// The re-scan may arrive before or after `editResult`; keep this intent
+		// until the host pair proves the renamed container, so a draft cannot be
+		// addressed at the dead id in between.
+		renameIntents.set(edit.editId, { editId: edit.editId, nodeId: edit.nodeId, shortName: edit.value });
+	}
+	hostAcks = true;
+	postToHost({
+		type: 'edit',
+		editId: edit.editId,
+		nodeId: edit.nodeId,
+		field: edit.field,
+		value: edit.value,
+		baseRevision: hostRevision
+	});
+}
+
+function pendingFlushOrder(): Array<[string, QueuedEdit]> {
+	return Array.from(pendingEdits.entries()).sort((left, right) =>
+		compareEditFlushOrder(left[1], right[1], levelOfRow)
+	);
+}
+
+function levelOfRow(nodeId: string): number | undefined {
+	return rowById.get(nodeId)?.level;
 }
 
 function queueEdit(edit: { nodeId: string; field?: EditField; value: string; display: string }): void {
@@ -1000,123 +1118,220 @@ function queueEdit(edit: { nodeId: string; field?: EditField; value: string; dis
 
 function hasNewerLocalEdit(edit: QueuedEdit): boolean {
 	const key = draftKey(edit.nodeId, edit.field);
-	return (
-		Array.from(pendingEdits.values()).some((candidate) => draftKey(candidate.nodeId, candidate.field) === key && candidate.editId > edit.editId) ||
-		Array.from(inflightEdits.values()).some((candidate) => draftKey(candidate.nodeId, candidate.field) === key && candidate.editId > edit.editId) ||
-		(invalidEdits.get(key)?.editId ?? 0) > edit.editId
-	);
+	return hasNewerPending(key, edit.editId) || hasNewerInflight(key, edit.editId) || hasNewerInvalid(key, edit.editId);
+}
+
+function hasNewerPending(key: string, editId: number): boolean {
+	return Array.from(pendingEdits.values()).some((candidate) => isNewerFor(candidate, key, editId));
+}
+
+function hasNewerInflight(key: string, editId: number): boolean {
+	return Array.from(inflightEdits.values()).some((candidate) => isNewerFor(candidate, key, editId));
+}
+
+function isNewerFor(candidate: QueuedEdit, key: string, editId: number): boolean {
+	return draftKey(candidate.nodeId, candidate.field) === key && candidate.editId > editId;
+}
+
+function hasNewerInvalid(key: string, editId: number): boolean {
+	return (invalidEdits.get(key)?.editId ?? 0) > editId;
 }
 
 /** Put the host-accepted row text back after a refusal with no newer local edit. */
-function handleEditResult(message: {
-	editId: number;
-	ok: boolean;
-	reason?: string;
-	revision: number;
-	nextNodeId?: string;
-}): void {
-	if (typeof message.editId !== 'number' || typeof message.revision !== 'number' || typeof message.ok !== 'boolean') {
+function handleEditResult(message: EditorMessage<'editResult'>): void {
+	if (!isEditResultMessage(message)) {
 		return;
 	}
-	const nextNodeId = typeof message.nextNodeId === 'string' ? message.nextNodeId : undefined;
 	const edit = inflightEdits.get(message.editId);
 	if (edit === undefined) {
 		return;
 	}
 	inflightEdits.delete(message.editId);
-	const intent = renameIntents.get(message.editId);
-	if (!message.ok) {
-		// The rename never happened, so its intent is not waiting for a re-scan.
-		// The pre-rename draft stays under its old id and remains editable.
-		if (intent !== undefined) {
-			renameIntents.delete(message.editId);
-		}
-	} else if (intent !== undefined && nextNodeId !== undefined) {
-		// The host owns the id grammar: record its pair so the next row store can
-		// prove the rename even when it arrived before this acknowledgement.
-		renameIntents.set(message.editId, { ...intent, nextNodeId });
-		remapDraftsAfterRename();
-		if (resolvedRenames.size > 0) {
-			// The re-scan landed before this ack: rebuild from the remapped drafts so
-			// the renamed row shows the post-flush keystroke and keeps the Details focus.
-			applyRows(rows, header, selectedId);
-		}
-	} else if (intent !== undefined) {
-		// A host that predates the pair cannot prove the new id. Drop the intent so a
-		// flush is not deferred forever; its drafts are then reported stale instead of
-		// being sent to an id the page no longer knows.
-		renameIntents.delete(message.editId);
-		remapDraftsAfterRename();
-	}
+	settleRenameIntent(message, stringOrUndefined(message.nextNodeId));
 	hostAcks = true;
 	hostRevision = Math.max(hostRevision, message.revision);
 	const superseded = hasNewerLocalEdit(edit);
+	recordEditOutcome(message, edit, superseded);
+	updateDirtyStatus();
+	followUpAfterResult(message, superseded);
+	maybeRequestSave();
+}
+
+function isEditResultMessage(message: EditorMessage<'editResult'>): boolean {
+	return (
+		typeof message.editId === 'number' &&
+		typeof message.revision === 'number' &&
+		typeof message.ok === 'boolean'
+	);
+}
+
+function settleRenameIntent(message: EditorMessage<'editResult'>, nextNodeId: string | undefined): void {
+	if (!message.ok) {
+		// The rename never happened, so its intent is not waiting for a re-scan.
+		// The pre-rename draft stays under its old id and remains editable.
+		renameIntents.delete(message.editId);
+		return;
+	}
+	const intent = renameIntents.get(message.editId);
+	if (intent === undefined) {
+		return;
+	}
+	if (nextNodeId === undefined) {
+		forgetRenameIntent(message.editId);
+		return;
+	}
+	confirmRenameIntent(message.editId, intent, nextNodeId);
+}
+
+function forgetRenameIntent(editId: number): void {
+	// A host that predates the pair cannot prove the new id. Drop the intent so a
+	// flush is not deferred forever; its drafts are then reported stale instead of
+	// being sent to an id the page no longer knows.
+	renameIntents.delete(editId);
+	remapDraftsAfterRename();
+}
+
+function confirmRenameIntent(editId: number, intent: RenameIntent, nextNodeId: string): void {
+	// The host owns the id grammar: record its pair so the next row store can
+	// prove the rename even when it arrived before this acknowledgement.
+	renameIntents.set(editId, { ...intent, nextNodeId });
+	remapDraftsAfterRename();
+	if (resolvedRenames.size > 0) {
+		// The re-scan landed before this ack: rebuild from the remapped drafts so
+		// the renamed row shows the post-flush keystroke and keeps the Details focus.
+		applyRows(rows, header, selectedId);
+	}
+}
+
+function recordEditOutcome(
+	message: EditorMessage<'editResult'>,
+	edit: QueuedEdit,
+	superseded: boolean
+): void {
 	if (message.ok) {
 		hostDirty = true;
-		const invalid = invalidEdits.get(draftKey(edit.nodeId, edit.field));
-		if (invalid === undefined || invalid.editId <= edit.editId) {
-			invalidEdits.delete(draftKey(edit.nodeId, edit.field));
-		}
-	} else if (!superseded) {
-		// Keep the refused text visible and marked instead of silently restoring the
-		// old value; Ctrl+S stays blocked until the user corrects or reverts it.
-		saveRequested = false;
-		invalidEdits.set(draftKey(edit.nodeId, edit.field), {
-			nodeId: edit.nodeId,
-			field: edit.field ?? 'value',
-			message: message.reason ?? 'the edit was refused',
-			display: edit.display,
-			editId: edit.editId
-		});
-		if (message.reason !== undefined && message.reason !== '') {
-			setDetailsStatus({ message: message.reason, kind: 'warn' });
-		}
-		syncDetailsField(edit.nodeId, edit.field ?? 'value', edit.display, message.reason ?? 'the edit was refused');
-		updateErrorState();
+		clearSettledInvalid(edit);
+		return;
 	}
-	updateDirtyStatus();
+	if (!superseded) {
+		recordRefusal(message, edit);
+	}
+}
+
+function clearSettledInvalid(edit: QueuedEdit): void {
+	const key = draftKey(edit.nodeId, edit.field);
+	const invalid = invalidEdits.get(key);
+	if (invalid === undefined || invalid.editId <= edit.editId) {
+		invalidEdits.delete(key);
+	}
+}
+
+function recordRefusal(message: EditorMessage<'editResult'>, edit: QueuedEdit): void {
+	// Keep the refused text visible and marked instead of silently restoring the
+	// old value; Ctrl+S stays blocked until the user corrects or reverts it.
+	saveRequested = false;
+	storeRefusal(message, edit);
+	updateErrorState();
+}
+
+function storeRefusal(message: EditorMessage<'editResult'>, edit: QueuedEdit): void {
+	const reason = message.reason ?? 'the edit was refused';
+	invalidEdits.set(draftKey(edit.nodeId, edit.field), {
+		nodeId: edit.nodeId,
+		field: edit.field ?? 'value',
+		message: reason,
+		display: edit.display,
+		editId: edit.editId
+	});
+	showRefusalStatus(message);
+	syncDetailsField(edit.nodeId, edit.field ?? 'value', edit.display, reason);
+}
+
+function showRefusalStatus(message: EditorMessage<'editResult'>): void {
+	if (message.reason !== undefined && message.reason !== '') {
+		setDetailsStatus({ message: message.reason, kind: 'warn' });
+	}
+}
+
+function followUpAfterResult(message: EditorMessage<'editResult'>, superseded: boolean): void {
 	// A refusal ends the save attempt. A superseded refusal does not: the newer
 	// draft still has to reach the host under the same Ctrl+S.
 	if (!message.ok && !superseded) {
 		maybeAcknowledgeFlush();
-	} else if (pendingEdits.size > 0 && (saveRequested || flushRequests.size > 0)) {
-		if (flushEdits()) {
-			saveRequested = false;
-			updateDirtyStatus();
-		}
-	} else {
-		maybeAcknowledgeFlush();
+		return;
 	}
-	maybeRequestSave();
+	if (hasQueuedFlush()) {
+		flushForSave();
+		return;
+	}
+	maybeAcknowledgeFlush();
+}
+
+function hasQueuedFlush(): boolean {
+	return pendingEdits.size > 0 && (saveRequested || flushRequests.size > 0);
+}
+
+function flushForSave(): void {
+	if (flushEdits()) {
+		saveRequested = false;
+		updateDirtyStatus();
+	}
 }
 
 function revealRow(id: string | undefined, focus = false, column = 1): void {
-	if (editor === undefined || id === undefined) {
+	const target = revealTarget(id);
+	if (target === undefined) {
 		return;
 	}
-	const line = lineOf(id);
+	const line = lineOf(target.id);
 	if (line === undefined) {
 		return;
 	}
-	editor.revealLineInCenter(line);
-	const maxColumn = editor.getModel()?.getLineMaxColumn(line) ?? 1;
-	editor.setPosition({ lineNumber: line, column: Math.min(column, maxColumn) });
+	target.editor.revealLineInCenter(line);
+	target.editor.setPosition({ lineNumber: line, column: Math.min(column, lineMaxColumn(line)) });
 	if (focus) {
-		editor.focus();
+		target.editor.focus();
 	}
+}
+
+function revealTarget(
+	id: string | undefined
+): { id: string; editor: monaco.editor.IStandaloneCodeEditor } | undefined {
+	if (editor === undefined || id === undefined) {
+		return undefined;
+	}
+	return { id, editor };
+}
+
+function lineMaxColumn(line: number): number {
+	return editor?.getModel()?.getLineMaxColumn(line) ?? 1;
 }
 
 function latestLocalEdits(): QueuedEdit[] {
 	const latest = new Map<string, QueuedEdit>();
+	recordInflightEdits(latest);
+	recordLatest(pendingEdits.values(), latest);
+	recordInvalidEdits(latest);
+	return Array.from(latest.values());
+}
+
+function recordInflightEdits(latest: Map<string, QueuedEdit>): void {
 	for (const edit of inflightEdits.values()) {
 		latest.set(draftKey(edit.nodeId, edit.field), edit);
 	}
-	for (const edit of pendingEdits.values()) {
-		const current = latest.get(draftKey(edit.nodeId, edit.field));
+}
+
+function recordLatest(edits: Iterable<QueuedEdit>, latest: Map<string, QueuedEdit>): void {
+	for (const edit of edits) {
+		const key = draftKey(edit.nodeId, edit.field);
+		const current = latest.get(key);
 		if (current === undefined || edit.editId > current.editId) {
-			latest.set(draftKey(edit.nodeId, edit.field), edit);
+			latest.set(key, edit);
 		}
 	}
+}
+
+function recordInvalidEdits(latest: Map<string, QueuedEdit>): void {
 	for (const [key, invalid] of invalidEdits) {
 		latest.set(key, {
 			type: 'edit',
@@ -1127,7 +1342,6 @@ function latestLocalEdits(): QueuedEdit[] {
 			display: invalid.display
 		});
 	}
-	return Array.from(latest.values());
 }
 
 /** Paint an optimistic field value over a line built from host-accepted rows. */
@@ -1136,17 +1350,21 @@ function overlayLocalOnLine(line: SyntheticLine, local: readonly QueuedEdit[] = 
 		if (line.rowId !== edit.nodeId) {
 			continue;
 		}
-		const field = edit.field ?? 'value';
-		const span = line.fieldSpans.find((candidate) => candidate.field === field);
-		if (span === undefined) {
-			continue;
-		}
-		const before = line.text.slice(0, span.startColumn - 1);
-		const after = line.text.slice(span.endColumn - 1);
-		line.text = before + edit.display + after;
-		span.text = edit.display;
-		span.endColumn = span.startColumn + edit.display.length;
+		overlayEditOnLine(line, edit);
 	}
+}
+
+function overlayEditOnLine(line: SyntheticLine, edit: QueuedEdit): void {
+	const field = edit.field ?? 'value';
+	const span = line.fieldSpans.find((candidate) => candidate.field === field);
+	if (span === undefined) {
+		return;
+	}
+	const before = line.text.slice(0, span.startColumn - 1);
+	const after = line.text.slice(span.endColumn - 1);
+	line.text = before + edit.display + after;
+	span.text = edit.display;
+	span.endColumn = span.startColumn + edit.display.length;
 }
 
 function overlayLocalEdits(doc: SyntheticDocument): void {
@@ -1174,21 +1392,9 @@ function remapDraftsAfterRename(): void {
 	// Pairs proved earlier in the same turn are kept: an acknowledgement can resolve
 	// a rename after its document already rebuilt the rows, and the rebuild that
 	// follows that acknowledgement still needs the mapping for caret and selection.
-	const plan = resolveRenameIntents(Array.from(renameIntents.values()), function (id) {
-		return rowById.get(id);
-	});
+	const plan = resolveRenameIntents(Array.from(renameIntents.values()), rowLookup);
 	for (const pair of plan.resolved) {
-		remapDraftMap(pendingEdits, pair.oldId, pair.newId);
-		remapDraftMap(invalidEdits, pair.oldId, pair.newId);
-		for (const [editId, edit] of Array.from(inflightEdits)) {
-			const next = remapDraftNodeId(edit, pair.oldId, pair.newId);
-			if (next !== undefined) {
-				// A refusal that arrives after this rebuild must be recorded at the new
-				// id; the Details selection never targets the dead one.
-				inflightEdits.set(editId, next);
-			}
-		}
-		resolvedRenames.set(pair.oldId, pair.newId);
+		applyRenamePair(pair);
 	}
 	if (plan.dropped.length > 0) {
 		// The rename did not land where the host said. Its drafts cannot be addressed
@@ -1202,123 +1408,212 @@ function remapDraftsAfterRename(): void {
 	}
 }
 
+function rowLookup(id: string): EcucRow | undefined {
+	return rowById.get(id);
+}
+
+function applyRenamePair(pair: RenameResolution): void {
+	remapDraftMap(pendingEdits, pair.oldId, pair.newId);
+	remapDraftMap(invalidEdits, pair.oldId, pair.newId);
+	remapInflightDrafts(pair);
+	resolvedRenames.set(pair.oldId, pair.newId);
+}
+
+function remapInflightDrafts(pair: RenameResolution): void {
+	for (const [editId, edit] of Array.from(inflightEdits)) {
+		const next = remapDraftNodeId(edit, pair.oldId, pair.newId);
+		if (next !== undefined) {
+			// A refusal that arrives after this rebuild must be recorded at the new
+			// id; the Details selection never targets the dead one.
+			inflightEdits.set(editId, next);
+		}
+	}
+}
+
 
 function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
 	localUndoActive = false;
 	restoringView = true;
 	try {
-		const anchor = captureCursor();
-		const viewState = editor?.saveViewState();
-		rows = Array.isArray(nextRows) ? nextRows : [];
-		indexRows();
-		remapDraftsAfterRename();
-		if (nextHeader !== undefined) {
-			header = nextHeader;
-		}
-		documentModel = buildSyntheticDocument(rows, header);
-		overlayLocalEdits(documentModel);
-		if (model !== undefined) {
-			applyingModel = true;
-			// Monaco sticky scroll converts a folding end to `end + 1`; a document that
-			// ends on its closing brace would make the outermost scope invalid and
-			// drop every sticky candidate. A real editor document ends with a newline.
-			model.setValue(`${documentModel.text}\n`);
-			applyingModel = false;
-			if (viewState !== undefined && viewState !== null) {
-				editor?.restoreViewState(viewState);
-			}
-			setModelFolding(model, documentModel.foldingRanges);
-		}
-		if (nextSelectedId !== undefined) {
-			selectedId = nextSelectedId;
-		}
-		if (selectedId !== undefined && !rowById.has(selectedId)) {
-			// A patch without a selection still follows a rename the re-scan proved, so
-			// the Details panel never targets a dead id (the renamed container or any
-			// draft-bearing row under it).
-			let mapped = resolvedRenames.get(selectedId);
-			for (const [oldId, newId] of resolvedRenames) {
-				mapped = mapped ?? remapNodeId(selectedId, oldId, newId);
-			}
-			selectedId = mapped !== undefined && rowById.has(mapped) ? mapped : undefined;
-		}
-		subtreeIds = subtreeRowIdsOf(selectedId);
-		setConditionRows(rows);
-		ensureDiscoveredConditionRows();
-		applyDisabledCount();
-		updateInspector();
-		resolvedRenames = new Map();
-		applyDecorations();
-		restoreCursor(anchor);
-		invalidateNativeFind();
+		rebuildRows(nextRows, nextHeader, nextSelectedId);
 	} finally {
 		restoringView = false;
 	}
+	flushAfterRows();
+}
+
+function rebuildRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
+	const anchor = captureCursor();
+	const viewState = currentViewState();
+	rows = Array.isArray(nextRows) ? nextRows : [];
+	indexRows();
+	remapDraftsAfterRename();
+	if (nextHeader !== undefined) {
+		header = nextHeader;
+	}
+	documentModel = buildSyntheticDocument(rows, header);
+	overlayLocalEdits(documentModel);
+	replaceModelText(viewState);
+	applySelection(nextSelectedId);
+	refreshRows();
+	resolvedRenames = new Map();
+	applyDecorations();
+	restoreCursor(anchor);
+	invalidateNativeFind();
+}
+
+function currentViewState(): ReturnType<monaco.editor.IStandaloneCodeEditor['saveViewState']> | undefined {
+	return editor?.saveViewState();
+}
+
+function replaceModelText(viewState: ReturnType<monaco.editor.IStandaloneCodeEditor['saveViewState']> | undefined): void {
+	if (model === undefined) {
+		return;
+	}
+	applyingModel = true;
+	// Monaco sticky scroll converts a folding end to `end + 1`; a document that
+	// ends on its closing brace would make the outermost scope invalid and
+	// drop every sticky candidate. A real editor document ends with a newline.
+	model.setValue(`${documentModel.text}\n`);
+	applyingModel = false;
+	if (viewState !== undefined && viewState !== null) {
+		editor?.restoreViewState(viewState);
+	}
+	setModelFolding(model, documentModel.foldingRanges);
+}
+
+function applySelection(nextSelectedId: string | undefined): void {
+	if (nextSelectedId !== undefined) {
+		selectedId = nextSelectedId;
+	}
+	if (selectedId !== undefined && !rowById.has(selectedId)) {
+		// A patch without a selection still follows a rename the re-scan proved, so
+		// the Details panel never targets a dead id (the renamed container or any
+		// draft-bearing row under it).
+		selectedId = renamedSelection(selectedId);
+	}
+}
+
+function renamedSelection(id: string): string | undefined {
+	let mapped = resolvedRenames.get(id);
+	for (const [oldId, newId] of resolvedRenames) {
+		mapped = mapped ?? remapNodeId(id, oldId, newId);
+	}
+	return existingRowId(mapped);
+}
+
+function existingRowId(id: string | undefined): string | undefined {
+	return id !== undefined && rowById.has(id) ? id : undefined;
+}
+
+function refreshRows(): void {
+	subtreeIds = subtreeRowIdsOf(selectedId);
+	setConditionRows(rows);
+	ensureDiscoveredConditionRows();
+	applyDisabledCount();
+	updateInspector();
+}
+
+function refreshPatchedRows(): void {
+	subtreeIds = subtreeRowIdsOf(selectedId);
+	applyDisabledCount();
+	updateInspector();
+}
+
+function flushAfterRows(): void {
 	// A Ctrl+S that was waiting on the rename (or on a host flush) now owns the
 	// remapped drafts: submit them under the new ids and let the save follow the
 	// acknowledgements. A draft whose row did not come back stops the save instead.
-	if (saveRequested || flushRequests.size > 0) {
-		if (flushEdits()) {
-			saveRequested = false;
-			updateDirtyStatus();
-		} else {
-			maybeRequestSave();
-		}
+	if (!saveRequested && flushRequests.size === 0) {
+		return;
 	}
+	if (flushEdits()) {
+		saveRequested = false;
+		updateDirtyStatus();
+		return;
+	}
+	maybeRequestSave();
 }
 
 function applyPatch(patch: EditorRowPatch, nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
 	localUndoActive = false;
-	if (!patch.structural && patch.remove === 1 && patch.rows.length === 1) {
-		const existing = rows[patch.at];
-		const incoming = patch.rows[0];
-		if (existing !== undefined && incoming !== undefined && existing.id === incoming.id) {
-			const anchor = captureCursor();
-			const row = { ...existing, ...incoming };
-			rows[patch.at] = row;
-			indexRows();
-			const line = documentModel.rowLine.get(row.id);
-			if (line !== undefined && model !== undefined) {
-				const built = syntheticRowLine(row);
-				const nextLine: SyntheticLine = {
-					line,
-					rowId: row.id,
-					kind: row.kind,
-					text: built.text,
-					fieldSpans: built.fieldSpans,
-					searchSpans: built.searchSpans
-				};
-				documentModel.lines[line - 1] = nextLine;
-				overlayLocalOnLine(nextLine);
-				documentModel.text = documentModel.lines.map((candidate) => candidate.text).join('\n');
-				applyingModel = true;
-				model.pushEditOperations(
-					[],
-					[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text: nextLine.text }],
-					function () {
-						return null;
-					}
-				);
-				applyingModel = false;
-			}
-			if (nextHeader !== undefined) {
-				header = nextHeader;
-			}
-			if (nextSelectedId !== undefined) {
-				selectedId = nextSelectedId;
-			}
-			subtreeIds = subtreeRowIdsOf(selectedId);
-			applyDisabledCount();
-			updateInspector();
-			applyDecorations();
-			restoreCursor(anchor);
-			invalidateNativeFind();
-			return;
-		}
+	if (tryApplyInPlacePatch(patch, nextHeader, nextSelectedId)) {
+		return;
 	}
 	const next = rows.slice();
 	next.splice(patch.at, patch.remove, ...patch.rows);
 	applyRows(next, nextHeader, nextSelectedId);
+}
+
+function tryApplyInPlacePatch(
+	patch: EditorRowPatch,
+	nextHeader?: EditorDocumentHeader,
+	nextSelectedId?: string
+): boolean {
+	if (!isInPlacePatch(patch)) {
+		return false;
+	}
+	const pair = inPlaceRow(patch);
+	if (pair === undefined) {
+		return false;
+	}
+	applyInPlacePatch(pair, patch.at, nextHeader, nextSelectedId);
+	return true;
+}
+
+function isInPlacePatch(patch: EditorRowPatch): boolean {
+	return !patch.structural && patch.remove === 1 && patch.rows.length === 1;
+}
+
+function inPlaceRow(patch: EditorRowPatch): { existing: EcucRow; incoming: EcucRow } | undefined {
+	const existing = rows[patch.at];
+	const incoming = patch.rows[0];
+	if (existing === undefined || incoming === undefined || existing.id !== incoming.id) {
+		return undefined;
+	}
+	return { existing, incoming };
+}
+
+function applyInPlacePatch(
+	pair: { existing: EcucRow; incoming: EcucRow },
+	at: number,
+	nextHeader?: EditorDocumentHeader,
+	nextSelectedId?: string
+): void {
+	const anchor = captureCursor();
+	const row = { ...pair.existing, ...pair.incoming };
+	rows[at] = row;
+	indexRows();
+	repaintRowLine(row);
+	if (nextHeader !== undefined) {
+		header = nextHeader;
+	}
+	if (nextSelectedId !== undefined) {
+		selectedId = nextSelectedId;
+	}
+	refreshPatchedRows();
+	applyDecorations();
+	restoreCursor(anchor);
+	invalidateNativeFind();
+}
+
+function repaintRowLine(row: EcucRow): void {
+	const line = documentModel.rowLine.get(row.id);
+	if (line === undefined) {
+		return;
+	}
+	repaintLine(line, row);
+}
+
+function repaintLine(line: number, row: EcucRow): void {
+	if (model === undefined) {
+		return;
+	}
+	const nextLine = syntheticLineOf(line, row, syntheticRowLine(row));
+	documentModel.lines[line - 1] = nextLine;
+	overlayLocalOnLine(nextLine);
+	syncDocumentText();
+	pushModelLine(line, nextLine.text);
 }
 
 function nativeFindKey(query: string, options: FindOptions): string {
@@ -1356,27 +1651,38 @@ function mapNativeMatches(result: { matches: FindMatch[] }): MonacoFindMatch[] {
 	const out: MonacoFindMatch[] = [];
 	const seen = new Set<string>();
 	for (const match of result.matches) {
-		const line = documentModel.rowLine.get(match.rowId);
-		const lineText = line === undefined ? undefined : documentModel.lines[line - 1];
-		if (line === undefined || lineText === undefined) {
+		const found = nativeMatchRange(match);
+		if (found === undefined || seen.has(found.key)) {
 			continue;
 		}
-		const range = searchRangeOnLine(lineText, match);
-		if (range === undefined) {
-			continue;
-		}
-		const key = `${line}:${range.startColumn}:${range.endColumn}`;
-		if (seen.has(key)) {
-			continue;
-		}
-		seen.add(key);
-		out.push({
-			range: new monaco.Range(line, range.startColumn, line, range.endColumn),
-			matches: [lineText.text.slice(range.startColumn - 1, range.endColumn - 1)]
-		} as unknown as MonacoFindMatch);
+		seen.add(found.key);
+		out.push(found.match);
 	}
 	out.sort((left, right) => monaco.Range.compareRangesUsingStarts(left.range, right.range));
 	return out;
+}
+
+function nativeMatchRange(match: FindMatch): { key: string; match: MonacoFindMatch } | undefined {
+	const line = documentModel.rowLine.get(match.rowId);
+	const lineText = lineAt(line);
+	if (line === undefined || lineText === undefined) {
+		return undefined;
+	}
+	const range = searchRangeOnLine(lineText, match);
+	if (range === undefined) {
+		return undefined;
+	}
+	return {
+		key: `${line}:${range.startColumn}:${range.endColumn}`,
+		match: {
+			range: new monaco.Range(line, range.startColumn, line, range.endColumn),
+			matches: [lineText.text.slice(range.startColumn - 1, range.endColumn - 1)]
+		} as unknown as MonacoFindMatch
+	};
+}
+
+function lineAt(line: number | undefined): SyntheticLine | undefined {
+	return line === undefined ? undefined : documentModel.lines[line - 1];
 }
 
 function nativeFindController(): NativeFindController | null {
@@ -1388,59 +1694,68 @@ function refreshNativeFind(query: string, options: FindOptions): void {
 		return;
 	}
 	const controller = nativeFindController();
-	const state = controller?.getState?.();
-	if (controller?.start === undefined || state === undefined || !state.isRevealed) {
+	const state = readFindState(controller);
+	if (!revealedFindState(state)) {
 		return;
 	}
 	// A faster keystroke may already have moved the widget past the result that
 	// just arrived; never replace the newer query with a stale result set.
-	if (
-		state.searchString !== query ||
-		state.isRegex !== options.regex ||
-		state.wholeWord !== options.wholeWord ||
-		state.matchCase !== options.caseSensitive
-	) {
+	if (!findStateMatches(state, query, options)) {
 		return;
 	}
-	void controller.start(
-		{
-			forceRevealReplace: false,
-			seedSearchStringFromSelection: 'none',
-			seedSearchStringFromNonEmptySelection: false,
-			seedSearchStringFromGlobalClipboard: false,
-			shouldFocus: 0,
-			shouldAnimate: false,
-			updateSearchScope: false,
-			loop: true
-		},
-		{
-			searchString: query,
-			isRegex: options.regex,
-			matchCase: options.caseSensitive,
-			wholeWord: options.wholeWord,
-			replaceString: state.replaceString,
-			preserveCase: state.preserveCase,
-			isReplaceRevealed: state.isReplaceRevealed
-		}
+	startNativeFind(controller, state, query, options);
+}
+
+function readFindState(controller: NativeFindController | null): NativeFindState | undefined {
+	return controller?.getState?.();
+}
+
+function revealedFindState(state: NativeFindState | undefined): state is NativeFindState {
+	return state !== undefined && state.isRevealed;
+}
+
+function findStateMatches(state: NativeFindState, query: string, options: FindOptions): boolean {
+	return (
+		state.searchString === query &&
+		state.isRegex === options.regex &&
+		state.wholeWord === options.wholeWord &&
+		state.matchCase === options.caseSensitive
 	);
 }
 
+function startNativeFind(
+	controller: NativeFindController | null,
+	state: NativeFindState,
+	query: string,
+	options: FindOptions
+): void {
+	startFindController(controller, state, query, options);
+}
+
 function applyNativeFindResult(requestId: number, result: { matches: FindMatch[] }, error?: string): void {
-	const key = nativeFindRequests.get(requestId);
-	if (key === undefined) {
-		return;
-	}
-	nativeFindRequests.delete(requestId);
-	nativeFindRequested.delete(key);
-	const query = nativeFindQueries.get(key);
+	const query = takeNativeFindQuery(requestId);
 	if (query === undefined) {
 		return;
 	}
 	if (error !== undefined) {
 		setDetailsStatus({ message: error, kind: 'warn' });
 	}
-	nativeFindCache.set(key, error === undefined ? mapNativeMatches(result) : []);
+	nativeFindCache.set(nativeFindKey(query.query, query.options), nativeFindMatches(result, error));
 	refreshNativeFind(query.query, query.options);
+}
+
+function takeNativeFindQuery(requestId: number): NativeFindQuery | undefined {
+	const key = nativeFindRequests.get(requestId);
+	if (key === undefined) {
+		return undefined;
+	}
+	nativeFindRequests.delete(requestId);
+	nativeFindRequested.delete(key);
+	return nativeFindQueries.get(key);
+}
+
+function nativeFindMatches(result: { matches: FindMatch[] }, error: string | undefined): MonacoFindMatch[] {
+	return error === undefined ? mapNativeMatches(result) : [];
 }
 
 function invalidateNativeFind(): void {
@@ -1448,20 +1763,26 @@ function invalidateNativeFind(): void {
 	nativeFindQueries.clear();
 	nativeFindRequested.clear();
 	nativeFindRequests.clear();
-	const state = nativeFindController()?.getState?.();
+	refreshRevealedFind();
+}
+
+function refreshRevealedFind(): void {
+	const state = readFindState(nativeFindController());
 	if (state?.isRevealed === true && state.searchString !== '') {
-		refreshNativeFind(state.searchString, {
-			caseSensitive: state.matchCase,
-			wholeWord: state.wholeWord,
-			regex: state.isRegex
-		});
+		refreshNativeFind(state.searchString, findOptionsFromState(state));
 	}
 }
 
+function findOptionsFromState(state: NativeFindState): FindOptions {
+	return {
+		caseSensitive: state.matchCase,
+		wholeWord: state.wholeWord,
+		regex: state.isRegex
+	};
+}
+
 /** The row field under one find match, in the offsets the engine compares. */
-function nativeTargetForRange(
-	range: monaco.Range
-): { rowId: string; field: 'label' | 'value' | 'meta'; start: number; end: number } | undefined {
+function nativeTargetForRange(range: monaco.Range): ReplaceTarget | undefined {
 	const line = documentModel.lines[range.startLineNumber - 1];
 	if (line === undefined) {
 		return undefined;
@@ -1481,24 +1802,23 @@ function nativeTargetForRange(
 	};
 }
 
-function nativeReplaceTarget(): { rowId: string; field: 'label' | 'value' | 'meta'; start: number; end: number } | undefined {
-	const state = nativeFindController()?.getState?.();
-	if (state !== undefined) {
-		const options: FindOptions = {
-			caseSensitive: state.matchCase,
-			wholeWord: state.wholeWord,
-			regex: state.isRegex
-		};
-		const matches = nativeFindCache.get(nativeFindKey(state.searchString, options)) ?? [];
-		const at = state.matchesPosition - 1;
-		const match = at >= 0 && at < matches.length ? matches[at] : undefined;
-		if (match !== undefined) {
-			const target = nativeTargetForRange(match.range);
-			if (target !== undefined) {
-				return target;
-			}
-		}
-	}
+function nativeReplaceTarget(): ReplaceTarget | undefined {
+	const state = readFindState(nativeFindController());
+	const fromState = state === undefined ? undefined : replaceTargetAtCurrentMatch(state);
+	return fromState ?? selectionReplaceTarget();
+}
+
+function replaceTargetAtCurrentMatch(state: NativeFindState): ReplaceTarget | undefined {
+	const matches = nativeFindCache.get(nativeFindKey(state.searchString, findOptionsFromState(state))) ?? [];
+	const match = matchAtPosition(matches, state.matchesPosition - 1);
+	return match === undefined ? undefined : nativeTargetForRange(match.range);
+}
+
+function matchAtPosition(matches: readonly MonacoFindMatch[], at: number): MonacoFindMatch | undefined {
+	return at >= 0 && at < matches.length ? matches[at] : undefined;
+}
+
+function selectionReplaceTarget(): ReplaceTarget | undefined {
 	const selection = editor?.getSelection();
 	if (selection === undefined || selection === null || selection.isEmpty()) {
 		return undefined;
@@ -1515,35 +1835,42 @@ function nativeReplaceTarget(): { rowId: string; field: 'label' | 'value' | 'met
 
 /** Route the native widget's Replace/Replace All through the Rust replace planner. */
 function requestNativeReplace(all: boolean): boolean {
-	const state = nativeFindController()?.getState?.();
-	if (state === undefined || !state.isRevealed || state.searchString.trim() === '') {
+	const state = readFindState(nativeFindController());
+	if (!canReplaceFind(state)) {
 		return false;
 	}
-	const options: FindOptions = {
-		caseSensitive: state.matchCase,
-		wholeWord: state.wholeWord,
-		regex: state.isRegex
-	};
 	const target = all ? undefined : nativeReplaceTarget();
-	if (!all && target === undefined) {
+	if (isSearchOnlyTarget(all, target)) {
 		// Container labels, values and numeric spans can carry a Rust plan. If
 		// no span matches, consume the action instead of letting Monaco edit the
 		// synthetic text behind the host.
 		setDetailsStatus({ message: 'This match is search-only', kind: 'warn' });
 		return true;
 	}
+	postReplaceRequest(state, all, target);
+	return true;
+}
+
+function isSearchOnlyTarget(all: boolean, target: ReplaceTarget | undefined): boolean {
+	return !all && target === undefined;
+}
+
+function canReplaceFind(state: NativeFindState | undefined): state is NativeFindState {
+	return state !== undefined && state.isRevealed && state.searchString.trim() !== '';
+}
+
+function postReplaceRequest(state: NativeFindState, all: boolean, target: ReplaceTarget | undefined): void {
 	const requestId = (nativeReplaceRequestId += 1);
 	postToHost({
 		type: 'replace',
 		requestId,
 		query: state.searchString,
-		options,
+		options: findOptionsFromState(state),
 		replacement: state.replaceString,
 		preserveCase: state.preserveCase,
 		all,
 		match: target
 	});
-	return true;
 }
 
 function installNativeReplaceBridge(): void {
@@ -1562,90 +1889,11 @@ function installNativeReplaceBridge(): void {
 }
 
 function installNativeFindBridge(target: monaco.editor.ITextModel): void {
-	const patched = target as unknown as {
-		findMatches(
-			searchString: string,
-			searchOnlyEditableRange: monaco.Range[] | null,
-			isRegex: boolean,
-			matchCase: boolean,
-			wordSeparators: string | null,
-			captureMatches: boolean,
-			limitResultCount: number
-		): MonacoFindMatch[];
-		findNextMatch(
-			searchString: string,
-			searchStart: monaco.Position,
-			isRegex: boolean,
-			matchCase: boolean,
-			wordSeparators: string | null,
-			captureMatches: boolean
-		): MonacoFindMatch | null;
-		findPreviousMatch(
-			searchString: string,
-			searchStart: monaco.Position,
-			isRegex: boolean,
-			matchCase: boolean,
-			wordSeparators: string | null,
-			captureMatches: boolean
-		): MonacoFindMatch | null;
-	};
-	patched.findMatches = function (
-		searchString,
-		_searchOnlyEditableRange,
-		isRegex,
-		matchCase,
-		wordSeparators,
-		_captureMatches,
-		limitResultCount
-	) {
-		const options = nativeFindOptions(isRegex, matchCase, wordSeparators);
-		const matches = nativeMatchesFor(searchString, options);
-		if (matches.length === 0) {
-			requestNativeFind(searchString, options);
-		}
-		return Number.isFinite(limitResultCount) ? matches.slice(0, limitResultCount) : matches.slice();
-	};
-	patched.findNextMatch = function (
-		searchString,
-		searchStart,
-		isRegex,
-		matchCase,
-		wordSeparators,
-		_captureMatches
-	) {
-		const options = nativeFindOptions(isRegex, matchCase, wordSeparators);
-		const matches = nativeMatchesFor(searchString, options);
-		if (matches.length === 0) {
-			requestNativeFind(searchString, options);
-			return null;
-		}
-		return matches.find((match) => monaco.Range.compareRangesUsingStarts(match.range, new monaco.Range(searchStart.lineNumber, searchStart.column, searchStart.lineNumber, searchStart.column)) >= 0) ?? matches[0];
-	};
-	patched.findPreviousMatch = function (
-		searchString,
-		searchStart,
-		isRegex,
-		matchCase,
-		wordSeparators,
-		_captureMatches
-	) {
-		const options = nativeFindOptions(isRegex, matchCase, wordSeparators);
-		const matches = nativeMatchesFor(searchString, options);
-		if (matches.length === 0) {
-			requestNativeFind(searchString, options);
-			return null;
-		}
-		for (let at = matches.length - 1; at >= 0; at -= 1) {
-			const end = matches[at].range.getEndPosition();
-			if (
-				end.lineNumber < searchStart.lineNumber ||
-				(end.lineNumber === searchStart.lineNumber && end.column <= searchStart.column)
-			) {
-				return matches[at];
-			}
-		}
-		return matches[matches.length - 1];
-	};
+	installFindBridge(target, {
+		options: nativeFindOptions,
+		matches: nativeMatchesFor,
+		request: requestNativeFind
+	});
 }
 
 function applySidebarVisibility(hidden: boolean): void {
@@ -1675,51 +1923,111 @@ function focusAdjacentParameter(fromId: string, direction: string): string | und
 	return next.id;
 }
 
+interface MultiEdit {
+	span: FieldSpan;
+	lineText: SyntheticLine;
+	text: string;
+	row: EcucRow;
+}
+
 function handleMultiChange(event: monaco.editor.IModelContentChangedEvent): void {
 	if (model === undefined) {
 		return;
 	}
-	const seenLines = new Set<number>();
-	const edits: { span: FieldSpan; lineText: SyntheticLine; text: string; row: EcucRow }[] = [];
-	for (const change of event.changes) {
-		if (change.range.startLineNumber !== change.range.endLineNumber || /[\r\n]/.test(change.text)) {
-			rebuildModel();
-			return;
-		}
-		const line = change.range.startLineNumber;
-		if (seenLines.has(line)) {
-			// Two edits on one line cannot be mapped to independent fields safely.
-			rebuildModel();
-			return;
-		}
-		seenLines.add(line);
-		const spans = documentModel.lines[line - 1]?.fieldSpans ?? [];
-		const span = spans.find(
-			(candidate) =>
-				change.range.startColumn >= candidate.startColumn &&
-				change.range.endColumn <= candidate.endColumn
-		);
-		const lineText = documentModel.lines[line - 1];
-		if (span === undefined || lineText === undefined) {
-			rebuildModel();
-			return;
-		}
-		const current = model.getLineContent(line);
-		const suffix = lineText.text.slice(span.endColumn - 1);
-		const text = current.slice(span.startColumn - 1, current.length - suffix.length);
-		const row = rowById.get(span.nodeId);
-		if (/[\r\n]/.test(text) || row === undefined) {
-			rebuildModel();
-			return;
-		}
-		edits.push({ span, lineText, text, row });
-	}
-	if (edits.length === 0) {
+	const edits = multiChangeEdits(event, model);
+	if (edits === null) {
+		rebuildModel();
 		return;
 	}
 	for (const edit of edits) {
 		applyLocalField(edit.span.nodeId, edit.span.field, edit.text);
 	}
+}
+
+function multiChangeEdits(
+	event: monaco.editor.IModelContentChangedEvent,
+	target: monaco.editor.ITextModel
+): MultiEdit[] | null {
+	const seenLines = new Set<number>();
+	const edits: MultiEdit[] = [];
+	for (const change of event.changes) {
+		const edit = multiChangeEdit(change, seenLines, target);
+		if (edit === null) {
+			return null;
+		}
+		appendEdit(edits, edit);
+	}
+	return edits;
+}
+
+function appendEdit(edits: MultiEdit[], edit: MultiEdit | undefined): void {
+	if (edit !== undefined) {
+		edits.push(edit);
+	}
+}
+
+function multiChangeEdit(
+	change: monaco.editor.IModelContentChange,
+	seenLines: Set<number>,
+	target: monaco.editor.ITextModel
+): MultiEdit | null | undefined {
+	if (!isSingleLineChange(change)) {
+		return null;
+	}
+	const line = change.range.startLineNumber;
+	if (seenLines.has(line)) {
+		// Two edits on one line cannot be mapped to independent fields safely.
+		return null;
+	}
+	seenLines.add(line);
+	return lineEdit(line, change.range, target);
+}
+
+function isSingleLineChange(change: monaco.editor.IModelContentChange): boolean {
+	return change.range.startLineNumber === change.range.endLineNumber && !isMultiline(change.text);
+}
+
+function lineEdit(line: number, range: monaco.IRange, target: monaco.editor.ITextModel): MultiEdit | null | undefined {
+	const field = lineFieldEdit(line, range, target);
+	if (field === undefined) {
+		return null;
+	}
+	const row = rowById.get(field.span.nodeId);
+	if (row === undefined || isMultiline(field.text)) {
+		return null;
+	}
+	return { ...field, row };
+}
+
+function lineFieldEdit(
+	line: number,
+	range: monaco.IRange,
+	target: monaco.editor.ITextModel
+): { span: FieldSpan; lineText: SyntheticLine; text: string } | undefined {
+	const lineText = documentModel.lines[line - 1];
+	if (lineText === undefined) {
+		return undefined;
+	}
+	const span = spanForRange(lineText, range);
+	if (span === undefined) {
+		return undefined;
+	}
+	return { span, lineText, text: fieldText(target.getLineContent(line), lineText, span) };
+}
+
+function spanForRange(lineText: SyntheticLine, range: monaco.IRange): FieldSpan | undefined {
+	return lineText.fieldSpans.find(
+		(candidate) => range.startColumn >= candidate.startColumn && range.endColumn <= candidate.endColumn
+	);
+}
+
+function fieldText(current: string, lineText: SyntheticLine, span: FieldSpan): string {
+	const suffix = lineText.text.slice(span.endColumn - 1);
+	return current.slice(span.startColumn - 1, current.length - suffix.length);
+}
+
+function isMultiline(text: string): boolean {
+	return /[\r\n]/.test(text);
 }
 
 /**
@@ -1732,10 +2040,28 @@ function handleMultiChange(event: monaco.editor.IModelContentChangedEvent): void
  * deleted quote, a moved prefix) is a syntax edit and must be restored.
  */
 function wholeLineFieldText(line: number, lineText: SyntheticLine): { span: FieldSpan; text: string } | undefined {
-	const span = lineText.fieldSpans.length === 1 ? lineText.fieldSpans[0] : undefined;
+	const span = singleFieldSpan(lineText);
+	if (span === undefined) {
+		return undefined;
+	}
 	const current = model?.getLineContent(line);
-	const text = current === undefined ? undefined : fieldTextFromWholeLine(lineText.text, lineText.fieldSpans, current);
-	return span === undefined || text === undefined ? undefined : { span, text };
+	if (current === undefined) {
+		return undefined;
+	}
+	return wholeLineSpanText(lineText, span, current);
+}
+
+function singleFieldSpan(lineText: SyntheticLine): FieldSpan | undefined {
+	return lineText.fieldSpans.length === 1 ? lineText.fieldSpans[0] : undefined;
+}
+
+function wholeLineSpanText(
+	lineText: SyntheticLine,
+	span: FieldSpan,
+	current: string
+): { span: FieldSpan; text: string } | undefined {
+	const text = fieldTextFromWholeLine(lineText.text, lineText.fieldSpans, current);
+	return text === undefined ? undefined : { span, text };
 }
 
 /**
@@ -1748,38 +2074,56 @@ function wholeLineFieldText(line: number, lineText: SyntheticLine): { span: Fiel
  * after the inserted span. A single-line paste and a cut are untouched.
  */
 function installMultilinePasteGuard(container: HTMLElement): void {
-	container.addEventListener(
-		'paste',
-		function (event: ClipboardEvent) {
-			const text = event.clipboardData?.getData('text/plain') ?? '';
-			if (text === '' || !/[\r\n]/.test(text) || editor === undefined || model === undefined) {
-				return;
-			}
-			const selection = editor.getSelection();
-			if (selection === null || selection.startLineNumber !== selection.endLineNumber) {
-				return;
-			}
-			const lineText = documentModel.lines[selection.startLineNumber - 1];
-			const span = lineText?.fieldSpans.find(
-				(candidate) =>
-					selection.startColumn >= candidate.startColumn && selection.endColumn <= candidate.endColumn
-			);
-			if (span === undefined) {
-				// Outside a field span the paste is not a value edit; let Monaco decide.
-				return;
-			}
-			event.preventDefault();
-			event.stopPropagation();
-			editor?.executeEdits('paste', [
-				{ range: selection, text: escapeNewlines(text), forceMoveMarkers: true }
-			]);
-		},
-		true
+	container.addEventListener('paste', handleMultilinePaste, true);
+}
+
+function handleMultilinePaste(event: ClipboardEvent): void {
+	const text = pasteText(event);
+	if (!shouldEscapePaste(text)) {
+		return;
+	}
+	const selection = editor?.getSelection();
+	if (!isSingleLineSelection(selection)) {
+		return;
+	}
+	const span = selectionSpan(selection);
+	if (span === undefined) {
+		// Outside a field span the paste is not a value edit; let Monaco decide.
+		return;
+	}
+	event.preventDefault();
+	event.stopPropagation();
+	insertEscapedPaste(selection, text);
+}
+
+function pasteText(event: ClipboardEvent): string {
+	return event.clipboardData?.getData('text/plain') ?? '';
+}
+
+function shouldEscapePaste(text: string): boolean {
+	return text !== '' && isMultiline(text) && editor !== undefined && model !== undefined;
+}
+
+function isSingleLineSelection(selection: monaco.Selection | null | undefined): selection is monaco.Selection {
+	return selection !== undefined && selection !== null && selection.startLineNumber === selection.endLineNumber;
+}
+
+function selectionSpan(selection: monaco.Selection): FieldSpan | undefined {
+	const lineText = documentModel.lines[selection.startLineNumber - 1];
+	return lineText?.fieldSpans.find(
+		(candidate) =>
+			selection.startColumn >= candidate.startColumn && selection.endColumn <= candidate.endColumn
 	);
 }
 
+function insertEscapedPaste(selection: monaco.Selection, text: string): void {
+	editor?.executeEdits('paste', [
+		{ range: selection, text: escapeNewlines(text), forceMoveMarkers: true }
+	]);
+}
+
 function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
-	if (applyingModel || model === undefined) {
+	if (isApplyingEdit()) {
 		return;
 	}
 	if (event.changes.length > 1) {
@@ -1787,65 +2131,81 @@ function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
 		return;
 	}
 	const change = event.changes[0];
-	if (change.range.startLineNumber !== change.range.endLineNumber || /[\r\n]/.test(change.text)) {
+	if (!isSingleLineChange(change)) {
 		rebuildModel();
 		return;
 	}
+	applyChange(change);
+}
+
+function isApplyingEdit(): boolean {
+	return applyingModel || model === undefined;
+}
+
+function applyChange(change: monaco.editor.IModelContentChange): void {
 	const line = change.range.startLineNumber;
-	const restored = (): void => {
-		const text = documentModel.lines[line - 1]?.text;
-		if (text === undefined || model === undefined) {
-			return;
-		}
-		const anchor = captureCursor();
-		applyingModel = true;
-		model.pushEditOperations(
-			[],
-			[{ range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)), text }],
-			function () {
-				return null;
-			}
-		);
-		applyingModel = false;
-		restoreCursor(anchor);
-	};
 	const lineText = documentModel.lines[line - 1];
-	const spans = lineText?.fieldSpans ?? [];
-	const span = spans.find(
-		(candidate) =>
-			change.range.startColumn >= candidate.startColumn &&
-			change.range.endColumn <= candidate.endColumn
-	);
-	if (span === undefined || model === undefined || lineText === undefined) {
+	const span = lineText === undefined ? undefined : spanForRange(lineText, change.range);
+	if (lineText === undefined || span === undefined) {
+		recoverWholeLine(line, change);
+		return;
+	}
+	applyTypedField(line, lineText, span);
+}
+
+function recoverWholeLine(line: number, change: monaco.editor.IModelContentChange): void {
+	const lineText = documentModel.lines[line - 1];
+	if (lineText === undefined || !isFullLineChange(lineText, change)) {
 		// Only a whole-line replacement can be the undo of a programmatic repaint;
 		// a one-character change outside the span (a deleted quote) stays a syntax
 		// edit, because quotes and value characters are indistinguishable there.
-		const fullLine =
-			lineText !== undefined &&
-			change.range.startColumn === 1 &&
-			change.range.endColumn === lineText.text.length + 1;
-		const recovered = lineText !== undefined && fullLine ? wholeLineFieldText(line, lineText) : undefined;
-		if (recovered !== undefined && rowById.has(recovered.span.nodeId)) {
-			applyLocalField(recovered.span.nodeId, recovered.span.field, recovered.text);
-			return;
-		}
-		restored();
+		restoreModelLine(line);
 		return;
 	}
-	const current = model.getLineContent(line);
-	const suffix = lineText.text.slice(span.endColumn - 1);
-	const text = current.slice(span.startColumn - 1, current.length - suffix.length);
-	if (/[\r\n]/.test(text)) {
-		restored();
+	const recovered = wholeLineFieldText(line, lineText);
+	if (!canRecover(recovered)) {
+		restoreModelLine(line);
+		return;
+	}
+	applyLocalField(recovered.span.nodeId, recovered.span.field, recovered.text);
+}
+
+function isFullLineChange(lineText: SyntheticLine, change: monaco.editor.IModelContentChange): boolean {
+	return change.range.startColumn === 1 && change.range.endColumn === lineText.text.length + 1;
+}
+
+function canRecover(
+	recovered: { span: FieldSpan; text: string } | undefined
+): recovered is { span: FieldSpan; text: string } {
+	return recovered !== undefined && rowById.has(recovered.span.nodeId);
+}
+
+function applyTypedField(line: number, lineText: SyntheticLine, span: FieldSpan): void {
+	const text = typedFieldText(line, lineText, span);
+	if (isMultiline(text)) {
+		restoreModelLine(line);
 		return;
 	}
 	const row = rowById.get(span.nodeId);
 	if (row === undefined) {
-		restored();
+		restoreModelLine(line);
 		return;
 	}
 	// Keep the local map in sync while the host round-trip is in flight.
 	applyLocalField(span.nodeId, span.field, text);
+}
+
+function typedFieldText(line: number, lineText: SyntheticLine, span: FieldSpan): string {
+	const current = model?.getLineContent(line) ?? '';
+	return fieldText(current, lineText, span);
+}
+
+function restoreModelLine(line: number): void {
+	const text = documentModel.lines[line - 1]?.text;
+	if (text === undefined) {
+		return;
+	}
+	pushLineText(line, text);
 }
 
 function revertToAccepted(): void {
@@ -1881,30 +2241,42 @@ function rebuildModel(): void {
 
 /** Undo the local draft stack; true keeps the host undo command out of the way. */
 function localUndo(): boolean {
-	if (!localDraftExists() && !localUndoActive) {
+	if (!hasLocalDraftStack()) {
 		return false;
 	}
-	const current = editor?.getModel();
-	if (current !== undefined && current !== null && current.canUndo()) {
-		// The model stack owns keystrokes and the programmatic Details repaint.
-		// `editor.trigger('undo')` would hit the host-undo action registered below.
-		current.undo();
-	}
+	undoModel();
 	localUndoActive = true;
 	return true;
 }
 
 /** Redo the local draft stack; true keeps the host redo command out of the way. */
 function localRedo(): boolean {
-	if (!localDraftExists() && !localUndoActive) {
+	if (!hasLocalDraftStack()) {
 		return false;
 	}
+	redoModel();
+	localUndoActive = true;
+	return true;
+}
+
+function undoModel(): void {
+	const current = editor?.getModel();
+	if (current !== undefined && current !== null && current.canUndo()) {
+		// The model stack owns keystrokes and the programmatic Details repaint.
+		// `editor.trigger('undo')` would hit the host-undo action registered below.
+		current.undo();
+	}
+}
+
+function redoModel(): void {
 	const current = editor?.getModel();
 	if (current !== undefined && current !== null && current.canRedo()) {
 		current.redo();
 	}
-	localUndoActive = true;
-	return true;
+}
+
+function hasLocalDraftStack(): boolean {
+	return localDraftExists() || localUndoActive;
 }
 
 function installShortcuts(): void {
@@ -1996,153 +2368,268 @@ function registerEditorActions(): void {
 	});
 }
 
+type MessageHandler = (message: EditorProviderToWebview) => void;
+
+const messageHandlers: Readonly<Record<EditorProviderToWebview['type'], MessageHandler>> = {
+	document: asMessageHandler(handleDocumentMessage),
+	documentPatch: asMessageHandler(handleDocumentPatchMessage),
+	editResult: asMessageHandler(handleEditResult),
+	dirty: asMessageHandler(handleDirtyMessage),
+	flushEdits: asMessageHandler(handleFlushEditsMessage),
+	conditions: asMessageHandler(handleConditionsMessage),
+	select: asMessageHandler(handleSelectMessage),
+	notice: asMessageHandler(handleNoticeMessage),
+	error: asMessageHandler(handleErrorMessage),
+	findResult: asMessageHandler(handleFindResultMessage),
+	replaceResult: asMessageHandler(handleReplaceResultMessage),
+	settings: asMessageHandler(handleSettingsMessage),
+	theme: asMessageHandler(handleThemeMessage)
+};
+
+/**
+ * Each entry is typed for its own union member; the dispatcher has already read
+ * the discriminator, so the narrow handler is safe to call with the payload.
+ */
+function asMessageHandler<T>(handler: (message: T) => void): MessageHandler {
+	return handler as unknown as MessageHandler;
+}
+
 function handleMessage(message: EditorProviderToWebview): void {
 	if (!message || typeof message.type !== 'string') {
 		return;
 	}
 	handleDetailsEditorMessage(message);
-	if (message.type === 'document') {
-		const revision = typeof message.document.revision === 'number' ? message.document.revision : undefined;
-		if (revision !== undefined && revision < hostRevision) {
-			return;
-		}
-		if (revision !== undefined) {
-			hostRevision = revision;
-			hostAcks = true;
-		}
-		if (typeof message.document.dirty === 'boolean') {
-			hostDirty = message.document.dirty;
-		}
-		applySettings(message.document.settings);
-		applyRows(message.document.rows, message.document.header, message.document.selectedId);
-		updateErrorState();
-		return;
+	messageHandlers[message.type]?.(message);
+}
+
+function acceptRevision(revision: unknown): boolean {
+	if (typeof revision !== 'number') {
+		return true;
 	}
-	if (message.type === 'documentPatch') {
-		const revision = typeof message.revision === 'number' ? message.revision : undefined;
-		if (revision !== undefined && revision < hostRevision) {
-			return;
-		}
-		if (revision !== undefined) {
-			hostRevision = revision;
-			hostAcks = true;
-		}
-		if (typeof message.dirty === 'boolean') {
-			hostDirty = message.dirty;
-		}
-		applyPatch(message.patch, message.header, message.selectedId);
-		updateErrorState();
-		return;
+	if (revision < hostRevision) {
+		return false;
 	}
-	if (message.type === 'editResult') {
-		handleEditResult(message);
-		return;
-	}
-	if (message.type === 'dirty') {
-		if (typeof message.revision !== 'number' || typeof message.dirty !== 'boolean') {
-			return;
-		}
-		hostAcks = true;
-		hostRevision = Math.max(hostRevision, message.revision);
-		hostDirty = message.dirty;
-		updateDirtyStatus();
-		return;
-	}
-	if (message.type === 'flushEdits') {
-		if (typeof message.requestId !== 'number') {
-			return;
-		}
-		flushRequests.add(message.requestId);
-		// A stale draft leaves `pendingEdits` non-empty, so the flush is never
-		// acknowledged and the host save waits rather than writing past it.
-		flushEdits();
-		maybeAcknowledgeFlush();
-		return;
-	}
-	if (message.type === 'settings') {
-		applySettings(message.settings);
-		return;
-	}
-	if (message.type === 'theme') {
-		defineEcucTheme();
-		monaco.editor.setTheme('arxml-ecuc-theme');
-		return;
-	}
-	if (message.type === 'conditions') {
-		renderConditionEntries(message.entries);
-		return;
-	}
-	if (message.type === 'select') {
-		if (rowById.has(message.nodeId)) {
-			setSelection(message.nodeId, true);
-		}
-		return;
-	}
-	if (message.type === 'findResult') {
-		applyNativeFindResult(message.requestId, message.result, message.error);
-		return;
-	}
-	if (message.type === 'replaceResult') {
-		if (!message.result.ok) {
-			if (message.result.reason !== undefined) {
-				setDetailsStatus({ message: message.result.reason, kind: 'warn' });
-			}
-			return;
-		}
-		// The host applied the Rust plan. Re-run the open query against the new
-		// document instead of the synthetic text Monaco replaced locally.
-		invalidateNativeFind();
-		return;
-	}
-	if (message.type === 'notice') {
-		if (message.scope === 'conditions') {
-			setConditionsStatus(message.message || '');
-			return;
-		}
-		// A revisioned host answers every field edit with an `editResult`, which
-		// restores exactly the refused field and keeps newer edits. The blanket
-		// restore here is only for a host that predates that acknowledgement.
-		if (hasPendingEdits() && !hostAcks && message.kind === 'warn') {
-			revertToAccepted();
-		}
-		if (!refusalShownInDetails(message, getSidebarState().tab !== 'details')) {
-			setDetailsStatus(message);
-		}
-		return;
-	}
-	if (message.type === 'error') {
-		setDetailsStatus({ message: message.message, kind: 'warn' });
+	hostRevision = revision;
+	hostAcks = true;
+	return true;
+}
+
+function applyHostDirty(dirty: unknown): void {
+	if (typeof dirty === 'boolean') {
+		hostDirty = dirty;
 	}
 }
+
+function handleDocumentMessage(message: EditorMessage<'document'>): void {
+	if (!acceptRevision(message.document.revision)) {
+		return;
+	}
+	applyHostDirty(message.document.dirty);
+	applySettings(message.document.settings);
+	applyRows(message.document.rows, message.document.header, message.document.selectedId);
+	updateErrorState();
+}
+
+function handleDocumentPatchMessage(message: EditorMessage<'documentPatch'>): void {
+	if (!acceptRevision(message.revision)) {
+		return;
+	}
+	applyHostDirty(message.dirty);
+	applyPatch(message.patch, message.header, message.selectedId);
+	updateErrorState();
+}
+
+function handleDirtyMessage(message: EditorMessage<'dirty'>): void {
+	if (typeof message.revision !== 'number' || typeof message.dirty !== 'boolean') {
+		return;
+	}
+	hostAcks = true;
+	hostRevision = Math.max(hostRevision, message.revision);
+	hostDirty = message.dirty;
+	updateDirtyStatus();
+}
+
+function handleFlushEditsMessage(message: EditorMessage<'flushEdits'>): void {
+	if (typeof message.requestId !== 'number') {
+		return;
+	}
+	flushRequests.add(message.requestId);
+	// A stale draft leaves `pendingEdits` non-empty, so the flush is never
+	// acknowledged and the host save waits rather than writing past it.
+	flushEdits();
+	maybeAcknowledgeFlush();
+}
+
+function handleSettingsMessage(message: EditorMessage<'settings'>): void {
+	applySettings(message.settings);
+}
+
+function handleThemeMessage(_message: EditorMessage<'theme'>): void {
+	defineEcucTheme();
+	monaco.editor.setTheme('arxml-ecuc-theme');
+}
+
+function handleConditionsMessage(message: EditorMessage<'conditions'>): void {
+	renderConditionEntries(message.entries);
+}
+
+function handleSelectMessage(message: EditorMessage<'select'>): void {
+	if (rowById.has(message.nodeId)) {
+		setSelection(message.nodeId, true);
+	}
+}
+
+function handleFindResultMessage(message: EditorMessage<'findResult'>): void {
+	applyNativeFindResult(message.requestId, message.result, message.error);
+}
+
+function handleReplaceResultMessage(message: EditorMessage<'replaceResult'>): void {
+	if (!message.result.ok) {
+		reportReplaceFailure(message.result.reason);
+		return;
+	}
+	// The host applied the Rust plan. Re-run the open query against the new
+	// document instead of the synthetic text Monaco replaced locally.
+	invalidateNativeFind();
+}
+
+function reportReplaceFailure(reason: string | undefined): void {
+	if (reason !== undefined) {
+		setDetailsStatus({ message: reason, kind: 'warn' });
+	}
+}
+
+function handleNoticeMessage(message: EditorMessage<'notice'>): void {
+	if (message.scope === 'conditions') {
+		setConditionsStatus(message.message || '');
+		return;
+	}
+	applyNotice(message);
+}
+
+function applyNotice(message: EditorMessage<'notice'>): void {
+	revertOnStaleNotice(message);
+	showNoticeStatus(message);
+}
+
+function revertOnStaleNotice(message: EditorMessage<'notice'>): void {
+	// A revisioned host answers every field edit with an `editResult`, which
+	// restores exactly the refused field and keeps newer edits. The blanket
+	// restore here is only for a host that predates that acknowledgement.
+	if (hasPendingEdits() && !hostAcks && message.kind === 'warn') {
+		revertToAccepted();
+	}
+}
+
+function showNoticeStatus(message: EditorMessage<'notice'>): void {
+	if (!refusalShownInDetails(message, getSidebarState().tab !== 'details')) {
+		setDetailsStatus(message);
+	}
+}
+
+function handleErrorMessage(message: EditorMessage<'error'>): void {
+	setDetailsStatus({ message: message.message, kind: 'warn' });
+}
+
+type EditorOptionsUpdate = Parameters<monaco.editor.IStandaloneCodeEditor['updateOptions']>[0];
 
 function applySettings(settings: MonacoSettings | undefined): void {
 	if (editor === undefined || settings === undefined) {
 		return;
 	}
-	editor.updateOptions({
-		...(settings.fontFamily !== undefined ? { fontFamily: settings.fontFamily } : {}),
-		...(settings.fontSize !== undefined ? { fontSize: settings.fontSize } : {}),
-		...(settings.lineHeight !== undefined && settings.lineHeight > 0 ? { lineHeight: settings.lineHeight } : {}),
-		...(settings.fontWeight !== undefined ? { fontWeight: settings.fontWeight } : {}),
+	editor.updateOptions(settingsOptions(settings));
+}
+
+function settingsOptions(settings: MonacoSettings): EditorOptionsUpdate {
+	return {
+		...fontSettings(settings),
+		...wrapSettings(settings),
+		...guideSettings(settings),
+		...cursorSettings(settings),
+		...renderSettings(settings)
+	};
+}
+
+function fontSettings(settings: MonacoSettings): EditorOptionsUpdate {
+	return {
+		...fontFamilySetting(settings),
+		...fontSizeSetting(settings),
+		...lineHeightSetting(settings),
+		...fontWeightSetting(settings)
+	};
+}
+
+function fontFamilySetting(settings: MonacoSettings): EditorOptionsUpdate {
+	return settings.fontFamily !== undefined ? { fontFamily: settings.fontFamily } : {};
+}
+
+function fontSizeSetting(settings: MonacoSettings): EditorOptionsUpdate {
+	return settings.fontSize !== undefined ? { fontSize: settings.fontSize } : {};
+}
+
+function lineHeightSetting(settings: MonacoSettings): EditorOptionsUpdate {
+	return settings.lineHeight !== undefined && settings.lineHeight > 0 ? { lineHeight: settings.lineHeight } : {};
+}
+
+function fontWeightSetting(settings: MonacoSettings): EditorOptionsUpdate {
+	return settings.fontWeight !== undefined ? { fontWeight: settings.fontWeight } : {};
+}
+
+function wrapSettings(settings: MonacoSettings): EditorOptionsUpdate {
+	return {
 		...(settings.wordWrap !== undefined ? { wordWrap: settings.wordWrap } : {}),
-		...(settings.wordWrapColumn !== undefined ? { wordWrapColumn: settings.wordWrapColumn } : {}),
+		...(settings.wordWrapColumn !== undefined ? { wordWrapColumn: settings.wordWrapColumn } : {})
+	};
+}
+
+function guideSettings(settings: MonacoSettings): EditorOptionsUpdate {
+	return {
 		...(settings.minimap !== undefined ? { minimap: { enabled: settings.minimap } } : {}),
-		...(settings.stickyScroll !== undefined
-			? { stickyScroll: { enabled: settings.stickyScroll, defaultModel: 'foldingProviderModel' } }
-			: {}),
-		...(settings.indentationGuides !== undefined || settings.bracketPairGuides !== undefined
-			? {
-				guides: {
-					indentation: settings.indentationGuides ?? true,
-					bracketPairs: settings.bracketPairGuides ?? false
-				}
-			}
-			: {}),
+		...stickyScrollSetting(settings),
+		...indentationGuideSetting(settings)
+	};
+}
+
+function stickyScrollSetting(settings: MonacoSettings): EditorOptionsUpdate {
+	return settings.stickyScroll !== undefined
+		? { stickyScroll: { enabled: settings.stickyScroll, defaultModel: 'foldingProviderModel' } }
+		: {};
+}
+
+function indentationGuideSetting(settings: MonacoSettings): EditorOptionsUpdate {
+	if (!hasGuideSetting(settings)) {
+		return {};
+	}
+	return {
+		guides: {
+			indentation: indentationGuides(settings),
+			bracketPairs: bracketPairGuides(settings)
+		}
+	};
+}
+
+function hasGuideSetting(settings: MonacoSettings): boolean {
+	return settings.indentationGuides !== undefined || settings.bracketPairGuides !== undefined;
+}
+
+function indentationGuides(settings: MonacoSettings): boolean {
+	return settings.indentationGuides ?? true;
+}
+
+function bracketPairGuides(settings: MonacoSettings): boolean | 'active' {
+	return settings.bracketPairGuides ?? false;
+}
+
+function cursorSettings(settings: MonacoSettings): EditorOptionsUpdate {
+	return {
 		...(settings.cursorStyle !== undefined ? { cursorStyle: settings.cursorStyle } : {}),
 		...(settings.cursorBlinking !== undefined ? { cursorBlinking: settings.cursorBlinking } : {}),
-		...(settings.smoothScrolling !== undefined ? { smoothScrolling: settings.smoothScrolling } : {}),
-		...(settings.renderWhitespace !== undefined ? { renderWhitespace: settings.renderWhitespace } : {})
-	});
+		...(settings.smoothScrolling !== undefined ? { smoothScrolling: settings.smoothScrolling } : {})
+	};
+}
+
+function renderSettings(settings: MonacoSettings): EditorOptionsUpdate {
+	return settings.renderWhitespace !== undefined ? { renderWhitespace: settings.renderWhitespace } : {};
 }
 
 function mountToolbar(): void {
@@ -2161,20 +2648,17 @@ function mountDetails(): void {
 	detailsBody = document.getElementById('sb-details-body');
 	detailsStatus = document.getElementById('details-status');
 	setDetailsEditorHost({
-		getRow: function (id) {
-			return rowById.get(id);
-		},
-		getSelectedId: function () {
-			return selectedId;
-		},
-		isDetailsTab: function () {
-			return getSidebarState().tab === 'details';
-		},
-		showSidebar: function () {
-			applySidebarVisibility(false);
-		},
-		showTab: showSidebarTab,
-		showSection: showSidebarSection,
+		...detailsEditorHostBase(
+			function (id) {
+				return rowById.get(id);
+			},
+			function () {
+				return selectedId;
+			},
+			function () {
+				applySidebarVisibility(false);
+			}
+		),
 		renderedItem: function () {
 			return undefined;
 		},
@@ -2235,23 +2719,11 @@ async function mountEditor(): Promise<void> {
 		(window as unknown as { __ARXML_EDITOR__?: unknown }).__ARXML_EDITOR__ = editor;
 	}
 	editor.onDidChangeModelContent(handleEdit);
+	editor.onDidChangeCursorPosition(handleCursorPosition);
 	window.addEventListener('beforeunload', function (event) {
 		if (localDraftExists()) {
 			event.preventDefault();
 			event.returnValue = '';
-		}
-	});
-	editor.onDidChangeCursorPosition(function (event) {
-		if (applyingModel || restoringView) {
-			// A document/patch rebuild resets the cursor before the host's selected
-			// row is applied. Treating that as a user move would rebuild the inspector
-			// for the wrong row and detach the focused Details control.
-			return;
-		}
-		const id = rowIdAtLine(event.position.lineNumber);
-		if (id !== undefined && id !== selectedId) {
-			setSelection(id);
-			postToHost({ type: 'select', nodeId: id });
 		}
 	});
 
@@ -2264,18 +2736,7 @@ async function mountEditor(): Promise<void> {
 	mountDetails();
 	mountConditionsPanel();
 	errorStrip = document.getElementById('editor-error-strip');
-	document.addEventListener(
-		'keydown',
-		function (event) {
-			const command = event.ctrlKey || event.metaKey;
-			if (command && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 's') {
-				event.preventDefault();
-				event.stopPropagation();
-				requestSave();
-			}
-		},
-		true
-	);
+	document.addEventListener('keydown', handleSaveShortcut, true);
 	setConditionRows([]);
 	setConditionsCallback(function (entries) {
 		postToHost({ type: 'conditions', entries });
@@ -2291,6 +2752,41 @@ async function mountEditor(): Promise<void> {
 	}
 	pendingMessages.length = 0;
 	postToHost({ type: 'ready' });
+}
+
+function handleCursorPosition(event: monaco.editor.ICursorPositionChangedEvent): void {
+	if (applyingModel || restoringView) {
+		// A document/patch rebuild resets the cursor before the host's selected
+		// row is applied. Treating that as a user move would rebuild the inspector
+		// for the wrong row and detach the focused Details control.
+		return;
+	}
+	const id = rowIdAtLine(event.position.lineNumber);
+	if (cursorSelectionChanged(id)) {
+		setSelection(id);
+		postToHost({ type: 'select', nodeId: id });
+	}
+}
+
+function cursorSelectionChanged(id: string | undefined): id is string {
+	return id !== undefined && id !== selectedId;
+}
+
+function handleSaveShortcut(event: KeyboardEvent): void {
+	if (!isSaveShortcut(event)) {
+		return;
+	}
+	event.preventDefault();
+	event.stopPropagation();
+	requestSave();
+}
+
+function isSaveShortcut(event: KeyboardEvent): boolean {
+	return isCommandKey(event) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 's';
+}
+
+function isCommandKey(event: KeyboardEvent): boolean {
+	return event.ctrlKey || event.metaKey;
 }
 
 function handleThemeChanges(): void {

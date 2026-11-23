@@ -107,6 +107,11 @@ async function waitFor(what: string, predicate: () => boolean, timeoutMs = 5000)
 	assert.fail(`timed out waiting for ${what}`);
 }
 
+/** A message's revision, with a missing one read as 0 so revision comparisons still fail. */
+function revisionOf(message: StubMessage | undefined): number {
+	return message?.revision ?? 0;
+}
+
 const fixturesDir = path.join(repoRoot, 'src', 'test', 'fixtures', 'editing');
 
 function committed(name: string): string {
@@ -484,7 +489,7 @@ suite('editor value editing (AC1–AC9)', () => {
 				(message) => message.type === 'editResult' && message.editId === 1
 			);
 			assert.strictEqual(result?.ok, true);
-			assert.ok((result?.revision ?? 0) >= document.version, 'the result carries the document revision');
+			assert.ok(revisionOf(result) >= document.version, 'the result carries the document revision');
 			assert.strictEqual(
 				result?.nextNodeId,
 				undefined,
@@ -535,7 +540,7 @@ suite('editor value editing (AC1–AC9)', () => {
 			);
 			assert.ok(results.every((message) => message.ok === true));
 			assert.ok(
-				(results[0]?.revision ?? 0) <= (results[1]?.revision ?? 0),
+				revisionOf(results[0]) <= revisionOf(results[1]),
 				'the revision moves forward'
 			);
 		});

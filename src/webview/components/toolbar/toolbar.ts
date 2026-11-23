@@ -59,19 +59,11 @@ export class EditorToolbar {
 		if (!status) {
 			return;
 		}
-		const text = invalid !== undefined ? 'Invalid value — not saved' : dirty ? '● Unsaved changes' : '';
-		const hidden = text === '';
-		if (status.hidden !== hidden) {
-			status.hidden = hidden;
-		}
-		if (status.textContent !== text) {
-			status.textContent = text;
-		}
-		const title = invalid ?? (dirty ? 'This ECUC document has unsaved changes' : '');
-		if (status.title !== title) {
-			status.title = title;
-		}
-		status.classList.toggle('invalid', invalid !== undefined);
+		const next = dirtyStatus(dirty, invalid);
+		writeHidden(status, next.hidden);
+		writeText(status, next.text);
+		writeTitle(status, next.title);
+		status.classList.toggle('invalid', next.invalid);
 	}
 
 	private bind(id: string, action: () => void): void {
@@ -79,6 +71,46 @@ export class EditorToolbar {
 		if (button) {
 			button.addEventListener('click', action);
 		}
+	}
+}
+
+interface DirtyStatus {
+	text: string;
+	title: string;
+	hidden: boolean;
+	invalid: boolean;
+}
+
+function dirtyStatus(dirty: boolean, invalid?: string): DirtyStatus {
+	if (invalid !== undefined) {
+		return { text: 'Invalid value — not saved', title: invalid, hidden: false, invalid: true };
+	}
+	if (dirty) {
+		return {
+			text: '● Unsaved changes',
+			title: 'This ECUC document has unsaved changes',
+			hidden: false,
+			invalid: false
+		};
+	}
+	return { text: '', title: '', hidden: true, invalid: false };
+}
+
+function writeHidden(status: HTMLElement, hidden: boolean): void {
+	if (status.hidden !== hidden) {
+		status.hidden = hidden;
+	}
+}
+
+function writeText(status: HTMLElement, text: string): void {
+	if (status.textContent !== text) {
+		status.textContent = text;
+	}
+}
+
+function writeTitle(status: HTMLElement, title: string): void {
+	if (status.title !== title) {
+		status.title = title;
 	}
 }
 

@@ -29,15 +29,31 @@ export function compareEditFlushOrder(
 	right: FlushCandidate,
 	levelOf: (nodeId: string) => number | undefined
 ): number {
-	const leftShort = left.field === 'shortName' ? 1 : 0;
-	const rightShort = right.field === 'shortName' ? 1 : 0;
+	const leftShort = shortNameRank(left);
+	const rightShort = shortNameRank(right);
 	if (leftShort !== rightShort) {
 		return leftShort - rightShort;
 	}
-	if (leftShort === 0) {
+	if (!isShortNameEdit(left)) {
 		return 0;
 	}
-	return (levelOf(right.nodeId) ?? 0) - (levelOf(left.nodeId) ?? 0);
+	return deepestFirst(levelOf, left.nodeId, right.nodeId);
+}
+
+function isShortNameEdit(candidate: FlushCandidate): boolean {
+	return candidate.field === 'shortName';
+}
+
+function shortNameRank(candidate: FlushCandidate): number {
+	return isShortNameEdit(candidate) ? 1 : 0;
+}
+
+function deepestFirst(
+	levelOf: (nodeId: string) => number | undefined,
+	leftId: string,
+	rightId: string
+): number {
+	return (levelOf(rightId) ?? 0) - (levelOf(leftId) ?? 0);
 }
 
 /**
@@ -56,12 +72,20 @@ export function remapNodeId(nodeId: string, oldId: string, newId: string): strin
 	if (nodeId.startsWith(`${oldId}/`)) {
 		return `${newId}${nodeId.slice(oldId.length)}`;
 	}
+	return remapThroughPath(nodeId, oldId, newId);
+}
+
+/** Apply the parent pair to an id built from the declaration-less path prefix. */
+function remapThroughPath(nodeId: string, oldId: string, newId: string): string | undefined {
 	const oldPath = oldId.replace(/#\d+$/, '');
-	const newPath = newId.replace(/#\d+$/, '');
-	if (oldPath !== oldId && nodeId.startsWith(`${oldPath}/`)) {
-		return `${newPath}${nodeId.slice(oldPath.length)}`;
+	if (oldPath === oldId) {
+		return undefined;
 	}
-	return undefined;
+	if (!nodeId.startsWith(`${oldPath}/`)) {
+		return undefined;
+	}
+	const newPath = newId.replace(/#\d+$/, '');
+	return `${newPath}${nodeId.slice(oldPath.length)}`;
 }
 
 /** One short-name write the page flushed and the host has not answered yet. */
@@ -105,40 +129,91 @@ export interface RenamePlan {
  */
 export function resolveRenameIntents(
 	intents: readonly RenameIntent[],
-	rowOf: (id: string) => { kind: string; shortName?: string } | undefined
+	rowOf: RowLookup
 ): RenamePlan {
+	const { resolved, unresolved, remaining } = partitionIntents(intents, rowOf);
+	resolveToFixedPoint(unresolved, resolved, rowOf);
+	// Deepest id first: a child draft must move to its official new id (which
+	// already contains the new parent path) before the parent prefix rewrite runs.
+	resolved.sort((left, right) => right.oldId.length - left.oldId.length);
+	return { resolved, kept: remaining, dropped: unresolved.map((intent) => intent.editId) };
+}
+
+type RowLookup = (id: string) => { kind: string; shortName?: string } | undefined;
+
+interface IntentPartition {
+	resolved: RenameResolution[];
+	unresolved: RenameIntent[];
+	remaining: RenameIntent[];
+}
+
+function partitionIntents(intents: readonly RenameIntent[], rowOf: RowLookup): IntentPartition {
 	const resolved: RenameResolution[] = [];
 	const unresolved: RenameIntent[] = [];
 	const remaining: RenameIntent[] = [];
 	for (const intent of intents) {
-		if (intent.nextNodeId === undefined || rowOf(intent.nodeId) !== undefined) {
+		if (isUnproved(intent, rowOf)) {
 			remaining.push(intent);
 			continue;
 		}
 		unresolved.push(intent);
 	}
+	return { resolved, unresolved, remaining };
+}
+
+/** An intent without a host pair, or whose old row is still present. */
+function isUnproved(intent: RenameIntent, rowOf: RowLookup): boolean {
+	return intent.nextNodeId === undefined || rowOf(intent.nodeId) !== undefined;
+}
+
+function resolveToFixedPoint(unresolved: RenameIntent[], resolved: RenameResolution[], rowOf: RowLookup): void {
 	let progress = true;
 	while (progress) {
 		progress = false;
 		for (let at = unresolved.length - 1; at >= 0; at -= 1) {
-			const intent = unresolved[at];
-			let newId = intent.nextNodeId;
-			for (const pair of resolved) {
-				newId = newId === undefined ? undefined : remapNodeId(newId, pair.oldId, pair.newId) ?? newId;
-			}
-			const row = newId === undefined ? undefined : rowOf(newId);
-			if (newId === undefined || row === undefined || row.kind !== 'container' || row.shortName !== intent.shortName) {
+			if (!resolveAt(unresolved, at, resolved, rowOf)) {
 				continue;
 			}
-			resolved.push({ oldId: intent.nodeId, newId });
-			unresolved.splice(at, 1);
 			progress = true;
 		}
 	}
-	// Deepest id first: a child draft must move to its official new id (which
-	// already contains the new parent path) before the parent prefix rewrite runs.
-	resolved.sort((left, right) => right.oldId.length - left.oldId.length);
-	return { resolved, kept: remaining, dropped: unresolved.map((intent) => intent.editId) };
+}
+
+/** Prove one intent against the row store; true when it moved to `resolved`. */
+function resolveAt(unresolved: RenameIntent[], at: number, resolved: RenameResolution[], rowOf: RowLookup): boolean {
+	const intent = unresolved[at];
+	const newId = remapThroughResolved(intent.nextNodeId, resolved);
+	if (!isProvedRename(newId, intent.shortName, rowOf)) {
+		return false;
+	}
+	resolved.push({ oldId: intent.nodeId, newId });
+	unresolved.splice(at, 1);
+	return true;
+}
+
+function remapThroughResolved(newId: string | undefined, resolved: readonly RenameResolution[]): string | undefined {
+	let current = newId;
+	for (const pair of resolved) {
+		if (current === undefined) {
+			return undefined;
+		}
+		current = remapNodeId(current, pair.oldId, pair.newId) ?? current;
+	}
+	return current;
+}
+
+function isProvedRename(newId: string | undefined, shortName: string, rowOf: RowLookup): newId is string {
+	if (newId === undefined) {
+		return false;
+	}
+	const row = rowOf(newId);
+	if (row === undefined) {
+		return false;
+	}
+	if (row.kind !== 'container') {
+		return false;
+	}
+	return row.shortName === shortName;
 }
 
 /** One draft the page holds for a field, keyed by {@link draftKey}. */

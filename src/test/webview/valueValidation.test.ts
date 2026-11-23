@@ -9,6 +9,33 @@ const boolean = { kind: 'parameter' as const, parameterType: 'Boolean' };
 const textual = { kind: 'parameter' as const, parameterType: 'String' };
 const container = { kind: 'container' as const, parameterType: undefined };
 
+type ValueRow = Parameters<typeof localValueError>[0];
+
+/** Assert every value is accepted, with a per-value message. */
+function assertAllValid(
+	row: ValueRow,
+	field: string,
+	values: readonly string[],
+	describe: (value: string) => string
+): void {
+	for (const value of values) {
+		assert.strictEqual(localValueError(row, field, value), undefined, describe(value));
+	}
+}
+
+/** Assert every value is rejected with `expected`, with a per-value message. */
+function assertAllInvalid(
+	row: ValueRow,
+	field: string,
+	values: readonly string[],
+	expected: string,
+	describe: (value: string) => string
+): void {
+	for (const value of values) {
+		assert.strictEqual(localValueError(row, field, value), expected, describe(value));
+	}
+}
+
 suite('ECUC local value validation', () => {
 	test('Integer accepts decimal, hexadecimal and binary, and rejects intermediates', () => {
 		for (const value of ['0', '42', '-42', '-7', '0xFF', '0X1f', '0b1010', '-0x1']) {
@@ -44,22 +71,27 @@ suite('ECUC local value validation', () => {
 	});
 
 	test('short names and definition refs follow the host grammar', () => {
-		for (const value of ['BranchX123456', '_internal', 'a1']) {
-			assert.strictEqual(localValueError(container, 'shortName', value), undefined, `${value} is a valid short name`);
-		}
-		for (const value of ['', '1abc', 'a-b', 'a b', 'a/b', 'a.b']) {
-			assert.strictEqual(localValueError(container, 'shortName', value), 'Invalid short name', `"${value}" is invalid`);
-		}
-		for (const value of ['/P/M/C', '/A_B/C1']) {
-			assert.strictEqual(localValueError(container, 'definitionRef', value), undefined, `${value} is an absolute path`);
-		}
-		for (const value of ['', '/', 'P/M', '/P//M', '/P/M ', '/P/M&', '/P/M<', '/P/M"']) {
-			assert.strictEqual(
-				localValueError(container, 'definitionRef', value),
-				'Invalid definition reference',
-				`"${value}" is invalid`
-			);
-		}
+		assertAllValid(
+			container,
+			'shortName',
+			['BranchX123456', '_internal', 'a1'],
+			(value) => `${value} is a valid short name`
+		);
+		assertAllInvalid(
+			container,
+			'shortName',
+			['', '1abc', 'a-b', 'a b', 'a/b', 'a.b'],
+			'Invalid short name',
+			(value) => `"${value}" is invalid`
+		);
+		assertAllValid(container, 'definitionRef', ['/P/M/C', '/A_B/C1'], (value) => `${value} is an absolute path`);
+		assertAllInvalid(
+			container,
+			'definitionRef',
+			['', '/', 'P/M', '/P//M', '/P/M ', '/P/M&', '/P/M<', '/P/M"'],
+			'Invalid definition reference',
+			(value) => `"${value}" is invalid`
+		);
 		assert.strictEqual(localValueError(container, 'shortName', 'bad\u0001name'), 'XML cannot represent this character');
 		assert.strictEqual(isXmlRepresentable('ok'), true);
 		assert.strictEqual(isXmlRepresentable('tab\tnewline\n'), true, 'tab and newline are representable');
