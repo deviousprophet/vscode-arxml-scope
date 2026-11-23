@@ -1,9 +1,10 @@
 /**
  * Details field editor: the value/name/definition controls of the Details panel.
  *
- * The component owns the single draft per field, its inline refusal text and the
- * Enter/Escape/Tab behaviour. The composition root owns row data, selection and
- * the actual write: every commit is reported through `host.commitEdit`.
+ * The component owns the controls, their inline refusal text and the
+ * Enter/Escape/Tab behaviour. The composition root owns the shared draft and the
+ * selection: every keystroke is reported through `host.previewEdit` and Ctrl+S is
+ * the only commit.
  */
 import './detailsEditor.css';
 import { inspectorElement } from '../../render/dom';
@@ -50,11 +51,18 @@ export interface DetailsEditorHost {
 interface DetailsEdit {
 	rowId: string;
 	field: string;
-	input: any;
-	error: any;
+	input: HTMLInputElement | HTMLSelectElement;
+	error: HTMLSpanElement;
 	pending: boolean;
 	type?: string;
+	/** The host-accepted value, restored by Escape. */
 	original: string;
+}
+
+/** A local draft the shared editor model already holds for a container row. */
+export interface DetailsContainerDraft {
+	shortName?: string;
+	definitionRef?: string;
 }
 
 interface PendingMove {
@@ -161,7 +169,7 @@ function detailsStoredEdit(row: any, field: string): DetailsEdit | null {
 	return previous && previous.rowId === row.id ? previous : null;
 }
 
-function detailsErrorSpan(): any {
+function detailsErrorSpan(): HTMLSpanElement {
 	const error = document.createElement('span');
 	error.className = 'details-value-error';
 	error.setAttribute('role', 'status');
@@ -181,8 +189,8 @@ function detailsFieldSibling(field: string, dir: string): string | undefined {
 	return dir === 'prev' ? detailsFieldOrder[at - 1] : detailsFieldOrder[at + 1];
 }
 
-function detailsRegisterKeydown(input: any, edit: DetailsEdit): void {
-	input.addEventListener('keydown', function (event: any) {
+function detailsRegisterKeydown(input: HTMLInputElement | HTMLSelectElement, edit: DetailsEdit): void {
+	input.addEventListener('keydown', function (event) {
 		detailsKeydown(edit, event);
 	});
 	input.addEventListener('input', function () {
@@ -231,8 +239,10 @@ export function resetDetailsEditorState(): void {
 }
 
 /**
- * Stores one field's draft, restores a draft that survived a re-scan, and wires
- * the shared key handling.
+ * Stores one field's draft bindings and wires the shared key handling.
+ *
+ * The text itself is seeded by the caller from the shared draft; only the
+ * host-accepted `original` and a refusal that is still open survive a rebuild.
  */
 function detailsDraft(
 	row: { id: string },
@@ -243,22 +253,12 @@ function detailsDraft(
 	type?: string
 ): DetailsEdit {
 	const previous = detailsStoredEdit(row, field);
-	if (previous) {
-		// Keep an unsaved draft, but adopt a newly accepted host value when there
-		// is no local difference.
-		if (previous.input.value !== previous.original) {
-			input.value = previous.input.value;
-		} else {
-			input.value = original;
-		}
-	}
-	const restored = restoredDetailsDraft(previous, original);
 	const edit: DetailsEdit = {
 		rowId: row.id,
 		field: field,
 		input: input,
 		error: error,
-		pending: restored.pending,
+		pending: previous?.pending ?? false,
 		...(type === undefined ? {} : { type }),
 		original: original
 	};
@@ -266,17 +266,6 @@ function detailsDraft(
 	restoreDetailsError(edit, previous);
 	detailsRegisterKeydown(input, edit);
 	return edit;
-}
-
-/** The draft fields a re-scan keeps from the previous control. */
-function restoredDetailsDraft(
-	previous: DetailsEdit | null,
-	original: string
-): { pending: boolean; original: string } {
-	if (previous === null) {
-		return { pending: false, original };
-	}
-	return { pending: previous.pending, original: previous.original };
 }
 
 /** Carries a refusal that survived the re-scan onto the new control. */
@@ -289,31 +278,47 @@ function restoreDetailsError(edit: DetailsEdit, previous: DetailsEdit | null): v
 }
 
 /** The details value control for one parameter row (input or Boolean select). */
-export function detailsValueInput(row: any, data: any): any {
+export function detailsValueInput(row: any, data: any, draft?: string): HTMLDivElement {
 	const rowElement = document.createElement('div');
 	rowElement.className = 'inspector-row';
 	rowElement.appendChild(inspectorElement('span', 'inspector-key', 'Value'));
 	const type = detailsValueType(row, data);
 	const boolean = isBooleanValueInput(type, row.value);
-	const input: any = document.createElement(boolean ? 'select' : 'input');
+	const input: HTMLInputElement | HTMLSelectElement = boolean
+		? document.createElement('select')
+		: document.createElement('input');
 	detailsValueAttributes(input, row, data, type);
 	const original = detailsValueOriginal(row.value, boolean);
-	if (boolean) {
+	if (input instanceof HTMLSelectElement) {
 		appendBooleanOptions(input);
 	} else {
 		applyValueInputMode(input, type);
 	}
-	input.value = original;
+	input.value = detailsValueDraft(original, draft, boolean);
 	const error = detailsErrorSpan();
 	rowElement.appendChild(input);
 	rowElement.appendChild(error);
 	detailsDraft(row, 'value', input, error, original, type);
-	input.addEventListener('beforeinput', function (event: any) {
-		if (event.data && !detailsInputAllowed(type, event.data)) {
+	input.addEventListener('beforeinput', function (event) {
+		// The project's DOM lib types `beforeinput` as a plain Event; the browser
+		// passes an InputEvent whose `data` is the inserted text.
+		const data = event instanceof InputEvent ? event.data : undefined;
+		if (data && !detailsInputAllowed(type, data)) {
 			event.preventDefault();
 		}
 	});
 	return rowElement;
+}
+
+/** A Boolean select can only show a real option; other controls show the draft as typed. */
+function detailsValueDraft(original: string, draft: string | undefined, boolean: boolean): string {
+	if (draft === undefined) {
+		return original;
+	}
+	if (!boolean) {
+		return draft;
+	}
+	return /^(true|false)$/i.test(draft) ? booleanText(draft) : original;
 }
 
 function isBooleanValueInput(type: string, value: string | undefined): boolean {
@@ -370,11 +375,17 @@ function applyValueInputMode(input: HTMLInputElement, type: string): void {
 	input.inputMode = type === 'Integer' ? 'numeric' : type === 'Float' ? 'decimal' : 'text';
 }
 
-function detailsFieldInput(row: any, field: string, label: string, value: string): any {
+function detailsFieldInput(
+	row: { id: string; label?: string },
+	field: string,
+	label: string,
+	value: string,
+	draft?: string
+): HTMLDivElement {
 	const rowElement = document.createElement('div');
 	rowElement.className = 'inspector-row';
 	rowElement.appendChild(inspectorElement('span', 'inspector-key', label));
-	const input: any = document.createElement('input');
+	const input = document.createElement('input');
 	input.id = detailsFieldId(field);
 	input.className = 'details-value';
 	input.type = 'text';
@@ -382,7 +393,7 @@ function detailsFieldInput(row: any, field: string, label: string, value: string
 	input.setAttribute('data-node-id', row.id);
 	input.setAttribute('data-field', field);
 	input.setAttribute('aria-label', label + ' of ' + (row.label || 'container'));
-	input.value = value;
+	input.value = draft ?? value;
 	const error = detailsErrorSpan();
 	rowElement.appendChild(input);
 	rowElement.appendChild(error);
@@ -390,16 +401,16 @@ function detailsFieldInput(row: any, field: string, label: string, value: string
 	return rowElement;
 }
 
-export function detailsContainerFields(row: any, data: any): any {
+export function detailsContainerFields(row: any, data: any, draft?: DetailsContainerDraft): HTMLDivElement {
 	const fields = document.createElement('div');
 	fields.className = 'inspector-fields';
 	// An absent element has no text range to write; showing an editor for it would offer
 	// an edit the host must refuse (adding an element is out of scope).
 	if (data.shortName) {
-		fields.appendChild(detailsFieldInput(row, 'shortName', 'Short name', data.shortName));
+		fields.appendChild(detailsFieldInput(row, 'shortName', 'Short name', data.shortName, draft?.shortName));
 	}
 	if (data.definitionRef) {
-		fields.appendChild(detailsFieldInput(row, 'definitionRef', 'Definition', data.definitionRef));
+		fields.appendChild(detailsFieldInput(row, 'definitionRef', 'Definition', data.definitionRef, draft?.definitionRef));
 	}
 	return fields;
 }
@@ -443,18 +454,38 @@ function detailsFirstContainerField(row: DetailsRowFields): string | undefined {
 }
 
 /** Update one Details input from the editor's shared draft, preserving its caret. */
-export function syncDetailsField(nodeId: string, field: string, value: string): void {
+export function syncDetailsField(nodeId: string, field: string, value: string, error?: string): void {
 	const edit = detailsEdits[field];
-	if (!edit || edit.rowId !== nodeId || edit.input.value === value) {
+	if (!edit || edit.rowId !== nodeId) {
+		return;
+	}
+	// The error follows the draft, so correcting the text clears it even when the
+	// displayed characters did not change (a refusal, a re-scan, a redundant edit).
+	if (error !== undefined && error !== '') {
+		setDetailsError(edit, error);
+	} else {
+		clearDetailsError(edit);
+	}
+	// A Boolean select has no option for an invalid draft; keep its last real
+	// option and let the inline error carry the invalid text.
+	if (edit.input instanceof HTMLSelectElement && ![...edit.input.options].some((option) => option.value === value)) {
+		return;
+	}
+	if (edit.input.value === value) {
 		return;
 	}
 	const focused = document.activeElement === edit.input;
-	const start = typeof edit.input.selectionStart === 'number' ? edit.input.selectionStart : undefined;
-	const end = typeof edit.input.selectionEnd === 'number' ? edit.input.selectionEnd : undefined;
+	const control = edit.input instanceof HTMLInputElement ? edit.input : undefined;
+	const start = control?.selectionStart ?? undefined;
+	const end = control?.selectionEnd ?? undefined;
+	// A caret at the end of the old text follows the draft's end, so a local undo
+	// clamps it and a local redo restores the caret the undone edits ended at.
+	const atEnd = start !== undefined && start === edit.input.value.length && (end === undefined || end === start);
 	edit.input.value = value;
-	if (focused && start !== undefined && typeof edit.input.setSelectionRange === 'function') {
-		const position = Math.min(start, value.length);
-		edit.input.setSelectionRange(position, Math.min(end ?? position, value.length));
+	if (focused && control !== undefined && start !== undefined) {
+		const position = atEnd === true ? value.length : Math.min(start, value.length);
+		const tail = atEnd === true ? value.length : Math.min(end ?? position, value.length);
+		control.setSelectionRange(position, tail);
 	}
 }
 
@@ -642,5 +673,8 @@ function rejectDetailsEdit(edit: DetailsEdit, messageText: string): void {
 	edit.input.focus();
 }
 
-/** Clear the stored draft when the selection moves to another row. */
+/**
+ * Clear the old row's DOM bindings when the selection moves. The text itself
+ * lives in the page's shared draft and comes back when the row is selected again.
+ */
 export { detailsSelectionChanged };

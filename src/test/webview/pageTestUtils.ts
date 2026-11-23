@@ -105,6 +105,9 @@ export function installMarkup(html: string): InstalledDom {
 		'document',
 		'Element',
 		'HTMLElement',
+		'HTMLInputElement',
+		'HTMLSelectElement',
+		'HTMLTextAreaElement',
 		'SVGElement',
 		'Node',
 		'getComputedStyle',
@@ -120,6 +123,9 @@ export function installMarkup(html: string): InstalledDom {
 	globals.document = window.document;
 	globals.Element = window.Element;
 	globals.HTMLElement = window.HTMLElement;
+	globals.HTMLInputElement = window.HTMLInputElement;
+	globals.HTMLSelectElement = window.HTMLSelectElement;
+	globals.HTMLTextAreaElement = window.HTMLTextAreaElement;
 	globals.SVGElement = window.SVGElement;
 	globals.Node = window.Node;
 	globals.getComputedStyle = window.getComputedStyle.bind(window);

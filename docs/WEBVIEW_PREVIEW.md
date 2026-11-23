@@ -54,8 +54,19 @@ its old bundle.
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; both arrows stay on the inner edges |
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
 | `editor-syntax` | editor | 1400×900 | decimal, binary, text, reference and system-condition values; binary matches the numeric colour, references use the reference colour, and condition names/operators/numbers stay distinct |
-| `editor-dirty` | editor | 1400×900 | a typed parameter shows the `● Unsaved changes` toolbar marker |
+| `editor-dirty` | editor | 1400×900 | a typed parameter shows the `● Unsaved changes` toolbar marker and posts no host edit before `Ctrl+S` |
 | `editor-invalid` | editor | 1400×900 | invalid direct input shows the red marker/error and a `Ctrl+S` attempt is blocked |
+| `editor-details` | editor | 1400×900 | typing in the Details value stays local; focus/caret kept, the line repainted, no host edit |
+| `editor-details-save` | editor | 1400×900 | `Ctrl+S` sends one raw edit, waits for its ack, saves, then the host echo rebuild keeps Details focus/caret |
+| `editor-details-rename` | editor | 1400×900 | a rename is acknowledged before the re-scan; the next save defers and the post-flush keystroke is submitted at the new id |
+| `editor-rename-refusal` | editor | 1400×900 | the re-scan lands first, then the host refuses the remapped rename; the refusal is shown inline at the new id and no save follows |
+| `editor-rename-late-ack` | editor | 1400×900 | the re-scan lands before the rename acknowledgement; the page keeps the post-flush draft and caret, submits it at the host id and saves |
+| `editor-multi-save` | editor | 1400×900 | two fields are edited locally, one `Ctrl+S` posts two edits then one save after both acks, and both new values stay visible |
+| `editor-paste` | editor | 1400×900 | a paste containing a newline becomes one escaped line (`\n`), keeps one quote pair and posts no host edit |
+| `editor-stale-save` | editor | 1400×900 | a draft whose row disappears from the re-scan blocks `Ctrl+S`, posts no save and explains that the node is gone |
+| `editor-details-undo` | editor | 1400×900 | a local undo after a Details edit restores the host value, caret and clean toolbar |
+| `editor-details-redo` | editor | 1400×900 | redo after that undo restores the draft, caret and dirty marker without a host edit |
+| `editor-delete` | editor | 1400×900 | type, backspace, word-delete, select-and-replace, clear and retype stay local and end at `Text = "R"` |
 | `editor-sticky` | editor | 1400×900 | deep scroll into the `Items` container; its header stays pinned by Monaco sticky scroll |
 | `editor-find` | editor | 1400×900 | native find widget open on `Items`, with the Rust result count and field highlight |
 | `diff-find` | diff | 1400×900 | native find widget in the modified pane, with the Rust diff match count |
@@ -91,9 +102,41 @@ strip or the page shell, and check each image before asking for review.
       decimal `42`, `P.Syn.Syntax.Target` in the reference colour, and
       `CANIPCORETYPE_SC==0` with distinct name, operator and number colours.
 - [ ] **Dirty typing is visible and coalesced.** `editor-dirty` shows `● Unsaved changes`
-      after a multi-character typing run and posts exactly one edit message.
+      after a multi-character typing run and posts no host edit before `Ctrl+S`.
 - [ ] **Invalid input blocks save.** `editor-invalid` shows the page error, posts no edit and
       no save after the `Ctrl+S` attempt.
+- [ ] **Details typing stays local and keeps the caret.** `editor-details` shows the redrawn
+      editor line, focus and the caret at the end of `#details-value`, and posts no host edit;
+      `editor-details-save` sends one raw edit on `Ctrl+S`, posts the save only after the ack,
+      and keeps focus/caret after the host echo rebuilds the Details panel.
+- [ ] **A rename holds the draft across an early ack.** `editor-details-rename` acknowledges
+      the short-name edit before its re-scan, defers the second `Ctrl+S`, then submits the
+      post-flush `Syntax23` at the predicted id; the field keeps focus/caret and no
+      stale-node notice appears.
+- [ ] **A refusal after the renamed re-scan lands at the new id.** `editor-rename-refusal`
+      shows the post-flush `Syntax23` addressed at the host's new id, the inline reason beside
+      the short-name field, the refusal in the Details status, focus on that control, and no
+      save after the refusal.
+- [ ] **A late acknowledgement keeps the caret.** `editor-rename-late-ack` delivers the renamed
+      re-scan first and the host pair second; the post-flush `Syntax23` still moves to the new
+      id, the short-name field keeps focus/caret, and the save follows that edit's ack.
+- [ ] **Undo returns to the host value.** `editor-details-undo` undoes the local Details draft,
+      restores `hello`, clamps the caret, hides the `● Unsaved changes` marker and posts no
+      host edit.
+- [ ] **Redo restores the undone draft.** `editor-details-redo` redoes that local undo, restores
+      `hello updated`, the caret, the `● Unsaved changes` marker, and posts no host edit.
+- [ ] **Delete paths stay local.** `editor-delete` types, backspaces, deletes by word, replaces
+      a selection, clears and retypes the textual value; it ends at `Text = "R"`, keeps one
+      quote pair, shows the dirty marker and posts no host edit.
+- [ ] **Two rows save on one Ctrl+S.** `editor-multi-save` edits `Decimal` and `Text` locally,
+      then `Ctrl+S` posts two `edit` messages in values-first order, one `save` after both
+      acknowledgements, and shows `Decimal = 427` and `Text = "hello!"` after the host echo.
+- [ ] **A pasted newline stays one line.** `editor-paste` pastes `\nsecond` into the `Text`
+      value; the line reads `Text = "hello\nsecond"` with the newline escaped, one quote pair,
+      and no host edit is posted.
+- [ ] **A stale draft blocks the save.** `editor-stale-save` types into `Text`, receives a
+      re-scan without that row, and attempts `Ctrl+S`; no edit and no save are posted and the
+      Details status says the node is no longer in the file.
 - [ ] **Sticky scroll keeps the scope.** `editor-sticky` shows the enclosing `Items` header
       pinned while the viewport is deep in its parameter list.
 - [ ] **The dirty marker is visible.** `editor-dirty` shows `● Unsaved changes` in the editor
@@ -177,6 +220,11 @@ The harness proves geometry and paint in Chromium at the listed sizes. The audit
 set of placement invariants, not a taste judgement: still inspect the PNG for colour,
 spacing and clipping the invariants do not encode. When Monaco is active the legacy
 DOM diff-geometry checks are skipped; the Monaco editor owns its gutter, arrows, scroll
-surface and selection. It does not prove VS Code theme fidelity (tokens are seeded), keyboard focus
-behaviour, screen-reader output or performance. Those still need the Extension Development
-Host, and a host observation belongs in the task notes as a manual check.
+surface and selection. It does not prove VS Code theme fidelity (tokens are seeded), real
+keyboard/IME input, screen-reader output or performance; those still need the Extension
+Development Host, and a host observation belongs in the task notes as a manual check. It does
+prove focus and caret in the Details panel across a local repaint and a host echo, and it invokes
+the registered Undo/Redo actions after a Details edit; the Ctrl+Z/Ctrl+Shift+Z keybindings
+themselves cannot be driven from the harness, so that route still needs the Extension Development
+Host. The paste probe dispatches a clipboard-shaped event to the editor's capture guard; it does
+not exercise the OS clipboard or Monaco's own paste handler.

@@ -159,7 +159,10 @@ Rules:
   VS Code boundary. Never carry a source range on `EcucRow`; the diff's `RangeLookup` supplies it from
   the node index.
 - **Node ids are opaque strings.** They are path-based and include a declaration-order `#n`. Do not
-  parse them. The diff's `baseId` is the one place that removes ordinals, for pairing only.
+  parse them. The diff's `baseId` is the one place that removes ordinals, for pairing only. The one
+  editor exception is applying a host-confirmed rename pair (`editResult.nextNodeId`) to the renamed
+  container and its subtree, including the parent-path prefix used by nested child ids; the page may
+  reuse that pair but must never predict a new id from a short name or ordinal.
 - **Conditions are three-valued.** `ConditionState` is `'true' | 'false' | 'unknown'`; only `'false'`
   disables a row, and `unknown` never does. The page sends raw `{ name, value }` text; the host
   normalizes it and the evaluator receives `ConditionValue`. Do not conflate an absent value with an

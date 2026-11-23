@@ -23,8 +23,10 @@ that is not obvious from the code.
 
 ## Rules the write path must keep
 
-- **One `WorkspaceEdit` per user action.** One action is exactly one undo step. Do not batch two edits
-  into one, and do not split one into two.
+- **One `WorkspaceEdit` per flushed field.** One action is exactly one undo step. Do not batch two
+  fields into one edit, and do not split one field into two. The Ctrl+S commit flushes one edit per
+  changed field, so a multi-field save is several undo steps — one per field — and the page waits for
+  every acknowledgement before it asks the host to save.
 - **Validation runs before the write, always.** A refusal leaves the bytes untouched. Never skip
   validation to make a test pass — the refusal test exists to make that visible.
 - **Write only inside the recomputed region.** Recompute it by re-scanning rather than replaying a
@@ -46,8 +48,10 @@ that is not obvious from the code.
 - **The details editor owns its input events.** The value input lives in the details panel, outside
   `#tree`, and stops `Enter`/`Escape`/`Tab` propagation. The Document row handler only selects/opens
   the details editor; it never inserts an input into `.value`.
-- **Anything that must survive a re-scan lives outside the row window.** The shell, toolbar and
-  inspector are not rebuilt; the row store, display list and window are.
+- **Anything that must survive a re-scan lives outside the row window.** The shell and toolbar are
+  not rebuilt; the row store, display list and window are. The Details inspector may be rebuilt on a
+  re-scan when it re-seeds each control from the shared draft and restores the focused control's
+  caret and selection; that repaint is the one place focus may move.
 - **Only the viewport window is in the DOM.** `calcVisibleRange` over `displayRows` plus the small
   overscan drives `renderWindow`; top/bottom spacers carry the rest of `calcTotalHeight`. Do not
   "hide" offscreen rows — they were never built.
@@ -95,9 +99,11 @@ that is not obvious from the code.
   own-line element removes its line and indentation; a duplicate is inserted after the original with
   the document's own line break. One `Ctrl+Z` restores either action. The value control follows the AUTOSAR
   type: integer/float/text use an input with type-specific character checks; Boolean uses a
-  true/false select. A parameter commits through `{ type: 'edit', nodeId, value }` (no `field`); a container
-  commits the same message with `field: 'shortName' | 'definitionRef'`. The host normalises a
-  missing `field` to `value` and ignores an unknown one. Enter commits, Escape restores, Tab moves
+  true/false select. Typing, deletion, cut/paste and selection replacement stay local; `Ctrl+S` is
+  the only commit trigger, and Enter is a no-op. The flush posts a parameter as
+  `{ type: 'edit', nodeId, value }` (no `field`) and a container as the same message with
+  `field: 'shortName' | 'definitionRef'`. The host normalises a
+  missing `field` to `value` and ignores an unknown one. Escape restores the accepted value, Tab moves
   (adjacent parameter for a value, the other container field for a container). A refusal keeps the
   typed text, marks the control invalid and shows the reason beside the field. Recoverable warnings
   never use a banner: condition-name warnings go to the Conditions status; follow failures and field

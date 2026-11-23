@@ -68,6 +68,8 @@ type EditField = 'value' | 'shortName' | 'definitionRef';
 interface EditOutcome {
 	ok: boolean;
 	reason?: string;
+	/** The edited node's id after the write, when the host can prove it changed. */
+	nextNodeId?: string;
 }
 
 const EDIT_FIELDS: readonly EditField[] = ['value', 'shortName', 'definitionRef'];
@@ -777,6 +779,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 					editId,
 					ok: outcome.ok,
 					...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+					...(outcome.nextNodeId === undefined ? {} : { nextNodeId: outcome.nextNodeId }),
 					revision: session.document.version
 				});
 				this.postDirty(session);
@@ -1220,7 +1223,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			await postInlineNotice(panel, applied.reason);
 			return { ok: false, reason: applied.reason };
 		}
-		return { ok: true };
+		return { ok: true, nextNodeId: plan.nextNodeId === nodeId ? undefined : plan.nextNodeId };
 	}
 
 	/**
@@ -1286,7 +1289,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			await postInlineNotice(session.panel, reason);
 			return { ok: false, reason };
 		}
-		return { ok: true };
+		return { ok: true, nextNodeId: plan.nextNodeId === nodeId ? undefined : plan.nextNodeId };
 	}
 
 	/** Opens the engine handle for a panel; failures leave the TypeScript path in place. */

@@ -51,6 +51,7 @@ interface StubMessage {
 	ok?: boolean;
 	reason?: string;
 	revision?: number;
+	nextNodeId?: string;
 	dirty?: boolean;
 }
 
@@ -484,6 +485,11 @@ suite('editor value editing (AC1–AC9)', () => {
 			);
 			assert.strictEqual(result?.ok, true);
 			assert.ok((result?.revision ?? 0) >= document.version, 'the result carries the document revision');
+			assert.strictEqual(
+				result?.nextNodeId,
+				undefined,
+				'a value edit keeps its id, so the acknowledgement omits the optional field'
+			);
 			await waitFor('the dirty notification', () =>
 				stub.messages.some((message) => message.type === 'dirty' && message.dirty === true)
 			);
@@ -1047,6 +1053,14 @@ suite('editor container field editing (R1–R5)', () => {
 
 			const newId = containerId(renamed, 'FirstContA');
 			await waitFor('the re-scan with the new id', () => lastModel(stub).selectedId === newId);
+			const ack = stub.messages.find(
+				(message) => message.type === 'editResult' && message.ok === true
+			);
+			assert.strictEqual(
+				ack?.nextNodeId,
+				newId,
+				'the acknowledgement carries the host-built renamed id so the page never predicts it'
+			);
 			assert.strictEqual(lastModel(stub).selectedId, newId, 'the renamed container stays selected');
 			const row = lastRows(stub).find((candidate) => candidate.id === newId);
 			assert.ok(row, 'the re-scanned rows carry the new id');
@@ -1084,6 +1098,14 @@ suite('editor container field editing (R1–R5)', () => {
 			);
 
 			await waitFor('the re-scan with the container selected', () => lastModel(stub).selectedId === id);
+			const refAck = stub.messages.find(
+				(message) => message.type === 'editResult' && message.ok === true
+			);
+			assert.strictEqual(
+				refAck?.nextNodeId,
+				undefined,
+				'a definition-ref edit keeps its id, so the acknowledgement omits the optional field'
+			);
 			assert.strictEqual(lastModel(stub).selectedId, id, 'the container is still selected');
 			await waitFor('the row label to follow the new tail', () =>
 				lastRows(stub).some((candidate) => candidate.id === id && candidate.label === 'FirstContRenamed')

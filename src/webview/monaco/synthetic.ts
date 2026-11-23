@@ -93,8 +93,8 @@ function indent(level: number): string {
 	return '    '.repeat(Math.max(0, level - 1));
 }
 
-/** A synthetic row is one model line; show embedded newlines as a literal. */
-function singleLine(text: string): string {
+/** A synthetic row is one model line; show embedded newlines as a literal `\n`. */
+export function escapeNewlines(text: string): string {
 	return text.replace(/\r\n|\r|\n/g, '\\n');
 }
 
@@ -151,14 +151,31 @@ function displayValue(row: EcucRow): string | undefined {
 	return undefined;
 }
 
-/** The raw value the host edit expects when the display added quotes. */
-export function rawFieldText(row: EcucRow, display: string): string {
-	if (row.kind === 'parameter' && row.value !== undefined && display !== row.value) {
-		if (display.length >= 2 && display.startsWith('"') && display.endsWith('"')) {
-			return display.slice(1, -1);
-		}
+/** True when a parameter renders its raw value inside syntax quotes. */
+function quotedParameterValue(row: EcucRow): boolean {
+	if (row.kind !== 'parameter') {
+		return false;
 	}
-	return display;
+	if (row.valueKind !== undefined) {
+		return row.valueKind === 'textual';
+	}
+	// A hand-built row may omit the kind; the quoted display is then the only hint.
+	const shown = row.shownValue ?? row.value ?? '';
+	return shown.length >= 2 && shown.startsWith('"') && shown.endsWith('"');
+}
+
+/** The complete synthetic line fragment a raw field value renders as. */
+export function displayForRaw(row: EcucRow, field: string, raw: string): string {
+	const text = spanTextForRaw(row, field, raw);
+	return field === 'value' && quotedParameterValue(row) ? `"${text}"` : text;
+}
+
+/** The text the field span holds: the rendered fragment without its syntax quotes. */
+export function spanTextForRaw(row: EcucRow, field: string, raw: string): string {
+	if (field === 'value') {
+		return quotedParameterValue(row) ? escapeNewlines(raw) : raw;
+	}
+	return field === 'shortName' ? escapeNewlines(raw) : raw;
 }
 
 function buildNodeLine(row: EcucRow): LineBuilder {
@@ -171,9 +188,15 @@ function buildNodeLine(row: EcucRow): LineBuilder {
 
 	const value = displayValue(row);
 	if (value !== undefined && (row.kind === 'parameter' || row.kind === 'reference')) {
-		const shown = singleLine(value);
+		const shown = escapeNewlines(value);
 		append(builder, ' = ');
-		if (row.kind === 'parameter' && shown === value) {
+		if (quotedParameterValue(row) && row.value !== undefined) {
+			// Quotes are syntax, not part of the editable value span. Keeping them
+			// outside the span stops a direct edit from multiplying or deleting them.
+			append(builder, '"');
+			appendField(builder, escapeNewlines(row.value), 'value', row.id);
+			append(builder, '"');
+		} else if (row.kind === 'parameter') {
 			appendField(builder, shown, 'value', row.id);
 		} else {
 			append(builder, shown);
@@ -189,12 +212,12 @@ function buildNodeLine(row: EcucRow): LineBuilder {
 		append(builder, ' ');
 		if (part.cls === 'short' && row.kind === 'container' && row.shortName !== undefined) {
 			// `shortPart` renders `"name"`; the editable span is the name inside.
-			const displayed = singleLine(part.text);
+			const displayed = escapeNewlines(part.text);
 			const quoted = displayed.startsWith('"') && displayed.endsWith('"');
 			if (quoted) {
 				const searchStart = builder.length + 1;
 				append(builder, '"');
-				appendField(builder, singleLine(row.shortName), 'shortName', row.id);
+				appendField(builder, escapeNewlines(row.shortName), 'shortName', row.id);
 				append(builder, '"');
 				builder.searchSpans.push({
 					field: 'meta',
@@ -207,7 +230,7 @@ function buildNodeLine(row: EcucRow): LineBuilder {
 				appendSearchSpan(builder, displayed, 'meta', index);
 			}
 		} else {
-			const displayed = singleLine(part.text);
+			const displayed = escapeNewlines(part.text);
 			append(builder, displayed);
 			appendSearchSpan(builder, displayed, 'meta', index);
 		}
@@ -237,7 +260,7 @@ function appendSearchSpan(
 function buildCommentLine(text: string, level: number, rowId: string): LineBuilder {
 	const builder = startLine('annotation', rowId);
 	append(builder, indent(level));
-	append(builder, `/* ${singleLine(text)} */`);
+	append(builder, `/* ${escapeNewlines(text)} */`);
 	return builder;
 }
 
@@ -394,7 +417,7 @@ function cellLine(cell: DiffCell | undefined, row: DiffRow): { text: string; sea
 	const value = cell.shownValue !== undefined ? cell.shownValue : cell.kind === 'reference' ? cell.target : cell.value;
 	if ((cell.kind === 'parameter' || cell.kind === 'reference') && value !== undefined) {
 		text += ' = ';
-		const shown = singleLine(value);
+		const shown = escapeNewlines(value);
 		const valueStart = text.length + 1;
 		text += shown;
 		searchSpans.push({ field: 'value', startColumn: valueStart, endColumn: text.length + 1 });
@@ -405,7 +428,7 @@ function cellLine(cell: DiffCell | undefined, row: DiffRow): { text: string; sea
 			continue;
 		}
 		text += ' ';
-		const shown = singleLine(part.text);
+		const shown = escapeNewlines(part.text);
 		const metaStart = text.length + 1;
 		text += shown;
 		searchSpans.push({ field: 'meta', part: index, startColumn: metaStart, endColumn: text.length + 1 });
@@ -427,7 +450,7 @@ function cellLine(cell: DiffCell | undefined, row: DiffRow): { text: string; sea
 
 function commentText(cell: DiffCell | undefined, index: number, level: number): string {
 	const text = cell?.comments?.[index];
-	return text === undefined ? '' : `${indent(level)}/* ${singleLine(text)} */`;
+	return text === undefined ? '' : `${indent(level)}/* ${escapeNewlines(text)} */`;
 }
 
 /** Serialize the merged diff rows into two line-aligned synthetic documents. */

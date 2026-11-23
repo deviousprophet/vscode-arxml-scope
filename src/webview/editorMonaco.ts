@@ -20,13 +20,27 @@ import type {
 import type { FindMatch, FindOptions } from '../core/searchModel';
 import {
 	buildSyntheticDocument,
-	rawFieldText,
+	displayForRaw,
+	escapeNewlines,
 	searchRangeOnLine,
+	spanTextForRaw,
 	syntheticRowLine,
 	type SyntheticDocument,
 	type SyntheticLine,
 	type FieldSpan
 } from './monaco/synthetic';
+import {
+	compareEditFlushOrder,
+	draftKey,
+	remapDraftMap,
+	remapDraftNodeId,
+	remapNodeId,
+	resolveRenameIntents,
+	type EditField,
+	type RenameIntent
+} from '../core/ecuc/editOrder';
+import { fieldTextFromWholeLine } from '../core/ecuc/lineEdit';
+import { localValueError } from '../core/ecuc/valueValidation';
 import { createEcucEditor, defineEcucTheme, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
 import { EditorToolbar } from './components/toolbar/toolbar';
 import {
@@ -109,29 +123,43 @@ let nativeFindRequests = new Map<number, string>();
 let nativeFindRequestId = 0;
 let nativeReplaceRequestId = 0;
 let applyingModel = false;
+/** True while a host document/patch is replacing the model and the selection. */
+let restoringView = false;
 interface QueuedEdit {
 	type: 'edit';
 	editId: number;
 	nodeId: string;
-	field?: 'value' | 'shortName' | 'definitionRef';
-	/** The host value, after the display-to-raw conversion for numeric text. */
+	field?: EditField;
+	/** The host value, after any display-to-raw conversion. */
 	value: string;
-	/** The exact text currently shown in the synthetic line. */
+	/** The text the synthetic field span holds: the value, newlines escaped. */
 	display: string;
 }
 let pendingEdits = new Map<string, QueuedEdit>();
 let inflightEdits = new Map<number, QueuedEdit>();
+/**
+ * Short-name writes whose new path id the row store has not shown yet. The
+ * host may answer `editResult` before its re-scan, so this outlives the
+ * in-flight entry; `applyRows` resolves it against the next row store.
+ */
+let renameIntents = new Map<number, RenameIntent>();
+/** old id -> new id proved by the rebuild in progress; consumed by that rebuild. */
+let resolvedRenames = new Map<string, string>();
+/**
+ * True after a local undo until a new edit or host refresh. Undoing a draft all
+ * the way back to the accepted value drops the pending entry, but redo must
+ * still be able to restore the draft from Monaco's model stack.
+ */
+let localUndoActive = false;
 let editSequence = 0;
 let hostRevision = 0;
 let hostDirty = false;
 /** True once the host proves it speaks the revisioned edit protocol. */
 let hostAcks = false;
-let editTimer: ReturnType<typeof setTimeout> | undefined;
-const EDIT_DEBOUNCE_MS = 160;
 const flushRequests = new Set<number>();
 interface InvalidEdit {
 	nodeId: string;
-	field: 'value' | 'shortName' | 'definitionRef';
+	field: EditField;
 	message: string;
 	display: string;
 	editId: number;
@@ -254,7 +282,12 @@ function renderIdentityFields(row: EcucRow, data: InspectorFields): void {
 	detailsBody?.appendChild(inspectorElement('div', 'inspector-label', data.label));
 	if (row.kind === 'container') {
 		if (detailsBody) {
-			detailsBody.appendChild(detailsContainerFields(row, data));
+			detailsBody.appendChild(
+				detailsContainerFields(row, data, {
+					shortName: localValueFor(row.id, 'shortName'),
+					definitionRef: localValueFor(row.id, 'definitionRef')
+				})
+			);
 		}
 		return;
 	}
@@ -277,7 +310,7 @@ function renderTypeFields(data: InspectorFields): void {
 
 function renderParameterValue(row: EcucRow, data: InspectorFields): void {
 	if (data.kind === 'parameter' && detailsBody) {
-		detailsBody.appendChild(detailsValueInput(row, data));
+		detailsBody.appendChild(detailsValueInput(row, data, localValueFor(row.id, 'value')));
 	}
 	for (const format of data.formats) {
 		appendInspectorField(format.label, format.value);
@@ -380,14 +413,126 @@ function renderInspectorActions(row: EcucRow): void {
 	appendRevealAction(actions, row);
 }
 
+interface DetailsFocusAnchor {
+	rowId: string;
+	field: string;
+	start?: number;
+	end?: number;
+}
+
+/**
+ * The Details caret a rebuild could not restore because the row id was waiting
+ * for the host's rename pair. The next rebuild that proves a rename consumes it.
+ */
+let pendingRenameFocus: DetailsFocusAnchor | undefined;
+
+function detailsControl(rowId: string, field: string): HTMLInputElement | HTMLSelectElement | null {
+	const controls = detailsBody?.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-field]') ?? [];
+	for (const control of Array.from(controls)) {
+		if (control.dataset.nodeId === rowId && control.dataset.field === field) {
+			return control;
+		}
+	}
+	return null;
+}
+
+/** Remember the focused Details control so a rebuild does not drop the caret. */
+function captureDetailsFocus(): DetailsFocusAnchor | undefined {
+	const active = document.activeElement;
+	// Only a control inside the Details body counts; focus in the tree, search or
+	// editor must not be moved by an inspector rebuild.
+	if (detailsBody === null || active === null || !detailsBody.contains(active)) {
+		return undefined;
+	}
+	if (!(active instanceof HTMLElement)) {
+		return undefined;
+	}
+	const rowId = active.dataset.nodeId;
+	const field = active.dataset.field;
+	if (rowId === undefined || field === undefined) {
+		return undefined;
+	}
+	const control = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : undefined;
+	const start = control?.selectionStart ?? undefined;
+	const end = control?.selectionEnd ?? undefined;
+	return {
+		rowId,
+		field,
+		...(start === undefined ? {} : { start }),
+		...(end === undefined ? {} : { end })
+	};
+}
+
+/** True while a short-name write whose path id will change is unresolved. */
+function renameInFlight(): boolean {
+	if (renameIntents.size > 0) {
+		return true;
+	}
+	for (const edit of inflightEdits.values()) {
+		if (edit.field === 'shortName') {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Restore focus/caret after a rebuild. A short-name rename changes the path-based
+ * row id, so the host pair proved by this rebuild moves the caret to the new id.
+ * A deleted row has no mapping and does not steal focus. Returns true when a
+ * control took focus.
+ */
+function restoreDetailsFocus(anchor: DetailsFocusAnchor | undefined): boolean {
+	if (anchor === undefined || detailsBody === null) {
+		return false;
+	}
+	let control = detailsControl(anchor.rowId, anchor.field);
+	if (control === null) {
+		for (const [oldId, newId] of resolvedRenames) {
+			const mapped = remapNodeId(anchor.rowId, oldId, newId);
+			if (mapped === undefined) {
+				continue;
+			}
+			control = detailsControl(mapped, anchor.field);
+			if (control !== null) {
+				break;
+			}
+		}
+	}
+	if (control === null) {
+		return false;
+	}
+	control.focus();
+	if (anchor.start !== undefined && 'setSelectionRange' in control) {
+		const max = control.value.length;
+		control.setSelectionRange(Math.min(anchor.start, max), Math.min(anchor.end ?? anchor.start, max));
+	}
+	return true;
+}
+
+/** Re-seed every invalid draft's text and inline error after the panel is rebuilt. */
+function syncInvalidDetails(): void {
+	for (const invalid of invalidEdits.values()) {
+		syncDetailsField(invalid.nodeId, invalid.field, invalid.display, invalid.message);
+	}
+}
+
 function updateInspector(): void {
 	if (!detailsBody) {
 		return;
 	}
+	const active = captureDetailsFocus();
+	// A rebuild that proves a rename may restore a caret captured before the host's
+	// pair arrived; any other rebuild drops it rather than stealing focus later.
+	const focus = active ?? (resolvedRenames.size > 0 ? pendingRenameFocus : undefined);
+	pendingRenameFocus = undefined;
 	detailsBody.textContent = '';
 	const row = selectedRow();
 	if (row === undefined) {
 		renderEmptyInspector();
+		if (focus !== undefined && renameIntents.size > 0) {
+			pendingRenameFocus = focus;
+		}
 		return;
 	}
 	detailsSelectionChanged(row.id);
@@ -400,6 +545,12 @@ function updateInspector(): void {
 	renderConditionSummary(data);
 	renderDefinitionFields(data);
 	renderInspectorActions(row);
+	syncInvalidDetails();
+	if (!restoreDetailsFocus(focus) && focus !== undefined && renameIntents.size > 0) {
+		// The row id is waiting for the rename acknowledgement; the rebuild that
+		// consumes the host pair will move this caret to the new id.
+		pendingRenameFocus = focus;
+	}
 }
 
 function applyDecorations(): void {
@@ -502,12 +653,8 @@ function restoreCursor(anchor: CursorAnchor): void {
 	editor.setScrollLeft(anchor.scrollLeft);
 }
 
-function editKey(edit: QueuedEdit): string {
-	return `${edit.nodeId}|${edit.field ?? ''}`;
-}
-
 function localEditPending(): boolean {
-	return pendingEdits.size > 0 || inflightEdits.size > 0 || editTimer !== undefined;
+	return pendingEdits.size > 0 || inflightEdits.size > 0;
 }
 
 function hasPendingEdits(): boolean {
@@ -515,7 +662,7 @@ function hasPendingEdits(): boolean {
 }
 
 function localDraftExists(): boolean {
-	return pendingEdits.size > 0 || inflightEdits.size > 0 || editTimer !== undefined || invalidEdits.size > 0;
+	return pendingEdits.size > 0 || inflightEdits.size > 0 || invalidEdits.size > 0;
 }
 
 function updateDirtyStatus(): void {
@@ -524,13 +671,7 @@ function updateDirtyStatus(): void {
 }
 
 function maybeRequestSave(): void {
-	if (
-		!saveRequested ||
-		invalidEdits.size > 0 ||
-		pendingEdits.size > 0 ||
-		inflightEdits.size > 0 ||
-		editTimer !== undefined
-	) {
+	if (!saveRequested || invalidEdits.size > 0 || pendingEdits.size > 0 || inflightEdits.size > 0) {
 		return;
 	}
 	saveRequested = false;
@@ -538,6 +679,7 @@ function maybeRequestSave(): void {
 }
 
 function requestSave(): void {
+	localUndoActive = false;
 	if (invalidEdits.size > 0) {
 		saveRequested = false;
 		const first = invalidEdits.values().next().value as InvalidEdit;
@@ -547,49 +689,14 @@ function requestSave(): void {
 		return;
 	}
 	saveRequested = true;
-	flushEdits();
+	// A draft whose row is gone cannot be written; the save stops here instead of
+	// posting `save` over work the host never received.
+	if (flushEdits()) {
+		saveRequested = false;
+		updateDirtyStatus();
+		return;
+	}
 	maybeRequestSave();
-}
-
-function fieldKey(nodeId: string, field: string): string {
-	return `${nodeId}|${field}`;
-}
-
-function xmlInvalid(text: string): boolean {
-	return /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
-}
-
-function localValueError(row: EcucRow, field: string, value: string): string | undefined {
-	if (xmlInvalid(value)) {
-		return 'XML cannot represent this character';
-	}
-	if (field !== 'value' || row.kind !== 'parameter') {
-		return undefined;
-	}
-	const type = row.parameterType;
-	if (type === 'Integer' && !/^[+-]?(?:\d+|0[xX][0-9a-fA-F]+|0[bB][01]+)$/.test(value)) {
-		return 'Invalid integer value';
-	}
-	if (
-		type === 'Float' &&
-		!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) &&
-		!/^[+-]?(?:INF|NaN)$/.test(value)
-	) {
-		return 'Invalid float value';
-	}
-	if (type === 'Boolean' && !/^(?:true|false)$/i.test(value)) {
-		return 'Invalid boolean value';
-	}
-	return undefined;
-}
-
-function displayForRaw(row: EcucRow, field: string, raw: string): string {
-	if (field !== 'value') {
-		return raw;
-	}
-	const shown = row.shownValue ?? row.value ?? '';
-	const quoted = shown.length >= 2 && shown.startsWith('"') && shown.endsWith('"');
-	return quoted ? `"${raw.replace(/\r\n|\r|\n/g, '\\n')}"` : raw;
 }
 
 function markerForInvalid(invalid: InvalidEdit): monaco.editor.IMarkerData | undefined {
@@ -631,21 +738,26 @@ function updateErrorState(): void {
 	updateDirtyStatus();
 }
 
-function replaceSyntheticLine(line: number, row: EcucRow, field: string, display: string): void {
+function replaceSyntheticLine(
+	line: number,
+	row: EcucRow,
+	field: EditField,
+	raw: string,
+	display: string
+): void {
 	if (model === undefined) {
 		return;
 	}
-	// A container's line label is its definition-ref tail, so a Details edit must
-	// repaint it now instead of waiting for the host's re-scan.
-	const patched: EcucRow = field === 'definitionRef' ? { ...row, label: lastShortName(display) } : row;
+	// The patched row is the one but last source of the line; the host row stays
+	// untouched until its re-scan accepts the draft.
 	const built = syntheticRowLine({
-		...patched,
-		...(patched.kind === 'parameter' && field === 'value'
-			? { value: rawFieldText(patched, display), shownValue: display }
-			: {}),
-		...(patched.kind === 'container' && field === 'shortName' ? { shortName: display } : {})
+		...row,
+		...(field === 'value' ? { value: raw, shownValue: display } : {}),
+		...(field === 'shortName' ? { shortName: raw } : {}),
+		// A container's line label is its definition-ref tail, so a Details edit
+		// must repaint it now instead of waiting for the host's re-scan.
+		...(field === 'definitionRef' ? { definitionRef: raw, label: lastShortName(raw) } : {})
 	});
-	const anchor = captureCursor();
 	documentModel.lines[line - 1] = {
 		line,
 		rowId: row.id,
@@ -655,6 +767,13 @@ function replaceSyntheticLine(line: number, row: EcucRow, field: string, display
 		searchSpans: built.searchSpans
 	};
 	documentModel.text = documentModel.lines.map((candidate) => candidate.text).join('\n');
+	if (model.getLineContent(line) === built.text) {
+		// Direct typing already produced the rendered line. Re-pushing it would add
+		// a second undo entry and can interrupt an IME composition; only the span
+		// metadata needs the new value.
+		return;
+	}
+	const anchor = captureCursor();
 	applyingModel = true;
 	model.pushEditOperations(
 		[],
@@ -667,12 +786,8 @@ function replaceSyntheticLine(line: number, row: EcucRow, field: string, display
 	restoreCursor(anchor);
 }
 
-function syncDetails(nodeId: string, field: string, raw: string): void {
-	syncDetailsField(nodeId, field, raw);
-}
-
 /** The host-accepted raw value for one field, matching the edit payload's `value`. */
-function acceptedFieldValue(row: EcucRow, field: 'value' | 'shortName' | 'definitionRef'): string | undefined {
+function acceptedFieldValue(row: EcucRow, field: EditField): string | undefined {
 	if (field === 'value') {
 		return row.value;
 	}
@@ -683,7 +798,7 @@ function acceptedFieldValue(row: EcucRow, field: 'value' | 'shortName' | 'defini
 function newestLocalEdit(key: string): QueuedEdit | undefined {
 	let newest = pendingEdits.get(key);
 	for (const edit of inflightEdits.values()) {
-		if (editKey(edit) === key && (newest === undefined || edit.editId > newest.editId)) {
+		if (draftKey(edit.nodeId, edit.field) === key && (newest === undefined || edit.editId > newest.editId)) {
 			newest = edit;
 		}
 	}
@@ -692,7 +807,7 @@ function newestLocalEdit(key: string): QueuedEdit | undefined {
 
 function inflightFor(key: string): QueuedEdit | undefined {
 	for (const edit of inflightEdits.values()) {
-		if (editKey(edit) === key) {
+		if (draftKey(edit.nodeId, edit.field) === key) {
 			return edit;
 		}
 	}
@@ -725,40 +840,49 @@ function isRedundantEdit(key: string, value: string, accepted: string | undefine
 /** The single mutation path for a live field value from Monaco or Details. */
 function applyLocalField(
 	nodeId: string,
-	field: 'value' | 'shortName' | 'definitionRef',
-	raw: string,
-	display = raw
+	field: EditField,
+	raw: string
 ): void {
+	localUndoActive = false;
 	const row = rowById.get(nodeId);
 	const line = documentModel.rowLine.get(nodeId);
 	if (row === undefined || line === undefined) {
 		return;
 	}
-	const key = fieldKey(nodeId, field);
+	const key = draftKey(nodeId, field);
 	const error = localValueError(row, field, raw);
-	const shown = displayForRaw(row, field, display);
-	replaceSyntheticLine(line, row, field, shown);
-	const detailsValue = field === 'value' ? raw : display;
-	syncDetails(nodeId, field, detailsValue);
+	const display = displayForRaw(row, field, raw);
+	const spanText = spanTextForRaw(row, field, raw);
+	replaceSyntheticLine(line, row, field, raw, display);
+	syncDetailsField(nodeId, field, spanText, error);
 	if (error !== undefined) {
 		// The invalid text stays visible, but it never enters the host document.
 		pendingEdits.delete(key);
-		invalidEdits.set(key, { nodeId, field, message: error, display: shown, editId: (editSequence += 1) });
+		invalidEdits.set(key, { nodeId, field, message: error, display: spanText, editId: (editSequence += 1) });
 		updateErrorState();
 		return;
 	}
-	const value = field === 'value' ? rawFieldText(row, raw) : raw;
 	invalidEdits.delete(key);
-	if (isRedundantEdit(key, value, acceptedFieldValue(row, field))) {
+	if (isRedundantEdit(key, raw, acceptedFieldValue(row, field))) {
 		updateErrorState();
 		return;
 	}
-	queueEdit({ nodeId, field, value, display: shown });
+	queueEdit({ nodeId, field, value: raw, display: spanText });
 	updateErrorState();
 }
 
+/** The text a Details control shows: invalid draft first, then the newest local raw value. */
+function localValueFor(nodeId: string, field: EditField): string | undefined {
+	const key = draftKey(nodeId, field);
+	const invalid = invalidEdits.get(key);
+	if (invalid !== undefined) {
+		return invalid.display;
+	}
+	return newestLocalEdit(key)?.value;
+}
+
 function maybeAcknowledgeFlush(): void {
-	if (pendingEdits.size > 0 || inflightEdits.size > 0 || editTimer !== undefined || flushRequests.size === 0) {
+	if (pendingEdits.size > 0 || inflightEdits.size > 0 || flushRequests.size === 0) {
 		return;
 	}
 	for (const requestId of flushRequests) {
@@ -768,33 +892,76 @@ function maybeAcknowledgeFlush(): void {
 }
 
 function clearPendingEdits(): void {
-	if (editTimer !== undefined) {
-		clearTimeout(editTimer);
-		editTimer = undefined;
-	}
 	pendingEdits.clear();
 	inflightEdits.clear();
+	renameIntents.clear();
+	resolvedRenames.clear();
+	pendingRenameFocus = undefined;
+	localUndoActive = false;
 	updateDirtyStatus();
 	maybeAcknowledgeFlush();
 }
 
-function flushEdits(): void {
-	if (editTimer !== undefined) {
-		clearTimeout(editTimer);
-		editTimer = undefined;
-	}
+/** Drop local no-ops so Ctrl+S never sends a value the host already holds. */
+function pruneRedundantPending(): void {
 	for (const [key, edit] of Array.from(pendingEdits)) {
-		// One edit per field may be in flight. A newer value waits for its ack so
-		// a refusal cannot be confused with the value that superseded it.
-		if (inflightEdits.has(edit.editId)) {
+		const row = rowById.get(edit.nodeId);
+		if (row === undefined || inflightFor(key) !== undefined) {
 			continue;
 		}
-		const keyBusy = Array.from(inflightEdits.values()).some((candidate) => editKey(candidate) === key);
-		if (keyBusy) {
+		if (edit.value === acceptedFieldValue(row, edit.field ?? 'value')) {
+			pendingEdits.delete(key);
+		}
+	}
+	updateDirtyStatus();
+}
+
+/**
+ * Send every local draft: values first, then short names deepest container first.
+ *
+ * Returns true when a draft had to be left behind because its row is no longer in
+ * the latest row store. Such a draft stays queued (the row may come back, and its
+ * text must not be lost) but a save must not proceed over it.
+ */
+function flushEdits(): boolean {
+	pruneRedundantPending();
+	if (renameInFlight()) {
+		// The re-scan that follows a rename re-keys the rows. Sending a draft under
+		// the pre-rename id would earn a refusal, so it waits for that document (or
+		// for the edit result) and is flushed under the host-provided id afterwards.
+		updateDirtyStatus();
+		maybeAcknowledgeFlush();
+		return false;
+	}
+	let stale = false;
+	const entries = Array.from(pendingEdits.entries()).sort((left, right) =>
+		compareEditFlushOrder(left[1], right[1], function (nodeId) {
+			return rowById.get(nodeId)?.level;
+		})
+	);
+	for (const [key, edit] of entries) {
+		const row = rowById.get(edit.nodeId);
+		if (row === undefined) {
+			// A previous re-scan removed the row; sending it would only earn a refusal.
+			// Keep the draft and report it, so the status explains the blocked save and
+			// the draft can still be submitted if the row returns.
+			stale = true;
+			setDetailsStatus({ message: 'The node is no longer in the file.', kind: 'warn' });
+			continue;
+		}
+		// One edit per field may be in flight. A newer value waits for its ack so
+		// a refusal cannot be confused with the value that superseded it.
+		if (inflightFor(key) !== undefined) {
 			continue;
 		}
 		pendingEdits.delete(key);
 		inflightEdits.set(edit.editId, edit);
+		if (edit.field === 'shortName') {
+			// The re-scan may arrive before or after `editResult`; keep this intent
+			// until the host pair proves the renamed container, so a draft cannot be
+			// addressed at the dead id in between.
+			renameIntents.set(edit.editId, { editId: edit.editId, nodeId: edit.nodeId, shortName: edit.value });
+		}
 		hostAcks = true;
 		postToHost({
 			type: 'edit',
@@ -805,13 +972,20 @@ function flushEdits(): void {
 			baseRevision: hostRevision
 		});
 	}
+	if (stale) {
+		// A stale draft makes any outstanding host flush unsatisfiable; that save
+		// times out and the host writes the document as it stands. Drop the request
+		// so it cannot act as a standing commit trigger for drafts queued later.
+		flushRequests.clear();
+	}
 	updateDirtyStatus();
 	maybeAcknowledgeFlush();
+	return stale;
 }
 
-function queueEdit(edit: { nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string; display: string }): void {
-	// Coalesce a fast typing run into one host write. The local buffer is already
-	// authoritative for the keystroke; the host round-trip only persists it.
+function queueEdit(edit: { nodeId: string; field?: EditField; value: string; display: string }): void {
+	// The local buffer is authoritative for the keystroke. A newer keystroke
+	// replaces it; Ctrl+S is the only path that turns it into a host write.
 	const next: QueuedEdit = {
 		type: 'edit',
 		editId: (editSequence += 1),
@@ -820,46 +994,74 @@ function queueEdit(edit: { nodeId: string; field?: 'value' | 'shortName' | 'defi
 		value: edit.value,
 		display: edit.display
 	};
-	pendingEdits.set(editKey(next), next);
-	if (editTimer !== undefined) {
-		clearTimeout(editTimer);
-	}
-	editTimer = setTimeout(flushEdits, EDIT_DEBOUNCE_MS);
+	pendingEdits.set(draftKey(next.nodeId, next.field), next);
 	updateDirtyStatus();
 }
 
 function hasNewerLocalEdit(edit: QueuedEdit): boolean {
-	const key = editKey(edit);
+	const key = draftKey(edit.nodeId, edit.field);
 	return (
-		Array.from(pendingEdits.values()).some((candidate) => editKey(candidate) === key && candidate.editId > edit.editId) ||
-		Array.from(inflightEdits.values()).some((candidate) => editKey(candidate) === key && candidate.editId > edit.editId) ||
+		Array.from(pendingEdits.values()).some((candidate) => draftKey(candidate.nodeId, candidate.field) === key && candidate.editId > edit.editId) ||
+		Array.from(inflightEdits.values()).some((candidate) => draftKey(candidate.nodeId, candidate.field) === key && candidate.editId > edit.editId) ||
 		(invalidEdits.get(key)?.editId ?? 0) > edit.editId
 	);
 }
 
 /** Put the host-accepted row text back after a refusal with no newer local edit. */
-function handleEditResult(message: { editId: number; ok: boolean; reason?: string; revision: number }): void {
+function handleEditResult(message: {
+	editId: number;
+	ok: boolean;
+	reason?: string;
+	revision: number;
+	nextNodeId?: string;
+}): void {
 	if (typeof message.editId !== 'number' || typeof message.revision !== 'number' || typeof message.ok !== 'boolean') {
 		return;
 	}
+	const nextNodeId = typeof message.nextNodeId === 'string' ? message.nextNodeId : undefined;
 	const edit = inflightEdits.get(message.editId);
 	if (edit === undefined) {
 		return;
 	}
 	inflightEdits.delete(message.editId);
+	const intent = renameIntents.get(message.editId);
+	if (!message.ok) {
+		// The rename never happened, so its intent is not waiting for a re-scan.
+		// The pre-rename draft stays under its old id and remains editable.
+		if (intent !== undefined) {
+			renameIntents.delete(message.editId);
+		}
+	} else if (intent !== undefined && nextNodeId !== undefined) {
+		// The host owns the id grammar: record its pair so the next row store can
+		// prove the rename even when it arrived before this acknowledgement.
+		renameIntents.set(message.editId, { ...intent, nextNodeId });
+		remapDraftsAfterRename();
+		if (resolvedRenames.size > 0) {
+			// The re-scan landed before this ack: rebuild from the remapped drafts so
+			// the renamed row shows the post-flush keystroke and keeps the Details focus.
+			applyRows(rows, header, selectedId);
+		}
+	} else if (intent !== undefined) {
+		// A host that predates the pair cannot prove the new id. Drop the intent so a
+		// flush is not deferred forever; its drafts are then reported stale instead of
+		// being sent to an id the page no longer knows.
+		renameIntents.delete(message.editId);
+		remapDraftsAfterRename();
+	}
 	hostAcks = true;
 	hostRevision = Math.max(hostRevision, message.revision);
+	const superseded = hasNewerLocalEdit(edit);
 	if (message.ok) {
 		hostDirty = true;
-		const invalid = invalidEdits.get(editKey(edit));
+		const invalid = invalidEdits.get(draftKey(edit.nodeId, edit.field));
 		if (invalid === undefined || invalid.editId <= edit.editId) {
-			invalidEdits.delete(editKey(edit));
+			invalidEdits.delete(draftKey(edit.nodeId, edit.field));
 		}
-	} else if (!hasNewerLocalEdit(edit)) {
+	} else if (!superseded) {
 		// Keep the refused text visible and marked instead of silently restoring the
 		// old value; Ctrl+S stays blocked until the user corrects or reverts it.
 		saveRequested = false;
-		invalidEdits.set(editKey(edit), {
+		invalidEdits.set(draftKey(edit.nodeId, edit.field), {
 			nodeId: edit.nodeId,
 			field: edit.field ?? 'value',
 			message: message.reason ?? 'the edit was refused',
@@ -869,11 +1071,19 @@ function handleEditResult(message: { editId: number; ok: boolean; reason?: strin
 		if (message.reason !== undefined && message.reason !== '') {
 			setDetailsStatus({ message: message.reason, kind: 'warn' });
 		}
+		syncDetailsField(edit.nodeId, edit.field ?? 'value', edit.display, message.reason ?? 'the edit was refused');
 		updateErrorState();
 	}
 	updateDirtyStatus();
-	if (pendingEdits.size > 0) {
-		flushEdits();
+	// A refusal ends the save attempt. A superseded refusal does not: the newer
+	// draft still has to reach the host under the same Ctrl+S.
+	if (!message.ok && !superseded) {
+		maybeAcknowledgeFlush();
+	} else if (pendingEdits.size > 0 && (saveRequested || flushRequests.size > 0)) {
+		if (flushEdits()) {
+			saveRequested = false;
+			updateDirtyStatus();
+		}
 	} else {
 		maybeAcknowledgeFlush();
 	}
@@ -899,12 +1109,12 @@ function revealRow(id: string | undefined, focus = false, column = 1): void {
 function latestLocalEdits(): QueuedEdit[] {
 	const latest = new Map<string, QueuedEdit>();
 	for (const edit of inflightEdits.values()) {
-		latest.set(editKey(edit), edit);
+		latest.set(draftKey(edit.nodeId, edit.field), edit);
 	}
 	for (const edit of pendingEdits.values()) {
-		const current = latest.get(editKey(edit));
+		const current = latest.get(draftKey(edit.nodeId, edit.field));
 		if (current === undefined || edit.editId > current.editId) {
-			latest.set(editKey(edit), edit);
+			latest.set(draftKey(edit.nodeId, edit.field), edit);
 		}
 	}
 	for (const [key, invalid] of invalidEdits) {
@@ -947,45 +1157,118 @@ function overlayLocalEdits(doc: SyntheticDocument): void {
 	doc.text = doc.lines.map((line) => line.text).join('\n');
 }
 
-function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
-	const anchor = captureCursor();
-	const viewState = editor?.saveViewState();
-	rows = Array.isArray(nextRows) ? nextRows : [];
-	indexRows();
-	if (nextHeader !== undefined) {
-		header = nextHeader;
-	}
-	documentModel = buildSyntheticDocument(rows, header);
-	overlayLocalEdits(documentModel);
-	if (model !== undefined) {
-		applyingModel = true;
-		// Monaco sticky scroll converts a folding end to `end + 1`; a document that
-		// ends on its closing brace would make the outermost scope invalid and
-		// drop every sticky candidate. A real editor document ends with a newline.
-		model.setValue(`${documentModel.text}\n`);
-		applyingModel = false;
-		if (viewState !== undefined && viewState !== null) {
-			editor?.restoreViewState(viewState);
+/**
+ * Apply the rename intents the rebuilt row store proves.
+ *
+ * A short-name write gets a durable intent when it is flushed, because the host
+ * can answer `editResult` before its re-scan. The intent is proved by the host's
+ * own pair (`nextNodeId` from `editResult`) together with a row store where the
+ * old row is gone and that container exists. Every pending/invalid draft and
+ * every in-flight entry's `nodeId` addressed at the old id (or its subtree) moves
+ * to the host id, the mapping is exposed for focus/selection, and the resolved
+ * intent is cleared. A refused intent is cleared by `handleEditResult`; an intent
+ * whose row vanished without the host's row is dropped, which marks its drafts
+ * stale by leaving them at the dead id and cancels a pending save.
+ */
+function remapDraftsAfterRename(): void {
+	// Pairs proved earlier in the same turn are kept: an acknowledgement can resolve
+	// a rename after its document already rebuilt the rows, and the rebuild that
+	// follows that acknowledgement still needs the mapping for caret and selection.
+	const plan = resolveRenameIntents(Array.from(renameIntents.values()), function (id) {
+		return rowById.get(id);
+	});
+	for (const pair of plan.resolved) {
+		remapDraftMap(pendingEdits, pair.oldId, pair.newId);
+		remapDraftMap(invalidEdits, pair.oldId, pair.newId);
+		for (const [editId, edit] of Array.from(inflightEdits)) {
+			const next = remapDraftNodeId(edit, pair.oldId, pair.newId);
+			if (next !== undefined) {
+				// A refusal that arrives after this rebuild must be recorded at the new
+				// id; the Details selection never targets the dead one.
+				inflightEdits.set(editId, next);
+			}
 		}
-		setModelFolding(model, documentModel.foldingRanges);
+		resolvedRenames.set(pair.oldId, pair.newId);
 	}
-	if (nextSelectedId !== undefined) {
-		selectedId = nextSelectedId;
+	if (plan.dropped.length > 0) {
+		// The rename did not land where the host said. Its drafts cannot be addressed
+		// anywhere safe, so the next flush reports them stale and this save stops.
+		saveRequested = false;
+		setDetailsStatus({ message: 'The node is no longer in the file.', kind: 'warn' });
 	}
-	if (selectedId !== undefined && !rowById.has(selectedId)) {
-		selectedId = undefined;
+	renameIntents = new Map();
+	for (const intent of plan.kept) {
+		renameIntents.set(intent.editId, intent);
 	}
-	subtreeIds = subtreeRowIdsOf(selectedId);
-	setConditionRows(rows);
-	ensureDiscoveredConditionRows();
-	applyDisabledCount();
-	updateInspector();
-	applyDecorations();
-	restoreCursor(anchor);
-	invalidateNativeFind();
+}
+
+
+function applyRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
+	localUndoActive = false;
+	restoringView = true;
+	try {
+		const anchor = captureCursor();
+		const viewState = editor?.saveViewState();
+		rows = Array.isArray(nextRows) ? nextRows : [];
+		indexRows();
+		remapDraftsAfterRename();
+		if (nextHeader !== undefined) {
+			header = nextHeader;
+		}
+		documentModel = buildSyntheticDocument(rows, header);
+		overlayLocalEdits(documentModel);
+		if (model !== undefined) {
+			applyingModel = true;
+			// Monaco sticky scroll converts a folding end to `end + 1`; a document that
+			// ends on its closing brace would make the outermost scope invalid and
+			// drop every sticky candidate. A real editor document ends with a newline.
+			model.setValue(`${documentModel.text}\n`);
+			applyingModel = false;
+			if (viewState !== undefined && viewState !== null) {
+				editor?.restoreViewState(viewState);
+			}
+			setModelFolding(model, documentModel.foldingRanges);
+		}
+		if (nextSelectedId !== undefined) {
+			selectedId = nextSelectedId;
+		}
+		if (selectedId !== undefined && !rowById.has(selectedId)) {
+			// A patch without a selection still follows a rename the re-scan proved, so
+			// the Details panel never targets a dead id (the renamed container or any
+			// draft-bearing row under it).
+			let mapped = resolvedRenames.get(selectedId);
+			for (const [oldId, newId] of resolvedRenames) {
+				mapped = mapped ?? remapNodeId(selectedId, oldId, newId);
+			}
+			selectedId = mapped !== undefined && rowById.has(mapped) ? mapped : undefined;
+		}
+		subtreeIds = subtreeRowIdsOf(selectedId);
+		setConditionRows(rows);
+		ensureDiscoveredConditionRows();
+		applyDisabledCount();
+		updateInspector();
+		resolvedRenames = new Map();
+		applyDecorations();
+		restoreCursor(anchor);
+		invalidateNativeFind();
+	} finally {
+		restoringView = false;
+	}
+	// A Ctrl+S that was waiting on the rename (or on a host flush) now owns the
+	// remapped drafts: submit them under the new ids and let the save follow the
+	// acknowledgements. A draft whose row did not come back stops the save instead.
+	if (saveRequested || flushRequests.size > 0) {
+		if (flushEdits()) {
+			saveRequested = false;
+			updateDirtyStatus();
+		} else {
+			maybeRequestSave();
+		}
+	}
 }
 
 function applyPatch(patch: EditorRowPatch, nextHeader?: EditorDocumentHeader, nextSelectedId?: string): void {
+	localUndoActive = false;
 	if (!patch.structural && patch.remove === 1 && patch.rows.length === 1) {
 		const existing = rows[patch.at];
 		const incoming = patch.rows[0];
@@ -1425,7 +1708,7 @@ function handleMultiChange(event: monaco.editor.IModelContentChangedEvent): void
 		const suffix = lineText.text.slice(span.endColumn - 1);
 		const text = current.slice(span.startColumn - 1, current.length - suffix.length);
 		const row = rowById.get(span.nodeId);
-		if (text === '' || /[\r\n]/.test(text) || row === undefined) {
+		if (/[\r\n]/.test(text) || row === undefined) {
 			rebuildModel();
 			return;
 		}
@@ -1435,13 +1718,64 @@ function handleMultiChange(event: monaco.editor.IModelContentChangedEvent): void
 		return;
 	}
 	for (const edit of edits) {
-		applyLocalField(
-			edit.span.nodeId,
-			edit.span.field,
-			edit.span.field === 'value' ? rawFieldText(edit.row, edit.text) : edit.text,
-			edit.text
-		);
+		applyLocalField(edit.span.nodeId, edit.span.field, edit.text);
 	}
+}
+
+/**
+ * Attribute a whole-line replacement to the row's single editable span.
+ *
+ * A Details edit repaints through `pushEditOperations`, so its undo arrives as a
+ * full-line change that starts outside the value span. When the unchanged prefix
+ * and suffix still surround that span, the replacement is the field's new text
+ * and can flow through the same draft path as direct typing. Anything else (a
+ * deleted quote, a moved prefix) is a syntax edit and must be restored.
+ */
+function wholeLineFieldText(line: number, lineText: SyntheticLine): { span: FieldSpan; text: string } | undefined {
+	const span = lineText.fieldSpans.length === 1 ? lineText.fieldSpans[0] : undefined;
+	const current = model?.getLineContent(line);
+	const text = current === undefined ? undefined : fieldTextFromWholeLine(lineText.text, lineText.fieldSpans, current);
+	return span === undefined || text === undefined ? undefined : { span, text };
+}
+
+/**
+ * Insert a clipboard paste that contains a line break as one escaped line.
+ *
+ * A synthetic row is one model line, so a raw multi-line insertion would make the
+ * model diverge from the row document and be reverted. Intercepting in the capture
+ * phase keeps the field draft on the normal single-line path: the text is escaped
+ * exactly as the synthetic display escapes it (`\\n`) and the restored caret lands
+ * after the inserted span. A single-line paste and a cut are untouched.
+ */
+function installMultilinePasteGuard(container: HTMLElement): void {
+	container.addEventListener(
+		'paste',
+		function (event: ClipboardEvent) {
+			const text = event.clipboardData?.getData('text/plain') ?? '';
+			if (text === '' || !/[\r\n]/.test(text) || editor === undefined || model === undefined) {
+				return;
+			}
+			const selection = editor.getSelection();
+			if (selection === null || selection.startLineNumber !== selection.endLineNumber) {
+				return;
+			}
+			const lineText = documentModel.lines[selection.startLineNumber - 1];
+			const span = lineText?.fieldSpans.find(
+				(candidate) =>
+					selection.startColumn >= candidate.startColumn && selection.endColumn <= candidate.endColumn
+			);
+			if (span === undefined) {
+				// Outside a field span the paste is not a value edit; let Monaco decide.
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			editor?.executeEdits('paste', [
+				{ range: selection, text: escapeNewlines(text), forceMoveMarkers: true }
+			]);
+		},
+		true
+	);
 }
 
 function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
@@ -1475,24 +1809,33 @@ function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
 		applyingModel = false;
 		restoreCursor(anchor);
 	};
-	const spans = documentModel.lines[line - 1]?.fieldSpans ?? [];
+	const lineText = documentModel.lines[line - 1];
+	const spans = lineText?.fieldSpans ?? [];
 	const span = spans.find(
 		(candidate) =>
 			change.range.startColumn >= candidate.startColumn &&
 			change.range.endColumn <= candidate.endColumn
 	);
-	if (span === undefined || model === undefined) {
+	if (span === undefined || model === undefined || lineText === undefined) {
+		// Only a whole-line replacement can be the undo of a programmatic repaint;
+		// a one-character change outside the span (a deleted quote) stays a syntax
+		// edit, because quotes and value characters are indistinguishable there.
+		const fullLine =
+			lineText !== undefined &&
+			change.range.startColumn === 1 &&
+			change.range.endColumn === lineText.text.length + 1;
+		const recovered = lineText !== undefined && fullLine ? wholeLineFieldText(line, lineText) : undefined;
+		if (recovered !== undefined && rowById.has(recovered.span.nodeId)) {
+			applyLocalField(recovered.span.nodeId, recovered.span.field, recovered.text);
+			return;
+		}
 		restored();
-		return;
-	}
-	const lineText = documentModel.lines[line - 1];
-	if (lineText === undefined) {
 		return;
 	}
 	const current = model.getLineContent(line);
 	const suffix = lineText.text.slice(span.endColumn - 1);
 	const text = current.slice(span.startColumn - 1, current.length - suffix.length);
-	if (text === '' || /[\r\n]/.test(text)) {
+	if (/[\r\n]/.test(text)) {
 		restored();
 		return;
 	}
@@ -1502,10 +1845,13 @@ function handleEdit(event: monaco.editor.IModelContentChangedEvent): void {
 		return;
 	}
 	// Keep the local map in sync while the host round-trip is in flight.
-	applyLocalField(span.nodeId, span.field, span.field === 'value' ? rawFieldText(row, text) : text, text);
+	applyLocalField(span.nodeId, span.field, text);
 }
 
 function revertToAccepted(): void {
+	for (const invalid of invalidEdits.values()) {
+		syncDetailsField(invalid.nodeId, invalid.field, invalid.display);
+	}
 	clearPendingEdits();
 	invalidEdits.clear();
 	saveRequested = false;
@@ -1533,27 +1879,52 @@ function rebuildModel(): void {
 	invalidateNativeFind();
 }
 
+/** Undo the local draft stack; true keeps the host undo command out of the way. */
+function localUndo(): boolean {
+	if (!localDraftExists() && !localUndoActive) {
+		return false;
+	}
+	const current = editor?.getModel();
+	if (current !== undefined && current !== null && current.canUndo()) {
+		// The model stack owns keystrokes and the programmatic Details repaint.
+		// `editor.trigger('undo')` would hit the host-undo action registered below.
+		current.undo();
+	}
+	localUndoActive = true;
+	return true;
+}
+
+/** Redo the local draft stack; true keeps the host redo command out of the way. */
+function localRedo(): boolean {
+	if (!localDraftExists() && !localUndoActive) {
+		return false;
+	}
+	const current = editor?.getModel();
+	if (current !== undefined && current !== null && current.canRedo()) {
+		current.redo();
+	}
+	localUndoActive = true;
+	return true;
+}
+
 function installShortcuts(): void {
 	if (editor === undefined) {
 		return;
 	}
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, function () {
-		if (localDraftExists()) {
-			editor?.trigger('api', 'undo', null);
+		if (localUndo()) {
 			return;
 		}
 		postToHost({ type: 'undo' });
 	});
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyZ, function () {
-		if (localDraftExists()) {
-			editor?.trigger('api', 'redo', null);
+		if (localRedo()) {
 			return;
 		}
 		postToHost({ type: 'redo' });
 	});
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY, function () {
-		if (localDraftExists()) {
-			editor?.trigger('api', 'redo', null);
+		if (localRedo()) {
 			return;
 		}
 		postToHost({ type: 'redo' });
@@ -1587,6 +1958,9 @@ function registerEditorActions(): void {
 		id: 'undo',
 		label: 'Undo',
 		run: function () {
+			if (localUndo()) {
+				return;
+			}
 			postToHost({ type: 'undo' });
 		}
 	});
@@ -1594,6 +1968,9 @@ function registerEditorActions(): void {
 		id: 'redo',
 		label: 'Redo',
 		run: function () {
+			if (localRedo()) {
+				return;
+			}
 			postToHost({ type: 'redo' });
 		}
 	});
@@ -1676,6 +2053,8 @@ function handleMessage(message: EditorProviderToWebview): void {
 			return;
 		}
 		flushRequests.add(message.requestId);
+		// A stale draft leaves `pendingEdits` non-empty, so the flush is never
+		// acknowledged and the host save waits rather than writing past it.
 		flushEdits();
 		maybeAcknowledgeFlush();
 		return;
@@ -1820,7 +2199,9 @@ function mountDetails(): void {
 		},
 		updateInspector,
 		previewEdit: function (message) {
-			applyLocalField(message.nodeId, (message.field ?? 'value') as 'value' | 'shortName' | 'definitionRef', message.value);
+			const field: EditField =
+				message.field === 'shortName' || message.field === 'definitionRef' ? message.field : 'value';
+			applyLocalField(message.nodeId, field, message.value);
 		},
 		commitEdit: function (message) {
 			postToHost(message);
@@ -1848,15 +2229,12 @@ export async function mountEditor(): Promise<void> {
 	setModelFolding(model, documentModel.foldingRanges);
 	installNativeFindBridge(model);
 	editor = createEcucEditor(container, model);
+	installMultilinePasteGuard(container);
 	installNativeReplaceBridge();
 	if ((window as unknown as { __PREVIEW__?: unknown }).__PREVIEW__ !== undefined) {
 		(window as unknown as { __ARXML_EDITOR__?: unknown }).__ARXML_EDITOR__ = editor;
 	}
 	editor.onDidChangeModelContent(handleEdit);
-	editor.onDidBlurEditorText(function () {
-		flushEdits();
-	});
-	window.addEventListener('pagehide', flushEdits);
 	window.addEventListener('beforeunload', function (event) {
 		if (localDraftExists()) {
 			event.preventDefault();
@@ -1864,6 +2242,12 @@ export async function mountEditor(): Promise<void> {
 		}
 	});
 	editor.onDidChangeCursorPosition(function (event) {
+		if (applyingModel || restoringView) {
+			// A document/patch rebuild resets the cursor before the host's selected
+			// row is applied. Treating that as a user move would rebuild the inspector
+			// for the wrong row and detach the focused Details control.
+			return;
+		}
 		const id = rowIdAtLine(event.position.lineNumber);
 		if (id !== undefined && id !== selectedId) {
 			setSelection(id);

@@ -16,6 +16,18 @@ export interface AuditState {
 	wide?: boolean;
 	pan?: number;
 	select?: boolean;
+	/** The text the Details state typed into `#details-value`. */
+	detailsEdit?: string;
+	/** Ctrl+S ran after the Details typing and every edit was acknowledged. */
+	detailsSave?: boolean;
+	/** A local undo ran after the Details typing. */
+	detailsUndo?: boolean;
+	/** A local redo ran after that undo. */
+	detailsRedo?: boolean;
+	/** The container rename, early ack, post-flush keystroke and renamed echo ran. */
+	detailsRename?: boolean;
+	/** The direct-editor delete/word-delete/replace scenario ran. */
+	deleteEdit?: boolean;
 }
 
 interface Rect {
@@ -454,8 +466,8 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 		const edits = (window.__PREVIEW_MESSAGES__ as Array<{ type?: string; value?: string }>).filter(
 			(message) => message.type === 'edit'
 		);
-		if (edits.length !== 1) {
-			issues.push(`the typing run posted ${edits.length} edit messages instead of one`);
+		if (edits.length !== 0) {
+			issues.push(`the typing run posted ${edits.length} host edits before Ctrl+S`);
 		}
 	}
 	if (state.name === 'editor-invalid') {
@@ -471,6 +483,39 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 			issues.push('an invalid edit allowed the document to save');
 		}
 	}
+	if (state.name === 'editor-details') {
+		issues.push(...detailsTypingViolations(state, true));
+	}
+	if (state.name === 'editor-details-save') {
+		issues.push(...detailsTypingViolations(state, false), ...detailsSaveViolations());
+	}
+	if (state.name === 'editor-details-rename') {
+		issues.push(...detailsRenameViolations());
+	}
+	if (state.name === 'editor-rename-refusal') {
+		issues.push(...renameRefusalViolations());
+	}
+	if (state.name === 'editor-rename-late-ack') {
+		issues.push(...detailsRenameViolations());
+	}
+	if (state.name === 'editor-details-undo') {
+		issues.push(...detailsUndoViolations());
+	}
+	if (state.name === 'editor-details-redo') {
+		issues.push(...detailsRedoViolations());
+	}
+	if (state.name === 'editor-delete') {
+		issues.push(...deleteEditViolations());
+	}
+	if (state.name === 'editor-multi-save') {
+		issues.push(...multiSaveViolations());
+	}
+	if (state.name === 'editor-paste') {
+		issues.push(...pasteViolations());
+	}
+	if (state.name === 'editor-stale-save') {
+		issues.push(...staleSaveViolations());
+	}
 	if (state.name === 'editor-sticky') {
 		if (audit.sticky === undefined || !audit.sticky.visible) {
 			issues.push('the sticky-scroll widget is not visible');
@@ -485,6 +530,351 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 		issues.push('the select gesture left no selected row');
 	}
 	issues.push(...swapViolations(state, audit.swap));
+	return issues;
+}
+
+/** The Details state typed locally: focus, caret, one exact repaint and no host edit. */
+function detailsTypingViolations(state: AuditState, expectNoEdit: boolean): string[] {
+	const issues: string[] = [];
+	const input = document.getElementById('details-value') as HTMLInputElement | null;
+	if (input === null) {
+		issues.push('the Details value control did not render');
+	} else {
+		if (document.activeElement !== input) {
+			issues.push('typing in Details dropped focus');
+		}
+		if (input.selectionStart !== input.value.length) {
+			issues.push('typing in Details lost the caret');
+		}
+		if (input.value !== `hello${state.detailsEdit ?? ''}`) {
+			issues.push(`the Details control shows "${input.value}" instead of the typed draft`);
+		}
+	}
+	const status = document.getElementById('editor-dirty-status');
+	if (status === null || status.hidden || !/Unsaved changes/.test(status.textContent ?? '')) {
+		issues.push('the Details draft did not show the Unsaved changes marker');
+	}
+	issues.push(...textLineViolations(`Text = "hello${state.detailsEdit ?? ''}"`));
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
+	if (expectNoEdit && messages.some((message) => message.type === 'edit')) {
+		issues.push('typing in Details posted a host edit before Ctrl+S');
+	}
+	return issues;
+}
+
+/** A local undo after a Details edit restores the host value and clears the draft. */
+function detailsUndoViolations(): string[] {
+	const issues: string[] = [];
+	const input = document.getElementById('details-value') as HTMLInputElement | null;
+	if (input === null) {
+		issues.push('the Details value control did not render');
+	} else {
+		if (document.activeElement !== input) {
+			issues.push('undo in Details dropped focus');
+		}
+		if (input.value !== 'hello') {
+			issues.push(`undo left the Details control at "${input.value}" instead of the host value`);
+		}
+		if (input.selectionStart !== 5) {
+			issues.push('undo did not clamp the Details caret to the restored value');
+		}
+	}
+	const status = document.getElementById('editor-dirty-status');
+	if (status !== null && !status.hidden && /Unsaved changes/.test(status.textContent ?? '')) {
+		issues.push('undo left the Unsaved changes marker behind');
+	}
+	issues.push(...textLineViolations('Text = "hello"'));
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
+	if (messages.some((message) => message.type === 'edit')) {
+		issues.push('undo posted a host edit');
+	}
+	return issues;
+}
+
+/** Redo after a local undo restores the draft from Monaco's model stack. */
+function detailsRedoViolations(): string[] {
+	const issues: string[] = [];
+	const input = document.getElementById('details-value') as HTMLInputElement | null;
+	if (input === null) {
+		issues.push('the Details value control did not render');
+	} else {
+		if (document.activeElement !== input) {
+			issues.push('redo in Details dropped focus');
+		}
+		if (input.value !== 'hello updated') {
+			issues.push(`redo left the Details control at "${input.value}" instead of the draft`);
+		}
+		if (input.selectionStart !== 13) {
+			issues.push('redo did not restore the Details caret to the draft end');
+		}
+	}
+	const status = document.getElementById('editor-dirty-status');
+	if (status === null || status.hidden || !/Unsaved changes/.test(status.textContent ?? '')) {
+		issues.push('redo did not restore the Unsaved changes marker');
+	}
+	issues.push(...textLineViolations('Text = "hello updated"'));
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
+	if (messages.some((message) => message.type === 'edit')) {
+		issues.push('redo posted a host edit');
+	}
+	return issues;
+}
+
+/** The direct-editor delete scenario ends at one bare textual value and no host edit. */
+function deleteEditViolations(): string[] {
+	const issues: string[] = [];
+	const status = document.getElementById('editor-dirty-status');
+	if (status === null || status.hidden || !/Unsaved changes/.test(status.textContent ?? '')) {
+		issues.push('the delete scenario did not show the Unsaved changes marker');
+	}
+	issues.push(...textLineViolations('Text = "R"'));
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
+	if (messages.some((message) => message.type === 'edit')) {
+		issues.push('a delete/backspace keystroke posted a host edit');
+	}
+	return issues;
+}
+
+/** A rename ack arrived before the re-scan: the post-flush keystroke must survive. */
+function detailsRenameViolations(): string[] {
+	const issues: string[] = [];
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{
+		type?: string;
+		field?: string;
+		value?: string;
+		nodeId?: string;
+		message?: string;
+	}>;
+	const edits = messages.filter((message) => message.type === 'edit');
+	if (edits.length !== 2) {
+		issues.push(`the rename sequence posted ${edits.length} host edits instead of two`);
+	} else {
+		const first = edits[0];
+		const second = edits[1];
+		if ((first.field ?? 'value') !== 'shortName' || first.value !== 'Syntax2') {
+			issues.push(`the first edit was ${String(first.field)}="${String(first.value)}" instead of the rename`);
+		}
+		if ((second.field ?? 'value') !== 'shortName' || second.value !== 'Syntax23') {
+			issues.push(`the deferred edit was ${String(second.field)}="${String(second.value)}" instead of the full name`);
+		}
+		if (first.nodeId === second.nodeId) {
+			issues.push('the post-flush draft was sent at the pre-rename id');
+		}
+		if (second.nodeId === undefined || !second.nodeId.includes('/Syntax2#')) {
+			issues.push(`the post-flush draft was not addressed at the host's new id (${String(second.nodeId)})`);
+		}
+	}
+	const saves = messages.filter((message) => message.type === 'save');
+	const lastSave = saves[saves.length - 1];
+	if (edits.length === 2 && (lastSave === undefined || messages.indexOf(lastSave) < messages.indexOf(edits[1]))) {
+		issues.push('the save did not follow the remapped edit acknowledgement');
+	}
+	if (messages.some((message) => (message.message ?? '').includes('no longer in the file'))) {
+		issues.push('the rename produced a stale-node refusal');
+	}
+	const input = document.getElementById('details-short-name') as HTMLInputElement | null;
+	if (input === null) {
+		issues.push('the rename state lost the short-name control');
+	} else {
+		if (input.value !== 'Syntax23') {
+			issues.push(`the post-flush keystroke was lost ("${input.value}")`);
+		}
+		if (document.activeElement !== input) {
+			issues.push('the rename echo dropped Details focus');
+		}
+		if (input.selectionStart !== input.value.length) {
+			issues.push('the rename echo lost the caret');
+		}
+	}
+	return issues;
+}
+
+/** A refusal after the rename document landed is recorded at the host's new id. */
+function renameRefusalViolations(): string[] {
+	const issues: string[] = [];
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{
+		type?: string;
+		field?: string;
+		value?: string;
+		nodeId?: string;
+	}>;
+	const edits = messages.filter((message) => message.type === 'edit');
+	if (edits.length !== 2) {
+		issues.push(`the rename-refusal sequence posted ${edits.length} host edits instead of two`);
+	} else {
+		const first = edits[0];
+		const second = edits[1];
+		if (second.nodeId === undefined || !second.nodeId.includes('/Syntax2#')) {
+			issues.push(`the refused draft was not addressed at the host's new id (${String(second.nodeId)})`);
+		}
+		if (first.nodeId === second.nodeId) {
+			issues.push('the post-flush draft kept the dead pre-rename id');
+		}
+		if ((second.field ?? 'value') !== 'shortName' || second.value !== 'Syntax23') {
+			issues.push(`the refused edit was ${String(second.field)}="${String(second.value)}" instead of the full name`);
+		}
+	}
+	if (edits.length === 2) {
+		const refusedAt = messages.indexOf(edits[1]);
+		const laterSave = messages.filter((message) => message.type === 'save').some((save) => messages.indexOf(save) > refusedAt);
+		if (laterSave) {
+			issues.push('a refused edit still allowed the document to save');
+		}
+	}
+	const input = document.getElementById('details-short-name') as HTMLInputElement | null;
+	if (input === null) {
+		issues.push('the refusal state lost the short-name control');
+	} else {
+		if (input.value !== 'Syntax23') {
+			issues.push(`the refused draft is not visible ("${input.value}")`);
+		}
+		if (document.activeElement !== input) {
+			issues.push('the refusal dropped Details focus');
+		}
+		if (input.getAttribute('aria-invalid') !== 'true') {
+			issues.push('the refused control is not marked invalid');
+		}
+	}
+	const inline = input?.parentElement?.querySelector('.details-value-error');
+	if (inline === null || inline === undefined || !/refused by the test host/.test(inline.textContent ?? '')) {
+		issues.push('the refusal reason is not shown beside the field');
+	}
+	const status = document.getElementById('details-status');
+	if (status === null || !/refused by the test host/.test(status.textContent ?? '')) {
+		issues.push('the refusal reason is not in the Details status');
+	}
+	if (/no longer in the file/.test(status?.textContent ?? '')) {
+		issues.push('the refusal was reported as a stale node');
+	}
+	return issues;
+}
+
+/** The rendered `Text = …` line, trimmed, must match exactly. */
+function textLineViolations(expected: string): string[] {
+	return editorLineViolations('Text = ', expected);
+}
+
+/** The rendered line whose trimmed text starts with `prefix`, compared exactly. */
+function editorLineViolations(prefix: string, expected: string): string[] {
+	const model = (window as unknown as {
+		__ARXML_EDITOR__?: { getModel(): { getLineCount(): number; getLineContent(line: number): string } | null };
+	}).__ARXML_EDITOR__?.getModel();
+	if (model === null || model === undefined) {
+		return ['the Details preview has no Monaco model'];
+	}
+	for (let line = 1; line <= model.getLineCount(); line += 1) {
+		const text = model.getLineContent(line).trim();
+		if (!text.startsWith(prefix)) {
+			continue;
+		}
+		return text === expected ? [] : [`the editor line shows "${text}" instead of "${expected}"`];
+	}
+	return [`the Details preview has no ${prefix.trim()} line`];
+}
+
+/** Ctrl+S over two row drafts: two host edits, then one save after both acks. */
+function multiSaveViolations(): string[] {
+	const issues: string[] = [];
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{
+		type?: string;
+		field?: string;
+		value?: string;
+	}>;
+	const edits = messages.filter((message) => message.type === 'edit');
+	const saves = messages.filter((message) => message.type === 'save');
+	if (edits.length !== 2) {
+		issues.push(`Ctrl+S posted ${edits.length} edits instead of two`);
+	} else {
+		assertFieldEdit(edits[0], '427', 'Decimal', issues);
+		assertFieldEdit(edits[1], 'hello!', 'Text', issues);
+	}
+	if (saves.length !== 1) {
+		issues.push(`Ctrl+S posted ${saves.length} saves instead of one`);
+	} else if (edits.length > 0 && messages.indexOf(saves[0]) < messages.indexOf(edits[edits.length - 1])) {
+		issues.push('the save was posted before both edits were acknowledged');
+	}
+	issues.push(...editorLineViolations('Decimal = ', 'Decimal = 427'));
+	issues.push(...editorLineViolations('Text = ', 'Text = "hello!"'));
+	const strip = document.getElementById('editor-error-strip');
+	if (strip !== null && !strip.hidden) {
+		issues.push('the multi-row save left an invalid-value error');
+	}
+	return issues;
+}
+
+/** One value edit carries the row's accepted value and nothing else. */
+function assertFieldEdit(
+	edit: { field?: string; value?: string } | undefined,
+	value: string,
+	label: string,
+	issues: string[]
+): void {
+	if (edit === undefined) {
+		issues.push(`the ${label} edit is missing`);
+		return;
+	}
+	if ((edit.field ?? 'value') !== 'value') {
+		issues.push(`the ${label} edit did not carry the value field`);
+	}
+	if (edit.value !== value) {
+		issues.push(`the ${label} edit carried "${String(edit.value)}" instead of "${value}"`);
+	}
+}
+
+/** A newline-containing paste becomes one escaped line and never reaches the host. */
+function pasteViolations(): string[] {
+	const issues: string[] = [];
+	issues.push(...editorLineViolations('Text = ', 'Text = "hello\\nsecond"'));
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
+	if (messages.some((message) => message.type === 'edit')) {
+		issues.push('the pasted newline posted a host edit');
+	}
+	return issues;
+}
+
+/** A draft whose row vanished blocks Ctrl+S and says why. */
+function staleSaveViolations(): string[] {
+	const issues: string[] = [];
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string }>;
+	if (messages.some((message) => message.type === 'edit')) {
+		issues.push('the stale draft was posted to the host');
+	}
+	if (messages.some((message) => message.type === 'save')) {
+		issues.push('a stale draft allowed the document to save');
+	}
+	const status = document.getElementById('details-status');
+	if (status === null || !/no longer in the file/.test(status.textContent ?? '')) {
+		issues.push(`the status does not explain the missing node ("${status?.textContent ?? ''}")`);
+	}
+	const strip = document.getElementById('editor-error-strip');
+	if (strip !== null && !strip.hidden) {
+		issues.push('the stale draft was reported as an invalid value');
+	}
+	return issues;
+}
+
+/** Ctrl+S sent one raw edit for the textual field, waited for its ack, then saved. */
+function detailsSaveViolations(): string[] {
+	const issues: string[] = [];
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; field?: string; value?: string }>;
+	const edits = messages.filter((message) => message.type === 'edit');
+	const saves = messages.filter((message) => message.type === 'save');
+	if (edits.length !== 1) {
+		issues.push(`Ctrl+S posted ${edits.length} edits instead of one`);
+	} else {
+		const edit = edits[0];
+		if ((edit.field ?? 'value') !== 'value') {
+			issues.push('the Details edit did not carry the value field');
+		}
+		if (edit.value !== 'hello updated') {
+			issues.push(`the Details edit carried "${edit.value}" instead of the raw value`);
+		}
+	}
+	if (saves.length !== 1) {
+		issues.push(`Ctrl+S posted ${saves.length} saves after the acknowledgement`);
+	} else if (edits.length > 0 && messages.indexOf(saves[0]) < messages.indexOf(edits[0])) {
+		issues.push('the save was posted before the edit acknowledgement');
+	}
 	return issues;
 }
 

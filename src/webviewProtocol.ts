@@ -75,7 +75,15 @@ export type EditorProviderToWebview =
 			dirty?: boolean;
 	  }
 	/** The host confirms or refuses one optimistic edit. */
-	| { type: 'editResult'; editId: number; ok: boolean; reason?: string; revision: number }
+	| {
+			type: 'editResult';
+			editId: number;
+			ok: boolean;
+			reason?: string;
+			revision: number;
+			/** The host's id for the edited node after the write; only a rename changes it. */
+			nextNodeId?: string;
+	  }
 	/** The TextDocument's dirty state changed. */
 	| { type: 'dirty'; dirty: boolean; revision: number }
 	/** The host asks the page to submit pending edits before saving. */

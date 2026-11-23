@@ -18,8 +18,7 @@ and keeps a line -> row -> field-span map; the Monaco model is not a second sour
 The editor's Monaco model always has one trailing newline: sticky scroll converts a folding
 end to `end + 1`, so without it a scope ending on the last row is considered invalid and the
 whole sticky model is dropped. The aligned diff models keep their exact synthetic text because
-the diff editor's sticky scroll is disabled. Accepted field edits still become one host `WorkspaceEdit`; Ctrl+Z/Ctrl+Shift+Z are intercepted and
-routed to the host document, never Monaco's local stack. The diff page serializes the aligned
+the diff editor's sticky scroll is disabled. Accepted field edits still become one host `WorkspaceEdit`, but they are written only when the user presses `Ctrl+S`; typing, deletion and Escape stay in the page's shared draft. With a local draft or an active local undo, Ctrl+Z/Ctrl+Shift+Z undo/redo Monaco's local stack (redo can restore a draft that an undo returned to the host value); otherwise they are routed to the host document. The diff page serializes the aligned
 `DiffDocument` rows into two equal-length documents and lets Monaco's diff editor render them.
 The webview CSP additionally allows `style-src 'unsafe-inline'`, `worker-src blob:`, `font-src` and
 `connect-src` for the fetched worker; no remote code is loaded.
@@ -194,23 +193,40 @@ store, then `postToHost({ type: 'ready' })`.
 6. **One user action, one write.** `editField` validates against the current text (or the engine's
    retained model), then applies exactly one `WorkspaceEdit` through `applyEdit`. Edits carry
    `editId` and `baseRevision`; the host serializes them on `session.editChain` and answers each with
-   `{ type: 'editResult', editId, ok, reason?, revision }`. Every `document` / `documentPatch` push
+   `{ type: 'editResult', editId, ok, reason?, revision, nextNodeId? }`; `nextNodeId` is present only
+   when the write renumbers the node (a container rename). Every `document` / `documentPatch` push
    carries `revision` and `dirty`, a save posts `dirty`, and the panel title's `•` follows
    `TextDocument.isDirty` after every change, save and edit.
    `onWillSaveTextDocument` asks the page to flush pending edits (`flushEdits`/`flushed`) and waits
-   for the queue before the save. The page-level `Ctrl+S` handler first blocks on local invalid
-   fields, then posts `save`; the host drains `editChain` and calls `document.save()`.
+   for the queue before the save. Typing, backspace, Delete, word-delete, cut/paste and a
+   selection replace post no `edit`; `queueEdit` only stores the shared draft. The page-level
+   `Ctrl+S` handler is the only commit trigger: it first blocks on local invalid fields, then
+   flushes one coalesced edit per field (values first, short names deepest-first, no-ops pruned),
+   waits for every `editResult`, and posts `save`; the host drains `editChain` and calls
+   `document.save()`. A draft whose row is no longer in the row store stays queued but stops the
+   save: the status says the node is gone and neither `edit` nor `save` is posted. Enter is a no-op
+   and blur/page hide never write.
    Delete and duplicate go through `planDelete` / `planDuplicate` and `applyStructureEdit` after a
    modal confirmation. A refusal posts a `notice` (for a field, `inline: true`, `scope: 'details'`),
    keeps the visible text marked invalid and leaves the bytes untouched.
 7. **One shared Details/editor draft.** Details input events call `previewEdit`, not `commitEdit`;
    the page routes both views through `applyLocalField`. `Enter` does not commit, `Tab` leaves
-   focus to the browser, `Escape` restores the field's accepted value. Local syntax markers and
-   the `#editor-error-strip` live in the page; invalid values never enter the `TextDocument` and
-   block save until corrected or reverted.
+   focus to the browser, `Escape` restores the field's accepted value. The shared draft survives a
+   selection change, so edits on several rows save together. Each inspector rebuild seeds its
+   controls from the shared draft and restores the focused control's caret; an inspector rebuild
+   must not drop focus. Local syntax markers and the `#editor-error-strip` live in the page;
+   invalid values never enter the `TextDocument` and block save until corrected or reverted.
 8. **Renames follow the id.** A container rename changes its path-based id. Before writing,
-   `editField` stores `plan.nextNodeId`; the re-scan that follows the document change carries that
-   surviving id. A refused write restores the previous selection entry.
+   `editField` stores `plan.nextNodeId` for the host selection, and the `editResult` carries the same
+   id as its optional `nextNodeId` field; the re-scan that follows the document change carries that
+   surviving id. A refused write restores the previous selection entry. The page records every
+   posted short-name write as a durable rename intent. The host may answer `editResult` before its
+   re-scan, so the next `document`/`documentPatch` resolves the intent from that host pair — never
+   by deriving an id from the short name or its ordinal. It then re-keys pending, invalid and
+   in-flight drafts plus the Details caret from the old id to the new id, and defers a second
+   `Ctrl+S` until that happens. Nested intents resolve deepest-first from the same pairs. A refusal
+   clears the intent; an intent whose old row is gone without the host's row leaves its drafts
+   stale, blocks the save and never addresses the dead id.
 9. **Reveal and follow are navigation only.** `reveal` maps the node id through
    `buildNodeIndex(model).byId` and calls `revealRangeInTextEditor` with the panel's column;
    `arxmlScope.ecuc.editor.revealMode` (`beside`, `focus`, `replace`) decides where the source opens.
