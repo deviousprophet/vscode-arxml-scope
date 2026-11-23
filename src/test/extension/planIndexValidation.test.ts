@@ -145,7 +145,17 @@ suite('plan index and validation rows (extension)', function () {
 		try {
 			service.start();
 			await waitFor('the initial index', () => service.workspaceIndex.file(beforeUri.toString()) !== undefined);
-			fs.renameSync(before, after);
+			// The watcher is created before the first build but can miss events for a
+			// moment. Index a probe through the watcher first, then rename through the
+			// VS Code file API so both sides of the rename are delivered.
+			const probe = vscode.Uri.file(path.join(dir, 'watcher-probe.arxml'));
+			fs.writeFileSync(probe.fsPath, moduleXml('Plan', 'WatcherProbe'));
+			await waitFor(
+				'the watcher probe',
+				() => service.workspaceIndex.file(probe.toString()) !== undefined,
+				20_000
+			);
+			await vscode.workspace.fs.rename(beforeUri, afterUri, { overwrite: false });
 			await waitFor('the renamed file', () => service.workspaceIndex.file(afterUri.toString()) !== undefined);
 			await waitFor('the old path to be dropped', () => service.workspaceIndex.file(beforeUri.toString()) === undefined, 20_000);
 

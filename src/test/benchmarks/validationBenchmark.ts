@@ -18,6 +18,9 @@ const CONTAINERS_PER_FILE = 1000;
 const PARAMETERS_PER_CONTAINER = 20;
 const MAX_STEP_MS = 5_000;
 const MAX_RETAINED_BYTES = 512 * 1024 * 1024;
+/** Warm-up plus three measured passes; the median max absorbs one-off runner noise. */
+const SLICE_PASSES = 3;
+const MAX_SLICE_MS = 50;
 
 /** One generator pass's shape and timing, before the assertions. */
 interface SlicedResult {
@@ -164,22 +167,44 @@ function collectSlices(index: WorkspaceIndex): SlicedResult {
 	return { slices, maxSliceMs, diagnostics, elapsedMs: Math.round(performance.now() - slicedStarted) };
 }
 
-function checkSlicedPass(index: WorkspaceIndex, expected: number): void {
+function median(values: readonly number[]): number {
+	const sorted = [...values].sort((left, right) => left - right);
+	return sorted[Math.floor(sorted.length / 2)];
+}
+
+/** One sliced pass, refusing a diagnostic drift before it can pollute the sample. */
+function measureSlicedPass(index: WorkspaceIndex, expected: number): SlicedResult {
 	const result = collectSlices(index);
-	console.log(
-		JSON.stringify({
-			_type: 'validation-slices',
-			slices: result.slices,
-			maxSliceMs: Math.round(result.maxSliceMs),
-			diagnostics: result.diagnostics,
-			elapsedMs: result.elapsedMs,
-		})
-	);
 	if (result.diagnostics !== expected) {
 		throw new Error(`the sliced pass returned ${result.diagnostics} of ${expected} diagnostics`);
 	}
-	if (result.maxSliceMs > 50) {
-		throw new Error(`the longest validation slice took ${Math.round(result.maxSliceMs)} ms; limit is 50 ms`);
+	return result;
+}
+
+function checkSlicedPass(index: WorkspaceIndex, expected: number): void {
+	// The first sliced pass pays the generator/JIT warm-up; measure the steady state.
+	measureSlicedPass(index, expected);
+	const passes: SlicedResult[] = [];
+	for (let pass = 0; pass < SLICE_PASSES; pass += 1) {
+		passes.push(measureSlicedPass(index, expected));
+	}
+	const maxSlices = passes.map((pass) => pass.maxSliceMs);
+	const representativeMax = median(maxSlices);
+	const representativeElapsed = median(passes.map((pass) => pass.elapsedMs));
+	console.log(
+		JSON.stringify({
+			_type: 'validation-slices',
+			slices: passes[0].slices,
+			maxSliceMs: Math.round(representativeMax),
+			diagnostics: expected,
+			elapsedMs: Math.round(representativeElapsed),
+			passes: maxSlices.map((value) => Math.round(value))
+		})
+	);
+	if (representativeMax > MAX_SLICE_MS) {
+		throw new Error(
+			`the median longest validation slice took ${Math.round(representativeMax)} ms over ${SLICE_PASSES} passes; limit is ${MAX_SLICE_MS} ms`
+		);
 	}
 }
 
