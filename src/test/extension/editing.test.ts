@@ -1043,7 +1043,7 @@ suite('editor container field editing (R1–R5)', () => {
 			const id = containerId(original, 'FirstCont');
 			await stub.send({ type: 'select', nodeId: id });
 
-			await stub.send({ type: 'edit', nodeId: id, field: 'shortName', value: 'FirstContA' });
+			await stub.send({ type: 'edit', editId: 7, nodeId: id, field: 'shortName', value: 'FirstContA' });
 			await waitFor('the rename', () => document.getText().includes('<SHORT-NAME>FirstContA</SHORT-NAME>'));
 			await waitFor('the rename to dirty the document', () => document.isDirty);
 
@@ -1053,9 +1053,15 @@ suite('editor container field editing (R1–R5)', () => {
 
 			const newId = containerId(renamed, 'FirstContA');
 			await waitFor('the re-scan with the new id', () => lastModel(stub).selectedId === newId);
-			const ack = stub.messages.find(
-				(message) => message.type === 'editResult' && message.ok === true
+			// The re-scan document is posted inside `editField`, before the host posts
+			// the acknowledgement; a slow platform can deliver the document first.
+			await waitFor('the rename acknowledgement', () =>
+				stub.messages.some((message) => message.type === 'editResult' && message.editId === 7)
 			);
+			const ack = stub.messages.find(
+				(message) => message.type === 'editResult' && message.editId === 7
+			);
+			assert.strictEqual(ack?.ok, true, 'the rename is acknowledged');
 			assert.strictEqual(
 				ack?.nextNodeId,
 				newId,
@@ -1087,7 +1093,7 @@ suite('editor container field editing (R1–R5)', () => {
 			await stub.send({ type: 'select', nodeId: id });
 
 			const next = '/PkgF/ContDefs/ContMod/FirstContRenamed';
-			await stub.send({ type: 'edit', nodeId: id, field: 'definitionRef', value: next });
+			await stub.send({ type: 'edit', editId: 8, nodeId: id, field: 'definitionRef', value: next });
 			await waitFor('the definition-ref edit', () => document.getText().includes(next + '</DEFINITION-REF>'));
 
 			const edited = fixtureText('editing/container-ref.expected.arxml');
@@ -1098,9 +1104,13 @@ suite('editor container field editing (R1–R5)', () => {
 			);
 
 			await waitFor('the re-scan with the container selected', () => lastModel(stub).selectedId === id);
-			const refAck = stub.messages.find(
-				(message) => message.type === 'editResult' && message.ok === true
+			await waitFor('the definition-ref acknowledgement', () =>
+				stub.messages.some((message) => message.type === 'editResult' && message.editId === 8)
 			);
+			const refAck = stub.messages.find(
+				(message) => message.type === 'editResult' && message.editId === 8
+			);
+			assert.strictEqual(refAck?.ok, true, 'the definition-ref edit is acknowledged');
 			assert.strictEqual(
 				refAck?.nextNodeId,
 				undefined,
