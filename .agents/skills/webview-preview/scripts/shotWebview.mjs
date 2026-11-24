@@ -1,21 +1,23 @@
 /**
  * Capture every preview state with headless Chrome or Edge.
  *
- *   node scripts/shotWebview.mjs [--state name] [--list]
+ *   node .agents/skills/webview-preview/scripts/shotWebview.mjs [--state name] [--list]
  *
  * Starts the preview server on a free port, runs the local browser once per
- * state, and writes `artifacts/webview/<state>.png`. No browser dependency: the
- * first installed Chrome/Edge (or `CHROME_PATH`) is used.
+ * state, and writes `artifacts/<state>.png`. No browser dependency: the first
+ * installed Chrome/Edge (or `CHROME_PATH`) is used.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { startPreview } from './previewWebview.mjs';
 
-const root = process.cwd();
-const outDir = path.join(root, 'artifacts', 'webview');
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const skillDir = path.resolve(scriptDir, '..');
+const outDir = path.join(skillDir, 'artifacts');
 
 function candidates() {
 	if (process.env.CHROME_PATH) {

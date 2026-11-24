@@ -1,18 +1,18 @@
 /**
  * Server-side state for the webview preview.
  *
- * Runs in Node (bundled by `scripts/previewWebview.mjs`): it builds the synthetic
+ * Runs in Node (bundled by the webview-preview skill): it builds the synthetic
  * documents with the real scanner, row builder and diff builder, renders the
  * production shell, and inlines the protocol payload. No page code is forked.
  */
-import { diffShell, editorShell } from '../../host/webviewShell';
-import { scanEcucValues } from '../../core/ecuc/scanner';
-import { buildRows } from '../../core/ecuc/renderRows';
-import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
-import { buildNodeIndex } from '../../core/ecuc/nodeId';
-import { buildDiffDocument } from '../../core/diff/diffModel';
-import type { DiffDocument } from '../../core/diff/diffModel';
-import type { EcucRow } from '../../core/ecuc/renderRows';
+import { diffShell, editorShell } from '../../../../src/host/webviewShell';
+import { scanEcucValues } from '../../../../src/core/ecuc/scanner';
+import { buildRows } from '../../../../src/core/ecuc/renderRows';
+import { SORT_EXCEPTIONS } from '../../../../src/core/ecuc/order';
+import { buildNodeIndex } from '../../../../src/core/ecuc/nodeId';
+import { buildDiffDocument } from '../../../../src/core/diff/diffModel';
+import type { DiffDocument } from '../../../../src/core/diff/diffModel';
+import type { EcucRow } from '../../../../src/core/ecuc/renderRows';
 import type { PreviewStateFields } from './previewStateFields';
 
 export interface PreviewState extends PreviewStateFields {

@@ -1,29 +1,31 @@
 /**
  * Serve the production webview pages with seeded states.
  *
- *   node scripts/previewWebview.mjs [--port 4173]
+ *   node .agents/skills/webview-preview/scripts/previewWebview.mjs [--port 4173]
  *
- * Bundles `src/test/preview/previewData.ts` for Node (fixtures + shell) and
- * `previewPage.ts` for the browser (the real page), then serves the shell with
- * the payload inlined. No CSP: this is a local development surface only.
+ * Bundles the skill's `preview/previewData.ts` for Node (fixtures + shell) and
+ * `preview/previewPage.ts` for the browser (the real page), then serves the shell
+ * with the payload inlined. No CSP: this is a local development surface only.
  */
 import { buildSync } from 'esbuild';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const root = process.cwd();
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const skillDir = path.resolve(scriptDir, '..');
+const root = path.resolve(scriptDir, '../../../..');
 const require = createRequire(import.meta.url);
-const previewDir = path.join(root, 'dist', 'preview');
+const previewDir = path.join(skillDir, '.cache');
 
 function buildData() {
 	const dir = mkdtempSync(path.join(tmpdir(), 'arxml-preview-'));
 	const outfile = path.join(dir, 'previewData.cjs');
 	buildSync({
-		entryPoints: [path.join(root, 'src', 'test', 'preview', 'previewData.ts')],
+		entryPoints: [path.join(skillDir, 'preview', 'previewData.ts')],
 		bundle: true,
 		platform: 'node',
 		format: 'cjs',
@@ -34,8 +36,9 @@ function buildData() {
 }
 
 function buildPage() {
+	mkdirSync(previewDir, { recursive: true });
 	buildSync({
-		entryPoints: [path.join(root, 'src', 'test', 'preview', 'previewPage.ts')],
+		entryPoints: [path.join(skillDir, 'preview', 'previewPage.ts')],
 		bundle: true,
 		platform: 'browser',
 		format: 'iife',
