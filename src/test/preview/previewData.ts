@@ -29,6 +29,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-removed', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-sash', page: 'diff', width: 1400, height: 900, merge: true, sash: true },
 	{ name: 'diff-wide', page: 'diff', width: 1400, height: 900, merge: true, wide: true },
 	{
 		name: 'diff-wide-panned',
@@ -399,6 +400,7 @@ function payloadFor(state: PreviewState, document: unknown) {
 		pan: state.pan,
 		jump: state.jump,
 		select: state.select,
+		sash: state.sash,
 		find: state.find,
 		edit: state.edit,
 		detailsEdit: state.detailsEdit,

@@ -209,6 +209,7 @@ function publishAudit(): void {
 			wide: payload.wide,
 			pan: payload.pan,
 			select: payload.select,
+			sash: payload.sash,
 			detailsEdit: payload.detailsEdit,
 			detailsSave: payload.detailsSave,
 			detailsUndo: payload.detailsUndo,
@@ -950,7 +951,15 @@ async function waitForMergeArrows(): Promise<void> {
 			document.querySelector('.monaco-diff-editor .gutter') !== null ||
 			document.querySelector('.monaco-diff-editor .gutterItem') !== null
 	);
-}interface GutterProbe {
+}interface GutterAvailabilitySnapshot {
+	hasItem: boolean;
+	hasService: boolean;
+	mapping: unknown;
+	values: { left: boolean; right: boolean } | null;
+	buttons: number;
+}
+
+interface GutterProbe {
 	present: boolean;
 	width: number;
 	items: number;
@@ -958,8 +967,9 @@ async function waitForMergeArrows(): Promise<void> {
 	sash: boolean;
 	mergeClass: boolean;
 	itemDisplay: string;
+	clicked: string | null;
 	copy: { side?: string; key?: string } | null;
-	availability?: unknown;
+	availability: GutterAvailabilitySnapshot[];
 }
 
 function gutterButtonLabel(button: Element): string {
@@ -975,6 +985,7 @@ async function probeGutter(): Promise<void> {
 	if (payload.page !== 'diff') {
 		return;
 	}
+	await waitFor(() => document.querySelector('.monaco-diff-editor .gutterItem') !== null);
 	await delay(250);
 	const gutter = document.querySelector<HTMLElement>('.monaco-diff-editor .gutter');
 	const items = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem'));
@@ -982,6 +993,7 @@ async function probeGutter(): Promise<void> {
 	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; side?: string; key?: string }>;
 	const before = messages.length;
 	const mergeClass = document.getElementById('diff-monaco')?.classList.contains('arxml-diff-merge') === true;
+	const clicked = buttons[0] === undefined ? null : gutterButtonLabel(buttons[0]);
 	if (mergeClass) {
 		buttons[0]?.click();
 		await tick();
@@ -996,8 +1008,10 @@ async function probeGutter(): Promise<void> {
 		sash: document.querySelector('.monaco-diff-editor .monaco-sash.vertical') !== null,
 		mergeClass,
 		itemDisplay: item === undefined ? '' : getComputedStyle(item).display,
+		clicked,
 		copy: copy === undefined ? null : { side: copy.side, key: copy.key },
-		availability: (window as unknown as { __GUTTER_AVAILABILITY__?: unknown }).__GUTTER_AVAILABILITY__
+		availability: (window as unknown as { __GUTTER_AVAILABILITY__?: GutterAvailabilitySnapshot[] })
+			.__GUTTER_AVAILABILITY__ ?? []
 	};
 }
 
@@ -1053,6 +1067,138 @@ async function probeFolding(): Promise<void> {
 	};
 }
 
+interface PreviewLayoutInfo {
+	width: number;
+	height: number;
+}
+
+interface PreviewSashEditor {
+	getLayoutInfo(): PreviewLayoutInfo;
+}
+
+interface PreviewSashDiffEditor {
+	getOriginalEditor(): PreviewSashEditor;
+	getModifiedEditor(): PreviewSashEditor;
+}
+
+interface SashProbe {
+	present: boolean;
+	gutterWidth: number;
+	initial: [number, number];
+	dragged: [number, number];
+	afterDocument: [number, number];
+	afterSwap: [number, number] | null;
+	reset: [number, number] | null;
+}
+
+function paneWidths(editor: PreviewSashDiffEditor): [number, number] {
+	return [
+		Math.round(editor.getOriginalEditor().getLayoutInfo().width),
+		Math.round(editor.getModifiedEditor().getLayoutInfo().width)
+	];
+}
+
+function previewSashEditor(): PreviewSashDiffEditor | undefined {
+	return (window as unknown as { __ARXML_DIFF_EDITOR__?: PreviewSashDiffEditor }).__ARXML_DIFF_EDITOR__;
+}
+
+function dragSash(sash: HTMLElement, deltaX: number): void {
+	const rect = sash.getBoundingClientRect();
+	const clientX = rect.left + rect.width / 2;
+	const clientY = rect.top + Math.min(rect.height / 2, 60);
+	sash.dispatchEvent(
+		new MouseEvent('mousedown', {
+			bubbles: true,
+			cancelable: true,
+			clientX,
+			clientY,
+			button: 0,
+			buttons: 1,
+			view: window
+		})
+	);
+	window.dispatchEvent(
+		new MouseEvent('mousemove', {
+			bubbles: true,
+			cancelable: true,
+			clientX: clientX + deltaX,
+			clientY,
+			button: 0,
+			buttons: 1,
+			view: window
+		})
+	);
+	window.dispatchEvent(
+		new MouseEvent('mouseup', {
+			bubbles: true,
+			cancelable: true,
+			clientX: clientX + deltaX,
+			clientY,
+			button: 0,
+			buttons: 0,
+			view: window
+		})
+	);
+}
+
+async function probeSash(): Promise<void> {
+	if (payload.page !== 'diff' || !payload.sash) {
+		return;
+	}
+	await delay(250);
+	const editor = previewSashEditor();
+	const sash = document.querySelector<HTMLElement>('.monaco-diff-editor .monaco-sash.vertical');
+	const gutterWidth = Math.round(
+		document.querySelector('.monaco-diff-editor .gutter')?.getBoundingClientRect().width ?? 0
+	);
+	if (editor === undefined || sash === null) {
+		(window as unknown as { __SASH_PROBE__?: SashProbe }).__SASH_PROBE__ = {
+			present: sash !== null,
+			gutterWidth,
+			initial: [0, 0],
+			dragged: [0, 0],
+			afterDocument: [0, 0],
+			afterSwap: null,
+			reset: null
+		};
+		return;
+	}
+	const initial = paneWidths(editor);
+	dragSash(sash, 140);
+	await delay(350);
+	const dragged = paneWidths(editor);
+	window.postMessage(payload.message, '*');
+	await delay(350);
+	const afterDocument = paneWidths(editor);
+	(window as unknown as { __SASH_PROBE__?: SashProbe }).__SASH_PROBE__ = {
+		present: true,
+		gutterWidth,
+		initial,
+		dragged,
+		afterDocument,
+		afterSwap: null,
+		reset: null
+	};
+}
+
+async function probeSashAfterSwap(): Promise<void> {
+	if (payload.page !== 'diff' || !payload.sash) {
+		return;
+	}
+	const editor = previewSashEditor();
+	const sash = document.querySelector<HTMLElement>('.monaco-diff-editor .monaco-sash.vertical');
+	const probe = (window as unknown as { __SASH_PROBE__?: SashProbe }).__SASH_PROBE__;
+	if (editor === undefined || sash === null || probe === undefined) {
+		return;
+	}
+	probe.afterSwap = paneWidths(editor);
+	sash.dispatchEvent(
+		new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: 0, clientY: 0, view: window })
+	);
+	await delay(350);
+	probe.reset = paneWidths(editor);
+}
+
 async function run(): Promise<void> {
 	window.postMessage(payload.message, '*');
 	await until(() => document.querySelector(pageRoot(payload.page)) !== null);
@@ -1062,10 +1208,14 @@ async function run(): Promise<void> {
 	await applyMerge();
 	if (payload.page === 'diff') {
 		await waitForMergeArrows();
-		await probeGutter();
 		await probeFolding();
+		await probeSash();
 	}
 	await applySwap();
+	if (payload.page === 'diff') {
+		await probeGutter();
+		await probeSashAfterSwap();
+	}
 	await applyPan();
 	await applyJumps();
 	await applySelect();

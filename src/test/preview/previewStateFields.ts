@@ -12,6 +12,8 @@ export interface PreviewStateFields {
 	/** F7 presses after mounting; the long document's first change is near line 1000. */
 	jump?: number;
 	select?: boolean;
+	/** Exercises the built-in sash drag, ratio persistence and double-click reset. */
+	sash?: boolean;
 	/** Opens the native find widget and seeds this query, with Rust-shaped results. */
 	find?: string;
 	/** Types this text into the first parameter to exercise the local dirty state. */

@@ -16,6 +16,7 @@ import {
 import { fieldTextFromWholeLine } from '../../core/ecuc/lineEdit';
 import {
 	buildAlignedSyntheticDocuments,
+	buildDiffSyntheticDocuments,
 	buildSyntheticDocument,
 	displayForRaw,
 	searchRangeOnLine,
@@ -881,7 +882,64 @@ suite('synthetic ECUC document', () => {
 		);
 	});
 
-	test('a diff row with no label keeps its quoted short name as a string token', () => {
+	test('the per-side diff documents keep each side’s own shape', () => {
+		const document = oneSidedDiffDocument();
+		const perSide = buildDiffSyntheticDocuments(document);
+		const left = perSide.left.text.split('\n');
+		const right = perSide.right.text.split('\n');
+
+		assert.ok(
+			left.some((line) => line.includes('P.RemovedMod')),
+			'the removed module renders only on the left'
+		);
+		assert.ok(
+			!left.some((line) => line.includes('P.AddedMod')),
+			'the left does not synthesize the added module'
+		);
+		assert.ok(
+			right.some((line) => line.includes('P.AddedMod')),
+			'the added module renders only on the right'
+		);
+		assert.ok(
+			!right.some((line) => line.includes('P.RemovedMod')),
+			'the right does not synthesize the removed module'
+		);
+		assert.strictEqual(perSide.leftLineKeys.length, left.length);
+		assert.strictEqual(perSide.rightLineKeys.length, right.length);
+		assert.strictEqual(
+			perSide.left.rowLine.get('module:removed#0'),
+			left.indexOf('module P.RemovedMod "RemovedMod"') + 1
+		);
+		assert.strictEqual(perSide.right.rowLine.has('module:removed#0'), false);
+		assert.ok(perSide.left.foldingRanges.length > 0, 'the left keeps its folding ranges');
+		assert.ok(perSide.right.foldingRanges.length > 0, 'the right keeps its folding ranges');
+	});
+
+	test('a pure removal gives the two sides different line counts', () => {
+		const full = oneSidedDiffDocument();
+		const document: DiffDocument = {
+			...full,
+			rows: full.rows.filter((row) => row.left !== undefined)
+		};
+		const perSide = buildDiffSyntheticDocuments(document);
+		const left = perSide.left.text.split('\n');
+		const right = perSide.right.text.split('\n');
+
+		assert.notStrictEqual(
+			left.length,
+			right.length,
+			'per-side documents are not padded to a shared line count'
+		);
+		assert.ok(left.includes('module P.RemovedMod "RemovedMod"'));
+		assert.ok(!right.some((line) => line.includes('P.RemovedMod')));
+		assert.strictEqual(
+			right.filter((line) => line.includes('module P.Shared')).length,
+			1,
+			'the shared module still renders once on the right'
+		);
+	});
+
+
 		const rowsModel = [{ ...moduleRow(), subtreeSize: 1 }, noLabelContainerRow()];
 		const document: DiffDocument = {
 			left: { name: 'left.arxml', path: 'left.arxml' },

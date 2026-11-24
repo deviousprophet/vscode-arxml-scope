@@ -3,11 +3,12 @@
 A development-only harness that serves the **production** webview shell and the real
 bundled pages, seeds each page through the host protocol, and captures every state with
 a local headless Chrome or Edge. Every capture also writes a rendered-geometry audit:
-the page measures its own panes, arrows, toolbar, gutter and scroll offsets after the
-gestures, and the runner fails when an action escapes its pane or overlaps a neighbour.
-The audit exists because a screenshot can look plausible while the geometry is wrong —
-an arrow can be outside a panned row, or a toolbar control can sit under the Search
-field — and the jsdom suites cannot see layout at all.
+the page measures its own panes, toolbar, built-in diff gutter/sash, folding and native
+diff paint after the gestures, and the runner fails when an action escapes its pane,
+overlaps a neighbour or a one-sided hunk offers an impossible copy. The audit exists
+because a screenshot can look plausible while the geometry is wrong — a toolbar control
+can sit under the Search field, a gutter item can show both directions on a deletion —
+and the jsdom suites cannot see layout at all.
 
 The harness wraps the production shell (`webviewShell.ts`) and mounts the production
 entries (`diffViewer.ts`, `editorViewer.ts`). There is no second renderer, no forked
@@ -46,13 +47,15 @@ its old bundle.
 
 | State | Page | Size | What it exercises |
 |---|---|---|---|
-| `diff-off` | diff | 1400×900 | baseline diff; no merge arrows |
-| `diff-merge` | diff | 1400×900 | Merge pressed; copy arrows on both panes |
-| `diff-swap` | diff | 1400×900 | Swap pressed; headers and values mirror, arrows follow |
+| `diff-off` | diff | 1400×900 | baseline diff; the built-in gutter and sash are mounted, copy actions are hidden outside Merge |
+| `diff-merge` | diff | 1400×900 | Merge pressed; the built-in hunk toolbar offers Copy Block to Left/Right |
+| `diff-swap` | diff | 1400×900 | Swap pressed; headers and values mirror, and the copy direction/host side follow the displayed panes |
 | `diff-rail` | diff | 1400×900 | long document; F7 jumps to the change near line 1000 and scrolls |
-| `diff-one-sided` | diff | 1400×900 | a right-only and a left-only module/container; the missing side stays blank and neutral, the owning side keeps its braces and change fill |
-| `diff-wide` | diff | 1400×900 | long parameter names; rows overflow horizontally, arrows stay on the pane edges |
-| `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; both arrows stay on the inner edges |
+| `diff-one-sided` | diff | 1400×900 | per-side models with changed pairs; native fills and diagonal gaps, no placeholder layers |
+| `diff-removed` | diff | 1400×900 | a left-only module deletion; the gutter hides Copy Block to Left and offers only Copy Block to Right |
+| `diff-sash` | diff | 1400×900 | built-in sash drag, document replacement and Swap preserve the ratio; double-click resets to 50/50 |
+| `diff-wide` | diff | 1400×900 | long parameter names; the panes overflow horizontally |
+| `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; native scrolling stays inside the panes |
 | `editor` | editor | 1400×900 | editor toolbar, gutter and selected Details row |
 | `editor-syntax` | editor | 1400×900 | decimal, binary, text, reference and system-condition values; binary matches the numeric colour, references use the reference colour, and condition names/operators/numbers stay distinct |
 | `editor-syscond` | editor | 1400×900 | the `Condition` row selected; the Monaco editor condition line and Details Condition code share the macro-blue name, magenta operator, cyan literal and number, and the Conditions panel uses the same name/state colours |
@@ -101,12 +104,15 @@ strip or the page shell, and check each image before asking for review.
       tooltip to paint over the toolbar while the widget is open.
 - [ ] **Diff fills stay translucent.** Changed rows keep readable text; the audit rejects
       opaque line or word fills in the dark preview.
-- [ ] **A one-sided block stays blank on the missing side.** `diff-one-sided` has a
-      right-only added module and a left-only removed module. The audit reads both aligned
-      models and the rendered layers: equal line counts, no `{`/`}` on the missing side, a
-      placeholder for every blank line (including the module gap), the editor-background fill
-      over Monaco's inserted/deleted line and char fills, and the owning side's braces and
-      change fill intact. The `oneSided` object in the audit JSON records the measured values.
+- [ ] **The per-side body has no placeholders.** `diff-one-sided` and `diff-removed` read two
+      independently shaped models. The audit requires no `arxml-diff-placeholder` decoration or
+      element, a native `.diagonal-fill` for the missing side, the owning side's inserted/deleted
+      fill intact, a deletion hunk in `diff-removed`, and unequal model line counts there. The
+      `oneSided` object records the models, changes, gutter availability and native paint.
+- [ ] **Folding works in both panes.** `diff-merge` starts with the full visible row count,
+      `Collapse All` hides rows, and `Expand All` restores the count. The audit records
+      `visibleBefore`, `visibleCollapsed`, `visibleExpanded` and the chevron count; chevrons are
+      hover-controlled, so the pass condition is the visible-row round trip.
 - [ ] **Value kinds keep their colours.** `editor-syntax` shows `0b1010` in the same colour as
       decimal `42`, `P.Syn.Syntax.Target` in the reference colour, and
       `CANIPCORETYPE_SC==0` with distinct name, operator and number colours.
@@ -162,23 +168,19 @@ strip or the page shell, and check each image before asking for review.
       pinned while the viewport is deep in its parameter list.
 - [ ] **The dirty marker is visible.** `editor-dirty` shows `● Unsaved changes` in the editor
       toolbar; the audit fails when the status is hidden or empty.
-- [ ] **Copy arrows are visible without hover.** Both panes show an arrow on the
-      changed rows; the left arrow points right, the right arrow points left. The audit
-      reports an arrow in each pane, on the inner edge, visible and with an opaque
-      background.
-- [ ] **Arrows survive horizontal overflow.** In `diff-wide` and `diff-wide-panned`,
-      the arrows stay inside the pane rect and on the inner edge at both scroll
-      positions. This is the check that catches an arrow pinned to the row's content
-      edge instead of the viewport edge.
-- [ ] **Arrows do not move text.** The 22px strip is reserved on the pane's inner
-      edge in both modes; toggling Merge may show or hide a glyph but never reflows
-      the row.
-- [ ] **The gutter rail is right of the digits.** The status edge sits on the
-      gutter's inner edge, and a four-digit number is fully visible beside it. The audit
-      requires a rail in each pane, on the inner edge (a leading rail fails), with the
-      digits clear of the right padding.
-- [ ] **No stray rails.** Changed rows show one rail per pane; no vertical bar at the
-      outer edge of the right pane.
+- [ ] **The built-in gutter mounts and gates on Merge.** `diff-merge` has a 35px `.gutter`,
+      hunk `.gutterItem`s and the Copy Block to Left/Right labels; `diff-off` hides only the
+      items and keeps the gutter and sash. The audit rejects a third action, `Revert Block`, or
+      any copy while Merge is off.
+- [ ] **One-sided hunks hide the impossible action.** `diff-removed` records a gutter item with
+      `left: false, right: true` and a single action; clicking it posts `side: "left"` with the
+      removed module key. Changed pairs expose both actions.
+- [ ] **Swap keeps the displayed-pane meaning.** In `diff-swap` the first action posts the
+      stored side now shown in the source pane (`side: "left"` after the swap). The audit derives
+      the expected side from the clicked action and the swap flag.
+- [ ] **The built-in sash resizes and resets.** `diff-sash` starts at 50/50 (left pane plus the
+      35px gutter equals the right pane), drags wider, keeps the ratio after a document
+      replacement and Swap, and double-click returns to 50/50. The audit records every width pair.
 - [ ] **Swap mirrors the panes.** The audit snapshots the titles and the first changed
       values before the click and requires each side to take the other's after it.
 - [ ] **F7 scrolls.** `diff-rail` starts above line 1000 and lands on the first
@@ -207,20 +209,22 @@ Record a manual observation with the state name and what changed, for example
   publishes the audit. Do not call the mount functions again: a second mount binds every
   toolbar action twice, and toggles such as Merge and Swap cancel themselves out.
 - `previewAudit.ts` reads the rendered DOM: pane and row widths, horizontal offsets,
-  arrow rects, edge gaps, visibility and opacity, toolbar control rects and pairwise
-  intersections, the Swap-to-divider distance, per-pane gutter rails and rail side,
-  selected row, Swap before/after titles and values, and page overflow. It turns those
-  measurements into violations such as “left copy arrow is outside its pane”.
+  toolbar control rects and pairwise intersections, the Swap-to-divider distance,
+  selected row, Swap before/after titles and values, and page overflow. For the diff
+  states it also reads the 35px built-in `.gutter`, per-hunk `.gutterItem` availability,
+  action labels, the clicked host copy, the `.monaco-sash`, the folding visible-range
+  round trip and the per-side model line counts/paint. It turns those measurements into
+  violations such as “the one-sided hunk does not hide Copy Block to Left”.
 - `shotWebview.mjs` starts the server, spawns the browser asynchronously once per
   state (`spawnSync`/`execFileSync` blocks the event loop and the server cannot answer
   Chrome), requests `--dump-dom` and `--screenshot` in the same run, extracts the audit
   script from the DOM, writes `<state>.audit.json`, and fails the run on violations.
 - Screenshot width/height come from the state manifest. Add a state there and it is
   served, captured, audited and listed automatically.
-- The arrow overlay is positioned from the **rendered** row width, not the content
-  estimate: the row can be a few pixels wider than the pre-layout number, and that gap
-  is exactly what pushed the arrow off the pane. A `ResizeObserver` re-runs the offset
-  when the shared vertical scrollbar changes a pane's width.
+- The gutter toolbar is VS Code's `DiffEditorGutter`/`DiffToolBar`. The checked-in
+  `patches/monaco-editor+0.57.0.patch` scopes a context-key service per hunk so the two
+  ARXML actions can hide independently; `diffGutterAvailability.ts` sets those keys for
+  the hovered/current hunk. The sash ratio is measured by dragging the real `.monaco-sash`.
 - The toolbar stays a three-column grid at every width. Secondary labels drop first,
   then the primary labels; the boxes step 60 → 40 → 36 → 32 → 28px. Find is Monaco's
   own widget inside the editor pane and is absent until `Ctrl+F`.
@@ -228,7 +232,7 @@ Record a manual observation with the state name and what changed, for example
 ## Adding a state
 
 1. Add an entry to `STATES` in `src/test/preview/previewData.ts`, with the page,
-   size and optional `merge`, `swap`, `wide`, `pan`, `jump` or `select` flags.
+   size and optional `merge`, `swap`, `wide`, `pan`, `jump`, `select` or `sash` flags.
 2. If the state needs a different fixture, extend `previewHtml` with the payload the
    production page expects; keep using the real host message shapes.
 3. Run `npm run shots:webview -- --state <name>`; fix every audit violation before
@@ -239,9 +243,13 @@ Record a manual observation with the state name and what changed, for example
 
 The harness proves geometry and paint in Chromium at the listed sizes. The audit is a
 set of placement invariants, not a taste judgement: still inspect the PNG for colour,
-spacing and clipping the invariants do not encode. When Monaco is active the legacy
-DOM diff-geometry checks are skipped; the Monaco editor owns its gutter, arrows, scroll
-surface and selection. It does not prove VS Code theme fidelity (tokens are seeded), real
+spacing and clipping the invariants do not encode. The diff body is Monaco's; the audit
+reads its per-side models, native diagonal fill, fills and gutter rather than a rebuilt
+DOM. The checked-in Monaco patch only scopes the gutter menu context; a fresh
+`npm install`/`npm ci` must run `patch-package` (the `postinstall` script) or the gutter
+audit fails. Folding is an intentional deviation from stock VS Code diff behavior: both
+inner editors re-enable `folding` and the ARXML Collapse/Expand actions drive them.
+It does not prove VS Code theme fidelity (tokens are seeded), real
 keyboard/IME input, screen-reader output or performance; those still need the Extension
 Development Host, and a host observation belongs in the task notes as a manual check. The
 condition palette is fixed per VS Code theme class, so the screenshot proves the dark
@@ -250,8 +258,6 @@ preview. It does prove focus and caret in the Details panel across a local repai
 the registered Undo/Redo actions after a Details edit; the Ctrl+Z/Ctrl+Shift+Z keybindings
 themselves cannot be driven from the harness, so that route still needs the Extension Development
 Host. The paste probe dispatches a clipboard-shaped event to the editor's capture guard; it does
-not exercise the OS clipboard or Monaco's own paste handler. A one-sided placeholder neutralizes
-Monaco's line, char and gutter fills; the overview ruler still marks the change region, which is
-the scrollbar's job, not a line fill. Monaco may also show its diagonal alignment padding opposite
-a longer one-sided run; that padding is a view zone, not a model line, and carries no added or
-removed tint.
+not exercise the OS clipboard or Monaco's own paste handler. The overview ruler marks the
+change region; the missing side relies on Monaco's diagonal view zone, which is not a model
+line and carries no added or removed tint.
