@@ -40,8 +40,9 @@ npm run compile
 npm test
 ```
 
-For layout changes to the webview, run `npm run shots:webview` and inspect
-`npm run shots:webview` under `.agents/skills/webview-preview/artifacts/` before review. See [the preview skill](docs/WEBVIEW_PREVIEW.md).
+For layout changes to the webview, load the `webview-preview` skill and run
+`.agents/skills/webview-preview/scripts/shotWebview.mjs`; inspect
+`.agents/skills/webview-preview/artifacts/` before review. See [the preview skill](docs/WEBVIEW_PREVIEW.md).
 
 `npm run compile` and `npm test` build the Rust engine binary first (`npm run engine:build`). `npm run benchmark` runs
 the optional performance suite.

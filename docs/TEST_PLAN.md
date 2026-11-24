@@ -11,7 +11,7 @@ at the plan row.
 |---|---|---|
 | Core unit | pure scanner/model/rows/index/diff/merge logic | `npm test` (`src/test/core`) |
 | Webview DOM | the bundled page, its components and the host↔page protocol in jsdom | `npm test` (`src/test/webview`) |
-| Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `npm run shots:webview` (see [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md)) |
+| Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `webview-preview` skill: `scripts/shotWebview.mjs` (see [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md)) |
 | Extension integration | real VS Code: panels, edits, undo, watchers, diagnostics | `npm test` (`src/test/extension`) |
 | Rust core | parse, ids, rows, edit plans, merge index, digests | `cargo test --workspace` |
 | Engine process | protocol, lifecycle, byte-for-byte row parity with the TS oracle | `npm run engine:smoke`, `npm run parity`, `npm run parity:rows` |
@@ -20,7 +20,8 @@ at the plan row.
 
 Run order for a change: `check-types` → `lint` → `cargo test`/`clippy`/`fmt` →
 `npm test` → `parity:rows` → the area benchmarks. For any toolbar, gutter or row-layout
-change, also run `npm run shots:webview`; it exits non-zero on a placement violation.
+change, also run the `webview-preview` skill's `scripts/shotWebview.mjs`; it exits
+non-zero on a placement violation.
 Still audit every image for colour, spacing and clipping the invariants do not encode.
 
 ## Regression gates
@@ -32,7 +33,7 @@ Still audit every image for colour, spacing and clipping the invariants do not e
 | `core/index/*`, `host/indexService` | `indexBuilder`, `workspaceIndex`, `index` (extension), `indexBenchmark`, `validation` |
 | `host/ecucEdit`, `host/ecucStructureEdit` | `editing`, `structureEdit`, `rescan`, `planMerge` |
 | `host/engine/*`, `rust/*` | `engine` suites, `engine:smoke`, `parity`, `parity:rows`, `engineEdit` |
-| `webview/*` | page + component suites for the touched component, `protocol`; `shots:webview` for layout changes |
+| `webview/*` | page + component suites for the touched component, `protocol`; the `webview-preview` skill for layout changes |
 | `commands.ts`, manifests | `activation`, `menus`, `compare`, `reveal` |
 | copy modules | `planCopy`, `planMerge` (extension), `copyBenchmark` |
 
@@ -302,9 +303,9 @@ Covered: manifest, activation, engine binary path, VSIX engine verification.
 | ID | Case | Expected |
 |---|---|---|
 | MON-01 | `buildSyntheticDocument` from the row store | text, row lines, field spans and folding ranges match the Current Document; parameter values and container short names are the editable spans |
-| MON-02 | `buildAlignedSyntheticDocuments` from a `DiffDocument` | both sides have equal line counts and a row present on one side leaves a blank line on the other |
+| MON-02 | `buildDiffSyntheticDocuments` from a `DiffDocument` | each side keeps its own line count and keys; a one-sided module is absent from the other model and uses native diagonal fill |
 | MON-03 | editor and diff shells | the CSP allows the Monaco worker, injected styles and packaged font; the worker URI meta is present; the script nonce is unchanged |
-| MON-04 | `npm run shots:webview` | all seeded states capture without a geometry violation; Monaco states skip the retired DOM diff audit |
+| MON-04 | `webview-preview` skill (`scripts/shotWebview.mjs`) | all seeded states capture without a geometry violation; the built-in gutter, folding and sash probes pass |
 
 ## PERF — benchmarks
 

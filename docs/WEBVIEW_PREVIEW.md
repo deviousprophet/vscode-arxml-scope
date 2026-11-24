@@ -18,18 +18,20 @@ markup and no extra dependency.
 
 ```bash
 # Serve every state at http://127.0.0.1:4173/?state=diff-off
-npm run preview:webview
+node .agents/skills/webview-preview/scripts/previewWebview.mjs
 
 # Pick a port
-npm run preview:webview -- --port 4180
+node .agents/skills/webview-preview/scripts/previewWebview.mjs --port 4180
 
 # Capture every state to the skill's artifacts/ directory
-npm run shots:webview
+node .agents/skills/webview-preview/scripts/shotWebview.mjs
 
 # Capture one state, or list the state names
-npm run shots:webview -- --state diff-merge
-npm run shots:webview -- --list
+node .agents/skills/webview-preview/scripts/shotWebview.mjs --state diff-merge
+node .agents/skills/webview-preview/scripts/shotWebview.mjs --list
 ```
+
+There is no `package.json` alias for the preview; the runner lives only in the skill.
 
 The capture exits non-zero and prints every violation when the audit fails. Read the
 `<state>.audit.json` for the measured boxes, scroll offsets and the full violation list;
@@ -41,7 +43,7 @@ The browser is detected from the usual Chrome/Edge install locations. Set
 the change under review, not committed fixtures.
 
 The first capture starts a private preview server on a free port. Stop a manually
-started `preview:webview` before relying on a fixed port; a stale server keeps serving
+started `previewWebview.mjs` before relying on a fixed port; a stale server keeps serving
 its old bundle.
 
 ## AI skill
@@ -252,8 +254,8 @@ Record a manual observation with the state name and what changed, for example
    optional `merge`, `swap`, `wide`, `pan`, `jump`, `select` or `sash` flags.
 2. If the state needs a different fixture, extend `previewHtml` with the payload the
    production page expects; keep using the real host message shapes.
-3. Run `npm run shots:webview -- --state <name>`; fix every audit violation before
-   looking at the image.
+3. Run `node .agents/skills/webview-preview/scripts/shotWebview.mjs --state <name>`; fix
+   every audit violation before looking at the image.
 4. Add the state to the table above and to the checklist if it covers a new surface.
 
 ## Limits

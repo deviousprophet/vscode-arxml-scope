@@ -29,15 +29,9 @@ node <skill-dir>/scripts/shotWebview.mjs
 node <skill-dir>/scripts/previewWebview.mjs [--port 4173]
 ```
 
-The package aliases are:
-
-```bash
-npm run shots:webview -- --list
-npm run shots:webview -- --state <name>
-npm run preview:webview -- --port 4180
-```
-
-`<skill-dir>` is `.agents/skills/webview-preview` in this repository. Set `CHROME_PATH` to override the detected Chrome/Edge.
+`<skill-dir>` is `.agents/skills/webview-preview` in this repository. There is no
+`package.json` alias; invoke the skill scripts directly. Set `CHROME_PATH` to override the
+detected Chrome/Edge.
 
 The preview needs `dist/monaco.worker.js`; run `npm run compile` or `npm run package` first if it is missing.
 
