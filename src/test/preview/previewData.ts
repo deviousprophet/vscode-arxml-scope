@@ -42,7 +42,10 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-merge', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
+	{ name: 'diff-unchanged', page: 'diff', width: 1400, height: 900, view: 'diff' },
+	{ name: 'diff-nav', page: 'diff', width: 1400, height: 900, jump: 2 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-removed', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-body', page: 'diff', width: 1400, height: 900, merge: true, settings: DIFF_SETTINGS },
 	{ name: 'diff-wide', page: 'diff', width: 1400, height: 900, merge: true, wide: true },
 	{
@@ -201,13 +204,16 @@ function oneSidedShared(changed: string): string {
 /** One module tree exists on only one side; a shared module/container/value aligns. */
 function oneSidedDocument(side: 'left' | 'right'): string {
 	const names = ONE_SIDED_NAMES[side];
+	// The removed side is one row longer than the added side, so the built-in
+	// diff proves real per-side line counts instead of a pre-aligned blank row.
+	const extra = side === 'left' ? oneSidedValue(names.module, names.container, 'RemovedExtra', '4') : '';
 	const modules = [
 		oneSidedModule(
 			names.module,
 			oneSidedContainer(
 				names.module,
 				names.container,
-				oneSidedValue(names.module, names.container, names.value, names.own)
+				oneSidedValue(names.module, names.container, names.value, names.own) + extra
 			)
 		),
 		oneSidedShared(names.changed)
@@ -220,6 +226,28 @@ function oneSidedDocument(side: 'left' | 'right'): string {
 function oneSidedPair(): DiffDocument {
 	const leftSide = rowsOf(oneSidedDocument('left'));
 	const rightSide = rowsOf(oneSidedDocument('right'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
+/** The shared module alone, so the other side has a real deletion block. */
+function sharedOnlyDocument(changed: string): string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${oneSidedShared(changed)}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+/** A left-only module with no counterpart, plus a shared changed value. */
+function removedPair(): DiffDocument {
+	const leftSide = rowsOf(oneSidedDocument('left'));
+	const rightSide = rowsOf(sharedOnlyDocument('7'));
 	return buildDiffDocument(
 		{ name: 'left.arxml', path: '/preview/left.arxml' },
 		{ name: 'right.arxml', path: '/preview/right.arxml' },
@@ -273,6 +301,49 @@ function bodyRenamedContainer(shortName: string): string {
 function bodyPair(): DiffDocument {
 	const leftSide = rowsOf(bodyDocument('left'));
 	const rightSide = rowsOf(bodyDocument('right'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
+function navValue(container: string, name: string, value: string): string {
+	return oneSidedValue('NavMod', container, name, value);
+}
+
+/** A childless container whose DEFINITION-REF is stable across the rename. */
+function navRenamedContainer(shortName: string): string {
+	return `<ECUC-CONTAINER-VALUE><SHORT-NAME>${shortName}</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/NavMod/Widget</DEFINITION-REF></ECUC-CONTAINER-VALUE>`;
+}
+
+/**
+ * A semantic rename that also moved across its sibling, and a one-sided
+ * parameter before it. The first semantic change is the removed parameter:
+ * Monaco's line diff points at the aligned row where the deletion happened, not
+ * at the removed row, so a line-change step picks a different semantic row.
+ */
+function navDocument(side: 'left' | 'right'): string {
+	const removed = side === 'left' ? navValue('Items', 'RemovedParam', '4') : '';
+	const items = oneSidedContainer(
+		'NavMod',
+		'Items',
+		removed + navValue('Items', 'P0000', '0') + navValue('Items', 'P0001', '1')
+	);
+	const widget = navRenamedContainer(side === 'left' ? 'NMH_Widget' : 'NM_Widget');
+	const containers = side === 'left' ? items + widget : widget + items;
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${oneSidedModule('NavMod', containers)}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+function navPair(): DiffDocument {
+	const leftSide = rowsOf(navDocument('left'));
+	const rightSide = rowsOf(navDocument('right'));
 	return buildDiffDocument(
 		{ name: 'left.arxml', path: '/preview/left.arxml' },
 		{ name: 'right.arxml', path: '/preview/right.arxml' },
@@ -364,6 +435,9 @@ const THEME = `<style>:root{
 --vscode-diffEditor-insertedTextBackground:rgba(87, 171, 90, 0.30);
 --vscode-diffEditor-removedTextBackground:rgba(244, 112, 103, 0.30);
 --vscode-diffEditor-modifiedTextBackground:#3a3320;
+--vscode-diffEditor-unchangedRegionBackground:#252526;
+--vscode-diffEditor-unchangedRegionForeground:#cccccc;
+--vscode-diffEditor-unchangedCodeBackground:rgba(116, 116, 116, 0.16);
 --vscode-diffEditorGutter-insertedLineBackground:#244b2e;
 --vscode-diffEditorGutter-removedLineBackground:#5a2b2b;
 --vscode-gitDecoration-addedResourceForeground:#81b88b;
@@ -412,14 +486,15 @@ function editorFixtureFor(state: PreviewState): EditorFixture {
 	return EDITOR_FIXTURES[state.name]?.() ?? editorDocument();
 }
 
+const DIFF_FIXTURES: Record<string, () => DiffDocument> = {
+	'diff-one-sided': oneSidedPair,
+	'diff-removed': removedPair,
+	'diff-body': bodyPair,
+	'diff-nav': navPair
+};
+
 function diffFixtureFor(state: PreviewState): DiffDocument {
-	if (state.name === 'diff-one-sided') {
-		return oneSidedPair();
-	}
-	if (state.name === 'diff-body') {
-		return bodyPair();
-	}
-	return pairFixtureFor(state);
+	return DIFF_FIXTURES[state.name]?.() ?? pairFixtureFor(state);
 }
 
 function pairFixtureFor(state: PreviewState): DiffDocument {
@@ -449,7 +524,9 @@ function payloadFor(state: PreviewState, document: unknown) {
 		swap: state.swap,
 		wide: state.wide,
 		pan: state.pan,
+		view: state.view,
 		jump: state.jump,
+		jumpBack: state.jumpBack,
 		select: state.select,
 		find: state.find,
 		// Every diff state inherits the same production settings payload; a state

@@ -2,66 +2,90 @@
  * The diff body surface contract.
  *
  * The class names on the host and both editor roots are read by the preview
- * audit and by the follow-up ruler/visual-proof children; the stylesheet owns the
- * VS Code diff paint. These source assertions keep a rename or a dropped class
- * from silently turning the body audit green against an empty surface.
+ * audit; the built-in Monaco diff owns the line/word paint, the overview ruler
+ * and the center margin, while the extra copy-left arrow reuses the built-in
+ * `.arrow-revert-change` view-zone margin. These source assertions keep a
+ * rename or a dropped contract from silently turning the body audit green
+ * against an empty surface.
  */
 import * as assert from 'assert';
 
 import { webviewCss, webviewSource } from './cssTestUtils';
 
 suite('diff body surface', () => {
-	test('the page publishes the body, gutter, status and merge-margin contract', () => {
+	test('the page publishes the body, gutter and status contract', () => {
 		const source = webviewSource('diffMonaco.ts');
-		for (const name of [
-			'arxml-diff-body',
-			'arxml-diff-gutter',
-			'arxml-diff-status',
-			'arxml-diff-merge-margin'
-		]) {
+		for (const name of ['arxml-diff-body', 'arxml-diff-gutter', 'arxml-diff-status']) {
 			assert.ok(source.includes(`'${name}'`), `${name} is applied by the page`);
 		}
 		assert.ok(source.includes("classList.toggle('arxml-diff-merge'"), 'merge mode is a body state');
+		assert.ok(!source.includes('arxml-diff-merge-margin'), 'no custom center overlay remains');
 	});
 
-	test('signs, fills and words are semantic decoration classes', () => {
+	test('the built-in diff owns the body paint and overview ruler', () => {
 		const source = webviewSource('diffMonaco.ts');
-		assert.ok(source.includes('arxml-diff-sign-${paint}'), 'the gutter sign is semantic');
-		assert.ok(source.includes('insert-sign codicon codicon-add'), 'the added sign is the built-in codicon');
-		assert.ok(source.includes('delete-sign codicon codicon-remove'), 'the removed sign is the built-in codicon');
-		assert.ok(source.includes('arxml-diff-line-${paint}'), 'the line fill is semantic');
-		assert.ok(source.includes('arxml-diff-word-${paint}'), 'the word span is semantic');
-		assert.ok(source.includes('wordDiffSpans'), 'word spans come from the pure helper');
-		assert.ok(!/renderIndicators:\s*true/.test(source), 'Monaco text-diff indicators stay off');
-		assert.ok(/renderMarginRevertIcon:\s*false/.test(source), 'merge mode never adds the built-in revert icon');
+		assert.ok(/renderIndicators:\s*true/.test(source), 'native +/− indicators are on');
+		assert.ok(/renderOverviewRuler:\s*true/.test(source), 'the built-in overview ruler is on');
+		assert.ok(/renderMarginRevertIcon:\s*true/.test(source), 'the built-in margin arrow stays mounted');
 		assert.ok(/renderGutterMenu:\s*false/.test(source), 'the gutter menu cannot duplicate the affordance');
+		assert.ok(!source.includes('overviewRuler:'), 'no semantic ruler decorations remain');
+		assert.ok(!source.includes('arxml-selected'), 'no custom selection tint remains');
+		assert.ok(!source.includes('arxml-subtree'), 'no custom subtree tint remains');
+		assert.ok(!source.includes('arxml-diff-line-'), 'no second semantic line/fill layer');
+		assert.ok(!source.includes('arxml-diff-sign-'), 'no second semantic sign layer');
+		assert.ok(!source.includes('arxml-diff-word-'), 'no second semantic word layer');
 	});
 
-	test('copy arrows are the glyph-margin codicons, not text pseudo-elements', () => {
+	test('merge arrows reuse the built-in diff-margin view zone', () => {
 		const source = webviewSource('diffMonaco.ts');
-		assert.ok(source.includes('codicon-arrow-${direction}'), 'the arrow is the VS Code codicon');
-		assert.ok(source.includes('glyphMargin: { position: monaco.editor.GlyphMarginLane.Right }'), 'the margin lane');
+		assert.ok(
+			/arrow-revert-change codicon codicon-arrow-left/.test(source),
+			'the extra arrow uses the built-in classes'
+		);
+		assert.ok(source.includes('marginDomNode: wrapper'), 'the arrow lives in a view-zone margin');
+		assert.ok(
+			source.includes("addEventListener('click', handleCopyArrow, true)"),
+			'the built-in arrow click is captured'
+		);
+		assert.ok(
+			source.includes("postToHost({ type: 'copy', side: target.side, key: target.key })"),
+			'the host copy action'
+		);
 		const css = webviewCss('monaco', 'monaco.css');
-		assert.ok(!/arxml-merge-arrow[^{]*::after/.test(css), 'no text arrow pseudo-element remains');
-		assert.ok(/\.cgmr\.arxml-merge-arrow/.test(css), 'the glyph control keeps VS Code margin geometry');
+		assert.ok(!css.includes('arxml-merge-arrow'), 'no custom pill/text arrow');
+		assert.ok(!css.includes('arxml-diff-merge-margin'), 'no custom center overlay');
+		assert.ok(!css.includes('arxml-selected'), 'no custom selection tint');
+		assert.ok(!css.includes('arxml-subtree'), 'no custom subtree tint');
+		assert.ok(
+			/#diff-monaco:not\(\.arxml-diff-merge\)[\s\S]*\.arrow-revert-change[\s\S]*display:\s*none/.test(css),
+			'merge mode gates the built-in arrow without a diff re-render'
+		);
 	});
 
-	test('the stylesheet owns the semantic paint and neutralizes Monaco text-diff fills', () => {
+	test('the stylesheet leaves the built-in diff paint intact', () => {
 		const css = webviewCss('monaco', 'monaco.css');
-		for (const selector of [
-			'.arxml-diff-line-added',
-			'.arxml-diff-line-removed',
-			'.arxml-diff-word-added',
-			'.arxml-diff-word-removed',
-			'.arxml-diff-sign'
-		]) {
-			assert.ok(css.includes(selector), `${selector} is styled`);
-		}
+		assert.ok(!css.includes('line-insert'), 'native inserted line fills are not neutralized');
+		assert.ok(!css.includes('line-delete'), 'native deleted line fills are not neutralized');
+		assert.ok(!css.includes('char-insert'), 'native inserted char spans are not neutralized');
+		assert.ok(!css.includes('char-delete'), 'native deleted char spans are not neutralized');
+	});
+
+	test('navigation stays semantic; the built-in arrow maps line changes only', () => {
+		const source = webviewSource('diffMonaco.ts');
+		assert.ok(source.includes('semanticChanges(body.rows)'), 'the navigation source is the body adapter');
+		assert.ok(source.includes('navigationTarget('), 'a missing side maps to the owning pane');
+		assert.ok(/diffEditor\?\.getLineChanges/.test(source), 'the built-in arrow maps its deletion block');
+	});
+
+	test('the native unchanged widgets stay on the Show all/Show diff path', () => {
+		const source = webviewSource('diffMonaco.ts');
 		assert.ok(
-			/\.monaco-diff-editor \.view-overlays > div > \.line-insert,[\s\S]*background-color: transparent/.test(css),
-			'the pre-aligned body does not keep a second line fill'
+			/hideUnchangedRegions:\s*\{[\s\S]*enabled:\s*changesOnly/.test(source),
+			'Show diff drives the native option'
 		);
-		assert.ok(/--vscode-diffEditor-insertedTextBackground/.test(css), 'word spans use the inserted role');
-		assert.ok(/--vscode-diffEditor-removedTextBackground/.test(css), 'word spans use the removed role');
+		assert.ok(/contextLineCount:\s*contextActive \? 5 : 0/.test(source), 'Context stays the 5/0 context count');
+		assert.ok(/minimumLineCount:\s*3/.test(source), 'the VS Code minimum unchanged run is kept');
+		assert.ok(source.includes('onViewAll'), 'Show all remains a toolbar action');
+		assert.ok(source.includes('onViewDiff'), 'Show diff remains a toolbar action');
 	});
 });

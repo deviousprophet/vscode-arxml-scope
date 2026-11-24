@@ -3,8 +3,8 @@
 ## Goal
 
 Keep the VS Code-native unchanged-region widgets that the shipped Monaco diff already uses, verify
-and align their behavior/geometry with the reference, and drive the overview ruler and previous/next
-hunk navigation from the semantic changed/added/removed rows.
+and align their behavior/geometry with the reference, keep Monaco's built-in overview ruler, and
+drive previous/next hunk navigation from the semantic changed/added/removed rows.
 
 ## Requirements
 
@@ -16,8 +16,8 @@ hunk navigation from the semantic changed/added/removed rows.
   - Do not let native hide/show operate on missing-side placeholders incorrectly; preserve the
     `diff-one-sided` placeholder contract.
 - **Overview ruler**
-  - Add semantic changed/added/removed marks to both panes' overview ruler using VS Code diff
-    color roles and current/selected emphasis.
+  - Keep Monaco's built-in `renderOverviewRuler` on; it is the same diff overview VS Code uses.
+  - Do not add semantic `overviewRuler` decorations or a selected-row ruler emphasis.
   - Do not derive marks from Monaco `getLineChanges()` on the synthetic text.
 - **Previous/next hunk**
   - Wire the current ARXML toolbar controls to semantic changed/added/removed rows (including
@@ -33,7 +33,7 @@ hunk navigation from the semantic changed/added/removed rows.
 - [ ] Show diff/Context uses the native unchanged-region widgets with VS Code-like geometry,
       labels and context behavior; Show all expands them correctly.
 - [ ] The native widgets do not paint/own missing-side placeholders or break `diff-one-sided`.
-- [ ] Overview-ruler marks correspond to semantic changed/added/removed rows on both panes.
+- [ ] Monaco's built-in `.diffOverview` is present; the page adds no semantic ruler decorations.
 - [ ] Previous/next hunk moves through semantic changes, not Monaco line changes, and handles the
       ends.
 - [ ] Current ARXML toolbar, merge, search, collapse and Show all/Show diff remain.
@@ -41,6 +41,9 @@ hunk navigation from the semantic changed/added/removed rows.
 
 ## Notes
 
-- Branch only after PR #40 merges: create `feat/ecuc-diff-unchanged-ruler` from latest `main`.
+- Continue on `feat/ecuc-diff-body-surface` (user decision: finish all tasks on one branch); do
+  not create a separate `feat/ecuc-diff-unchanged-ruler` branch.
 - Consume the body adapter/classes from `11-23-ecuc-diff-body-surface`; do not create a second
   semantic map or a custom gap renderer.
+- **Scope change (2026-11-24):** the user confirmed strict built-in parity, so the semantic overview
+  ruler is removed. This child now owns the native unchanged widgets and semantic Prev/Next only.

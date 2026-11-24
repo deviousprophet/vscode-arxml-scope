@@ -76,15 +76,16 @@ fixture. It must return an explicit failure if the editor/model/dom is unavailab
   non-empty and inside changed lines.
 - Unchanged: native widget geometry/labels/context and Show all behavior; no placeholder hidden as
   real context.
-- Ruler: semantic changed/added/removed marks on both panes; no synthetic placeholders.
+- Ruler: Monaco's native `.diffOverview`; no semantic marks or placeholders.
 - Navigation: semantic changed/added/removed targets in order under swap; ends handled.
 - Density: font/line height/gutter/indent within the documented tolerance.
 - Negative controls:
   - hide the body layer,
-  - remove the +/−/copy-arrow class,
+  - remove the +/−/margin-arrow class,
   - paint a placeholder,
   - show a duplicate revert icon,
-  - replace the semantic ruler with line changes,
+  - restore the custom center overlay,
+  - add a semantic ruler decoration,
   - make the model unavailable.
   Each must fail with a specific message.
 

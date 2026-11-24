@@ -1,41 +1,41 @@
 /**
  * The Monaco semantic-diff page.
  *
- * The host still owns the semantic comparison. This page turns the aligned
- * `DiffDocument` rows into two line-aligned synthetic ECUC documents and lets
- * Monaco render the real diff editor, including hidden unchanged regions and
- * word-level changes.
+ * The host still owns the semantic comparison. This page turns each
+ * `DiffDocument` row into the per-side synthetic ECUC document that owns it and
+ * lets Monaco's built-in diff editor render the body: per-side line numbers,
+ * inserted/deleted fills, word spans, indicators, diagonal gaps and unchanged
+ * regions. Merge mode binds the built-in diff-margin arrow to the semantic copy
+ * and adds the single copy-to-left arrow.
  */
 import './styles/tokens.css';
 import './styles/base.css';
 import './components/diffView/diffView.css';
 import './monaco/monaco.css';
-import type { DiffCell, DiffChange, DiffDocument, DiffHeader, DiffRow } from '../core/diff/diffModel';
+import type { DiffDocument, DiffHeader } from '../core/diff/diffModel';
 import { applyDiffPatch, type DiffPatch } from '../core/diff/diffPatch';
-import { wordDiffSpans, type WordSpan, type WordSpanPair } from '../core/diff/wordDiff';
 import type { DiffFindMatch, FindOptions } from '../core/searchModel';
 import type { DiffProviderToWebview } from '../diffProtocol';
 import type { MonacoSettings } from '../webviewProtocol';
 import {
-	buildAlignedSyntheticDocuments,
+	buildDiffSyntheticDocuments,
 	searchRangeOnLine,
-	type AlignedSyntheticDocuments,
-	type SearchSpan,
-	type SyntheticDocument,
-	type SyntheticLine
+	type DiffSyntheticDocuments,
+	type SyntheticDocument
 } from './monaco/synthetic';
 import { defineEcucTheme, editorFontOptions, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
 import { settingsOptions } from './monaco/settings';
 import {
 	buildDiffBody,
-	cellOnSide,
-	lineOnSide,
+	cursorChangeIndex,
 	linesOnSide,
-	mergeSourceSide,
-	otherSide,
+	navigationTarget,
+	semanticChanges,
+	stepChange,
 	type DiffBody,
 	type DiffBodyRow,
-	type DiffSide
+	type DiffSide,
+	type SemanticChange
 } from './monaco/diffBody';
 import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
 import { DiffToolbar } from './components/toolbar/toolbar';
@@ -44,7 +44,7 @@ import { postToHost } from './vscodeApi';
 
 let documentModel: DiffDocument | undefined;
 let body: DiffBody | undefined;
-let aligned: AlignedSyntheticDocuments | undefined;
+let synthetic: DiffSyntheticDocuments | undefined;
 let leftModel: monaco.editor.ITextModel | undefined;
 let rightModel: monaco.editor.ITextModel | undefined;
 let diffEditor: monaco.editor.IStandaloneDiffEditor | undefined;
@@ -55,11 +55,10 @@ let changesOnly = false;
 let contextActive = true;
 let semantic = true;
 let selectedKey: string | undefined;
-let originalDecorations: string[] = [];
-let modifiedDecorations: string[] = [];
-/** Model lines whose cell is missing on that side; the whole one-sided block. */
-let leftPlaceholderLines = new Set<number>();
-let rightPlaceholderLines = new Set<number>();
+/** The pane the user last put the caret in; toolbar clicks do not clear it. */
+let focusedPane: 'original' | 'modified' = 'modified';
+/** View-zone ids for the extra copy-to-left arrows in the modified margin. */
+let leftArrowZones: string[] = [];
 interface DiffNativeQuery {
 	query: string;
 	options: FindOptions;
@@ -103,31 +102,23 @@ if (typeof window !== 'undefined') {
 }
 
 function originalKeys(): (string | undefined)[] {
-	if (aligned === undefined) {
+	if (synthetic === undefined) {
 		return [];
 	}
 	if (swapped) {
-		return aligned.rightLineKeys;
+		return synthetic.rightLineKeys;
 	}
-	return aligned.leftLineKeys;
+	return synthetic.leftLineKeys;
 }
 
 function modifiedKeys(): (string | undefined)[] {
-	if (aligned === undefined) {
+	if (synthetic === undefined) {
 		return [];
 	}
 	if (swapped) {
-		return aligned.leftLineKeys;
+		return synthetic.leftLineKeys;
 	}
-	return aligned.rightLineKeys;
-}
-
-function originalDocument(): SyntheticDocument | undefined {
-	return swapped ? aligned?.right : aligned?.left;
-}
-
-function modifiedDocument(): SyntheticDocument | undefined {
-	return swapped ? aligned?.left : aligned?.right;
+	return synthetic.rightLineKeys;
 }
 
 function originalEditor(): monaco.editor.ICodeEditor | undefined {
@@ -145,71 +136,6 @@ function lineFor(key: string | undefined, doc: SyntheticDocument | undefined): n
 	return doc.rowLine.get(key);
 }
 
-/**
- * Every model line belonging to a row that has no cell on `side`: the node line,
- * its brace lines and a one-sided subtree's children. The line counts stay
- * aligned, so these are the blank placeholder lines Monaco sees as an insertion
- * or deletion.
- */
-function rowsByKey(document: DiffDocument): Map<string, DiffRow> {
-	const byKey = new Map<string, DiffRow>();
-	for (const row of document.rows) {
-		byKey.set(row.key, row);
-	}
-	return byKey;
-}
-
-/** True when the row has no cell on `side`, including rows missing from the tree. */
-function rowMissingCell(row: DiffRow | undefined, side: DiffSide): boolean {
-	if (row === undefined) {
-		return false;
-	}
-	return (side === 'left' ? row.left : row.right) === undefined;
-}
-
-function placeholderLines(
-	document: DiffDocument,
-	keys: readonly (string | undefined)[],
-	side: DiffSide
-): Set<number> {
-	const byKey = rowsByKey(document);
-	const lines = new Set<number>();
-	for (let at = 0; at < keys.length; at += 1) {
-		const key = keys[at];
-		if (key === undefined) {
-			// A module gap is a display-only blank line with no owning cell. Treat
-			// it as neutral on both sides so Monaco's blank-line alignment cannot
-			// turn it into an added/removed row.
-			lines.add(at + 1);
-			continue;
-		}
-		if (rowMissingCell(byKey.get(key), side)) {
-			lines.add(at + 1);
-		}
-	}
-	return lines;
-}
-
-/** The placeholder set for the model line's own side, or undefined when unknown. */
-function placeholderLinesFor(doc: SyntheticDocument | undefined): Set<number> | undefined {
-	if (aligned === undefined) {
-		return undefined;
-	}
-	if (doc === undefined) {
-		return undefined;
-	}
-	return doc === aligned.left ? leftPlaceholderLines : rightPlaceholderLines;
-}
-
-/** True when this model line carries no cell on its own side. */
-function placeholderOn(doc: SyntheticDocument | undefined, line: number | undefined): boolean {
-	if (line === undefined) {
-		return false;
-	}
-	const lines = placeholderLinesFor(doc);
-	return lines !== undefined && lines.has(line);
-}
-
 function keyAt(editor: monaco.editor.ICodeEditor | undefined, line: number, side: 'original' | 'modified'): string | undefined {
 	if (editor === undefined) {
 		return undefined;
@@ -219,7 +145,7 @@ function keyAt(editor: monaco.editor.ICodeEditor | undefined, line: number, side
 }
 
 function sideDocument(side: DiffSide): SyntheticDocument | undefined {
-	return side === 'left' ? aligned?.left : aligned?.right;
+	return side === 'left' ? synthetic?.left : synthetic?.right;
 }
 
 function findFlag(value: boolean): string {
@@ -463,7 +389,7 @@ function resumeEditorDiffFind(editor: monaco.editor.ICodeEditor | undefined): vo
 
 function invalidateDiffFind(): void {
 	resetDiffFindCache();
-	if (aligned === undefined) {
+	if (synthetic === undefined) {
 		return;
 	}
 	for (const editor of [originalEditor(), modifiedEditor()]) {
@@ -482,29 +408,6 @@ function installSideFindBridge(target: monaco.editor.ITextModel, side: DiffSide)
 	});
 }
 
-function collectSubtree(rows: readonly DiffRow[], at: number): Set<string> {
-	const out = new Set<string>();
-	const end = at + rows[at].subtreeSize;
-	for (let index = at; index <= end && index < rows.length; index += 1) {
-		out.add(rows[index].key);
-	}
-	return out;
-}
-
-function subtreeKeys(key: string | undefined): Set<string> {
-	if (documentModel === undefined) {
-		return new Set<string>();
-	}
-	if (key === undefined) {
-		return new Set<string>();
-	}
-	const at = documentModel.rows.findIndex((row) => row.key === key);
-	if (at < 0) {
-		return new Set<string>();
-	}
-	return collectSubtree(documentModel.rows, at);
-}
-
 function updateDiffOptions(): void {
 	if (diffEditor === undefined) {
 		return;
@@ -519,6 +422,7 @@ function updateDiffOptions(): void {
 	// The Rust diff search is scoped to the current view, so a view toggle
 	// needs a fresh query instead of last view's match set.
 	invalidateDiffFind();
+	syncBodyState();
 }
 
 function setNotice(text: string, kind: 'warn' | 'error' = 'warn'): void {
@@ -600,11 +504,6 @@ function setTitles(): void {
 	setTitle('diff-title-right', labelFor(model, 1), headerFor(model, 'right'), pathFor(model, 'right'));
 }
 
-function setPlaceholderLines(document: DiffDocument, docs: AlignedSyntheticDocuments): void {
-	leftPlaceholderLines = placeholderLines(document, docs.leftLineKeys, 'left');
-	rightPlaceholderLines = placeholderLines(document, docs.rightLineKeys, 'right');
-}
-
 function setModelText(model: monaco.editor.ITextModel | undefined, source: SyntheticDocument): void {
 	if (model === undefined) {
 		return;
@@ -613,7 +512,7 @@ function setModelText(model: monaco.editor.ITextModel | undefined, source: Synth
 	setModelFolding(model, source.foldingRanges);
 }
 
-function setModelTexts(docs: AlignedSyntheticDocuments): void {
+function setModelTexts(docs: DiffSyntheticDocuments): void {
 	setModelText(leftModel, docs.left);
 	setModelText(rightModel, docs.right);
 }
@@ -667,10 +566,9 @@ function syncToolbarState(): void {
 function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
 	documentModel = next;
 	semantic = nextSemantic;
-	const docs = buildAlignedSyntheticDocuments(next);
-	aligned = docs;
+	const docs = buildDiffSyntheticDocuments(next);
+	synthetic = docs;
 	body = buildDiffBody(next, docs);
-	setPlaceholderLines(next, docs);
 	setModelTexts(docs);
 	setDiffModel();
 	selectedKey = undefined;
@@ -681,15 +579,10 @@ function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
 	showSemanticSkip(next.semanticSkipped);
 	clearNotice();
 	syncBodyState();
-	renderDecorations();
+	renderCopyArrows();
 }
 
-const BODY_CLASSES = [
-	'arxml-diff-body',
-	'arxml-diff-gutter',
-	'arxml-diff-status',
-	'arxml-diff-merge-margin'
-] as const;
+const BODY_CLASSES = ['arxml-diff-body', 'arxml-diff-gutter', 'arxml-diff-status'] as const;
 
 function addBodyClasses(element: Element | null | undefined): void {
 	element?.classList.add(...BODY_CLASSES);
@@ -738,6 +631,37 @@ function previewBodyRows(): Array<Omit<DiffBodyRow, 'leftCell' | 'rightCell'>> {
 	}));
 }
 
+function previewMode(): { changesOnly: boolean; contextActive: boolean; swapped: boolean; merge: boolean } {
+	return { changesOnly, contextActive, swapped, merge: mergeMode };
+}
+
+function isPreview(): boolean {
+	return (window as unknown as { __PREVIEW__?: unknown }).__PREVIEW__ !== undefined;
+}
+
+function publishNavigation(change: SemanticChange, target: { side: DiffSide; line: number }): void {
+	if (!isPreview()) {
+		return;
+	}
+	const windowWithPreview = window as unknown as {
+		__ARXML_DIFF_NAV__?: unknown;
+		__ARXML_DIFF_NAV_HISTORY__?: unknown[];
+	};
+	const entry = {
+		key: change.key,
+		status: change.status,
+		order: change.order,
+		renamed: change.renamed,
+		side: target.side,
+		line: target.line
+	};
+	windowWithPreview.__ARXML_DIFF_NAV__ = entry;
+	windowWithPreview.__ARXML_DIFF_NAV_HISTORY__ = [
+		...(windowWithPreview.__ARXML_DIFF_NAV_HISTORY__ ?? []),
+		entry
+	];
+}
+
 /**
  * Publish the body classes, mode data and (in the preview) the semantic rows.
  * The decorations and the DOM both derive from the same adapter, so a child
@@ -751,9 +675,10 @@ function syncBodyState(): void {
 	host.classList.toggle('arxml-diff-merge', mergeMode);
 	applyBodyClasses();
 	setBodyData(host);
-	if ((window as unknown as { __PREVIEW__?: unknown }).__PREVIEW__ !== undefined) {
+	if (isPreview()) {
 		(window as unknown as { __ARXML_DIFF_BODY__?: unknown }).__ARXML_DIFF_BODY__ = {
-			rows: previewBodyRows()
+			rows: previewBodyRows(),
+			mode: previewMode()
 		};
 	}
 }
@@ -800,398 +725,6 @@ function applyBodyTypography(settings: MonacoSettings): void {
 	}
 }
 
-/** Both editors when the diff editor and its panes exist. */
-function diffEditors():
-	| { original: monaco.editor.ICodeEditor; modified: monaco.editor.ICodeEditor }
-	| undefined {
-	if (diffEditor === undefined) {
-		return undefined;
-	}
-	const original = originalEditor();
-	const modified = modifiedEditor();
-	if (original === undefined || modified === undefined) {
-		return undefined;
-	}
-	return { original, modified };
-}
-
-function pushLineDecoration(
-	target: monaco.editor.IModelDeltaDecoration[],
-	line: number,
-	className: string
-): void {
-	target.push({
-		range: new monaco.Range(line, 1, line, 1),
-		options: { isWholeLine: true, className, zIndex: 1 }
-	});
-}
-
-function selectionClass(key: string): string {
-	return key === selectedKey ? 'arxml-selected' : 'arxml-subtree';
-}
-
-function addSelectedRow(
-	target: monaco.editor.IModelDeltaDecoration[],
-	doc: SyntheticDocument | undefined,
-	key: string
-): void {
-	// The node line gets the selected class; its brace and annotation lines
-	// keep the subtree tint, matching the old Document. A placeholder line has
-	// no cell, so it stays neutral instead of joining the selection tint.
-	const line = lineFor(key, doc);
-	if (line === undefined) {
-		return;
-	}
-	if (placeholderOn(doc, line)) {
-		return;
-	}
-	pushLineDecoration(target, line, selectionClass(key));
-}
-
-function addSelectedRows(
-	target: monaco.editor.IModelDeltaDecoration[],
-	doc: SyntheticDocument | undefined,
-	selected: Set<string>
-): void {
-	for (const key of selected) {
-		addSelectedRow(target, doc, key);
-	}
-}
-
-function isSubtreeLine(
-	keys: readonly (string | undefined)[],
-	at: number,
-	doc: SyntheticDocument | undefined,
-	selected: Set<string>
-): boolean {
-	const key = keys[at];
-	if (key === undefined) {
-		return false;
-	}
-	if (!selected.has(key)) {
-		return false;
-	}
-	if (doc?.rowLine.get(key) === at + 1) {
-		return false;
-	}
-	return !placeholderOn(doc, at + 1);
-}
-
-function addSubtreeLines(
-	target: monaco.editor.IModelDeltaDecoration[],
-	keys: readonly (string | undefined)[],
-	doc: SyntheticDocument | undefined,
-	selected: Set<string>
-): void {
-	for (let at = 0; at < keys.length; at += 1) {
-		if (!isSubtreeLine(keys, at, doc, selected)) {
-			continue;
-		}
-		pushLineDecoration(target, at + 1, 'arxml-subtree');
-	}
-}
-
-function addSelectionDecorations(
-	originalRanges: monaco.editor.IModelDeltaDecoration[],
-	modifiedRanges: monaco.editor.IModelDeltaDecoration[]
-): void {
-	const selected = subtreeKeys(selectedKey);
-	const originalDoc = originalDocument();
-	const modifiedDoc = modifiedDocument();
-	addSelectedRows(originalRanges, originalDoc, selected);
-	addSelectedRows(modifiedRanges, modifiedDoc, selected);
-	addSubtreeLines(originalRanges, originalKeys(), originalDoc, selected);
-	addSubtreeLines(modifiedRanges, modifiedKeys(), modifiedDoc, selected);
-}
-
-// Monaco's line diff still classifies a blank placeholder opposite a real
-// line as inserted/deleted. An opaque editor-background layer outranks that
-// fill (zIndex above Monaco's default 0), so the missing side reads blank;
-// the real side keeps its own change fill. The margin class neutralizes the
-// gutter fill and sign in the stylesheet.
-function placeholderDecorations(
-	doc: SyntheticDocument | undefined
-): monaco.editor.IModelDeltaDecoration[] {
-	const lines = placeholderLinesFor(doc);
-	if (lines === undefined) {
-		return [];
-	}
-	const out: monaco.editor.IModelDeltaDecoration[] = [];
-	for (const line of lines) {
-		out.push({
-			range: new monaco.Range(line, 1, line, 1),
-			options: {
-				isWholeLine: true,
-				className: 'arxml-diff-placeholder',
-				marginClassName: 'arxml-diff-placeholder-margin',
-				zIndex: 2
-			}
-		});
-	}
-	return out;
-}
-
-type BodyPaint = 'added' | 'removed';
-
-interface BodyPane {
-	ranges: monaco.editor.IModelDeltaDecoration[];
-	side: DiffSide;
-	paint: BodyPaint;
-}
-
-/** The whole-line fill class for one semantic side. */
-function pushBodyFill(target: monaco.editor.IModelDeltaDecoration[], line: number, paint: BodyPaint): void {
-	target.push({
-		range: new monaco.Range(line, 1, line, 1),
-		options: { isWholeLine: true, className: `arxml-diff-line arxml-diff-line-${paint}`, zIndex: 0 }
-	});
-}
-
-/** The VS Code diff gutter sign for one semantic side. */
-function pushBodySign(target: monaco.editor.IModelDeltaDecoration[], line: number, paint: BodyPaint): void {
-	const glyph = paint === 'added' ? 'insert-sign codicon codicon-add' : 'delete-sign codicon codicon-remove';
-	target.push({
-		range: new monaco.Range(line, 1, line, 1),
-		options: { linesDecorationsClassName: `arxml-diff-sign arxml-diff-sign-${paint} ${glyph}`, zIndex: 1 }
-	});
-}
-
-/** The VS Code merge margin affordance: one arrow pointing at the other pane. */
-function pushMergeDecoration(
-	target: monaco.editor.IModelDeltaDecoration[],
-	line: number,
-	direction: 'left' | 'right'
-): void {
-	target.push({
-		range: new monaco.Range(line, 1, line, 1),
-		options: {
-			glyphMarginClassName: `arxml-merge-arrow arxml-merge-arrow-${direction} codicon codicon-arrow-${direction}`,
-			glyphMarginHoverMessage: { value: 'Copy this element to the other side' },
-			glyphMargin: { position: monaco.editor.GlyphMarginLane.Right },
-			zIndex: 1
-		}
-	});
-}
-
-const META_CLASSES: Readonly<Record<string, 'short' | 'variant' | 'condition' | 'context'>> = {
-	'short name': 'short',
-	variant: 'variant',
-	condition: 'condition',
-	context: 'context'
-};
-
-function metaClassForField(field: DiffChange['field']): 'short' | 'variant' | 'condition' | 'context' | undefined {
-	return META_CLASSES[field];
-}
-
-/** The unique meta part for a semantic field; ambiguous duplicates are skipped. */
-function metaPartIndex(cell: DiffCell, cls: 'short' | 'variant' | 'condition' | 'context'): number | undefined {
-	let found: number | undefined;
-	for (let at = 0; at < cell.meta.length; at += 1) {
-		if (cell.meta[at].cls !== cls) {
-			continue;
-		}
-		if (found !== undefined) {
-			return undefined;
-		}
-		found = at;
-	}
-	return found;
-}
-
-interface ChangeSpanSpec {
-	field: SearchSpan['field'];
-	part?: number;
-}
-
-function isValueField(field: DiffChange['field']): boolean {
-	return field === 'value' || field === 'shown value' || field === 'target';
-}
-
-function metaSpec(cell: DiffCell, field: DiffChange['field']): ChangeSpanSpec | undefined {
-	const cls = metaClassForField(field);
-	if (cls === undefined) {
-		return undefined;
-	}
-	const part = metaPartIndex(cell, cls);
-	return part === undefined ? undefined : { field: 'meta', part };
-}
-
-function spanSpecForChange(change: DiffChange, cell: DiffCell): ChangeSpanSpec | undefined {
-	if (isValueField(change.field)) {
-		return { field: 'value' };
-	}
-	return metaSpec(cell, change.field);
-}
-
-/** The synthetic search span that renders this semantic field on its line. */
-function spanForChange(
-	line: SyntheticLine | undefined,
-	cell: DiffCell | undefined,
-	change: DiffChange
-): SearchSpan | undefined {
-	if (line === undefined || cell === undefined) {
-		return undefined;
-	}
-	const spec = spanSpecForChange(change, cell);
-	if (spec === undefined) {
-		return undefined;
-	}
-	return line.searchSpans.find((span) => span.field === spec.field && span.part === spec.part);
-}
-
-function spanText(line: SyntheticLine, span: SearchSpan): string {
-	return line.text.slice(span.startColumn - 1, span.endColumn - 1);
-}
-
-function pushWordDecoration(
-	target: monaco.editor.IModelDeltaDecoration[],
-	line: number,
-	span: SearchSpan,
-	word: { start: number; end: number },
-	paint: BodyPaint
-): void {
-	const startColumn = span.startColumn + word.start;
-	const endColumn = span.startColumn + word.end;
-	if (endColumn <= startColumn) {
-		return;
-	}
-	target.push({
-		range: new monaco.Range(line, startColumn, line, endColumn),
-		options: { inlineClassName: `arxml-diff-word arxml-diff-word-${paint}`, zIndex: 2 }
-	});
-}
-
-/** One pane's line text for the same semantic row on the other side. */
-function otherSideLine(row: DiffBodyRow, paneSide: DiffSide): SyntheticLine | undefined {
-	const other = otherSide(paneSide);
-	const line = lineOnSide(row, other);
-	const doc = sideDocument(other);
-	return line === undefined || doc === undefined ? undefined : doc.lines[line - 1];
-}
-
-interface WordLineParts {
-	line: SyntheticLine;
-	otherLine: SyntheticLine;
-	cell: DiffCell;
-	otherCell: DiffCell;
-}
-
-interface WordPaint {
-	span: SearchSpan;
-	words: readonly WordSpan[];
-}
-
-function isDefined<T>(value: T | undefined): value is T {
-	return value !== undefined;
-}
-
-function wordLineParts(row: DiffBodyRow, paneSide: DiffSide, nodeLine: number): WordLineParts | undefined {
-	const doc = sideDocument(paneSide);
-	const line = doc?.lines[nodeLine - 1];
-	const otherLine = otherSideLine(row, paneSide);
-	const cell = cellOnSide(row, paneSide);
-	const otherCell = cellOnSide(row, otherSide(paneSide));
-	if (![line, otherLine, cell, otherCell].every(isDefined)) {
-		return undefined;
-	}
-	return { line: line!, otherLine: otherLine!, cell: cell!, otherCell: otherCell! };
-}
-
-function wordPairFor(
-	parts: WordLineParts,
-	paneSpan: SearchSpan,
-	otherSpan: SearchSpan,
-	paneSide: DiffSide
-): WordSpanPair {
-	return paneSide === 'left'
-		? wordDiffSpans(spanText(parts.line, paneSpan), spanText(parts.otherLine, otherSpan))
-		: wordDiffSpans(spanText(parts.otherLine, otherSpan), spanText(parts.line, paneSpan));
-}
-
-function wordPaintForChange(
-	parts: WordLineParts,
-	paneSide: DiffSide,
-	change: DiffChange
-): WordPaint | undefined {
-	const paneSpan = spanForChange(parts.line, parts.cell, change);
-	const otherSpan = spanForChange(parts.otherLine, parts.otherCell, change);
-	if (paneSpan === undefined || otherSpan === undefined) {
-		return undefined;
-	}
-	const pair = wordPairFor(parts, paneSpan, otherSpan, paneSide);
-	return { span: paneSpan, words: paneSide === 'left' ? pair.left : pair.right };
-}
-
-function paintWords(
-	target: monaco.editor.IModelDeltaDecoration[],
-	nodeLine: number,
-	paint: WordPaint,
-	paintSide: BodyPaint
-): void {
-	for (const word of paint.words) {
-		pushWordDecoration(target, nodeLine, paint.span, word, paintSide);
-	}
-}
-
-function addWordSpans(
-	target: monaco.editor.IModelDeltaDecoration[],
-	row: DiffBodyRow,
-	paneSide: DiffSide,
-	nodeLine: number,
-	paint: BodyPaint
-): void {
-	const parts = wordLineParts(row, paneSide, nodeLine);
-	if (parts === undefined) {
-		return;
-	}
-	for (const change of row.changes) {
-		const wordPaint = wordPaintForChange(parts, paneSide, change);
-		if (wordPaint === undefined) {
-			continue;
-		}
-		paintWords(target, nodeLine, wordPaint, paint);
-	}
-}
-
-/**
- * Paint the semantic status on the pane that shows the owning cell. Colors and
- * signs follow the displayed pane (original = removed, modified = added), so a
- * swapped side keeps the VS Code diff grammar. Missing-side placeholders have no
- * cell here and are never painted.
- */
-function paintedLines(row: DiffBodyRow, side: DiffSide, nodeLine: number): readonly number[] {
-	return row.status === 'changed' ? [nodeLine] : linesOnSide(row, side);
-}
-
-interface DecoratedPosition {
-	cell: DiffCell;
-	nodeLine: number;
-}
-
-function decoratedPosition(row: DiffBodyRow, side: DiffSide): DecoratedPosition | undefined {
-	const cell = cellOnSide(row, side);
-	const nodeLine = lineOnSide(row, side);
-	if (cell === undefined || nodeLine === undefined) {
-		return undefined;
-	}
-	return { cell, nodeLine };
-}
-
-function addRowDecorations(row: DiffBodyRow, pane: BodyPane): void {
-	const position = decoratedPosition(row, pane.side);
-	if (position === undefined) {
-		return;
-	}
-	for (const line of paintedLines(row, pane.side, position.nodeLine)) {
-		pushBodyFill(pane.ranges, line, pane.paint);
-		pushBodySign(pane.ranges, line, pane.paint);
-	}
-	if (row.status === 'changed') {
-		addWordSpans(pane.ranges, row, pane.side, position.nodeLine, pane.paint);
-	}
-}
-
 function changedRows(): readonly DiffBodyRow[] {
 	if (body === undefined) {
 		return [];
@@ -1199,86 +732,8 @@ function changedRows(): readonly DiffBodyRow[] {
 	return body.rows.filter((row) => row.status !== 'unchanged');
 }
 
-function addBodyDecorations(
-	originalRanges: monaco.editor.IModelDeltaDecoration[],
-	modifiedRanges: monaco.editor.IModelDeltaDecoration[]
-): void {
-	const panes: BodyPane[] = [
-		{ ranges: originalRanges, side: displayedSide('original'), paint: 'removed' },
-		{ ranges: modifiedRanges, side: displayedSide('modified'), paint: 'added' }
-	];
-	for (const row of changedRows()) {
-		for (const pane of panes) {
-			addRowDecorations(row, pane);
-		}
-	}
-}
-
-function pushMergeForSide(
-	target: monaco.editor.IModelDeltaDecoration[],
-	row: DiffBodyRow,
-	side: DiffSide,
-	direction: 'left' | 'right'
-): void {
-	const line = lineOnSide(row, side);
-	if (line !== undefined) {
-		pushMergeDecoration(target, line, direction);
-	}
-}
-
-function addMergeRow(
-	originalRanges: monaco.editor.IModelDeltaDecoration[],
-	modifiedRanges: monaco.editor.IModelDeltaDecoration[],
-	row: DiffBodyRow,
-	originalSide: DiffSide,
-	modifiedSide: DiffSide
-): void {
-	if (row.status === 'unchanged') {
-		return;
-	}
-	pushMergeForSide(originalRanges, row, originalSide, 'right');
-	pushMergeForSide(modifiedRanges, row, modifiedSide, 'left');
-}
-
-function addMergeDecorations(
-	originalRanges: monaco.editor.IModelDeltaDecoration[],
-	modifiedRanges: monaco.editor.IModelDeltaDecoration[]
-): void {
-	if (!mergeMode || body === undefined) {
-		return;
-	}
-	const originalSide = displayedSide('original');
-	const modifiedSide = displayedSide('modified');
-	for (const row of body.rows) {
-		addMergeRow(originalRanges, modifiedRanges, row, originalSide, modifiedSide);
-	}
-}
-
-function renderDecorations(): void {
-	if (aligned === undefined) {
-		return;
-	}
-	const editors = diffEditors();
-	if (editors === undefined) {
-		return;
-	}
-	const originalRanges: monaco.editor.IModelDeltaDecoration[] = [];
-	const modifiedRanges: monaco.editor.IModelDeltaDecoration[] = [];
-	addSelectionDecorations(originalRanges, modifiedRanges);
-	addBodyDecorations(originalRanges, modifiedRanges);
-	originalRanges.push(...placeholderDecorations(originalDocument()));
-	modifiedRanges.push(...placeholderDecorations(modifiedDocument()));
-	addMergeDecorations(originalRanges, modifiedRanges);
-	originalDecorations = editors.original.deltaDecorations(originalDecorations, originalRanges);
-	modifiedDecorations = editors.modified.deltaDecorations(modifiedDecorations, modifiedRanges);
-}
-
 function selectKey(key: string | undefined): void {
-	if (key === selectedKey) {
-		return;
-	}
 	selectedKey = key;
-	renderDecorations();
 }
 
 function swapSides(): void {
@@ -1288,7 +743,7 @@ function swapSides(): void {
 	setTitles();
 	selectedKey = undefined;
 	syncBodyState();
-	renderDecorations();
+	renderCopyArrows();
 }
 
 function foldAll(): void {
@@ -1301,56 +756,73 @@ function unfoldAll(): void {
 	modifiedEditor()?.trigger('toolbar', 'editor.unfoldAll', null);
 }
 
-function changeList(): monaco.editor.ILineChange[] {
-	return diffEditor?.getLineChanges() ?? [];
+function changeRows(): readonly SemanticChange[] {
+	return body === undefined ? [] : semanticChanges(body.rows);
 }
 
-function changeLine(change: monaco.editor.ILineChange): number {
-	return change.modifiedStartLineNumber || change.originalStartLineNumber;
+interface ActivePane {
+	side: DiffSide;
+	editor: monaco.editor.ICodeEditor | undefined;
 }
 
-function currentModifiedLine(): number {
-	return modifiedEditor()?.getPosition()?.lineNumber ?? 0;
+/** The pane the user is working in; a missing side falls back to its owner. */
+function activePane(): ActivePane {
+	const editor = focusedPane === 'original' ? originalEditor() : modifiedEditor();
+	return { side: displayedSide(focusedPane), editor };
 }
 
-function findForwardChange(changes: monaco.editor.ILineChange[], current: number): number {
-	return changes.findIndex((change) => changeLine(change) >= current);
+function selectedChangeIndex(changes: readonly SemanticChange[]): number {
+	return selectedKey === undefined ? -1 : changes.findIndex((change) => change.key === selectedKey);
 }
 
-function findBackwardChange(changes: monaco.editor.ILineChange[], current: number): number {
-	for (let at = changes.length - 1; at >= 0; at -= 1) {
-		if (changeLine(changes[at]) < current) {
-			return at;
-		}
+function changeAnchor(changes: readonly SemanticChange[], active: ActivePane): number | undefined {
+	const selected = selectedChangeIndex(changes);
+	if (selected >= 0) {
+		return selected;
 	}
-	return -1;
+	const line = active.editor?.getPosition()?.lineNumber;
+	return line === undefined ? undefined : cursorChangeIndex(changes, line, active.side);
 }
 
-function changeIndex(changes: monaco.editor.ILineChange[], current: number, direction: 1 | -1): number {
-	const index = direction > 0 ? findForwardChange(changes, current) : findBackwardChange(changes, current);
-	if (index >= 0) {
-		return index;
-	}
-	return direction > 0 ? 0 : changes.length - 1;
+function editorForSide(side: DiffSide): monaco.editor.ICodeEditor | undefined {
+	return side === displayedSide('original') ? originalEditor() : modifiedEditor();
 }
 
-function revealChange(change: monaco.editor.ILineChange): void {
-	const editor = modifiedEditor();
+function revealChangeTarget(target: { side: DiffSide; line: number }): void {
+	const editor = editorForSide(target.side);
 	if (editor === undefined) {
 		return;
 	}
-	const line = changeLine(change);
-	editor.revealLineInCenter(line);
-	editor.setPosition({ lineNumber: line, column: 1 });
+	editor.revealLineInCenter(target.line);
+	editor.setPosition({ lineNumber: target.line, column: 1 });
+	editor.focus();
 }
 
+/**
+ * Step through the semantic change rows, not Monaco's line diff on the
+ * pre-synthetic synthetic text: a rename, a semantic pair and a one-sided block
+ * each move one semantic step, and the owning pane receives the cursor.
+ */
 function navigate(direction: 1 | -1): void {
-	const changes = changeList();
+	const changes = changeRows();
 	if (changes.length === 0) {
 		setNotice('No differences to navigate');
 		return;
 	}
-	revealChange(changes[changeIndex(changes, currentModifiedLine(), direction)]);
+	clearNotice();
+	const active = activePane();
+	const index = stepChange(changes.length, changeAnchor(changes, active), direction);
+	if (index === undefined) {
+		return;
+	}
+	const change = changes[index];
+	const target = navigationTarget(change, active.side);
+	if (target === undefined) {
+		return;
+	}
+	revealChangeTarget(target);
+	selectKey(change.key);
+	publishNavigation(change, target);
 }
 
 function applyLabelsMessage(labels: DiffDocument['labels']): void {
@@ -1381,10 +853,7 @@ function dispatchViewMessage(message: DiffProviderToWebview): boolean {
 		return true;
 	}
 	if (message.type === 'mergeMode') {
-		mergeMode = message.enabled;
-		toolbar?.setMergeMode(mergeMode);
-		syncBodyState();
-		renderDecorations();
+		setMergeMode(message.enabled);
 		return true;
 	}
 	if (message.type === 'labels') {
@@ -1468,11 +937,8 @@ function mountToolbar(): void {
 		onExpandAll: unfoldAll,
 		onSwap: swapSides,
 		onMergeMode: function () {
-			mergeMode = !mergeMode;
-			toolbar?.setMergeMode(mergeMode);
+			setMergeMode(!mergeMode);
 			postToHost({ type: 'mergeMode', enabled: mergeMode });
-			syncBodyState();
-			renderDecorations();
 		},
 		onMatchMode: function (nextSemantic) {
 			semantic = nextSemantic;
@@ -1495,59 +961,242 @@ function displayedSide(pane: 'original' | 'modified'): DiffSide {
 	return originalIsLeft === onOriginal ? 'left' : 'right';
 }
 
-function handleMergeClick(
-	editor: monaco.editor.ICodeEditor,
-	pane: 'original' | 'modified',
-	line: number
-): void {
-	const key = keyAt(editor, line, pane);
-	if (key === undefined) {
-		return;
-	}
-	const row = body?.byKey.get(key);
-	if (row === undefined) {
-		return;
-	}
-	// The clicked owning pane is the source; the host keeps its copy/delete
-	// semantics for a side that owns no cell.
-	postToHost({ type: 'copy', side: mergeSourceSide(row, displayedSide(pane)), key: row.key });
+function rowOwnsSide(row: DiffBodyRow, side: DiffSide): boolean {
+	return side === 'left' ? row.leftCell !== undefined : row.rightCell !== undefined;
 }
 
-function eventLine(event: monaco.editor.IEditorMouseEvent): number | undefined {
-	const position = event.target.position;
-	if (position === undefined || position === null) {
+interface CopyTarget {
+	side: DiffSide;
+	key: string;
+}
+
+/** The copy-to-left source is the stored side currently shown on the right. */
+function copyLeftTarget(row: DiffBodyRow): CopyTarget | undefined {
+	const side = displayedSide('modified');
+	if (!rowOwnsSide(row, side)) {
 		return undefined;
 	}
-	return position.lineNumber;
+	return { side, key: row.key };
 }
 
-function mergeClickHandler(
-	editor: monaco.editor.ICodeEditor,
-	pane: 'original' | 'modified'
-): (event: monaco.editor.IEditorMouseEvent) => void {
-	return function (event) {
-		if (!mergeMode) {
-			return;
-		}
-		if (event.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
-			return;
-		}
-		const line = eventLine(event);
-		if (line === undefined) {
-			return;
-		}
-		handleMergeClick(editor, pane, line);
-	};
-}
-
-function wireMergeClicks(): void {
-	const original = originalEditor();
-	const modified = modifiedEditor();
-	if (original === undefined || modified === undefined) {
+/** One extra arrow in the built-in diff-margin view-zone lane. */
+function addLeftArrowZone(
+	accessor: monaco.editor.IViewZoneChangeAccessor,
+	row: DiffBodyRow,
+	target: CopyTarget
+): void {
+	const firstLine = linesOnSide(row, displayedSide('modified'))[0];
+	if (firstLine === undefined) {
 		return;
 	}
-	original.onMouseDown(mergeClickHandler(original, 'original'));
-	modified.onMouseDown(mergeClickHandler(modified, 'modified'));
+	const wrapper = document.createElement('div');
+	wrapper.className = 'arxml-copy-left-margin';
+	const arrow = document.createElement('div');
+	arrow.className = 'arrow-revert-change codicon codicon-arrow-left';
+	arrow.dataset.copyKey = target.key;
+	arrow.dataset.copySide = target.side;
+	arrow.title = 'Copy this element to the left side';
+	arrow.setAttribute('aria-label', arrow.title);
+	wrapper.appendChild(arrow);
+	const zone = accessor.addZone({
+		afterLineNumber: Math.max(0, firstLine - 1),
+		heightInPx: 0,
+		domNode: document.createElement('div'),
+		marginDomNode: wrapper,
+		showInHiddenAreas: true,
+		suppressMouseDown: true
+	});
+	leftArrowZones.push(zone);
+}
+
+function clearLeftArrowZones(accessor: monaco.editor.IViewZoneChangeAccessor): void {
+	for (const zone of leftArrowZones) {
+		accessor.removeZone(zone);
+	}
+	leftArrowZones = [];
+}
+
+function addLeftArrowZones(accessor: monaco.editor.IViewZoneChangeAccessor): void {
+	for (const row of changedRows()) {
+		const target = copyLeftTarget(row);
+		if (target !== undefined) {
+			addLeftArrowZone(accessor, row, target);
+		}
+	}
+}
+
+/**
+ * Rebuild only the extra copy-left arrow. The right-pointing arrow is Monaco's
+ * own diff-margin view zone; its click is rebound below.
+ */
+function renderCopyArrows(): void {
+	const editor = modifiedEditor();
+	if (editor === undefined) {
+		return;
+	}
+	editor.changeViewZones(function (accessor) {
+		clearLeftArrowZones(accessor);
+		if (mergeMode && body !== undefined) {
+			addLeftArrowZones(accessor);
+		}
+	});
+}
+
+function arrowTop(editor: monaco.editor.ICodeEditor, arrow: Element): number | undefined {
+	const wrapper = arrow.parentElement;
+	const node = editor.getDomNode();
+	if (wrapper === null || node === null) {
+		return undefined;
+	}
+	return wrapper.getBoundingClientRect().top - node.getBoundingClientRect().top;
+}
+
+function anchorTop(editor: monaco.editor.ICodeEditor, anchor: number): number {
+	if (anchor === 0) {
+		return 0;
+	}
+	return (
+		editor.getTopForLineNumber(anchor) +
+		editor.getOption(monaco.editor.EditorOption.lineHeight) -
+		editor.getScrollTop()
+	);
+}
+
+function nearestLineChange(
+	editor: monaco.editor.ICodeEditor,
+	top: number
+): monaco.editor.ILineChange | undefined {
+	const changes = diffEditor?.getLineChanges();
+	if (!changes) {
+		return undefined;
+	}
+	let best: monaco.editor.ILineChange | undefined;
+	let bestDelta = 8;
+	for (const change of changes) {
+		const delta = Math.abs(anchorTop(editor, change.modifiedEndLineNumber) - top);
+		if (delta < bestDelta) {
+			best = change;
+			bestDelta = delta;
+		}
+	}
+	return best;
+}
+
+/** The line change a built-in margin arrow belongs to, from its view-zone top. */
+function lineChangeForArrow(
+	editor: monaco.editor.ICodeEditor,
+	arrow: Element
+): monaco.editor.ILineChange | undefined {
+	const top = arrowTop(editor, arrow);
+	return top === undefined ? undefined : nearestLineChange(editor, top);
+}
+
+/** Fallback for the same mapping through Monaco's view-zone hit target. */
+function lineChangeAtPoint(
+	editor: monaco.editor.ICodeEditor,
+	event: MouseEvent
+): monaco.editor.ILineChange | undefined {
+	const target = editor.getTargetAtClientPoint(event.clientX, event.clientY);
+	if (target?.type !== monaco.editor.MouseTargetType.GUTTER_VIEW_ZONE) {
+		return undefined;
+	}
+	const after = target.detail.afterLineNumber;
+	return diffEditor?.getLineChanges()?.find((change) => change.modifiedEndLineNumber === after);
+}
+
+function rowIsChangedAndOwned(row: DiffBodyRow, side: DiffSide): boolean {
+	return row.status !== 'unchanged' && rowOwnsSide(row, side);
+}
+
+function ownedRow(key: string | undefined, side: DiffSide): DiffBodyRow | undefined {
+	if (key === undefined) {
+		return undefined;
+	}
+	const row = body?.byKey.get(key);
+	return row !== undefined && rowIsChangedAndOwned(row, side) ? row : undefined;
+}
+
+function firstOwnedRow(start: number, end: number, side: DiffSide): DiffBodyRow | undefined {
+	const keys = originalKeys();
+	for (let line = start; line <= end; line += 1) {
+		const row = ownedRow(keys[line - 1], side);
+		if (row !== undefined) {
+			return row;
+		}
+	}
+	return undefined;
+}
+
+/** A built-in deletion block maps to the first semantic row it contains. */
+function builtInArrowTarget(change: monaco.editor.ILineChange | undefined): CopyTarget | undefined {
+	if (change === undefined) {
+		return undefined;
+	}
+	const side = displayedSide('original');
+	const row = firstOwnedRow(change.originalStartLineNumber, change.originalEndLineNumber, side);
+	return row === undefined ? undefined : { side, key: row.key };
+}
+
+function copyArrowElement(event: MouseEvent): HTMLElement | undefined {
+	const target = event.target;
+	if (!(target instanceof Element)) {
+		return undefined;
+	}
+	return target.closest<HTMLElement>('.arrow-revert-change') ?? undefined;
+}
+
+function taggedTarget(arrow: HTMLElement): CopyTarget | undefined {
+	const key = arrow.dataset.copyKey;
+	const side = arrow.dataset.copySide;
+	if (key === undefined || (side !== 'left' && side !== 'right')) {
+		return undefined;
+	}
+	return { key, side };
+}
+
+function builtInTargetAt(arrow: HTMLElement, event: MouseEvent): CopyTarget | undefined {
+	const editor = modifiedEditor();
+	if (editor === undefined) {
+		return undefined;
+	}
+	const change = lineChangeForArrow(editor, arrow) ?? lineChangeAtPoint(editor, event);
+	return builtInArrowTarget(change);
+}
+
+function copyTargetForArrow(arrow: HTMLElement, event: MouseEvent): CopyTarget | undefined {
+	return taggedTarget(arrow) ?? builtInTargetAt(arrow, event);
+}
+
+/**
+ * Intercept the built-in arrow before Monaco's revert handler and post the
+ * ARXML copy instead. The synthetic models are never edited from the page.
+ */
+function handleCopyArrow(event: MouseEvent): void {
+	if (!mergeMode) {
+		return;
+	}
+	const arrow = copyArrowElement(event);
+	if (arrow === undefined) {
+		return;
+	}
+	event.preventDefault();
+	event.stopPropagation();
+	const target = copyTargetForArrow(arrow, event);
+	if (target !== undefined) {
+		postToHost({ type: 'copy', side: target.side, key: target.key });
+	}
+}
+
+function wireCopyArrows(): void {
+	modifiedEditor()?.getDomNode()?.addEventListener('click', handleCopyArrow, true);
+}
+
+/** Merge mode is the only state that renders the two center arrows. */
+function setMergeMode(enabled: boolean): void {
+	mergeMode = enabled;
+	toolbar?.setMergeMode(mergeMode);
+	syncBodyState();
+	renderCopyArrows();
 }
 
 function wireSelection(): void {
@@ -1556,6 +1205,12 @@ function wireSelection(): void {
 	if (original === undefined || modified === undefined) {
 		return;
 	}
+	original.onDidFocusEditorText(function () {
+		focusedPane = 'original';
+	});
+	modified.onDidFocusEditorText(function () {
+		focusedPane = 'modified';
+	});
 	original.onDidChangeCursorPosition(function (event) {
 		selectKey(keyAt(original, event.position.lineNumber, 'original'));
 	});
@@ -1570,15 +1225,20 @@ function diffEditorOptions(
 	return {
 		theme: 'arxml-ecuc-theme',
 		automaticLayout: true,
-		readOnly: true,
+		// The built-in margin arrow only renders when the diff readOnly flag is
+		// off. Both inner editors are set readOnly right after creation, so the
+		// synthetic models stay non-editable while the arrow keeps VS Code's DOM.
+		readOnly: false,
 		originalEditable: false,
 		renderSideBySide: true,
 		useInlineViewWhenSpaceIsLimited: false,
 		enableSplitViewResizing: false,
-		// Semantic signs replace Monaco's text-diff indicators: the aligned body
-		// owns the meaning, so no second +/- column may disagree with it.
-		renderIndicators: false,
-		renderMarginRevertIcon: false,
+		// The built-in diff owns the body, so its +/− indicators, line fills,
+		// word spans, diagonal gaps and overview ruler are the single paint layer.
+		renderIndicators: true,
+		// Keep Monaco's built-in margin arrow mounted; the merge class gates its
+		// visibility so toggling Merge never rebuilds the diff view zones.
+		renderMarginRevertIcon: true,
 		renderGutterMenu: false,
 		glyphMargin: true,
 		lineNumbers: 'on',
@@ -1636,23 +1296,25 @@ async function mountDiff(): Promise<void> {
 	});
 	exposePreviewEditor(diffEditor);
 	diffEditor.getOriginalEditor().updateOptions({
+		readOnly: true,
 		glyphMargin: true,
 		lineNumbers: 'on',
 		minimap: { enabled: false }
 	});
 	diffEditor.getModifiedEditor().updateOptions({
+		readOnly: true,
 		glyphMargin: true,
 		lineNumbers: 'on',
 		minimap: { enabled: false }
 	});
 	syncBodyState();
 	diffEditor.onDidUpdateDiff(function () {
-		renderDecorations();
+		renderCopyArrows();
 	});
 
 	mountToolbar();
 	wireSelection();
-	wireMergeClicks();
+	wireCopyArrows();
 	mounted = true;
 	flushPendingMessages();
 	postToHost({ type: 'ready' });

@@ -1,21 +1,21 @@
 /**
  * The semantic body adapter for the Monaco diff.
  *
- * The pre-aligned synthetic documents already carry the semantic pairing: every
- * emitted line maps back to a `DiffRow` key. This module turns that map into the
- * small row/line view the diff decorations, the merge margin and the preview
+ * The per-side synthetic documents already carry the semantic pairing: every
+ * emitted line maps back to a `DiffRow` key. This module turns those maps into
+ * the small row/line view the diff decorations, the merge margin and the preview
  * audit share, so no caller re-derives the pairing or the owning side.
  */
 import type { DiffCell, DiffChange, DiffDocument, DiffRow, DiffStatus } from '../../core/diff/diffModel';
-import type { AlignedSyntheticDocuments } from './synthetic';
+import type { DiffSyntheticDocuments } from './synthetic';
 
 export type DiffSide = 'left' | 'right';
 
 /**
- * One semantic row projected onto the aligned models. `leftLines` / `rightLines`
+ * One semantic row projected onto the per-side models. `leftLines` / `rightLines`
  * contain every model line keyed to the row on that side (node line, comment
  * lines and braces); they are empty when the row has no cell on that side, so a
- * one-sided block never reports a placeholder line as owning.
+ * one-sided block never reports a line on the missing side.
  */
 export interface DiffBodyRow {
 	key: string;
@@ -38,13 +38,33 @@ export interface DiffBody {
 	byKey: ReadonlyMap<string, DiffBodyRow>;
 }
 
+/**
+ * One navigable/ruler semantic row. `order` is the merged row index, so the
+ * sequence follows the body rather than Monaco's line diff on the synthetic
+ * text. A missing side leaves its line undefined; a missing side is never a target.
+ */
+export interface SemanticChange {
+	key: string;
+	status: Exclude<DiffStatus, 'unchanged'>;
+	order: number;
+	leftLine?: number;
+	rightLine?: number;
+	renamed: boolean;
+}
+
+export interface NavigationTarget {
+	side: DiffSide;
+	/** 1-based node line on `side`. */
+	line: number;
+}
+
 /** `[left, right]` sides, in display order. */
-export function otherSide(side: DiffSide): DiffSide {
+function otherSide(side: DiffSide): DiffSide {
 	return side === 'left' ? 'right' : 'left';
 }
 
-/** The cell shown on `side`, or `undefined` for a missing-side placeholder. */
-export function cellOnSide(row: DiffBodyRow, side: DiffSide): DiffCell | undefined {
+/** The cell shown on `side`, or `undefined` when the side has no cell. */
+function cellOnSide(row: DiffBodyRow, side: DiffSide): DiffCell | undefined {
 	return side === 'left' ? row.leftCell : row.rightCell;
 }
 
@@ -53,7 +73,7 @@ export function lineOnSide(row: DiffBodyRow, side: DiffSide): number | undefined
 	return side === 'left' ? row.leftLine : row.rightLine;
 }
 
-/** Every model line keyed to the row on `side`; empty for a placeholder side. */
+/** Every model line keyed to the row on `side`; empty for a missing side. */
 export function linesOnSide(row: DiffBodyRow, side: DiffSide): readonly number[] {
 	return side === 'left' ? row.leftLines : row.rightLines;
 }
@@ -100,7 +120,7 @@ function linesByKey(keys: readonly (string | undefined)[]): Map<string, number[]
 function assignLeft(
 	result: DiffBodyRow,
 	row: DiffRow,
-	aligned: AlignedSyntheticDocuments,
+	aligned: DiffSyntheticDocuments,
 	leftLines: ReadonlyMap<string, readonly number[]>
 ): void {
 	if (row.left === undefined) {
@@ -117,7 +137,7 @@ function assignLeft(
 function assignRight(
 	result: DiffBodyRow,
 	row: DiffRow,
-	aligned: AlignedSyntheticDocuments,
+	aligned: DiffSyntheticDocuments,
 	rightLines: ReadonlyMap<string, readonly number[]>
 ): void {
 	if (row.right === undefined) {
@@ -137,7 +157,7 @@ function isRenamedRow(row: DiffRow): boolean {
 
 function bodyRow(
 	row: DiffRow,
-	aligned: AlignedSyntheticDocuments,
+	aligned: DiffSyntheticDocuments,
 	leftLines: ReadonlyMap<string, readonly number[]>,
 	rightLines: ReadonlyMap<string, readonly number[]>
 ): DiffBodyRow {
@@ -155,7 +175,7 @@ function bodyRow(
 }
 
 /** Project every merged row onto its left/right model lines. */
-export function buildDiffBody(document: DiffDocument, aligned: AlignedSyntheticDocuments): DiffBody {
+export function buildDiffBody(document: DiffDocument, aligned: DiffSyntheticDocuments): DiffBody {
 	const leftLines = linesByKey(aligned.leftLineKeys);
 	const rightLines = linesByKey(aligned.rightLineKeys);
 	const rows = document.rows.map((row) => bodyRow(row, aligned, leftLines, rightLines));
@@ -164,4 +184,100 @@ export function buildDiffBody(document: DiffDocument, aligned: AlignedSyntheticD
 		byKey.set(row.key, row);
 	}
 	return { rows, byKey };
+}
+
+function semanticChange(row: DiffBodyRow, order: number): SemanticChange | undefined {
+	if (row.status === 'unchanged') {
+		return undefined;
+	}
+	return {
+		key: row.key,
+		status: row.status,
+		order,
+		...(row.leftLine === undefined ? {} : { leftLine: row.leftLine }),
+		...(row.rightLine === undefined ? {} : { rightLine: row.rightLine }),
+		renamed: row.renamed
+	};
+}
+
+/**
+ * The changed/added/removed rows in merged order. This is the navigation and
+ * ruler source: a rename or a semantic pair is one entry, a one-sided row keeps
+ * only the side that owns it, and an unchanged row is never a step.
+ */
+export function semanticChanges(rows: readonly DiffBodyRow[]): SemanticChange[] {
+	const changes: SemanticChange[] = [];
+	for (let order = 0; order < rows.length; order += 1) {
+		const change = semanticChange(rows[order], order);
+		if (change !== undefined) {
+			changes.push(change);
+		}
+	}
+	return changes;
+}
+
+function lineOnChange(change: SemanticChange, side: DiffSide): number | undefined {
+	return side === 'left' ? change.leftLine : change.rightLine;
+}
+
+/**
+ * The pane and line a navigation step reveals. Prefer the pane the caller is
+ * working in (the focused pane, mapped through swap); a row that side does not
+ * own falls back to the owning pane, so a removed row never reveals a
+ * missing side.
+ */
+export function navigationTarget(change: SemanticChange, preferred: DiffSide): NavigationTarget | undefined {
+	const preferredLine = lineOnChange(change, preferred);
+	if (preferredLine !== undefined) {
+		return { side: preferred, line: preferredLine };
+	}
+	const fallback = otherSide(preferred);
+	const fallbackLine = lineOnChange(change, fallback);
+	return fallbackLine === undefined ? undefined : { side: fallback, line: fallbackLine };
+}
+
+/**
+ * Step through the semantic changes, wrapping past either end. `current` is an
+ * index into `changes`; no current position starts at the first change forward
+ * and the last change backward.
+ */
+export function stepChange(count: number, current: number | undefined, direction: 1 | -1): number | undefined {
+	if (count <= 0) {
+		return undefined;
+	}
+	return direction > 0 ? stepForward(count, current) : stepBackward(count, current);
+}
+
+function stepForward(count: number, current: number | undefined): number {
+	if (current === undefined || current < 0 || current >= count) {
+		return 0;
+	}
+	return (current + 1) % count;
+}
+
+function stepBackward(count: number, current: number | undefined): number {
+	if (current === undefined || current < 0 || current >= count) {
+		return count - 1;
+	}
+	return (current - 1 + count) % count;
+}
+
+/**
+ * The change the cursor sits in or after on `side`. A cursor above the first
+ * change has no anchor, so a forward step starts at the first row and a
+ * backward step wraps to the last one.
+ */
+export function cursorChangeIndex(
+	changes: readonly SemanticChange[],
+	line: number,
+	side: DiffSide
+): number | undefined {
+	let found: number | undefined;
+	for (let at = 0; at < changes.length; at += 1) {
+		const changeLine = lineOnChange(changes[at], side);
+		if (changeLine !== undefined && changeLine <= line) {
+			found = at;
+		}
+	}
+	return found;
 }

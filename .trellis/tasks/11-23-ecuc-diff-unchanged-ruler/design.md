@@ -24,17 +24,11 @@
   classes; do not replace it with a custom widget unless the child documents why.
 - Add a preview state that exercises Show diff + Context and Show all.
 
-## 3. Semantic ruler
+## 3. Overview ruler
 
-- Add overview-ruler decorations per pane:
-  - semantic `changed` rows → modified color role,
-  - `added` → inserted role,
-  - `removed` → deleted role.
-- Compute the line from the existing `leftLineKeys`/`rightLineKeys`/`rowLine`; skip missing-side
-  placeholders.
-- Add a current/selected emphasis without hiding the underlying mark.
-- Use `overviewRuler` decoration options (`color`, `position`, `lane`) and VS Code diff color roles.
-- Do not use Monaco's `getLineChanges()` as the mark source.
+- Keep Monaco's built-in `renderOverviewRuler` on; it is the same diff overview VS Code uses.
+- Do not add semantic `overviewRuler` decorations or a current/selected emphasis.
+- Do not use Monaco's `getLineChanges()` as a semantic mark source; there are no semantic marks.
 
 ## 4. Semantic previous/next
 
@@ -49,8 +43,8 @@
 ## 5. Tests / preview
 
 - Unit: semantic change list ordering, target line under swap, end wrapping, skipped placeholders.
-- Preview: Show diff/Context geometry, Show all, ruler marks and navigation; a semantic rename/move
-  case where Monaco line changes would pick the wrong row.
+- Preview: Show diff/Context geometry, Show all, native `.diffOverview` presence and navigation;
+  a semantic rename/move case where Monaco line changes would pick the wrong row.
 - Keep `diff-one-sided`, merge, search, collapse and existing audits green.
 
 ## 6. Risks / rollback
@@ -58,5 +52,5 @@
 - Native `hideUnchangedRegions` DOM/options can drift between Monaco versions; the visual-proof
   child audits it.
 - Placeholder lines must not be hidden/expanded as real context.
-- Rollback: revert the semantic ruler/navigation and any native-widget CSS; the semantic diff and
+- Rollback: revert the navigation changes and any native-widget CSS; the semantic diff and
   toolbar remain.

@@ -15,6 +15,12 @@ export interface AuditState {
 	swap?: boolean;
 	wide?: boolean;
 	pan?: number;
+	/** Show diff was selected after mounting; the native unchanged widgets were on. */
+	view?: 'all' | 'diff';
+	/** Next-diff presses; semantic navigation ran. */
+	jump?: number;
+	/** Prev-diff presses after the Next presses. */
+	jumpBack?: number;
 	select?: boolean;
 	/** The text the Details state typed into `#details-value`. */
 	detailsEdit?: string;
@@ -112,47 +118,101 @@ interface SyscondAudit {
 	panelState: string | null;
 }
 
-/** Actual aligned models and placeholder paint for the one-sided diff fixture. */
+interface NativeDiffPaint {
+	lineInsert: number;
+	lineDelete: number;
+	charInsert: number;
+	charDelete: number;
+	insertSigns: number;
+	deleteSigns: number;
+	diagonalFills: number;
+}
+
+/**
+ * The built-in diff-margin arrows. Monaco renders the right arrow for a
+ * left-only block; the page adds one left arrow per right-side change.
+ */
+interface CopyArrowAudit {
+	count: number;
+	/** Built-in right-pointing arrows (`codicon-arrow-right`). */
+	builtIn: number;
+	/** The extra copy-to-left arrows (`codicon-arrow-left`). */
+	copyLeft: number;
+	/** Every arrow has a painted, non-empty box. */
+	visible: boolean;
+	/** Every arrow sits in the modified editor's left gutter. */
+	atGutter: boolean;
+	/** The host copy message a clicked arrow posted. */
+	copy: { side: string; key: string; direction: string; swapped: boolean } | null;
+	/** The clicked arrow posted the semantic side/key for its direction. */
+	copyValid: boolean;
+}
+
+/** Monaco's native diff overview, not a semantic decoration layer. */
+interface NativeOverviewAudit {
+	present: boolean;
+}
+
+/** Actual per-side models and built-in diff paint for the one-sided fixture. */
 export interface OneSidedAudit {
 	originalLines: number;
 	modifiedLines: number;
-	missingSideBlank: boolean;
-	missingSideBraces: string[];
+	missingSideHasRemoved: boolean;
+	missingSideHasAdded: boolean;
 	owningSideBraces: number;
-	gapLines: number;
-	placeholderLines: number;
-	placeholderExpected: number;
-	realSidePlaceholder: boolean;
-	placeholderFill: string;
-	neutralFill: string;
-	fillsNeutral: boolean;
-	diffFillNeutral: boolean;
-	owningFill: boolean;
-	gutterNeutral: boolean;
-	signHidden: boolean;
+	emptyOwningLines: number;
+	native: NativeDiffPaint;
+	margin: CopyArrowAudit;
+	customPaint: number;
 	lineChanges: number;
-	owningArrows: number;
 	removedNavigable: boolean;
 	addedNavigable: boolean;
-	/** Semantic gutter signs or body fills painted on a missing-side line. */
-	placeholderSigns: number;
-	placeholderBodyFills: number;
 }
 
-/** The stable body contract and measured semantic paint for one diff page. */
+/** The stable body contract, native paint and semantic margin for one diff page. */
 export interface DiffBodyAudit {
 	host: boolean;
 	gutter: boolean;
 	status: boolean;
-	mergeMargin: boolean;
 	rows: number;
 	statuses: { changed: number; added: number; removed: number; renamed: number };
-	signs: { removed: number; added: number };
-	lineFills: { removed: number; added: number };
-	wordSpans: { removed: number; added: number };
-	arrows: number;
-	placeholderSigns: number;
-	placeholderArrows: number;
+	lineCounts: { original: number; modified: number };
+	native: NativeDiffPaint;
+	margin: CopyArrowAudit;
+	/** Any old custom body fill/sign/word/placeholder paint left anywhere. */
+	customPaint: number;
+	/** Monaco's built-in diff overview. */
+	overview: NativeOverviewAudit;
+	/** Monaco's native hide-unchanged-region widgets and the toggle probe. */
+	unchanged: {
+		centers: number;
+		height: number;
+		labels: string[];
+		unfold: number;
+		handles: number;
+		showDiff: number;
+		showAll: number;
+		restored: number;
+		contextOnLines: number;
+		contextOffLines: number;
+		withoutContext: number;
+		contextRestored: number;
+	};
+	/** The semantic Next/Prev target recorded by the preview page. */
+	nav?: {
+		history: Array<{
+			key: string;
+			status: string;
+			order: number;
+			renamed: boolean;
+			side: string;
+			line: number;
+		}>;
+		positionSide?: string;
+		positionLine?: number;
+		lineChangeLines: number[];
+		lineChangeKeys: string[];
+	};
 	density: {
 		fontFamily: string;
 		fontSize: number;
@@ -178,6 +238,12 @@ interface PreviewModelDecoration {
 		glyphMarginClassName?: string | null;
 		linesDecorationsClassName?: string | null;
 		inlineClassName?: string | null;
+		description?: string | null;
+		overviewRuler?: {
+			color?: string | { id?: string };
+			position?: number;
+			zIndex?: number;
+		} | null;
 	};
 }
 
@@ -197,6 +263,7 @@ interface PreviewLineChange {
 interface PreviewDiffSideEditor {
 	getModel(): PreviewDiffModel | null;
 	getDomNode(): HTMLElement | null;
+	getPosition(): { lineNumber: number; column: number } | null;
 }
 
 interface PreviewDiffEditor {
@@ -637,8 +704,7 @@ const SYSCOND_COLORS = {
 /** The `diff-one-sided` fixture contract, so a fixture edit names the failing expectation. */
 const ONE_SIDED_FIXTURE = {
 	owningBraces: 8,
-	minLineChanges: 3,
-	owningArrows: 2
+	minLineChanges: 3
 } as const;
 
 /** The Dark+ definition and string colours the label preview resolves. */
@@ -1420,11 +1486,7 @@ const TRANSLUCENT_DIFF_SELECTORS = [
 	'.monaco-diff-editor .line-insert',
 	'.monaco-diff-editor .line-delete',
 	'.monaco-diff-editor .char-insert',
-	'.monaco-diff-editor .char-delete',
-	'.monaco-diff-editor .arxml-diff-line-added',
-	'.monaco-diff-editor .arxml-diff-line-removed',
-	'.monaco-diff-editor .arxml-diff-word-added',
-	'.monaco-diff-editor .arxml-diff-word-removed'
+	'.monaco-diff-editor .char-delete'
 ] as const;
 
 function translucentDiffViolations(): string[] {
@@ -1504,18 +1566,6 @@ interface OneSidedContext {
 	addedEnd: number;
 }
 
-interface SideScan {
-	present: boolean;
-	blank: boolean;
-	braces: string[];
-}
-
-interface GutterScan {
-	wrappers: number;
-	neutral: boolean;
-	signsHidden: boolean;
-}
-
 function previewDiffEditor(): PreviewDiffEditor | undefined {
 	return (window as unknown as { __ARXML_DIFF_EDITOR__?: PreviewDiffEditor }).__ARXML_DIFF_EDITOR__;
 }
@@ -1565,230 +1615,12 @@ function oneSidedContext(): OneSidedContext | undefined {
 	};
 }
 
-function scanMissingSide(lines: readonly string[], start: number, end: number, label: string): SideScan {
-	if (start < 0) {
-		return { present: false, blank: true, braces: [] };
-	}
-	return {
-		present: true,
-		blank: equallyBlank(lines, start, end),
-		braces: braceLines(lines, start, end, label)
-	};
-}
-
-function equallyBlank(lines: readonly string[], start: number, end: number): boolean {
-	for (let at = start; at < end; at += 1) {
-		if (lines[at] !== '') {
-			return false;
-		}
-	}
-	return true;
-}
-
-function braceLines(lines: readonly string[], start: number, end: number, label: string): string[] {
-	const braces: string[] = [];
-	for (let at = start; at < end; at += 1) {
-		const line = lines[at];
-		if (line.includes('{') || line.includes('}')) {
-			braces.push(`${label} ${at + 1}: ${line}`);
-		}
-	}
-	return braces;
-}
-
-function missingSideScan(c: OneSidedContext): { blank: boolean; braces: string[] } {
-	const right = scanMissingSide(c.right, c.removedAt, c.removedEnd, 'right');
-	const left = scanMissingSide(c.left, c.addedAt, c.addedEnd, 'left');
-	return {
-		blank: right.present && left.present && right.blank && left.blank,
-		braces: [...right.braces, ...left.braces]
-	};
-}
-
-function placeholderOf(model: PreviewDiffModel): number[] {
-	return model
-		.getAllDecorations()
-		.filter((decoration) => decorationHasClass(decoration.options, 'arxml-diff-placeholder'))
-		.map((decoration) => decoration.range.startLineNumber);
-}
-
-function classNameOf(value: string | null | undefined): string {
-	return typeof value === 'string' ? value : '';
-}
-
-interface PlaceholderPaint {
-	sign: boolean;
-	fill: boolean;
-}
-
-/** Semantic signs/fills that leaked onto a missing-side placeholder line. */
-function placeholderPaints(models: readonly PreviewDiffModel[]): { signs: number; fills: number } {
-	const paints = models.flatMap(placeholderModelPaints);
-	return {
-		signs: paints.filter((paint) => paint.sign).length,
-		fills: paints.filter((paint) => paint.fill).length
-	};
-}
-
-function placeholderModelPaints(model: PreviewDiffModel): PlaceholderPaint[] {
-	const placeholderLines = new Set(placeholderOf(model));
-	return model
-		.getAllDecorations()
-		.filter((decoration) => placeholderLines.has(decoration.range.startLineNumber))
-		.map(placeholderDecorationPaint);
-}
-
-function placeholderDecorationPaint(decoration: PreviewModelDecoration): PlaceholderPaint {
-	return {
-		sign: classNameOf(decoration.options.linesDecorationsClassName).includes('arxml-diff-sign'),
-		fill: isSemanticFill(decoration.options)
-	};
-}
-
-function isSemanticFill(options: PreviewModelDecoration['options']): boolean {
-	return (
-		classNameOf(options.className).includes('arxml-diff-line-') ||
-		classNameOf(options.inlineClassName).includes('arxml-diff-word-')
-	);
-}
-
-function realSidePlaceholder(c: OneSidedContext, left: number[], right: number[]): boolean {
-	const onRight = right.some((line) => c.addedAt >= 0 && line > c.addedAt && line <= c.addedEnd);
-	const onLeft = left.some((line) => c.removedAt >= 0 && line > c.removedAt && line <= c.removedEnd);
-	return onRight || onLeft;
-}
-
-function diffRoots(c: OneSidedContext): HTMLElement[] {
-	return [c.originalEditor.getDomNode(), c.modifiedEditor.getDomNode()].filter(
-		(root): root is HTMLElement => root !== null
-	);
-}
-
-function placeholderFill(c: OneSidedContext): string {
-	const sample =
-		c.originalEditor.getDomNode()?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
-		c.modifiedEditor.getDomNode()?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
-		null;
-	return sample === null ? '' : getComputedStyle(sample).backgroundColor;
-}
-
-function countGapLines(left: readonly string[], right: readonly string[]): number {
-	let gaps = 0;
-	const lineCount = Math.min(left.length, right.length);
-	for (let at = 0; at < lineCount; at += 1) {
-		if (left[at] === '' && right[at] === '') {
-			gaps += 1;
-		}
-	}
-	return gaps;
-}
-
-function hasVisibleFill(element: Element): boolean {
-	const alpha = colorAlpha(getComputedStyle(element).backgroundColor);
-	return alpha !== undefined && alpha > 0;
-}
-
-function placeholderPaintScan(
-	roots: HTMLElement[],
-	neutralFill: string
-): { elements: number; neutral: boolean } {
-	const elements = roots.flatMap((root) => Array.from(root.querySelectorAll('.cdr.arxml-diff-placeholder')));
-	const neutral = elements.every((element) => getComputedStyle(element).backgroundColor === neutralFill);
-	return { elements: elements.length, neutral };
-}
-
-const PLACEHOLDER_DIFF_FILL_SELECTOR =
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-insert, ' +
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-delete, ' +
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-insert, ' +
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-delete';
-const PLACEHOLDER_GUTTER_SELECTOR = '.margin-view-overlays > div:has(> .arxml-diff-placeholder-margin)';
-
-function diffFillNeutral(roots: HTMLElement[]): boolean {
-	return roots.every((root) =>
-		Array.from(root.querySelectorAll(PLACEHOLDER_DIFF_FILL_SELECTOR)).every((fill) => !hasVisibleFill(fill))
-	);
-}
-
-function gutterScan(roots: HTMLElement[]): GutterScan {
-	const scans = roots.flatMap((root) =>
-		Array.from(root.querySelectorAll(PLACEHOLDER_GUTTER_SELECTOR)).map(gutterWrapperScan)
-	);
-	return {
-		wrappers: scans.reduce((total, scan) => total + scan.wrappers, 0),
-		neutral: scans.every((scan) => scan.neutral),
-		signsHidden: scans.every((scan) => scan.signsHidden)
-	};
-}
-
-function gutterWrapperScan(wrapper: Element): GutterScan {
-	const fill = wrapper.querySelector('.gutter-insert, .gutter-delete');
-	const neutral = fill === null || !hasVisibleFill(fill);
-	const signs = Array.from(wrapper.querySelectorAll('.insert-sign, .delete-sign'));
-	return {
-		wrappers: 1,
-		neutral,
-		signsHidden: signs.every((sign) => getComputedStyle(sign).display === 'none')
-	};
-}
-
-/** The owning side must keep its semantic fill; only placeholders go neutral. */
-function owningFillVisible(
-	root: HTMLElement | null,
-	className: 'arxml-diff-line-removed' | 'arxml-diff-line-added'
-): boolean {
-	if (root === null) {
-		return false;
-	}
-	return Array.from(root.querySelectorAll(`.view-overlays > div > .${className}`)).some(isOwningFill);
-}
-
-function isOwningFill(fill: Element): boolean {
-	const wrapper = fill.parentElement;
-	if (wrapper === null || hasPlaceholderChild(wrapper)) {
-		return false;
-	}
-	return hasVisibleFill(fill);
-}
-
-function hasPlaceholderChild(wrapper: Element): boolean {
-	return Array.from(wrapper.children).some((child) => child.classList.contains('arxml-diff-placeholder'));
-}
-
-function owningFills(c: OneSidedContext): boolean {
-	return (
-		owningFillVisible(c.originalEditor.getDomNode(), 'arxml-diff-line-removed') &&
-		owningFillVisible(c.modifiedEditor.getDomNode(), 'arxml-diff-line-added')
-	);
-}
-
 function lineChangesOf(editor: PreviewDiffEditor): PreviewLineChange[] {
 	return editor.getLineChanges() ?? [];
 }
 
 function covers(start: number, end: number, line: number): boolean {
 	return start > 0 && line >= start && line <= Math.max(start, end);
-}
-
-function isGlyphArrow(decoration: PreviewModelDecoration, line: number): boolean {
-	const glyph = decoration.options.glyphMarginClassName;
-	return (
-		decoration.range.startLineNumber === line &&
-		typeof glyph === 'string' &&
-		glyph.includes('arxml-merge-arrow')
-	);
-}
-
-function glyphArrowOn(model: PreviewDiffModel, line: number): boolean {
-	return model.getAllDecorations().some((decoration) => isGlyphArrow(decoration, line));
-}
-
-function arrowAt(at: number, model: PreviewDiffModel): number {
-	return at >= 0 && glyphArrowOn(model, at + 1) ? 1 : 0;
-}
-
-function owningArrowCount(c: OneSidedContext): number {
-	return arrowAt(c.removedAt, c.originalModel) + arrowAt(c.addedAt, c.modifiedModel);
 }
 
 function removedNavigable(c: OneSidedContext, changes: PreviewLineChange[]): boolean {
@@ -1807,75 +1639,249 @@ function addedNavigable(c: OneSidedContext, changes: PreviewLineChange[]): boole
 	return changes.some((change) => covers(change.modifiedStartLineNumber, change.modifiedEndLineNumber, line));
 }
 
-function placeholderExpected(c: OneSidedContext, gapLines: number): number {
+function emptyLinesInBlock(lines: readonly string[], start: number, end: number): number {
+	let count = 0;
+	for (let at = Math.max(0, start); at < end; at += 1) {
+		if (lines[at] === '') {
+			count += 1;
+		}
+	}
+	return count;
+}
+
+function countMatches(root: HTMLElement | null, selector: string): number {
+	return root === null ? 0 : root.querySelectorAll(selector).length;
+}
+
+function nativePaintFromNodes(original: HTMLElement | null, modified: HTMLElement | null): NativeDiffPaint {
+	return {
+		lineInsert: countMatches(modified, '.line-insert'),
+		lineDelete: countMatches(original, '.line-delete'),
+		charInsert: countMatches(modified, '.char-insert'),
+		charDelete: countMatches(original, '.char-delete'),
+		insertSigns: countMatches(modified, '.insert-sign'),
+		deleteSigns: countMatches(original, '.delete-sign'),
+		diagonalFills: countMatches(original, '.diagonal-fill') + countMatches(modified, '.diagonal-fill')
+	};
+}
+
+const CUSTOM_BODY_TOKENS = ['arxml-diff-line', 'arxml-diff-word', 'arxml-diff-sign', 'arxml-diff-placeholder'];
+
+function isCustomPaintClass(value: string | null | undefined): boolean {
+	const className = typeof value === 'string' ? value : '';
+	return CUSTOM_BODY_TOKENS.some((token) => className.includes(token));
+}
+
+function isCustomPaintDecoration(options: PreviewModelDecoration['options']): boolean {
 	return (
-		c.removedEnd - Math.max(0, c.removedAt) + (c.addedEnd - Math.max(0, c.addedAt)) + 2 * gapLines
+		isCustomPaintClass(options.className) ||
+		isCustomPaintClass(options.inlineClassName) ||
+		isCustomPaintClass(options.linesDecorationsClassName) ||
+		isCustomPaintClass(options.marginClassName)
 	);
 }
 
-function fillsNeutralScan(scan: { elements: number; neutral: boolean }, expected: number): boolean {
-	return scan.elements > 0 && scan.neutral && scan.elements === expected;
+function customPaintCount(roots: readonly HTMLElement[], models: readonly PreviewDiffModel[]): number {
+	const dom = roots.reduce(
+		(total, root) =>
+			total +
+			Array.from(
+				root.querySelectorAll(
+					'[class*="arxml-diff-line"], [class*="arxml-diff-word"], [class*="arxml-diff-sign"], [class*="arxml-diff-placeholder"]'
+				)
+			).length,
+		0
+	);
+	const decorations = models.reduce(
+		(total, model) =>
+			total + model.getAllDecorations().filter((decoration) => isCustomPaintDecoration(decoration.options)).length,
+		0
+	);
+	return dom + decorations;
 }
 
-function countedAnd(count: number, value: boolean): boolean {
-	return count > 0 && value;
+function diffRoots(c: OneSidedContext): HTMLElement[] {
+	return [c.originalEditor.getDomNode(), c.modifiedEditor.getDomNode()].filter(
+		(root): root is HTMLElement => root !== null
+	);
 }
 
-/**
- * Reads the actual aligned models and the rendered placeholder layers. The fake
- * brace regression lived in the model text, so this audit cannot pass on geometry
- * alone: it walks the exact lines of both one-sided blocks.
- */
+function copyArrowNodes(): HTMLElement[] {
+	const modified = document.querySelector<HTMLElement>(
+		'.monaco-editor.modified-in-monaco-diff-editor'
+	);
+	if (modified === null) {
+		return [];
+	}
+	return Array.from(
+		modified.querySelectorAll<HTMLElement>('.margin-view-zones .arrow-revert-change')
+	).filter((arrow) => getComputedStyle(arrow).display !== 'none');
+}
+
+function arrowBoxVisible(arrow: HTMLElement): boolean {
+	const rect = rectOf(arrow);
+	return rect.width > 0 && rect.height > 0 && isArrowVisible(arrow);
+}
+
+function arrowAtGutter(arrow: HTMLElement, modified: HTMLElement | null): boolean {
+	if (modified === null) {
+		return false;
+	}
+	const rect = rectOf(arrow);
+	const gutter = modified.getBoundingClientRect();
+	return rect.x >= gutter.x - 1 && rect.x <= gutter.x + 48;
+}
+
+
+interface MergeProbe {
+	side: string;
+	key: string;
+	direction: string;
+	swapped: boolean;
+}
+
+function mergeProbe(): CopyArrowAudit['copy'] {
+	const probe = (window as unknown as { __ARXML_DIFF_MERGE_PROBE__?: MergeProbe | null })
+		.__ARXML_DIFF_MERGE_PROBE__;
+	return probe === undefined || probe === null
+		? null
+		: { side: probe.side, key: probe.key, direction: probe.direction, swapped: probe.swapped };
+}
+
+const ARROW_SIDES = new Map<string, readonly ['left' | 'right', 'left' | 'right']>([
+	['left', ['right', 'left']],
+	['right', ['left', 'right']]
+]);
+
+function arrowSourceSide(direction: string, swapped: boolean): 'left' | 'right' | undefined {
+	const sides = ARROW_SIDES.get(direction);
+	if (sides === undefined) {
+		return undefined;
+	}
+	return swapped ? sides[1] : sides[0];
+}
+
+function previewRowOwnsSide(row: PreviewBodyRow, side: 'left' | 'right'): boolean {
+	const lines = side === 'left' ? row.leftLines : row.rightLines;
+	return (lines?.length ?? 0) > 0;
+}
+
+function rowIsCopySource(row: PreviewBodyRow | undefined, side: 'left' | 'right'): boolean {
+	return row !== undefined && row.status !== 'unchanged' && previewRowOwnsSide(row, side);
+}
+
+function copyTargetValid(probe: MergeProbe): boolean {
+	const side = arrowSourceSide(probe.direction, probe.swapped);
+	if (side === undefined) {
+		return false;
+	}
+	const row = previewRows().find((candidate) => candidate.key === probe.key);
+	return probe.side === side && rowIsCopySource(row, side);
+}
+
+function copyArrowAudit(modified: HTMLElement | null): CopyArrowAudit {
+	const arrows = copyArrowNodes();
+	const visibleArrows = arrows.filter(arrowBoxVisible);
+	const copy = mergeProbe();
+	return {
+		count: arrows.length,
+		builtIn: arrows.filter((arrow) => arrow.classList.contains('codicon-arrow-right')).length,
+		copyLeft: arrows.filter((arrow) => arrow.classList.contains('codicon-arrow-left')).length,
+		visible: visibleArrows.length > 0,
+		atGutter: visibleArrows.every((arrow) => arrowAtGutter(arrow, modified)),
+		copy,
+		copyValid: copy === null || copyTargetValid(copy)
+	};
+}
+
 function oneSidedAudit(): OneSidedAudit | undefined {
 	const context = oneSidedContext();
 	return context === undefined ? undefined : oneSidedValues(context);
 }
 
+function oneSidedValues(c: OneSidedContext): OneSidedAudit {
+	const roots = diffRoots(c);
+	const changes = lineChangesOf(c.editor);
+	return {
+		originalLines: c.originalModel.getLineCount(),
+		modifiedLines: c.modifiedModel.getLineCount(),
+		missingSideHasRemoved: c.right.some(
+			(line) => line.includes('RemovedMod') || line.includes('RemovedItems') || line.includes('RemovedExtra')
+		),
+		missingSideHasAdded: c.left.some(
+			(line) => line.includes('AddedMod') || line.includes('AddedItems') || line.includes('AddedValue')
+		),
+		owningSideBraces:
+			braceCount(c.left, c.removedAt, c.removedEnd) + braceCount(c.right, c.addedAt, c.addedEnd),
+		emptyOwningLines:
+			emptyLinesInBlock(c.left, c.removedAt, c.removedEnd) +
+			emptyLinesInBlock(c.right, c.addedAt, c.addedEnd),
+		native: nativePaintFromNodes(c.originalEditor.getDomNode(), c.modifiedEditor.getDomNode()),
+		margin: copyArrowAudit(c.modifiedEditor.getDomNode()),
+		customPaint: customPaintCount(roots, [c.originalModel, c.modifiedModel]),
+		lineChanges: changes.length,
+		removedNavigable: removedNavigable(c, changes),
+		addedNavigable: addedNavigable(c, changes)
+	};
+}
+
+interface PreviewBodyRow {
+	key: string;
+	status: string;
+	renamed?: boolean;
+	leftLine?: number;
+	rightLine?: number;
+	leftLines?: number[];
+	rightLines?: number[];
+}
+
 interface PreviewBodyData {
-	rows: Array<{ key: string; status: string; renamed?: boolean }>;
+	rows: Array<PreviewBodyRow & { status: string; renamed?: boolean }>;
+	mode?: { changesOnly: boolean; contextActive: boolean; swapped: boolean; merge: boolean };
+}
+
+interface PreviewNavTarget {
+	key: string;
+	status: string;
+	order: number;
+	renamed: boolean;
+	side: string;
+	line: number;
+}
+
+interface PreviewUnchangedCounts {
+	centers: number;
+	labels: string[];
+}
+
+interface PreviewUnchangedProbe {
+	withContext: PreviewUnchangedCounts;
+	afterShowAll: PreviewUnchangedCounts;
+	restored: PreviewUnchangedCounts;
+	withoutContext: PreviewUnchangedCounts;
+	contextRestored: PreviewUnchangedCounts;
 }
 
 function previewBodyData(): PreviewBodyData | undefined {
 	return (window as unknown as { __ARXML_DIFF_BODY__?: PreviewBodyData }).__ARXML_DIFF_BODY__;
 }
 
+function previewNavHistory(): PreviewNavTarget[] {
+	const history = (window as unknown as { __ARXML_DIFF_NAV_HISTORY__?: PreviewNavTarget[] })
+		.__ARXML_DIFF_NAV_HISTORY__;
+	return history ?? [];
+}
+
+function previewUnchangedProbe(): PreviewUnchangedProbe | undefined {
+	return (window as unknown as { __ARXML_DIFF_UNCHANGED__?: PreviewUnchangedProbe })
+		.__ARXML_DIFF_UNCHANGED__;
+}
+
 function hasClass(element: Element | null | undefined, name: string): boolean {
 	return element !== null && element !== undefined && element.classList.contains(name);
 }
 
-function countDecorations(
-	model: PreviewDiffModel,
-	select: (options: PreviewModelDecoration['options']) => string | null | undefined,
-	needle: string
-): number {
-	return model
-		.getAllDecorations()
-		.filter((decoration) => classNameOf(select(decoration.options)).includes(needle)).length;
-}
-
-function glyphArrows(model: PreviewDiffModel): PreviewModelDecoration[] {
-	return model
-		.getAllDecorations()
-		.filter((decoration) => classNameOf(decoration.options.glyphMarginClassName).includes('arxml-merge-arrow'));
-}
-
-function placeholderGlyphArrows(model: PreviewDiffModel): number {
-	const placeholderLines = new Set(placeholderOf(model));
-	return glyphArrows(model).filter((decoration) => placeholderLines.has(decoration.range.startLineNumber)).length;
-}
-
-function placeholderSignDecorations(model: PreviewDiffModel): number {
-	const placeholderLines = new Set(placeholderOf(model));
-	return model
-		.getAllDecorations()
-		.filter(
-			(decoration) =>
-				placeholderLines.has(decoration.range.startLineNumber) &&
-				classNameOf(decoration.options.linesDecorationsClassName).includes('arxml-diff-sign')
-		).length;
-}
-
-function bodyStatuses(rows: PreviewBodyData['rows']): DiffBodyAudit['statuses'] {
+function bodyStatuses(rows: readonly PreviewBodyRow[]): DiffBodyAudit['statuses'] {
 	return {
 		changed: rows.filter((row) => row.status === 'changed').length,
 		added: rows.filter((row) => row.status === 'added').length,
@@ -1921,7 +1927,171 @@ function elementWidth(element: HTMLElement | null): number {
 	return element === null ? 0 : Math.round(element.getBoundingClientRect().width);
 }
 
+function uniqueStrings(values: readonly string[]): string[] {
+	return Array.from(new Set(values));
+}
+
+function nativeOverviewAudit(): NativeOverviewAudit {
+	return {
+		present: document.querySelector('.monaco-diff-editor .diffOverview') !== null
+	};
+}
+
+function hiddenLineTotal(labels: readonly string[]): number {
+	return labels.reduce((total, label) => {
+		const count = /^(\d+)/.exec(label);
+		return total + (count === null ? 0 : Number(count[1]));
+	}, 0);
+}
+
+interface UnchangedToggles {
+	showDiff: number;
+	showAll: number;
+	restored: number;
+	contextOnLines: number;
+	contextOffLines: number;
+	withoutContext: number;
+	contextRestored: number;
+}
+
+const NO_UNCHANGED_TOGGLES: UnchangedToggles = {
+	showDiff: -1,
+	showAll: -1,
+	restored: -1,
+	contextOnLines: -1,
+	contextOffLines: -1,
+	withoutContext: -1,
+	contextRestored: -1
+};
+
+function unchangedToggles(): UnchangedToggles {
+	const probe = previewUnchangedProbe();
+	if (probe === undefined) {
+		return NO_UNCHANGED_TOGGLES;
+	}
+	return {
+		showDiff: probe.withContext.centers,
+		showAll: probe.afterShowAll.centers,
+		restored: probe.restored.centers,
+		contextOnLines: hiddenLineTotal(probe.withContext.labels),
+		contextOffLines: hiddenLineTotal(probe.withoutContext.labels),
+		withoutContext: probe.withoutContext.centers,
+		contextRestored: probe.contextRestored.centers
+	};
+}
+
+/** The centered native unchanged widget, its labels and control counts. */
+function unchangedAudit(): DiffBodyAudit['unchanged'] {
+	const root: ParentNode = document.querySelector('.monaco-diff-editor') ?? document;
+	const centers = Array.from(root.querySelectorAll<HTMLElement>('.diff-hidden-lines .center'));
+	return {
+		centers: centers.length,
+		height: centers.length === 0 ? 0 : Math.round(centers[0].getBoundingClientRect().height),
+		labels: uniqueStrings(
+			centers.map((center) => (center.textContent ?? '').trim()).filter((label) => label !== '')
+		),
+		unfold: root.querySelectorAll('.diff-hidden-lines .default-control .codicon-unfold').length,
+		handles: root.querySelectorAll('.diff-hidden-lines .top, .diff-hidden-lines .bottom').length,
+		...unchangedToggles()
+	};
+}
+
+function keyAtLine(
+	rows: readonly PreviewBodyRow[],
+	side: 'left' | 'right',
+	line: number
+): string | undefined {
+	for (const row of rows) {
+		const lines = side === 'left' ? row.leftLines : row.rightLines;
+		if (lines?.includes(line) === true) {
+			return row.key;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * The navigation the page performed plus the row a line-change step would
+ * have chosen. The display mapping turns the stored side back into the pane
+ * the user sees, so a swapped capture is compared against its own panes.
+ */
+interface NavPosition {
+	positionSide: string;
+	positionLine: number | undefined;
+}
+
+function navPosition(
+	history: readonly PreviewNavTarget[],
+	models: NonNullable<ReturnType<typeof diffModels>>,
+	swapped: boolean
+): NavPosition {
+	const last = history[history.length - 1];
+	const onOriginal = last.side === (swapped ? 'right' : 'left');
+	const position = onOriginal
+		? models.originalEditor.getPosition()
+		: models.modifiedEditor.getPosition();
+	return { positionSide: last.side, positionLine: position?.lineNumber };
+}
+
+interface NavSources {
+	editor: PreviewDiffEditor;
+	models: NonNullable<ReturnType<typeof diffModels>>;
+}
+
+function navSources(): NavSources | undefined {
+	const editor = previewDiffEditor();
+	if (editor === undefined) {
+		return undefined;
+	}
+	const models = diffPreviewModels();
+	return models === undefined ? undefined : { editor, models };
+}
+
+/**
+ * The navigation the page performed plus the row a line-change step would
+ * have chosen. The old step always revealed the modified pane, including a
+ * missing-side placeholder, so that line is what the keys map.
+ */
+function navAudit(
+	rows: readonly PreviewBodyRow[],
+	swapped: boolean
+): DiffBodyAudit['nav'] | undefined {
+	const history = previewNavHistory();
+	if (history.length === 0) {
+		return undefined;
+	}
+	const sources = navSources();
+	if (sources === undefined) {
+		return undefined;
+	}
+	const modifiedSide = swapped ? 'left' : 'right';
+	const changes = lineChangesOf(sources.editor);
+	return {
+		history,
+		...navPosition(history, sources.models, swapped),
+		lineChangeLines: changes.map(
+			(change) => change.modifiedStartLineNumber || change.originalStartLineNumber
+		),
+		lineChangeKeys: changes.map(
+			(change) =>
+				keyAtLine(
+					rows,
+					modifiedSide,
+					change.modifiedStartLineNumber || change.originalStartLineNumber
+				) ?? ''
+		)
+	};
+}
+
 /** Reads the stable body contract and the semantic paint on the real Monaco page. */
+function previewRows(): readonly PreviewBodyRow[] {
+	return previewBodyData()?.rows ?? [];
+}
+
+function previewSwapped(): boolean {
+	return previewBodyData()?.mode?.swapped === true;
+}
+
 function diffBodyAudit(): DiffBodyAudit | undefined {
 	const models = diffPreviewModels();
 	if (models === undefined) {
@@ -1930,30 +2100,26 @@ function diffBodyAudit(): DiffBodyAudit | undefined {
 	const host = document.getElementById('diff-monaco');
 	const originalNode = models.originalEditor.getDomNode();
 	const modifiedNode = models.modifiedEditor.getDomNode();
-	const body = previewBodyData();
-	const rows = body === undefined ? [] : body.rows;
+	const rows = previewRows();
 	return {
 		host: hasClass(host, 'arxml-diff-body'),
 		gutter: bodyClassOn('arxml-diff-gutter', host, originalNode, modifiedNode),
 		status: bodyClassOn('arxml-diff-status', host, originalNode, modifiedNode),
-		mergeMargin: bodyClassOn('arxml-diff-merge-margin', host, originalNode, modifiedNode),
 		rows: rows.length,
 		statuses: bodyStatuses(rows),
-		signs: {
-			removed: countDecorations(models.originalModel, (options) => options.linesDecorationsClassName, 'arxml-diff-sign-removed'),
-			added: countDecorations(models.modifiedModel, (options) => options.linesDecorationsClassName, 'arxml-diff-sign-added')
+		lineCounts: {
+			original: models.originalModel.getLineCount(),
+			modified: models.modifiedModel.getLineCount()
 		},
-		lineFills: {
-			removed: countDecorations(models.originalModel, (options) => options.className, 'arxml-diff-line-removed'),
-			added: countDecorations(models.modifiedModel, (options) => options.className, 'arxml-diff-line-added')
-		},
-		wordSpans: {
-			removed: countDecorations(models.originalModel, (options) => options.inlineClassName, 'arxml-diff-word-removed'),
-			added: countDecorations(models.modifiedModel, (options) => options.inlineClassName, 'arxml-diff-word-added')
-		},
-		arrows: glyphArrows(models.originalModel).length + glyphArrows(models.modifiedModel).length,
-		placeholderSigns: placeholderSignDecorations(models.originalModel) + placeholderSignDecorations(models.modifiedModel),
-		placeholderArrows: placeholderGlyphArrows(models.originalModel) + placeholderGlyphArrows(models.modifiedModel),
+		native: nativePaintFromNodes(originalNode, modifiedNode),
+		margin: copyArrowAudit(modifiedNode),
+		customPaint: customPaintCount(
+			[originalNode, modifiedNode].filter((node): node is HTMLElement => node !== null),
+			[models.originalModel, models.modifiedModel]
+		),
+		overview: nativeOverviewAudit(),
+		unchanged: unchangedAudit(),
+		nav: navAudit(rows, previewSwapped()),
 		density: densityAudit(originalNode)
 	};
 }
@@ -1981,7 +2147,10 @@ function bodyViolations(state: AuditState, audit: DiffBodyAudit | undefined): st
 	}
 	return [
 		...bodySurfaceIssues(audit),
-		...bodyPlaceholderIssues(audit),
+		...bodyCustomPaintIssues(audit),
+		...bodyOverviewIssues(audit),
+		...bodyUnchangedIssues(state, audit),
+		...bodyNavIssues(state, audit),
 		...bodyMergeStateIssues(state, audit),
 		...bodyStateIssues(state, audit)
 	];
@@ -1991,38 +2160,196 @@ function bodySurfaceIssues(audit: DiffBodyAudit): string[] {
 	return [
 		...issueWhen(!audit.host, 'the diff host is missing the arxml-diff-body class'),
 		...issueWhen(!audit.gutter, 'a diff editor root is missing the arxml-diff-gutter class'),
-		...issueWhen(!audit.status, 'a diff editor root is missing the arxml-diff-status class'),
-		...issueWhen(!audit.mergeMargin, 'a diff editor root is missing the arxml-diff-merge-margin class')
+		...issueWhen(!audit.status, 'a diff editor root is missing the arxml-diff-status class')
 	];
 }
 
-function bodyPlaceholderIssues(audit: DiffBodyAudit): string[] {
+function bodyCustomPaintIssues(audit: DiffBodyAudit): string[] {
+	return issueWhen(
+		audit.customPaint > 0,
+		`${audit.customPaint} old custom body fill/sign/word/placeholder element(s)/decoration(s) remain`
+	);
+}
+
+function bodyOverviewIssues(audit: DiffBodyAudit): string[] {
+	return issueWhen(!audit.overview.present, 'the built-in diff overview is missing');
+}
+
+function unchangedWidgetIssues(unchanged: DiffBodyAudit['unchanged']): string[] {
+	const labelsUseReference =
+		unchanged.labels.length > 0 && unchanged.labels.every((label) => /^\d+ hidden lines$/.test(label));
 	return [
+		...issueWhen(unchanged.centers === 0, 'Show diff rendered no native unchanged widget'),
 		...issueWhen(
-			audit.placeholderSigns > 0,
-			`${audit.placeholderSigns} semantic gutter sign(s) landed on a missing-side placeholder`
+			unchanged.height !== 24,
+			`the unchanged widget center is ${unchanged.height}px high, not the 24px reference`
 		),
 		...issueWhen(
-			audit.placeholderArrows > 0,
-			`${audit.placeholderArrows} copy arrow(s) landed on a missing-side placeholder`
+			!labelsUseReference,
+			`the unchanged widgets do not use the "{n} hidden lines" label (${unchanged.labels.join(' | ')})`
+		),
+		...issueWhen(unchanged.unfold === 0, 'no native unchanged widget offers the unfold control'),
+		...issueWhen(
+			unchanged.handles !== unchanged.centers * 2,
+			'the native unchanged widgets lost their top/bottom drag handles'
 		)
 	];
 }
 
+function unchangedToggleIssues(unchanged: DiffBodyAudit['unchanged']): string[] {
+	const contextShrank =
+		unchanged.contextOnLines >= 0 &&
+		unchanged.contextOffLines >= 0 &&
+		unchanged.contextOffLines < unchanged.contextOnLines;
+	return [
+		...issueWhen(
+			unchanged.showAll !== 0,
+			`Show all left ${unchanged.showAll} unchanged widget(s) visible`
+		),
+		...issueWhen(
+			unchanged.restored <= 0,
+			'Show diff did not restore the native unchanged widgets after Show all'
+		),
+		...issueWhen(contextShrank, 'Context off hid fewer unchanged rows than Context on'),
+		...issueWhen(
+			unchanged.contextRestored <= 0,
+			'turning Context back on did not restore the unchanged widgets'
+		)
+	];
+}
+
+function bodyUnchangedIssues(state: AuditState, audit: DiffBodyAudit): string[] {
+	if (state.view !== 'diff') {
+		return issueWhen(
+			audit.unchanged.centers > 0,
+			"native unchanged widgets are visible while Show all is selected"
+		);
+	}
+	return [
+		...unchangedWidgetIssues(audit.unchanged),
+		...unchangedToggleIssues(audit.unchanged)
+	];
+}
+
+function navStepIssues(clicks: number, nav: NonNullable<DiffBodyAudit['nav']>): string[] {
+	const issues = [
+		...issueWhen(
+			nav.history.length !== clicks,
+			`${nav.history.length} semantic navigation step(s) ran for ${clicks} toolbar press(es)`
+		)
+	];
+	const last = nav.history[nav.history.length - 1];
+	if (last === undefined) {
+		issues.push('semantic navigation recorded no target row');
+		return issues;
+	}
+	issues.push(
+		...issueWhen(
+			nav.positionLine !== last.line,
+			`the cursor is on line ${nav.positionLine ?? '?'}, not the semantic target line ${last.line}`
+		)
+	);
+	return issues;
+}
+
+function navFixtureIssues(state: AuditState, nav: NonNullable<DiffBodyAudit['nav']>): string[] {
+	if (state.name !== 'diff-nav') {
+		return [];
+	}
+	const last = nav.history[nav.history.length - 1];
+	const first = nav.history[0];
+	return [
+		...issueWhen(last !== undefined && !last.renamed, 'the semantic navigation did not reach the renamed row'),
+		...issueWhen(
+			first !== undefined && nav.lineChangeKeys[0] === first.key,
+			'the first line change picks the same semantic row; the fixture does not prove the semantic source'
+		)
+	];
+}
+
+function countOrZero(value: number | undefined): number {
+	return value ?? 0;
+}
+
+function pressCount(state: AuditState): number {
+	return countOrZero(state.jump) + countOrZero(state.jumpBack);
+}
+
+function bodyNavIssues(state: AuditState, audit: DiffBodyAudit): string[] {
+	const clicks = pressCount(state);
+	if (clicks === 0) {
+		return [];
+	}
+	const nav = audit.nav;
+	if (nav === undefined) {
+		return ['the semantic navigation audit recorded no target'];
+	}
+	return [...navStepIssues(clicks, nav), ...navFixtureIssues(state, nav)];
+}
+
 function bodyMergeStateIssues(state: AuditState, audit: DiffBodyAudit): string[] {
-	return issueWhen(audit.arrows > 0 && state.merge !== true, 'copy arrows are visible while Merge is off');
+	return issueWhen(audit.margin.count > 0 && state.merge !== true, 'center copy arrows are visible while Merge is off');
 }
 
 function bodyStateIssues(state: AuditState, audit: DiffBodyAudit): string[] {
-	return state.name === 'diff-body' ? diffBodyStateIssues(audit) : [];
+	if (state.name === 'diff-body') {
+		return diffBodyStateIssues(audit);
+	}
+	if (state.name === 'diff-removed') {
+		return diffRemovedIssues(audit);
+	}
+	if (state.name === 'diff-swap') {
+		return marginIssues(audit.margin);
+	}
+	return [];
+}
+
+function diffRemovedIssues(audit: DiffBodyAudit): string[] {
+	return [
+		...marginIssues(audit.margin),
+		...issueWhen(audit.margin.builtIn === 0, 'the removed block has no built-in right arrow'),
+		...issueWhen(audit.margin.copyLeft === 0, 'the changed row has no copy-left arrow'),
+		...issueWhen(
+			audit.margin.copy?.direction !== 'right',
+			'the built-in right arrow was not the probed arrow'
+		)
+	];
 }
 
 function diffBodyStateIssues(audit: DiffBodyAudit): string[] {
 	return [
 		...bodyRowIssues(audit),
-		...bodySemanticIssues(audit),
-		...bodyArrowIssues(audit),
+		...bodyLineCountIssues(audit.lineCounts),
+		...bodyNativeIssues(audit.native),
+		...marginIssues(audit.margin),
+		...diffBodyMarginIssues(audit.margin),
 		...diffBodyDensityIssues(audit.density)
+	];
+}
+
+function bodyLineCountIssues(counts: DiffBodyAudit['lineCounts']): string[] {
+	return issueWhen(
+		counts.original === 0 || counts.modified === 0,
+		`a diff model has no lines (original ${counts.original}, modified ${counts.modified})`
+	);
+}
+
+function bodyNativeIssues(native: NativeDiffPaint): string[] {
+	return [
+		...issueWhen(native.lineDelete === 0, 'the body is missing a built-in deleted line fill'),
+		...issueWhen(native.lineInsert === 0, 'the body is missing a built-in inserted line fill'),
+		...issueWhen(native.deleteSigns === 0, 'the body is missing a built-in delete indicator'),
+		...issueWhen(native.insertSigns === 0, 'the body is missing a built-in insert indicator'),
+		...issueWhen(native.diagonalFills === 0, 'the body is missing a built-in diagonal gap fill'),
+		...issueWhen(native.charDelete === 0, 'the body is missing a built-in removed word span'),
+		...issueWhen(native.charInsert === 0, 'the body is missing a built-in inserted word span')
+	];
+}
+
+function diffBodyMarginIssues(margin: CopyArrowAudit): string[] {
+	return [
+		...issueWhen(margin.count === 0, 'the diff body state has no diff-margin arrow'),
+		...issueWhen(margin.copyLeft === 0, 'the diff body state has no copy-left arrow')
 	];
 }
 
@@ -2037,22 +2364,6 @@ function bodyRowIssues(audit: DiffBodyAudit): string[] {
 	];
 }
 
-function bodySemanticIssues(audit: DiffBodyAudit): string[] {
-	return [
-		...issueWhen(pairMissing(audit.signs), 'the diff body state is missing a semantic gutter sign'),
-		...issueWhen(pairMissing(audit.lineFills), 'the diff body state is missing a semantic line fill'),
-		...issueWhen(pairMissing(audit.wordSpans), 'the diff body state is missing a semantic word span')
-	];
-}
-
-function pairMissing(pair: { removed: number; added: number }): boolean {
-	return pair.removed === 0 || pair.added === 0;
-}
-
-function bodyArrowIssues(audit: DiffBodyAudit): string[] {
-	return issueWhen(audit.arrows === 0, 'the diff body state has no copy arrow in merge mode');
-}
-
 function diffBodyDensityIssues(density: DiffBodyAudit['density']): string[] {
 	return [
 		...issueWhen(density.fontSize !== 13, `the inherited editor font size is ${density.fontSize}px, not 13px`),
@@ -2063,100 +2374,48 @@ function diffBodyDensityIssues(density: DiffBodyAudit['density']): string[] {
 	];
 }
 
-function oneSidedValues(c: OneSidedContext): OneSidedAudit {
-	const missing = missingSideScan(c);
-	const leftPlaceholders = placeholderOf(c.originalModel);
-	const rightPlaceholders = placeholderOf(c.modifiedModel);
-	const roots = diffRoots(c);
-	const neutralFill = resolvedColor('var(--vscode-editor-background)');
-	const placeholderPaint = placeholderPaintScan(roots, neutralFill);
-	const gutter = gutterScan(roots);
-	const changes = lineChangesOf(c.editor);
-	const gapLines = countGapLines(c.left, c.right);
-	const paints = placeholderPaints([c.originalModel, c.modifiedModel]);
-	return {
-		originalLines: c.originalModel.getLineCount(),
-		modifiedLines: c.modifiedModel.getLineCount(),
-		missingSideBlank: missing.blank,
-		missingSideBraces: missing.braces,
-		owningSideBraces:
-			braceCount(c.left, c.removedAt, c.removedEnd) + braceCount(c.right, c.addedAt, c.addedEnd),
-		gapLines,
-		placeholderLines: leftPlaceholders.length + rightPlaceholders.length,
-		placeholderExpected: placeholderExpected(c, gapLines),
-		realSidePlaceholder: realSidePlaceholder(c, leftPlaceholders, rightPlaceholders),
-		placeholderFill: placeholderFill(c),
-		neutralFill,
-		fillsNeutral: fillsNeutralScan(
-			placeholderPaint,
-			leftPlaceholders.length + rightPlaceholders.length
-		),
-		diffFillNeutral: diffFillNeutral(roots),
-		owningFill: owningFills(c),
-		gutterNeutral: countedAnd(gutter.wrappers, gutter.neutral),
-		signHidden: countedAnd(gutter.wrappers, gutter.signsHidden),
-		lineChanges: changes.length,
-		owningArrows: owningArrowCount(c),
-		removedNavigable: removedNavigable(c, changes),
-		addedNavigable: addedNavigable(c, changes),
-		placeholderSigns: paints.signs,
-		placeholderBodyFills: paints.fills
-	};
-}
-
 function oneSidedViolations(audit: OneSidedAudit): string[] {
 	return [
-		...oneSidedModelIssues(audit),
-		...oneSidedPaintIssues(audit),
-		...oneSidedNavigationIssues(audit)
-	];
-}
-
-function oneSidedModelIssues(audit: OneSidedAudit): string[] {
-	return [
 		...issueWhen(
-			audit.originalLines !== audit.modifiedLines,
-			`the aligned models have ${audit.originalLines} and ${audit.modifiedLines} lines`
+			audit.originalLines === audit.modifiedLines,
+			`the per-side models both have ${audit.originalLines} lines; a one-sided fixture must prove different counts`
 		),
-		...issueWhen(!audit.missingSideBlank, 'a missing-side placeholder still has content'),
-		...issueWhen(
-			audit.missingSideBraces.length > 0,
-			`the missing side synthesized braces (${audit.missingSideBraces.join('; ')})`
-		),
+		...issueWhen(audit.missingSideHasRemoved, 'the missing side still renders the removed block'),
+		...issueWhen(audit.missingSideHasAdded, 'the missing side still renders the added block'),
 		...issueWhen(
 			audit.owningSideBraces !== ONE_SIDED_FIXTURE.owningBraces,
 			`the owning side has ${audit.owningSideBraces} brace lines, not the ${ONE_SIDED_FIXTURE.owningBraces} in the diff-one-sided fixture`
 		),
+		...issueWhen(audit.emptyOwningLines > 0, `${audit.emptyOwningLines} blank line(s) inside an owning block`),
 		...issueWhen(
-			audit.placeholderLines !== audit.placeholderExpected,
-			`expected ${audit.placeholderExpected} placeholder lines, found ${audit.placeholderLines}`
+			audit.customPaint > 0,
+			`${audit.customPaint} old custom body paint element(s)/decoration(s) remain`
 		),
-		...issueWhen(audit.realSidePlaceholder, 'a placeholder decoration covers a line that owns a cell'),
-		...issueWhen(
-			audit.placeholderSigns > 0,
-			`${audit.placeholderSigns} semantic gutter sign(s) landed on a missing-side placeholder`
-		),
-		...issueWhen(
-			audit.placeholderBodyFills > 0,
-			`${audit.placeholderBodyFills} semantic line/word fill(s) landed on a missing-side placeholder`
-		)
+		...nativePaintIssues(audit.native),
+		...marginIssues(audit.margin),
+		...oneSidedNavigationIssues(audit)
 	];
 }
 
-function oneSidedPaintIssues(audit: OneSidedAudit): string[] {
+function nativePaintIssues(native: NativeDiffPaint): string[] {
 	return [
-		...issueWhen(
-			audit.placeholderFill === '' || audit.placeholderFill !== audit.neutralFill,
-			`the placeholder fill is ${audit.placeholderFill || '<none>'}, not the editor background ${audit.neutralFill}`
-		),
-		...issueWhen(!audit.fillsNeutral, 'a placeholder layer is not painted with the editor background'),
-		...issueWhen(
-			!audit.diffFillNeutral,
-			'a placeholder wrapper keeps Monaco inserted/deleted line or char fill'
-		),
-		...issueWhen(!audit.owningFill, 'the owning side lost its inserted/deleted line fill'),
-		...issueWhen(!audit.gutterNeutral, 'the placeholder gutter keeps the inserted/deleted line fill'),
-		...issueWhen(!audit.signHidden, 'the placeholder gutter keeps the inserted/deleted sign')
+		...issueWhen(native.lineDelete === 0, 'the built-in diff rendered no deleted line fill'),
+		...issueWhen(native.lineInsert === 0, 'the built-in diff rendered no inserted line fill'),
+		...issueWhen(native.deleteSigns === 0, 'the built-in diff rendered no delete indicator'),
+		...issueWhen(native.insertSigns === 0, 'the built-in diff rendered no insert indicator'),
+		...issueWhen(native.diagonalFills === 0, 'the built-in diff rendered no diagonal gap fill'),
+		...issueWhen(native.charDelete === 0, 'the built-in diff rendered no removed word span'),
+		...issueWhen(native.charInsert === 0, 'the built-in diff rendered no inserted word span')
+	];
+}
+
+function marginIssues(margin: CopyArrowAudit): string[] {
+	return [
+		...issueWhen(margin.count === 0, 'the built-in diff margin rendered no copy arrow'),
+		...issueWhen(margin.count > 0 && !margin.visible, 'a diff-margin arrow is not visible while Merge is on'),
+		...issueWhen(margin.count > 0 && !margin.atGutter, 'a diff-margin arrow is outside the modified gutter'),
+		...issueWhen(margin.copy === null, 'clicking a diff-margin arrow did not post the host copy action'),
+		...issueWhen(margin.copy !== null && !margin.copyValid, 'the clicked arrow posted the wrong semantic side or key')
 	];
 }
 
@@ -2166,10 +2425,7 @@ function oneSidedNavigationIssues(audit: OneSidedAudit): string[] {
 			audit.lineChanges < ONE_SIDED_FIXTURE.minLineChanges,
 			`the diff has ${audit.lineChanges} line changes, fewer than the ${ONE_SIDED_FIXTURE.minLineChanges} in the diff-one-sided fixture`
 		),
-		...issueWhen(
-			audit.owningArrows !== ONE_SIDED_FIXTURE.owningArrows,
-			`the owning side has ${audit.owningArrows} merge arrows, not the ${ONE_SIDED_FIXTURE.owningArrows} in the diff-one-sided fixture`
-		),
+		...issueWhen(audit.margin.copyLeft === 0, 'the added/changed rows have no copy-left arrow'),
 		...issueWhen(!audit.removedNavigable, 'the removed block is missing from the navigation change list'),
 		...issueWhen(!audit.addedNavigable, 'the added block is missing from the navigation change list')
 	];

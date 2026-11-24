@@ -13,8 +13,15 @@ export interface PreviewStateFields {
 	wide?: boolean;
 	/** Horizontal scroll offset applied after the page renders. */
 	pan?: number;
-	/** F7 presses after mounting; the long document's first change is near line 1000. */
+	/**
+	 * The native view after mount: `diff` enables Monaco's unchanged-region
+	 * widgets, `all` keeps every row. The default is Show all.
+	 */
+	view?: 'all' | 'diff';
+	/** Next-diff presses after mounting; drives semantic navigation. */
 	jump?: number;
+	/** Prev-diff presses after the Next presses. */
+	jumpBack?: number;
 	select?: boolean;
 	/** Opens the native find widget and seeds this query, with Rust-shaped results. */
 	find?: string;

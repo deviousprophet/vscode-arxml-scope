@@ -353,20 +353,42 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
   horizontal padding; the pane layer is the clip boundary. Keep the fixed file-name strip and the diff
   status tints.
-- **Both panes are Monaco editors over pre-aligned synthetic documents.** `diffMonaco` mounts one
+- **Both panes are Monaco editors over per-side synthetic documents.** `diffMonaco` mounts one
   `IStandaloneDiffEditor`; header, comment and brace lines are model lines and the semantic `DiffRow`
-  key maps every one of them. Only the semantic status paint is diff-specific, and it never recolours
-  tokens. `11-23-ecuc-diff-body-surface` owns the `arxml-diff-body` / `arxml-diff-gutter` /
-  `arxml-diff-status` / `arxml-diff-merge-margin` class contract on the host and both editor roots,
-  plus the semantic sign, line-fill and word-span decorations.
-- **One-sided rows keep their structure on the owning side.** `buildAlignedSyntheticDocuments` emits
-  a container/module brace only when that side has the cell; the missing side keeps blank lines of
-  the same count. `diffMonaco` decorates every missing-side line with `arxml-diff-placeholder`, and
-  the diff CSS neutralizes Monaco's inserted/deleted line, char, gutter and sign paints. The semantic
-  body never paints a placeholder: no sign, line fill, word span or copy arrow. The owning side keeps
-  its change fill and merge arrow; only the selection tint is skipped. The `diff-one-sided` preview
-  audit reads the actual aligned models and computed styles, so a reappearing fake brace, a
-  placeholder sign/fill, or a missing owning fill fails the capture.
+  key maps every one of them. `buildDiffSyntheticDocuments` emits only the lines that side owns, so
+  the built-in diff paints per-side line numbers, inserted/deleted line and word fills, indicators,
+  diagonal one-sided gaps and unchanged-region widgets. Do not add custom body fills, signs, word
+  spans or placeholders. `11-23-ecuc-diff-body-surface` owns the `arxml-diff-body` /
+  `arxml-diff-gutter` / `arxml-diff-status` class contract on the host and both editor roots.
+- **The center margin is the built-in diff margin.** `renderMarginRevertIcon` stays on;
+  Monaco's own `arrow-revert-change codicon-arrow-right` view-zone margin stays mounted and
+  the `arxml-diff-merge` host class gates its visibility. Its click is captured and posted as
+  the host `copy` instead of Monaco's `revert`. The one extra
+  `arrow-revert-change codicon-arrow-left` is a zero-height view zone with a
+  `marginDomNode` in the modified editor's margin. Do not add a custom overlay,
+  pill, text arrow or glyph-margin button; do not map the arrow from a second
+  semantic table.
+- **The unchanged regions are Monaco's native view zones.** Show diff sets
+  `hideUnchangedRegions.enabled`, Context chooses `contextLineCount: 5|0`, and
+  `minimumLineCount: 3`. Do not replace them with `DiffGap`: the native
+  `.diff-hidden-lines` center (24px), `{n} hidden lines` label, unfold codicon, drag
+  handles and Show all expansion are the reference geometry. Show all disables the
+  option; a missing-side line is not a hidden run of its own.
+- **The overview ruler is Monaco's native diff overview.** `renderOverviewRuler`
+  stays on. Do not add semantic `overviewRuler` decorations: a rename or semantic
+  pair is a body/navigation concern, while the scrollbar overview is the built-in
+  line-diff view. Find results may add Monaco's own overview decorations.
+- **Prev/Next diff steps semantic rows.** `semanticChanges`, `navigationTarget`,
+  `stepChange` and `cursorChangeIndex` in `webview/monaco/diffBody.ts` are the single
+  source. Navigation prefers the focused pane, falls back to the owning pane for a
+  one-sided row, reveals and selects the line, and wraps at either end. It must not
+  use `getLineChanges()` on the per-side synthetic body.
+- **One-sided rows exist only on the owning side.** `buildDiffSyntheticDocuments` emits a
+  container/module brace and its children only when that side has the cell; the missing side has no
+  line at all, so the built-in diff draws its diagonal gap instead of a blank numbered row. A paired
+  container that is empty on one side renders `{ }` there, not a synthesized brace pair. The
+  `diff-one-sided` preview audit reads the per-side models and computed native paint, so a
+  reappearing blank row, a custom fill/sign/word span, or a missing diagonal gap fails the capture.
 - **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the fixed

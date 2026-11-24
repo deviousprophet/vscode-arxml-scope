@@ -92,10 +92,8 @@ Rules:
   high-contrast/selection rules go deeper only because they must scope to a view, a tree and a state at
   once. Do not add a deeper chain for a new feature.
 - Do not use `!important`. There are none in the shipped stylesheets; keep it that way.
-  The one documented exception is the `.arxml-diff-placeholder` neutralizer in
-  `src/webview/monaco/monaco.css`, which must outrank Monaco's internal inserted/deleted line,
-  gutter and sign fills. Keep it scoped to `.monaco-diff-editor`; the `diff-one-sided` audit fails
-  if the placeholder fill regresses.
+  The diff body leaves Monaco's inserted/deleted line, char, gutter and sign fills untouched, so no
+  neutralizer is needed and no custom body paint competes with them.
 - Do not style through `innerHTML` or inject markup. Rows are created with `createElement` /
   `textContent`; the only namespace-built SVG is the inline twisty.
 
@@ -214,21 +212,19 @@ Rules:
 ### Monaco diff body
 
 - `src/webview/monaco/monaco.css` owns the shipped Monaco body paint. The host and both editor roots
-  carry `arxml-diff-body`, `arxml-diff-gutter`, `arxml-diff-status` and
-  `arxml-diff-merge-margin`; these are the stable hooks the preview audit and the visual-proof child
-  read. Do not move them into the legacy `diffView.css` selectors.
-- The semantic status is one layer: `.arxml-diff-line-added` / `.arxml-diff-line-removed` whole-line
-  fills, `.arxml-diff-word-added` / `.arxml-diff-word-removed` inline spans, and the built-in
-  `insert-sign` / `delete-sign` codicons. Monaco's own `.line-insert` / `.line-delete` /
-  `.char-insert` / `.char-delete` fills are neutralized in the body so the pre-aligned text cannot
-  paint a second, disagreeing diff. The placeholder neutralizer still uses `!important` (the
-  documented exception).
-- The merge affordance is the `.cgmr.arxml-merge-arrow` codicon in the glyph margin, one arrow per
-  owning pane, pointing at the other pane. It replaces the legacy 22px text-arrow strip in the
-  shipped page; `--diff-arrow-strip` remains only for the legacy DOM page.
-- Word spans use `--vscode-diffEditor-insertedTextBackground` / `removedTextBackground` and the
-  `--diff-added-edge` / `--diff-removed-edge` outline. High contrast replaces the fills with a dotted
-  outline; forced colours do the same.
+  carry `arxml-diff-body`, `arxml-diff-gutter` and `arxml-diff-status`; these are the stable hooks the
+  preview audit and the visual-proof child read. Do not move them into the legacy `diffView.css`
+  selectors.
+- The built-in diff is the body paint: `.line-insert` / `.line-delete` whole-line fills,
+  `.char-insert` / `.char-delete` word spans, `insert-sign` / `delete-sign` indicators,
+  `.diagonal-fill` one-sided gaps and `.diff-hidden-lines` unchanged widgets. Do not neutralize or
+  restyle them, and do not add `arxml-diff-line-*`, `arxml-diff-word-*`, `arxml-diff-sign` or
+  placeholder classes.
+- The merge affordance is Monaco's own `.arrow-revert-change` view-zone margin. `renderMarginRevertIcon`
+  stays on and the `arxml-diff-merge` class gates visibility; the built-in right arrow keeps its
+  DOM/CSS and its click posts the host `copy`. The extra copy-left arrow reuses the same classes in a
+  zero-height `marginDomNode` view zone in the modified editor. Do not add `arxml-diff-merge-margin`,
+  `.arxml-merge-arrow`, pill/text arrows or a custom selection/subtree tint.
 
 ## Build and Bundle
 

@@ -309,7 +309,8 @@ checks that those hosts are not clipping when a find widget is visible.
 
 ### Diff
 
-Each pane is its own surface inside the shared scroller. Status is a background tint plus a 3px rail:
+The legacy DOM diff renderer (not the shipped page) gives each pane its own surface inside the
+shared scroller. Status is a background tint plus a 3px rail:
 `added` on the right, `removed` on the left, `changed` on both. Changed words get a 1px outline in the
 same colour. Each pane also owns its own line-number gutter: rows missing on a side leave that gutter
 blank, hidden unchanged runs are not numbered, and the gutter cell repeats the pane's status tint so
@@ -319,17 +320,21 @@ selection, search or F7. The pane window spans at least the pane width and the f
 including header lines, so the selection and subtree tints fill a stable width. Syntax tokens keep
 their own colours.
 
-The shipped Monaco body keeps the pre-aligned semantic rows as the source of truth. It paints one
-semantic layer per owning side: `diffEditor-insertedLineBackground` / `diffEditor-removedLineBackground`
-whole-line fills, the same `insertedTextBackground` / `removedTextBackground` roles on the changed
-words, and the built-in `+` / `−` codicons in the line-decoration column. The original pane is the
-removed role and the modified pane is the added role; a missing-side placeholder never receives a
-sign, fill or word span. Merge mode puts one codicon copy arrow on the owning pane's glyph margin
-(the margin affordance), with no separate revert icon; the host copy/delete path is unchanged. The
-`arxml-diff-body` class on the host and both editor roots, plus `arxml-diff-gutter`,
-`arxml-diff-status` and `arxml-diff-merge-margin`, is the stable hook the preview audit reads. Font,
-line height, whitespace, indent guides and wrapping come from the inherited `MonacoSettings`; the
-minimap is always off and the line-number/decorations columns use the Monaco diff defaults.
+The shipped Monaco body is a modified built-in diff. Each side has its own synthetic ECUC
+document, so Monaco owns per-side line numbers, inserted/deleted line and word fills, `+` / `−`
+indicators, diagonal one-sided gaps, the overview ruler and unchanged-region widgets. The
+original pane is the removed role and the modified pane is the added role; a row that exists on
+one side has no line at all on the other side, so there is no blank placeholder to neutralize.
+The semantic `DiffDocument` remains the merge/navigation source of truth. Merge mode enables
+Monaco's `renderMarginRevertIcon` stays on: the built-in right arrow stays in the modified gutter and its
+click posts the existing host copy instead of reverting the synthetic model. The page adds one
+copy-left arrow with the same `.arrow-revert-change` classes in a zero-height view-zone margin,
+so every changed/added row with a right-side cell has one. There is no custom overlay, pill, text
+arrow or selection/subtree tint. The `arxml-diff-body` class on the host and both editor roots,
+plus `arxml-diff-gutter` and `arxml-diff-status`, is the stable hook the preview audit reads.
+Font, line height, whitespace, indent guides and wrapping come from the inherited
+`MonacoSettings`; the minimap is always off and the line-number/decorations columns use the
+Monaco diff defaults.
 
 ### Diagnostics and overlay
 

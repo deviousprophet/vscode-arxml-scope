@@ -12,7 +12,7 @@
   "assignee": "--help",
   "createdAt": "2026-11-23",
   "completedAt": null,
-  "branch": null,
+  "branch": "feat/ecuc-diff-body-surface",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
@@ -21,6 +21,6 @@
   "children": [],
   "parent": "11-23-ecuc-diff-builtin-parity",
   "relatedFiles": [],
-  "notes": "",
+  "notes": "Paused until the body-surface rework to the unaligned built-in diff body lands on this branch.",
   "meta": {}
 }

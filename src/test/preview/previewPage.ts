@@ -3,8 +3,9 @@
  *
  * Mounts the real page, then posts the host messages the state describes. The
  * production shell is server-rendered; this file only drives the protocol, a
- * few DOM gestures (Swap, horizontal pan, F7, a changed-row click), then records
- * a rendered-geometry audit for the screenshot runner. No page code is forked.
+ * few DOM gestures (Show diff/Context, Merge, Swap, horizontal pan, Prev/Next
+ * diff, a changed-row click), then records a rendered-geometry audit for the
+ * screenshot runner. No page code is forked.
  */
 // The production entries auto-mount when their page root is present, exactly as
 // the extension webview does. Importing them is the whole wiring; calling the
@@ -99,6 +100,11 @@ function tick(): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/** Preview-only breadcrumb so a stalled capture names the step it reached. */
+function markStage(name: string): void {
+	document.body.dataset.previewStage = name;
+}
+
 function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -133,15 +139,95 @@ async function waitFor(predicate: () => boolean): Promise<void> {
 	}
 }
 
-async function jumpToChange(): Promise<void> {
-	const pane = document.getElementById('diff-pane-left');
-	if (!pane) {
+function repeatClick(button: string, count: number | undefined): void {
+	for (let press = 0; press < (count ?? 0); press++) {
+		click(button);
+	}
+}
+
+async function applyJumps(): Promise<void> {
+	repeatClick('diff-next', payload.jump);
+	repeatClick('diff-prev', payload.jumpBack);
+	await tick();
+}
+
+interface UnchangedCounts {
+	centers: number;
+	labels: string[];
+}
+
+function unchangedCenters(): HTMLElement[] {
+	return Array.from(
+		document.querySelectorAll<HTMLElement>('.monaco-diff-editor .diff-hidden-lines .center')
+	);
+}
+
+function unchangedCounts(): UnchangedCounts {
+	const centers = unchangedCenters();
+	return {
+		centers: centers.length,
+		labels: centers.map((center) => (center.textContent ?? '').trim())
+	};
+}
+
+async function waitForHiddenLines(): Promise<void> {
+	// The native view zones render synchronously into the editor; a short timer
+	// lets the layout settle without spending the preview's virtual-time budget.
+	await delay(150);
+}
+
+/**
+ * Show diff's native unchanged widgets are a Monaco view zone. Toggle Show all
+ * and Context to record what the audit can no longer see after the final state
+ * is restored.
+ */
+async function probeUnchanged(): Promise<void> {
+	if (payload.view !== 'diff') {
 		return;
 	}
-	pane.dispatchEvent(
-		new KeyboardEvent('keydown', { key: 'F7', bubbles: true, cancelable: true })
-	);
+	const withContext = unchangedCounts();
+	click('diff-view-all');
 	await tick();
+	await delay(250);
+	const afterShowAll = unchangedCounts();
+	click('diff-view-diff');
+	await tick();
+	await waitForHiddenLines();
+	const restored = unchangedCounts();
+	click('diff-context');
+	await tick();
+	await delay(250);
+	const withoutContext = unchangedCounts();
+	click('diff-context');
+	await tick();
+	await waitForHiddenLines();
+	(window as unknown as { __ARXML_DIFF_UNCHANGED__?: unknown }).__ARXML_DIFF_UNCHANGED__ = {
+		withContext,
+		afterShowAll,
+		restored,
+		withoutContext,
+		contextRestored: unchangedCounts()
+	};
+}
+
+const VIEW_BUTTONS: Readonly<Record<'all' | 'diff', string>> = {
+	all: 'diff-view-all',
+	diff: 'diff-view-diff'
+};
+
+function viewButton(view: 'all' | 'diff' | undefined): string | undefined {
+	return view === undefined ? undefined : VIEW_BUTTONS[view];
+}
+
+async function applyViewMode(): Promise<void> {
+	const button = viewButton(payload.view);
+	if (button !== undefined) {
+		click(button);
+		await tick();
+	}
+	if (payload.view === 'diff') {
+		await waitForHiddenLines();
+	}
 }
 
 async function applyMerge(): Promise<void> {
@@ -150,6 +236,91 @@ async function applyMerge(): Promise<void> {
 	}
 	window.postMessage({ type: 'mergeMode', enabled: payload.merge }, '*');
 	await tick();
+}
+
+interface PreviewCopyMessage {
+	type?: string;
+	side?: string;
+	key?: string;
+}
+
+interface MergeProbe {
+	side: string;
+	key: string;
+	direction: string;
+	/** The displayed swap state at click time. */
+	swapped: boolean;
+}
+
+function marginArrows(): { left: HTMLElement | null; right: HTMLElement | null } | undefined {
+	const margin = document.querySelector<HTMLElement>(
+		'.monaco-editor.modified-in-monaco-diff-editor .margin-view-zones'
+	);
+	if (margin === null) {
+		return undefined;
+	}
+	return {
+		left: margin.querySelector<HTMLElement>('.arrow-revert-change.codicon-arrow-left'),
+		right: margin.querySelector<HTMLElement>('.arrow-revert-change.codicon-arrow-right')
+	};
+}
+
+function arrowIsLaidOut(arrow: HTMLElement | null): boolean {
+	return arrow !== null && arrow.getBoundingClientRect().height > 0;
+}
+
+function mergeArrowButton(): HTMLElement | null {
+	const arrows = marginArrows();
+	if (arrows === undefined) {
+		return null;
+	}
+	if (arrowIsLaidOut(arrows.right)) {
+		return arrows.right;
+	}
+	return arrows.left ?? arrows.right;
+}
+
+function arrowDirection(button: HTMLElement): string {
+	if (button.classList.contains('codicon-arrow-left')) {
+		return 'left';
+	}
+	return button.classList.contains('codicon-arrow-right') ? 'right' : '';
+}
+
+function findCopyMessage(messages: readonly PreviewCopyMessage[], before: number): PreviewCopyMessage | undefined {
+	return messages.slice(before).find((message) => message.type === 'copy');
+}
+
+function toMergeProbe(
+	copy: PreviewCopyMessage | undefined,
+	direction: string,
+	swapped: boolean
+): MergeProbe | null {
+	if (copy === undefined) {
+		return null;
+	}
+	return { side: copy.side ?? '', key: copy.key ?? '', direction, swapped };
+}
+
+async function clickMergeArrow(button: HTMLElement): Promise<MergeProbe | null> {
+	const messages = window.__PREVIEW_MESSAGES__ as PreviewCopyMessage[];
+	const before = messages.length;
+	const swapped = document.getElementById('diff-monaco')?.dataset.swapped === 'true';
+	button.click();
+	button.blur();
+	await tick();
+	return toMergeProbe(findCopyMessage(messages, before), arrowDirection(button), swapped);
+}
+
+/** Click one center-margin arrow so the audit can prove the host copy action. */
+async function probeMergeMargin(): Promise<void> {
+	if (payload.page !== 'diff' || payload.merge !== true) {
+		return;
+	}
+	const preview = window as unknown as { __ARXML_DIFF_MERGE_PROBE__?: MergeProbe | null };
+	await delay(250);
+	const button = mergeArrowButton();
+	preview.__ARXML_DIFF_MERGE_PROBE__ = button === null ? null : await clickMergeArrow(button);
 }
 
 async function applySwap(): Promise<void> {
@@ -173,12 +344,6 @@ async function applyPan(): Promise<void> {
 		new WheelEvent('wheel', { deltaX: payload.pan, deltaY: 0, bubbles: true, cancelable: true })
 	);
 	await tick();
-}
-
-async function applyJumps(): Promise<void> {
-	for (let press = 0; press < (payload.jump ?? 0); press++) {
-		await jumpToChange();
-	}
 }
 
 function selectRow(): HTMLElement | null {
@@ -208,6 +373,9 @@ function publishAudit(): void {
 			swap: payload.swap,
 			wide: payload.wide,
 			pan: payload.pan,
+			view: payload.view,
+			jump: payload.jump,
+			jumpBack: payload.jumpBack,
 			select: payload.select,
 			detailsEdit: payload.detailsEdit,
 			detailsSave: payload.detailsSave,
@@ -945,15 +1113,29 @@ async function waitForDiffRender(): Promise<void> {
 }
 
 async function waitForMergeArrows(): Promise<void> {
-	await waitFor(() => document.querySelector('[class*="arxml-merge-arrow"]') !== null);
+	await waitFor(
+		() =>
+			document.querySelector(
+				'.monaco-editor.modified-in-monaco-diff-editor .margin-view-zones .arrow-revert-change'
+			) !== null
+	);
 }
 
 async function run(): Promise<void> {
+	markStage('start');
 	postPayloadMessages();
 	await until(() => document.querySelector(pageRoot(payload.page)) !== null);
+	markStage('mounted');
 	await waitForPageRender();
+	markStage('rendered');
+	await applyViewMode();
+	await probeUnchanged();
 	await applyMerge();
+	markStage('merge-sent');
 	await waitForMergeSurface();
+	markStage('merge-surface');
+	await probeMergeMargin();
+	markStage('merge-probed');
 	await applySwap();
 	await applyPan();
 	await applyJumps();
@@ -968,6 +1150,7 @@ async function run(): Promise<void> {
 	await applyStaleSave();
 	await applyScroll();
 	await settle();
+	markStage('ready');
 	document.body.dataset.previewReady = 'true';
 	publishAudit();
 }
@@ -982,7 +1165,11 @@ function postPayloadMessages(): void {
 async function waitForPageRender(): Promise<void> {
 	if (payload.page === 'diff') {
 		await waitForDiffRender();
+		return;
 	}
+	// Monaco tokenizes and paints the editor lines asynchronously; the audit's
+	// syntax/label checks need the token spans, not just the mounted root.
+	await waitFor(() => document.querySelector('#tree .monaco-editor .view-line span[class*="mtk"]') !== null);
 }
 
 async function waitForMergeSurface(): Promise<void> {

@@ -2,19 +2,18 @@
 
 ## Branch gate
 
-- [ ] Wait for PR #40 to merge to `main`.
-- [ ] Body surface and unchanged/ruler children merged (or their final DOM/class contract stable).
-- [ ] `git switch main && git pull`.
-- [ ] Create `feat/ecuc-diff-visual-proof` from latest `main`.
-- [ ] `task.py start 11-23-ecuc-diff-visual-proof` from that branch.
-- [ ] Do not start from `feat/ecuc-vscode-parity`.
+- [x] PR #40 merged to `main`.
+- [ ] Body surface and unchanged/ruler are complete on `feat/ecuc-diff-body-surface`.
+- [ ] Continue on `feat/ecuc-diff-body-surface`; the user chose to finish all remaining diff-body tasks on one branch.
+- [ ] `task.py start 11-23-ecuc-diff-visual-proof` on that branch.
+- [ ] Do not create `feat/ecuc-diff-visual-proof` or start from `feat/ecuc-vscode-parity`.
 
 ## Phase 0 — Reference capture
 
 - [ ] Capture VS Code `^1.125` built-in diff body in Dark+, Light+ and HC smoke with the documented
       font/zoom/settings.
 - [ ] Measure gutter, line number, margin, font/line height, indentation, unchanged-widget geometry,
-      ruler and diff color roles.
+      native diff-overview geometry and diff color roles.
 - [ ] Write `docs/reference/diff-body/spec.json` and the capture README; check in the images.
 - [ ] State the chrome-vs-content caveat: the reference is for the body chrome, not the ECUC
       semantic content.
@@ -31,14 +30,16 @@
 - [ ] Add `diffBodyAudit()` to `previewAudit.ts` reading the real Monaco models, decorations, DOM
       and computed styles.
 - [ ] Assert:
-  - [ ] +/− signs and copy-arrow margin; owning-side only; no duplicate revert icon.
+  - [ ] built-in diff-margin arrows: right arrow on a left-only block, one copy-left arrow, host
+        copy handler; no custom overlay or duplicate revert.
   - [ ] line/word fills and placeholder exclusions.
   - [ ] native unchanged widget geometry/labels/Show all behavior.
-  - [ ] semantic ruler marks and navigation targets.
+  - [ ] native `.diffOverview` present; no semantic ruler decorations; navigation targets.
   - [ ] font/line height/gutter/indent/density against `spec.json` tolerances.
 - [ ] Fail explicitly when the editor/model/DOM is missing; no silent pass.
 - [ ] Add negative controls (body layer removed, class removed, placeholder painted, duplicate
-      revert, line-change ruler, model missing) and prove they fail.
+      revert, custom center overlay restored, semantic ruler decoration added, model missing) and
+      prove they fail.
 - [ ] Dark+/Light+ full; HC smoke.
 
 ## Phase 3 — Preview/docs

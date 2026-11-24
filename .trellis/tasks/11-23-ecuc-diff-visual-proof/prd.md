@@ -17,20 +17,22 @@ looks plausible is not enough; the audit must fail when the body is wrong.
     settings) at Dark+ and Light+; add a high-contrast smoke capture.
   - Check in the reference image(s) and a machine-readable reference spec: gutter widths, line
     number column, margin geometry, font/line height, indentation/density, diff color roles,
-    unchanged-widget geometry, ruler marks. State clearly that the reference is for the diff body
-    chrome, not the ECUC semantic content.
+    unchanged-widget geometry, native diff-overview geometry. State clearly that the reference is
+    for the diff body chrome, not the ECUC semantic content.
 - **Automated body audit**
   - Read the real ARXML diff page: Monaco models, decorations, DOM classes and computed styles.
-  - Assert +/− signs and copy-arrow merge margin (owning side only; no duplicate revert icon).
+  - Assert the built-in diff-margin arrows: Monaco's right arrow on a left-only block and the one
+    copy-left arrow for right-side changes; both post the host copy and edit no model.
   - Assert line/word fill roles and no paint on missing-side placeholders.
   - Assert native unchanged-region widget geometry/labels/show-all behavior.
-  - Assert semantic ruler marks and previous/next targets.
+  - Assert the native `.diffOverview` is present with no semantic ruler decorations, and verify
+    previous/next targets.
   - Assert font/line height/indentation/gutter/density against the reference spec with explicit
     tolerances.
   - Dark+ and Light+ are full audits; HC is a smoke audit.
 - **Negative controls**
-  - Removing the body layer/CSS, reverting a required class, painting a placeholder, or restoring
-    the old margin must fail the audit.
+  - Removing the body layer/CSS, reverting a required class, painting a placeholder, restoring the
+    old center overlay, or adding a semantic ruler decoration must fail the audit.
 - **Docs**
   - Update `docs/WEBVIEW_PREVIEW.md` with the state, reference location, audit scope and the
     chrome-vs-content caveat. The screenshot harness must not claim a pass when the model/body is
@@ -48,7 +50,8 @@ looks plausible is not enough; the audit must fail when the body is wrong.
 
 ## Notes
 
-- Branch only after PR #40 merges and the body/unchanged children are merged (or their final
-  DOM/class contract is stable): create `feat/ecuc-diff-visual-proof` from latest `main`.
+- Continue on `feat/ecuc-diff-body-surface` (user decision: finish all tasks on one branch); do
+  not create a separate `feat/ecuc-diff-visual-proof` branch. Run after unchanged/ruler is
+  complete on that branch.
 - Do not copy local sample files or VS Code source. The reference image is documentation/test
   evidence, not product code.
