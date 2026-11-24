@@ -188,6 +188,7 @@ export interface PreviewAudit {
 	arrows: ArrowAudit[];
 	toolbar: ToolbarAudit;
 	gutter: GutterAudit;
+	gutterProbe?: GutterProbe;
 	content: ContentAudit;
 	selected: string | null;
 	swap: { before: PaneSnapshot; after: PaneSnapshot } | null;
@@ -196,6 +197,17 @@ export interface PreviewAudit {
 	oneSided?: OneSidedAudit;
 	sticky?: { visible: boolean; display: string; text: string; rect: Rect | null };
 	violations: string[];
+}
+
+interface GutterProbe {
+	present: boolean;
+	width: number;
+	items: number;
+	buttons: string[];
+	sash: boolean;
+	mergeClass: boolean;
+	itemDisplay: string;
+	copy: { side?: string; key?: string } | null;
 }
 
 function rectOf(element: Element): Rect {
@@ -458,6 +470,10 @@ function edgeGap(rect: Rect, bounds: PaneBounds): number {
 		return 0;
 	}
 	return bounds.side === 'left' ? bounds.right - rect.right : rect.x - bounds.left;
+}
+
+function gutterProbeOf(): GutterProbe | undefined {
+	return (window as unknown as { __GUTTER_PROBE__?: GutterProbe }).__GUTTER_PROBE__;
 }
 
 function gutterAudit(): GutterAudit {
@@ -2049,6 +2065,7 @@ function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAu
 		arrows: arrowAudits(),
 		toolbar: toolbarAudit(),
 		gutter: gutterAudit(),
+		gutterProbe: gutterProbeOf(),
 		content: contentAudit(),
 		selected: selectedKey(),
 		swap: swapSnapshot(swapBefore),

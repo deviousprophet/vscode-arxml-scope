@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Monaco diff page, ARXML toolbar and body contracts"}
+{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Monaco host and CSS rules"}
+{"file": "DESIGN.md", "reason": "Diff view design and webview markup/CSS rules"}
+{"file": "docs/WEBVIEW_PREVIEW.md", "reason": "Preview state and audit contract"}

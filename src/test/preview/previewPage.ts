@@ -945,7 +945,57 @@ async function waitForDiffRender(): Promise<void> {
 }
 
 async function waitForMergeArrows(): Promise<void> {
-	await waitFor(() => document.querySelector('[class*="arxml-merge-arrow"]') !== null);
+	await waitFor(
+		() =>
+			document.querySelector('.monaco-diff-editor .gutter') !== null ||
+			document.querySelector('.monaco-diff-editor .gutterItem') !== null
+	);
+}interface GutterProbe {
+	present: boolean;
+	width: number;
+	items: number;
+	buttons: string[];
+	sash: boolean;
+	mergeClass: boolean;
+	itemDisplay: string;
+	copy: { side?: string; key?: string } | null;
+}
+
+function gutterButtonLabel(button: Element): string {
+	return (
+		button.getAttribute('aria-label') ??
+		button.getAttribute('title') ??
+		button.textContent?.trim() ??
+		button.className
+	);
+}
+
+async function probeGutter(): Promise<void> {
+	if (payload.page !== 'diff') {
+		return;
+	}
+	const gutter = document.querySelector<HTMLElement>('.monaco-diff-editor .gutter');
+	const items = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem'));
+	const buttons = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem .action-label'));
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; side?: string; key?: string }>;
+	const before = messages.length;
+	const mergeClass = document.getElementById('diff-monaco')?.classList.contains('arxml-diff-merge') === true;
+	if (mergeClass) {
+		buttons[0]?.click();
+		await tick();
+	}
+	const copy = messages.slice(before).find((message) => message.type === 'copy');
+	const item = items[0];
+	(window as unknown as { __GUTTER_PROBE__?: GutterProbe }).__GUTTER_PROBE__ = {
+		present: gutter !== null,
+		width: gutter === null ? 0 : Math.round(gutter.getBoundingClientRect().width),
+		items: items.length,
+		buttons: buttons.map(gutterButtonLabel),
+		sash: document.querySelector('.monaco-diff-editor .monaco-sash.vertical') !== null,
+		mergeClass,
+		itemDisplay: item === undefined ? '' : getComputedStyle(item).display,
+		copy: copy === undefined ? null : { side: copy.side, key: copy.key }
+	};
 }
 
 async function run(): Promise<void> {
@@ -955,8 +1005,9 @@ async function run(): Promise<void> {
 		await waitForDiffRender();
 	}
 	await applyMerge();
-	if (payload.page === 'diff' && payload.merge) {
+	if (payload.page === 'diff') {
 		await waitForMergeArrows();
+		await probeGutter();
 	}
 	await applySwap();
 	await applyPan();

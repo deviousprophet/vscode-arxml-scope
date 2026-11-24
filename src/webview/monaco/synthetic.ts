@@ -509,7 +509,7 @@ interface DiffLineText {
 	searchSpans: SearchSpan[];
 }
 
-function cellLine(cell: DiffCell | undefined, row: DiffRow): DiffLineText {
+function cellLine(cell: DiffCell | undefined, row: DiffRow, hasChildren = row.hasChildren): DiffLineText {
 	if (cell === undefined) {
 		return { text: '', searchSpans: [] };
 	}
@@ -517,7 +517,7 @@ function cellLine(cell: DiffCell | undefined, row: DiffRow): DiffLineText {
 	appendCellLabel(line, cell);
 	appendCellValue(line, cell);
 	appendCellMeta(line, cell);
-	appendEmptyCellContainer(line, cell, row);
+	appendEmptyCellContainer(line, cell, hasChildren);
 	appendChangedDefinition(line, cell, row);
 	return line;
 }
@@ -572,8 +572,8 @@ function appendCellMeta(line: DiffLineText, cell: DiffCell): void {
 	}
 }
 
-function appendEmptyCellContainer(line: DiffLineText, cell: DiffCell, row: DiffRow): void {
-	if (cell.kind === 'container' && !row.hasChildren) {
+function appendEmptyCellContainer(line: DiffLineText, cell: DiffCell, hasChildren: boolean): void {
+	if (cell.kind === 'container' && !hasChildren) {
 		line.text += ' { }';
 	}
 }
@@ -761,5 +761,145 @@ function toSyntheticDiffDocument(side: DiffSide): SyntheticDocument {
 		})),
 		rowLine: side.rowLine,
 		foldingRanges: side.folding
+	};
+}
+
+/** The per-side synthetic documents and the model-line -> row-key maps. */
+export interface DiffSyntheticDocuments {
+	left: SyntheticDocument;
+	right: SyntheticDocument;
+	leftLineKeys: (string | undefined)[];
+	rightLineKeys: (string | undefined)[];
+}
+
+type DocumentSide = 'left' | 'right';
+
+interface DiffBuild {
+	document: DiffDocument;
+	left: DiffSide;
+	right: DiffSide;
+	at: number;
+	hasModule: Record<DocumentSide, boolean>;
+}
+
+function sideCell(row: DiffRow, side: DocumentSide): DiffCell | undefined {
+	return side === 'left' ? row.left : row.right;
+}
+
+function sideHasChildren(document: DiffDocument, index: number, side: DocumentSide): boolean {
+	const row = document.rows[index];
+	const end = Math.min(document.rows.length, index + 1 + Math.max(0, row.subtreeSize));
+	for (let child = index + 1; child < end; child += 1) {
+		if (sideCell(document.rows[child], side) !== undefined) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function emitSideLine(
+	side: DiffSide,
+	text: string,
+	key?: string,
+	spans: SearchSpan[] = []
+): void {
+	side.text.push(text);
+	side.searchSpans.push(spans);
+	side.keys.push(key);
+}
+
+function appendSideModuleGap(build: DiffBuild, row: DiffRow, sideName: DocumentSide): void {
+	if (row.kind !== 'module') {
+		return;
+	}
+	const side = build[sideName];
+	if (build.hasModule[sideName]) {
+		emitSideLine(side, '', undefined);
+	}
+	build.hasModule[sideName] = true;
+}
+
+function appendSideComments(build: DiffBuild, row: DiffRow, sideName: DocumentSide): void {
+	const cell = sideCell(row, sideName);
+	const count = sideCommentCount(cell);
+	for (let index = 0; index < count; index += 1) {
+		emitSideLine(build[sideName], commentText(cell, index, row.level), row.key);
+	}
+}
+
+function appendSideCell(build: DiffBuild, row: DiffRow, sideName: DocumentSide, hasChildren: boolean): void {
+	const cell = sideCell(row, sideName);
+	if (cell === undefined) {
+		return;
+	}
+	const line = cellLine(cell, row, hasChildren);
+	emitSideLine(build[sideName], line.text, row.key, line.searchSpans);
+}
+
+function openSideBlock(build: DiffBuild, row: DiffRow, sideName: DocumentSide): number | undefined {
+	const cell = sideCell(row, sideName);
+	if (cell === undefined || !sideHasChildren(build.document, build.at - 1, sideName)) {
+		return undefined;
+	}
+	const startLine = build[sideName].text.length + 1;
+	emitSideLine(build[sideName], `${indent(row.level)}{`, row.key);
+	return startLine;
+}
+
+function closeSideBlock(build: DiffBuild, row: DiffRow, sideName: DocumentSide, startLine: number | undefined): void {
+	if (startLine === undefined) {
+		return;
+	}
+	const side = build[sideName];
+	emitSideLine(side, `${indent(row.level)}}`, row.key);
+	appendSideFolding(side.folding, sideCell(row, sideName), startLine, side.text.length);
+}
+
+function walkDiffRow(build: DiffBuild): void {
+	const index = build.at;
+	const row = build.document.rows[index];
+	build.at += 1;
+	for (const sideName of ['left', 'right'] as const) {
+		if (sideCell(row, sideName) === undefined) {
+			continue;
+		}
+		appendSideModuleGap(build, row, sideName);
+		appendSideComments(build, row, sideName);
+		appendSideCell(build, row, sideName, sideHasChildren(build.document, index, sideName));
+		build[sideName].rowLine.set(row.key, build[sideName].text.length);
+	}
+	const starts = {
+		left: openSideBlock(build, row, 'left'),
+		right: openSideBlock(build, row, 'right')
+	};
+	if (row.hasChildren) {
+		const end = build.at + row.subtreeSize;
+		while (build.at < end && build.at < build.document.rows.length) {
+			walkDiffRow(build);
+		}
+	}
+	closeSideBlock(build, row, 'left', starts.left);
+	closeSideBlock(build, row, 'right', starts.right);
+}
+
+/** Serialize the merged diff rows into two independently shaped synthetic documents. */
+export function buildDiffSyntheticDocuments(document: DiffDocument): DiffSyntheticDocuments {
+	const build: DiffBuild = {
+		document,
+		left: createDiffSide(),
+		right: createDiffSide(),
+		at: 0,
+		hasModule: { left: false, right: false }
+	};
+	while (build.at < document.rows.length) {
+		walkDiffRow(build);
+	}
+	build.left.folding.sort(byStartLine);
+	build.right.folding.sort(byStartLine);
+	return {
+		left: toSyntheticDiffDocument(build.left),
+		right: toSyntheticDiffDocument(build.right),
+		leftLineKeys: build.left.keys,
+		rightLineKeys: build.right.keys
 	};
 }

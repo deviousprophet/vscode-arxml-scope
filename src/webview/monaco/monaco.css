@@ -62,6 +62,12 @@
 	min-height: 0;
 }
 
+/* The built-in gutter and sash stay mounted so panes resize in every mode.
+ * Merge owns only the copy items. */
+#diff-monaco:not(.arxml-diff-merge) .monaco-diff-editor .gutter .gutterItem {
+	display: none;
+}
+
 .monaco-diff-editor .arxml-subtree {
 	background-color: var(--vscode-editor-selectionHighlightBackground, rgba(38, 79, 120, 0.18));
 }
