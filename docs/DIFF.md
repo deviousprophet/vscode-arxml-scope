@@ -6,7 +6,7 @@ is a read-only view: it never writes, repairs or generates a file.
 > **Renderer status.** The two panes are now Monaco's side-by-side diff editor. The schema and
 > package header lines are shown in the pane title tooltip because VS Code diff headers are chrome,
 > not compared lines. Hidden unchanged regions, word-level changes and the diff gutter come from
-> Monaco; Merge keeps the existing whole-element semantics with VS Code-style gutter arrows.
+> Monaco; Merge keeps the existing whole-element semantics with VS Code's hover gutter actions.
 
 ## Selecting the two files
 

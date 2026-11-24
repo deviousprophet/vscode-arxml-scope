@@ -16,13 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replace and Replace All update validated parameter values and container short names in the document view, with preserve case and no write when the engine refuses
 - The diff view searches the same row fields with the same options but has no replace row
 - The ECUC editor and semantic diff now use the real VS Code editor and diff editor, with native selection, scrolling, folding, word wrap, minimap and sticky scroll
+- The diff view exposes VS Code's hover hunk gutter: **Copy Block to Left** and **Copy Block to Right** copy through the existing merge path, and a one-sided hunk shows only the meaningful direction
+- Diff panes resize by dragging the divider and reset to 50/50 on double-click, in Merge and non-Merge modes
+- Both diff panes support folding, and the Collapse/Expand toolbar actions fold or unfold both sides
 
 ### Changed
 
 - Starting on an unsupported platform now names the packaged engine targets instead of failing with a missing-binary error
 - The ECUC editor inherits the configured VS Code editor font, wrapping, minimap, sticky scroll, guide and cursor settings
 - Parameter values and container short names can be typed directly in the ECUC editor; definition-ref edits remain in Details, and structural edits remain in the row menu
-- The diff view renders two line-aligned documents in the VS Code diff editor, with hidden unchanged regions, word-level changes and VS Code-style Merge arrows
+- The diff view renders each side's own ECUC document in the VS Code diff editor, with native line changes, word-level spans, diagonal gaps for a missing side, the overview ruler and unchanged-region widgets
 - The ECUC find widget is Monaco's native widget; its match list, count and replace plans still come from the Rust ARXML search
 - The ECUC syntax palette separates container types, parameter and reference names, values, metadata and comments so the Document reads like the previous renderer
 - Search highlights map each Rust field offset onto the synthetic line, so the native count, navigation and Replace target only real ARXML matches
@@ -32,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - The custom Document renderer, roving row keyboard, Space-to-select, type-ahead and semantic multi-row copy are replaced by native editor behavior
+- The custom diff margin, blank placeholder rows and glyph merge arrows are replaced by the native VS Code gutter and diagonal gaps
 
 ### Fixed
 
