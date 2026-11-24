@@ -22,7 +22,7 @@ npm run preview:webview
 # Pick a port
 npm run preview:webview -- --port 4180
 
-# Capture every state to artifacts/webview/<state>.png and <state>.audit.json
+# Capture every state to the skill's artifacts/ directory
 npm run shots:webview
 
 # Capture one state, or list the state names
@@ -35,12 +35,23 @@ The capture exits non-zero and prints every violation when the audit fails. Read
 the PNG is the visual check, the JSON is the proof of placement.
 
 The browser is detected from the usual Chrome/Edge install locations. Set
-`CHROME_PATH` to override it. `artifacts/` is gitignored; screenshots and audits are
-evidence for the change under review, not committed fixtures.
+`CHROME_PATH` to override it. Captures and audits are written under
+`.agents/skills/webview-preview/artifacts/`, which is gitignored; they are evidence for
+the change under review, not committed fixtures.
 
 The first capture starts a private preview server on a free port. Stop a manually
 started `preview:webview` before relying on a fixed port; a stale server keeps serving
 its old bundle.
+
+## AI skill
+
+The harness is packaged as the `webview-preview` AI skill at
+`.agents/skills/webview-preview/`. Load it when a change needs an agent to see the
+rendered webview. The skill owns the runners, the preview page/fixtures/audit and its
+own cache/artifacts; there is no second preview source under `src/test` or `scripts/`.
+
+The skill workflow is: list states → capture the narrowest state → read the audit →
+inspect the PNG → fix and recapture; run the full set for layout changes.
 
 ## States
 
@@ -191,30 +202,35 @@ Record a manual observation with the state name and what changed, for example
 
 ## How it works
 
-- `scripts/previewWebview.mjs` bundles `src/test/preview/previewData.ts` for Node and
-  `src/test/preview/previewPage.ts` for the browser with esbuild, then serves one HTML
-  document per state. esbuild emits `dist/preview/preview.js` and `preview.css`; the
-  server also serves the bundled `monaco.worker.js` and hashed font assets. It deliberately
-  drops the production CSP for this local surface.
-- `previewData.ts` calls the production `diffShell`/`editorShell`, injects the supported
-  dark-theme token block, seeds a synthetic `DiffDocument` or editor document and inlines the payload.
-  The theme block is required: without VS Code's variables the gutter is transparent and the rail can
+- `.agents/skills/webview-preview/scripts/previewWebview.mjs` bundles the skill’s
+  `preview/previewData.ts` for Node and `preview/previewPage.ts` for the browser with
+  esbuild, then serves one HTML document per state. esbuild emits
+  `.agents/skills/webview-preview/.cache/preview.js` and `preview.css`; the server also
+  serves the bundled `monaco.worker.js` and hashed font assets. It deliberately drops
+  the production CSP for this local surface.
+- `.agents/skills/webview-preview/preview/previewData.ts` calls the production
+  `diffShell`/`editorShell`, injects the supported dark-theme token block, seeds a
+  synthetic `DiffDocument` or editor document and inlines the payload. The theme block
+  is required: without VS Code's variables the gutter is transparent and the rail can
   be mistaken for a stray edge.
-- `previewPage.ts` imports the production page entries. They auto-mount when their
-  root is present, exactly as in the extension. The preview then posts the document,
-  applies Merge, clicks Swap (after snapshotting the panes), pans the rows, presses F7
-  or selects a row, waits a short timer for layout and the resize observer, and
-  publishes the audit. Do not call the mount functions again: a second mount binds every
-  toolbar action twice, and toggles such as Merge and Swap cancel themselves out.
-- `previewAudit.ts` reads the rendered DOM: pane and row widths, horizontal offsets,
-  arrow rects, edge gaps, visibility and opacity, toolbar control rects and pairwise
-  intersections, the Swap-to-divider distance, per-pane gutter rails and rail side,
-  selected row, Swap before/after titles and values, and page overflow. It turns those
-  measurements into violations such as “left copy arrow is outside its pane”.
-- `shotWebview.mjs` starts the server, spawns the browser asynchronously once per
-  state (`spawnSync`/`execFileSync` blocks the event loop and the server cannot answer
-  Chrome), requests `--dump-dom` and `--screenshot` in the same run, extracts the audit
-  script from the DOM, writes `<state>.audit.json`, and fails the run on violations.
+- `.agents/skills/webview-preview/preview/previewPage.ts` imports the production page
+  entries. They auto-mount when their root is present, exactly as in the extension. The
+  preview then posts the document, applies Merge, clicks Swap (after snapshotting the
+  panes), pans the rows, presses F7 or selects a row, waits a short timer for layout and
+  the resize observer, and publishes the audit. Do not call the mount functions again: a
+  second mount binds every toolbar action twice, and toggles such as Merge and Swap
+  cancel themselves out.
+- `.agents/skills/webview-preview/preview/previewAudit.ts` reads the rendered DOM: pane
+  and row widths, horizontal offsets, arrow rects, edge gaps, visibility and opacity,
+  toolbar control rects and pairwise intersections, the Swap-to-divider distance,
+  per-pane gutter rails and rail side, selected row, Swap before/after titles and values,
+  and page overflow. It turns those measurements into violations such as “left copy
+  arrow is outside its pane”.
+- `.agents/skills/webview-preview/scripts/shotWebview.mjs` starts the server, spawns the
+  browser asynchronously once per state (`spawnSync`/`execFileSync` blocks the event loop
+  and the server cannot answer Chrome), requests `--dump-dom` and `--screenshot` in the
+  same run, extracts the audit script from the DOM, writes `<state>.audit.json`, and
+  fails the run on violations.
 - Screenshot width/height come from the state manifest. Add a state there and it is
   served, captured, audited and listed automatically.
 - The arrow overlay is positioned from the **rendered** row width, not the content
@@ -227,8 +243,9 @@ Record a manual observation with the state name and what changed, for example
 
 ## Adding a state
 
-1. Add an entry to `STATES` in `src/test/preview/previewData.ts`, with the page,
-   size and optional `merge`, `swap`, `wide`, `pan`, `jump` or `select` flags.
+1. Add an entry to `STATES` in
+   `.agents/skills/webview-preview/preview/previewData.ts`, with the page, size and
+   optional `merge`, `swap`, `wide`, `pan`, `jump` or `select` flags.
 2. If the state needs a different fixture, extend `previewHtml` with the payload the
    production page expects; keep using the real host message shapes.
 3. Run `npm run shots:webview -- --state <name>`; fix every audit violation before
@@ -237,9 +254,11 @@ Record a manual observation with the state name and what changed, for example
 
 ## Limits
 
-The harness proves geometry and paint in Chromium at the listed sizes. The audit is a
-set of placement invariants, not a taste judgement: still inspect the PNG for colour,
-spacing and clipping the invariants do not encode. When Monaco is active the legacy
+The harness proves geometry and paint in Chromium at the listed sizes. All preview
+source lives in `.agents/skills/webview-preview/`; do not reintroduce a copy under
+`src/test` or `scripts/`. The audit is a set of placement invariants, not a taste
+judgement: still inspect the PNG for colour, spacing and clipping the invariants do not
+encode. When Monaco is active the legacy
 DOM diff-geometry checks are skipped; the Monaco editor owns its gutter, arrows, scroll
 surface and selection. It does not prove VS Code theme fidelity (tokens are seeded), real
 keyboard/IME input, screen-reader output or performance; those still need the Extension

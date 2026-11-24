@@ -9,8 +9,8 @@
 // The production entries auto-mount when their page root is present, exactly as
 // the extension webview does. Importing them is the whole wiring; calling the
 // mount functions again would bind every toolbar action twice.
-import '../../webview/diffMonaco';
-import '../../webview/editorMonaco';
+import '../../../../src/webview/diffMonaco';
+import '../../../../src/webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
 import type { PaneSnapshot } from './previewAudit';
 import type { PreviewStateFields } from './previewStateFields';

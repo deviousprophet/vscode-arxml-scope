@@ -10,7 +10,7 @@ the extension does and how to use it.
 | [Semantic diff](DIFF.md) | Selecting and comparing two files, change classes, search/view/swap/collapse, refresh and limitations. |
 | [Design system](../DESIGN.md) | The webview visual identity: theme tokens, typography, spacing, shapes and component rules. |
 | [Two-way merge](MERGE.md) | Turning the diff into a merge: per-row copy arrows, what a copy replaces, and the safety rules. |
-| [Webview preview](WEBVIEW_PREVIEW.md) | Serving the real webview pages, capturing seeded states in headless Chrome/Edge, and the visual self-audit checklist. |
+| [Webview preview](WEBVIEW_PREVIEW.md) | The `webview-preview` AI skill: serving the real webview pages, capturing seeded states in headless Chrome/Edge, and the visual self-audit checklist. |
 | [Test plan](TEST_PLAN.md) | The regression plan for every feature: layers, gates, edge cases and the known gaps. |
 | [Synthetic example](../examples/README.md) | A small ECUC-Values file to open, edit and compare without customer data. |
 
