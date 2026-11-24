@@ -26,10 +26,11 @@ surface is reviewed.
 | `editor/browser/widget/diffEditor/components/diffEditorSash.js` | `0ada5415d0c7716760816f11f9b01a12f2f508cf511e49dee2a5d30c1fcdd5a3` |
 | `editor/browser/widget/diffEditor/diffEditorWidget.js` | `b7095044c8e7e01a9b4a5aeb105c9502aa90bc32cbed0042f0a0a809fc2afc3a` |
 | `editor/browser/widget/diffEditor/diffEditor.contribution.js` | `4872c4050da0c60b1f6e7cdecf636b176584dcc16d72b3ded77d983ef3693bbd` |
-| `platform/actions/browser/toolbar.js` | `27f3ba3c9398042a6a777a0f6677b45ae4c7f690cbad9b9e04ebf5de38e1f71b` |
+| `platform/actions/browser/toolbar.js` | `4382bca3d09f4679e77f9f690d8e088419d842379ef0aa055cc09fbb9e495f09` |
 
 The first and last hashes are the **patched** files. The other three are the unmodified
-release files.
+release files. Hashes are computed over LF text so a CRLF checkout matches the Linux CI
+runner.
 
 ## The checked-in patch
 

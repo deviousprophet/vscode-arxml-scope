@@ -10,7 +10,8 @@ function read(relative: string): string {
 }
 
 function sha256(relative: string): string {
-	return createHash('sha256').update(readFileSync(path.join(root, relative))).digest('hex');
+	const text = readFileSync(path.join(root, relative), 'utf8').replaceAll('\r\n', '\n');
+	return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 function webviewFiles(extension: string): string[] {
@@ -54,7 +55,7 @@ suite('VS Code diff code parity', () => {
 			'node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditor.contribution.js':
 				'4872c4050da0c60b1f6e7cdecf636b176584dcc16d72b3ded77d983ef3693bbd',
 			'node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js':
-				'27f3ba3c9398042a6a777a0f6677b45ae4c7f690cbad9b9e04ebf5de38e1f71b'
+				'4382bca3d09f4679e77f9f690d8e088419d842379ef0aa055cc09fbb9e495f09'
 		};
 		for (const [file, expectedHash] of Object.entries(expected)) {
 			assert.ok(existsSync(path.join(root, file)), `${file} exists`);
