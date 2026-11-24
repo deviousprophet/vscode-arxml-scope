@@ -78,18 +78,27 @@ function applyAvailability(
 	keys.right.set(values.right);
 }
 
+function itemValues(
+	item: GutterItemElement,
+	host: GutterAvailabilityHost
+): GutterAvailability | null {
+	const mapping = item.__arxmlGutterItem?.mapping;
+	return mapping === undefined ? null : host.availability(mapping);
+}
+
+function snapshotItem(item: GutterItemElement, host: GutterAvailabilityHost): unknown {
+	const buttons = item.querySelector<GutterButtonsElement>('.buttons');
+	return {
+		hasItem: item.__arxmlGutterItem !== undefined,
+		hasService: buttons?.__arxmlContextKeyService !== undefined,
+		mapping: item.__arxmlGutterItem?.mapping ?? null,
+		values: itemValues(item, host),
+		buttons: item.querySelectorAll('.action-label').length
+	};
+}
+
 function debugSnapshot(host: GutterAvailabilityHost): unknown[] {
-	return gutterItems().map((item) => {
-		const buttons = item.querySelector<GutterButtonsElement>('.buttons');
-		const mapping = item.__arxmlGutterItem?.mapping;
-		return {
-			hasItem: item.__arxmlGutterItem !== undefined,
-			hasService: buttons?.__arxmlContextKeyService !== undefined,
-			mapping: mapping ?? null,
-			values: mapping === undefined ? null : host.availability(mapping),
-			buttons: item.querySelectorAll('.action-label').length
-		};
-	});
+	return gutterItems().map((item) => snapshotItem(item, host));
 }
 
 /**

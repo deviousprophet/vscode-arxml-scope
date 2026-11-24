@@ -61,14 +61,14 @@ This task starts fresh from `main`; the abandoned `feat/ecuc-diff-body-surface` 
 
 ## Acceptance criteria
 
-- [ ] The page enables `renderGutterMenu` and `enableSplitViewResizing`; no custom margin/arrow/overlay/glyph merge classes remain.
-- [ ] Per-side synthetic documents differ in line count; one-sided gaps use native diagonal fill; no blank numbered placeholders or custom body paint.
-- [ ] Inside Merge, hovering a hunk reveals the built-in toolbar; the current hunk uses VS Code’s `showAlways`; outside Merge no copy buttons are visible.
-- [ ] Changed pairs show both copy actions; one-sided hunks show only the meaningful direction; labels/tooltips are exactly “Copy Block to Left/Right” with matching icons and aria labels.
-- [ ] The built-in Revert action is absent.
-- [ ] Copy actions target the topmost semantic row and post the correct host side/key under Swap.
-- [ ] Panes resize in Merge and non-Merge modes; 50/50 default, drag, double-click reset, ratio survives document updates and Swap.
-- [ ] The diff panes expose folding controls; the ARXML Collapse/Expand toolbar buttons fold/unfold both sides and restore the original visible rows.
-- [ ] The ARXML toolbar and semantic navigation/search/collapse/Show all-diff behavior remain.
-- [ ] The code-parity manifest, version/integrity/file hashes and source/runtime tests pass.
-- [ ] Full test suite, preview audit, lint, fallow, production bundle and `git diff --check` pass.
+- [x] The page enables `renderGutterMenu` and `enableSplitViewResizing`; no custom margin/arrow/overlay/glyph merge classes remain.
+- [x] Per-side synthetic documents differ in line count; one-sided gaps use native diagonal fill; no blank numbered placeholders or custom body paint.
+- [x] Inside Merge, hovering a hunk reveals the built-in toolbar; the current hunk uses VS Code’s `showAlways`; outside Merge no copy buttons are visible.
+- [x] Changed pairs show both copy actions; one-sided hunks show only the meaningful direction; labels/tooltips are exactly “Copy Block to Left/Right” with matching icons and aria labels.
+- [x] The built-in Revert action is absent.
+- [x] Copy actions target the topmost semantic row and post the correct host side/key under Swap.
+- [x] Panes resize in Merge and non-Merge modes; 50/50 default, drag, double-click reset, ratio survives document updates and Swap.
+- [x] The diff panes expose folding controls; the ARXML Collapse/Expand toolbar buttons fold/unfold both sides and restore the original visible rows.
+- [x] The ARXML toolbar and semantic navigation/search/collapse/Show all-diff behavior remain.
+- [x] The code-parity manifest, version/integrity/file hashes and source/runtime tests pass.
+- [x] Full test suite, preview audit, lint, fallow, production bundle and `git diff --check` pass.

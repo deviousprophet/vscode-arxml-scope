@@ -194,7 +194,7 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 		// reveal/refresh checks live in the Extension Development Host.
 		for (const [folder, name] of [
 			['core/diff', 'diffModel.ts'],
-			['webview', 'diffViewer.ts'],
+			['webview', 'diffMonaco.ts'],
 		] as const) {
 			const source = fs.readFileSync(path.join(repoRoot, 'src', ...folder.split('/'), name), 'utf8');
 			assert.ok(!/from 'vscode'/.test(source), `${name} has no vscode import`);
@@ -207,7 +207,7 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 			fs.readFileSync(path.join(repoRoot, 'src', ...file.split('/')), 'utf8');
 		const pageSources = [
 			read('core/diff/diffModel.ts'),
-			read('webview/diffViewer.ts'),
+			read('webview/diffMonaco.ts'),
 			read('webview/components/diffView/diffView.ts'),
 		].join('\n');
 		const mergePanel = read('host/diffPanel.ts');

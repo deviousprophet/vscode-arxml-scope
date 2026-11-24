@@ -575,7 +575,8 @@ function violationsOf(state: AuditState, audit: Omit<PreviewAudit, 'violations'>
 }
 
 function oneSidedStateIssues(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
-	if (state.name !== 'diff-one-sided' && state.name !== 'diff-removed') {
+	const oneSided = state.name === 'diff-one-sided' || state.name === 'diff-removed' || state.name === 'diff-added';
+	if (!oneSided) {
 		return [];
 	}
 	return audit.oneSided === undefined
@@ -1852,7 +1853,9 @@ function oneSidedValues(c: OneSidedContext): OneSidedAudit {
 }
 
 function oneSidedViolations(audit: OneSidedAudit, stateName: string): string[] {
-	const minimumChanges = stateName === 'diff-removed' ? 2 : ONE_SIDED_FIXTURE.minLineChanges;
+	const isRemoved = stateName === 'diff-removed';
+	const isAdded = stateName === 'diff-added';
+	const minimumChanges = isRemoved || isAdded ? 2 : ONE_SIDED_FIXTURE.minLineChanges;
 	return [
 		...issueWhen(
 			audit.placeholderDecorations > 0,
@@ -1875,18 +1878,22 @@ function oneSidedViolations(audit: OneSidedAudit, stateName: string): string[] {
 			audit.lineChanges < minimumChanges,
 			`the diff has ${audit.lineChanges} line changes, fewer than the ${minimumChanges} expected`
 		),
-		...issueWhen(stateName === 'diff-removed' && !audit.hasDeletion, 'the removed module is not a deletion hunk'),
-		...issueWhen(!audit.removedNavigable, 'the removed block is missing from the navigation change list'),
+		...issueWhen(isRemoved && !audit.hasDeletion, 'the removed module is not a deletion hunk'),
+		...issueWhen(isAdded && !audit.hasInsertion, 'the added module is not an insertion hunk'),
 		...issueWhen(
-			stateName === 'diff-one-sided' && !audit.addedNavigable,
+			!isAdded && !audit.removedNavigable,
+			'the removed block is missing from the navigation change list'
+		),
+		...issueWhen(
+			!isRemoved && !audit.addedNavigable,
 			'the added block is missing from the navigation change list'
 		),
 		...issueWhen(
-			stateName === 'diff-removed' && audit.originalLines === audit.modifiedLines,
+			(isRemoved || isAdded) && audit.originalLines === audit.modifiedLines,
 			'the per-side models still have equal line counts'
 		),
 		...issueWhen(
-			stateName === 'diff-removed' && audit.oneSidedGutterItems === 0,
+			(isRemoved || isAdded) && audit.oneSidedGutterItems === 0,
 			'no one-sided hunk hides the impossible copy action'
 		)
 	];
@@ -1990,10 +1997,22 @@ function availabilityIssues(state: AuditState, probe: GutterProbe): string[] {
 		);
 		return [
 			...issueWhen(
-				probe.copy?.side !== 'left' || !probe.copy?.key?.startsWith('module:'),
+				probe.copy?.side !== 'left' || !probe.copy?.key?.includes('module:'),
 				'the removed module did not copy from the stored left side'
 			),
 			...issueWhen(!hidesLeft, 'the one-sided hunk does not hide Copy Block to Left')
+		];
+	}
+	if (state.name === 'diff-added') {
+		const hidesRight = probe.availability.some(
+			(item) => item.values?.left === true && item.values.right === false
+		);
+		return [
+			...issueWhen(
+				probe.copy?.side !== 'right' || !probe.copy?.key?.includes('module:'),
+				'the added module did not copy from the stored right side'
+			),
+			...issueWhen(!hidesRight, 'the one-sided hunk does not hide Copy Block to Right')
 		];
 	}
 	if (state.name !== 'diff-merge' && state.name !== 'diff-swap' && state.name !== 'diff-sash') {
@@ -2272,7 +2291,9 @@ function syscondOf(state: AuditState): SyscondAudit | undefined {
 }
 
 function oneSidedOf(state: AuditState): OneSidedAudit | undefined {
-	return state.name === 'diff-one-sided' || state.name === 'diff-removed' ? oneSidedAudit() : undefined;
+	return state.name === 'diff-one-sided' || state.name === 'diff-removed' || state.name === 'diff-added'
+		? oneSidedAudit()
+		: undefined;
 }
 
 function syntaxOf(state: AuditState): PreviewAudit['syntax'] {

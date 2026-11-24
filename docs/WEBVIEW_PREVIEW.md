@@ -11,7 +11,7 @@ can sit under the Search field, a gutter item can show both directions on a dele
 and the jsdom suites cannot see layout at all.
 
 The harness wraps the production shell (`webviewShell.ts`) and mounts the production
-entries (`diffViewer.ts`, `editorViewer.ts`). There is no second renderer, no forked
+entries (`diffMonaco.ts`, `editorMonaco.ts`). There is no second renderer, no forked
 markup and no extra dependency.
 
 ## Commands
@@ -66,6 +66,7 @@ inspect the PNG → fix and recapture; run the full set for layout changes.
 | `diff-rail` | diff | 1400×900 | long document; F7 jumps to the change near line 1000 and scrolls |
 | `diff-one-sided` | diff | 1400×900 | per-side models with changed pairs; native fills and diagonal gaps, no placeholder layers |
 | `diff-removed` | diff | 1400×900 | a left-only module deletion; the gutter hides Copy Block to Left and offers only Copy Block to Right |
+| `diff-added` | diff | 1400×900 | a right-only module insertion; the gutter hides Copy Block to Right and offers only Copy Block to Left |
 | `diff-sash` | diff | 1400×900 | built-in sash drag, document replacement and Swap preserve the ratio; double-click resets to 50/50 |
 | `diff-wide` | diff | 1400×900 | long parameter names; the panes overflow horizontally |
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; native scrolling stays inside the panes |
@@ -185,9 +186,10 @@ strip or the page shell, and check each image before asking for review.
       hunk `.gutterItem`s and the Copy Block to Left/Right labels; `diff-off` hides only the
       items and keeps the gutter and sash. The audit rejects a third action, `Revert Block`, or
       any copy while Merge is off.
-- [ ] **One-sided hunks hide the impossible action.** `diff-removed` records a gutter item with
-      `left: false, right: true` and a single action; clicking it posts `side: "left"` with the
-      removed module key. Changed pairs expose both actions.
+- [ ] **One-sided hunks hide the impossible action.** `diff-removed` records a gutter item
+      with `left: false, right: true` and a single action; clicking it posts `side: "left"`
+      with the removed module key. `diff-added` is the mirror (`left: true, right: false`,
+      copy side `right`). Changed pairs expose both actions.
 - [ ] **Swap keeps the displayed-pane meaning.** In `diff-swap` the first action posts the
       stored side now shown in the source pane (`side: "left"` after the swap). The audit derives
       the expected side from the clicked action and the swap flag.

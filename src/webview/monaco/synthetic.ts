@@ -612,14 +612,7 @@ export function buildAlignedSyntheticDocuments(document: DiffDocument): AlignedS
 	while (build.at < document.rows.length) {
 		walkAlignedRow(build);
 	}
-	build.left.folding.sort(byStartLine);
-	build.right.folding.sort(byStartLine);
-	return {
-		left: toSyntheticDiffDocument(build.left),
-		right: toSyntheticDiffDocument(build.right),
-		leftLineKeys: build.left.keys,
-		rightLineKeys: build.right.keys
-	};
+	return finishDocuments(build);
 }
 
 interface DiffSide {
@@ -855,31 +848,52 @@ function closeSideBlock(build: DiffBuild, row: DiffRow, sideName: DocumentSide, 
 	appendSideFolding(side.folding, sideCell(row, sideName), startLine, side.text.length);
 }
 
+function walkSideRow(build: DiffBuild, row: DiffRow, index: number, sideName: DocumentSide): void {
+	if (sideCell(row, sideName) === undefined) {
+		return;
+	}
+	appendSideModuleGap(build, row, sideName);
+	appendSideComments(build, row, sideName);
+	appendSideCell(build, row, sideName, sideHasChildren(build.document, index, sideName));
+	build[sideName].rowLine.set(row.key, build[sideName].text.length);
+}
+
+function walkChildren(build: DiffBuild, row: DiffRow): void {
+	if (!row.hasChildren) {
+		return;
+	}
+	const end = build.at + row.subtreeSize;
+	while (build.at < end && build.at < build.document.rows.length) {
+		walkDiffRow(build);
+	}
+}
+
 function walkDiffRow(build: DiffBuild): void {
 	const index = build.at;
 	const row = build.document.rows[index];
 	build.at += 1;
 	for (const sideName of ['left', 'right'] as const) {
-		if (sideCell(row, sideName) === undefined) {
-			continue;
-		}
-		appendSideModuleGap(build, row, sideName);
-		appendSideComments(build, row, sideName);
-		appendSideCell(build, row, sideName, sideHasChildren(build.document, index, sideName));
-		build[sideName].rowLine.set(row.key, build[sideName].text.length);
+		walkSideRow(build, row, index, sideName);
 	}
 	const starts = {
 		left: openSideBlock(build, row, 'left'),
 		right: openSideBlock(build, row, 'right')
 	};
-	if (row.hasChildren) {
-		const end = build.at + row.subtreeSize;
-		while (build.at < end && build.at < build.document.rows.length) {
-			walkDiffRow(build);
-		}
-	}
+	walkChildren(build, row);
 	closeSideBlock(build, row, 'left', starts.left);
 	closeSideBlock(build, row, 'right', starts.right);
+}
+
+/** Sort and serialize a completed pair of synthetic sides. */
+function finishDocuments(build: { left: DiffSide; right: DiffSide }): DiffSyntheticDocuments {
+	build.left.folding.sort(byStartLine);
+	build.right.folding.sort(byStartLine);
+	return {
+		left: toSyntheticDiffDocument(build.left),
+		right: toSyntheticDiffDocument(build.right),
+		leftLineKeys: build.left.keys,
+		rightLineKeys: build.right.keys
+	};
 }
 
 /** Serialize the merged diff rows into two independently shaped synthetic documents. */
@@ -894,12 +908,5 @@ export function buildDiffSyntheticDocuments(document: DiffDocument): DiffSynthet
 	while (build.at < document.rows.length) {
 		walkDiffRow(build);
 	}
-	build.left.folding.sort(byStartLine);
-	build.right.folding.sort(byStartLine);
-	return {
-		left: toSyntheticDiffDocument(build.left),
-		right: toSyntheticDiffDocument(build.right),
-		leftLineKeys: build.left.keys,
-		rightLineKeys: build.right.keys
-	};
+	return finishDocuments(build);
 }

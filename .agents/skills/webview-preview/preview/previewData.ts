@@ -29,6 +29,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-removed', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-added', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-sash', page: 'diff', width: 1400, height: 900, merge: true, sash: true },
 	{ name: 'diff-wide', page: 'diff', width: 1400, height: 900, merge: true, wide: true },
 	{
@@ -240,6 +241,22 @@ function removedPair(): DiffDocument {
 	);
 }
 
+/** A right-only module with no counterpart, plus a shared changed value. */
+function addedPair(): DiffDocument {
+	const leftSide = rowsOf(sharedOnlyDocument('6'));
+	const rightSide = rowsOf(oneSidedDocument('right'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
 function editorDocument(): { rows: EcucRow[]; selectedId?: string } {
 	const rows = rowsOf(synthetic(values(1100, () => false))).rows;
 	return { rows, selectedId: rows[0]?.id };
@@ -373,6 +390,9 @@ function diffFixtureFor(state: PreviewState): DiffDocument {
 	}
 	if (state.name === 'diff-removed') {
 		return removedPair();
+	}
+	if (state.name === 'diff-added') {
+		return addedPair();
 	}
 	const fixture = state.wide ? widePair : state.name === 'diff-rail' ? railPair : mergePair;
 	return fixture();

@@ -569,24 +569,30 @@ function identifyRow(key: string): DiffRow | undefined {
 	return documentModel?.rows.find((row) => row.key === key);
 }
 
-/** Both editors when the diff editor and its panes exist. */
+/** Whether a merged row owns a cell on the stored side. */
+function rowHasSide(row: DiffRow | undefined, side: DiffSide): boolean {
+	return row !== undefined && (side === 'left' ? row.left : row.right) !== undefined;
+}
+
+/** The row key on this model line, when it owns a cell on the stored side. */
+function keyHasSide(key: string | undefined, side: DiffSide): boolean {
+	if (key === undefined) {
+		return false;
+	}
+	return rowHasSide(
+		documentModel?.rows.find((candidate) => candidate.key === key),
+		side
+	);
+}
+
+/** The first keyed, side-owning model line in a hunk range. */
 function firstKeyInRange(
 	keys: readonly (string | undefined)[],
 	range: { startLineNumber: number; endLineNumberExclusive: number },
 	side: DiffSide
 ): string | undefined {
 	const end = Math.min(range.endLineNumberExclusive, keys.length + 1);
-	for (let line = range.startLineNumber; line < end; line += 1) {
-		const key = keys[line - 1];
-		if (key === undefined) {
-			continue;
-		}
-		const row = documentModel?.rows.find((candidate) => candidate.key === key);
-		if (row !== undefined && (side === 'left' ? row.left : row.right) !== undefined) {
-			return key;
-		}
-	}
-	return undefined;
+	return keys.slice(range.startLineNumber - 1, end - 1).find((key) => keyHasSide(key, side));
 }
 
 function rangeHasSource(
@@ -610,18 +616,42 @@ function gutterAvailabilityFor(mapping: {
 	};
 }
 
+type GutterMapping = NonNullable<DiffGutterContext['mapping']>;
+
+function canCopy(mapping: DiffGutterContext['mapping']): mapping is GutterMapping {
+	return documentModel !== undefined && mapping !== undefined && mapping !== null;
+}
+
+function copyTarget(
+	direction: DiffGutterDirection,
+	mapping: GutterMapping
+): { side: DiffSide; range: GutterMapping['original']; keys: (string | undefined)[] } {
+	const left = direction === 'left';
+	return {
+		side: left ? displayedSide('modified') : displayedSide('original'),
+		range: left ? mapping.modified : mapping.original,
+		keys: left ? modifiedKeys() : originalKeys()
+	};
+}
+
 /** The built-in hunk toolbar posts the same host copy as the old arrow overlay. */
-function copyFromGutter(direction: DiffGutterDirection, context: DiffGutterContext | undefined): void {
+function gutterCopyRequest(
+	direction: DiffGutterDirection,
+	context: DiffGutterContext | undefined
+): { side: DiffSide; key: string } | undefined {
 	const mapping = context?.mapping;
-	if (documentModel === undefined || mapping === undefined || mapping === null) {
-		return;
+	if (!canCopy(mapping)) {
+		return undefined;
 	}
-	const side = direction === 'left' ? displayedSide('modified') : displayedSide('original');
-	const range = direction === 'left' ? mapping.modified : mapping.original;
-	const keys = direction === 'left' ? modifiedKeys() : originalKeys();
-	const key = firstKeyInRange(keys, range, side);
-	if (key !== undefined) {
-		postToHost({ type: 'copy', side, key });
+	const target = copyTarget(direction, mapping);
+	const key = firstKeyInRange(target.keys, target.range, target.side);
+	return key === undefined ? undefined : { side: target.side, key };
+}
+
+function copyFromGutter(direction: DiffGutterDirection, context: DiffGutterContext | undefined): void {
+	const request = gutterCopyRequest(direction, context);
+	if (request !== undefined) {
+		postToHost({ type: 'copy', ...request });
 	}
 }
 

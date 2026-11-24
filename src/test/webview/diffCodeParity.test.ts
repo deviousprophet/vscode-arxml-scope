@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
-const root = path.resolve(__dirname, '../../../..');
+const root = path.resolve(__dirname, '../../..');
 
 function read(relative: string): string {
 	return readFileSync(path.join(root, relative), 'utf8');

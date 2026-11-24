@@ -26,7 +26,7 @@ export interface DocumentGuide {
 export type DocumentWordDiffMetaClass = Extract<MetaPart['cls'], 'condition' | 'variant' | 'context'>;
 
 /** One pair per chip of each class, in display order; extras stay plain. */
-export const WORD_DIFF_META_CLASSES: readonly DocumentWordDiffMetaClass[] = ['condition', 'variant', 'context'];
+const WORD_DIFF_META_CLASSES: readonly DocumentWordDiffMetaClass[] = ['condition', 'variant', 'context'];
 
 /**
  * Word-level changes for one changed diff row. Only the fields a changed row

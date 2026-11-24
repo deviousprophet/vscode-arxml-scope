@@ -45,7 +45,7 @@ function run(direction: DiffGutterDirection, context: unknown): void {
 /**
  * Register the two ARXML copy actions on the built-in diff hunk toolbar.
  * The built-in Revert action is hidden by the diff editor's readOnly context;
- * these actions deliberately do not depend on `diffEditorModifiedWritable`.
+ * these actions deliberately do not depend on the built-in writable context key.
  */
 export function installDiffGutterActions(next: DiffGutterHandler): void {
 	handler = next;

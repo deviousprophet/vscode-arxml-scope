@@ -40,7 +40,7 @@ No custom margin, arrow overlay, glyph merge arrow, placeholder mask, selection/
 
 - Add `buildDiffSyntheticDocuments(document)` emitting each side’s module gaps, comments, cells and braces only on the owning side.
 - Keep `leftLineKeys`/`rightLineKeys`, per-side `rowLine`, folding and native model text.
-- Add `DiffBody`/`buildDiffBody` with `leftLine`, `rightLine`, `leftLines`, `rightLines`, `leftCell`/`rightCell`, status and `byKey`.
+- Map a hunk to its topmost semantic row through the existing line-key arrays and `firstKeyInRange`; no separate body model is added.
 - Remove placeholder decorations and CSS. A missing side has no line, so Monaco paints the diagonal gap and nothing is numbered there.
 - Remove custom selection/subtree tints and semantic overview-ruler decorations; native Monaco paint is the only body paint.
 
@@ -101,11 +101,31 @@ If this adapter cannot be made reliable using the internal menu/context-key API,
 
 VS Code’s `DiffToolBar` uses `overflowBehavior.maxItems = 1` when the hunk starts at line 1 and is shorter than 30px, rendering a “More Actions…” button. Keep that behavior; the submenu exposes the two copy actions with their normal labels/tooltips. The audit must open the overflow menu rather than requiring both icons inline on that hunk.
 
+### 5.6 Scoped per-item context (accepted patch)
+
+The stock `DiffToolBar` creates one menu context for every hunk. Hiding one direction on a
+one-sided hunk therefore requires a context-key service scoped to that hunk’s `.buttons`
+element. We checked in `patches/monaco-editor+0.57.0.patch`, applied by `patch-package`
+from `postinstall`:
+
+- `gutterFeature.js` creates a scoped service per `.gutterItem`, exposes the hovered
+  hunk as `__arxmlGutterItem` and initialises `arxml.copyLeftAvailable` /
+  `arxml.copyRightAvailable` from `globalThis.__ARXML_GUTTER_AVAILABILITY__`;
+- `toolbar.js` lets `MenuWorkbenchToolBar` use `options.contextKeyService`.
+
+This is the only upstream modification. `docs/vscode-diff-parity.md` records the patched
+file hashes and `diffCodeParity.test.ts` fails on drift. A fresh `npm ci` must run
+`patch-package`; without it the impossible direction cannot be hidden per hunk.
+
 ## 6. Sash and ratio
 
 - The built-in `DiffEditorSash` is enabled by `enableSplitViewResizing` and exists because the gutter has actions.
 - A 50/50 default, drag and double-click reset are Monaco behavior; do not reimplement.
-- Keep the ratio across `setModel` updates and Swap. Verify Monaco preserves it; if it resets on model replacement, add the smallest documented adapter/patch that restores the previous sash ratio, and test it.
+- Keep the ratio across `setModel` updates and Swap. Verified in `diff-sash`: initial
+  panes `637/672` (left content plus the 35px gutter equals the right pane), dragged
+  `777/532`, unchanged after a document replacement and after Swap, and double-click
+  reset back to `637/672`. No ratio adapter is needed; Monaco preserves it.
+- The preview audit measures the real `.monaco-sash` drag and records all width pairs.
 
 ## 7. Code-level parity proof
 

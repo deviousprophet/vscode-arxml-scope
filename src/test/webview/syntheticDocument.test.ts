@@ -939,7 +939,7 @@ suite('synthetic ECUC document', () => {
 		);
 	});
 
-
+	test('a diff row with no label keeps its quoted short name as a string token', () => {
 		const rowsModel = [{ ...moduleRow(), subtreeSize: 1 }, noLabelContainerRow()];
 		const document: DiffDocument = {
 			left: { name: 'left.arxml', path: 'left.arxml' },
