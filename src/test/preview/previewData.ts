@@ -28,6 +28,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-removed', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-wide', page: 'diff', width: 1400, height: 900, merge: true, wide: true },
 	{
 		name: 'diff-wide-panned',
@@ -216,6 +217,28 @@ function oneSidedPair(): DiffDocument {
 	);
 }
 
+/** The shared module alone, so the other side has a real deletion block. */
+function sharedOnlyDocument(changed: string): string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${oneSidedShared(changed)}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+/** A left-only module with no counterpart, plus a shared changed value. */
+function removedPair(): DiffDocument {
+	const leftSide = rowsOf(oneSidedDocument('left'));
+	const rightSide = rowsOf(sharedOnlyDocument('7'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
 function editorDocument(): { rows: EcucRow[]; selectedId?: string } {
 	const rows = rowsOf(synthetic(values(1100, () => false))).rows;
 	return { rows, selectedId: rows[0]?.id };
@@ -346,6 +369,9 @@ function editorFixtureFor(state: PreviewState): EditorFixture {
 function diffFixtureFor(state: PreviewState): DiffDocument {
 	if (state.name === 'diff-one-sided') {
 		return oneSidedPair();
+	}
+	if (state.name === 'diff-removed') {
+		return removedPair();
 	}
 	const fixture = state.wide ? widePair : state.name === 'diff-rail' ? railPair : mergePair;
 	return fixture();

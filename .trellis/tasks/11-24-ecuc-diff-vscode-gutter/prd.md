@@ -25,6 +25,7 @@ This task starts fresh from `main`; the abandoned `feat/ecuc-diff-body-surface` 
 
 - **Built-in diff view**
   - Use the VS Code/Monaco diff editor options and UI code: `renderGutterMenu: true`, `enableSplitViewResizing: true`, side-by-side layout, native indicators, fills, word spans, overview ruler and unchanged widgets.
+  - Add the intentional modified feature: enable folding in both diff panes and make the ARXML Collapse/Expand toolbar actions fold/unfold both sides like the single-document editor.
   - Remove every custom merge margin/arrow/overlay/view zone, placeholder decoration/mask, custom selection/subtree tint, custom semantic ruler and custom arrow CSS.
   - Keep the ARXML toolbar, search, collapse, Show all/diff and semantic Prev/Next behavior.
 - **Per-side body**
@@ -67,6 +68,7 @@ This task starts fresh from `main`; the abandoned `feat/ecuc-diff-body-surface` 
 - [ ] The built-in Revert action is absent.
 - [ ] Copy actions target the topmost semantic row and post the correct host side/key under Swap.
 - [ ] Panes resize in Merge and non-Merge modes; 50/50 default, drag, double-click reset, ratio survives document updates and Swap.
+- [ ] The diff panes expose folding controls; the ARXML Collapse/Expand toolbar buttons fold/unfold both sides and restore the original visible rows.
 - [ ] The ARXML toolbar and semantic navigation/search/collapse/Show all-diff behavior remain.
 - [ ] The code-parity manifest, version/integrity/file hashes and source/runtime tests pass.
 - [ ] Full test suite, preview audit, lint, fallow, production bundle and `git diff --check` pass.

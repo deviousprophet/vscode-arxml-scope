@@ -317,6 +317,7 @@
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "npm run engine:build && npm run check-types && npm run lint && node esbuild.js",
+    "postinstall": "patch-package",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
@@ -353,6 +354,7 @@
     "eslint": "^10.15.0",
     "jsdom": "^31.0.1",
     "npm-run-all": "^4.1.5",
+    "patch-package": "^8.0.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.73.0"
   },

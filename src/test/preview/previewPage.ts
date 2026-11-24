@@ -959,6 +959,7 @@ async function waitForMergeArrows(): Promise<void> {
 	mergeClass: boolean;
 	itemDisplay: string;
 	copy: { side?: string; key?: string } | null;
+	availability?: unknown;
 }
 
 function gutterButtonLabel(button: Element): string {
@@ -974,6 +975,7 @@ async function probeGutter(): Promise<void> {
 	if (payload.page !== 'diff') {
 		return;
 	}
+	await delay(250);
 	const gutter = document.querySelector<HTMLElement>('.monaco-diff-editor .gutter');
 	const items = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem'));
 	const buttons = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem .action-label'));
@@ -994,7 +996,60 @@ async function probeGutter(): Promise<void> {
 		sash: document.querySelector('.monaco-diff-editor .monaco-sash.vertical') !== null,
 		mergeClass,
 		itemDisplay: item === undefined ? '' : getComputedStyle(item).display,
-		copy: copy === undefined ? null : { side: copy.side, key: copy.key }
+		copy: copy === undefined ? null : { side: copy.side, key: copy.key },
+		availability: (window as unknown as { __GUTTER_AVAILABILITY__?: unknown }).__GUTTER_AVAILABILITY__
+	};
+}
+
+interface FoldingProbe {
+	visibleBefore: number;
+	visibleCollapsed: number;
+	visibleExpanded: number;
+	chevrons: number;
+}
+
+interface PreviewVisibleRange {
+	startLineNumber: number;
+	endLineNumber: number;
+}
+
+interface PreviewFoldEditor {
+	getVisibleRanges(): PreviewVisibleRange[];
+}
+
+async function probeFolding(): Promise<void> {
+	if (payload.page !== 'diff') {
+		return;
+	}
+	const editor = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: { getModifiedEditor(): PreviewFoldEditor };
+		}
+	).__ARXML_DIFF_EDITOR__;
+	if (editor === undefined) {
+		return;
+	}
+	const modified = editor.getModifiedEditor();
+	const countVisible = (): number =>
+		modified.getVisibleRanges().reduce(
+			(total, range) => total + range.endLineNumber - range.startLineNumber + 1,
+			0
+		);
+	const visibleBefore = countVisible();
+	click('diff-collapse-all');
+	await delay(250);
+	const visibleCollapsed = countVisible();
+	const chevrons = document.querySelectorAll(
+		'.monaco-diff-editor .codicon-folding-collapsed, .monaco-diff-editor .codicon-folding-expanded'
+	).length;
+	click('diff-expand-all');
+	await delay(250);
+	const visibleExpanded = countVisible();
+	(window as unknown as { __FOLDING_PROBE__?: FoldingProbe }).__FOLDING_PROBE__ = {
+		visibleBefore,
+		visibleCollapsed,
+		visibleExpanded,
+		chevrons
 	};
 }
 
@@ -1008,6 +1063,7 @@ async function run(): Promise<void> {
 	if (payload.page === 'diff') {
 		await waitForMergeArrows();
 		await probeGutter();
+		await probeFolding();
 	}
 	await applySwap();
 	await applyPan();

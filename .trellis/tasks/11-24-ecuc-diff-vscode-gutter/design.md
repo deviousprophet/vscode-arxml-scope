@@ -33,6 +33,7 @@ No custom margin, arrow overlay, glyph merge arrow, placeholder mask, selection/
 - `readOnly: true`, `originalEditable: false`; this hides the built-in “Revert Block” action via `diffEditorModifiedWritable`, while the inner editors stay read-only and our custom actions remain visible.
 - `renderIndicators: true`, `renderOverviewRuler: true`, `ignoreTrimWhitespace: false`, `diffAlgorithm: 'advanced'`.
 - `glyphMargin: true`, `lineNumbers: 'on'`, `lineNumbersMinChars: 3`, `lineDecorationsWidth: 14` to match the measured VS Code 1.125 gutter.
+- **Intentional modified feature — folding:** the VS Code diff editor disables folding on its inner editors. Re-enable `folding: true` and `showFoldingControls: 'mouseover'` on both inner editors after creation and after every `diffEditor.updateOptions`/view toggle. The ARXML Collapse/Expand toolbar buttons call `editor.foldAll`/`editor.unfoldAll` on both sides. The per-side synthetic folding ranges are the source. This is a documented deviation from stock VS Code diff behavior.
 - `hideUnchangedRegions` stays on the Show diff/Context path.
 
 ## 4. Per-side synthetic body

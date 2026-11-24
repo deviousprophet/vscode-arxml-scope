@@ -44,3 +44,22 @@ declare module 'monaco-editor/platform/commands/common/commands.js' {
 		): unknown;
 	};
 }
+
+declare module 'monaco-editor/platform/contextkey/common/contextkey.js' {
+	export interface IContextKey<T> {
+		set(value: T, tx?: unknown): void;
+	}
+	export interface IContextKeyService {
+		createKey<T>(key: string, defaultValue: T): IContextKey<T>;
+	}
+	export const ContextKeyExpr: {
+		has(key: string): unknown;
+	};
+	export const IContextKeyService: unknown;
+}
+
+declare module 'monaco-editor/editor/standalone/browser/standaloneServices.js' {
+	export const StandaloneServices: {
+		get<T>(id: unknown): T;
+	};
+}

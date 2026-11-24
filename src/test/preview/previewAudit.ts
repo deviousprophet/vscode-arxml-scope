@@ -189,6 +189,12 @@ export interface PreviewAudit {
 	toolbar: ToolbarAudit;
 	gutter: GutterAudit;
 	gutterProbe?: GutterProbe;
+	folding?: {
+		visibleBefore: number;
+		visibleCollapsed: number;
+		visibleExpanded: number;
+		chevrons: number;
+	};
 	content: ContentAudit;
 	selected: string | null;
 	swap: { before: PaneSnapshot; after: PaneSnapshot } | null;
@@ -474,6 +480,17 @@ function edgeGap(rect: Rect, bounds: PaneBounds): number {
 
 function gutterProbeOf(): GutterProbe | undefined {
 	return (window as unknown as { __GUTTER_PROBE__?: GutterProbe }).__GUTTER_PROBE__;
+}
+
+interface FoldingProbe {
+	visibleBefore: number;
+	visibleCollapsed: number;
+	visibleExpanded: number;
+	chevrons: number;
+}
+
+function foldingProbeOf(): FoldingProbe | undefined {
+	return (window as unknown as { __FOLDING_PROBE__?: FoldingProbe }).__FOLDING_PROBE__;
 }
 
 function gutterAudit(): GutterAudit {
@@ -2066,6 +2083,7 @@ function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAu
 		toolbar: toolbarAudit(),
 		gutter: gutterAudit(),
 		gutterProbe: gutterProbeOf(),
+		folding: foldingProbeOf(),
 		content: contentAudit(),
 		selected: selectedKey(),
 		swap: swapSnapshot(swapBefore),

@@ -32,6 +32,9 @@
 - [ ] Remove CSS that neutralizes native paint or restores custom placeholder/merge layers.
 - [ ] Keep only the ARXML syntax/theme, inherited editor settings and body audit hooks.
 - [ ] Verify one-sided gaps use native `.diagonal-fill` with no numbered placeholder.
+- [ ] Re-enable folding on both inner editors after creation and after view/settings updates.
+- [ ] Verify the ARXML Collapse/Expand buttons fold/unfold both sides and restore the visible rows.
+- [ ] Add a preview audit for folding controls and the Collapse/Expand probe.
 
 ## Phase 3 — Built-in gutter, toolbar and sash
 

@@ -22,6 +22,7 @@ import {
 } from './monaco/synthetic';
 import { defineEcucTheme, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
 import { installDiffGutterActions, type DiffGutterContext, type DiffGutterDirection } from './monaco/diffGutterActions';
+import { installGutterAvailability } from './monaco/diffGutterAvailability';
 import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
 import { DiffToolbar } from './components/toolbar/toolbar';
 import { installNoticeErrors } from './render/pageError';
@@ -39,6 +40,7 @@ let changesOnly = false;
 let contextActive = true;
 let semantic = true;
 let selectedKey: string | undefined;
+let gutterAvailability: { sync(): void; dispose(): void } | undefined;
 type DiffSide = 'left' | 'right';
 interface DiffNativeQuery {
 	query: string;
@@ -400,6 +402,9 @@ function updateDiffOptions(): void {
 			minimumLineCount: 3
 		}
 	});
+	// The diff editor rewrites sub-editor options on update; re-enable folding.
+	applyDiffFolding();
+	gutterAvailability?.sync();
 	// The Rust diff search is scoped to the current view, so a view toggle
 	// needs a fresh query instead of last view's match set.
 	invalidateDiffFind();
@@ -584,6 +589,27 @@ function firstKeyInRange(
 	return undefined;
 }
 
+function rangeHasSource(
+	keys: readonly (string | undefined)[],
+	range: { startLineNumber: number; endLineNumberExclusive: number },
+	side: DiffSide
+): boolean {
+	return firstKeyInRange(keys, range, side) !== undefined;
+}
+
+function gutterAvailabilityFor(mapping: {
+	original: { startLineNumber: number; endLineNumberExclusive: number };
+	modified: { startLineNumber: number; endLineNumberExclusive: number };
+}): { left: boolean; right: boolean } {
+	if (documentModel === undefined || aligned === undefined) {
+		return { left: true, right: true };
+	}
+	return {
+		left: rangeHasSource(modifiedKeys(), mapping.modified, displayedSide('modified')),
+		right: rangeHasSource(originalKeys(), mapping.original, displayedSide('original'))
+	};
+}
+
 /** The built-in hunk toolbar posts the same host copy as the old arrow overlay. */
 function copyFromGutter(direction: DiffGutterDirection, context: DiffGutterContext | undefined): void {
 	const mapping = context?.mapping;
@@ -609,6 +635,7 @@ function swapSides(): void {
 	toolbar?.setSwapped(swapped);
 	setTitles();
 	selectedKey = undefined;
+	gutterAvailability?.sync();
 }
 
 function foldAll(): void {
@@ -619,6 +646,16 @@ function foldAll(): void {
 function unfoldAll(): void {
 	originalEditor()?.trigger('toolbar', 'editor.unfoldAll', null);
 	modifiedEditor()?.trigger('toolbar', 'editor.unfoldAll', null);
+}
+
+/** The diff editor disables folding on its inner editors; the modified feature re-enables it. */
+function applyDiffFolding(): void {
+	for (const editor of [originalEditor(), modifiedEditor()]) {
+		editor?.updateOptions({
+			folding: true,
+			showFoldingControls: 'mouseover'
+		});
+	}
 }
 
 function changeList(): monaco.editor.ILineChange[] {
@@ -909,6 +946,8 @@ async function mountDiff(): Promise<void> {
 	installSideFindBridge(leftModel, 'left');
 	installSideFindBridge(rightModel, 'right');
 	installDiffGutterActions(copyFromGutter);
+	(window as unknown as { __ARXML_GUTTER_AVAILABILITY__?: unknown }).__ARXML_GUTTER_AVAILABILITY__ =
+		gutterAvailabilityFor;
 	diffEditor = monaco.editor.createDiffEditor(container, {
 		theme: 'arxml-ecuc-theme',
 		automaticLayout: true,
@@ -945,7 +984,12 @@ async function mountDiff(): Promise<void> {
 		lineNumbers: 'on',
 		minimap: { enabled: false }
 	});
+	applyDiffFolding();
+	gutterAvailability = installGutterAvailability({
+		availability: gutterAvailabilityFor
+	});
 	diffEditor.onDidUpdateDiff(function () {
+		gutterAvailability?.sync();
 	});
 
 	mountToolbar();
