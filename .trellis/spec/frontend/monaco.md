@@ -169,7 +169,8 @@ preview audit records the visible-row round trip (`visibleBefore`, `visibleColla
   contents, page options, exactly two action registrations and no legacy classes.
 - `webview-preview` skill — the diff and editor states in the full seeded set; the audit
   reads the real `.gutter`, `.gutterItem`, `.monaco-sash`, action availability, folding
-  ranges and native body paint. See [`preview-audit.md`](./preview-audit.md).
+  ranges, native body paint and the hunk-toolbar alignment captured before any scroll. See
+  [`preview-audit.md`](./preview-audit.md).
 
 ## Wrong vs Correct
 

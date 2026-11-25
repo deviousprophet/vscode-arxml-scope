@@ -280,7 +280,7 @@ the built-in hover gutter copies a hunk to the other side as one undoable edit. 
 
 | ID | Case | Expected |
 |---|---|---|
-| MERGE-01 | toggle off | no gutter items; the `.gutter` and sash stay mounted and no copy is possible |
+| MERGE-01 | toggle off | no visible gutter items; the `.gutter` and sash stay mounted, hidden items keep their layout, and no copy is possible |
 | MERGE-02 | copy left→right on a changed parameter | the right value becomes the left one, one undo restores |
 | MERGE-03 | copy right→left | mirrored, same bytes |
 | MERGE-04 | copy a container | the whole subtree replaces the target, target-only children removed |

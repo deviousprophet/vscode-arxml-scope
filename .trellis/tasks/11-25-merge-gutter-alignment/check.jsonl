@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify the preview and test gates for the layout fix"}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Verify the alignment probe is non-vacuous and covers the initial toggle"}

@@ -40,8 +40,8 @@ projection for choosing a state.
 
 | State | Page | Size | What it exercises |
 |---|---|---|---|
-| `diff-off` | diff | 1400×900 | baseline diff; the built-in gutter and sash are mounted, copy actions are hidden outside Merge, and the sash drag/reset runs |
-| `diff-merge` | diff | 1400×900 | Merge pressed; the built-in hunk toolbar offers Copy Block to Left/Right |
+| `diff-off` | diff | 1400×900 | baseline diff; the built-in gutter and sash are mounted, copy actions are hidden outside Merge without collapsing their layout, and the sash drag/reset runs |
+| `diff-merge` | diff | 1400×900 | Merge pressed; the built-in hunk toolbar offers Copy Block to Left/Right and its arrows start centered on the hunk |
 | `diff-swap` | diff | 1400×900 | Swap pressed; headers and values mirror, the copy direction/host side follow the displayed panes, and the sash ratio survives |
 | `diff-rail` | diff | 1400×900 | long document; Next diff jumps to the change near line 1000 and scrolls |
 | `diff-one-sided` | diff | 1400×900 | per-side models with changed pairs; native fills and diagonal gaps, no placeholder layers |

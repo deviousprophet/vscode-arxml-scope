@@ -277,8 +277,10 @@ VS Code's built-in 35px hunk gutter: hovering a hunk shows `Copy Block to Left` 
 `Copy Block to Right`, and the current hunk uses VS Code's `showAlways`. A one-sided hunk
 offers both directions: copying from the owning side adds it, copying from the empty side
 deletes it. The gutter and sash stay mounted when Merge is off;
-only the hunk items hide, so the panes still resize. Labels follow the displayed panes and
-the host receives the stored side shown in the source pane, including after Swap.
+only the hunk items are made invisible, without collapsing their layout, so Monaco can measure the
+toolbar and center the arrows before Merge is revealed. The panes still resize either way. Labels
+follow the displayed panes and the host receives the stored side shown in the source pane, including
+after Swap.
 
 The toolbar is a 54px strip with divider-separated groups and icon-over-label tools: a 60x48 box with
 an 18px icon above a 10px label. The dense diff group drops its secondary labels (Show all/Show diff,

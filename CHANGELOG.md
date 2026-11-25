@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Merge hunk arrows are centered on their lines as soon as Merge is enabled instead of correcting only after the diff scrolls
 - Opening the native find widget with `Ctrl+F` or `Ctrl+H` no longer shifts the diff panes' scroll position
 - The native find buttons' tooltips no longer blink between shown and hidden in the diff view
 - A bulk rename whose names share no token now pairs containers in the semantic diff, including when new containers sort before the renamed block

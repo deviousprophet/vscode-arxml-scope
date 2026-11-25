@@ -139,6 +139,11 @@ the listed DOM/model state, not a screenshot diff.
   hunk `.gutterItem`s and the Copy Block to Left/Right labels; `diff-off` hides only the
   items and keeps the gutter and sash. A third action, `Revert Block`, or any copy while
   Merge is off is a violation.
+- **The Merge arrows are centered on their hunks before any scroll.** The alignment probe runs
+  immediately after the Merge message, before folding or sash gestures. It compares each compact
+  visible `.gutterItem` with its `.buttons` toolbar and fails when their centers differ by more
+  than 1px. This pins the hidden-layout bug where `display: none` made Monaco measure a 0px
+  toolbar and draw the arrows almost one line low until the next scroll.
 - **One-sided hunks offer both directions.** `diff-removed` and `diff-added` render both
   `Copy Block to Left` and `Copy Block to Right` on the one-sided hunk. Copying from the
   owning side adds the block; copying from the empty side posts the owning row key with the

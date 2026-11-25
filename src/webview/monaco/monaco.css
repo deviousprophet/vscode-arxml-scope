@@ -63,9 +63,13 @@
 }
 
 /* The built-in gutter and sash stay mounted so panes resize in every mode.
- * Merge owns only the copy items. */
+ * Merge owns only the copy items. Keep the items laid out while hidden:
+ * Monaco measures the button toolbar height during `layout`, and `display:
+ * none` makes that height 0, so the arrows are positioned almost one line too
+ * low until the next scroll. */
 #diff-monaco:not([data-merge="true"]) .monaco-diff-editor .gutter .gutterItem {
-	display: none;
+	visibility: hidden;
+	pointer-events: none;
 }
 
 /* Native find-button tooltips are compact and can overlap their anchor. If the

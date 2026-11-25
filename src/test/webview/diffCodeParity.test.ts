@@ -140,6 +140,20 @@ suite('VS Code diff source contract', () => {
 		);
 	});
 
+	test('source contract: hidden Merge gutter items keep their measured layout', () => {
+		const css = read('src/webview/monaco/monaco.css');
+		assert.ok(
+			/#diff-monaco:not\(\[data-merge="true"\]\)[^{]*\.gutterItem\s*\{[^}]*visibility:\s*hidden[^}]*pointer-events:\s*none/.test(
+				css
+			),
+			'Merge must hide gutter items with visibility so Monaco can measure the button toolbar'
+		);
+		assert.ok(
+			!/#diff-monaco:not\(\[data-merge="true"\]\)[^{]*\.gutterItem\s*\{[^}]*display:\s*none/.test(css),
+			'Merge must not hide gutter items with display:none'
+		);
+	});
+
 	test('source contract: no custom margin, arrow, placeholder or ruler layer remains', () => {
 		const forbidden = [
 			'arxml-diff-placeholder',

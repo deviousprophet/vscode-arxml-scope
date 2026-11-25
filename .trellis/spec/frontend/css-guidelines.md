@@ -92,8 +92,9 @@ Rules:
   once. Do not add a deeper chain for a new feature.
 - Do not use `!important`. There are none in the shipped stylesheets; keep it that way.
 - Merge visibility is a data attribute, not a mirroring class:
-  `#diff-monaco:not([data-merge="true"]) .gutterItem { display: none; }`. The gutter and sash stay
-  mounted; the toolbar keeps `aria-pressed` as its state.
+  `#diff-monaco:not([data-merge="true"]) .gutterItem { visibility: hidden; pointer-events: none; }`.
+  The gutter and sash stay mounted and the hidden items keep their layout, because Monaco measures
+  the hunk toolbar height while positioning it. The toolbar keeps `aria-pressed` as its state.
 - Do not style through `innerHTML` or inject markup. Rows are created with `createElement` /
   `textContent`; the only namespace-built SVG is the inline twisty.
 
@@ -184,9 +185,10 @@ Rules:
 - `diffView.css` keeps only the shell, title strip, empty state and host box rules. The old
   `.diff-row` / `.diff-cell` / `.word-changed` / arrow-strip rules are gone.
 - Merge gates the hunk actions with `#diff-monaco[data-merge="true"]`; outside Merge the 35px
-  `.gutter` and `.monaco-sash` stay mounted and only `.gutterItem` is hidden.
+  `.gutter` and `.monaco-sash` stay mounted and only `.gutterItem` is hidden with
+  `visibility: hidden`, never `display: none`, so its buttons keep their measured height.
 - The gutter toolbar is Monaco's; `Copy Block to Left` / `Copy Block to Right` are registered on
-  `MenuId.DiffEditorHunkToolbar`. A one-sided hunk hides the impossible action, and the short line-1
+  `MenuId.DiffEditorHunkToolbar`. A one-sided hunk offers both directions, and the short line-1
   hunk uses the built-in “More Actions…” overflow.
 
 

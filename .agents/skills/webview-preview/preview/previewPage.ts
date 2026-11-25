@@ -12,7 +12,7 @@
 import '../../../../src/webview/diffMonaco';
 import '../../../../src/webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
-import type { PaneSnapshot } from './previewAudit';
+import type { GutterAlignment, PaneSnapshot } from './previewAudit';
 import type { PreviewStateFields } from './previewStateFields';
 
 interface PreviewPayload extends PreviewStateFields {
@@ -984,6 +984,7 @@ interface GutterProbe {
 	sash: boolean;
 	mergeActive: boolean;
 	itemDisplay: string;
+	itemVisible: boolean;
 	currentShowAlways: boolean;
 	currentActions: string[];
 	clicked: string | null;
@@ -991,6 +992,14 @@ interface GutterProbe {
 	overflowLabels: string[] | null;
 	overflowDebug: string[];
 	availability: GutterAvailabilitySnapshot[];
+}
+
+function isElementVisible(element: Element | undefined): boolean {
+	if (element === undefined) {
+		return false;
+	}
+	const style = getComputedStyle(element);
+	return style.display !== 'none' && style.visibility !== 'hidden';
 }
 
 function gutterButtonLabel(button: Element): string {
@@ -1004,6 +1013,53 @@ function gutterButtonLabel(button: Element): string {
 
 function itemActions(item: Element): string[] {
 	return Array.from(item.querySelectorAll('.action-label')).map(gutterButtonLabel);
+}
+
+async function probeGutterAlignment(): Promise<void> {
+	await waitFor(() => document.querySelector('.monaco-diff-editor .gutterItem') !== null);
+	const items = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem'));
+	const changes =
+		(
+			window as unknown as {
+				__ARXML_DIFF_EDITOR__?: {
+					getLineChanges?(): Array<{
+						originalStartLineNumber: number;
+						modifiedStartLineNumber: number;
+					}> | null;
+				};
+			}
+		).__ARXML_DIFF_EDITOR__?.getLineChanges?.() ?? [];
+	const indexed = items.map((item, index) => ({ item, change: changes[index] }));
+	const visible = indexed.filter(({ item }) => isElementVisible(item));
+	let checked = 0;
+	let maxCenterOffset = 0;
+	for (const { item, change } of visible) {
+		const itemRect = item.getBoundingClientRect();
+		const buttons = item.querySelector<HTMLElement>('.buttons');
+		if (
+			buttons === null ||
+			itemRect.height > 44 ||
+			change === undefined ||
+			change.originalStartLineNumber === 0 ||
+			change.modifiedStartLineNumber === 0
+		) {
+			continue;
+		}
+		const buttonRect = buttons.getBoundingClientRect();
+		const offset = Math.abs(
+			buttonRect.top + buttonRect.height / 2 - (itemRect.top + itemRect.height / 2)
+		);
+		maxCenterOffset = Math.max(maxCenterOffset, offset);
+		checked += 1;
+	}
+	const alignment: GutterAlignment = {
+		mergeActive: document.getElementById('diff-monaco')?.getAttribute('data-merge') === 'true',
+		items: items.length,
+		visible: visible.length,
+		checked,
+		maxCenterOffset: Math.round(maxCenterOffset * 10) / 10
+	};
+	(window as unknown as { __GUTTER_ALIGNMENT__?: GutterAlignment }).__GUTTER_ALIGNMENT__ = alignment;
 }
 
 async function probeGutter(): Promise<void> {
@@ -1088,6 +1144,7 @@ async function probeGutter(): Promise<void> {
 		sash: document.querySelector('.monaco-diff-editor .monaco-sash.vertical') !== null,
 		mergeActive,
 		itemDisplay: current === undefined ? '' : getComputedStyle(current).display,
+		itemVisible: isElementVisible(current),
 		currentShowAlways: current?.classList.contains('showAlways') === true,
 		currentActions,
 		clicked,
@@ -1305,6 +1362,7 @@ async function run(): Promise<void> {
 	await applyMerge();
 	if (payload.page === 'diff') {
 		await waitForMergeArrows();
+		await probeGutterAlignment();
 		await probeFolding();
 		await probeSash();
 	}

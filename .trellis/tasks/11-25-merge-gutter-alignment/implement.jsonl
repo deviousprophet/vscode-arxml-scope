@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/monaco.md", "reason": "Gutter mount, availability and built-in diff contracts"}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Gutter, folding, sash and one-sided audit rules"}
+{"file": ".trellis/spec/frontend/components/component-diff-view.md", "reason": "Diff shell, toolbar and title-strip ownership"}
+{"file": ".trellis/spec/frontend/diff-parity.md", "reason": "Pinned Monaco surface and checked-in patch"}

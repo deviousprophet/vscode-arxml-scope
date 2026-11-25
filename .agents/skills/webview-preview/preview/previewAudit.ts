@@ -149,6 +149,7 @@ export interface PreviewAudit {
 	toolbar: ToolbarAudit;
 	gutter: GutterAudit;
 	gutterProbe?: GutterProbe;
+	gutterAlignment?: GutterAlignment;
 	folding?: FoldingProbe;
 	sash?: SashProbe;
 	content: ContentAudit;
@@ -161,6 +162,14 @@ export interface PreviewAudit {
 	violations: string[];
 }
 
+export interface GutterAlignment {
+	mergeActive: boolean;
+	items: number;
+	visible: number;
+	checked: number;
+	maxCenterOffset: number;
+}
+
 interface GutterProbe {
 	present: boolean;
 	width: number;
@@ -170,6 +179,7 @@ interface GutterProbe {
 	sash: boolean;
 	mergeActive: boolean;
 	itemDisplay: string;
+	itemVisible: boolean;
 	currentShowAlways: boolean;
 	currentActions: string[];
 	clicked: string | null;
@@ -335,6 +345,10 @@ function inside(inner: Rect, outer: Rect): boolean {
 
 function gutterProbeOf(): GutterProbe | undefined {
 	return (window as unknown as { __GUTTER_PROBE__?: GutterProbe }).__GUTTER_PROBE__;
+}
+
+function gutterAlignmentOf(): GutterAlignment | undefined {
+	return (window as unknown as { __GUTTER_ALIGNMENT__?: GutterAlignment }).__GUTTER_ALIGNMENT__;
 }
 
 interface FoldingProbe {
@@ -1545,6 +1559,7 @@ function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations
 	return [
 		...monacoDiffViolations(state),
 		...gutterProbeViolations(state, audit.gutterProbe),
+		...gutterAlignmentIssues(state, audit.gutterAlignment),
 		...foldingViolations(state, audit.folding),
 		...sashViolations(state, audit.sash),
 		...mergePressViolations(state, audit)
@@ -1584,14 +1599,14 @@ function mergeGutterIssues(state: AuditState, probe: GutterProbe): string[] {
 	if (!state.merge) {
 		return [
 			...issueWhen(
-				probe.items > 0 && probe.itemDisplay !== 'none',
+				probe.items > 0 && probe.itemVisible,
 				'gutter copy actions are visible while Merge is off'
 			),
 			...issueWhen(probe.copy !== null, 'a gutter copy fired while Merge is off')
 		];
 	}
 	return [
-		...issueWhen(probe.itemDisplay === 'none', 'gutter copy actions are hidden inside Merge'),
+		...issueWhen(!probe.itemVisible, 'gutter copy actions are hidden inside Merge'),
 		...issueWhen(
 			state.name !== 'diff-removed' && !probe.currentShowAlways,
 			'the current hunk is not marked showAlways'
@@ -1754,6 +1769,38 @@ function mergePressViolations(state: AuditState, audit: Omit<PreviewAudit, 'viol
 	return ['Merge is not pressed'];
 }
 
+function gutterAlignmentIssues(
+	state: AuditState,
+	alignment: GutterAlignment | undefined
+): string[] {
+	if (state.page !== 'diff') {
+		return [];
+	}
+	if (alignment === undefined) {
+		return ['the gutter alignment probe did not run'];
+	}
+	if (alignment.mergeActive !== Boolean(state.merge)) {
+		return [];
+	}
+	if (!state.merge) {
+		return issueWhen(
+			alignment.visible > 0,
+			'gutter copy actions are visible while Merge is off'
+		);
+	}
+	return [
+		...issueWhen(alignment.visible === 0, 'gutter copy actions are hidden inside Merge'),
+		...issueWhen(
+			alignment.visible > 0 && alignment.checked === 0,
+			'the gutter alignment probe found no compact hunk to measure'
+		),
+		...issueWhen(
+			alignment.maxCenterOffset > 1,
+			`the gutter copy buttons are ${alignment.maxCenterOffset}px off the hunk centre`
+		)
+	];
+}
+
 interface PreviewSnapshotModel {
 	getValue(): string;
 }
@@ -1843,6 +1890,7 @@ function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAu
 		toolbar: toolbarAudit(),
 		gutter: gutterAudit(),
 		gutterProbe: gutterProbeOf(),
+		gutterAlignment: gutterAlignmentOf(),
 		folding: foldingProbeOf(),
 		sash: sashProbeOf(),
 		content: contentAudit(),
