@@ -170,15 +170,20 @@ the listed DOM/model state, not a screenshot diff.
   cyclic rotation of the change lines with one wrap step, so a repeated current change or a
   skipped change is a violation.
 - **A collapsed container keeps its node header and folds both panes.** `diff-collapsed` folds
-  the `Items` container through the folding command from each side in turn. The audit requires
-  the full `Items "Items"` line and `⋯` fold hint in both panes and no visible `P0000` child
-  row; a one-pane fold, a `{`-only line or an unfolded container is a violation. Folding also
-  requires one `.arxml-fold-has-diff` glyph dot in each pane while collapsed and zero after
-  expansion; the dot has no count or text.
+  the `Items` container and expands it once. The audit requires the full `Items "Items"` line
+  and `⋯` fold hint in both panes and no visible `P0000` child row; a one-pane fold, a
+  `{`-only line or an unfolded container is a violation. Folding also requires one
+  `.arxml-fold-has-diff` glyph dot in each pane while collapsed and zero after expansion; the dot
+  has no count or text and only appears when the collapsed row exists on both sides.
 - **A folded one-sided gap does not stripe the block.** `diff-collapsed-onesided` folds a shared
   `Items` container that carries a left-only child. The audit counts only visible
-  `.diagonal-fill` elements: zero in both panes while folded, at least one after expansion, and
-  zero again after the reverse fold. A visible striped gap or a missing native fill fails.
+  `.diagonal-fill` elements: zero in both panes while folded. The expanded native fill remains
+  covered by `diff-removed` / `diff-added`, which require a visible diagonal fill. A visible
+  striped gap or a globally hidden native fill fails.
+- **Collapse All folds one-sided containers too.** `diff-collapse-all` folds a left-only module
+  and a shared module through the toolbar action. The audit requires the module headers to stay
+  visible, `RemovedValue` and `ChangedValue` to be hidden, and the shared module header to remain
+  in the modified pane. A one-sided fold that the other pane immediately unfolds is a violation.
 - **Editor page.** Toolbar, line-number gutter, selected row and Details panel render
   without clipping. The `select` state must leave a selected row in the audit.
 

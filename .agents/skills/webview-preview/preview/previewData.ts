@@ -24,12 +24,13 @@ export interface PreviewState extends PreviewStateFields {
 
 export const STATES: PreviewState[] = [
 	{ name: 'diff-off', page: 'diff', width: 1400, height: 900, sash: true },
+	{ name: 'diff-collapsed', page: 'diff', width: 1400, height: 900, merge: true, foldLabel: 'Items "Items"' },
+	{ name: 'diff-collapsed-onesided', page: 'diff', width: 1400, height: 900, foldLabel: 'Items "Items"' },
+	{ name: 'diff-collapse-all', page: 'diff', width: 1400, height: 900, collapseAll: true },
 	{ name: 'diff-merge', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true, sash: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-nav', page: 'diff', width: 1400, height: 900, merge: true, nav: true },
-	{ name: 'diff-collapsed', page: 'diff', width: 1400, height: 900, merge: true, foldLabel: 'Items "Items"' },
-	{ name: 'diff-collapsed-onesided', page: 'diff', width: 1400, height: 900, foldLabel: 'Items "Items"' },
 	{ name: 'diff-sticky', page: 'diff', width: 1400, height: 900, merge: true, diffScrollLine: 40 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-removed', page: 'diff', width: 1400, height: 900, merge: true },
@@ -438,6 +439,9 @@ function diffFixtureFor(state: PreviewState): DiffDocument {
 	if (state.name === 'diff-collapsed-onesided') {
 		return collapsedOneSidedPair();
 	}
+	if (state.name === 'diff-collapse-all') {
+		return removedPair();
+	}
 	const fixture = state.wide ? widePair : state.name === 'diff-rail' ? railPair : mergePair;
 	return fixture();
 }
@@ -465,6 +469,7 @@ function payloadFor(state: PreviewState, document: unknown) {
 		jump: state.jump,
 		nav: state.nav,
 		foldLabel: state.foldLabel,
+		collapseAll: state.collapseAll,
 		select: state.select,
 		sash: state.sash,
 		find: state.find,

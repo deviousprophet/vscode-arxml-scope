@@ -25,7 +25,7 @@ function rowHasDifference(row: DiffRow, isRoot: boolean): boolean {
 /** True when the row at `rowIndex` or any descendant is changed/added/removed. */
 export function subtreeHasDifference(rows: readonly DiffRow[], rowIndex: number): boolean {
 	const row = rows[rowIndex];
-	if (row === undefined) {
+	if (row === undefined || row.left === undefined || row.right === undefined) {
 		return false;
 	}
 	const end = Math.min(rows.length, rowIndex + 1 + row.subtreeSize);

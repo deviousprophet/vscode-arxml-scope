@@ -168,13 +168,13 @@ region. The control is display-only; it never changes the comparison result.
 | **Show all** | Show every row, including unchanged rows. |
 | **Show diff** | Keep changed/added/removed rows, five context rows above and below each change, and a hidden-region control for the rest. |
 | **Prev diff** / **Next diff** | Move to the previous/next changed row, wrapping at the ends. |
-| **Collapse** / **Expand** | Fold or unfold every container in both panes. |
+| **Collapse** / **Expand** | Fold or unfold every container in both panes. Removed/added containers fold on the side that owns them. |
 | `F7` / `Shift+F7` | Same as Next/Prev while focus is in the diff. |
 | **Swap sides** | Mirror the displayed sides; display only, no re-comparison. |
 | **Merge** | Turn the panel into the two-way copy merge; off by default. See [MERGE.md](MERGE.md). |
 | **Semantic** / **Strict** | Two-button view group for renamed-container pairing. The group flips immediately and a spinner/status shows while the new view is prepared. |
 | **Context** | Active by default; keeps five unchanged rows above and below each change in Show diff. Only the toggle changes. |
-| Fold control | Collapse or expand one container in both panes; the matching container on the other side follows. A small margin dot marks a collapsed container whose subtree hides changed rows. |
+| Fold control | Collapse or expand one container in both panes; the matching container on the other side follows. A small margin dot marks a collapsed container only when the container exists on both sides and hides changed rows. |
 | Sticky header | While scrolling, the nearest parent container/module header stays pinned, matching the ECUC editor. |
 | **Search** | `Ctrl+F` / `Cmd+F` opens Monaco's native find widget in the focused pane; type a query and press `Enter`; `Shift+Enter` goes backwards. |
 | **Search options** | `Aa` case sensitive, `ab|` whole word, `.*` regular expression. The diff has no replace row. |

@@ -15,6 +15,8 @@ export interface PreviewStateFields {
 	nav?: boolean;
 	/** Folds the diff row whose text contains this label and records the visible result. */
 	foldLabel?: string;
+	/** Clicks the diff Collapse All action and records both panes' visible rows. */
+	collapseAll?: boolean;
 	select?: boolean;
 	/** Exercises the built-in sash drag, ratio persistence and double-click reset. */
 	sash?: boolean;

@@ -35,6 +35,10 @@ suite('diff folding', () => {
 			new Set(),
 			new Map([
 				['module', 2],
+				['missing', 99]
+			]),
+			new Map([
+				['module', 2],
 				['container', 10]
 			]),
 			target
@@ -44,14 +48,38 @@ suite('diff folding', () => {
 
 	test('an expanded source plans the target expansion', () => {
 		const target = regionsOf([2, 10], [0]);
-		const plan = foldTogglePlan(new Set(), new Set(['module']), new Map([['module', 2]]), target);
+		const plan = foldTogglePlan(
+			new Set(),
+			new Set(['module']),
+			new Map([['module', 2]]),
+			new Map([['module', 2]]),
+			target
+		);
 		assert.deepStrictEqual(plan, [0]);
+	});
+
+	test('a target-only collapsed row is not unfolded', () => {
+		const target = regionsOf([2, 10], [1]);
+		assert.deepStrictEqual(
+			foldTogglePlan(
+				new Set(),
+				new Set(['removed']),
+				new Map([['module', 2]]),
+				new Map([
+					['module', 2],
+					['removed', 10]
+				]),
+				target
+			),
+			[]
+		);
 	});
 
 	test('equal states plan no toggles', () => {
 		const target = regionsOf([2, 10], [1]);
+		const lineByKey = new Map([['container', 10]]);
 		assert.deepStrictEqual(
-			foldTogglePlan(new Set(['container']), new Set(['container']), new Map([['container', 10]]), target),
+			foldTogglePlan(new Set(['container']), new Set(['container']), lineByKey, lineByKey, target),
 			[]
 		);
 	});

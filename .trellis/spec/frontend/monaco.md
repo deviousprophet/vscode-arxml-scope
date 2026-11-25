@@ -141,10 +141,12 @@ preview audit records the visible-row round trip (`visibleBefore`, `visibleColla
 like `buildSyntheticDocument`; a collapsed container therefore keeps its full node header
 with Monaco's `⋯` fold hint instead of leaving only the opening brace visible. Fold changes
 on either inner editor are mirrored to the other side by row key through the pinned
-`editor.contrib.folding` contribution, so collapsing from either pane folds both. A collapsed
-row whose subtree contains a changed/added/removed row gets a glyph-margin dot
-(`.arxml-fold-has-diff`); it carries no count or text and is cleared on expansion. A rename of
-the collapsed row itself does not mark it, but descendant changes still do.
+`editor.contrib.folding` contribution, so collapsing from either pane folds both. Sync skips
+keys that exist on only one side, so a one-sided removed/added container cannot be unfolded by
+the pane that lacks it. A collapsed row whose subtree contains a changed/added/removed row gets
+a glyph-margin dot (`.arxml-fold-has-diff`); it carries no count or text and is cleared on
+expansion. The marker requires the collapsed row itself to exist on both sides, and a rename of
+that row alone does not mark it; descendant changes still do.
 The pinned `diffEditorViewZones.js` patch sets `showInHiddenAreas: false` for side-by-side
 filler view zones, so a folded block does not leave a striped diagonal-fill gap. Expanded
 one-sided hunks keep the native fill.

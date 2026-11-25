@@ -12,6 +12,7 @@ function row(
 	subtreeSize = 0,
 	changes: DiffRow['changes'] = []
 ): DiffRow {
+	const cell = {} as NonNullable<DiffRow['left']>;
 	return {
 		key,
 		parentKey: null,
@@ -22,9 +23,24 @@ function row(
 		hasChildren: subtreeSize > 0,
 		subtreeSize,
 		status,
+		left: cell,
+		right: cell,
 		changes,
 		haystack: key
 	};
+}
+
+function existingOn(
+	key: string,
+	status: DiffRow['status'],
+	side: 'left' | 'right',
+	subtreeSize = 0,
+	changes: DiffRow['changes'] = []
+): DiffRow {
+	const rowValue = row(key, status, subtreeSize, changes);
+	return side === 'left'
+		? { ...rowValue, right: undefined }
+		: { ...rowValue, left: undefined };
 }
 
 function nameChange(): DiffRow['changes'] {
@@ -61,6 +77,16 @@ suite('diff fold indicator', () => {
 	test('a one-sided added or removed row counts as a difference', () => {
 		const sideRows = [row('module', 'unchanged', 1), row('added', 'added')];
 		assert.strictEqual(subtreeHasDifference(sideRows, 0), true);
+	});
+
+	test('a collapsed row that exists on only one side never marks', () => {
+		const rows = [existingOn('removed', 'removed', 'left', 1), existingOn('child', 'added', 'left')];
+		assert.strictEqual(subtreeHasDifference(rows, 0), false);
+	});
+
+	test('a one-sided descendant marks a shared root', () => {
+		const rows = [row('module', 'unchanged', 1), existingOn('added', 'added', 'left')];
+		assert.strictEqual(subtreeHasDifference(rows, 0), true);
 	});
 
 	test('the collapsed row’s own rename does not mark it', () => {

@@ -684,12 +684,15 @@ function unfoldAll(): void {
 }
 
 let syncingFolds = false;
+let foldActionVersion = 0;
 let foldSyncQueue: Promise<void> = Promise.resolve();
 let foldIndicatorQueue: Promise<void> = Promise.resolve();
 const foldIndicatorIds = new WeakMap<monaco.editor.ICodeEditor, string[]>();
 
-function scheduleFoldSync(editor: monaco.editor.ICodeEditor): void {
-	foldSyncQueue = foldSyncQueue.then(() => syncFolds(editor)).catch(() => undefined);
+function scheduleFoldSync(editor: monaco.editor.ICodeEditor, version: number): void {
+	foldSyncQueue = foldSyncQueue
+		.then(() => (version === foldActionVersion ? syncFolds(editor) : undefined))
+		.catch(() => undefined);
 }
 
 function scheduleFoldIndicator(editor: monaco.editor.ICodeEditor): void {
@@ -881,6 +884,7 @@ async function foldPlanFor(
 	return foldTogglePlan(
 		collapsedRowKeys(source.fold.regions, source.keys),
 		collapsedRowKeys(target.fold.regions, target.keys),
+		source.rows,
 		target.rows,
 		target.fold.regions
 	);
@@ -935,7 +939,8 @@ function wireFoldSync(): void {
 	}
 	for (const editor of [diffEditor.getOriginalEditor(), diffEditor.getModifiedEditor()]) {
 		editor.onDidChangeHiddenAreas(function () {
-			scheduleFoldSync(editor);
+			foldActionVersion += 1;
+			scheduleFoldSync(editor, foldActionVersion);
 			scheduleFoldIndicator(editor);
 		});
 	}

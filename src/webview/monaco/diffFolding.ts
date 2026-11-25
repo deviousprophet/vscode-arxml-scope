@@ -61,23 +61,61 @@ function targetRegionIndex(
 	return index;
 }
 
+function sharedKey(
+	key: string,
+	sourceLineByKey: ReadonlyMap<string, number>,
+	targetLineByKey: ReadonlyMap<string, number>
+): boolean {
+	return sourceLineByKey.has(key) && targetLineByKey.has(key);
+}
+
+function needsToggle(
+	key: string,
+	sourceCollapsed: ReadonlySet<string>,
+	targetCollapsed: ReadonlySet<string>
+): boolean {
+	return sourceCollapsed.has(key) !== targetCollapsed.has(key);
+}
+
+function toggleIndexFor(
+	key: string,
+	sourceCollapsed: ReadonlySet<string>,
+	targetCollapsed: ReadonlySet<string>,
+	sourceLineByKey: ReadonlyMap<string, number>,
+	targetLineByKey: ReadonlyMap<string, number>,
+	targetRegions: FoldRegions
+): number | undefined {
+	if (!needsToggle(key, sourceCollapsed, targetCollapsed)) {
+		return undefined;
+	}
+	if (!sharedKey(key, sourceLineByKey, targetLineByKey)) {
+		return undefined;
+	}
+	return targetRegionIndex(key, targetLineByKey, targetRegions);
+}
+
 /**
  * The target region indexes to toggle so both panes hide the same row keys.
- * A key with no matching target node line is skipped; the other pane simply
- * does not carry that row.
+ * Keys missing from either side are skipped; a one-sided row can never be
+ * folded or unfolded on the pane that does not carry it.
  */
 export function foldTogglePlan(
 	sourceCollapsed: ReadonlySet<string>,
 	targetCollapsed: ReadonlySet<string>,
+	sourceLineByKey: ReadonlyMap<string, number>,
 	targetLineByKey: ReadonlyMap<string, number>,
 	targetRegions: FoldRegions
 ): number[] {
 	const indexes = new Set<number>();
 	for (const key of new Set([...sourceCollapsed, ...targetCollapsed])) {
-		if (sourceCollapsed.has(key) === targetCollapsed.has(key)) {
-			continue;
-		}
-		const index = targetRegionIndex(key, targetLineByKey, targetRegions);
+		const index = toggleIndexFor(
+			key,
+			sourceCollapsed,
+			targetCollapsed,
+			sourceLineByKey,
+			targetLineByKey,
+			targetRegions
+		);
 		if (index !== undefined) {
 			indexes.add(index);
 		}

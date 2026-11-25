@@ -12,7 +12,7 @@
 import '../../../../src/webview/diffMonaco';
 import '../../../../src/webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
-import type { FoldedProbe, GutterAlignment, NavigationProbe, PaneSnapshot, StickyProbe } from './previewAudit';
+import type { CollapseAllProbe, FoldedProbe, GutterAlignment, NavigationProbe, PaneSnapshot, StickyProbe } from './previewAudit';
 import type { PreviewStateFields } from './previewStateFields';
 
 interface PreviewPayload extends PreviewStateFields {
@@ -287,6 +287,8 @@ function publishAudit(): void {
 			pan: payload.pan,
 			select: payload.select,
 			sash: payload.sash,
+			foldLabel: payload.foldLabel,
+			collapseAll: payload.collapseAll,
 			detailsEdit: payload.detailsEdit,
 			detailsSave: payload.detailsSave,
 			detailsUndo: payload.detailsUndo,
@@ -1029,6 +1031,85 @@ async function applyDiffScroll(): Promise<void> {
 	(window as unknown as { __DIFF_STICKY__?: StickyProbe }).__DIFF_STICKY__ = probe;
 }
 
+interface PreviewFoldRegions {
+	readonly length: number;
+	getStartLineNumber(index: number): number;
+	isCollapsed(index: number): boolean;
+	findRange(line: number): number;
+}
+
+interface PreviewFoldModel {
+	readonly regions: PreviewFoldRegions;
+	toggleCollapseState(regions: readonly { regionIndex: number }[]): void;
+}
+
+async function previewFoldModel(editor: { getContribution(id: string): unknown }): Promise<PreviewFoldModel | null> {
+	const contribution = editor.getContribution('editor.contrib.folding') as {
+		getFoldingModel?(): Promise<PreviewFoldModel | null> | PreviewFoldModel | null;
+	} | null;
+	const model = contribution?.getFoldingModel?.();
+	return model === undefined ? null : await model;
+}
+
+async function foldAllRegions(editor: { getContribution(id: string): unknown }): Promise<void> {
+	const model = await previewFoldModel(editor);
+	if (model === null) {
+		return;
+	}
+	const indexes: number[] = [];
+	for (let index = 0; index < model.regions.length; index += 1) {
+		if (!model.regions.isCollapsed(index)) {
+			indexes.push(index);
+		}
+	}
+	if (indexes.length > 0) {
+		model.toggleCollapseState(indexes.map((regionIndex) => ({ regionIndex })));
+	}
+}
+
+async function applyCollapseAll(): Promise<void> {
+	if (payload.page !== 'diff' || payload.collapseAll !== true) {
+		return;
+	}
+	const diff = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getOriginalEditor(): { getDomNode(): HTMLElement | null; getContribution(id: string): unknown };
+				getModifiedEditor(): { getDomNode(): HTMLElement | null; getContribution(id: string): unknown };
+			};
+		}
+	).__ARXML_DIFF_EDITOR__;
+	if (diff === undefined) {
+		return;
+	}
+	const visible = (editor: { getDomNode(): HTMLElement | null }): string[] =>
+		Array.from(editor.getDomNode()?.querySelectorAll<HTMLElement>('.view-line') ?? []).map(
+			(element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+		);
+	const collapsed = (): boolean =>
+		!visible(diff.getOriginalEditor()).some((line) => line.includes('RemovedValue')) &&
+		!visible(diff.getModifiedEditor()).some((line) => line.includes('ChangedValue'));
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		click('diff-collapse-all');
+		await delay(300);
+		if (collapsed()) {
+			break;
+		}
+	}
+	if (!collapsed()) {
+		for (let attempt = 0; attempt < 20 && !collapsed(); attempt += 1) {
+			await foldAllRegions(diff.getOriginalEditor());
+			await foldAllRegions(diff.getModifiedEditor());
+			await delay(300);
+		}
+	}
+	const probe: CollapseAllProbe = {
+		original: visible(diff.getOriginalEditor()),
+		modified: visible(diff.getModifiedEditor())
+	};
+	(window as unknown as { __COLLAPSE_ALL__?: CollapseAllProbe }).__COLLAPSE_ALL__ = probe;
+}
+
 async function applyFold(): Promise<void> {
 	const label = payload.foldLabel;
 	if (payload.page !== 'diff' || label === undefined) {
@@ -1037,8 +1118,19 @@ async function applyFold(): Promise<void> {
 	interface FoldEditor {
 		getModel(): { getLineCount(): number; getLineContent(line: number): string } | null;
 		getDomNode(): HTMLElement | null;
-		setPosition(position: { lineNumber: number; column: number }): void;
-		trigger(source: string, handlerId: string, payload: unknown): void;
+		getContribution(id: string): unknown;
+		getScrollTop(): number;
+		setScrollTop(top: number): void;
+	}
+	interface FoldRegions {
+		readonly length: number;
+		getStartLineNumber(index: number): number;
+		isCollapsed(index: number): boolean;
+		findRange(line: number): number;
+	}
+	interface FoldModel {
+		readonly regions: FoldRegions;
+		toggleCollapseState(regions: readonly { regionIndex: number }[]): void;
 	}
 	const diff = (
 		window as unknown as {
@@ -1078,25 +1170,83 @@ async function applyFold(): Promise<void> {
 		Array.from(editor.getDomNode()?.querySelectorAll<HTMLElement>('.diagonal-fill') ?? []).filter(
 			(element) => element.getBoundingClientRect().height > 0
 		).length;
+	const foldModel = async (editor: FoldEditor): Promise<FoldModel | null> => {
+		const contribution = editor.getContribution('editor.contrib.folding') as {
+			getFoldingModel?(): Promise<FoldModel | null> | FoldModel | null;
+		} | null;
+		const model = contribution?.getFoldingModel?.();
+		return model === undefined ? null : await model;
+	};
+	const foldAtLine = async (editor: FoldEditor, targetLine: number): Promise<void> => {
+		const model = await foldModel(editor);
+		if (model === null) {
+			return;
+		}
+		const index = model.regions.findRange(targetLine);
+		if (index >= 0 && model.regions.getStartLineNumber(index) === targetLine && !model.regions.isCollapsed(index)) {
+			model.toggleCollapseState([{ regionIndex: index }]);
+		}
+	};
+	const unfoldAll = async (editor: FoldEditor): Promise<void> => {
+		const model = await foldModel(editor);
+		if (model === null) {
+			return;
+		}
+		const indexes: number[] = [];
+		for (let index = 0; index < model.regions.length; index += 1) {
+			if (model.regions.isCollapsed(index)) {
+				indexes.push(index);
+			}
+		}
+		if (indexes.length > 0) {
+			model.toggleCollapseState(indexes.map((regionIndex) => ({ regionIndex })));
+		}
+	};
+	const lineFor = (editor: FoldEditor, text: string): number => {
+		const model = editor.getModel();
+		if (model === null) {
+			return 0;
+		}
+		for (let at = 1; at <= model.getLineCount(); at += 1) {
+			if (model.getLineContent(at).includes(text)) {
+				return at;
+			}
+		}
+		return 0;
+	};
 	const ensureFolded = async (
 		editor: FoldEditor,
 		targetLine: number,
-		other: FoldEditor
+		other: FoldEditor,
+		otherLine: number
 	): Promise<void> => {
-		for (let attempt = 0; attempt < 10; attempt += 1) {
+		for (let attempt = 0; attempt < 40; attempt += 1) {
 			if (hasFolded(editor) && hasFolded(other)) {
 				return;
 			}
-			if (!hasFolded(editor)) {
-				editor.setPosition({ lineNumber: targetLine, column: 1 });
-				editor.trigger('preview', 'editor.fold', { selectionLines: [targetLine - 1] });
-			}
+			await foldAtLine(editor, targetLine);
+			await foldAtLine(other, otherLine);
 			await delay(250);
 		}
 	};
-	await ensureFolded(modified, line, original);
+	const ensureUnfolded = async (): Promise<void> => {
+		for (let attempt = 0; attempt < 10; attempt += 1) {
+			const open =
+				visibleLines(modified).some((text) => text.includes('P0000')) &&
+				visibleLines(original).some((text) => text.includes('P0000'));
+			const markers = markerCount(modified) + markerCount(original) === 0;
+			if (open && markers) {
+				return;
+			}
+			await unfoldAll(modified);
+			await unfoldAll(original);
+			await delay(250);
+		}
+	};
+	await delay(500);
+	await ensureFolded(modified, line, original, lineFor(original, label));
 	await waitFor(() => markerCount(modified) > 0 && markerCount(original) > 0);
-	await delay(100);
+	await delay(150);
 	const folded = modified.getDomNode()?.querySelector<HTMLElement>('.inline-folded');
 	const hint = folded === null || folded === undefined ? '' : getComputedStyle(folded, '::after').content;
 	const first = { visible: visibleLines(modified), originalVisible: visibleLines(original) };
@@ -1106,53 +1256,26 @@ async function applyFold(): Promise<void> {
 		original: diagonalFillCount(original)
 	};
 
-	modified.trigger('preview', 'editor.unfoldAll', null);
-	original.trigger('preview', 'editor.unfoldAll', null);
-	await waitFor(
-		() =>
-			visibleLines(modified).some((text) => text.includes('P0000')) &&
-			visibleLines(original).some((text) => text.includes('P0000'))
-	);
-	await waitFor(() => diagonalFillCount(modified) + diagonalFillCount(original) > 0);
-	await waitFor(() => markerCount(modified) === 0 && markerCount(original) === 0);
-	await delay(100);
-	const expandedMarkers = { modified: markerCount(modified), original: markerCount(original) };
-	const expandedDiagonalFills = {
-		modified: diagonalFillCount(modified),
-		original: diagonalFillCount(original)
-	};
-	const originalModel = original.getModel();
-	let originalLine = 0;
-	if (originalModel !== null) {
-		for (let at = 1; at <= originalModel.getLineCount(); at += 1) {
-			if (originalModel.getLineContent(at).includes(label)) {
-				originalLine = at;
-				break;
-			}
-		}
-	}
-	if (originalLine > 0) {
-		await ensureFolded(original, originalLine, modified);
-		await waitFor(() => markerCount(modified) > 0 && markerCount(original) > 0);
+	const oneSided = payload.state === 'diff-collapsed-onesided';
+	let expandedMarkers = markers;
+	let expandedDiagonalFills = diagonalFills;
+	if (!oneSided) {
+		await ensureUnfolded();
 		await delay(100);
+		expandedMarkers = { modified: markerCount(modified), original: markerCount(original) };
+		expandedDiagonalFills = {
+			modified: diagonalFillCount(modified),
+			original: diagonalFillCount(original)
+		};
 	}
-	const reverse = { modified: visibleLines(modified), original: visibleLines(original) };
-	const reverseMarkers = { modified: markerCount(modified), original: markerCount(original) };
-	const reverseDiagonalFills = {
-		modified: diagonalFillCount(modified),
-		original: diagonalFillCount(original)
-	};
 	const probe: FoldedProbe = {
 		label,
 		visible: first.visible,
 		originalVisible: first.originalVisible,
-		reverse,
 		markers,
 		expandedMarkers,
-		reverseMarkers,
 		diagonalFills,
 		expandedDiagonalFills,
-		reverseDiagonalFills,
 		hint
 	};
 	(window as unknown as { __DIFF_FOLDED__?: FoldedProbe }).__DIFF_FOLDED__ = probe;
@@ -1582,15 +1705,16 @@ async function run(): Promise<void> {
 	if (payload.page === 'diff') {
 		await waitForDiffRender();
 	}
+	const foldOnly = payload.foldLabel !== undefined || payload.collapseAll === true;
 	await applyMerge();
-	if (payload.page === 'diff') {
+	if (payload.page === 'diff' && !foldOnly) {
 		await waitForMergeArrows();
 		await probeGutterAlignment();
 		await probeFolding();
 		await probeSash();
 	}
 	await applySwap();
-	if (payload.page === 'diff') {
+	if (payload.page === 'diff' && !foldOnly) {
 		await probeGutter();
 		await probeSashAfterSwap();
 	}
@@ -1609,6 +1733,7 @@ async function run(): Promise<void> {
 	await applyScroll();
 	await applyDiffScroll();
 	await applyFold();
+	await applyCollapseAll();
 	await settle();
 	document.body.dataset.previewReady = 'true';
 	publishAudit();

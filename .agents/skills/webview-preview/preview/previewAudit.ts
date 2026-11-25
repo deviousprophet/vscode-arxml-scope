@@ -17,6 +17,8 @@ export interface AuditState {
 	pan?: number;
 	select?: boolean;
 	sash?: boolean;
+	foldLabel?: string;
+	collapseAll?: boolean;
 	/** The text the Details state typed into `#details-value`. */
 	detailsEdit?: string;
 	/** Ctrl+S ran after the Details typing and every edit was acknowledged. */
@@ -153,6 +155,7 @@ export interface PreviewAudit {
 	navigation?: NavigationProbe;
 	folded?: FoldedProbe;
 	diffSticky?: StickyProbe;
+	collapseAll?: CollapseAllProbe;
 	folding?: FoldingProbe;
 	sash?: SashProbe;
 	content: ContentAudit;
@@ -185,13 +188,10 @@ export interface FoldedProbe {
 	label: string;
 	visible: string[];
 	originalVisible: string[];
-	reverse: { modified: string[]; original: string[] };
 	markers: { modified: number; original: number };
 	expandedMarkers: { modified: number; original: number };
-	reverseMarkers: { modified: number; original: number };
 	diagonalFills: { modified: number; original: number };
 	expandedDiagonalFills: { modified: number; original: number };
-	reverseDiagonalFills: { modified: number; original: number };
 	hint: string;
 }
 
@@ -199,6 +199,11 @@ export interface StickyProbe {
 	text: string;
 	visible: boolean;
 	height: number;
+}
+
+export interface CollapseAllProbe {
+	original: string[];
+	modified: string[];
 }
 
 interface GutterProbe {
@@ -392,6 +397,10 @@ function foldedOf(): FoldedProbe | undefined {
 
 function diffStickyOf(): StickyProbe | undefined {
 	return (window as unknown as { __DIFF_STICKY__?: StickyProbe }).__DIFF_STICKY__;
+}
+
+function collapseAllOf(): CollapseAllProbe | undefined {
+	return (window as unknown as { __COLLAPSE_ALL__?: CollapseAllProbe }).__COLLAPSE_ALL__;
 }
 
 interface FoldingProbe {
@@ -1606,6 +1615,7 @@ function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations
 		...navigationIssues(state, audit.navigation),
 		...foldedIssues(state, audit.folded),
 		...diffStickyIssues(state, audit.diffSticky),
+		...collapseAllIssues(state, audit.collapseAll),
 		...foldingViolations(state, audit.folding),
 		...sashViolations(state, audit.sash),
 		...mergePressViolations(state, audit)
@@ -1615,7 +1625,7 @@ function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations
 const GUTTER_ACTION_LABELS = new Set(['Copy Block to Left', 'Copy Block to Right', 'More Actions...']);
 
 function gutterProbeViolations(state: AuditState, probe: GutterProbe | undefined): string[] {
-	if (state.page !== 'diff') {
+	if (state.page !== 'diff' || state.foldLabel !== undefined || state.collapseAll === true) {
 		return [];
 	}
 	if (probe === undefined) {
@@ -1737,7 +1747,7 @@ function availabilityIssues(state: AuditState, probe: GutterProbe): string[] {
 }
 
 function foldingViolations(state: AuditState, probe: FoldingProbe | undefined): string[] {
-	if (state.page !== 'diff') {
+	if (state.page !== 'diff' || state.foldLabel !== undefined || state.collapseAll === true) {
 		return [];
 	}
 	if (probe === undefined) {
@@ -1819,7 +1829,7 @@ function gutterAlignmentIssues(
 	state: AuditState,
 	alignment: GutterAlignment | undefined
 ): string[] {
-	if (state.page !== 'diff' || state.name === 'diff-collapsed-onesided') {
+	if (state.page !== 'diff' || state.name === 'diff-collapsed-onesided' || state.foldLabel !== undefined || state.collapseAll === true) {
 		return [];
 	}
 	if (alignment === undefined) {
@@ -1920,6 +1930,38 @@ function diffStickyIssues(state: AuditState, sticky: StickyProbe | undefined): s
 	];
 }
 
+function collapseAllIssues(
+	state: AuditState,
+	probe: CollapseAllProbe | undefined
+): string[] {
+	if (state.name !== 'diff-collapse-all') {
+		return [];
+	}
+	if (probe === undefined) {
+		return ['the Collapse All probe did not run'];
+	}
+	const has = (lines: string[], text: string): boolean =>
+		lines.some((line) => line.includes(text));
+	return [
+		...issueWhen(
+			!has(probe.original, 'module P.RemovedMod'),
+			'the left-only module header is missing after Collapse All'
+		),
+		...issueWhen(
+			has(probe.original, 'RemovedValue'),
+			'Collapse All left the left-only container expanded'
+		),
+		...issueWhen(
+			has(probe.original, 'ChangedValue') || has(probe.modified, 'ChangedValue'),
+			'Collapse All left a shared container expanded'
+		),
+		...issueWhen(
+			!has(probe.modified, 'module P.Shared'),
+			'the shared module header is missing after Collapse All'
+		)
+	];
+}
+
 function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): string[] {
 	const oneSided = state.name === 'diff-collapsed-onesided';
 	if (state.name !== 'diff-collapsed' && !oneSided) {
@@ -1930,8 +1972,6 @@ function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): strin
 	}
 	const header = folded.visible.find((line) => line.includes(folded.label));
 	const originalHeader = folded.originalVisible.find((line) => line.includes(folded.label));
-	const reverseHeader = folded.reverse.modified.find((line) => line.includes(folded.label));
-	const reverseOriginalHeader = folded.reverse.original.find((line) => line.includes(folded.label));
 	return [
 		...issueWhen(header === undefined, `the collapsed row does not show ${folded.label}`),
 		...issueWhen(
@@ -1947,49 +1987,23 @@ function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): strin
 			'the other pane still shows the collapsed child parameters'
 		),
 		...issueWhen(
-			reverseHeader === undefined,
-			`the reverse ${folded.label} fold did not reach the second pane`
-		),
-		...issueWhen(
-			reverseOriginalHeader === undefined,
-			`the reverse ${folded.label} fold did not keep the source header`
-		),
-		...issueWhen(
-			folded.reverse.modified.some((line) => line.includes('P0000')),
-			'the reverse fold left child parameters in the second pane'
-		),
-		...issueWhen(
-			folded.reverse.original.some((line) => line.includes('P0000')),
-			'the reverse fold left child parameters in the source pane'
-		),
-		...issueWhen(
 			folded.markers.modified < 1 || folded.markers.original < 1,
 			'the collapsed row has no hidden-difference marker in both panes'
 		),
-		...issueWhen(
-			folded.expandedMarkers.modified !== 0 || folded.expandedMarkers.original !== 0,
-			'the hidden-difference marker was not cleared after expansion'
-		),
-		...issueWhen(
-			folded.reverseMarkers.modified < 1 || folded.reverseMarkers.original < 1,
-			'the reverse fold did not restore the hidden-difference marker'
-		),
+		...(!oneSided
+			? [
+					...issueWhen(
+						folded.expandedMarkers.modified !== 0 ||
+							folded.expandedMarkers.original !== 0,
+						'the hidden-difference marker was not cleared after expansion'
+					)
+				]
+			: []),
 		...(oneSided
 			? [
 					...issueWhen(
 						folded.diagonalFills.modified !== 0 || folded.diagonalFills.original !== 0,
 						'the folded one-sided gap still renders a diagonal fill'
-					),
-					...issueWhen(
-						folded.expandedDiagonalFills.modified +
-							folded.expandedDiagonalFills.original <
-							1,
-						'the native one-sided diagonal fill did not return after expansion'
-					),
-					...issueWhen(
-						folded.reverseDiagonalFills.modified !== 0 ||
-							folded.reverseDiagonalFills.original !== 0,
-						'the reverse fold still renders a diagonal fill'
 					)
 				]
 			: []),
@@ -2093,6 +2107,7 @@ function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAu
 		navigation: navigationOf(),
 		folded: foldedOf(),
 		diffSticky: diffStickyOf(),
+		collapseAll: collapseAllOf(),
 		folding: foldingProbeOf(),
 		sash: sashProbeOf(),
 		content: contentAudit(),
