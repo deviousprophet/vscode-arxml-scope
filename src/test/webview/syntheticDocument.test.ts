@@ -778,6 +778,20 @@ suite('synthetic ECUC document', () => {
 		assert.strictEqual(perSide.right.rowLine.has('module:removed#0'), false);
 		assert.ok(perSide.left.foldingRanges.length > 0, 'the left keeps its folding ranges');
 		assert.ok(perSide.right.foldingRanges.length > 0, 'the right keeps its folding ranges');
+		for (const [side, keys] of [
+			[perSide.left, perSide.leftLineKeys],
+			[perSide.right, perSide.rightLineKeys]
+		] as const) {
+			for (const range of side.foldingRanges) {
+				const key = keys[range.startLine - 1];
+				assert.ok(key, `fold start line ${range.startLine} has a row key`);
+				assert.strictEqual(
+					side.rowLine.get(key),
+					range.startLine,
+					`fold range for ${key} starts on its node line`
+				);
+			}
+		}
 	});
 
 	test('a pure removal gives the two sides different line counts', () => {

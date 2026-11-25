@@ -164,6 +164,10 @@ the listed DOM/model state, not a screenshot diff.
   after each Next, each Prev and each Next after Swap. The audit requires each sequence to be a
   cyclic rotation of the change lines with one wrap step, so a repeated current change or a
   skipped change is a violation.
+- **A collapsed container keeps its node header.** `diff-collapsed` folds the `Items` container
+  through the folding command. The audit requires the full `Items "Items"` line, the `⋯` fold
+  hint and no visible `P0000` child row; a `{`-only line or an unfolded container is a
+  violation.
 - **Editor page.** Toolbar, line-number gutter, selected row and Details panel render
   without clipping. The `select` state must leave a selected row in the audit.
 

@@ -256,6 +256,7 @@ regions, navigation, refresh, limits, headers, a11y, swap, search, Monaco body.
 | DIFF-06 | one-sided module | the missing side has no model line and uses Monaco's native diagonal fill |
 | DIFF-07 | built-in hunk toolbar | only Copy Block to Left/Right are registered; no Revert Block and no custom arrow overlay |
 | DIFF-08 | Next/Prev diff through every change, before and after Swap | each press moves one adjacent change, wraps at the ends and never repeats the current change |
+| DIFF-09 | collapse a diff container | the full node header and `⋯` hint stay visible, child rows hide, and the fold starts on the node line |
 
 ## ENG — engine process
 

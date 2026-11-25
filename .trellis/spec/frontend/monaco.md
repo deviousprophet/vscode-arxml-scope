@@ -134,6 +134,9 @@ Stock VS Code disables folding on the diff editor's inner editors. The ARXML dif
 re-enables `folding` on both sides; this is the modified feature, not an accident. The
 preview audit records the visible-row round trip (`visibleBefore`, `visibleCollapsed`,
 `visibleExpanded`) because chevrons are hover-controlled.
+`buildDiffSyntheticDocuments` starts every diff fold range on the owning node line, exactly
+like `buildSyntheticDocument`; a collapsed container therefore keeps its full node header
+with Monaco's `⋯` fold hint instead of leaving only the opening brace visible.
 
 ### Gutter and copy actions
 

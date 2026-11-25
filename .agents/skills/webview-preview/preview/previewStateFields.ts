@@ -13,6 +13,8 @@ export interface PreviewStateFields {
 	jump?: number;
 	/** Records the Next/Prev sequence and the sequence after Swap for the navigation audit. */
 	nav?: boolean;
+	/** Folds the diff row whose text contains this label and records the visible result. */
+	foldLabel?: string;
 	select?: boolean;
 	/** Exercises the built-in sash drag, ratio persistence and double-click reset. */
 	sash?: boolean;

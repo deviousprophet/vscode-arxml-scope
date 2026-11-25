@@ -151,6 +151,7 @@ export interface PreviewAudit {
 	gutterProbe?: GutterProbe;
 	gutterAlignment?: GutterAlignment;
 	navigation?: NavigationProbe;
+	folded?: FoldedProbe;
 	folding?: FoldingProbe;
 	sash?: SashProbe;
 	content: ContentAudit;
@@ -177,6 +178,12 @@ export interface NavigationProbe {
 	forward: number[];
 	backward: number[];
 	afterSwap: number[];
+}
+
+export interface FoldedProbe {
+	label: string;
+	visible: string[];
+	hint: string;
 }
 
 interface GutterProbe {
@@ -362,6 +369,10 @@ function gutterAlignmentOf(): GutterAlignment | undefined {
 
 function navigationOf(): NavigationProbe | undefined {
 	return (window as unknown as { __DIFF_NAVIGATION__?: NavigationProbe }).__DIFF_NAVIGATION__;
+}
+
+function foldedOf(): FoldedProbe | undefined {
+	return (window as unknown as { __DIFF_FOLDED__?: FoldedProbe }).__DIFF_FOLDED__;
 }
 
 interface FoldingProbe {
@@ -1574,6 +1585,7 @@ function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations
 		...gutterProbeViolations(state, audit.gutterProbe),
 		...gutterAlignmentIssues(state, audit.gutterAlignment),
 		...navigationIssues(state, audit.navigation),
+		...foldedIssues(state, audit.folded),
 		...foldingViolations(state, audit.folding),
 		...sashViolations(state, audit.sash),
 		...mergePressViolations(state, audit)
@@ -1863,6 +1875,27 @@ function cyclicSequenceIssues(label: string, sequence: number[], expected: numbe
 	return [];
 }
 
+function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): string[] {
+	if (state.name !== 'diff-collapsed') {
+		return [];
+	}
+	if (folded === undefined) {
+		return ['the collapsed-row probe did not run'];
+	}
+	const header = folded.visible.find((line) => line.includes(folded.label));
+	return [
+		...issueWhen(header === undefined, `the collapsed row does not show ${folded.label}`),
+		...issueWhen(
+			folded.visible.some((line) => line.includes('P0000')),
+			'the collapsed row still shows its child parameters'
+		),
+		...issueWhen(
+			!folded.hint.includes('⋯'),
+			'the collapsed row has no fold hint'
+		)
+	];
+}
+
 interface PreviewSnapshotModel {
 	getValue(): string;
 }
@@ -1954,6 +1987,7 @@ function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAu
 		gutterProbe: gutterProbeOf(),
 		gutterAlignment: gutterAlignmentOf(),
 		navigation: navigationOf(),
+		folded: foldedOf(),
 		folding: foldingProbeOf(),
 		sash: sashProbeOf(),
 		content: contentAudit(),

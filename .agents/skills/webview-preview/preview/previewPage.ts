@@ -12,7 +12,7 @@
 import '../../../../src/webview/diffMonaco';
 import '../../../../src/webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
-import type { GutterAlignment, NavigationProbe, PaneSnapshot } from './previewAudit';
+import type { FoldedProbe, GutterAlignment, NavigationProbe, PaneSnapshot } from './previewAudit';
 import type { PreviewStateFields } from './previewStateFields';
 
 interface PreviewPayload extends PreviewStateFields {
@@ -988,6 +988,50 @@ async function applyScroll(): Promise<void> {
 	await delay(1200);
 }
 
+async function applyFold(): Promise<void> {
+	const label = payload.foldLabel;
+	if (payload.page !== 'diff' || label === undefined) {
+		return;
+	}
+	const editor = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getModifiedEditor(): {
+					getModel(): { getLineCount(): number; getLineContent(line: number): string } | null;
+					getDomNode(): HTMLElement | null;
+					setPosition(position: { lineNumber: number; column: number }): void;
+					trigger(source: string, handlerId: string, payload: unknown): void;
+				};
+			};
+		}
+	).__ARXML_DIFF_EDITOR__?.getModifiedEditor();
+	const model = editor?.getModel();
+	if (editor === undefined || model === null || model === undefined) {
+		return;
+	}
+	let line = 0;
+	for (let at = 1; at <= model.getLineCount(); at += 1) {
+		if (model.getLineContent(at).includes(label)) {
+			line = at;
+			break;
+		}
+	}
+	if (line === 0) {
+		return;
+	}
+	editor.setPosition({ lineNumber: line, column: 1 });
+	editor.trigger('preview', 'editor.fold', { selectionLines: [line - 1] });
+	await delay(350);
+	const root = editor.getDomNode();
+	const visible = Array.from(root?.querySelectorAll<HTMLElement>('.view-line') ?? []).map(
+		(element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+	);
+	const folded = root?.querySelector<HTMLElement>('.inline-folded');
+	const hint = folded === null || folded === undefined ? '' : getComputedStyle(folded, '::after').content;
+	const probe: FoldedProbe = { label, visible, hint };
+	(window as unknown as { __DIFF_FOLDED__?: FoldedProbe }).__DIFF_FOLDED__ = probe;
+}
+
 function revealLine(line: number): void {
 	const editor = previewEditor();
 	if (editor === undefined) {
@@ -1436,6 +1480,7 @@ async function run(): Promise<void> {
 	await applyPasteEdit();
 	await applyStaleSave();
 	await applyScroll();
+	await applyFold();
 	await settle();
 	document.body.dataset.previewReady = 'true';
 	publishAudit();

@@ -723,7 +723,10 @@ function openSideBlock(build: DiffBuild, row: DiffRow, sideName: DocumentSide): 
 	if (cell === undefined || !sideHasChildren(build.document, build.at - 1, sideName)) {
 		return undefined;
 	}
-	const startLine = build[sideName].text.length + 1;
+	const startLine = build[sideName].rowLine.get(row.key);
+	if (startLine === undefined) {
+		return undefined;
+	}
 	emitSideLine(build[sideName], `${indent(row.level)}{`, row.key);
 	return startLine;
 }
