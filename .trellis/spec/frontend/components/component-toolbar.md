@@ -58,29 +58,30 @@ export class DiffToolbar {
 
 - One row; no wrapping. Every Document action and every diff button uses `.tool.diff-tool` with an
   18px icon over a small label.
-- Editor order: flexible slot, Collapse, Expand, Sidebar toggle, Search.
+- Editor order: dirty status, Collapse, Expand, flexible slot, Sidebar toggle on the right.
 - Diff order: left `Show all / Show diff`, divider, Context, divider, `Semantic / Strict`, divider,
-  Prev, Next, divider, Collapse, Expand; centre Swap; right status + Search.
+  Prev, Next, divider, Merge, Swap, divider, Collapse, Expand; status on the right.
 - The Context toggle is disabled while Show all is active.
 - Buttons use the shared `.tool`/`.sb-btn`/`.nav-btn` primitives; no one-off styles.
 - Host wires actions through callbacks; the component never mutates host state.
 
 ## Behaviour
 
-- Editor strip: `#collapse-all`, `#expand-all`, `#toggle-sidebar`, then the Search slot. The search
-  field is always the last control. `#toggle-sidebar` is stateful (`aria-pressed` true when the
-  sidebar is visible, dynamic `Hide sidebar` / `Show sidebar` title, static accessible name
-  `Sidebar`); Collapse and Expand are one-shot actions with no pressed state.
-  `setSidebarHidden(hidden)` repaints the toggle after the host flips the page state.
+- Editor strip: `#collapse-all`, `#expand-all`, then the flexible slot, then `#toggle-sidebar` on
+  the right. The search field is always the last control in its own bar. `#toggle-sidebar` is
+  stateful (`aria-pressed` true when the sidebar is visible, dynamic `Hide sidebar` / `Show sidebar`
+  title, static accessible name `Sidebar`); Collapse and Expand are one-shot actions with no pressed
+  state. `setSidebarHidden(hidden)` repaints the toggle after the host flips the page state.
 - The Sidebar toggle is the only visibility control. Showing the sidebar restores its previous tab;
   there is no duplicate toolbar Details action because the sidebar tab strip already owns that
   navigation.
 - Diff strip: `#diff-view-all` / `#diff-view-diff` and `#diff-mode-semantic` / `#diff-mode-strict`
   are two-button view groups. The left order is view group, divider, `#diff-context`, divider, mode
-  group, divider, `#diff-prev`, `#diff-next`, divider, `#diff-collapse-all`, `#diff-expand-all`.
-  `#diff-swap` is the centered control over the pane divider; `#diff-match-status` and Search are on
-  the right. `aria-pressed` reflects the active view, match mode, swap and context state; the buttons
-  do not own the state. Collapse/Expand are ordinary action buttons and do not use `aria-pressed`.
+  group, divider, `#diff-prev`, `#diff-next`, divider, `#diff-merge`, `#diff-swap`, divider,
+  `#diff-collapse-all`, `#diff-expand-all`. `#diff-match-status` and Search are on the right.
+  `#diff-swap` is not centred; it follows Merge in the left group. `aria-pressed` reflects the active
+  view, match mode, swap and context state; the buttons do not own the state. Collapse/Expand are
+  ordinary action buttons and do not use `aria-pressed`.
 - Every main button has an 18px inline SVG, an `aria-label`, and a `.lbl` underneath. Labels hide
   at <=1040px while the accessible name remains; at <=720px the icon buttons compact further. The
   Document strip uses the same treatment and shares the diff strip's 54px track.

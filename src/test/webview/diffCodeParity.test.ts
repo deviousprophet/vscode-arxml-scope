@@ -120,6 +120,26 @@ suite('VS Code diff source contract', () => {
 		);
 	});
 
+	test('source contract: compact find-button tooltips do not steal hover', () => {
+		const css = read('src/webview/monaco/monaco.css');
+		assert.ok(
+			/\.monaco-hover\.workbench-hover\.compact\s*\{[^}]*pointer-events:\s*none/.test(css),
+			'compact hover tooltips must not intercept their anchor'
+		);
+		assert.ok(
+			/\.workbench-hover-container:has\(\.monaco-hover\.workbench-hover\.compact\)\s*\{[^}]*pointer-events:\s*none/.test(
+				css
+			),
+			'the compact tooltip container must not intercept its anchor'
+		);
+		assert.ok(
+			/\.context-view:has\(\.monaco-hover\.workbench-hover\.compact\)\s*\{[^}]*pointer-events:\s*none/.test(
+				css
+			),
+			'the compact tooltip context view must not intercept its anchor'
+		);
+	});
+
 	test('source contract: no custom margin, arrow, placeholder or ruler layer remains', () => {
 		const forbidden = [
 			'arxml-diff-placeholder',

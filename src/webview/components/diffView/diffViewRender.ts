@@ -2,8 +2,9 @@
 export function renderDiffViewHtml(): string {
 	return `<div id="diff-body">
 <div id="diff-title-strip" class="diff-title-strip" role="presentation">
-<div id="diff-title-left" class="diff-title-cell" role="presentation"></div>
-<div id="diff-title-right" class="diff-title-cell" role="presentation"></div>
+<span id="diff-title-left" class="diff-title-cell" role="presentation"></span>
+<span class="diff-title-sep" aria-hidden="true">↔</span>
+<span id="diff-title-right" class="diff-title-cell" role="presentation"></span>
 </div>
 <p id="diff-semantic-skip" class="diff-semantic-skip" hidden></p>
 <div id="diff-list" class="diff-panes" role="presentation"></div>

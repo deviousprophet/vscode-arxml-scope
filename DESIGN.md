@@ -275,7 +275,8 @@ subtree fills keep one stable width while rows scroll horizontally.
 pressed state carried by `aria-pressed` (never a mirroring class). Turning it on reveals
 VS Code's built-in 35px hunk gutter: hovering a hunk shows `Copy Block to Left` and
 `Copy Block to Right`, and the current hunk uses VS Code's `showAlways`. A one-sided hunk
-shows only the meaningful direction. The gutter and sash stay mounted when Merge is off;
+offers both directions: copying from the owning side adds it, copying from the empty side
+deletes it. The gutter and sash stay mounted when Merge is off;
 only the hunk items hide, so the panes still resize. Labels follow the displayed panes and
 the host receives the stored side shown in the source pane, including after Swap.
 
@@ -283,11 +284,11 @@ The toolbar is a 54px strip with divider-separated groups and icon-over-label to
 an 18px icon above a 10px label. The dense diff group drops its secondary labels (Show all/Show diff,
 Prev/Next, Collapse/Expand) at 1399px, then its primary labels (Context, Semantic, Strict, Merge) at
 1150px; the editor labels hide at 1040px. Diff boxes compact to 40px, then 36px at 960px, 32px at
-880px and 28px at 720px. The strip stays a three-column grid at every width, so the Swap action keeps
-its place over the pane divider. The Document strip carries Collapse, Expand and the Sidebar toggle
-in the same variant as the diff toolbar. Use the shared sidebar button primitives for other actions;
-do not invent a second button style. The sidebar is a 360px panel with a 28px vertical tab strip and
-a 22px section header.
+880px and 28px at 720px. The strip is a flex row at every width: the diff actions stay left, Swap
+follows Merge, and the match status sits on the right. The Document strip puts Collapse/Expand left
+and the Sidebar toggle on the right, in the same variant as the diff toolbar. Use the shared sidebar
+button primitives for other actions; do not invent a second button style. The sidebar is a 360px
+panel with a 28px vertical tab strip and a 22px section header.
 
 ### Search
 

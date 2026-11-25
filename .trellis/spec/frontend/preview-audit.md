@@ -139,10 +139,11 @@ the listed DOM/model state, not a screenshot diff.
   hunk `.gutterItem`s and the Copy Block to Left/Right labels; `diff-off` hides only the
   items and keeps the gutter and sash. A third action, `Revert Block`, or any copy while
   Merge is off is a violation.
-- **One-sided hunks hide the impossible action.** `diff-removed` records a gutter item
-  with `left: false, right: true` and a single action; clicking it posts `side: "left"` with
-  the removed module key. `diff-added` is the mirror (`left: true, right: false`, copy side
-  `right`). Changed pairs expose both actions.
+- **One-sided hunks offer both directions.** `diff-removed` and `diff-added` render both
+  `Copy Block to Left` and `Copy Block to Right` on the one-sided hunk. Copying from the
+  owning side adds the block; copying from the empty side posts the owning row key with the
+  empty side as the source, which the host turns into a delete. The audit checks the
+  rendered labels and the posted side/key. Changed pairs expose both actions too.
 - **Swap keeps the displayed-pane meaning.** In `diff-swap` the first action posts the
   stored side now shown in the source pane (`side: "left"` after the swap). The audit
   derives the expected side from the clicked action and the swap flag.

@@ -56,7 +56,7 @@ src/test/webview/diffCodeParity.test.ts
 |---|---|
 | One-sided hunk | Only the meaningful copy action is rendered; the missing side uses Monaco's diagonal gap |
 | Merge off | `.gutterItem` hidden, `.gutter`/`.monaco-sash` still mounted |
-| Swap | Title columns and model pairs flip; horizontal offsets reset; sash ratio and vertical position stay |
+| Swap | Title labels and model pairs flip; horizontal offsets reset; sash ratio and vertical position stay |
 | Change-only view | `hideUnchangedRegions` owns the collapsed runs; no custom body rows |
 | Empty document | `#diff-empty` shown, no editor rows |
 | Engine/compare error | `#diff-notice` shows the error banner |

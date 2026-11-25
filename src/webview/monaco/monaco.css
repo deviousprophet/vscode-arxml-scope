@@ -67,3 +67,16 @@
 #diff-monaco:not([data-merge="true"]) .monaco-diff-editor .gutter .gutterItem {
 	display: none;
 }
+
+/* Native find-button tooltips are compact and can overlap their anchor. If the
+ * tooltip accepts pointer events it steals hover, hides itself, and the button
+ * re-triggers it in a loop. Keep compact tooltips non-interactive. */
+.monaco-hover.workbench-hover.compact {
+	pointer-events: none;
+}
+.workbench-hover-container:has(.monaco-hover.workbench-hover.compact) {
+	pointer-events: none;
+}
+.context-view:has(.monaco-hover.workbench-hover.compact) {
+	pointer-events: none;
+}

@@ -25,10 +25,10 @@ suite('DiffView component', () => {
 			webviewCss('components', 'diffView', 'diffView.css') +
 			webviewCss('components', 'documentTree', 'documentTree.css') +
 			webviewCss('components', 'virtualScroll', 'virtualScroll.css');
-		assert.ok(/\.diff-title-strip\s*\{[^}]*display:\s*grid/.test(css));
+		assert.ok(/\.diff-title-strip\s*\{[^}]*display:\s*flex/.test(css));
 		assert.ok(/\.diff-title-strip\s*\{[^}]*width:\s*calc\(100% - var\(--diff-scrollbar-width/.test(css));
-		assert.ok(/\.diff-title-strip::after\s*\{[^}]*left:\s*50%/.test(css));
-		assert.ok(/\.diff-title-strip::after\s*\{[^}]*width:\s*3px/.test(css));
+		assert.ok(/\.diff-title-sep\s*\{[^}]*color:/.test(css));
+		assert.ok(!/\.diff-title-strip::after/.test(css), 'the title strip has no fixed 50% divider');
 		assert.ok(/\.diff-semantic-skip\s*\{[^}]*color:\s*var\(--vscode-descriptionForeground\)/.test(css));
 		assert.ok(/\.virtual-scroll-pane-right\s*\{[^}]*border-left:\s*3px/.test(css));
 		assert.ok(/\.virtual-scroll-vscroll\s*\{[^}]*overflow-y:\s*auto/.test(css));

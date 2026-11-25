@@ -25,13 +25,6 @@
 	min-width: 0;
 	flex: 0 0 auto;
 }
-.toolbar-center {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 0;
-	flex: 0 0 auto;
-}
 .toolbar-divider {
 	align-self: center;
 	flex: none;

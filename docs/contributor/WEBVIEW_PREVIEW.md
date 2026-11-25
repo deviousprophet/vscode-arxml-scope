@@ -5,9 +5,9 @@ bundled pages, seeds each page through the host protocol, and captures every sta
 a local headless Chrome or Edge. Every capture also writes a rendered-geometry audit:
 the page measures its own panes, toolbar, built-in diff gutter/sash, folding and native
 diff paint after the gestures, and the runner fails when an action escapes its pane,
-overlaps a neighbour or a one-sided hunk offers an impossible copy. The audit exists
+overlaps a neighbour or a gutter item renders the wrong copy action. The audit exists
 because a screenshot can look plausible while the geometry is wrong — a toolbar control
-can sit under the Search field, a gutter item can show both directions on a deletion —
+can sit under the Search field, a one-sided hunk can show a dead direction —
 and the jsdom suites cannot see layout at all.
 
 The harness wraps the production shell (`webviewShell.ts`) and mounts the production
@@ -45,8 +45,8 @@ projection for choosing a state.
 | `diff-swap` | diff | 1400×900 | Swap pressed; headers and values mirror, the copy direction/host side follow the displayed panes, and the sash ratio survives |
 | `diff-rail` | diff | 1400×900 | long document; Next diff jumps to the change near line 1000 and scrolls |
 | `diff-one-sided` | diff | 1400×900 | per-side models with changed pairs; native fills and diagonal gaps, no placeholder layers |
-| `diff-removed` | diff | 1400×900 | a left-only module deletion; the gutter hides Copy Block to Left and offers only Copy Block to Right |
-| `diff-added` | diff | 1400×900 | a right-only module insertion; the gutter hides Copy Block to Right and offers only Copy Block to Left |
+| `diff-removed` | diff | 1400×900 | a left-only module deletion; both copy directions are offered, including the empty-side delete |
+| `diff-added` | diff | 1400×900 | a right-only module insertion; both copy directions are offered, including the empty-side delete |
 | `diff-sash` | diff | 1400×900 | built-in sash drag, document replacement and Swap preserve the ratio; double-click resets to 50/50 |
 | `diff-wide` | diff | 1400×900 | long parameter names; the panes overflow horizontally |
 | `diff-wide-panned` | diff | 1400×900 | the same rows panned 600px; native scrolling stays inside the panes |
@@ -70,11 +70,11 @@ projection for choosing a state.
 | `editor-sticky` | editor | 1400×900 | deep scroll into the `Items` container; its header stays pinned by Monaco sticky scroll |
 | `editor-find` | editor | 1400×900 | native find widget open on `Items`, with the Rust result count and field highlight |
 | `diff-find` | diff | 1400×900 | native find widget in the modified pane, with the Rust diff match count |
-| `toolbar-1400` | diff | 1400×900 | full labels; Merge active; Swap over the pane divider |
+| `toolbar-1400` | diff | 1400×900 | full labels; Merge active; Swap follows Merge on the left |
 | `toolbar-1200` | diff | 1200×900 | secondary labels hidden; Context/Semantic/Strict/Merge labels remain |
-| `toolbar-1024` | diff | 1024×900 | icon-only 40px tools; Swap over the divider |
+| `toolbar-1024` | diff | 1024×900 | icon-only 40px tools; the left group stays left |
 | `toolbar-900` | diff | 900×900 | 36px tools; dividers hidden |
-| `toolbar-800` | diff | 800×900 | 32px tools; grid still centred |
+| `toolbar-800` | diff | 800×900 | 32px tools; the left group stays left |
 | `toolbar-640` | diff | 640×900 | 28px tools; native find widget hidden until `Ctrl+F` |
 
 The diff states use a synthetic module with ten changed values; the long states use a

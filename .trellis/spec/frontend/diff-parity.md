@@ -78,7 +78,8 @@ TypeScript and CSS for those class names.
 - **Per-side synthetic body.** Each side owns its module gaps, comments, cells and
   braces. A missing side is not padded with numbered placeholders; Monaco paints its
   native diagonal view zone.
-- **Scoped hunk availability.** One-sided hunks show only the meaningful copy direction.
+- **Scoped hunk availability.** Both copy directions are offered on a one-sided hunk; the
+  empty-side action deletes from the owning side. Hunks with no semantic row expose none.
   The patch above makes that per-hunk rather than global.
 
 ## Verification

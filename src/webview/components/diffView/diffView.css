@@ -20,23 +20,15 @@ body[data-page="diff"] .toolbar {
 	padding: 3px 8px;
 }
 body[data-page="diff"] .toolbar-left,
-body[data-page="diff"] .toolbar-center,
 body[data-page="diff"] .toolbar-right {
 	align-items: center;
-}
-/* Three columns: the centre action stays over the pane divider without ever
- * sitting on top of the left or right groups. The left group scrolls inside its
- * own column when the panel is narrower than its tools. */
-body[data-page="diff"] .toolbar {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-	gap: 4px;
 }
 body[data-page="diff"] .toolbar-divider {
 	margin: 0;
 }
 body[data-page="diff"] .toolbar-left {
 	min-width: 0;
+	flex: 0 1 auto;
 	gap: 3px;
 	overflow-x: auto;
 	overflow-y: hidden;
@@ -45,13 +37,9 @@ body[data-page="diff"] .toolbar-left {
 body[data-page="diff"] .toolbar-left::-webkit-scrollbar {
 	display: none;
 }
-body[data-page="diff"] .toolbar-center {
-	position: static;
-	transform: none;
-	justify-self: center;
-}
 body[data-page="diff"] .toolbar-right {
-	justify-self: end;
+	margin-left: auto;
+	justify-content: flex-end;
 	min-width: 0;
 }
 body[data-page="diff"] .toolbar .view-switch {
@@ -113,25 +101,23 @@ body[data-page="diff"] .nav-btn:disabled {
 	min-height: 0;
 }
 .diff-title-strip {
-	position: relative;
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	gap: 6px;
 	flex: none;
 	width: calc(100% - var(--diff-scrollbar-width, 0px));
 	min-width: 0;
+	padding: 0 10px;
 	background: var(--vscode-editor-background);
 	border-top: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 	border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border));
 }
-.diff-title-strip::after {
-	content: '';
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: 50%;
-	width: 3px;
-	background: var(--vscode-editorIndentGuide-activeBackground, var(--vscode-editorGroup-border, var(--vscode-panel-border)));
-	pointer-events: none;
+.diff-title-sep {
+	flex: none;
+	color: var(--vscode-descriptionForeground, var(--tok-dim));
+	font-size: 11px;
+	line-height: 18px;
 }
 .diff-semantic-skip {
 	flex: none;
@@ -147,8 +133,9 @@ body[data-page="diff"] .nav-btn:disabled {
 	display: none;
 }
 .diff-title-cell {
+	flex: 1 1 0;
 	min-width: 0;
-	padding: 0 10px;
+	padding: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -157,6 +144,9 @@ body[data-page="diff"] .nav-btn:disabled {
 	font-weight: 600;
 	line-height: 18px;
 	color: var(--vscode-editor-foreground);
+}
+.diff-title-cell:last-child {
+	text-align: right;
 }
 #diff-list {
 	flex: 1 1 auto;

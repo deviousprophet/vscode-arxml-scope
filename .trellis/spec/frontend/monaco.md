@@ -140,12 +140,13 @@ preview audit records the visible-row round trip (`visibleBefore`, `visibleColla
   Right**. The built-in Revert action stays hidden by the diff editor's read-only context;
   the ARXML actions deliberately do not depend on the built-in writable context key.
 - `diffGutterAvailability.ts` sets `arxml.copyLeftAvailable` / `arxml.copyRightAvailable`
-  per hovered/current hunk from the hunk mapping and the displayed side, and publishes the
-  preview/debug snapshot. A one-sided hunk hides the impossible direction.
+  per hunk from the hunk mapping. Both keys are true when either side owns a semantic row;
+  both are false on a header/gap hunk. A one-sided hunk therefore shows both directions:
+  copying from the owning side adds, copying from the empty side deletes.
 - The checked-in `patches/monaco-editor+0.57.0.patch` scopes a context-key service per
   `.gutterItem` and initialises the two keys from
   `globalThis.__ARXML_GUTTER_AVAILABILITY__`; `toolbar.js` uses that scoped service. Without
-  the patch, hiding one direction hides it for every hunk.
+  the patch, the no-row hunk would hide or show actions globally.
 - The gutter action posts `{ type: 'copy', side, key }`, where `side` is the **host** side
   mapped from the displayed pane (after Swap, the displayed pane's side wins). Merge mode
   is the only write path; the host refuses a copy while it is off.

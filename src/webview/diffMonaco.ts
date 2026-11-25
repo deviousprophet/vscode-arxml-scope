@@ -475,7 +475,7 @@ function setTitle(id: string, label: string, header: DiffHeader, path: string): 
 	if (element === null) {
 		return;
 	}
-	element.textContent = label + (header.schema !== undefined ? ` · ${header.schema}` : '');
+	element.textContent = label;
 	element.title = [path, headerTooltip(header)].filter((part) => part !== '').join('\n');
 }
 
@@ -572,32 +572,44 @@ function gutterAvailabilityFor(mapping: DiffGutterMapping): { left: boolean; rig
 		return { left: true, right: true };
 	}
 	const rows = documentModel.rows;
-	return {
-		left: rangeHasSource(rows, modifiedKeys(), mapping.modified, displayedSide('modified')),
-		right: rangeHasSource(rows, originalKeys(), mapping.original, displayedSide('original'))
-	};
+	const hasEither =
+		rangeHasSource(rows, modifiedKeys(), mapping.modified, displayedSide('modified')) ||
+		rangeHasSource(rows, originalKeys(), mapping.original, displayedSide('original'));
+	return { left: hasEither, right: hasEither };
 }
 
 function gutterCopyReady(mapping: DiffGutterContext['mapping']): mapping is DiffGutterMapping {
 	return documentModel !== undefined && mapping !== undefined && mapping !== null;
 }
 
+interface CopySide {
+	side: DiffSide;
+	range: DiffGutterRange;
+	keys: (string | undefined)[];
+}
+
 function copyTarget(
 	direction: DiffGutterDirection,
 	mapping: DiffGutterMapping
-): { side: DiffSide; range: DiffGutterRange; keys: (string | undefined)[] } {
+): { source: CopySide; target: CopySide } {
 	const left = direction === 'left';
-	return {
-		side: left ? displayedSide('modified') : displayedSide('original'),
-		range: left ? mapping.modified : mapping.original,
-		keys: left ? modifiedKeys() : originalKeys()
+	const modified: CopySide = {
+		side: displayedSide('modified'),
+		range: mapping.modified,
+		keys: modifiedKeys()
 	};
+	const original: CopySide = {
+		side: displayedSide('original'),
+		range: mapping.original,
+		keys: originalKeys()
+	};
+	return left ? { source: modified, target: original } : { source: original, target: modified };
 }
 
 function copyContext(
 	direction: DiffGutterDirection,
 	context: DiffGutterContext | undefined
-): { rows: readonly DiffRow[]; target: ReturnType<typeof copyTarget> } | undefined {
+): { rows: readonly DiffRow[]; source: CopySide; target: CopySide } | undefined {
 	const mapping = context?.mapping;
 	if (!gutterCopyReady(mapping)) {
 		return undefined;
@@ -605,7 +617,8 @@ function copyContext(
 	if (documentModel === undefined) {
 		return undefined;
 	}
-	return { rows: documentModel.rows, target: copyTarget(direction, mapping) };
+	const target = copyTarget(direction, mapping);
+	return { rows: documentModel.rows, ...target };
 }
 
 /** The built-in hunk toolbar posts the same host copy as the old arrow overlay. */
@@ -617,13 +630,16 @@ function gutterCopyRequest(
 	if (resolved === undefined) {
 		return undefined;
 	}
-	const key = firstKeyInRange(
+	const sourceKey = firstKeyInRange(
 		resolved.rows,
-		resolved.target.keys,
-		resolved.target.range,
-		resolved.target.side
+		resolved.source.keys,
+		resolved.source.range,
+		resolved.source.side
 	);
-	return key === undefined ? undefined : { side: resolved.target.side, key };
+	const key =
+		sourceKey ??
+		firstKeyInRange(resolved.rows, resolved.target.keys, resolved.target.range, resolved.target.side);
+	return key === undefined ? undefined : { side: resolved.source.side, key };
 }
 
 function copyFromGutter(direction: DiffGutterDirection, context: DiffGutterContext | undefined): void {
@@ -917,6 +933,46 @@ function wireMergeClicks(): void {
 	modified.onMouseDown(mergeClickHandler(modified, 'modified'));
 }
 
+interface ScrollSnapshot {
+	editor: monaco.editor.ICodeEditor;
+	top: number;
+}
+
+const FIND_SHORTCUT_KEYS = new Set(['f', 'h']);
+
+function hasFindModifier(event: KeyboardEvent): boolean {
+	return (event.ctrlKey || event.metaKey) && !event.repeat && !event.altKey;
+}
+
+function isFindShortcut(event: KeyboardEvent): boolean {
+	return hasFindModifier(event) && FIND_SHORTCUT_KEYS.has(event.key.toLowerCase());
+}
+
+function scrollSnapshot(): ScrollSnapshot[] {
+	return [originalEditor(), modifiedEditor()]
+		.filter((editor): editor is monaco.editor.ICodeEditor => editor !== undefined)
+		.map((editor) => ({ editor, top: editor.getScrollTop() }));
+}
+
+function wireFindScrollGuard(): void {
+	document.addEventListener(
+		'keydown',
+		function (event) {
+			if (!isFindShortcut(event)) {
+				return;
+			}
+			const snapshot = scrollSnapshot();
+			if (snapshot.length === 0) {
+				return;
+			}
+			window.requestAnimationFrame(function () {
+				snapshot.forEach(({ editor, top }) => editor.setScrollTop(top));
+			});
+		},
+		true
+	);
+}
+
 async function mountDiff(): Promise<void> {
 	const host = document.getElementById('diff-list');
 	if (host === null) {
@@ -984,6 +1040,7 @@ async function mountDiff(): Promise<void> {
 
 	mountToolbar();
 	wireMergeClicks();
+	wireFindScrollGuard();
 	mounted = true;
 	for (const message of pendingMessages) {
 		handleMessage(message);

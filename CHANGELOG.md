@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replace and Replace All update validated parameter values and container short names in the document view, with preserve case and no write when the engine refuses
 - The ECUC editor and semantic diff use the real VS Code editor and diff editor, with native selection, scrolling, folding, word wrap, minimap, sticky scroll and syntax colouring
 - The editor supports direct typing of parameter values and container short names with local drafts, undo/redo, coalesced saves and an unsaved-changes marker
-- The diff view exposes VS Code's hover hunk gutter: `Copy Block to Left` and `Copy Block to Right` copy through the existing merge path, and a one-sided hunk shows only the meaningful direction
+- The diff view exposes VS Code's hover hunk gutter: `Copy Block to Left` and `Copy Block to Right` copy through the existing merge path. A one-sided hunk offers both directions, and copying from the empty side deletes the block from the owning side
 - Diff panes resize by dragging the divider and reset to 50/50 on double-click, in Merge and non-Merge modes, including after Swap
 - Both diff panes support folding, and the Collapse/Expand toolbar actions fold or unfold both sides
 
@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Search highlights map each Rust field offset onto the synthetic line, so the native count, navigation and Replace target only real ARXML matches
 - Typing and deleting in the ECUC editor or Details stay local until `Ctrl+S`; a save writes one coalesced edit per changed field, waits for every acknowledgement and then saves
 - A multi-line paste into an ECUC value is inserted as one line with `\n` escapes instead of being discarded
+- The diff title strip is one flexible bar with a separator instead of a fixed 50% divider, and the visible label no longer appends the raw schema number
+- The diff toolbar keeps **Swap sides** in the left action group after **Merge**, with the match status on the right
+- The ECUC editor toolbar keeps Collapse and Expand on the left and the Sidebar toggle on the right
 
 ### Removed
 
@@ -39,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Opening the native find widget with `Ctrl+F` or `Ctrl+H` no longer shifts the diff panes' scroll position
+- The native find buttons' tooltips no longer blink between shown and hidden in the diff view
 - A bulk rename whose names share no token now pairs containers in the semantic diff, including when new containers sort before the renamed block
 
 ## [0.10.0] - 2026-11-15

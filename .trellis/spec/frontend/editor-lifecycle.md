@@ -513,7 +513,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
   merged order, summary, visibility, flattening, next-change wrap, labels/title.
 - `src/test/core/wordDiff.test.ts` — tokenizer (whitespace, identifiers, one-character punctuation,
   hex literal, path slashes), LCS, empty sides and adjacent-segment merging.
-- `src/test/webview/components/diffView.test.ts` — fixed title strip with an aligned divider, one
+- `src/test/webview/components/diffView.test.ts` — fixed title strip with a single flex bar, one
   VirtualScroll, two window panes with per-pane horizontal bars, shared content geometry, swap reset,
   header update, optional status, word-colour CSS and the shared module gap row.
 - `src/test/webview/page/diffPage.test.ts` — loading state before the first document, toolbar both

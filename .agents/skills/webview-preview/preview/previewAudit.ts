@@ -56,7 +56,6 @@ interface ToolbarAudit {
 	controls: number;
 	display: string;
 	groups: Record<string, GroupAudit | null>;
-	swapCenterGap: number;
 	overlaps: string[];
 	outside: string[];
 	clipped: string[];
@@ -104,7 +103,6 @@ export interface OneSidedAudit {
 	hasInsertion: boolean;
 	removedNavigable: boolean;
 	addedNavigable: boolean;
-	oneSidedGutterItems: number;
 }
 
 interface PreviewModelDecoration {
@@ -274,10 +272,8 @@ function toolbarAudit(): ToolbarAudit {
 		display: toolbar ? getComputedStyle(toolbar).display : '',
 		groups: {
 			left: groupAudit('.toolbar-left'),
-			center: groupAudit('.toolbar-center'),
 			right: groupAudit('.toolbar-right')
 		},
-		swapCenterGap: swapCenterGap(),
 		overlaps: overlapLabels(controls),
 		outside: outsideLabels(controls),
 		clipped: clippedLabels(controls),
@@ -290,25 +286,13 @@ function groupAudit(selector: string): GroupAudit | null {
 	return group ? { rect: rectOf(group), clientWidth: group.clientWidth, scrollWidth: group.scrollWidth } : null;
 }
 
-/** How far the Swap button's centre sits from the diff editor's divider. */
-function swapCenterGap(): number {
-	const swap = document.getElementById('diff-swap');
-	const host = document.getElementById('diff-monaco');
-	if (!swap || !host) {
-		return 0;
-	}
-	const swapRect = rectOf(swap);
-	const hostRect = rectOf(host);
-	return Math.round(Math.abs(swapRect.x + swapRect.width / 2 - (hostRect.x + hostRect.width / 2)));
-}
-
 function visibleControls(): ToolbarControl[] {
 	const elements = Array.from(document.querySelectorAll('.toolbar .tool, .toolbar .search-field'));
 	return elements.filter(isVisible).map(controlOf);
 }
 
 function controlOf(element: Element): ToolbarControl {
-	const group = element.closest('.toolbar-left, .toolbar-center, .toolbar-right');
+	const group = element.closest('.toolbar-left, .toolbar-right');
 	return { name: labelOf(element), rect: rectOf(element), groupRect: group ? rectOf(group) : undefined };
 }
 
@@ -1481,15 +1465,6 @@ const LEGACY_DIFF_LAYER_SELECTOR = [
 	'.arxml-diff-ruler'
 ].join(', ');
 
-function oneSidedGutterItems(): number {
-	const items = (window as unknown as { __ARXML_GUTTER_PROBE__?: GutterAvailabilitySnapshot[] })
-		.__ARXML_GUTTER_PROBE__;
-	if (!Array.isArray(items)) {
-		return 0;
-	}
-	return items.filter((item) => item.values !== null && item.values.left !== item.values.right).length;
-}
-
 function oneSidedValues(c: OneSidedContext): OneSidedAudit {
 	const roots = diffRoots(c);
 	const changes = lineChangesOf(c.editor);
@@ -1515,8 +1490,7 @@ function oneSidedValues(c: OneSidedContext): OneSidedAudit {
 		hasDeletion,
 		hasInsertion,
 		removedNavigable: removedNavigable(c, changes),
-		addedNavigable: addedNavigable(c, changes),
-		oneSidedGutterItems: oneSidedGutterItems()
+		addedNavigable: addedNavigable(c, changes)
 	};
 }
 
@@ -1559,10 +1533,6 @@ function oneSidedViolations(audit: OneSidedAudit, stateName: string): string[] {
 		...issueWhen(
 			(isRemoved || isAdded) && audit.originalLines === audit.modifiedLines,
 			'the per-side models still have equal line counts'
-		),
-		...issueWhen(
-			(isRemoved || isAdded) && audit.oneSidedGutterItems === 0,
-			'no one-sided hunk hides the impossible copy action'
 		)
 	];
 }
@@ -1638,19 +1608,10 @@ const COPY_RIGHT_LABEL = 'Copy Block to Right';
 function renderedActionIssues(state: AuditState, probe: GutterProbe): string[] {
 	if (state.name === 'diff-removed' || state.name === 'diff-added') {
 		const first = probe.itemActions[0] ?? [];
-		const impossible = state.name === 'diff-removed' ? COPY_LEFT_LABEL : COPY_RIGHT_LABEL;
-		const meaningful = state.name === 'diff-removed' ? COPY_RIGHT_LABEL : COPY_LEFT_LABEL;
 		return [
-			...issueWhen(first.includes(impossible), `the one-sided hunk renders ${impossible}`),
 			...issueWhen(
-				!first.includes(meaningful) && first[0] !== 'More Actions...',
-				`the one-sided hunk does not render ${meaningful}`
-			),
-			...issueWhen(
-				!probe.itemActions.some(
-					(actions) => actions.includes(COPY_LEFT_LABEL) && actions.includes(COPY_RIGHT_LABEL)
-				),
-				'the changed hunk does not render both copy actions'
+				!first.includes(COPY_LEFT_LABEL) || !first.includes(COPY_RIGHT_LABEL),
+				'the one-sided hunk does not render both copy directions'
 			)
 		];
 	}
@@ -1700,31 +1661,13 @@ function expectedCopySide(swapped: boolean, action: string | null): 'left' | 'ri
 }
 
 function availabilityIssues(state: AuditState, probe: GutterProbe): string[] {
-	if (state.name === 'diff-removed') {
-		const hidesLeft = probe.availability.some(
-			(item) => item.values?.left === false && item.values.right === true
-		);
-		return [
-			...issueWhen(
-				probe.copy?.side !== 'left' || !probe.copy?.key?.includes('module:'),
-				'the removed module did not copy from the stored left side'
-			),
-			...issueWhen(!hidesLeft, 'the one-sided hunk does not hide Copy Block to Left')
-		];
-	}
-	if (state.name === 'diff-added') {
-		const hidesRight = probe.availability.some(
-			(item) => item.values?.left === true && item.values.right === false
-		);
-		return [
-			...issueWhen(
-				probe.copy?.side !== 'right' || !probe.copy?.key?.includes('module:'),
-				'the added module did not copy from the stored right side'
-			),
-			...issueWhen(!hidesRight, 'the one-sided hunk does not hide Copy Block to Right')
-		];
-	}
-	if (state.name !== 'diff-merge' && state.name !== 'diff-swap' && state.name !== 'diff-sash') {
+	if (
+		state.name !== 'diff-merge' &&
+		state.name !== 'diff-swap' &&
+		state.name !== 'diff-sash' &&
+		state.name !== 'diff-removed' &&
+		state.name !== 'diff-added'
+	) {
 		return [];
 	}
 	return probe.availability
@@ -1803,13 +1746,6 @@ function sashViolations(state: AuditState, probe: SashProbe | undefined): string
 	return issues;
 }
 
-
-function centeredSwapIssues(audit: Omit<PreviewAudit, 'violations'>): string[] {
-	if (audit.toolbar.swapCenterGap <= 12) {
-		return [];
-	}
-	return [`the Swap action is ${audit.toolbar.swapCenterGap}px off the pane divider`];
-}
 
 function mergePressViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
 	if (!state.merge || audit.toolbar.mergePressed === true) {

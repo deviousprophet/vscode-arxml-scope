@@ -9,14 +9,15 @@ The comparison itself, its change classes and its navigation are in
 ## Using it
 
 1. Compare two files as usual (**Compare with…** or **Compare Selected**).
-2. Click **Merge** in the diff title strip. The toggle only affects this panel and is off
+2. Click **Merge** in the diff toolbar. The toggle only affects this panel and is off
    by default.
 3. Hover a changed hunk in the diff. VS Code's built-in hunk toolbar shows
-   **Copy Block to Left** and **Copy Block to Right**. A hunk with an element only on one
-   side shows only the meaningful direction; the impossible action is hidden. A short
-   hunk at line 1 collapses its actions into **More Actions…**.
-4. Copying a container carries its subtree. Copying the right-hand side of a one-sided
-   hunk deletes the element from the side that has it.
+   **Copy Block to Left** and **Copy Block to Right**. On a hunk with an element only on
+   one side, copy from the side that has it to add it to the other side, or copy from the
+   empty side to delete it from the side that has it. A short hunk at line 1 collapses
+   its actions into **More Actions…**.
+4. Copying a container carries its subtree. Copying from the empty side deletes the
+   element from the side that has it.
 5. Save the file you changed with the normal **Save**. `Ctrl+Z` in that pane undoes one
    copy; the pane label shows `•` while its document is dirty.
 

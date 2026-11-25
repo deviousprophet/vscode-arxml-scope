@@ -8,7 +8,7 @@
  * Monaco-side ordering and the "ask the host once" fallback.
  */
 import type { FindOptions } from '../../core/searchModel';
-import { monaco } from './setup';
+import type { monaco } from './setup';
 
 export type MonacoFindMatch = ReturnType<monaco.editor.ITextModel['findMatches']>[number];
 
@@ -106,6 +106,9 @@ function matchesOrRequest(
 	searchString: string,
 	options: FindOptions
 ): MonacoFindMatch[] | null {
+	if (searchString.length === 0) {
+		return [];
+	}
 	const matches = adapter.matches(searchString, options);
 	if (matches.length === 0) {
 		adapter.request(searchString, options);
@@ -114,20 +117,17 @@ function matchesOrRequest(
 	return matches;
 }
 
-function positionAt(searchStart: monaco.Position): monaco.Range {
-	return new monaco.Range(
-		searchStart.lineNumber,
-		searchStart.column,
-		searchStart.lineNumber,
-		searchStart.column
-	);
+function comparePositions(left: monaco.Position, right: monaco.Position): number {
+	if (left.lineNumber !== right.lineNumber) {
+		return left.lineNumber - right.lineNumber;
+	}
+	return left.column - right.column;
 }
 
 function nextMatch(matches: readonly MonacoFindMatch[], searchStart: monaco.Position): MonacoFindMatch {
-	const start = positionAt(searchStart);
 	return (
 		matches.find(
-			(match) => monaco.Range.compareRangesUsingStarts(match.range, start) >= 0
+			(match) => comparePositions(match.range.getStartPosition(), searchStart) >= 0
 		) ?? matches[0]
 	);
 }
@@ -161,6 +161,9 @@ function findMatch(
 	wordSeparators: string | null,
 	choose: (matches: readonly MonacoFindMatch[], start: monaco.Position) => MonacoFindMatch
 ): MonacoFindMatch | null {
+	if (searchString.length === 0) {
+		return null;
+	}
 	const options = adapter.options(isRegex, matchCase, wordSeparators);
 	const matches = matchesOrRequest(adapter, searchString, options);
 	return matches === null ? null : choose(matches, searchStart);
@@ -178,6 +181,9 @@ export function installFindBridge(target: monaco.editor.ITextModel, adapter: Fin
 		_captureMatches,
 		limitResultCount
 	) {
+		if (searchString.length === 0) {
+			return [];
+		}
 		const options = adapter.options(isRegex, matchCase, wordSeparators);
 		const matches = adapter.matches(searchString, options);
 		if (matches.length === 0) {
