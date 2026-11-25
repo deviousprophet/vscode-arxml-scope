@@ -12,21 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Rust engine restarts automatically after a crash with bounded backoff, reopens live documents and keeps their ids
 - `ARXML Scope: Show Engine Status` reports the engine state, pid, uptime, restarts, memory and last error, and can restart the engine
 - Documents above the 64 MiB frame limit open through a chunked upload up to a 512 MiB cap, so large ECUC files can be diffed and edited
-- Find is Monaco's own find widget, opened with `Ctrl+F`/`Ctrl+H`, with case-sensitive, whole-word and regular-expression options in the document and diff views
 - Replace and Replace All update validated parameter values and container short names in the document view, with preserve case and no write when the engine refuses
-- The ECUC editor and semantic diff use the real VS Code editor and diff editor, with native selection, scrolling, folding, word wrap, minimap, sticky scroll and syntax colouring
-- The editor supports direct typing of parameter values and container short names with local drafts, undo/redo, coalesced saves and an unsaved-changes marker
-- The diff view exposes VS Code's hover hunk gutter: `Copy Block to Left` and `Copy Block to Right` copy through the existing merge path. A one-sided hunk offers both directions, and copying from the empty side deletes the block from the owning side
+- The editor supports direct typing of parameter values and container short names with local drafts, undo/redo, coalesced saves and an unsaved-changes marker; definition-ref edits remain in Details and structural edits stay in the row menu
 - Diff panes resize by dragging the divider and reset to 50/50 on double-click, in Merge and non-Merge modes, including after Swap
-- Both diff panes support folding, and the Collapse/Expand toolbar actions fold or unfold both sides
+- Both diff panes support folding; Collapse/Expand folds both sides, including removed/added containers
+- Folded diff rows keep their full node header and fold hint, synchronize across panes, mark hidden differences only when the container exists on both sides, and hide one-sided diagonal fills inside the fold; the sticky header shows the full parent header
 
 ### Changed
 
 - Starting on an unsupported platform now names the packaged engine targets instead of failing with a missing-binary error
+- The ECUC editor and semantic diff use the real VS Code editor and diff editor, with native selection, scrolling, folding, word wrap, minimap, sticky scroll and syntax colouring
 - The ECUC editor inherits the configured VS Code editor font, wrapping, minimap, sticky scroll, guide and cursor settings
-- Parameter values and container short names can be typed directly in the ECUC editor; definition-ref edits remain in Details, and structural edits remain in the row menu
 - The diff view renders each side's own ECUC document in the VS Code diff editor, with native line changes, word-level spans, diagonal gaps for a missing side, the overview ruler and unchanged-region widgets
-- The ECUC find widget is Monaco's native widget; its match list, count and replace plans still come from the Rust ARXML search
+- The diff view exposes VS Code's hover hunk gutter: `Copy Block to Left` and `Copy Block to Right` copy through the existing merge path. A one-sided hunk offers both directions, copying from the empty side deletes the block, and the arrows stay centered on their hunk
+- Find in the editor and diff uses Monaco's native widget; its match list, count and replace plans still come from the Rust ARXML search, opening it no longer shifts the diff scroll, and its button tooltips stay stable
 - The ECUC syntax palette separates container types, parameter and reference names, values, metadata and comments, and uses the preprocessor palette for condition names, operators and literals
 - Search highlights map each Rust field offset onto the synthetic line, so the native count, navigation and Replace target only real ARXML matches
 - Typing and deleting in the ECUC editor or Details stay local until `Ctrl+S`; a save writes one coalesced edit per changed field, waits for every acknowledgement and then saves
@@ -42,14 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Prev diff** / **Next diff** now move to the adjacent change every time and wrap at the ends, including after Swap
-- Collapsing a container on either diff pane applies the same fold to the matching container on the other side; a small margin dot marks collapsed containers that hide differences, but only when the container exists on both sides and not when only the collapsed row was renamed
-- Collapse All now folds removed/added containers on the side that owns them instead of the other pane immediately unfolding them
-- Folded diff containers no longer leave a striped diagonal-fill gap when the hidden subtree contains one-sided rows
-- Collapsed diff containers keep their full node header and fold hint, and the diff sticky header shows the full parent module/container instead of only `{`
-- The Merge hunk arrows are centered on their lines as soon as Merge is enabled instead of correcting only after the diff scrolls
-- Opening the native find widget with `Ctrl+F` or `Ctrl+H` no longer shifts the diff panes' scroll position
-- The native find buttons' tooltips no longer blink between shown and hidden in the diff view
 - A bulk rename whose names share no token now pairs containers in the semantic diff, including when new containers sort before the renamed block
 
 ## [0.10.0] - 2026-11-15
