@@ -174,7 +174,7 @@ region. The control is display-only; it never changes the comparison result.
 | **Merge** | Turn the panel into the two-way copy merge; off by default. See [MERGE.md](MERGE.md). |
 | **Semantic** / **Strict** | Two-button view group for renamed-container pairing. The group flips immediately and a spinner/status shows while the new view is prepared. |
 | **Context** | Active by default; keeps five unchanged rows above and below each change in Show diff. Only the toggle changes. |
-| Fold control | Collapse or expand one container in its pane. |
+| Fold control | Collapse or expand one container in both panes; the matching container on the other side follows. |
 | **Search** | `Ctrl+F` / `Cmd+F` opens Monaco's native find widget in the focused pane; type a query and press `Enter`; `Shift+Enter` goes backwards. |
 | **Search options** | `Aa` case sensitive, `ab|` whole word, `.*` regular expression. The diff has no replace row. |
 | **Search count** | Native `1 of N` / `No results`; the matches come from the Rust diff search, not a local scan. |

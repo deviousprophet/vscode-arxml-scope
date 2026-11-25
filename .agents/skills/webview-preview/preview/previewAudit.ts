@@ -183,6 +183,8 @@ export interface NavigationProbe {
 export interface FoldedProbe {
 	label: string;
 	visible: string[];
+	originalVisible: string[];
+	reverse: { modified: string[]; original: string[] };
 	hint: string;
 }
 
@@ -1883,11 +1885,38 @@ function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): strin
 		return ['the collapsed-row probe did not run'];
 	}
 	const header = folded.visible.find((line) => line.includes(folded.label));
+	const originalHeader = folded.originalVisible.find((line) => line.includes(folded.label));
+	const reverseHeader = folded.reverse.modified.find((line) => line.includes(folded.label));
+	const reverseOriginalHeader = folded.reverse.original.find((line) => line.includes(folded.label));
 	return [
 		...issueWhen(header === undefined, `the collapsed row does not show ${folded.label}`),
 		...issueWhen(
+			originalHeader === undefined,
+			`the other pane did not receive the ${folded.label} fold`
+		),
+		...issueWhen(
 			folded.visible.some((line) => line.includes('P0000')),
 			'the collapsed row still shows its child parameters'
+		),
+		...issueWhen(
+			folded.originalVisible.some((line) => line.includes('P0000')),
+			'the other pane still shows the collapsed child parameters'
+		),
+		...issueWhen(
+			reverseHeader === undefined,
+			`the reverse ${folded.label} fold did not reach the second pane`
+		),
+		...issueWhen(
+			reverseOriginalHeader === undefined,
+			`the reverse ${folded.label} fold did not keep the source header`
+		),
+		...issueWhen(
+			folded.reverse.modified.some((line) => line.includes('P0000')),
+			'the reverse fold left child parameters in the second pane'
+		),
+		...issueWhen(
+			folded.reverse.original.some((line) => line.includes('P0000')),
+			'the reverse fold left child parameters in the source pane'
 		),
 		...issueWhen(
 			!folded.hint.includes('⋯'),

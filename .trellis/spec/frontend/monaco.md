@@ -136,7 +136,9 @@ preview audit records the visible-row round trip (`visibleBefore`, `visibleColla
 `visibleExpanded`) because chevrons are hover-controlled.
 `buildDiffSyntheticDocuments` starts every diff fold range on the owning node line, exactly
 like `buildSyntheticDocument`; a collapsed container therefore keeps its full node header
-with Monaco's `⋯` fold hint instead of leaving only the opening brace visible.
+with Monaco's `⋯` fold hint instead of leaving only the opening brace visible. Fold changes
+on either inner editor are mirrored to the other side by row key through the pinned
+`editor.contrib.folding` contribution, so collapsing from either pane folds both.
 
 ### Gutter and copy actions
 

@@ -993,20 +993,24 @@ async function applyFold(): Promise<void> {
 	if (payload.page !== 'diff' || label === undefined) {
 		return;
 	}
-	const editor = (
+	interface FoldEditor {
+		getModel(): { getLineCount(): number; getLineContent(line: number): string } | null;
+		getDomNode(): HTMLElement | null;
+		setPosition(position: { lineNumber: number; column: number }): void;
+		trigger(source: string, handlerId: string, payload: unknown): void;
+	}
+	const diff = (
 		window as unknown as {
 			__ARXML_DIFF_EDITOR__?: {
-				getModifiedEditor(): {
-					getModel(): { getLineCount(): number; getLineContent(line: number): string } | null;
-					getDomNode(): HTMLElement | null;
-					setPosition(position: { lineNumber: number; column: number }): void;
-					trigger(source: string, handlerId: string, payload: unknown): void;
-				};
+				getOriginalEditor(): FoldEditor;
+				getModifiedEditor(): FoldEditor;
 			};
 		}
-	).__ARXML_DIFF_EDITOR__?.getModifiedEditor();
-	const model = editor?.getModel();
-	if (editor === undefined || model === null || model === undefined) {
+	).__ARXML_DIFF_EDITOR__;
+	const modified = diff?.getModifiedEditor();
+	const original = diff?.getOriginalEditor();
+	const model = modified?.getModel();
+	if (modified === undefined || original === undefined || model === null || model === undefined) {
 		return;
 	}
 	let line = 0;
@@ -1019,16 +1023,43 @@ async function applyFold(): Promise<void> {
 	if (line === 0) {
 		return;
 	}
-	editor.setPosition({ lineNumber: line, column: 1 });
-	editor.trigger('preview', 'editor.fold', { selectionLines: [line - 1] });
+	modified.setPosition({ lineNumber: line, column: 1 });
+	modified.trigger('preview', 'editor.fold', { selectionLines: [line - 1] });
 	await delay(350);
-	const root = editor.getDomNode();
-	const visible = Array.from(root?.querySelectorAll<HTMLElement>('.view-line') ?? []).map(
-		(element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? ''
-	);
-	const folded = root?.querySelector<HTMLElement>('.inline-folded');
+	const visibleLines = (editor: FoldEditor): string[] =>
+		Array.from(editor.getDomNode()?.querySelectorAll<HTMLElement>('.view-line') ?? []).map(
+			(element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+		);
+	const folded = modified.getDomNode()?.querySelector<HTMLElement>('.inline-folded');
 	const hint = folded === null || folded === undefined ? '' : getComputedStyle(folded, '::after').content;
-	const probe: FoldedProbe = { label, visible, hint };
+	const first = { visible: visibleLines(modified), originalVisible: visibleLines(original) };
+
+	modified.trigger('preview', 'editor.unfoldAll', null);
+	original.trigger('preview', 'editor.unfoldAll', null);
+	await delay(250);
+	const originalModel = original.getModel();
+	let originalLine = 0;
+	if (originalModel !== null) {
+		for (let at = 1; at <= originalModel.getLineCount(); at += 1) {
+			if (originalModel.getLineContent(at).includes(label)) {
+				originalLine = at;
+				break;
+			}
+		}
+	}
+	if (originalLine > 0) {
+		original.setPosition({ lineNumber: originalLine, column: 1 });
+		original.trigger('preview', 'editor.fold', { selectionLines: [originalLine - 1] });
+		await delay(350);
+	}
+	const reverse = { modified: visibleLines(modified), original: visibleLines(original) };
+	const probe: FoldedProbe = {
+		label,
+		visible: first.visible,
+		originalVisible: first.originalVisible,
+		reverse,
+		hint
+	};
 	(window as unknown as { __DIFF_FOLDED__?: FoldedProbe }).__DIFF_FOLDED__ = probe;
 }
 

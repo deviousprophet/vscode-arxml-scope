@@ -38,7 +38,8 @@ Extract `foldedRowKeys(regions, keys)` and `foldTogglePlan(collapsedSource, coll
 ## Tests
 
 - Unit test key extraction, one-sided keys and toggle plans.
-- Preview: a `diff-folds` state collapses `Items` on one side, records hidden keys on both, expands, then repeats from the other side. Audit fails on mismatched sets.
+- Preview: the `diff-collapsed` state folds `Items` on one side, records hidden keys on both,
+  expands, then repeats from the other side. Audit fails on mismatched sets.
 
 ## Rollback
 

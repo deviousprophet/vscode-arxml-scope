@@ -31,6 +31,12 @@ import {
 	originalChangeLine,
 	type DiffNavigationChange
 } from './monaco/diffNavigation';
+import {
+	collapsedRowKeys,
+	foldTogglePlan,
+	type FoldModel,
+	type FoldingContribution
+} from './monaco/diffFolding';
 import { DiffToolbar } from './components/toolbar/toolbar';
 import { installNoticeErrors } from './render/pageError';
 import { postToHost } from './vscodeApi';
@@ -673,6 +679,77 @@ function unfoldAll(): void {
 	modifiedEditor()?.trigger('toolbar', 'editor.unfoldAll', null);
 }
 
+let syncingFolds = false;
+let foldSyncQueue: Promise<void> = Promise.resolve();
+
+function scheduleFoldSync(editor: monaco.editor.ICodeEditor): void {
+	foldSyncQueue = foldSyncQueue.then(() => syncFolds(editor)).catch(() => undefined);
+}
+
+function foldingContribution(
+	editor: monaco.editor.ICodeEditor | undefined
+): FoldingContribution | null {
+	if (editor === undefined) {
+		return null;
+	}
+	return (editor.getContribution('editor.contrib.folding') as unknown as FoldingContribution | null) ?? null;
+}
+
+async function foldingModel(editor: monaco.editor.ICodeEditor): Promise<FoldModel | null> {
+	const contribution = foldingContribution(editor);
+	if (contribution === null) {
+		return null;
+	}
+	return contribution.getFoldingModel();
+}
+
+function sideOfModel(model: monaco.editor.ITextModel | null): 'left' | 'right' | undefined {
+	if (model === leftModel) {
+		return 'left';
+	}
+	if (model === rightModel) {
+		return 'right';
+	}
+	return undefined;
+}
+
+/** Mirror the collapsed row keys of one pane onto the other. */
+async function syncFolds(sourceEditor: monaco.editor.ICodeEditor): Promise<void> {
+	if (syncingFolds || aligned === undefined) {
+		return;
+	}
+	const source = sideOfModel(sourceEditor.getModel());
+	const targetEditor =
+		sourceEditor === originalEditor() ? modifiedEditor() : originalEditor();
+	if (source === undefined || targetEditor === undefined) {
+		return;
+	}
+	const sourceFold = await foldingModel(sourceEditor);
+	const targetFold = await foldingModel(targetEditor);
+	if (sourceFold === null || targetFold === null) {
+		return;
+	}
+	const sourceKeys = source === 'left' ? aligned.leftLineKeys : aligned.rightLineKeys;
+	const targetSide = source === 'left' ? 'right' : 'left';
+	const targetKeys = targetSide === 'left' ? aligned.leftLineKeys : aligned.rightLineKeys;
+	const targetRows = targetSide === 'left' ? aligned.left.rowLine : aligned.right.rowLine;
+	const plan = foldTogglePlan(
+		collapsedRowKeys(sourceFold.regions, sourceKeys),
+		collapsedRowKeys(targetFold.regions, targetKeys),
+		targetRows,
+		targetFold.regions
+	);
+	if (plan.length === 0) {
+		return;
+	}
+	syncingFolds = true;
+	try {
+		targetFold.toggleCollapseState(plan.map((regionIndex) => ({ regionIndex })));
+	} finally {
+		syncingFolds = false;
+	}
+}
+
 /** The diff editor disables folding on its inner editors; the modified feature re-enables it. */
 function applyDiffFolding(): void {
 	for (const editor of [originalEditor(), modifiedEditor()]) {
@@ -1038,6 +1115,11 @@ async function mountDiff(): Promise<void> {
 		minimap: { enabled: false }
 	});
 	applyDiffFolding();
+	for (const editor of [diffEditor.getOriginalEditor(), diffEditor.getModifiedEditor()]) {
+		editor.onDidChangeHiddenAreas(function () {
+			scheduleFoldSync(editor);
+		});
+	}
 	gutterAvailability = installGutterAvailability({
 		availability: gutterAvailabilityFor
 	});
