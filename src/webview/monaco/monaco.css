@@ -42,6 +42,9 @@
  * so the indicator does not add text or shift the line. The cell stays clear;
  * only the pseudo-element dot is painted. */
 .monaco-editor .arxml-fold-has-diff {
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	background: transparent;
 }
 .monaco-editor .arxml-fold-has-diff::after {
@@ -49,7 +52,6 @@
 	display: block;
 	width: 6px;
 	height: 6px;
-	margin: 7px auto 0;
 	border-radius: 50%;
 	background-color: var(
 		--vscode-gitDecoration-modifiedResourceForeground,

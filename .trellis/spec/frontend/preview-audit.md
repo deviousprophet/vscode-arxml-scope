@@ -175,6 +175,10 @@ the listed DOM/model state, not a screenshot diff.
   row; a one-pane fold, a `{`-only line or an unfolded container is a violation. Folding also
   requires one `.arxml-fold-has-diff` glyph dot in each pane while collapsed and zero after
   expansion; the dot has no count or text.
+- **A folded one-sided gap does not stripe the block.** `diff-collapsed-onesided` folds a shared
+  `Items` container that carries a left-only child. The audit counts only visible
+  `.diagonal-fill` elements: zero in both panes while folded, at least one after expansion, and
+  zero again after the reverse fold. A visible striped gap or a missing native fill fails.
 - **Editor page.** Toolbar, line-number gutter, selected row and Details panel render
   without clipping. The `select` state must leave a selected row in the audit.
 

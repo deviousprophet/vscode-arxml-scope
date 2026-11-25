@@ -43,7 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Prev diff** / **Next diff** now move to the adjacent change every time and wrap at the ends, including after Swap
-- Collapsing a container on either diff pane applies the same fold to the matching container on the other side; a small margin dot marks collapsed containers that hide differences
+- Collapsing a container on either diff pane applies the same fold to the matching container on the other side; a small margin dot marks collapsed containers that hide differences, ignoring a rename of the collapsed row itself
+- Folded diff containers no longer leave a striped diagonal-fill gap when the hidden subtree contains one-sided rows
 - Collapsed diff containers keep their full node header and fold hint, and the diff sticky header shows the full parent module/container instead of only `{`
 - The Merge hunk arrows are centered on their lines as soon as Merge is enabled instead of correcting only after the diff scrolls
 - Opening the native find widget with `Ctrl+F` or `Ctrl+H` no longer shifts the diff panes' scroll position

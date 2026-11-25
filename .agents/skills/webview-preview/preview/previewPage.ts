@@ -1074,6 +1074,10 @@ async function applyFold(): Promise<void> {
 	};
 	const markerCount = (editor: FoldEditor): number =>
 		editor.getDomNode()?.querySelectorAll('.arxml-fold-has-diff').length ?? 0;
+	const diagonalFillCount = (editor: FoldEditor): number =>
+		Array.from(editor.getDomNode()?.querySelectorAll<HTMLElement>('.diagonal-fill') ?? []).filter(
+			(element) => element.getBoundingClientRect().height > 0
+		).length;
 	const ensureFolded = async (
 		editor: FoldEditor,
 		targetLine: number,
@@ -1097,6 +1101,10 @@ async function applyFold(): Promise<void> {
 	const hint = folded === null || folded === undefined ? '' : getComputedStyle(folded, '::after').content;
 	const first = { visible: visibleLines(modified), originalVisible: visibleLines(original) };
 	const markers = { modified: markerCount(modified), original: markerCount(original) };
+	const diagonalFills = {
+		modified: diagonalFillCount(modified),
+		original: diagonalFillCount(original)
+	};
 
 	modified.trigger('preview', 'editor.unfoldAll', null);
 	original.trigger('preview', 'editor.unfoldAll', null);
@@ -1105,9 +1113,14 @@ async function applyFold(): Promise<void> {
 			visibleLines(modified).some((text) => text.includes('P0000')) &&
 			visibleLines(original).some((text) => text.includes('P0000'))
 	);
+	await waitFor(() => diagonalFillCount(modified) + diagonalFillCount(original) > 0);
 	await waitFor(() => markerCount(modified) === 0 && markerCount(original) === 0);
 	await delay(100);
 	const expandedMarkers = { modified: markerCount(modified), original: markerCount(original) };
+	const expandedDiagonalFills = {
+		modified: diagonalFillCount(modified),
+		original: diagonalFillCount(original)
+	};
 	const originalModel = original.getModel();
 	let originalLine = 0;
 	if (originalModel !== null) {
@@ -1125,6 +1138,10 @@ async function applyFold(): Promise<void> {
 	}
 	const reverse = { modified: visibleLines(modified), original: visibleLines(original) };
 	const reverseMarkers = { modified: markerCount(modified), original: markerCount(original) };
+	const reverseDiagonalFills = {
+		modified: diagonalFillCount(modified),
+		original: diagonalFillCount(original)
+	};
 	const probe: FoldedProbe = {
 		label,
 		visible: first.visible,
@@ -1133,6 +1150,9 @@ async function applyFold(): Promise<void> {
 		markers,
 		expandedMarkers,
 		reverseMarkers,
+		diagonalFills,
+		expandedDiagonalFills,
+		reverseDiagonalFills,
 		hint
 	};
 	(window as unknown as { __DIFF_FOLDED__?: FoldedProbe }).__DIFF_FOLDED__ = probe;

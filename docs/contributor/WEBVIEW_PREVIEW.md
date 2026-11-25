@@ -46,6 +46,7 @@ projection for choosing a state.
 | `diff-rail` | diff | 1400×900 | long document; Next diff jumps to the change near line 1000 and scrolls |
 | `diff-nav` | diff | 1400×900 | Next/Prev visit every change in order and wrap; the probe repeats the sequence after Swap |
 | `diff-collapsed` | diff | 1400×900 | the `Items` container is folded from each side in turn; both panes keep the node header, `⋯` hint and a glyph-margin difference dot, and hide child rows |
+| `diff-collapsed-onesided` | diff | 1400×900 | a shared `Items` container with a left-only child is folded; no visible diagonal fill remains while folded, and the native fill returns after expansion |
 | `diff-sticky` | diff | 1400×900 | deep scroll into `Items`; both diff panes pin the full module/container header through sticky scroll |
 | `diff-one-sided` | diff | 1400×900 | per-side models with changed pairs; native fills and diagonal gaps, no placeholder layers |
 | `diff-removed` | diff | 1400×900 | a left-only module deletion; both copy directions are offered, including the empty-side delete |

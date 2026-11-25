@@ -258,6 +258,7 @@ regions, navigation, refresh, limits, headers, a11y, swap, search, Monaco body.
 | DIFF-08 | Next/Prev diff through every change, before and after Swap | each press moves one adjacent change, wraps at the ends and never repeats the current change |
 | DIFF-09 | collapse a diff container from either side | both panes keep the full node header and `⋯` hint, child rows hide, the fold starts on the node line, and a glyph dot marks hidden differences |
 | DIFF-10 | deep-scroll the diff | the sticky header shows the full module/container text, not `{` or an empty widget |
+| DIFF-11 | collapse a shared container with a one-sided child | no visible diagonal-fill gap while folded; the native fill returns on expansion |
 
 ## ENG — engine process
 

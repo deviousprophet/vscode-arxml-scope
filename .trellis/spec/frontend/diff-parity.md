@@ -28,27 +28,31 @@ surface is reviewed.
 | `editor/browser/widget/diffEditor/components/diffEditorSash.js` | `0ada5415d0c7716760816f11f9b01a12f2f508cf511e49dee2a5d30c1fcdd5a3` |
 | `editor/browser/widget/diffEditor/diffEditorWidget.js` | `b7095044c8e7e01a9b4a5aeb105c9502aa90bc32cbed0042f0a0a809fc2afc3a` |
 | `editor/browser/widget/diffEditor/diffEditor.contribution.js` | `4872c4050da0c60b1f6e7cdecf636b176584dcc16d72b3ded77d983ef3693bbd` |
+| `editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js` | `ca5771457cad0f06ffd6a8ae0d3b10ec2d72bf43ae7e961523866f029d94ea91` |
 | `platform/actions/browser/toolbar.js` | `4382bca3d09f4679e77f9f690d8e088419d842379ef0aa055cc09fbb9e495f09` |
 
-The first and last hashes are the **patched** files. The other three are the unmodified
-release files. Hashes are computed over LF text so a CRLF checkout matches the Linux CI
-runner.
+`gutterFeature.js`, `diffEditorViewZones.js` and `toolbar.js` are the **patched** files. The
+other three are the unmodified release files. Hashes are computed over LF text so a CRLF
+checkout matches the Linux CI runner.
 
 ## The checked-in patch
 
 `patches/monaco-editor+0.57.0.patch` is applied by `patch-package` from the
-`postinstall` script. It changes two upstream files:
+`postinstall` script. It changes three upstream files:
 
 - `gutterFeature.js` creates a scoped context-key service per `.gutterItem`, exposes the
   hovered hunk as `__arxmlGutterItem` and initialises `arxml.copyLeftAvailable` /
   `arxml.copyRightAvailable` from `globalThis.__ARXML_GUTTER_AVAILABILITY__`.
 - `toolbar.js` lets the hunk toolbar use that scoped context-key service instead of the
   global one.
+- `diffEditorViewZones.js` marks the side-by-side diagonal-fill view zones with
+  `showInHiddenAreas: false`, so folding a container does not leave the filler visible
+  inside the hidden range. Top padding and inline-deleted-code zones are unchanged.
 
 The stock `DiffToolBar` uses one menu context for every hunk. Without the patch, hiding
 one impossible copy direction would hide it for every hunk. The patch is deliberately
-scoped to the gutter toolbar; it does not change the diff algorithms, row model or host
-protocol.
+scoped to the gutter toolbar and folded fillers; it does not change the diff algorithms,
+row model or host protocol.
 
 A fresh `npm install` / `npm ci` must run `patch-package`; if the patch does not apply,
 the gutter audit fails and `diffCodeParity.test.ts` fails on the file hashes.

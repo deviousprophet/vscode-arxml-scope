@@ -29,6 +29,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-nav', page: 'diff', width: 1400, height: 900, merge: true, nav: true },
 	{ name: 'diff-collapsed', page: 'diff', width: 1400, height: 900, merge: true, foldLabel: 'Items "Items"' },
+	{ name: 'diff-collapsed-onesided', page: 'diff', width: 1400, height: 900, foldLabel: 'Items "Items"' },
 	{ name: 'diff-sticky', page: 'diff', width: 1400, height: 900, merge: true, diffScrollLine: 40 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-removed', page: 'diff', width: 1400, height: 900, merge: true },
@@ -222,6 +223,43 @@ function oneSidedPair(): DiffDocument {
 	);
 }
 
+/** A shared module/container with one child container that exists on only one side. */
+function collapsedOneSidedDocument(side: 'left' | 'right', changed: string): string {
+	const own =
+		side === 'left'
+			? oneSidedContainer(
+					'Shared',
+					'RemovedContainer',
+					oneSidedValue('Shared', 'RemovedContainer', 'RemovedValue', '1')
+				)
+			: '';
+	const items = oneSidedContainer(
+		'Shared',
+		'Items',
+		oneSidedValue('Shared', 'Items', 'P0000', '0') +
+			own +
+			oneSidedValue('Shared', 'Items', 'ChangedValue', changed)
+	);
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${oneSidedModule('Shared', items)}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+/** A shared module whose Items container holds a left-only child container. */
+function collapsedOneSidedPair(): DiffDocument {
+	const leftSide = rowsOf(collapsedOneSidedDocument('left', '5'));
+	const rightSide = rowsOf(collapsedOneSidedDocument('right', '5'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
 /** The shared module alone, so the other side has a real deletion block. */
 function sharedOnlyDocument(changed: string): string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
@@ -396,6 +434,9 @@ function diffFixtureFor(state: PreviewState): DiffDocument {
 	}
 	if (state.name === 'diff-added') {
 		return addedPair();
+	}
+	if (state.name === 'diff-collapsed-onesided') {
+		return collapsedOneSidedPair();
 	}
 	const fixture = state.wide ? widePair : state.name === 'diff-rail' ? railPair : mergePair;
 	return fixture();

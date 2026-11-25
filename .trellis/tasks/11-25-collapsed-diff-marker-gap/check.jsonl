@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Unit, preview and patch verification gates"}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Verify visible diagonal-fill and marker assertions are non-vacuous"}

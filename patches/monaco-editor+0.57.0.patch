@@ -51,3 +51,42 @@ diff --git a/node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.
          this._store.add(this._menu.onDidChange(() => {
              this._updateToolbar();
              this._onDidChangeMenuItems.fire(this);
+diff --git a/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js b/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js
+--- a/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js
++++ b/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js
+@@ -247,7 +247,7 @@ let DiffEditorViewZones = class DiffEditorViewZones extends Disposable {
+                             afterLineNumber: a.originalRange.endLineNumberExclusive - 1,
+                             domNode: createFakeLinesDiv(),
+                             heightInPx: delta,
+-                            showInHiddenAreas: true,
++                            showInHiddenAreas: false,
+                             suppressMouseDown: true,
+                         });
+                     }
+@@ -274,7 +274,7 @@ let DiffEditorViewZones = class DiffEditorViewZones extends Disposable {
+                             domNode: createFakeLinesDiv(),
+                             heightInPx: -delta,
+                             marginDomNode,
+-                            showInHiddenAreas: true,
++                            showInHiddenAreas: false,
+                             suppressMouseDown: true,
+                         });
+                     }
+@@ -292,7 +292,7 @@ let DiffEditorViewZones = class DiffEditorViewZones extends Disposable {
+                         afterLineNumber: a.originalRange.endLineNumberExclusive - 1,
+                         domNode: createFakeLinesDiv(),
+                         heightInPx: delta,
+-                        showInHiddenAreas: true,
++                        showInHiddenAreas: false,
+                         suppressMouseDown: true,
+                     });
+                 }
+@@ -301,7 +301,7 @@ let DiffEditorViewZones = class DiffEditorViewZones extends Disposable {
+                         afterLineNumber: a.modifiedRange.endLineNumberExclusive - 1,
+                         domNode: createFakeLinesDiv(),
+                         heightInPx: -delta,
+-                        showInHiddenAreas: true,
++                        showInHiddenAreas: false,
+                         suppressMouseDown: true,
+                     });
+                 }

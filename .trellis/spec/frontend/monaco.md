@@ -143,7 +143,11 @@ with Monaco's `⋯` fold hint instead of leaving only the opening brace visible.
 on either inner editor are mirrored to the other side by row key through the pinned
 `editor.contrib.folding` contribution, so collapsing from either pane folds both. A collapsed
 row whose subtree contains a changed/added/removed row gets a glyph-margin dot
-(`.arxml-fold-has-diff`); it carries no count or text and is cleared on expansion.
+(`.arxml-fold-has-diff`); it carries no count or text and is cleared on expansion. A rename of
+the collapsed row itself does not mark it, but descendant changes still do.
+The pinned `diffEditorViewZones.js` patch sets `showInHiddenAreas: false` for side-by-side
+filler view zones, so a folded block does not leave a striped diagonal-fill gap. Expanded
+one-sided hunks keep the native fill.
 
 ### Gutter and copy actions
 

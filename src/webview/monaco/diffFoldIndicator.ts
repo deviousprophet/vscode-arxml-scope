@@ -7,6 +7,21 @@
  */
 import type { DiffRow } from '../../core/diff/diffModel';
 
+function isNameOnly(row: DiffRow): boolean {
+	return (
+		row.status === 'changed' &&
+		row.changes.length > 0 &&
+		row.changes.every((change) => change.field === 'short name')
+	);
+}
+
+function rowHasDifference(row: DiffRow, isRoot: boolean): boolean {
+	if (row.status === 'unchanged') {
+		return false;
+	}
+	return !(isRoot && isNameOnly(row));
+}
+
 /** True when the row at `rowIndex` or any descendant is changed/added/removed. */
 export function subtreeHasDifference(rows: readonly DiffRow[], rowIndex: number): boolean {
 	const row = rows[rowIndex];
@@ -14,7 +29,9 @@ export function subtreeHasDifference(rows: readonly DiffRow[], rowIndex: number)
 		return false;
 	}
 	const end = Math.min(rows.length, rowIndex + 1 + row.subtreeSize);
-	return rows.slice(rowIndex, end).some((candidate) => candidate.status !== 'unchanged');
+	return rows
+		.slice(rowIndex, end)
+		.some((candidate, offset) => rowHasDifference(candidate, offset === 0));
 }
 
 /** The collapsed row keys whose folded subtree carries a difference. */

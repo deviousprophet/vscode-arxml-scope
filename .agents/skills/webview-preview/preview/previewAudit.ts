@@ -189,6 +189,9 @@ export interface FoldedProbe {
 	markers: { modified: number; original: number };
 	expandedMarkers: { modified: number; original: number };
 	reverseMarkers: { modified: number; original: number };
+	diagonalFills: { modified: number; original: number };
+	expandedDiagonalFills: { modified: number; original: number };
+	reverseDiagonalFills: { modified: number; original: number };
 	hint: string;
 }
 
@@ -1816,7 +1819,7 @@ function gutterAlignmentIssues(
 	state: AuditState,
 	alignment: GutterAlignment | undefined
 ): string[] {
-	if (state.page !== 'diff') {
+	if (state.page !== 'diff' || state.name === 'diff-collapsed-onesided') {
 		return [];
 	}
 	if (alignment === undefined) {
@@ -1918,7 +1921,8 @@ function diffStickyIssues(state: AuditState, sticky: StickyProbe | undefined): s
 }
 
 function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): string[] {
-	if (state.name !== 'diff-collapsed') {
+	const oneSided = state.name === 'diff-collapsed-onesided';
+	if (state.name !== 'diff-collapsed' && !oneSided) {
 		return [];
 	}
 	if (folded === undefined) {
@@ -1970,6 +1974,25 @@ function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): strin
 			folded.reverseMarkers.modified < 1 || folded.reverseMarkers.original < 1,
 			'the reverse fold did not restore the hidden-difference marker'
 		),
+		...(oneSided
+			? [
+					...issueWhen(
+						folded.diagonalFills.modified !== 0 || folded.diagonalFills.original !== 0,
+						'the folded one-sided gap still renders a diagonal fill'
+					),
+					...issueWhen(
+						folded.expandedDiagonalFills.modified +
+							folded.expandedDiagonalFills.original <
+							1,
+						'the native one-sided diagonal fill did not return after expansion'
+					),
+					...issueWhen(
+						folded.reverseDiagonalFills.modified !== 0 ||
+							folded.reverseDiagonalFills.original !== 0,
+						'the reverse fold still renders a diagonal fill'
+					)
+				]
+			: []),
 		...issueWhen(
 			!folded.hint.includes('⋯'),
 			'the collapsed row has no fold hint'

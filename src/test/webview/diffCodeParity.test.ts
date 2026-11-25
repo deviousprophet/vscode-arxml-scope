@@ -58,6 +58,8 @@ suite('VS Code diff source contract', () => {
 				'b7095044c8e7e01a9b4a5aeb105c9502aa90bc32cbed0042f0a0a809fc2afc3a',
 			'node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditor.contribution.js':
 				'4872c4050da0c60b1f6e7cdecf636b176584dcc16d72b3ded77d983ef3693bbd',
+			'node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js':
+				'ca5771457cad0f06ffd6a8ae0d3b10ec2d72bf43ae7e961523866f029d94ea91',
 			'node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js':
 				'4382bca3d09f4679e77f9f690d8e088419d842379ef0aa055cc09fbb9e495f09'
 		};
@@ -74,6 +76,11 @@ suite('VS Code diff source contract', () => {
 		assert.ok(patch.includes('__arxmlGutterItem'), 'the patch exposes the hovered hunk');
 		assert.ok(patch.includes('arxml.copyLeftAvailable'), 'the patch scopes the left action');
 		assert.ok(patch.includes('arxml.copyRightAvailable'), 'the patch scopes the right action');
+		assert.ok(patch.includes('diffEditorViewZones.js'), 'the patch scopes folded diff fillers');
+		assert.ok(
+			patch.includes('showInHiddenAreas: false'),
+			'the side-by-side filler view zones hide inside folded areas'
+		);
 	});
 
 	test('source contract: the page uses the built-in diff surface with the per-side body', () => {
