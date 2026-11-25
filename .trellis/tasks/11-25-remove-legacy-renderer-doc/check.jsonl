@@ -1,2 +1,0 @@
-{"file": ".trellis/spec/guides/documentation-architecture-guide.md", "reason": "Delete old paths instead of keeping historical pages; index and link rules"}
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Docs-only changes skip product suites but must resolve links and encoding"}
