@@ -1,0 +1,31 @@
+{
+  "id": "diff-actions-body-parity",
+  "name": "diff-actions-body-parity",
+  "title": "Align diff view actions and body with the ECUC editor",
+  "description": "Fix Prev/Next navigation, synchronize per-container folding across diff panes, match collapsed container/module rendering to the ECUC editor, and restore full sticky headers in the diff.",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "--help",
+  "assignee": "--help",
+  "createdAt": "2026-11-25",
+  "completedAt": null,
+  "branch": "feat/ecuc-diff-vscode-gutter",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-25-diff-prev-next-navigation",
+    "11-25-diff-synced-folding",
+    "11-25-diff-collapsed-row-parity",
+    "11-25-diff-sticky-header-parity"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

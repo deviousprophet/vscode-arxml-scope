@@ -12,7 +12,7 @@
 import '../../../../src/webview/diffMonaco';
 import '../../../../src/webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
-import type { GutterAlignment, PaneSnapshot } from './previewAudit';
+import type { GutterAlignment, NavigationProbe, PaneSnapshot } from './previewAudit';
 import type { PreviewStateFields } from './previewStateFields';
 
 interface PreviewPayload extends PreviewStateFields {
@@ -195,6 +195,58 @@ async function applyJumps(): Promise<void> {
 	for (let press = 0; press < (payload.jump ?? 0); press++) {
 		await jumpToChange();
 	}
+}
+
+async function probeNavigation(): Promise<void> {
+	if (payload.page !== 'diff' || payload.nav !== true) {
+		return;
+	}
+	const editor = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getLineChanges?(): Array<{
+					originalStartLineNumber: number;
+					modifiedStartLineNumber: number;
+				}> | null;
+				getModifiedEditor(): { getPosition(): { lineNumber: number } | null };
+			};
+		}
+	).__ARXML_DIFF_EDITOR__;
+	if (editor === undefined) {
+		return;
+	}
+	const rawChanges = editor.getLineChanges?.() ?? [];
+	const changes = rawChanges.map(
+		(change) => change.modifiedStartLineNumber || change.originalStartLineNumber
+	);
+	const swappedChanges = rawChanges.map(
+		(change) => change.originalStartLineNumber || change.modifiedStartLineNumber
+	);
+	const position = (): number => editor.getModifiedEditor().getPosition()?.lineNumber ?? 0;
+	const forward: number[] = [];
+	const backward: number[] = [];
+	const afterSwap: number[] = [];
+	for (let press = 0; press < changes.length + 1; press += 1) {
+		click('diff-next');
+		await delay(40);
+		forward.push(position());
+	}
+	for (let press = 0; press < changes.length + 1; press += 1) {
+		click('diff-prev');
+		await delay(40);
+		backward.push(position());
+	}
+	click('diff-swap');
+	await delay(200);
+	for (let press = 0; press < changes.length + 1; press += 1) {
+		click('diff-next');
+		await delay(40);
+		afterSwap.push(position());
+	}
+	click('diff-swap');
+	await delay(200);
+	const probe: NavigationProbe = { changes, swappedChanges, forward, backward, afterSwap };
+	(window as unknown as { __DIFF_NAVIGATION__?: NavigationProbe }).__DIFF_NAVIGATION__ = probe;
 }
 
 function selectRow(): HTMLElement | null {
@@ -1373,6 +1425,7 @@ async function run(): Promise<void> {
 	}
 	await applyPan();
 	await applyJumps();
+	await probeNavigation();
 	await applySelect();
 	await applyFind();
 	await applyDirtyEdit();

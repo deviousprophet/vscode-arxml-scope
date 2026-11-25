@@ -255,6 +255,7 @@ regions, navigation, refresh, limits, headers, a11y, swap, search, Monaco body.
 | DIFF-05 | 1,200-row document with all rows changed | windowing keeps the frame budget |
 | DIFF-06 | one-sided module | the missing side has no model line and uses Monaco's native diagonal fill |
 | DIFF-07 | built-in hunk toolbar | only Copy Block to Left/Right are registered; no Revert Block and no custom arrow overlay |
+| DIFF-08 | Next/Prev diff through every change, before and after Swap | each press moves one adjacent change, wraps at the ends and never repeats the current change |
 
 ## ENG — engine process
 

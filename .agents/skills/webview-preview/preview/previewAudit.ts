@@ -150,6 +150,7 @@ export interface PreviewAudit {
 	gutter: GutterAudit;
 	gutterProbe?: GutterProbe;
 	gutterAlignment?: GutterAlignment;
+	navigation?: NavigationProbe;
 	folding?: FoldingProbe;
 	sash?: SashProbe;
 	content: ContentAudit;
@@ -168,6 +169,14 @@ export interface GutterAlignment {
 	visible: number;
 	checked: number;
 	maxCenterOffset: number;
+}
+
+export interface NavigationProbe {
+	changes: number[];
+	swappedChanges: number[];
+	forward: number[];
+	backward: number[];
+	afterSwap: number[];
 }
 
 interface GutterProbe {
@@ -349,6 +358,10 @@ function gutterProbeOf(): GutterProbe | undefined {
 
 function gutterAlignmentOf(): GutterAlignment | undefined {
 	return (window as unknown as { __GUTTER_ALIGNMENT__?: GutterAlignment }).__GUTTER_ALIGNMENT__;
+}
+
+function navigationOf(): NavigationProbe | undefined {
+	return (window as unknown as { __DIFF_NAVIGATION__?: NavigationProbe }).__DIFF_NAVIGATION__;
 }
 
 interface FoldingProbe {
@@ -1560,6 +1573,7 @@ function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations
 		...monacoDiffViolations(state),
 		...gutterProbeViolations(state, audit.gutterProbe),
 		...gutterAlignmentIssues(state, audit.gutterAlignment),
+		...navigationIssues(state, audit.navigation),
 		...foldingViolations(state, audit.folding),
 		...sashViolations(state, audit.sash),
 		...mergePressViolations(state, audit)
@@ -1801,6 +1815,54 @@ function gutterAlignmentIssues(
 	];
 }
 
+function navigationIssues(state: AuditState, navigation: NavigationProbe | undefined): string[] {
+	if (state.page !== 'diff' || state.name !== 'diff-nav') {
+		return [];
+	}
+	if (navigation === undefined) {
+		return ['the navigation probe did not run'];
+	}
+	const issues: string[] = [];
+	if (navigation.changes.length < 2) {
+		issues.push(`the navigation fixture has ${navigation.changes.length} changes, not at least 2`);
+	}
+	if (new Set(navigation.changes).size !== navigation.changes.length) {
+		issues.push('the navigation change list contains duplicate lines');
+	}
+	issues.push(
+		...cyclicSequenceIssues('Next', navigation.forward, navigation.changes),
+		...cyclicSequenceIssues('Prev', navigation.backward, [...navigation.changes].reverse()),
+		...cyclicSequenceIssues('Next after Swap', navigation.afterSwap, navigation.swappedChanges)
+	);
+	return issues;
+}
+
+function cyclicSequenceIssues(label: string, sequence: number[], expected: number[]): string[] {
+	const count = expected.length;
+	if (count === 0) {
+		return [`${label} has no expected change lines`];
+	}
+	if (sequence.length !== count + 1) {
+		return [`${label} recorded ${sequence.length} steps for ${count} changes`];
+	}
+	if (new Set(sequence).size !== count) {
+		return [`${label} did not cover every change exactly once before wrapping`];
+	}
+	const start = expected.indexOf(sequence[0]);
+	if (start < 0) {
+		return [`${label} starts at line ${sequence[0]}, outside the change list`];
+	}
+	for (let step = 0; step <= count; step += 1) {
+		const wanted = expected[(start + step) % count];
+		if (sequence[step] !== wanted) {
+			return [
+				`${label} step ${step} is line ${sequence[step]}, expected ${wanted}`
+			];
+		}
+	}
+	return [];
+}
+
 interface PreviewSnapshotModel {
 	getValue(): string;
 }
@@ -1891,6 +1953,7 @@ function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAu
 		gutter: gutterAudit(),
 		gutterProbe: gutterProbeOf(),
 		gutterAlignment: gutterAlignmentOf(),
+		navigation: navigationOf(),
 		folding: foldingProbeOf(),
 		sash: sashProbeOf(),
 		content: contentAudit(),

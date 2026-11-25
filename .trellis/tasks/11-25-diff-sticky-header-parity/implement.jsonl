@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/monaco.md", "reason": "Diff editor options, folding provider and sticky-scroll contract"}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Deep-scroll sticky-header probe"}

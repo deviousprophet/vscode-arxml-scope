@@ -25,6 +25,12 @@ import { installDiffGutterActions, type DiffGutterContext, type DiffGutterDirect
 import { firstKeyInRange, rangeHasSource, type DiffSide } from './monaco/diffBody';
 import { installGutterAvailability } from './monaco/diffGutterAvailability';
 import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
+import {
+	adjacentChangeIndex,
+	displayedChangeLine,
+	originalChangeLine,
+	type DiffNavigationChange
+} from './monaco/diffNavigation';
 import { DiffToolbar } from './components/toolbar/toolbar';
 import { installNoticeErrors } from './render/pageError';
 import { postToHost } from './vscodeApi';
@@ -681,43 +687,31 @@ function changeList(): monaco.editor.ILineChange[] {
 	return diffEditor?.getLineChanges() ?? [];
 }
 
-function changeLine(change: monaco.editor.ILineChange): number {
-	return change.modifiedStartLineNumber || change.originalStartLineNumber;
+function focusedOriginalPane(): boolean {
+	return originalEditor()?.hasTextFocus() === true;
 }
 
-function currentModifiedLine(): number {
-	return modifiedEditor()?.getPosition()?.lineNumber ?? 0;
-}
-
-function findForwardChange(changes: monaco.editor.ILineChange[], current: number): number {
-	return changes.findIndex((change) => changeLine(change) >= current);
-}
-
-function findBackwardChange(changes: monaco.editor.ILineChange[], current: number): number {
-	for (let at = changes.length - 1; at >= 0; at -= 1) {
-		if (changeLine(changes[at]) < current) {
-			return at;
-		}
-	}
-	return -1;
-}
-
-function changeIndex(changes: monaco.editor.ILineChange[], current: number, direction: 1 | -1): number {
-	const index = direction > 0 ? findForwardChange(changes, current) : findBackwardChange(changes, current);
-	if (index >= 0) {
-		return index;
-	}
-	return direction > 0 ? 0 : changes.length - 1;
+function currentDisplayedLine(fromOriginal: boolean): number {
+	const editor = fromOriginal ? originalEditor() : modifiedEditor();
+	return editor?.getPosition()?.lineNumber ?? 0;
 }
 
 function revealChange(change: monaco.editor.ILineChange): void {
-	const editor = modifiedEditor();
-	if (editor === undefined) {
+	const original = originalEditor();
+	const modified = modifiedEditor();
+	if (original === undefined || modified === undefined) {
 		return;
 	}
-	const line = changeLine(change);
-	editor.revealLineInCenter(line);
-	editor.setPosition({ lineNumber: line, column: 1 });
+	const navigation: DiffNavigationChange = {
+		originalStartLineNumber: change.originalStartLineNumber,
+		modifiedStartLineNumber: change.modifiedStartLineNumber
+	};
+	const originalLine = originalChangeLine(navigation, swapped);
+	const modifiedLine = displayedChangeLine(navigation, swapped);
+	original.setPosition({ lineNumber: originalLine, column: 1 });
+	modified.setPosition({ lineNumber: modifiedLine, column: 1 });
+	original.revealLineInCenter(originalLine);
+	modified.revealLineInCenter(modifiedLine);
 }
 
 function navigate(direction: 1 | -1): void {
@@ -726,7 +720,20 @@ function navigate(direction: 1 | -1): void {
 		setNotice('No differences to navigate');
 		return;
 	}
-	revealChange(changes[changeIndex(changes, currentModifiedLine(), direction)]);
+	const fromOriginal = focusedOriginalPane();
+	const lines = changes.map((change) => {
+		const navigation: DiffNavigationChange = {
+			originalStartLineNumber: change.originalStartLineNumber,
+			modifiedStartLineNumber: change.modifiedStartLineNumber
+		};
+		return fromOriginal
+			? originalChangeLine(navigation, swapped)
+			: displayedChangeLine(navigation, swapped);
+	});
+	const index = adjacentChangeIndex(lines, currentDisplayedLine(fromOriginal), direction);
+	if (index >= 0) {
+		revealChange(changes[index]);
+	}
 }
 
 function applyLabelsMessage(labels: DiffDocument['labels']): void {

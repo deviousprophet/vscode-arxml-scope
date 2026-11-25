@@ -11,6 +11,8 @@ export interface PreviewStateFields {
 	pan?: number;
 	/** Next-diff clicks after mounting; the long document's first change is near line 1000. */
 	jump?: number;
+	/** Records the Next/Prev sequence and the sequence after Swap for the navigation audit. */
+	nav?: boolean;
 	select?: boolean;
 	/** Exercises the built-in sash drag, ratio persistence and double-click reset. */
 	sash?: boolean;

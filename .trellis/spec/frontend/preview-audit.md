@@ -160,6 +160,10 @@ the listed DOM/model state, not a screenshot diff.
   before the click and requires each side to take the other's after it.
 - **Next diff scrolls.** `diff-rail` starts above line 1000 and lands on the first changed
   row; the selection and the rail agree.
+- **Prev/Next visit every change once and wrap.** `diff-nav` records the modified-editor line
+  after each Next, each Prev and each Next after Swap. The audit requires each sequence to be a
+  cyclic rotation of the change lines with one wrap step, so a repeated current change or a
+  skipped change is a violation.
 - **Editor page.** Toolbar, line-number gutter, selected row and Details panel render
   without clipping. The `select` state must leave a selected row in the audit.
 

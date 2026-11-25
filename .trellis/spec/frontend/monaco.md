@@ -124,6 +124,9 @@ Ownership:
 - The ARXML Collapse/Expand actions call `editor.foldAll`/`editor.unfoldAll` on both inner
   editors. The diff editor rewrites sub-editor options on every update, so folding is
   re-enabled after each `updateOptions`/model change.
+- **Prev/Next diff** use `diffNavigation.ts`: forward and backward are strictly adjacent and
+  wrap, and the change line is mapped to the pane that is currently displayed. A reveal sets
+  both inner editors so the synchronized scroll lands on the change after Swap too.
 
 ### Folding deviation (intentional)
 
