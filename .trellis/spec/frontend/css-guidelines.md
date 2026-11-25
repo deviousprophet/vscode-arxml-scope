@@ -195,8 +195,9 @@ Rules:
 - `esbuild.js` builds three outputs: the Node `dist/extension.js` and the browser entries
   `src/webview/editorMonaco.ts` → `dist/editorViewer.js` and `src/webview/diffMonaco.ts` →
   `dist/diffViewer.js`. The imported CSS is emitted by esbuild next to each browser bundle as
-  `dist/editorViewer.css` and `dist/diffViewer.css`. The development-only preview harness adds a
-  fourth, unshipped pair under `dist/preview/` when `scripts/previewWebview.mjs` runs.
+  `dist/editorViewer.css` and `dist/diffViewer.css`. The development-only preview harness adds an
+  unshipped browser pair in `.agents/skills/webview-preview/.cache/` when its
+  `scripts/previewWebview.mjs` runs.
 - The extension bundle uses the `ignore-css` plugin: importing a component's `.ts` from the host (for
   its static HTML builder) must not emit a CSS artifact beside `extension.js`.
 - `src/host/webviewShell.ts` writes the static shell. `editorShell` and `diffShell` receive

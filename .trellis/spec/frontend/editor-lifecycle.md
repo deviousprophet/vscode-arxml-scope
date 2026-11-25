@@ -10,7 +10,7 @@ with merge mode off.
 Two independent webview surfaces use the same static-shell + `postMessage` pattern:
 
 - the ECUC custom text editor (`EcucEditorProvider`, `VIEW_TYPE = 'vscode-arxml-scope.ecucEditor'`);
-- the read-only semantic diff panel (`DiffPanel.viewType = 'vscode-arxml-scope.diff'`).
+- the semantic diff panel (`DiffPanel.viewType = 'vscode-arxml-scope.diff'`); merge mode is off by default.
 
 The rendering surface is `monaco-editor@0.57.0`, pinned exactly and bundled by esbuild. The
 page serializes the existing rows into a synthetic ECUC document (`src/webview/monaco/synthetic.ts`)
@@ -332,7 +332,7 @@ const applied = await applyEdit(document, plan.record);
 if (!applied.ok) { this.selections.set(key, previous!); /* post inline notice */ }
 ```
 
-## Scenario: Compare two ECUC files in the read-only diff panel
+## Scenario: Compare two ECUC files in the diff panel
 
 ### 1. Scope / Trigger
 
@@ -342,8 +342,9 @@ if (!applied.ok) { this.selections.set(key, previous!); /* post inline notice */
   - `vscode-arxml-scope.compareToStaged` (`Compare with First File`, guarded by the
     `arxmlScope.hasCompareSelection` context key);
   - `vscode-arxml-scope.compareSelected` (`Compare Two ARXML Files…`, guarded by `listDoubleSelection`).
-- The diff is read-only. It never creates a `WorkspaceEdit`, writes a file, repairs a difference or
-  generates a derived document.
+- The comparison is read-only while merge mode is off. Merge mode is the only write path: the page
+  posts `copy` and the host applies one `WorkspaceEdit`. The comparison itself never repairs a
+  difference or generates a derived document.
 
 ### 2. Signatures
 
@@ -531,7 +532,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
 // Wrong: a "fix" action that writes the right value into the left file.
 await vscode.workspace.applyEdit(new vscode.WorkspaceEdit());
 
-// Correct: the diff is read-only; the page only asks the host to reveal a row.
+// Correct: the comparison does not write; the page only asks the host to reveal a row.
 if (message.type === 'reveal') {
   void reveal(message.side, message.key);
 }

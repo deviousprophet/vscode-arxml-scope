@@ -28,8 +28,9 @@ body (column)
 - `VirtualScroll` (`src/webview/components/virtualScroll/virtualScroll.ts`) owns the scroll surface,
   both bars and the precomputed offsets. `DocumentTreeView` is the window renderer inside a pane layer:
   it receives `{ rowCount, offsets, renderRow(index, pane) }`, renders the visible slice at
-  `offsets[start]`, and never creates a scroller or a pinned header. Both pages import the same classes;
-  the editor mounts one window and the diff mounts one per pane inside one shared VirtualScroll.
+  `offsets[start]`, and never creates a scroller or a pinned header. The editor page imports both
+  classes for its Document; the diff page does not mount them — its body is Monaco's diff editor
+  ([`monaco.md`](./monaco.md)).
 - The host supplies `{ rowCount, offsets, renderRow(index, pane) }`. `offsets` is the cumulative row
   table (length `rowCount + 1`), including header rows and module gaps. VirtualScroll binary-searches
   it for the visible range; scroll frames do no height math. `overflow-anchor: none` on the scroller
@@ -226,9 +227,10 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
   `reconcileRowState`, `resolveFocusId`, `subtreeRowIds`, `guidesFor` in `documentTreeState.ts`;
   `inspectorFields` in `detailsPanel.ts`) are ordinary exports imported by the page bundle and the
   tests. Do not create a second implementation.
-- `RowSearchEngine` scans the row store in chunks and `flattenRows` builds the display list from the
-  collapsed set only. Search does not filter the row store; a jump expands ancestors explicitly. There
-  is no second visibility input to the display list.
+- Search is Monaco's native find widget; `installFindBridge` answers its match hooks from the Rust
+  `doc.search`/`diff.search` lists (see [`monaco.md`](./monaco.md)). `flattenRows` builds the display
+  list from the collapsed set only. Search does not filter the row store; a jump expands ancestors
+  explicitly. There is no second visibility input to the display list.
 
 ## Theme and accessibility
 
@@ -265,16 +267,16 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
 
 ## Manual previews
 
-The in-repo preview harness (`preview:ecuc`, `preview:check`) and the `scripts/` directory have been
-removed. The production `editorShell`/`diffShell` page is therefore observed in the Extension
-Development Host: open a fixture or a local `.arxml` in the ECUC editor and inspect the real webview.
+The webview is served and captured by the `webview-preview` skill
+(`.agents/skills/webview-preview/`); see its
+[`SKILL.md`](../../../.agents/skills/webview-preview/SKILL.md) for the executable workflow and
+[`preview-audit.md`](./preview-audit.md) for the rendered-geometry invariants. The harness wraps the
+production `editorShell`/`diffShell` page; a second renderer is a test that agrees with itself.
 
-The host is not a repeatable check: its observations cannot run in CI, so record them as
-host-observed with the file and the steps that produced them. If a preview harness is reintroduced, it
-must wrap the production renderer — a second renderer is a test that agrees with itself.
-
-The Development Host remains the acceptance environment: it can prove VS Code's own theme/font
-resolution, tab/focus behaviour and accessibility-tree exposure, which no string assertion can.
+The Extension Development Host remains the acceptance environment for what the seed cannot prove:
+VS Code's own theme/font resolution, tab/focus behaviour and accessibility-tree exposure. A host
+observation is not a repeatable check; record it as host-observed with the file and steps that
+produced it.
 
 ## Common mistakes
 
@@ -283,13 +285,13 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 | Building the full row DOM instead of the virtual window | The lag this task removes comes back; the window tests and DOM count fail |
 | Putting the row builder behind a second renderer or copied markup | It diverges from the product; wrap the production shell and bundled page instead |
 | Re-adding a Tree view toggle/CSS/glyph | The Document-only contract and tests fail; the Tree view was deliberately removed |
-| Re-adding line numbers/`data-line`/`digits` | The no-gutter contract and alignment tests fail |
+| Re-adding a custom DOM line-number gutter | Monaco owns the line numbers and folded-line display; a second gutter duplicates them |
 | Re-adding a repeating indent gradient | The bracket-guide contract fails |
 | Leaking bracket guides outside their container | `guidesFor` and the `.guide` tests fail |
 | Tinting rows outside the selected subtree | `subtreeRowIds`/`data-subtree` tests fail |
 | Making every reference show a jump action | Unresolved targets must not get the details button; the followability test fails |
 | Hiding the Collapse/Expand labels above 1040px, or dropping the `.lbl`/18px icon markup | The labelled-control test fails |
-| Inserting an editor into `.value` | The Document is read-only; the `.value` direct-child/test contract and click semantics fail |
+| Inserting an editor into `.value` | Only the mapped `fieldSpans` are editable; the `.value` direct-child/test contract and click semantics fail |
 | Adding a Source block or copy action | The details panel exposes Jump/Reveal only; provider copy code was deleted |
 | Reintroducing a page-local scroll container | The component owns the scroller; a second one desynchronizes the virtual range |
 | Measuring a row offset from the window element | It moves with the top spacer; the component keeps the scroll offset instead |
@@ -325,32 +327,27 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   remains for the single-leftover case. The base key removes the row's own ordinal **and** an
   embedded parent container ordinal, so reordered duplicate containers keep their parameters and
   references paired at every depth.
-- The diff is read-only: no `WorkspaceEdit`, `writeFile`, `applyEdit`, repair or derived file.
-  An edit triggers a full re-scan after a 150 ms debounce; the page keeps the view mode, swap state,
+- The comparison is read-only while merge mode is off; merge mode is the only write path (one
+  `WorkspaceEdit` per copy). An edit triggers a full re-scan after a 150 ms debounce; the page keeps the view mode, swap state,
   collapse, selection, search and scroll. A **Semantic/Strict** toggle does not re-scan: the host
   reuses the prepared rows/ranges and a `DiffSession` document cache, and a changed document version
   falls back to the full refresh.
 - The diff toolbar uses icon-over-label buttons. The left group is **Show all** / **Show diff**, a
-  divider, **Context**, a divider, **Semantic** / **Strict**, a divider, then **Prev diff** /
-  **Next diff**. **Swap sides** is the centered control over the pane divider; the right group is the
-  live mode status and Search. There is no changed/added/removed/renamed count summary. **Context** is
-  the only standalone toggle: active by default, fixed at 5 unchanged rows above and below each
-  change, disabled in Show all. While a mode switch is pending, the toolbar shows `aria-busy`, a
-  spinner and a live `Switching to …` status instead of a silent wait. Search uses `RowSearchEngine`
-  (Enter-only, chunked, cancellable); its candidates are the changed/added/removed rows in diff-only
-  view, all rows otherwise. Search never hides rows.
-- **Split lines are the diff-only gap control.** `diffVisibility(rows, true, 5)` keeps five context
-  rows around each change; the remaining hidden runs become `DiffGap` rows in
-  `flattenDiffDocument`. A gap row shows `N unchanged lines` and expands in place; the row stays
-  while expanded so it can collapse again. Gap rows are not tree nodes: selection, `F7` and search
-  skip them. The whole row is clickable; the inner `.diff-gap-toggle` is the keyboard focus target.
-  It is a row-local control and deliberately does not use the toolbar `.sb-btn`/`.nav-btn` shapes.
-  The control sits in the displayed left pane and follows Swap sides.
-- **Diff rows reuse Document geometry.** Each pane starts with the 26px fold gutter, an absolute 16px
-  twisty at `left: 2px`, Document content padding and the `--indent` step per level. Labels use the
-  Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
-  horizontal padding; the pane layer is the clip boundary. Keep the fixed file-name strip and the diff
-  status tints.
+  divider, **Context**, a divider, **Semantic** / **Strict**, a divider, **Prev diff** /
+  **Next diff**, a divider, **Merge**, a divider, **Collapse** / **Expand**. **Swap sides** is the
+  centered control over the pane divider; the right group is the live mode status. There is no
+  changed/added/removed/renamed count summary and no Search slot: find is Monaco's native widget.
+  **Context** is the only standalone toggle: active by default, fixed at 5 unchanged rows above and
+  below each change, disabled in Show all. While a mode switch is pending, the toolbar shows
+  `aria-busy`, a spinner and a live `Switching to …` status instead of a silent wait. Search is
+  Monaco's native find widget, backed by the Rust diff search (generation-guarded); its candidates are
+  the changed/added/removed rows in diff-only view, all rows otherwise. Search never hides rows.
+- **Hidden unchanged runs are Monaco's.** `Show diff` sets `hideUnchangedRegions.enabled`; `Context`
+  sets `contextLineCount` (5, or 0 with Context off; `minimumLineCount` 3). Monaco draws the
+  hidden-region control; the page does not build `DiffGap` body rows.
+- **Diff labels reuse Document typography.** Labels and `.row-meta` come from the row store; the ECUC
+  theme keeps the Document font and colours. Monaco owns row geometry, line numbers, fold controls and
+  horizontal clipping. Keep the fixed file-name strip and the diff status tints.
 - **Both panes are Monaco's diff editors.** `diffMonaco` mounts `monaco.editor.createDiffEditor` with
   the two per-side synthetic models. Monaco owns the body paint, line numbers, folding, overview ruler,
   unchanged widgets and sash. The page supplies the ECUC theme, the `data-merge` gate and the two
@@ -360,8 +357,8 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   draws its native diagonal gap. The owning side keeps its native change fill; removed placeholder,
   glyph-arrow and custom-margin layers must not return. `diff-added` / `diff-removed` prove the
   one-sided direction and `diff-one-sided` proves native paint.
-- **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
-  selected-row table or reveal buttons.
+- **The diff has no bottom strip or selected-row table.** Reveal is a host intent, not a page
+  keybinding; the toolbar has no reveal button.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the fixed
   file-name strip shows the same shortest distinguishing suffix.
 - **Monaco owns the scroll surface and the sash.** The diff editor has one vertical scroll surface,

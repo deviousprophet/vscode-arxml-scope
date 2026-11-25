@@ -1,5 +1,5 @@
 /**
- * Plan rows ROW-01…09 from `docs/TEST_PLAN.md` (ROW-06 and ROW-08 stay open:
+ * Plan rows ROW-01…09 from `docs/contributor/TEST_PLAN.md` (ROW-06 and ROW-08 stay open:
  * annotation shape and the tail-exception ordering need their own fixtures).
  */
 import * as assert from 'assert';

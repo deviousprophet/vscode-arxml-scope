@@ -1,5 +1,5 @@
 /**
- * Plan rows DIFF-01, 03, 04 from `docs/TEST_PLAN.md`.
+ * Plan rows DIFF-01, 03, 04 from `docs/contributor/TEST_PLAN.md`.
  *
  * DIFF-02 described the removed three-way merge and is re-scoped in the plan.
  * DIFF-05 (1,200 changed rows stay windowed) lives in `diffPage.test.ts` because

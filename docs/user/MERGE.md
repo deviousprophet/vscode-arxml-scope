@@ -3,6 +3,8 @@
 The diff panel can merge two ECUC configurations directly: turn on **Merge** and copy a
 row from either side into the other through the built-in hover gutter. It is the compare
 view plus a hunk toolbar — no base file, no conflict wizard, no generated `.merged.arxml`.
+The comparison itself, its change classes and its navigation are in
+[Semantic Diff](DIFF.md).
 
 ## Using it
 

@@ -1,5 +1,5 @@
 /**
- * Plan rows ID-01…05 from `docs/TEST_PLAN.md`.
+ * Plan rows ID-01…05 from `docs/contributor/TEST_PLAN.md`.
  *
  * Identity is asserted through `buildNodeIndex`: an id resolves to exactly one
  * node, and a rename or a deletion moves it in the documented way.

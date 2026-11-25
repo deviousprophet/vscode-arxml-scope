@@ -1,12 +1,14 @@
 # Semantic Diff
 
 The semantic diff compares two ECUC-Values files by their **configuration**, not by their XML text. It
-is a read-only view: it never writes, repairs or generates a file.
+is a read-only comparison until **Merge** is turned on; with Merge off it never writes, repairs or
+generates a file. [Two-way copy merge](MERGE.md) documents the copy actions.
 
-> **Renderer status.** The two panes are now Monaco's side-by-side diff editor. The schema and
-> package header lines are shown in the pane title tooltip because VS Code diff headers are chrome,
-> not compared lines. Hidden unchanged regions, word-level changes and the diff gutter come from
-> Monaco; Merge keeps the existing whole-element semantics with VS Code's hover gutter actions.
+The two panes are Monaco's side-by-side diff editor. The schema and package header lines are shown in
+the pane content because VS Code diff headers are chrome, not compared lines. Hidden unchanged regions,
+word-level changes, the diff gutter, the hunk toolbar, the sash, the overview ruler and the native body
+paint come from Monaco; the ARXML toolbar, the two synthetic documents and the copy actions are the
+extension's.
 
 ## Selecting the two files
 
@@ -36,49 +38,25 @@ compared, not just the bytes on disk.
 
 - One panel titled `<left> ↔ <right>`, with the two panes side by side.
 - The toolbar is icon-over-label: **Show all** / **Show diff** ÷ **Context** ÷ **Semantic** /
-  **Strict** ÷ **Prev diff** / **Next diff** ÷ **Collapse** / **Expand**, with **Swap sides**
-  centered over the pane divider. Find is a floating widget opened by `Ctrl+F`, not a toolbar slot.
-  There is no changed/added/removed/renamed count in the page.
+  **Strict** ÷ **Prev diff** / **Next diff** ÷ **Merge** ÷ **Collapse** / **Expand**, with
+  **Swap sides** centered over the pane divider. Find is a floating widget opened by `Ctrl+F`, not a
+  toolbar slot. There is no changed/added/removed/renamed count in the page.
 - A fixed file-name strip above the two panes shows the shortest distinguishing label on each side,
   with the full path in its tooltip. It is chrome, not content: it never scrolls.
-- Schema and package lines are the first rows of each pane's document content. They scroll with the
-  rows, use the same row shell and are searchable; a shorter header is padded with blank rows so the
-  first compared row starts at the same y in both panes. One blank line separates the header from the
-  first module in both panes. Search treats one aligned header row as one candidate, so the count stays
-  one per visible line, and marks the `schema`/`package` keyword as well as its value.
-- Rows are aligned: a line that exists on only one side has a blank cell on the other side. One shared
-  blank line separates consecutive module groups in both panes; it sits above the later module's
-  annotations. A module hidden by **Show diff** or **Context** has no visible gap, and the first visible
-  module has none. The module gap is not a change row: no key, no status tint and no cell.
-- Each pane has a fixed line-number gutter that numbers its own display lines from 1. A padded header
-  line or a row missing on one side leaves that pane's number blank; a hidden unchanged run is not
-  numbered, and visible numbers renumber around it. The module gap is one shared display line and is
-  numbered on both sides. The selected row's number uses the active colour.
-  The gutter stays fixed while the rows scroll horizontally, scrolls with them vertically, and is not
-  searchable, selectable or focusable.
-- Diff status also tints the gutter cell for added, removed and changed lines, using the VS Code diff
-  gutter colours with the pane's line tint as the fallback. The pane-side 3px rails hidden under the
-  gutter are redrawn on the gutter cell's inner edge (left changed/removed, right added), so a
-  four-digit number is never covered by the rail.
-- Annotations, braces and bracket guides follow each side of the comparison. Both panes use the same
-  Document view as the editor, so annotations, braces, guides, colours and typography match.
-- A **read-only** status tint marks added, removed and changed cells; changed words are highlighted
-  inside changed rows. Syntax tokens keep their colours. Diff fills keep the theme colour's alpha;
+- Each pane is its own synthetic ECUC document. Schema and package lines are the first content of each
+  side and scroll with the rows; they are searchable and focusable but are not ECUC nodes.
+- The two sides are independently shaped. A row that exists on only one side has no line in the other
+  model, and Monaco paints its native diagonal fill for the missing side. There are no numbered
+  placeholder rows and no shared padding between the panes.
+- Line numbers are Monaco's per-side model-line numbers. Hiding an unchanged region or folding a
+  container hides lines without renumbering the visible ones, and the numbers stay fixed during
+  horizontal scrolling.
+- Diff status tints, changed-word highlights and the overview ruler are Monaco's theme-aware paints;
   when a theme does not define the diff line colours, the page uses VS Code's subtle dark fallbacks
-  instead of opaque blocks.
-- Selecting a container or module tints its whole subtree in both panes, including the annotation rows
-  of descendant containers. An added or removed row highlights only the pane that owns its cell; the
-  blank side stays blank. The highlight spans a stable width: at least the pane and the full content
-  width, including header lines, so a short selected row does not shrink to the rendered slice.
-- A collapsed container whose subtree contains a change shows a small dot beside its fold marker in both
-  panes, with the accessible description `Contains hidden changes`. The row keeps its own status and
-  tint; expanding the container removes the dot. It is display-only: not a search candidate, F7 target,
-  selection target or gutter row.
-- One shared virtual-scroll surface owns the vertical scrollbar and the row offsets. Each pane has its
-  own horizontal scrollbar; moving either bar scrolls both panes in sync, and the pane split stays
-  fixed. The content height is precomputed, so the thumb and drag match the rendered lines, and only the
-  visible window is rendered. `Swap sides` resets both horizontal offsets but keeps the vertical
-  position.
+  instead of opaque blocks. Syntax tokens keep their colours.
+- One shared vertical scroll position keeps the panes together; each pane has its own horizontal
+  scrollbar. The sash resizes the panes and double-click resets it to 50/50. `Swap sides` resets both
+  horizontal offsets but keeps the vertical position.
 - Until the first comparison arrives, the panel shows `Loading comparison…` instead of flashing
   `No differences`.
 
@@ -115,34 +93,20 @@ row instead of becoming an add + remove pair, and keeps its children aligned ins
 
 - Pairing is attempted only between modules or containers with the same `DEFINITION-REF` and the same
   parent.
-- Names are compared first. Mutual-best name pairs can teach a token substitution (for example
-  `NMH→NM`) before child values are scored, so children whose values embed the old container name do
-  not deadlock the match. A single unambiguous rename is enough.
-- Candidate blocking keeps the cost near-linear: containers are grouped by a digit-normalized name
-  signature and by their child-key multiset, and rare name tokens provide a short list of candidates.
-  Only that short list is fully scored; the rest of a large definition group is not compared
-  exhaustively.
-- A score combines the similarity of the children (0.55), the short name (0.30), the relative position
-  (0.10) and learned token substitutions (0.05). A pair is accepted at 0.62 or higher.
-- Learning and scoring repeat until no new substitution appears, so partial renames inside child values
-  are covered too.
+- Names are compared first, and a single unambiguous rename is enough. Children of a semantic pair are
+  compared by their final id segment, so a changed owner name does not turn every child into an
+  add + remove pair.
 - A near-tie stays unpaired, except when every child is identical: those siblings pair by name and then
   by ordinal position, so index-ordered containers such as `PDU_01`…`PDU_04` stay aligned.
-- A comparison has a deterministic work budget. When the budget is reached, the pairs already found
-  stay visible and the notice reports how many containers were left unmatched and why. The budget is a
-  candidate count, so the same files produce the same result on every run.
-- Above 250,000 candidate pairs in one definition group, a linear name/position fallback runs instead of
-  the full score. If it still cannot pair containers, the note above the diff rows reports the fallback
-  count. A budget-limited comparison uses a different note so the two cases are distinguishable.
-- The scale benchmark pairs 500 renamed containers with 25 embedded-name children in about 0.2 s and
-  700 in about 0.1 s on the development machine. The CI guards are 3 s for 500 and 6 s for 700, so an
-  ordinary slower runner still passes while a return to quadratic scoring fails.
-- Children of a semantic pair are compared by their final id segment, so a changed owner name does not
-  turn every child into an add + remove pair.
 - A renamed module or container renders exactly like any other **changed** row; there is no badge, no
   dashed underline and no visible count. The pairing still keeps the row and its children aligned.
 - Only modules and containers are paired semantically. Parameters and references keep the strict
   pairing rules.
+
+A comparison has a deterministic work budget and a large-group fallback. When one applies, the pairs
+already found stay visible and a note above the rows reports how many containers were left unmatched
+and why. The scoring thresholds and candidate blocking are implementation detail, documented for
+contributors.
 
 The toolbar has a **Semantic** / **Strict** view group; selecting one switches the current panel only
 and posts the new mode to the host, which rebuilds the comparison without changing the setting. The
@@ -182,37 +146,35 @@ their normal rendering.
 
 A file that is not ECUC-Values is refused before the panel opens.
 
-## Context and split lines
+## Context and hidden unchanged rows
 
-The diff toolbar has a **Context** toggle, active by default. In **Show diff** it keeps five
-unchanged rows above and below each changed row. It has one fixed value, no menu, and is disabled while
+The diff toolbar has a **Context** toggle, active by default. In **Show diff** it keeps five unchanged
+rows above and below each changed row. It has one fixed value, no menu, and is disabled while
 **Show all** is active.
 
-The remaining unchanged runs are replaced by one split line per run: a horizontal rule with
-`N unchanged lines` and a chevron. Clicking anywhere on the split row expands the hidden rows; the
-row stays as a collapse control, with its accessible label switching between Show and Hide. The
-toggle sits in the displayed left pane and follows **Swap sides**; the whole row is clickable in both
-panes. Split lines are not selectable and are skipped by `F7` and search.
+The remaining unchanged runs are hidden by Monaco's native unchanged-region control: a horizontal
+rule showing how many unchanged lines are hidden, with a chevron. Clicking the row expands the hidden
+rows; the row stays as a collapse control, with its accessible label switching between Show and Hide.
+The toggle sits in the displayed left pane and follows **Swap sides**; the whole row is clickable in
+both panes. Hidden-region rows are not selection targets and are skipped by `F7` and search.
 
-With **Context** off, only the changed rows and their ancestors remain visible; every hidden run is a
-split line. The split line is a display control only; it never changes the comparison result.
+With **Context** off, only the changed rows are kept visible; every hidden run is a native unchanged
+region. The control is display-only; it never changes the comparison result.
 
 ## Navigating the diff
 
 | Control / key | Action |
 |---|---|
 | **Show all** | Show every row, including unchanged rows. |
-| **Show diff** | Keep changed/added/removed rows, five context rows above and below each change, and split lines for the hidden runs. |
+| **Show diff** | Keep changed/added/removed rows, five context rows above and below each change, and a hidden-region control for the rest. |
 | **Prev diff** / **Next diff** | Move to the previous/next changed row, wrapping at the ends. |
-| **Collapse** / **Expand** | Collapse every container in both panes or restore the full tree; the focused, selected or current search row keeps its viewport position (its nearest visible ancestor when Collapse hides it). |
-| `F7` / `Shift+F7` | Same as Next/Prev while focus is in the diff list. |
+| **Collapse** / **Expand** | Fold or unfold every container in both panes. |
+| `F7` / `Shift+F7` | Same as Next/Prev while focus is in the diff. |
 | **Swap sides** | Mirror the displayed sides; display only, no re-comparison. |
+| **Merge** | Turn the panel into the two-way copy merge; off by default. See [MERGE.md](MERGE.md). |
 | **Semantic** / **Strict** | Two-button view group for renamed-container pairing. The group flips immediately and a spinner/status shows while the new view is prepared. |
 | **Context** | Active by default; keeps five unchanged rows above and below each change in Show diff. Only the toggle changes. |
-| Split line | Expand or collapse the unchanged rows hidden under an `N unchanged lines` rule. |
-| Row twisty / `Left` / `Right` | Collapse or expand a subtree. |
-| `Space` | Select the focused row. |
-| `Enter` | Reveal the selected row in its source file. The revealed side follows the displayed pane after a swap. |
+| Fold control | Collapse or expand one container in its pane. |
 | **Search** | `Ctrl+F` / `Cmd+F` opens Monaco's native find widget in the focused pane; type a query and press `Enter`; `Shift+Enter` goes backwards. |
 | **Search options** | `Aa` case sensitive, `ab|` whole word, `.*` regular expression. The diff has no replace row. |
 | **Search count** | Native `1 of N` / `No results`; the matches come from the Rust diff search, not a local scan. |
@@ -220,10 +182,8 @@ split line. The split line is a display control only; it never changes the compa
 Search jumps and marks; it never hides rows. In **Show diff** the search candidates are the
 changed/added/removed rows; in **Show all** they are all rows. Switching the view restarts the committed query
 against the new candidate set and preserves the current key where possible. Swapping sides re-projects
-the same merged rows, so the search result set does not change. **Collapse** and **Expand** capture the
-focused row, else the selected row, else the current search match, then restore that key at its previous
-viewport offset; a key hidden by the collapse anchors to its nearest visible ancestor, and the
-selection, focus and current match themselves do not move.
+the same merged rows, so the search result set does not change. **Collapse** and **Expand** fold or
+unfold every container; the selection, focus and current match do not change.
 
 ## Refresh behaviour
 
@@ -237,15 +197,16 @@ selection, focus and current match themselves do not move.
 
 ## Limitations
 
-- Read-only: no merge, no apply, no repair, no generated file.
+- The comparison itself is read-only. Merge mode is the only write path: with **Merge** off the hunk
+  actions are hidden and copies are refused. See [MERGE.md](MERGE.md).
 - Both files must be ECUC-Values `.arxml`; other files are refused.
 - The comparison is over the display model. It does not compare XML comments, unknown elements or
   attributes the scanner does not model.
 - Reference following is a single-file feature; the diff reveals source ranges, it does not build a
   cross-file target index.
-- Line numbers follow display rows, not XML source lines: Show diff/Context, a collapse or a swap
-  renumbers the visible lines. There is no configurable line-number width.
-- Search and navigation are over the merged display list; there is no filter control or bottom action
+- Line numbers follow display lines, not XML source lines: folding or a hidden unchanged region skips
+  numbers rather than mapping them to XML lines. There is no configurable line-number width.
+- Search and navigation are over the display list; there is no filter control or bottom action
   strip.
 - Semantic pairing is a heuristic. A rename that changes the `DEFINITION-REF` or the parent stays an
   add + remove pair. A group above 250,000 candidate pairs uses the name/position fallback, and a
