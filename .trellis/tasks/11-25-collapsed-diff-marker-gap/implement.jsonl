@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/monaco.md", "reason": "Diff fold ranges, view zones, glyph marker and pinned patch contract"}
-{"file": ".trellis/spec/frontend/diff-parity.md", "reason": "Pinned Monaco hashes and checked-in patch rules"}
-{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Collapsed-row marker and one-sided gap proof"}
