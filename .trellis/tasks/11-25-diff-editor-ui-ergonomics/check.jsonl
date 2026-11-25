@@ -1,2 +1,0 @@
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify the empty-query find guard and the non-vacuous preview audit"}
-{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Verify one-sided copy/delete, find scroll and tooltip stability proof"}

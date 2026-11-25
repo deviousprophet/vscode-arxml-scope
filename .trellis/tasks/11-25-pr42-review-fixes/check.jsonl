@@ -1,2 +1,0 @@
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Verify the preview probes are non-vacuous and source-contract tests are labelled"}
-{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Verify the diff selectors and merge attribute match the shipped CSS"}
