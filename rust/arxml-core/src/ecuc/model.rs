@@ -2,7 +2,7 @@
 //!
 //! Every node carries the source range needed for navigation and editing. Offsets
 //! are UTF-16 code units (`text::Range`). The shape mirrors the TypeScript model
-//! this engine replaces, field for field, so the host and the parity oracle can
+//! this engine replaces, field for field, so the host and the row parity test can
 //! compare them directly.
 
 use std::collections::HashMap;

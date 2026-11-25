@@ -105,7 +105,7 @@ testable without a running editor.
 | An engine spawn, handshake, frame or document operation | `src/host/engine/` |
 | A Rust parser/index/validation/diff implementation | `rust/arxml-core/` |
 | An engine-process operation or protocol frame | `rust/arxml-engine/src/main.rs` |
-| A parity/debug CLI command | `rust/arxml-cli/src/main.rs` |
+| A debug CLI command | `rust/arxml-cli/src/main.rs` |
 | A reusable UI unit with markup, input behaviour and styles | `src/webview/components/<Name>/` |
 | A page shell / provider bridge | `src/webview/editorMonaco.ts` or `diffMonaco.ts` |
 | A shared page helper (scroll, rows, search, escaping) | `src/webview/render/` |

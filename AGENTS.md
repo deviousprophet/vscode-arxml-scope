@@ -33,3 +33,13 @@ Layout changes also need eyes: load the `webview-preview` skill and run its
 [`docs/contributor/WEBVIEW_PREVIEW.md`](docs/contributor/WEBVIEW_PREVIEW.md).
 
 <!-- DESIGN.md:END -->
+
+<!-- VERIFICATION:START -->
+## Verification
+
+Before handing off: `npm run check-types`, `npm run lint`, `npm test` (includes the
+engine vs TypeScript row parity suite in `src/test/parity`), `npm run engine:smoke`
+and `npm run rust:test`. `npm run engine:build` stages the engine binary when it is
+not built yet.
+
+<!-- VERIFICATION:END -->

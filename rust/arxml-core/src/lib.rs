@@ -1,7 +1,7 @@
 //! Pure ARXML/ECUC core engine.
 //!
 //! This crate has no Node, N-API or VS Code dependency. The stdio process wrapper
-//! (`arxml-engine`), the parity CLI (`arxml-cli`) and the test oracle live in
+//! (`arxml-engine`), the debug CLI (`arxml-cli`) and the test oracle live in
 //! sibling crates; this crate owns the parser, ids, rows, conditions, edit planning,
 //! the copy planner, the diff and the find/replace matcher.
 

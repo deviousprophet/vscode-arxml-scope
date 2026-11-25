@@ -25,7 +25,7 @@ The webview CSP additionally allows `style-src 'unsafe-inline'`, `worker-src blo
 
 The host owns documents, scans, writes and persistence. A Rust engine process is
 required at activation (`src/host/engine/engineLoader.ts`, `npm run engine:build`); it
-serves the parity-checked scanner, rows, edit plans, diff and copy plans. The editor
+serves the engine-checked scanner, rows, edit plans, diff and copy plans. The editor
 validates an edit against the engine model, applies the returned span as one
 `WorkspaceEdit`, and replaces the resulting row through a `documentPatch`; the full
 row store is still built in TypeScript when a panel opens and after a structural
@@ -54,7 +54,7 @@ TypeScript fallback.
   512 MiB.
 - Copy planning lives in Rust (`copy.plan`); `diffPanel` must not import
   `planCopy`/`planDelete`/`wrapWithAncestors` from production code. Those stay as the
-  parity oracle only.
+  TypeScript reference implementation for the copy tests and benchmark only.
 
 ### Find and replace
 

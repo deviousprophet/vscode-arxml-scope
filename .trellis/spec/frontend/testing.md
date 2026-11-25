@@ -74,7 +74,8 @@ not keep a second gate table. The agent rules that go with them are:
 - Touch layout, toolbar, gutter, folding or the page shell: capture the narrowest state while fixing,
   then the **full seeded set** before review. Read the audit JSON first; the PNG is the taste check.
   Invariants: [`preview-audit.md`](./preview-audit.md).
-- Touch the engine or the protocol: run `engine:smoke`, `parity` and `parity:rows`. There is no
+- Touch the engine or the protocol: run `engine:smoke`, `rust:test` and `npm test` (the row
+  parity suite lives in `src/test/parity`). There is no
   TypeScript core fallback; a panel without an engine handle stays on the host row path only.
 - A docs-only change does not run the product suites. It must resolve every relative link, keep
   UTF-8 without replacement characters and leave the tree clean under `git diff --check`; run the

@@ -102,7 +102,7 @@ function shiftLine(line: string, sourceIndent: string, targetIndent: string): st
 }
 
 /** The document's own line break, the one a copied block must adopt. */
-export function lineBreakOf(text: string): string {
+function lineBreakOf(text: string): string {
 	return text.includes('\r\n') ? '\r\n' : '\n';
 }
 
