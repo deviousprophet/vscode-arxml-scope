@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/monaco.md", "reason": "Diff editor, synthetic documents, folding and sticky-scroll contracts"}
-{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Gutter, folding and rendered-body audit rules"}
-{"file": ".trellis/spec/frontend/components/component-diff-view.md", "reason": "Diff shell, toolbar and title-strip ownership"}
