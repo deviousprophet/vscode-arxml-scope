@@ -25,7 +25,6 @@ described in [ENGINE.md](ENGINE.md) and [`rust/README.md`](../../rust/README.md)
 | Regression layers, gates, case IDs and known gaps | [TEST_PLAN.md](TEST_PLAN.md) |
 | Preview commands, seeded states, outputs and limits | [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md) and the [`webview-preview` skill](../../.agents/skills/webview-preview/SKILL.md) |
 | Engine lifecycle, status and limits | [ENGINE.md](ENGINE.md) |
-| Retired pre-Monaco DOM interaction reference (historical only) | [legacy-dom-renderer.md](legacy-dom-renderer.md) |
 | Agent test rules and the preview full-set gate | [`testing.md`](../../.trellis/spec/frontend/testing.md) |
 | Preview audit invariants | [`preview-audit.md`](../../.trellis/spec/frontend/preview-audit.md) |
 

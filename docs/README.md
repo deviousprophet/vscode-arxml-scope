@@ -30,7 +30,6 @@ for the audience rules.
 | [Test plan](contributor/TEST_PLAN.md) | Contributors | The human regression plan: layers, commands, per-area gates, case IDs and known gaps. |
 | [Webview preview](contributor/WEBVIEW_PREVIEW.md) | Contributors | The human preview guide: what the harness is, the seeded state table, outputs, commands pointer and limits. |
 | [Design system](../DESIGN.md) | Contributors | The webview visual identity and design contract: theme tokens, typography, spacing and component rules; the `design:lint` target. |
-| [Legacy DOM renderer](contributor/legacy-dom-renderer.md) | Contributors | The retired pre-Monaco interaction reference; historical only, not current behaviour. |
 | [Changelog](../CHANGELOG.md) | Everyone | Released changes. |
 | [Root README](../README.md) | Everyone | Installation, quick start and the repository overview. |
 
