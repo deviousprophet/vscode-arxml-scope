@@ -14,12 +14,12 @@ at the plan row.
 | Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `webview-preview` skill: `scripts/shotWebview.mjs` (see [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md)) |
 | Extension integration | real VS Code: panels, edits, undo, watchers, diagnostics | `npm test` (`src/test/extension`) |
 | Rust core | parse, ids, rows, edit plans, merge index, digests | `cargo test --workspace` |
-| Engine process | protocol, lifecycle, byte-for-byte row parity with the TS oracle | `npm run engine:smoke`, `npm run parity`, `npm run parity:rows` |
+| Engine process | protocol, lifecycle, byte-for-byte row parity with the TypeScript oracle | `npm run engine:smoke`, `npm test` (`src/test/parity`) |
 | Performance | ceilings and payload sizes on the 20–26 MiB fixtures | `npm run benchmark` |
 | Local sample | a real private ARXML, never committed | `ARXML_SCOPE_SAMPLE=… npm run benchmark sampleFile` |
 
 Run order for a change: `check-types` → `lint` → `cargo test`/`clippy`/`fmt` →
-`npm test` → `parity:rows` → the area benchmarks. For any toolbar, gutter or row-layout
+`npm test` → the area benchmarks. For any toolbar, gutter or row-layout
 change, also run the `webview-preview` skill's `scripts/shotWebview.mjs`; it exits
 non-zero on a placement violation.
 Still audit every image for colour, spacing and clipping the invariants do not encode.
@@ -28,11 +28,11 @@ Still audit every image for colour, spacing and clipping the invariants do not e
 
 | Touched area | Must run |
 |---|---|
-| `core/ecuc/*` | core scanner/rows/order/validate suites, `parity:rows`, `ecucLargeFile`, `engineEdit` |
+| `core/ecuc/*` | core scanner/rows/order/validate suites, row parity (`src/test/parity`), `ecucLargeFile`, `engineEdit` |
 | `core/diff/*` | `diffModel` (43 tests), `wordDiff`, `diffSemantic`, `renameScale`, `diffPage` |
 | `core/index/*`, `host/indexService` | `indexBuilder`, `workspaceIndex`, `index` (extension), `indexBenchmark`, `validation` |
 | `host/ecucEdit`, `host/ecucStructureEdit` | `editing`, `structureEdit`, `rescan`, `planMerge` |
-| `host/engine/*`, `rust/*` | `engine` suites, `engine:smoke`, `parity`, `parity:rows`, `engineEdit` |
+| `host/engine/*`, `rust/*` | `engine` suites, `engine:smoke`, row parity (`src/test/parity`), `engineEdit` |
 | `webview/*` | page + component suites for the touched component, `protocol`; the `webview-preview` skill for layout changes |
 | `commands.ts`, manifests | `activation`, `menus`, `compare`, `reveal` |
 | copy modules | `planCopy`, `planMerge` (extension), `copyBenchmark` |

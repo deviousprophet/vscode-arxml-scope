@@ -8,8 +8,8 @@ process**. There is no N-API addon and no TypeScript fallback:
   diff patching and the merge copy planner.
 - `arxml-engine` - the stdio process: framing, document handles, chunked upload, row
   streaming, edit plans, copy plans, panic guard.
-- `arxml-cli` - debug probe and the parity surface: `scan`, `rows`, `diff`, `words`,
-  `copy` and the fixture manifest.
+- `arxml-cli` - debug probe: `scan`, `rows`, `diff`, `words`, `copy` and the
+  fixture manifest.
 
 ## Build and test
 
@@ -19,12 +19,10 @@ cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D war
 cargo fmt --manifest-path rust/Cargo.toml --all -- --check
 npm run engine:build        # writes dist/engine/<platform>-<arch>/arxml-engine[.exe]
 npm run engine:smoke        # spawn, handshake, chunked open, rows, plan, diff, patch
-npm run parity              # fixture-manifest parity with the TypeScript side
-npm run parity:rows         # row-store parity against the TypeScript oracle
-npm run parity:diff         # semantic diff parity against the TypeScript oracle
-npm run parity:words        # word-diff parity
-npm run parity:copy         # copy-planner parity
 ```
+
+Row-store parity is a Mocha suite (`src/test/parity/rowParity.test.ts`) and runs in
+`npm test`; the TypeScript oracle is the same row builder the editor uses.
 
 `npm run engine:build` stages the release binary under `dist/engine/`. The host loads
 it from `enginePath()` in `src/host/engine/engineLoader.ts`; a missing binary, an
@@ -99,7 +97,8 @@ untested one.
 ## Status
 
 The scanner, rows, node ids, conditions, edit plans, word diff, semantic diff, diff
-patch and copy planner are in Rust and gated by the parity scripts. The workspace
+patch and copy planner are in Rust and gated by the Rust suites, the engine smoke
+test, the row-parity suite and the benchmarks. The workspace
 index, validation, text-editor features and the webview renderer are still
 TypeScript; moving them is the rest of the v0.11.0 plan.
 

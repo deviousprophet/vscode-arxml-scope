@@ -1,9 +1,8 @@
-//! Debug and parity helper for the Rust core.
+//! Debug helper for the Rust core.
 //!
 //! `info` prints the engine probe as JSON, `fixture-manifest` walks a directory and
-//! prints a canonical byte/SHA-256 manifest (the TypeScript parity harness computes
-//! the same manifest), and `scan` / `rows` print the engine's model and row JSON so
-//! the parity suite can compare them against the TypeScript oracle.
+//! prints a canonical byte/SHA-256 manifest, and `scan` / `rows` print the engine's
+//! model and row JSON for local inspection.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-/// The CLI copy request: explicit texts so the parity harness needs no engine process.
+/// The CLI copy request: explicit texts so a debug run needs no engine process.
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct CopyFileRequest {
@@ -31,7 +30,7 @@ struct CopyFileRequest {
     ancestors: Vec<MissingAncestor>,
 }
 
-/// One fixture entry. Field order is part of the parity contract with `scripts/parity.mjs`.
+/// One fixture entry. Field order is stable for the printed manifest.
 #[derive(Serialize)]
 struct FixtureEntry {
     path: String,

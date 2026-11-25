@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Debug and parity CLI for the ARXML Scope core."
+description = "Debug CLI for the ARXML Scope core."
 
 [dependencies]
 arxml-core = { path = "../arxml-core" }
