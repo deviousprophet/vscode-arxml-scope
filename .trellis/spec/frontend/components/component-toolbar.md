@@ -13,7 +13,7 @@ shared button classes and the editor/diff control arrangement. Hosts own the act
 src/webview/components/toolbar/
     toolbar.ts       markup builder + control wiring
     toolbar.css      component styles
-src/webview/editorViewer.ts / diffViewer.ts
+src/webview/editorMonaco.ts / diffMonaco.ts
 src/test/webview/components/toolbar.test.ts
 ```
 

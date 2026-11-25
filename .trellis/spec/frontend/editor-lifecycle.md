@@ -160,7 +160,7 @@ export async function applyStructureEdit(
 export function watchBoot(onSilent: () => void, timeoutMs: number): BootWatchdog;
 ```
 
-The page boot order is `mountEditor()` from `src/webview/editorViewer.ts`: install the console error
+The page boot order is `mountEditor()` from `src/webview/editorMonaco.ts`: install the console error
 reporter, subscribe to `message`, wire the sidebar, Conditions panel, Details editor, toolbar and
 search components, mount one `DocumentTreeView('#tree', 'document', …)`, initialize an empty row
 store, then `postToHost({ type: 'ready' })`.

@@ -19,7 +19,7 @@ src/webview/components/documentTree/
     documentTreeState.ts   collapse/selection/guide helpers
     documentRows.ts        node/brace/comment builders
     documentTree.css       component-owned styles
-src/webview/editorViewer.ts / diffViewer.ts   composition roots
+src/webview/editorMonaco.ts / diffMonaco.ts   composition roots
 src/test/webview/components/documentTree.test.ts
 ```
 

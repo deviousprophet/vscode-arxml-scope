@@ -40,29 +40,6 @@ interface Rect {
 	height: number;
 }
 
-interface PaneAudit {
-	side: 'left' | 'right';
-	rect: Rect;
-	clientWidth: number;
-	contentWidth: number;
-	scrollLeft: number;
-	gutterInset: number;
-	rows: number;
-	changedRows: number;
-	rails: number;
-	innerRail: boolean;
-}
-
-interface ArrowAudit {
-	side: string;
-	rect: Rect;
-	vertical: boolean;
-	insideX: boolean;
-	edgeGap: number;
-	visible: boolean;
-	opaque: boolean;
-}
-
 interface ToolbarControl {
 	name: string;
 	rect: Rect;
@@ -90,7 +67,6 @@ interface GutterAudit {
 	cells: number;
 	rails: number;
 	digitsClear: boolean;
-	legacyCellRail: boolean;
 }
 
 interface ContentAudit {
@@ -129,13 +105,6 @@ export interface OneSidedAudit {
 	removedNavigable: boolean;
 	addedNavigable: boolean;
 	oneSidedGutterItems: number;
-}
-
-interface PaneBounds {
-	side: string;
-	rect?: Rect;
-	left: number;
-	right: number;
 }
 
 interface PreviewModelDecoration {
@@ -179,17 +148,10 @@ export interface PreviewAudit {
 	page: 'diff' | 'editor';
 	ready: boolean;
 	viewport: { width: number; height: number };
-	panes: PaneAudit[];
-	arrows: ArrowAudit[];
 	toolbar: ToolbarAudit;
 	gutter: GutterAudit;
 	gutterProbe?: GutterProbe;
-	folding?: {
-		visibleBefore: number;
-		visibleCollapsed: number;
-		visibleExpanded: number;
-		chevrons: number;
-	};
+	folding?: FoldingProbe;
 	sash?: SashProbe;
 	content: ContentAudit;
 	selected: string | null;
@@ -205,12 +167,17 @@ interface GutterProbe {
 	present: boolean;
 	width: number;
 	items: number;
+	itemActions: string[][];
 	buttons: string[];
 	sash: boolean;
-	mergeClass: boolean;
+	mergeActive: boolean;
 	itemDisplay: string;
+	currentShowAlways: boolean;
+	currentActions: string[];
 	clicked: string | null;
 	copy: { side?: string; key?: string } | null;
+	overflowLabels: string[] | null;
+	overflowDebug: string[];
 	availability: GutterAvailabilitySnapshot[];
 }
 
@@ -299,55 +266,6 @@ function statusTextOf(id: string): string {
 	return document.getElementById(id)?.textContent ?? '';
 }
 
-function paneAudits(): PaneAudit[] {
-	const left = paneAudit('left');
-	const right = paneAudit('right');
-	return [left, right].filter((pane): pane is PaneAudit => pane !== undefined);
-}
-
-function paneAudit(side: 'left' | 'right'): PaneAudit | undefined {
-	const pane = document.getElementById(`diff-pane-${side}`);
-	if (!pane) {
-		return undefined;
-	}
-	const rect = rectOf(pane);
-	const rails = paneRails(pane);
-	return {
-		side,
-		rect,
-		clientWidth: pane.clientWidth,
-		contentWidth: paneContentWidth(pane),
-		scrollLeft: paneScrollLeft(side),
-		gutterInset: gutterInset(pane, rect),
-		rows: pane.querySelectorAll('.diff-row').length,
-		changedRows: pane.querySelectorAll('.diff-row[data-status="changed"]').length,
-		rails: rails.count,
-		innerRail: rails.inner
-	};
-}
-
-function paneContentWidth(pane: HTMLElement): number {
-	const windowEl = pane.querySelector('.document-tree-window');
-	return windowEl ? rectOf(windowEl).width : 0;
-}
-
-function paneScrollLeft(side: string): number {
-	const bar = document.querySelector(`#diff-list .virtual-scroll-hscroll-${side}`) as HTMLElement | null;
-	return bar ? Math.round(bar.scrollLeft) : 0;
-}
-
-function gutterInset(pane: HTMLElement, rect: Rect): number {
-	const gutter = pane.querySelector('.document-tree-lines');
-	return gutter ? rectOf(gutter).x - (rect.x + pane.clientLeft) : 0;
-}
-
-function paneRails(pane: HTMLElement): { count: number; inner: boolean } {
-	const shadows = Array.from(pane.querySelectorAll('.document-tree-line-number'))
-		.map((cell) => getComputedStyle(cell).boxShadow)
-		.filter((shadow) => shadow !== 'none');
-	return { count: shadows.length, inner: shadows.every((shadow) => shadow.includes('-3px')) };
-}
-
 function toolbarAudit(): ToolbarAudit {
 	const controls = visibleControls();
 	const toolbar = document.querySelector('.toolbar') as HTMLElement | null;
@@ -372,15 +290,16 @@ function groupAudit(selector: string): GroupAudit | null {
 	return group ? { rect: rectOf(group), clientWidth: group.clientWidth, scrollWidth: group.scrollWidth } : null;
 }
 
-/** How far the Swap button's centre sits from the pane divider. */
+/** How far the Swap button's centre sits from the diff editor's divider. */
 function swapCenterGap(): number {
 	const swap = document.getElementById('diff-swap');
-	const left = document.getElementById('diff-pane-left');
-	if (!swap || !left) {
+	const host = document.getElementById('diff-monaco');
+	if (!swap || !host) {
 		return 0;
 	}
 	const swapRect = rectOf(swap);
-	return Math.round(Math.abs(swapRect.x + swapRect.width / 2 - rectOf(left).right));
+	const hostRect = rectOf(host);
+	return Math.round(Math.abs(swapRect.x + swapRect.width / 2 - (hostRect.x + hostRect.width / 2)));
 }
 
 function visibleControls(): ToolbarControl[] {
@@ -430,78 +349,17 @@ function inside(inner: Rect, outer: Rect): boolean {
 	return inner.x >= outer.x - 1 && inner.right <= outer.right + 1;
 }
 
-function arrowAudits(): ArrowAudit[] {
-	return Array.from(document.querySelectorAll('.diff-copy-arrow')).map(arrowAudit);
-}
-
-function arrowAudit(button: Element): ArrowAudit {
-	const pane = button.closest('.diff-pane') as HTMLElement | null;
-	const rect = rectOf(button);
-	const bounds = paneBounds(pane);
-	return {
-		side: bounds.side,
-		rect,
-		vertical: isVertical(rect, bounds),
-		insideX: isInsideX(rect, bounds),
-		edgeGap: edgeGap(rect, bounds),
-		visible: isArrowVisible(button),
-		opaque: opaqueBackground(button)
-	};
-}
-
-function isArrowVisible(element: Element): boolean {
-	const style = getComputedStyle(element);
-	return style.display !== 'none' && style.visibility !== 'hidden' && Number.parseFloat(style.opacity) > 0.5;
-}
-
-/** The arrow overlays the row text; a transparent background would leave it legible. */
-function opaqueBackground(element: Element): boolean {
-	const color = getComputedStyle(element).backgroundColor;
-	const match = color.match(/rgba?\(([^)]+)\)/);
-	if (!match) {
-		return color !== 'transparent';
-	}
-	const parts = match[1].split(',').map((part) => Number.parseFloat(part));
-	return parts.length < 4 || parts[3] >= 1;
-}
-
-function paneBounds(pane: HTMLElement | null): PaneBounds {
-	if (!pane) {
-		return { side: 'unknown', left: 0, right: 0 };
-	}
-	const rect = rectOf(pane);
-	const rightBorder = pane.offsetWidth - pane.clientWidth - pane.clientLeft;
-	return {
-		side: pane.id.replace('diff-pane-', ''),
-		rect,
-		left: rect.x + pane.clientLeft,
-		right: rect.right - rightBorder
-	};
-}
-
-function isVertical(rect: Rect, bounds: PaneBounds): boolean {
-	return bounds.rect !== undefined && rect.y >= bounds.rect.y && rect.bottom <= bounds.rect.bottom;
-}
-
-function isInsideX(rect: Rect, bounds: PaneBounds): boolean {
-	return bounds.rect !== undefined && rect.x >= bounds.left - 1 && rect.right <= bounds.right + 1;
-}
-
-function edgeGap(rect: Rect, bounds: PaneBounds): number {
-	if (bounds.rect === undefined) {
-		return 0;
-	}
-	return bounds.side === 'left' ? bounds.right - rect.right : rect.x - bounds.left;
-}
-
 function gutterProbeOf(): GutterProbe | undefined {
 	return (window as unknown as { __GUTTER_PROBE__?: GutterProbe }).__GUTTER_PROBE__;
 }
 
 interface FoldingProbe {
-	visibleBefore: number;
-	visibleCollapsed: number;
-	visibleExpanded: number;
+	originalBefore: number;
+	originalCollapsed: number;
+	originalExpanded: number;
+	modifiedBefore: number;
+	modifiedCollapsed: number;
+	modifiedExpanded: number;
 	chevrons: number;
 }
 
@@ -519,10 +377,7 @@ function gutterAudit(): GutterAudit {
 	return {
 		cells: cells.length,
 		rails: changed.filter((cell) => getComputedStyle(cell).boxShadow !== 'none').length,
-		digitsClear: changed.every(digitsClearOfCell),
-		legacyCellRail: Array.from(document.querySelectorAll('.diff-cell')).some(
-			(cell) => getComputedStyle(cell).boxShadow !== 'none'
-		)
+		digitsClear: changed.every(digitsClearOfCell)
 	};
 }
 
@@ -1400,9 +1255,6 @@ function gutterViolations(gutter: GutterAudit): string[] {
 	if (!gutter.digitsClear) {
 		issues.push('a line-number digit overlaps its status rail');
 	}
-	if (gutter.legacyCellRail) {
-		issues.push('a diff cell paints a status rail at the pane edge');
-	}
 	return issues;
 }
 
@@ -1477,30 +1329,9 @@ function blockEnd(lines: readonly string[], start: number): number {
 	return at;
 }
 
-function braceCount(lines: readonly string[], start: number, end: number): number {
-	let count = 0;
-	for (let at = Math.max(0, start); at < end; at += 1) {
-		if (lines[at].includes('{') || lines[at].includes('}')) {
-			count += 1;
-		}
-	}
-	return count;
-}
-
 function decorationHasClass(options: PreviewModelDecoration['options'], name: string): boolean {
 	const value = options.className;
 	return typeof value === 'string' && value.split(/\s+/).includes(name);
-}
-
-/** Resolves a theme variable through a hidden probe, e.g. `var(--vscode-editor-background)`. */
-function resolvedColor(expression: string): string {
-	const probe = document.createElement('div');
-	probe.style.color = expression;
-	probe.style.display = 'none';
-	document.body.appendChild(probe);
-	const color = getComputedStyle(probe).color;
-	probe.remove();
-	return color;
 }
 
 interface OneSidedContext {
@@ -1515,18 +1346,6 @@ interface OneSidedContext {
 	addedAt: number;
 	removedEnd: number;
 	addedEnd: number;
-}
-
-interface SideScan {
-	present: boolean;
-	blank: boolean;
-	braces: string[];
-}
-
-interface GutterScan {
-	wrappers: number;
-	neutral: boolean;
-	signsHidden: boolean;
 }
 
 function previewDiffEditor(): PreviewDiffEditor | undefined {
@@ -1578,131 +1397,15 @@ function oneSidedContext(): OneSidedContext | undefined {
 	};
 }
 
-function scanMissingSide(lines: readonly string[], start: number, end: number, label: string): SideScan {
-	if (start < 0) {
-		return { present: false, blank: true, braces: [] };
-	}
-	return {
-		present: true,
-		blank: equallyBlank(lines, start, end),
-		braces: braceLines(lines, start, end, label)
-	};
-}
-
-function equallyBlank(lines: readonly string[], start: number, end: number): boolean {
-	for (let at = start; at < end; at += 1) {
-		if (lines[at] !== '') {
-			return false;
-		}
-	}
-	return true;
-}
-
-function braceLines(lines: readonly string[], start: number, end: number, label: string): string[] {
-	const braces: string[] = [];
-	for (let at = start; at < end; at += 1) {
-		const line = lines[at];
-		if (line.includes('{') || line.includes('}')) {
-			braces.push(`${label} ${at + 1}: ${line}`);
-		}
-	}
-	return braces;
-}
-
-function missingSideScan(c: OneSidedContext): { blank: boolean; braces: string[] } {
-	const right = scanMissingSide(c.right, c.removedAt, c.removedEnd, 'right');
-	const left = scanMissingSide(c.left, c.addedAt, c.addedEnd, 'left');
-	return {
-		blank: right.present && left.present && right.blank && left.blank,
-		braces: [...right.braces, ...left.braces]
-	};
-}
-
-function placeholderOf(model: PreviewDiffModel): number[] {
-	return model
-		.getAllDecorations()
-		.filter((decoration) => decorationHasClass(decoration.options, 'arxml-diff-placeholder'))
-		.map((decoration) => decoration.range.startLineNumber);
-}
-
-function realSidePlaceholder(c: OneSidedContext, left: number[], right: number[]): boolean {
-	const onRight = right.some((line) => c.addedAt >= 0 && line > c.addedAt && line <= c.addedEnd);
-	const onLeft = left.some((line) => c.removedAt >= 0 && line > c.removedAt && line <= c.removedEnd);
-	return onRight || onLeft;
-}
-
 function diffRoots(c: OneSidedContext): HTMLElement[] {
 	return [c.originalEditor.getDomNode(), c.modifiedEditor.getDomNode()].filter(
 		(root): root is HTMLElement => root !== null
 	);
 }
 
-function placeholderFill(c: OneSidedContext): string {
-	const sample =
-		c.originalEditor.getDomNode()?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
-		c.modifiedEditor.getDomNode()?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
-		null;
-	return sample === null ? '' : getComputedStyle(sample).backgroundColor;
-}
-
-function countGapLines(left: readonly string[], right: readonly string[]): number {
-	let gaps = 0;
-	const lineCount = Math.min(left.length, right.length);
-	for (let at = 0; at < lineCount; at += 1) {
-		if (left[at] === '' && right[at] === '') {
-			gaps += 1;
-		}
-	}
-	return gaps;
-}
-
 function hasVisibleFill(element: Element): boolean {
 	const alpha = colorAlpha(getComputedStyle(element).backgroundColor);
 	return alpha !== undefined && alpha > 0;
-}
-
-function placeholderPaintScan(
-	roots: HTMLElement[],
-	neutralFill: string
-): { elements: number; neutral: boolean } {
-	const elements = roots.flatMap((root) => Array.from(root.querySelectorAll('.cdr.arxml-diff-placeholder')));
-	const neutral = elements.every((element) => getComputedStyle(element).backgroundColor === neutralFill);
-	return { elements: elements.length, neutral };
-}
-
-const PLACEHOLDER_DIFF_FILL_SELECTOR =
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-insert, ' +
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-delete, ' +
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-insert, ' +
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-delete';
-const PLACEHOLDER_GUTTER_SELECTOR = '.margin-view-overlays > div:has(> .arxml-diff-placeholder-margin)';
-
-function diffFillNeutral(roots: HTMLElement[]): boolean {
-	return roots.every((root) =>
-		Array.from(root.querySelectorAll(PLACEHOLDER_DIFF_FILL_SELECTOR)).every((fill) => !hasVisibleFill(fill))
-	);
-}
-
-function gutterScan(roots: HTMLElement[]): GutterScan {
-	const scans = roots.flatMap((root) =>
-		Array.from(root.querySelectorAll(PLACEHOLDER_GUTTER_SELECTOR)).map(gutterWrapperScan)
-	);
-	return {
-		wrappers: scans.reduce((total, scan) => total + scan.wrappers, 0),
-		neutral: scans.every((scan) => scan.neutral),
-		signsHidden: scans.every((scan) => scan.signsHidden)
-	};
-}
-
-function gutterWrapperScan(wrapper: Element): GutterScan {
-	const fill = wrapper.querySelector('.gutter-insert, .gutter-delete');
-	const neutral = fill === null || !hasVisibleFill(fill);
-	const signs = Array.from(wrapper.querySelectorAll('.insert-sign, .delete-sign'));
-	return {
-		wrappers: 1,
-		neutral,
-		signsHidden: signs.every((sign) => getComputedStyle(sign).display === 'none')
-	};
 }
 
 /** The owning side keeps its own removed/added fill; the missing side is native paint only. */
@@ -1728,27 +1431,6 @@ function covers(start: number, end: number, line: number): boolean {
 	return start > 0 && line >= start && line <= Math.max(start, end);
 }
 
-function isGlyphArrow(decoration: PreviewModelDecoration, line: number): boolean {
-	const glyph = decoration.options.glyphMarginClassName;
-	return (
-		decoration.range.startLineNumber === line &&
-		typeof glyph === 'string' &&
-		glyph.includes('arxml-merge-arrow')
-	);
-}
-
-function glyphArrowOn(model: PreviewDiffModel, line: number): boolean {
-	return model.getAllDecorations().some((decoration) => isGlyphArrow(decoration, line));
-}
-
-function arrowAt(at: number, model: PreviewDiffModel): number {
-	return at >= 0 && glyphArrowOn(model, at + 1) ? 1 : 0;
-}
-
-function owningArrowCount(c: OneSidedContext): number {
-	return arrowAt(c.removedAt, c.originalModel) + arrowAt(c.addedAt, c.modifiedModel);
-}
-
 function removedNavigable(c: OneSidedContext, changes: PreviewLineChange[]): boolean {
 	if (c.removedAt < 0) {
 		return false;
@@ -1763,20 +1445,6 @@ function addedNavigable(c: OneSidedContext, changes: PreviewLineChange[]): boole
 	}
 	const line = c.addedAt + 1;
 	return changes.some((change) => covers(change.modifiedStartLineNumber, change.modifiedEndLineNumber, line));
-}
-
-function placeholderExpected(c: OneSidedContext, gapLines: number): number {
-	return (
-		c.removedEnd - Math.max(0, c.removedAt) + (c.addedEnd - Math.max(0, c.addedAt)) + 2 * gapLines
-	);
-}
-
-function fillsNeutralScan(scan: { elements: number; neutral: boolean }, expected: number): boolean {
-	return scan.elements > 0 && scan.neutral && scan.elements === expected;
-}
-
-function countedAnd(count: number, value: boolean): boolean {
-	return count > 0 && value;
 }
 
 /**
@@ -1814,8 +1482,8 @@ const LEGACY_DIFF_LAYER_SELECTOR = [
 ].join(', ');
 
 function oneSidedGutterItems(): number {
-	const items = (window as unknown as { __GUTTER_AVAILABILITY__?: GutterAvailabilitySnapshot[] })
-		.__GUTTER_AVAILABILITY__;
+	const items = (window as unknown as { __ARXML_GUTTER_PROBE__?: GutterAvailabilitySnapshot[] })
+		.__ARXML_GUTTER_PROBE__;
 	if (!Array.isArray(items)) {
 		return 0;
 	}
@@ -1931,8 +1599,8 @@ function gutterProbeViolations(state: AuditState, probe: GutterProbe | undefined
 		...issueWhen(state.merge && probe.items === 0, 'the built-in diff gutter has no hunk items'),
 		...issueWhen(!probe.sash, 'the built-in diff sash did not mount'),
 		...issueWhen(
-			probe.mergeClass !== Boolean(state.merge),
-			`the Merge class is ${probe.mergeClass}, expected ${Boolean(state.merge)}`
+			probe.mergeActive !== Boolean(state.merge),
+			`the Merge state is ${probe.mergeActive}, expected ${Boolean(state.merge)}`
 		),
 		...issueWhen(probe.buttons.includes('Revert Block'), 'the built-in Revert action is still visible'),
 		...probe.buttons
@@ -1954,16 +1622,57 @@ function mergeGutterIssues(state: AuditState, probe: GutterProbe): string[] {
 	}
 	return [
 		...issueWhen(probe.itemDisplay === 'none', 'gutter copy actions are hidden inside Merge'),
+		...issueWhen(
+			state.name !== 'diff-removed' && !probe.currentShowAlways,
+			'the current hunk is not marked showAlways'
+		),
 		...copyTargetIssues(state, probe),
+		...renderedActionIssues(state, probe),
 		...availabilityIssues(state, probe)
 	];
 }
 
+const COPY_LEFT_LABEL = 'Copy Block to Left';
+const COPY_RIGHT_LABEL = 'Copy Block to Right';
+
+function renderedActionIssues(state: AuditState, probe: GutterProbe): string[] {
+	if (state.name === 'diff-removed' || state.name === 'diff-added') {
+		const first = probe.itemActions[0] ?? [];
+		const impossible = state.name === 'diff-removed' ? COPY_LEFT_LABEL : COPY_RIGHT_LABEL;
+		const meaningful = state.name === 'diff-removed' ? COPY_RIGHT_LABEL : COPY_LEFT_LABEL;
+		return [
+			...issueWhen(first.includes(impossible), `the one-sided hunk renders ${impossible}`),
+			...issueWhen(
+				!first.includes(meaningful) && first[0] !== 'More Actions...',
+				`the one-sided hunk does not render ${meaningful}`
+			),
+			...issueWhen(
+				!probe.itemActions.some(
+					(actions) => actions.includes(COPY_LEFT_LABEL) && actions.includes(COPY_RIGHT_LABEL)
+				),
+				'the changed hunk does not render both copy actions'
+			)
+		];
+	}
+	if (state.name === 'diff-merge' || state.name === 'diff-swap' || state.name === 'diff-sash') {
+		return probe.itemActions
+			.filter((actions) => actions.length === 1 && actions[0] !== 'More Actions...')
+			.map(() => 'a changed hunk renders only one copy action');
+	}
+	return [];
+}
+
 function copyTargetIssues(state: AuditState, probe: GutterProbe): string[] {
 	if (probe.clicked === 'More Actions...') {
-		// The first hunk starts at line 1, so VS Code collapses its actions into
-		// "More Actions...". That overflow is the built-in behavior under test.
-		return [];
+		const labels = probe.overflowLabels ?? [];
+		const hasBoth = labels.includes(COPY_LEFT_LABEL) && labels.includes(COPY_RIGHT_LABEL);
+		return [
+			...issueWhen(probe.overflowLabels === null, 'the gutter overflow menu did not open'),
+			...issueWhen(
+				state.name === 'diff-one-sided' && !hasBoth,
+				'the overflow menu does not offer both copy actions'
+			)
+		];
 	}
 	const expected = expectedCopySide(state.swap === true, probe.clicked);
 	return [
@@ -2031,10 +1740,21 @@ function foldingViolations(state: AuditState, probe: FoldingProbe | undefined): 
 		return ['the diff folding probe did not run'];
 	}
 	return [
-		...issueWhen(probe.visibleCollapsed >= probe.visibleBefore, 'Collapse All did not hide rows'),
 		...issueWhen(
-			probe.visibleExpanded !== probe.visibleBefore,
-			'Expand All did not restore the visible rows'
+			probe.originalCollapsed >= probe.originalBefore,
+			'Collapse All did not hide original-pane rows'
+		),
+		...issueWhen(
+			probe.originalExpanded !== probe.originalBefore,
+			'Expand All did not restore the original-pane rows'
+		),
+		...issueWhen(
+			probe.modifiedCollapsed >= probe.modifiedBefore,
+			'Collapse All did not hide modified-pane rows'
+		),
+		...issueWhen(
+			probe.modifiedExpanded !== probe.modifiedBefore,
+			'Expand All did not restore the modified-pane rows'
 		)
 	];
 }
@@ -2091,70 +1811,6 @@ function centeredSwapIssues(audit: Omit<PreviewAudit, 'violations'>): string[] {
 	return [`the Swap action is ${audit.toolbar.swapCenterGap}px off the pane divider`];
 }
 
-function paneRailViolations(panes: PaneAudit[]): string[] {
-	return panes.flatMap(railIssues);
-}
-
-function railIssues(pane: PaneAudit): string[] {
-	if (pane.rails === 0) {
-		return [`the ${pane.side} pane has no gutter status rail`];
-	}
-	if (!pane.innerRail) {
-		return [`the ${pane.side} gutter rail is not on the inner edge`];
-	}
-	return [];
-}
-
-function mergeViolations(state: AuditState, panes: PaneAudit[], arrows: ArrowAudit[]): string[] {
-	if (!state.merge) {
-		return [];
-	}
-	return panes.flatMap((pane) => paneArrowViolations(pane, arrows));
-}
-
-function paneArrowViolations(pane: PaneAudit, arrows: ArrowAudit[]): string[] {
-	const own = arrows.filter((arrow) => arrow.side === pane.side && arrow.vertical);
-	if (own.length === 0) {
-		return [`no copy arrow is rendered in the ${pane.side} pane`];
-	}
-	return own.map((arrow) => arrowIssue(arrow, pane)).filter((issue): issue is string => issue !== undefined);
-}
-
-function arrowIssue(arrow: ArrowAudit, pane: PaneAudit): string | undefined {
-	return arrowPlacementIssue(arrow, pane) ?? arrowPresentationIssue(arrow, pane);
-}
-
-function arrowPlacementIssue(arrow: ArrowAudit, pane: PaneAudit): string | undefined {
-	if (!arrow.insideX) {
-		return `${pane.side} copy arrow is outside its pane (x=${arrow.rect.x})`;
-	}
-	if (arrow.edgeGap > 2) {
-		return `${pane.side} copy arrow is ${arrow.edgeGap}px from the inner edge`;
-	}
-	return undefined;
-}
-
-function arrowPresentationIssue(arrow: ArrowAudit, pane: PaneAudit): string | undefined {
-	if (!arrow.visible) {
-		return `${pane.side} copy arrow is not visible`;
-	}
-	if (!arrow.opaque) {
-		return `${pane.side} copy arrow has a transparent background over the row text`;
-	}
-	return undefined;
-}
-
-function arrowStateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
-	return [...offArrowViolations(state, audit), ...mergePressViolations(state, audit)];
-}
-
-function offArrowViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
-	if (state.merge || audit.arrows.length === 0) {
-		return [];
-	}
-	return ['copy arrows are visible while Merge is off'];
-}
-
 function mergePressViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
 	if (!state.merge || audit.toolbar.mergePressed === true) {
 		return [];
@@ -2162,49 +1818,36 @@ function mergePressViolations(state: AuditState, audit: Omit<PreviewAudit, 'viol
 	return ['Merge is not pressed'];
 }
 
-function railViolations(state: AuditState, gutter: GutterAudit): string[] {
-	if (state.page !== 'diff' || gutter.rails > 0) {
-		return [];
-	}
-	return ['no gutter status rail is rendered'];
+interface PreviewSnapshotModel {
+	getValue(): string;
 }
 
-function wideViolations(panes: PaneAudit[]): string[] {
-	return panes
-		.filter((pane) => pane.contentWidth <= pane.clientWidth + 20)
-		.map((pane) => `the ${pane.side} pane did not overflow horizontally`);
+interface PreviewSnapshotEditor {
+	getModel(): PreviewSnapshotModel | null;
 }
 
-function panViolations(pan: number, panes: PaneAudit[]): string[] {
-	const issues: string[] = [];
-	for (const pane of panes) {
-		const max = Math.max(0, pane.contentWidth - pane.clientWidth);
-		const expected = Math.min(pan, max);
-		if (Math.abs(pane.scrollLeft - expected) > 5) {
-			issues.push(`the ${pane.side} pane is at ${pane.scrollLeft}px, expected ${expected}px`);
-		}
-	}
-	return issues;
+interface PreviewSnapshotDiff {
+	getOriginalEditor(): PreviewSnapshotEditor;
+	getModifiedEditor(): PreviewSnapshotEditor;
 }
 
 /** A capture-able before/after view of the panes for the Swap state. */
 export function paneSnapshot(): PaneSnapshot {
+	const diff = (window as unknown as { __ARXML_DIFF_EDITOR__?: PreviewSnapshotDiff })
+		.__ARXML_DIFF_EDITOR__;
+	const left = diff?.getOriginalEditor().getModel()?.getValue().slice(0, 400) ?? '';
+	const right = diff?.getModifiedEditor().getModel()?.getValue().slice(0, 400) ?? '';
 	return {
 		leftTitle: titleOf('diff-title-left'),
 		rightTitle: titleOf('diff-title-right'),
-		leftValue: changedValue('left'),
-		rightValue: changedValue('right')
+		leftValue: left,
+		rightValue: right
 	};
 }
 
 function titleOf(id: string): string {
 	const element = document.getElementById(id);
 	return element === null ? '' : textOf(element);
-}
-
-function changedValue(side: 'left' | 'right'): string {
-	const cell = document.querySelector(`#diff-pane-${side} .diff-row[data-status="changed"] .diff-cell`);
-	return cell === null ? '' : textOf(cell);
 }
 
 function selectedKey(): string | null {
@@ -2261,8 +1904,6 @@ function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAu
 		page: state.page,
 		ready: document.body.dataset.previewReady === 'true',
 		viewport: { width: window.innerWidth, height: window.innerHeight },
-		panes: paneAudits(),
-		arrows: arrowAudits(),
 		toolbar: toolbarAudit(),
 		gutter: gutterAudit(),
 		gutterProbe: gutterProbeOf(),

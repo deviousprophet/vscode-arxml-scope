@@ -52,15 +52,12 @@ function gutterItems(): GutterItemElement[] {
 	return Array.from(document.querySelectorAll<GutterItemElement>('.monaco-diff-editor .gutterItem'));
 }
 
-function itemAvailability(
+function itemValues(
 	item: GutterItemElement,
 	host: GutterAvailabilityHost
-): GutterAvailability | undefined {
+): GutterAvailability | null {
 	const mapping = item.__arxmlGutterItem?.mapping;
-	if (mapping === undefined) {
-		return undefined;
-	}
-	return host.availability(mapping);
+	return mapping === undefined ? null : host.availability(mapping);
 }
 
 function applyAvailability(
@@ -69,21 +66,13 @@ function applyAvailability(
 ): void {
 	const buttons = item.querySelector<GutterButtonsElement>('.buttons');
 	const service = buttons?.__arxmlContextKeyService;
-	const values = itemAvailability(item, host);
-	if (service === undefined || values === undefined) {
+	const values = itemValues(item, host);
+	if (service === undefined || values === null) {
 		return;
 	}
 	const keys = createScopedKeys(service);
 	keys.left.set(values.left);
 	keys.right.set(values.right);
-}
-
-function itemValues(
-	item: GutterItemElement,
-	host: GutterAvailabilityHost
-): GutterAvailability | null {
-	const mapping = item.__arxmlGutterItem?.mapping;
-	return mapping === undefined ? null : host.availability(mapping);
 }
 
 function snapshotItem(item: GutterItemElement, host: GutterAvailabilityHost): unknown {
@@ -97,7 +86,7 @@ function snapshotItem(item: GutterItemElement, host: GutterAvailabilityHost): un
 	};
 }
 
-function debugSnapshot(host: GutterAvailabilityHost): unknown[] {
+function previewSnapshot(host: GutterAvailabilityHost): unknown[] {
 	return gutterItems().map((item) => snapshotItem(item, host));
 }
 
@@ -119,8 +108,8 @@ export function installGutterAvailability(host: GutterAvailabilityHost): {
 			applyAvailability(item, host);
 		}
 		if ((window as unknown as { __PREVIEW__?: unknown }).__PREVIEW__ !== undefined) {
-			(window as unknown as { __GUTTER_AVAILABILITY__?: unknown }).__GUTTER_AVAILABILITY__ =
-				debugSnapshot(host);
+			(window as unknown as { __ARXML_GUTTER_PROBE__?: unknown }).__ARXML_GUTTER_PROBE__ =
+				previewSnapshot(host);
 		}
 	};
 	const schedule = (): void => {

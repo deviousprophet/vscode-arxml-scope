@@ -21,7 +21,8 @@ import {
 	type SyntheticDocument
 } from './monaco/synthetic';
 import { defineEcucTheme, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
-import { installDiffGutterActions, type DiffGutterContext, type DiffGutterDirection } from './monaco/diffGutterActions';
+import { installDiffGutterActions, type DiffGutterContext, type DiffGutterDirection, type DiffGutterMapping, type DiffGutterRange } from './monaco/diffGutterActions';
+import { firstKeyInRange, rangeHasSource, type DiffSide } from './monaco/diffBody';
 import { installGutterAvailability } from './monaco/diffGutterAvailability';
 import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
 import { DiffToolbar } from './components/toolbar/toolbar';
@@ -39,9 +40,7 @@ let mergeMode = false;
 let changesOnly = false;
 let contextActive = true;
 let semantic = true;
-let selectedKey: string | undefined;
 let gutterAvailability: { sync(): void; dispose(): void } | undefined;
-type DiffSide = 'left' | 'right';
 interface DiffNativeQuery {
 	query: string;
 	options: FindOptions;
@@ -546,7 +545,7 @@ function syncToolbarState(): void {
 	toolbar?.setContext(contextActive);
 	toolbar?.setSwapped(swapped);
 	toolbar?.setMergeMode(mergeMode);
-	document.getElementById('diff-monaco')?.classList.toggle('arxml-diff-merge', mergeMode);
+	document.getElementById('diff-monaco')?.setAttribute('data-merge', mergeMode ? 'true' : 'false');
 }
 
 function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
@@ -556,7 +555,6 @@ function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
 	aligned = docs;
 	setModelTexts(docs);
 	setDiffModel();
-	selectedKey = undefined;
 	setTitles();
 	syncToolbarState();
 	updateDiffOptions();
@@ -569,63 +567,25 @@ function identifyRow(key: string): DiffRow | undefined {
 	return documentModel?.rows.find((row) => row.key === key);
 }
 
-/** Whether a merged row owns a cell on the stored side. */
-function rowHasSide(row: DiffRow | undefined, side: DiffSide): boolean {
-	return row !== undefined && (side === 'left' ? row.left : row.right) !== undefined;
-}
-
-/** The row key on this model line, when it owns a cell on the stored side. */
-function keyHasSide(key: string | undefined, side: DiffSide): boolean {
-	if (key === undefined) {
-		return false;
-	}
-	return rowHasSide(
-		documentModel?.rows.find((candidate) => candidate.key === key),
-		side
-	);
-}
-
-/** The first keyed, side-owning model line in a hunk range. */
-function firstKeyInRange(
-	keys: readonly (string | undefined)[],
-	range: { startLineNumber: number; endLineNumberExclusive: number },
-	side: DiffSide
-): string | undefined {
-	const end = Math.min(range.endLineNumberExclusive, keys.length + 1);
-	return keys.slice(range.startLineNumber - 1, end - 1).find((key) => keyHasSide(key, side));
-}
-
-function rangeHasSource(
-	keys: readonly (string | undefined)[],
-	range: { startLineNumber: number; endLineNumberExclusive: number },
-	side: DiffSide
-): boolean {
-	return firstKeyInRange(keys, range, side) !== undefined;
-}
-
-function gutterAvailabilityFor(mapping: {
-	original: { startLineNumber: number; endLineNumberExclusive: number };
-	modified: { startLineNumber: number; endLineNumberExclusive: number };
-}): { left: boolean; right: boolean } {
+function gutterAvailabilityFor(mapping: DiffGutterMapping): { left: boolean; right: boolean } {
 	if (documentModel === undefined || aligned === undefined) {
 		return { left: true, right: true };
 	}
+	const rows = documentModel.rows;
 	return {
-		left: rangeHasSource(modifiedKeys(), mapping.modified, displayedSide('modified')),
-		right: rangeHasSource(originalKeys(), mapping.original, displayedSide('original'))
+		left: rangeHasSource(rows, modifiedKeys(), mapping.modified, displayedSide('modified')),
+		right: rangeHasSource(rows, originalKeys(), mapping.original, displayedSide('original'))
 	};
 }
 
-type GutterMapping = NonNullable<DiffGutterContext['mapping']>;
-
-function canCopy(mapping: DiffGutterContext['mapping']): mapping is GutterMapping {
+function gutterCopyReady(mapping: DiffGutterContext['mapping']): mapping is DiffGutterMapping {
 	return documentModel !== undefined && mapping !== undefined && mapping !== null;
 }
 
 function copyTarget(
 	direction: DiffGutterDirection,
-	mapping: GutterMapping
-): { side: DiffSide; range: GutterMapping['original']; keys: (string | undefined)[] } {
+	mapping: DiffGutterMapping
+): { side: DiffSide; range: DiffGutterRange; keys: (string | undefined)[] } {
 	const left = direction === 'left';
 	return {
 		side: left ? displayedSide('modified') : displayedSide('original'),
@@ -634,18 +594,36 @@ function copyTarget(
 	};
 }
 
+function copyContext(
+	direction: DiffGutterDirection,
+	context: DiffGutterContext | undefined
+): { rows: readonly DiffRow[]; target: ReturnType<typeof copyTarget> } | undefined {
+	const mapping = context?.mapping;
+	if (!gutterCopyReady(mapping)) {
+		return undefined;
+	}
+	if (documentModel === undefined) {
+		return undefined;
+	}
+	return { rows: documentModel.rows, target: copyTarget(direction, mapping) };
+}
+
 /** The built-in hunk toolbar posts the same host copy as the old arrow overlay. */
 function gutterCopyRequest(
 	direction: DiffGutterDirection,
 	context: DiffGutterContext | undefined
 ): { side: DiffSide; key: string } | undefined {
-	const mapping = context?.mapping;
-	if (!canCopy(mapping)) {
+	const resolved = copyContext(direction, context);
+	if (resolved === undefined) {
 		return undefined;
 	}
-	const target = copyTarget(direction, mapping);
-	const key = firstKeyInRange(target.keys, target.range, target.side);
-	return key === undefined ? undefined : { side: target.side, key };
+	const key = firstKeyInRange(
+		resolved.rows,
+		resolved.target.keys,
+		resolved.target.range,
+		resolved.target.side
+	);
+	return key === undefined ? undefined : { side: resolved.target.side, key };
 }
 
 function copyFromGutter(direction: DiffGutterDirection, context: DiffGutterContext | undefined): void {
@@ -655,16 +633,11 @@ function copyFromGutter(direction: DiffGutterDirection, context: DiffGutterConte
 	}
 }
 
-function selectKey(key: string | undefined): void {
-	selectedKey = key;
-}
-
 function swapSides(): void {
 	swapped = !swapped;
 	setDiffModel();
 	toolbar?.setSwapped(swapped);
 	setTitles();
-	selectedKey = undefined;
 	gutterAvailability?.sync();
 }
 
@@ -944,20 +917,6 @@ function wireMergeClicks(): void {
 	modified.onMouseDown(mergeClickHandler(modified, 'modified'));
 }
 
-function wireSelection(): void {
-	const original = originalEditor();
-	const modified = modifiedEditor();
-	if (original === undefined || modified === undefined) {
-		return;
-	}
-	original.onDidChangeCursorPosition(function (event) {
-		selectKey(keyAt(original, event.position.lineNumber, 'original'));
-	});
-	modified.onDidChangeCursorPosition(function (event) {
-		selectKey(keyAt(modified, event.position.lineNumber, 'modified'));
-	});
-}
-
 async function mountDiff(): Promise<void> {
 	const host = document.getElementById('diff-list');
 	if (host === null) {
@@ -988,7 +947,8 @@ async function mountDiff(): Promise<void> {
 		enableSplitViewResizing: true,
 		renderGutterMenu: true,
 		renderIndicators: true,
-		renderMarginRevertIcon: false,
+		lineNumbersMinChars: 3,
+		lineDecorationsWidth: 14,
 		glyphMargin: true,
 		diffAlgorithm: 'advanced',
 		ignoreTrimWhitespace: false,
@@ -1023,7 +983,6 @@ async function mountDiff(): Promise<void> {
 	});
 
 	mountToolbar();
-	wireSelection();
 	wireMergeClicks();
 	mounted = true;
 	for (const message of pendingMessages) {

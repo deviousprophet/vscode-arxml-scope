@@ -132,7 +132,7 @@ try {
 				`--user-data-dir=${profile}`,
 				'--force-device-scale-factor=1',
 				`--window-size=${state.width},${state.height}`,
-				'--virtual-time-budget=5000',
+				'--virtual-time-budget=10000',
 				'--dump-dom',
 				`--screenshot=${png}`,
 				url

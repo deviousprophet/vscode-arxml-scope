@@ -5,11 +5,11 @@
 export interface PreviewStateFields {
 	merge?: boolean;
 	swap?: boolean;
-	/** Long parameter names force horizontal overflow; the copy arrows must survive it. */
+	/** Long parameter names force horizontal overflow; native scrolling must stay inside the pane. */
 	wide?: boolean;
 	/** Horizontal scroll offset applied after the page renders. */
 	pan?: number;
-	/** F7 presses after mounting; the long document's first change is near line 1000. */
+	/** Next-diff clicks after mounting; the long document's first change is near line 1000. */
 	jump?: number;
 	select?: boolean;
 	/** Exercises the built-in sash drag, ratio persistence and double-click reset. */

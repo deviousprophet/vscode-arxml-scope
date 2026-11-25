@@ -11,7 +11,7 @@ These rules describe the stylesheets that ship in `dist/editorViewer.css` and `d
 | `src/webview/styles/tokens.css` | Theme tokens and the fallback set for the Document surface and the diff. Imported first by both pages. |
 | `src/webview/styles/base.css` | Reset, `body` layout, `#content` / `#main` boxes, `#tree-measure` probe host, `.sr-only`, `.grow` and the narrow layout. |
 | `components/documentTree/documentTree.css` | `.document-tree*` shell (header, scroller, window, spacers, line-number gutter), `.row`, `.label`, `.value`, `.row-meta`, `.twisty`, `.guide`, condition/annotation/mark styling, depth and high-contrast rules. |
-| `components/diffView/diffView.css` | Diff page tokens, the `#diff-body` column, the `#diff-list` / `.diff-pane` grid, `.diff-row` / `.diff-cell` status tints, `.word-changed` removed/inserted runs, the empty state and pane header parity. |
+| `components/diffView/diffView.css` | Diff shell tokens, the `#diff-body` column, the fixed title strip, `#diff-list` / `#diff-monaco` host, the empty state and pane header parity. Monaco owns the panes and body paint. |
 | `components/toolbar/toolbar.css` | `.toolbar`, `.toolbar-left` / `-center` / `-right`, `.tool`, `.diff-tool`, `.editor-dirty-status`. |
 | `components/searchBar/searchBar.css` | `.find-widget`, `.find-row`, `.find-field`, `.find-toggle`, `.find-action`, `.search-input`, `.search-clear`, `.search-count`, `.search-progress` and `.replace-row`. |
 | `components/sidebar/sidebar.css` | `#sidebar`, `#sidebar-resizer`, `#side-tabs`, `.stab`, `.sb-tab-panel`, `.sb-pane*`, `.sb-section-*` and the shared `.sb-btn*` / `.nav-btn` / `.act-btn` primitives. |
@@ -46,7 +46,7 @@ also sets `data-page="diff"`, which scopes its own surface tokens. Plain declara
 | Syntax | `--tok-keyword`, `--tok-string`, `--tok-number`, `--tok-meta`, `--tok-comment`, `--tok-key`, `--tok-punct`, `--tok-dim` | Every value resolves from a `--vscode-*` token, with the editor foreground as the fallback. |
 | Condition | `--tok-syscond`, `--tok-syscond-op`, `--tok-syscond-literal` | Fixed Dark+/Light+ preprocessor, parameter and constant palette keyed off the body theme class (see the exception log). |
 | Surfaces | `--hover-bg`, `--sel-bg`, `--sel-bg-focus`, `--subtree-bg`, `--sel-container-bg`, `--sel-outline`, `--rail` | Selection uses tint + rail; it never recolours syntax. |
-| Geometry | `--fold-gutter: 26px`, `--line-numbers-width: 0px`, `--doc-pad: 3ch`, `--indent: 4ch`, `--content-pad`, `--diff-arrow-strip` | `--content-pad` is `calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad))`; depth is generated from it. `--line-numbers-width` is written per pane as `<chars>ch` (the diff panes add 4px for the status rail) and defaults to `0px`. `--diff-arrow-strip` is the diff pane's reserved 22px inner edge. |
+| Geometry | `--fold-gutter: 26px`, `--line-numbers-width: 0px`, `--doc-pad: 3ch`, `--indent: 4ch`, `--content-pad` | `--content-pad` is `calc(var(--line-numbers-width) + var(--fold-gutter) + var(--doc-pad))`; depth is generated from it. `--line-numbers-width` is written per pane as `<chars>ch` and defaults to `0px`. The Monaco diff owns its 35px gutter and sash; there is no arrow strip. |
 | Search | `--match-bg`, `--match-hi` | Fixed amber tiers: 0.18 alpha for every hit, 0.36 for the current hit (see the exception log). |
 | Container accent | `--container-accent` | Fixed `#4EC9B0` (see the exception log). |
 
@@ -80,22 +80,20 @@ Rules:
   carries.
 - **Classes name structure.** `.row`, `.label`, `.value`, `.value-text`, `.row-meta`, `.twisty`,
   `.guide`, `.condition`, `.annotation`, `.comment`, `.virtual-scroll-vscroll`, `.virtual-scroll-content`,
-  `.virtual-scroll-pane`, `.document-tree-window`, `.diff-row`, `.diff-cell`, `.word-changed`,
-  `.sb-section-head`, `.sb-body`. The row builders and the tests select these names; renaming one is a
-  contract change.
+  `.virtual-scroll-pane`, `.document-tree-window`, `.monaco-diff-editor`, `.gutter`, `.gutterItem`,
+  `.monaco-sash`, `.sb-section-head`, `.sb-body`. The row builders and the tests select these names;
+  renaming one is a contract change.
 - **IDs are singletons owned by the shell.** `#tree`, `#sidebar`, `#side-tabs`, `#row-menu`,
-  `#diff-list`, `#diff-title-left` / `#diff-title-right`. VirtualScroll creates the pane layers
-  (`#diff-pane-left` / `#diff-pane-right`, `#tree-pane`); a window renderer takes the pane element, not
-  a global id, and never queries a global id inside its own logic.
+  `#diff-list`, `#diff-monaco`, `#diff-title-left` / `#diff-title-right`. The editor's VirtualScroll
+  creates `#tree-pane`; the Monaco diff owns its own internal panes, so there is no `#diff-pane-*`.
 - Prefer shallow selectors and a scoped custom property over a long descendant chain. The generated
   depth rules are two levels (`body[data-view="document"] .row[data-level]`); the existing
   high-contrast/selection rules go deeper only because they must scope to a view, a tree and a state at
   once. Do not add a deeper chain for a new feature.
 - Do not use `!important`. There are none in the shipped stylesheets; keep it that way.
-  The one documented exception is the `.arxml-diff-placeholder` neutralizer in
-  `src/webview/monaco/monaco.css`, which must outrank Monaco's internal inserted/deleted line,
-  gutter and sign fills. Keep it scoped to `.monaco-diff-editor`; the `diff-one-sided` audit fails
-  if the placeholder fill regresses.
+- Merge visibility is a data attribute, not a mirroring class:
+  `#diff-monaco:not([data-merge="true"]) .gutterItem { display: none; }`. The gutter and sash stay
+  mounted; the toolbar keeps `aria-pressed` as its state.
 - Do not style through `innerHTML` or inject markup. Rows are created with `createElement` /
   `textContent`; the only namespace-built SVG is the inline twisty.
 
@@ -177,44 +175,25 @@ Rules:
 
 ### Diff
 
-- `#diff-body` is the flex column; the fixed `.diff-title-strip` sits above `#diff-list`, which mounts
-  one `VirtualScroll` with two pane layers. Each pane mounts a `DocumentTreeView` window renderer, so
-  there is one vertical bar and one horizontal bar per pane, and the pane split stays fixed. Header rows
-  are the
-  first virtual rows; both panes pad the shorter header to the same line count and share one offsets
-  table, so the first compared row starts at the same y.
-- Status is a tint on `.diff-row > .diff-cell[data-side="left|right"]`, driven by
-  `[data-status="added|removed|changed"]`. The status tint never recolours syntax tokens.
-- Both panes show the shared blank `.diff-module-gap-row` before every module after the first: one
-  `--ecuc-lh` high, editor background, no cell, tint, rail, border or word span. It is not a change row.
-- A changed row's changed words are `.word-changed[data-word-side="left|right"]`. The left pane uses
-  `--vscode-diffEditor-removedTextBackground` (fallback `--diff-removed-bg`) with a 1px
-  `--diff-removed-edge` outline; the right pane uses `--vscode-diffEditor-insertedTextBackground`
-  (fallback `--diff-added-bg`) with a 1px `--diff-added-edge` outline. A search `<mark>` inside one
-  keeps `--match-bg` (or `--match-hi` when current); the calmer fill never erases the word span's
-  outline. Forced-colors and high contrast replace both fills with a dotted outline.
-- Both panes share the same row height, offsets and text content width; each pane's horizontal extent
-  adds its own number column (`diffContent + chars * chWidth`), so the last characters stay reachable.
-  Header rows use the Document `.document-tree-header-row` geometry and the shorter header is padded so
-  the rows align. `diffContent` is computed over every row and header line, and the pane window keeps
-  `min-width: max(100%, ...)`, so a short selected row still fills the pane.
-- Each pane numbers its own display lines in a fixed gutter. A padded header line or a row missing on
-  that side leaves the cell blank; hidden unchanged-run rows are not numbered. The module gap is
-  numbered on both sides; header/gap/comment and brace lines are numbered. The gutter cell reuses the
-  `diffEditorGutter-*` tint with the diff line-background fallbacks and redraws the pane-side rails on
-  the gutter's inner edge (left changed/removed, right added/changed). The right pane's gutter starts
-  after the reserved copy-arrow strip, so the column lines up with the number column in the row.
-- Merge mode reserves `--diff-arrow-strip` (22px) on each pane's inner edge. The copy arrow is
-  absolutely positioned in that strip; its inset follows the rendered row width and the live scroll
-  offset, and its background is opaque so panned text does not show through. The arrow's chip uses the
-  row tint on a tinted side and the editor background on an empty side.
-- The header gap is one blank row with no rule child or border, numbered on both sides. The module gap
-  shares that treatment, adds no cell and never carries a status attribute.
+- `#diff-body` is the flex column; the fixed `.diff-title-strip` sits above `#diff-list.monaco-diff-host`,
+  which mounts `#diff-monaco`. `#diff-monaco` owns `monaco.editor.createDiffEditor` with two native
+  panes. There is no `VirtualScroll` or `DocumentTreeView` in the diff.
+- Status fills, changed-word spans, diagonal gaps for a missing side, the overview ruler and the
+  unchanged-region widgets are Monaco's. The page supplies the ECUC syntax theme and the per-side
+  synthetic models; it does not paint rows, rails, gutters or arrows.
+- `diffView.css` keeps only the shell, title strip, empty state and host box rules. The old
+  `.diff-row` / `.diff-cell` / `.word-changed` / arrow-strip rules are gone.
+- Merge gates the hunk actions with `#diff-monaco[data-merge="true"]`; outside Merge the 35px
+  `.gutter` and `.monaco-sash` stay mounted and only `.gutterItem` is hidden.
+- The gutter toolbar is Monaco's; `Copy Block to Left` / `Copy Block to Right` are registered on
+  `MenuId.DiffEditorHunkToolbar`. A one-sided hunk hides the impossible action, and the short line-1
+  hunk uses the built-in “More Actions…” overflow.
+
 
 ## Build and Bundle
 
 - `esbuild.js` builds three outputs: the Node `dist/extension.js` and the browser entries
-  `src/webview/editorViewer.ts` → `dist/editorViewer.js` and `src/webview/diffViewer.ts` →
+  `src/webview/editorMonaco.ts` → `dist/editorViewer.js` and `src/webview/diffMonaco.ts` →
   `dist/diffViewer.js`. The imported CSS is emitted by esbuild next to each browser bundle as
   `dist/editorViewer.css` and `dist/diffViewer.css`. The development-only preview harness adds a
   fourth, unshipped pair under `dist/preview/` when `scripts/previewWebview.mjs` runs.

@@ -60,10 +60,10 @@ inspect the PNG → fix and recapture; run the full set for layout changes.
 
 | State | Page | Size | What it exercises |
 |---|---|---|---|
-| `diff-off` | diff | 1400×900 | baseline diff; the built-in gutter and sash are mounted, copy actions are hidden outside Merge |
+| `diff-off` | diff | 1400×900 | baseline diff; the built-in gutter and sash are mounted, copy actions are hidden outside Merge, and the sash drag/reset runs |
 | `diff-merge` | diff | 1400×900 | Merge pressed; the built-in hunk toolbar offers Copy Block to Left/Right |
-| `diff-swap` | diff | 1400×900 | Swap pressed; headers and values mirror, and the copy direction/host side follow the displayed panes |
-| `diff-rail` | diff | 1400×900 | long document; F7 jumps to the change near line 1000 and scrolls |
+| `diff-swap` | diff | 1400×900 | Swap pressed; headers and values mirror, the copy direction/host side follow the displayed panes, and the sash ratio survives |
+| `diff-rail` | diff | 1400×900 | long document; Next diff jumps to the change near line 1000 and scrolls |
 | `diff-one-sided` | diff | 1400×900 | per-side models with changed pairs; native fills and diagonal gaps, no placeholder layers |
 | `diff-removed` | diff | 1400×900 | a left-only module deletion; the gutter hides Copy Block to Left and offers only Copy Block to Right |
 | `diff-added` | diff | 1400×900 | a right-only module insertion; the gutter hides Copy Block to Right and offers only Copy Block to Left |
@@ -193,18 +193,19 @@ strip or the page shell, and check each image before asking for review.
 - [ ] **Swap keeps the displayed-pane meaning.** In `diff-swap` the first action posts the
       stored side now shown in the source pane (`side: "left"` after the swap). The audit derives
       the expected side from the clicked action and the swap flag.
-- [ ] **The built-in sash resizes and resets.** `diff-sash` starts at 50/50 (left pane plus the
-      35px gutter equals the right pane), drags wider, keeps the ratio after a document
-      replacement and Swap, and double-click returns to 50/50. The audit records every width pair.
+- [ ] **The built-in sash resizes and resets.** `diff-sash`, `diff-off` and `diff-swap` start at
+      50/50 (left pane plus the 35px gutter equals the right pane), drag wider, keep the ratio after a
+      document replacement and (for `diff-swap`) Swap, and double-click returns to 50/50. The audit
+      records every width pair.
 - [ ] **Swap mirrors the panes.** The audit snapshots the titles and the first changed
       values before the click and requires each side to take the other's after it.
-- [ ] **F7 scrolls.** `diff-rail` starts above line 1000 and lands on the first
+- [ ] **Next diff scrolls.** `diff-rail` starts above line 1000 and lands on the first
       changed row; the selection and the rail agree.
 - [ ] **Editor page.** Toolbar, line-number gutter, selected row and Details panel
       render without clipping. The `select` state must leave a selected row in the audit.
 
 Record a manual observation with the state name and what changed, for example
-“`diff-rail`: F7 lands on line 1007, rail clear of the four digits”.
+“`diff-rail`: Next diff lands on line 1007, rail clear of the four digits”.
 
 ## How it works
 
@@ -222,7 +223,7 @@ Record a manual observation with the state name and what changed, for example
 - `.agents/skills/webview-preview/preview/previewPage.ts` imports the production page
   entries. They auto-mount when their root is present, exactly as in the extension. The
   preview then posts the document, applies Merge, probes folding and the sash, clicks
-  Swap (after snapshotting the panes), probes the gutter, pans the rows, presses F7 or
+  Swap (after snapshotting the panes), probes the gutter, pans the rows, clicks Next diff or
   selects a row, waits a short timer for layout and the resize observer, and publishes
   the audit. Do not call the mount functions again: a second mount binds every toolbar
   action twice, and toggles such as Merge and Swap cancel themselves out.

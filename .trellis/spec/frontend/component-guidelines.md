@@ -295,25 +295,23 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
 | Measuring a row offset from the window element | It moves with the top spacer; the component keeps the scroll offset instead |
 | Setting spacer heights with a style attribute | The CSP blocks inline styles; the component writes its own CSSOM custom properties |
 | Using an inline `style` instead of `data-level` | The CSP blocks style attributes and the depth CSS cannot follow |
-| Duplicating the virtual-scroll math instead of importing it | The page and the diff would drift on window bounds, spacer height and overscan; import `render/virtualScroll.ts` in both |
+| Duplicating the virtual-scroll math instead of importing it | The editor page imports `render/virtualScroll.ts`; the diff page delegates scrolling to Monaco — do not reimplement either |
 | `innerHTML` with a model value | The value is text, not markup; use `textContent` |
 | Reading the inspector from the rendered row | An offscreen selection has no rendered row; use `rowById` |
 | Calling a string assertion or a test-host render a webview pass | Neither is a VS Code webview; the Extension Development Host still needs a check |
 
 ## Semantic diff surface
 
-`src/webview/diffViewer.ts + src/core/diff/diffModel.ts` is a second webview, not a second renderer. Its invariants:
+`src/webview/diffMonaco.ts + src/core/diff/diffModel.ts` is a second webview, not a second renderer. Its invariants:
 
 - `core/diff/diffModel.ts` is pure (no `vscode`); it owns projection, matching, status, merged order,
   summary and the page helpers. The panel only reads documents, scans and posts.
-- Both pages import `render/rowView.ts` and `components/documentTree/documentRows.ts`; `valueSpan`,
-  `metaSpan`, `appendHighlighted` and the node/brace/comment builders have one definition (tested). Do
-  not fork a row primitive into the diff page.
-- `webview/diffViewer.ts` mounts two `DocumentTreeView` instances; each one imports
-  `render/virtualScroll.ts`, so only its viewport window is in the DOM and its spacers come from
-  `calcRowOffset`/`calcTotalHeight`.
-  The panes share the aligned display list, `heightFn` and content width; the host syncs their
-  offsets.
+- The editor page owns the Document row primitives (`render/rowView.ts`,
+  `components/documentTree/documentRows.ts`). The diff page uses `monaco/synthetic.ts` to serialize
+  each side into a synthetic ECUC document; do not fork a row primitive into the diff page.
+- `webview/diffMonaco.ts` mounts `monaco.editor.createDiffEditor` with the two per-side models.
+  Monaco owns the panes, scrolling, folding, gutter/sash and body paint; the page only supplies the
+  ECUC theme, the `data-merge` gate and the two gutter actions.
 - `DiffCell.range` is injected from the host's `buildNodeIndex`; `EcucRow` still carries no
   source positions. Reveal forces `mode: 'beside'` so the diff tab survives `revealMode: replace`.
 - A paired row uses the left id as its page key; an added row uses `right:` + its right id, so a
@@ -353,29 +351,22 @@ resolution, tab/focus behaviour and accessibility-tree exposure, which no string
   Document weight; `.row-meta` keeps the Document monospace line (`nowrap`, `gap: 1ch`). Cells have no
   horizontal padding; the pane layer is the clip boundary. Keep the fixed file-name strip and the diff
   status tints.
-- **Both panes are `DocumentTreeView` windows.** The diff mounts one shared `VirtualScroll` and one
-  window renderer per pane. Header rows are the first virtual rows; they are padded to the longer side
-  and are content, not pinned chrome. Annotations and `{` / `}` rows follow each side; colours, font,
-  gutter, indentation and meta typography match Document. Only the status tint and edge marker are
-  diff-specific, and they sit on the cell without recolouring tokens. Status is an optional render
-  input; the editor never sets it.
-- **One-sided rows keep their structure on the owning side.** `buildAlignedSyntheticDocuments` emits
-  a container/module brace only when that side has the cell; the missing side keeps blank lines of
-  the same count. `diffMonaco` decorates every missing-side line with `arxml-diff-placeholder`, and
-  the diff CSS neutralizes Monaco's inserted/deleted line, char, gutter and sign paints; the owning
-  side keeps its change fill. The placeholder side keeps its host delete/copy arrow intentionally;
-  only the selection tint is skipped. The `diff-one-sided` preview audit reads the actual aligned
-  models and computed styles, so a reappearing fake brace or placeholder fill fails the capture.
+- **Both panes are Monaco's diff editors.** `diffMonaco` mounts `monaco.editor.createDiffEditor` with
+  the two per-side synthetic models. Monaco owns the body paint, line numbers, folding, overview ruler,
+  unchanged widgets and sash. The page supplies the ECUC theme, the `data-merge` gate and the two
+  gutter actions; it does not mount `VirtualScroll` or `DocumentTreeView` in the diff.
+- **One-sided rows keep their structure on the owning side.** `buildDiffSyntheticDocuments` emits a
+  container/module brace only when that side has the cell. The missing side has no line and Monaco
+  draws its native diagonal gap. The owning side keeps its native change fill; removed placeholder,
+  glyph-arrow and custom-margin layers must not return. `diff-added` / `diff-removed` prove the
+  one-sided direction and `diff-one-sided` proves native paint.
 - **The diff has no bottom strip.** `Enter` on the selected row is the reveal action; there is no
   selected-row table or reveal buttons.
 - **Side labels are model data.** `DiffDocument.labels` comes from `disambiguatedLabels`; the fixed
   file-name strip shows the same shortest distinguishing suffix.
-- **One VirtualScroll owns the vertical surface; each pane owns its horizontal bar.** The diff has one
-  vertical bar and one horizontal bar per pane. Both panes share the same offsets and vertical position;
-  each horizontal bar moves only its pane and the pane split stays fixed. Wheel/scrollbar movement is
-  native, and header rows and content rows move together. Content width is the longest rendered line
-  per pane plus the Document gutter and slack, with no cap. Swap resets both horizontal offsets to zero
-  and leaves the vertical position untouched.
+- **Monaco owns the scroll surface and the sash.** The diff editor has one vertical scroll surface,
+  one horizontal surface per pane and the resizable 35px sash. `Swap` rebuilds the model pair and
+  resets horizontal offsets while keeping the vertical position and sash ratio.
 - **Swap sides is display-only.** `displayLeft`/`displayRight`/`displayStatus` re-project the row,
   and `Enter` maps a displayed side back to the host's original side. The comparison documents are
   not recomputed and neither pane's vertical scroll is reset.

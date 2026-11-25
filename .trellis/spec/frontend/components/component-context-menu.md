@@ -17,7 +17,7 @@ reports one `(action, nodeId)` through `contextMenuHost.onAction`.
 src/webview/components/contextMenu/
     contextMenu.ts       markup + menu controller script
     contextMenu.css      component styles
-src/webview/editorViewer.ts   composition root
+src/webview/editorMonaco.ts   composition root
 src/test/webview/components/contextMenu.test.ts
 ```
 

@@ -15,7 +15,7 @@ src/webview/components/sidebar/
     sidebar.ts / sidebar.css
     detailsPanel/       detailsPanel.ts + css
     conditionsPanel/    conditionsPanel.ts + css
-src/webview/editorViewer.ts
+src/webview/editorMonaco.ts
 src/test/webview/components/sidebar.test.ts
 ```
 

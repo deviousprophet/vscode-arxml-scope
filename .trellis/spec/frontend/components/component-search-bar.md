@@ -19,7 +19,7 @@ the legacy DOM renderers and their page tests.
 src/webview/components/searchBar/
     searchBar.ts     markup + feedback setters + callbacks
     searchBar.css    component styles
-src/webview/editorViewer.ts / diffViewer.ts
+src/webview/editorMonaco.ts / diffMonaco.ts
 src/test/webview/components/searchBar.test.ts
 ```
 

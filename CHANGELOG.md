@@ -11,13 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The Rust engine restarts automatically after a crash with bounded backoff, reopens live documents and keeps their ids
 - `ARXML Scope: Show Engine Status` reports the engine state, pid, uptime, restarts, memory and last error, and can restart the engine
-- Documents above the 64 MiB frame limit open through a chunked upload, up to a 512 MiB cap, so large ECUC files can be diffed and edited
+- Documents above the 64 MiB frame limit open through a chunked upload up to a 512 MiB cap, so large ECUC files can be diffed and edited
 - Find is Monaco's own find widget, opened with `Ctrl+F`/`Ctrl+H`, with case-sensitive, whole-word and regular-expression options in the document and diff views
 - Replace and Replace All update validated parameter values and container short names in the document view, with preserve case and no write when the engine refuses
-- The diff view searches the same row fields with the same options but has no replace row
-- The ECUC editor and semantic diff now use the real VS Code editor and diff editor, with native selection, scrolling, folding, word wrap, minimap and sticky scroll
-- The diff view exposes VS Code's hover hunk gutter: **Copy Block to Left** and **Copy Block to Right** copy through the existing merge path, and a one-sided hunk shows only the meaningful direction
-- Diff panes resize by dragging the divider and reset to 50/50 on double-click, in Merge and non-Merge modes
+- The ECUC editor and semantic diff use the real VS Code editor and diff editor, with native selection, scrolling, folding, word wrap, minimap, sticky scroll and syntax colouring
+- The editor supports direct typing of parameter values and container short names with local drafts, undo/redo, coalesced saves and an unsaved-changes marker
+- The diff view exposes VS Code's hover hunk gutter: `Copy Block to Left` and `Copy Block to Right` copy through the existing merge path, and a one-sided hunk shows only the meaningful direction
+- Diff panes resize by dragging the divider and reset to 50/50 on double-click, in Merge and non-Merge modes, including after Swap
 - Both diff panes support folding, and the Collapse/Expand toolbar actions fold or unfold both sides
 
 ### Changed
@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parameter values and container short names can be typed directly in the ECUC editor; definition-ref edits remain in Details, and structural edits remain in the row menu
 - The diff view renders each side's own ECUC document in the VS Code diff editor, with native line changes, word-level spans, diagonal gaps for a missing side, the overview ruler and unchanged-region widgets
 - The ECUC find widget is Monaco's native widget; its match list, count and replace plans still come from the Rust ARXML search
-- The ECUC syntax palette separates container types, parameter and reference names, values, metadata and comments so the Document reads like the previous renderer
+- The ECUC syntax palette separates container types, parameter and reference names, values, metadata and comments, and uses the preprocessor palette for condition names, operators and literals
 - Search highlights map each Rust field offset onto the synthetic line, so the native count, navigation and Replace target only real ARXML matches
 - Typing and deleting in the ECUC editor or Details stay local until `Ctrl+S`; a save writes one coalesced edit per changed field, waits for every acknowledgement and then saves
 - A multi-line paste into an ECUC value is inserted as one line with `\n` escapes instead of being discarded
@@ -39,18 +39,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Direct and Details ECUC edits share one local draft: typing in either view updates the other, quoted values keep exactly one pair of quotes, Details keeps focus and caret, and invalid values block `Ctrl+S` until corrected
-- Container short-name renames keep the renamed node selected when the host acknowledges the new id, even when more characters are typed before the re-scan
-- Local undo/redo restores ECUC drafts before the first save
-- A draft whose row disappeared from the file blocks `Ctrl+S` instead of saving without it
-- ECUC sticky scroll now pins the enclosing module and container headers while scrolling; the synthetic model's trailing newline keeps full-document folding scopes valid
-- The ECUC editor now shows an `Unsaved changes` marker in the toolbar and a `•` on the tab title, flushes pending drafts before save, and acknowledges each edit with its document revision
-- System-condition names use the C macro/preprocessor colour, with distinct operator and literal colours, across the Monaco editor and diff, the Document tree, Details and the Conditions panel
-- Container short names without a definition label use the string colour instead of the definition colour
-- A container or module that exists on only one side of the diff leaves the other side blank instead of showing fake empty braces or an inserted-line fill
-- Binary ECUC values use the numeric colour and dotted reference targets use the reference colour instead of the string colour
-- Diff line and word fills preserve the theme color's alpha and use VS Code's readable dark fallbacks, so changed rows no longer become opaque blocks
-- Native find-widget tooltips are no longer clipped by the editor host or toolbar; they stay visible long enough to read and click
 - A bulk rename whose names share no token now pairs containers in the semantic diff, including when new containers sort before the renamed block
 
 ## [0.10.0] - 2026-11-15

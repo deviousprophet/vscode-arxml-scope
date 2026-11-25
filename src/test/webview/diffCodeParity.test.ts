@@ -21,8 +21,12 @@ function webviewFiles(extension: string): string[] {
 		.map((file) => path.join('src', 'webview', file).replaceAll('\\', '/'));
 }
 
-suite('VS Code diff code parity', () => {
-	test('monaco-editor is pinned to the VS Code 1.125 release', () => {
+/**
+ * Static source/hash contract for the pinned Monaco surface. This is not a
+ * behavioural test; the preview suite exercises the rendered DOM.
+ */
+suite('VS Code diff source contract', () => {
+	test('source contract: monaco-editor is pinned to the VS Code 1.125 release', () => {
 		const lock = JSON.parse(read('package-lock.json')) as {
 			packages: Record<string, { version?: string; integrity?: string }>;
 		};
@@ -44,7 +48,7 @@ suite('VS Code diff code parity', () => {
 		assert.strictEqual(pkg.scripts?.['postinstall'], 'patch-package');
 	});
 
-	test('the built-in gutter, sash and diff editor files match the pinned release', () => {
+	test('source contract: the built-in gutter, sash and diff editor files match the pinned release', () => {
 		const expected: Record<string, string> = {
 			'node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/gutterFeature.js':
 				'26895e826aa577208097ddd126ecae16b1785f1cdf45cea9b6e17ce5aa9dd13a',
@@ -63,7 +67,7 @@ suite('VS Code diff code parity', () => {
 		}
 	});
 
-	test('the checked-in patch is the only upstream modification', () => {
+	test('source contract: the checked-in patch is the only upstream modification', () => {
 		const patch = read('patches/monaco-editor+0.57.0.patch');
 		assert.ok(patch.includes('features/gutterFeature.js'), 'the patch scopes the gutter toolbar');
 		assert.ok(patch.includes('platform/actions/browser/toolbar.js'), 'the patch scopes the menu');
@@ -72,7 +76,7 @@ suite('VS Code diff code parity', () => {
 		assert.ok(patch.includes('arxml.copyRightAvailable'), 'the patch scopes the right action');
 	});
 
-	test('the page uses the built-in diff surface with the per-side body', () => {
+	test('source contract: the page uses the built-in diff surface with the per-side body', () => {
 		const page = read('src/webview/diffMonaco.ts');
 		const required = [
 			'renderGutterMenu: true',
@@ -99,7 +103,7 @@ suite('VS Code diff code parity', () => {
 		);
 	});
 
-	test('exactly two ARXML actions are registered on the built-in hunk toolbar', () => {
+	test('source contract: exactly two ARXML actions are registered on the built-in hunk toolbar', () => {
 		const actions = read('src/webview/monaco/diffGutterActions.ts');
 		assert.strictEqual(
 			(actions.match(/MenuRegistry\.appendMenuItem\(MenuId\.DiffEditorHunkToolbar/g) ?? []).length,
@@ -116,7 +120,7 @@ suite('VS Code diff code parity', () => {
 		);
 	});
 
-	test('no custom margin, arrow, placeholder or ruler layer remains', () => {
+	test('source contract: no custom margin, arrow, placeholder or ruler layer remains', () => {
 		const forbidden = [
 			'arxml-diff-placeholder',
 			'arxml-merge-arrow',

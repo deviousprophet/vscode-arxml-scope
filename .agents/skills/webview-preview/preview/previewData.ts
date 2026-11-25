@@ -23,9 +23,9 @@ export interface PreviewState extends PreviewStateFields {
 }
 
 export const STATES: PreviewState[] = [
-	{ name: 'diff-off', page: 'diff', width: 1400, height: 900 },
+	{ name: 'diff-off', page: 'diff', width: 1400, height: 900, sash: true },
 	{ name: 'diff-merge', page: 'diff', width: 1400, height: 900, merge: true },
-	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true },
+	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true, sash: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-removed', page: 'diff', width: 1400, height: 900, merge: true },

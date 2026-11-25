@@ -95,6 +95,28 @@ declare global {
 const payload = window.__PREVIEW__;
 let swapBefore: PaneSnapshot | undefined;
 
+function publishPageError(message: string): void {
+	if (message.includes('ResizeObserver loop')) {
+		return;
+	}
+	if (document.getElementById('preview-audit') !== null) {
+		return;
+	}
+	const node = document.createElement('script');
+	node.type = 'application/json';
+	node.id = 'preview-audit';
+	node.textContent = JSON.stringify({
+		state: payload.state,
+		page: payload.page,
+		ready: false,
+		violations: [`page error: ${message}`]
+	}).replaceAll('<', '\\u003c');
+	document.body.appendChild(node);
+}
+
+window.addEventListener('error', (event) => publishPageError(event.message));
+window.addEventListener('unhandledrejection', (event) => publishPageError(String(event.reason)));
+
 function tick(): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -134,13 +156,7 @@ async function waitFor(predicate: () => boolean): Promise<void> {
 }
 
 async function jumpToChange(): Promise<void> {
-	const pane = document.getElementById('diff-pane-left');
-	if (!pane) {
-		return;
-	}
-	pane.dispatchEvent(
-		new KeyboardEvent('keydown', { key: 'F7', bubbles: true, cancelable: true })
-	);
+	click('diff-next');
 	await tick();
 }
 
@@ -187,7 +203,7 @@ function selectRow(): HTMLElement | null {
 			'#tree-pane .node[data-document-index]:not([aria-selected="true"])'
 		) as HTMLElement | null;
 	}
-	return document.querySelector('#diff-pane-left .diff-row[data-status="changed"]') as HTMLElement | null;
+	return null;
 }
 
 async function applySelect(): Promise<void> {
@@ -963,12 +979,17 @@ interface GutterProbe {
 	present: boolean;
 	width: number;
 	items: number;
+	itemActions: string[][];
 	buttons: string[];
 	sash: boolean;
-	mergeClass: boolean;
+	mergeActive: boolean;
 	itemDisplay: string;
+	currentShowAlways: boolean;
+	currentActions: string[];
 	clicked: string | null;
 	copy: { side?: string; key?: string } | null;
+	overflowLabels: string[] | null;
+	overflowDebug: string[];
 	availability: GutterAvailabilitySnapshot[];
 }
 
@@ -981,44 +1002,110 @@ function gutterButtonLabel(button: Element): string {
 	);
 }
 
+function itemActions(item: Element): string[] {
+	return Array.from(item.querySelectorAll('.action-label')).map(gutterButtonLabel);
+}
+
 async function probeGutter(): Promise<void> {
 	if (payload.page !== 'diff') {
 		return;
 	}
 	await waitFor(() => document.querySelector('.monaco-diff-editor .gutterItem') !== null);
 	await delay(250);
+	const diff = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getLineChanges?(): Array<{
+					originalStartLineNumber: number;
+					modifiedStartLineNumber: number;
+				}> | null;
+				getOriginalEditor(): { setPosition(position: { lineNumber: number; column: number }): void };
+				getModifiedEditor(): { setPosition(position: { lineNumber: number; column: number }): void };
+			};
+		}
+	).__ARXML_DIFF_EDITOR__;
+	const firstChange = diff?.getLineChanges?.()?.[0];
+	if (diff !== undefined && firstChange !== undefined) {
+		diff.getOriginalEditor().setPosition({
+			lineNumber: Math.max(1, firstChange.originalStartLineNumber),
+			column: 1
+		});
+		diff.getModifiedEditor().setPosition({
+			lineNumber: Math.max(1, firstChange.modifiedStartLineNumber),
+			column: 1
+		});
+		await delay(200);
+	}
 	const gutter = document.querySelector<HTMLElement>('.monaco-diff-editor .gutter');
 	const items = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem'));
 	const buttons = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem .action-label'));
 	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; side?: string; key?: string }>;
 	const before = messages.length;
-	const mergeClass = document.getElementById('diff-monaco')?.classList.contains('arxml-diff-merge') === true;
+	const mergeActive = document.getElementById('diff-monaco')?.getAttribute('data-merge') === 'true';
 	const clicked = buttons[0] === undefined ? null : gutterButtonLabel(buttons[0]);
-	if (mergeClass) {
+	const current = items[0];
+	const currentActions = current === undefined ? [] : itemActions(current);
+	let overflowLabels: string[] | null = null;
+	let overflowDebug: string[] = [];
+	if (mergeActive && clicked === 'More Actions...') {
+		buttons[0]?.dispatchEvent(
+			new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, buttons: 1, view: window })
+		);
+		buttons[0]?.click();
+		await delay(400);
+		const menuRoots = Array.from(
+			document.querySelectorAll<HTMLElement>(
+				'.monaco-menu, .context-view, [role="menu"], .monaco-menu-container'
+			)
+		);
+		const menuButtons = menuRoots.flatMap((root) =>
+			Array.from(root.querySelectorAll<HTMLElement>('.action-label, [role="menuitem"], .action-item'))
+		);
+		overflowLabels = Array.from(
+			new Set(menuButtons.map(gutterButtonLabel).filter((label) => label.length > 0))
+		);
+		overflowDebug = menuRoots.slice(0, 5).map((root) => {
+			const text = root.textContent?.replace(/\s+/g, ' ').trim().slice(0, 120) ?? '';
+			return `${root.tagName}.${root.className}: ${text}`;
+		});
+		const copyButton = menuButtons.find((button) =>
+			/^Copy Block to (Left|Right)$/.test(gutterButtonLabel(button))
+		);
+		copyButton?.click();
+		await tick();
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+	} else if (mergeActive) {
 		buttons[0]?.click();
 		await tick();
 	}
 	const copy = messages.slice(before).find((message) => message.type === 'copy');
-	const item = items[0];
 	(window as unknown as { __GUTTER_PROBE__?: GutterProbe }).__GUTTER_PROBE__ = {
 		present: gutter !== null,
 		width: gutter === null ? 0 : Math.round(gutter.getBoundingClientRect().width),
 		items: items.length,
+		itemActions: items.map(itemActions),
 		buttons: buttons.map(gutterButtonLabel),
 		sash: document.querySelector('.monaco-diff-editor .monaco-sash.vertical') !== null,
-		mergeClass,
-		itemDisplay: item === undefined ? '' : getComputedStyle(item).display,
+		mergeActive,
+		itemDisplay: current === undefined ? '' : getComputedStyle(current).display,
+		currentShowAlways: current?.classList.contains('showAlways') === true,
+		currentActions,
 		clicked,
 		copy: copy === undefined ? null : { side: copy.side, key: copy.key },
-		availability: (window as unknown as { __GUTTER_AVAILABILITY__?: GutterAvailabilitySnapshot[] })
-			.__GUTTER_AVAILABILITY__ ?? []
+		overflowLabels,
+		overflowDebug,
+		availability: (window as unknown as { __ARXML_GUTTER_PROBE__?: GutterAvailabilitySnapshot[] })
+			.__ARXML_GUTTER_PROBE__ ?? []
 	};
 }
 
 interface FoldingProbe {
-	visibleBefore: number;
-	visibleCollapsed: number;
-	visibleExpanded: number;
+	originalBefore: number;
+	originalCollapsed: number;
+	originalExpanded: number;
+	modifiedBefore: number;
+	modifiedCollapsed: number;
+	modifiedExpanded: number;
 	chevrons: number;
 }
 
@@ -1037,32 +1124,42 @@ async function probeFolding(): Promise<void> {
 	}
 	const editor = (
 		window as unknown as {
-			__ARXML_DIFF_EDITOR__?: { getModifiedEditor(): PreviewFoldEditor };
+			__ARXML_DIFF_EDITOR__?: {
+				getOriginalEditor(): PreviewFoldEditor;
+				getModifiedEditor(): PreviewFoldEditor;
+			};
 		}
 	).__ARXML_DIFF_EDITOR__;
 	if (editor === undefined) {
 		return;
 	}
-	const modified = editor.getModifiedEditor();
-	const countVisible = (): number =>
-		modified.getVisibleRanges().reduce(
+	const countVisible = (target: PreviewFoldEditor): number =>
+		target.getVisibleRanges().reduce(
 			(total, range) => total + range.endLineNumber - range.startLineNumber + 1,
 			0
 		);
-	const visibleBefore = countVisible();
+	const original = editor.getOriginalEditor();
+	const modified = editor.getModifiedEditor();
+	const originalBefore = countVisible(original);
+	const modifiedBefore = countVisible(modified);
 	click('diff-collapse-all');
 	await delay(250);
-	const visibleCollapsed = countVisible();
+	const originalCollapsed = countVisible(original);
+	const modifiedCollapsed = countVisible(modified);
 	const chevrons = document.querySelectorAll(
 		'.monaco-diff-editor .codicon-folding-collapsed, .monaco-diff-editor .codicon-folding-expanded'
 	).length;
 	click('diff-expand-all');
 	await delay(250);
-	const visibleExpanded = countVisible();
+	const originalExpanded = countVisible(original);
+	const modifiedExpanded = countVisible(modified);
 	(window as unknown as { __FOLDING_PROBE__?: FoldingProbe }).__FOLDING_PROBE__ = {
-		visibleBefore,
-		visibleCollapsed,
-		visibleExpanded,
+		originalBefore,
+		originalCollapsed,
+		originalExpanded,
+		modifiedBefore,
+		modifiedCollapsed,
+		modifiedExpanded,
 		chevrons
 	};
 }

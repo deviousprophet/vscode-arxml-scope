@@ -81,17 +81,22 @@ in the task notes rather than implying it was tested.
 
 ## Manual checks happen through the preview harness or the Extension Development Host
 
-The page is served locally by `npm run preview:webview` and captured by `npm run shots:webview`.
-The harness wraps the **production shell** (`webviewShell.ts`) and imports the real page entries
-(`diffViewer.ts`, `editorViewer.ts`), which auto-mount exactly as in the extension. It seeds states
-through the host protocol and writes `artifacts/webview/<state>.png` plus `<state>.audit.json`;
+The page is served locally by the `webview-preview` skill:
+`node .agents/skills/webview-preview/scripts/previewWebview.mjs`, and captured by
+`.../scripts/shotWebview.mjs`. The harness wraps the **production shell** (`webviewShell.ts`) and
+imports the real page entries (`diffMonaco.ts`, `editorMonaco.ts`), which auto-mount exactly as in the
+extension. It seeds states through the host protocol and writes
+`.agents/skills/webview-preview/artifacts/<state>.png` plus `<state>.audit.json`;
 `docs/WEBVIEW_PREVIEW.md` holds the state table and the visual audit checklist. The runner fails
-when the rendered geometry violates an invariant: a copy arrow outside its pane, a toolbar control
-overlapping or clipped, a digit touching its rail, or a page-level horizontal scroll. When changing
-scroll-dependent chrome, add a wide/overflow state and a panned state; a fixture whose lines fit
-the pane cannot catch an arrow pinned to the content edge. Do not call a mount function after
-importing a page entry: a second mount binds every toolbar action twice and toggles cancel
-themselves.
+when the rendered geometry violates an invariant: a gutter item off its hunk, a toolbar control
+overlapping or clipped, a digit touching its rail, or a page-level horizontal scroll. The diff audit
+also reads the real `.gutterItem` actions, the folding round trip and the sash drag, so a deleted
+feature cannot pass vacuously. When changing scroll-dependent chrome, add a wide/overflow state and a
+panned state. Do not call a mount function after importing a page entry: a second mount binds every
+toolbar action twice and toggles cancel themselves.
+
+Source-level wiring or hash tests are a last resort. Label the suite and test names as a source
+contract, and keep the behavioural proof in the preview harness or Extension Development Host.
 
 The screenshots are Chromium layout evidence, not a behavioural gate. They do not prove VS Code
 theme fidelity (the harness seeds the supported dark-theme tokens), keyboard focus, screen-reader output or
@@ -179,17 +184,16 @@ source-line gutter, and the row model carries no source-position fields.
 ## Virtual page tests drive the compiled page module
 
 The virtual row renderer is tested at two levels. Pure modules (`renderRows`, `virtualScroll`,
-`treeQuery`, `rowSearch`) have ordinary unit tests over values. The page entrypoint is mounted in
+`treeQuery`) have ordinary unit tests over values. The editor page entrypoint is mounted in
 jsdom from the host's static shell and driven through the protocol: `installDom` + `loadModule` give
-the test the real `mountEditor`/`mountDiff` path, so `flattenRows`, `ancestorIds`, `reconcileRowState`,
+the test the real `mountEditor` path, so `flattenRows`, `ancestorIds`, `reconcileRowState`,
 `subtreeRowIds`, `guidesFor`, the inspector and the virtual window run as they do in the shipped page
-— the test does not re-implement them.
+— the test does not re-implement them. The Monaco diff page is exercised by the preview harness and
+its source contract; jsdom does not provide the editor layout.
 `virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse display
 lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan payload.
-`rowSearch.test.ts` pins the chunked engine: matches, progress, cancellation, the timing constants
-and a 150k-row completion threshold. Structural
-assertions (a window loop, spacers, no `innerHTML`/style attribute in the row builder, `data-level`
-CSS) are the regression guard; the real DOM pass is the Extension Development Host.
+Structural assertions (a window loop, spacers, no `innerHTML`/style attribute in the row builder,
+`data-level` CSS) are the regression guard; the real DOM pass is the Extension Development Host.
 
 Mutation checks for this layer: render the full row list instead of `[start,end)`, remove the
 top/bottom spacers, zero the overscan, drop subtree collapse logic, use `innerHTML` for row text, use

@@ -70,15 +70,6 @@ export interface SyntheticDocument {
 	foldingRanges: FoldingRange[];
 }
 
-/** The aligned pair the diff page feeds to Monaco's diff editor. */
-export interface AlignedSyntheticDocuments {
-	left: SyntheticDocument;
-	right: SyntheticDocument;
-	/** Model line -> merged diff row key, per side. */
-	leftLineKeys: (string | undefined)[];
-	rightLineKeys: (string | undefined)[];
-}
-
 interface LineBuilder {
 	line: number;
 	parts: string[];
@@ -600,21 +591,6 @@ function commentText(cell: DiffCell | undefined, index: number, level: number): 
 	return text === undefined ? '' : `${indent(level)}/* ${escapeNewlines(text)} */`;
 }
 
-/** Serialize the merged diff rows into two line-aligned synthetic documents. */
-export function buildAlignedSyntheticDocuments(document: DiffDocument): AlignedSyntheticDocuments {
-	const build: AlignedBuild = {
-		document,
-		left: createDiffSide(),
-		right: createDiffSide(),
-		at: 0,
-		hasModule: false
-	};
-	while (build.at < document.rows.length) {
-		walkAlignedRow(build);
-	}
-	return finishDocuments(build);
-}
-
 interface DiffSide {
 	text: string[];
 	searchSpans: SearchSpan[][];
@@ -623,69 +599,8 @@ interface DiffSide {
 	folding: FoldingRange[];
 }
 
-interface AlignedBuild {
-	document: DiffDocument;
-	left: DiffSide;
-	right: DiffSide;
-	at: number;
-	hasModule: boolean;
-}
-
 function createDiffSide(): DiffSide {
 	return { text: [], searchSpans: [], keys: [], rowLine: new Map(), folding: [] };
-}
-
-function emitLine(
-	build: AlignedBuild,
-	left: string,
-	right: string,
-	key?: string,
-	leftSpans: SearchSpan[] = [],
-	rightSpans: SearchSpan[] = []
-): void {
-	build.left.text.push(left);
-	build.right.text.push(right);
-	build.left.searchSpans.push(leftSpans);
-	build.right.searchSpans.push(rightSpans);
-	build.left.keys.push(key);
-	build.right.keys.push(key);
-}
-
-function walkAlignedRow(build: AlignedBuild): void {
-	const row = build.document.rows[build.at];
-	build.at += 1;
-	appendModuleGap(build, row);
-	appendRowComments(build, row);
-	const leftLine = build.left.text.length + 1;
-	const rightLine = build.right.text.length + 1;
-	appendRowCells(build, row);
-	build.left.rowLine.set(row.key, leftLine);
-	build.right.rowLine.set(row.key, rightLine);
-	if (!row.hasChildren) {
-		return;
-	}
-	appendChildBlock(build, row, leftLine, rightLine);
-}
-
-function appendModuleGap(build: AlignedBuild, row: DiffRow): void {
-	if (row.kind !== 'module') {
-		return;
-	}
-	if (build.hasModule) {
-		emitLine(build, '', '', undefined);
-	}
-	build.hasModule = true;
-}
-
-function appendRowComments(build: AlignedBuild, row: DiffRow): void {
-	const count = commentCount(row);
-	for (let index = 0; index < count; index += 1) {
-		emitLine(build, commentText(row.left, index, row.level), commentText(row.right, index, row.level), row.key);
-	}
-}
-
-function commentCount(row: DiffRow): number {
-	return Math.max(sideCommentCount(row.left), sideCommentCount(row.right));
 }
 
 function sideCommentCount(cell: DiffCell | undefined): number {
@@ -697,32 +612,6 @@ function sideCommentCount(cell: DiffCell | undefined): number {
 		return 0;
 	}
 	return comments.length;
-}
-
-function appendRowCells(build: AlignedBuild, row: DiffRow): void {
-	const leftCell = cellLine(row.left, row);
-	const rightCell = cellLine(row.right, row);
-	emitLine(build, leftCell.text, rightCell.text, row.key, leftCell.searchSpans, rightCell.searchSpans);
-}
-
-function appendChildBlock(build: AlignedBuild, row: DiffRow, leftStart: number, rightStart: number): void {
-	const pad = indent(row.level);
-	// A one-sided row owns no line on the missing side: its braces stay blank
-	// there, so the block never reads as a valid empty container.
-	emitLine(build, braceText(row.left !== undefined, pad, '{'), braceText(row.right !== undefined, pad, '{'), row.key);
-	const end = build.at + row.subtreeSize;
-	while (build.at < end) {
-		walkAlignedRow(build);
-	}
-	const leftEnd = build.left.text.length + 1;
-	const rightEnd = build.right.text.length + 1;
-	emitLine(build, braceText(row.left !== undefined, pad, '}'), braceText(row.right !== undefined, pad, '}'), row.key);
-	appendSideFolding(build.left.folding, row.left, leftStart, leftEnd);
-	appendSideFolding(build.right.folding, row.right, rightStart, rightEnd);
-}
-
-function braceText(present: boolean, pad: string, brace: string): string {
-	return present ? `${pad}${brace}` : '';
 }
 
 function appendSideFolding(

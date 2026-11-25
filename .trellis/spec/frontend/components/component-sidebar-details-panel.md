@@ -14,7 +14,7 @@ composition root paints the body from the selected row and hosts the field edito
 src/webview/components/sidebar/detailsPanel/
     detailsPanel.ts      markup + inspectorFields + refusal helper
     detailsPanel.css     panel layout and status styles
-src/webview/editorViewer.ts         composition root (painter)
+src/webview/editorMonaco.ts         composition root (painter)
 src/test/webview/components/sidebar.test.ts
 ```
 
