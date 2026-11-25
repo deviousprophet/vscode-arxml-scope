@@ -26,7 +26,7 @@ import { firstKeyInRange, rangeHasSource, type DiffSide } from './monaco/diffBod
 import { installGutterAvailability } from './monaco/diffGutterAvailability';
 import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
 import {
-	adjacentChangeIndex,
+	adjacentChangeLineIndex,
 	displayedChangeLine,
 	originalChangeLine,
 	type DiffNavigationChange
@@ -713,40 +713,108 @@ function sideOfModel(model: monaco.editor.ITextModel | null): 'left' | 'right' |
 	return undefined;
 }
 
+interface FoldPane {
+	fold: FoldModel;
+	keys: readonly (string | undefined)[];
+	rows: ReadonlyMap<string, number>;
+}
+
+function otherEditor(editor: monaco.editor.ICodeEditor): monaco.editor.ICodeEditor | undefined {
+	return editor === originalEditor() ? modifiedEditor() : originalEditor();
+}
+
+interface FoldSideData {
+	keys: readonly (string | undefined)[];
+	rows: ReadonlyMap<string, number>;
+}
+
+function foldSideData(side: 'left' | 'right'): FoldSideData | undefined {
+	if (aligned === undefined) {
+		return undefined;
+	}
+	return side === 'left'
+		? { keys: aligned.leftLineKeys, rows: aligned.left.rowLine }
+		: { keys: aligned.rightLineKeys, rows: aligned.right.rowLine };
+}
+
+async function foldPane(editor: monaco.editor.ICodeEditor, side: 'left' | 'right'): Promise<FoldPane | undefined> {
+	const data = foldSideData(side);
+	if (data === undefined) {
+		return undefined;
+	}
+	const fold = await foldingModel(editor);
+	return fold === null ? undefined : { fold, ...data };
+}
+
+async function foldPlanFor(
+	sourceEditor: monaco.editor.ICodeEditor,
+	sourceSide: 'left' | 'right',
+	targetEditor: monaco.editor.ICodeEditor
+): Promise<number[]> {
+	const source = await foldPane(sourceEditor, sourceSide);
+	const target = await foldPane(targetEditor, sourceSide === 'left' ? 'right' : 'left');
+	if (source === undefined || target === undefined) {
+		return [];
+	}
+	return foldTogglePlan(
+		collapsedRowKeys(source.fold.regions, source.keys),
+		collapsedRowKeys(target.fold.regions, target.keys),
+		target.rows,
+		target.fold.regions
+	);
+}
+
+function applyFoldPlan(fold: FoldModel, plan: readonly number[]): void {
+	syncingFolds = true;
+	try {
+		fold.toggleCollapseState(plan.map((regionIndex) => ({ regionIndex })));
+	} finally {
+		syncingFolds = false;
+	}
+}
+
+function foldTarget(
+	sourceEditor: monaco.editor.ICodeEditor
+): { sourceSide: 'left' | 'right'; targetEditor: monaco.editor.ICodeEditor } | undefined {
+	const sourceSide = sideOfModel(sourceEditor.getModel());
+	if (sourceSide === undefined) {
+		return undefined;
+	}
+	const targetEditor = otherEditor(sourceEditor);
+	return targetEditor === undefined ? undefined : { sourceSide, targetEditor };
+}
+
+async function applyPlanTo(targetEditor: monaco.editor.ICodeEditor, plan: readonly number[]): Promise<void> {
+	const targetFold = await foldingModel(targetEditor);
+	if (targetFold !== null) {
+		applyFoldPlan(targetFold, plan);
+	}
+}
+
 /** Mirror the collapsed row keys of one pane onto the other. */
 async function syncFolds(sourceEditor: monaco.editor.ICodeEditor): Promise<void> {
-	if (syncingFolds || aligned === undefined) {
+	if (syncingFolds) {
 		return;
 	}
-	const source = sideOfModel(sourceEditor.getModel());
-	const targetEditor =
-		sourceEditor === originalEditor() ? modifiedEditor() : originalEditor();
-	if (source === undefined || targetEditor === undefined) {
+	const target = foldTarget(sourceEditor);
+	if (target === undefined) {
 		return;
 	}
-	const sourceFold = await foldingModel(sourceEditor);
-	const targetFold = await foldingModel(targetEditor);
-	if (sourceFold === null || targetFold === null) {
-		return;
-	}
-	const sourceKeys = source === 'left' ? aligned.leftLineKeys : aligned.rightLineKeys;
-	const targetSide = source === 'left' ? 'right' : 'left';
-	const targetKeys = targetSide === 'left' ? aligned.leftLineKeys : aligned.rightLineKeys;
-	const targetRows = targetSide === 'left' ? aligned.left.rowLine : aligned.right.rowLine;
-	const plan = foldTogglePlan(
-		collapsedRowKeys(sourceFold.regions, sourceKeys),
-		collapsedRowKeys(targetFold.regions, targetKeys),
-		targetRows,
-		targetFold.regions
-	);
+	const plan = await foldPlanFor(sourceEditor, target.sourceSide, target.targetEditor);
 	if (plan.length === 0) {
 		return;
 	}
-	syncingFolds = true;
-	try {
-		targetFold.toggleCollapseState(plan.map((regionIndex) => ({ regionIndex })));
-	} finally {
-		syncingFolds = false;
+	await applyPlanTo(target.targetEditor, plan);
+}
+
+function wireFoldSync(): void {
+	if (diffEditor === undefined) {
+		return;
+	}
+	for (const editor of [diffEditor.getOriginalEditor(), diffEditor.getModifiedEditor()]) {
+		editor.onDidChangeHiddenAreas(function () {
+			scheduleFoldSync(editor);
+		});
 	}
 }
 
@@ -755,7 +823,9 @@ function applyDiffFolding(): void {
 	for (const editor of [originalEditor(), modifiedEditor()]) {
 		editor?.updateOptions({
 			folding: true,
-			showFoldingControls: 'mouseover'
+			showFoldingControls: 'mouseover',
+			stickyScroll: { enabled: true, defaultModel: 'foldingProviderModel' },
+			guides: { indentation: true, bracketPairs: false, highlightActiveBracketPair: true }
 		});
 	}
 }
@@ -807,7 +877,7 @@ function navigate(direction: 1 | -1): void {
 			? originalChangeLine(navigation, swapped)
 			: displayedChangeLine(navigation, swapped);
 	});
-	const index = adjacentChangeIndex(lines, currentDisplayedLine(fromOriginal), direction);
+	const index = adjacentChangeLineIndex(lines, currentDisplayedLine(fromOriginal), direction);
 	if (index >= 0) {
 		revealChange(changes[index]);
 	}
@@ -1115,11 +1185,7 @@ async function mountDiff(): Promise<void> {
 		minimap: { enabled: false }
 	});
 	applyDiffFolding();
-	for (const editor of [diffEditor.getOriginalEditor(), diffEditor.getModifiedEditor()]) {
-		editor.onDidChangeHiddenAreas(function () {
-			scheduleFoldSync(editor);
-		});
-	}
+	wireFoldSync();
 	gutterAvailability = installGutterAvailability({
 		availability: gutterAvailabilityFor
 	});

@@ -12,7 +12,7 @@
 import '../../../../src/webview/diffMonaco';
 import '../../../../src/webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
-import type { FoldedProbe, GutterAlignment, NavigationProbe, PaneSnapshot } from './previewAudit';
+import type { FoldedProbe, GutterAlignment, NavigationProbe, PaneSnapshot, StickyProbe } from './previewAudit';
 import type { PreviewStateFields } from './previewStateFields';
 
 interface PreviewPayload extends PreviewStateFields {
@@ -223,6 +223,14 @@ async function probeNavigation(): Promise<void> {
 		(change) => change.originalStartLineNumber || change.modifiedStartLineNumber
 	);
 	const position = (): number => editor.getModifiedEditor().getPosition()?.lineNumber ?? 0;
+	const waitForChanges = async (): Promise<void> => {
+		for (let attempt = 0; attempt < 80; attempt += 1) {
+			if ((editor.getLineChanges?.()?.length ?? 0) > 0) {
+				return;
+			}
+			await delay(25);
+		}
+	};
 	const forward: number[] = [];
 	const backward: number[] = [];
 	const afterSwap: number[] = [];
@@ -238,6 +246,7 @@ async function probeNavigation(): Promise<void> {
 	}
 	click('diff-swap');
 	await delay(200);
+	await waitForChanges();
 	for (let press = 0; press < changes.length + 1; press += 1) {
 		click('diff-next');
 		await delay(40);
@@ -988,6 +997,38 @@ async function applyScroll(): Promise<void> {
 	await delay(1200);
 }
 
+async function applyDiffScroll(): Promise<void> {
+	const line = payload.diffScrollLine;
+	if (payload.page !== 'diff' || line === undefined || line <= 0) {
+		return;
+	}
+	const editor = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getModifiedEditor(): {
+					getModel(): { getLineCount(): number } | null;
+					getDomNode(): HTMLElement | null;
+					revealLineInCenter(line: number): void;
+				};
+			};
+		}
+	).__ARXML_DIFF_EDITOR__?.getModifiedEditor();
+	const model = editor?.getModel();
+	if (editor === undefined || model === null || model === undefined) {
+		return;
+	}
+	editor.revealLineInCenter(Math.min(line, model.getLineCount()));
+	await delay(1400);
+	const widget = editor.getDomNode()?.querySelector<HTMLElement>('.sticky-widget');
+	const rect = widget?.getBoundingClientRect();
+	const probe: StickyProbe = {
+		text: widget?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+		visible: rect !== undefined && rect.height > 0,
+		height: rect === undefined ? 0 : Math.round(rect.height)
+	};
+	(window as unknown as { __DIFF_STICKY__?: StickyProbe }).__DIFF_STICKY__ = probe;
+}
+
 async function applyFold(): Promise<void> {
 	const label = payload.foldLabel;
 	if (payload.page !== 'diff' || label === undefined) {
@@ -1023,20 +1064,31 @@ async function applyFold(): Promise<void> {
 	if (line === 0) {
 		return;
 	}
-	modified.setPosition({ lineNumber: line, column: 1 });
-	modified.trigger('preview', 'editor.fold', { selectionLines: [line - 1] });
-	await delay(350);
 	const visibleLines = (editor: FoldEditor): string[] =>
 		Array.from(editor.getDomNode()?.querySelectorAll<HTMLElement>('.view-line') ?? []).map(
 			(element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? ''
 		);
+	const hasFolded = (editor: FoldEditor): boolean => {
+		const lines = visibleLines(editor);
+		return !lines.some((text) => text.includes('P0000')) && lines.some((text) => text.includes(label));
+	};
+	modified.setPosition({ lineNumber: line, column: 1 });
+	modified.trigger('preview', 'editor.fold', { selectionLines: [line - 1] });
+	await waitFor(() => hasFolded(modified));
+	await waitFor(() => hasFolded(original));
+	await delay(150);
 	const folded = modified.getDomNode()?.querySelector<HTMLElement>('.inline-folded');
 	const hint = folded === null || folded === undefined ? '' : getComputedStyle(folded, '::after').content;
 	const first = { visible: visibleLines(modified), originalVisible: visibleLines(original) };
 
 	modified.trigger('preview', 'editor.unfoldAll', null);
 	original.trigger('preview', 'editor.unfoldAll', null);
-	await delay(250);
+	await waitFor(
+		() =>
+			visibleLines(modified).some((text) => text.includes('P0000')) &&
+			visibleLines(original).some((text) => text.includes('P0000'))
+	);
+	await delay(300);
 	const originalModel = original.getModel();
 	let originalLine = 0;
 	if (originalModel !== null) {
@@ -1050,7 +1102,9 @@ async function applyFold(): Promise<void> {
 	if (originalLine > 0) {
 		original.setPosition({ lineNumber: originalLine, column: 1 });
 		original.trigger('preview', 'editor.fold', { selectionLines: [originalLine - 1] });
-		await delay(350);
+		await waitFor(() => hasFolded(original));
+		await waitFor(() => hasFolded(modified));
+		await delay(300);
 	}
 	const reverse = { modified: visibleLines(modified), original: visibleLines(original) };
 	const probe: FoldedProbe = {
@@ -1144,6 +1198,7 @@ function itemActions(item: Element): string[] {
 
 async function probeGutterAlignment(): Promise<void> {
 	await waitFor(() => document.querySelector('.monaco-diff-editor .gutterItem') !== null);
+	await delay(120);
 	const items = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem'));
 	const changes =
 		(
@@ -1511,6 +1566,7 @@ async function run(): Promise<void> {
 	await applyPasteEdit();
 	await applyStaleSave();
 	await applyScroll();
+	await applyDiffScroll();
 	await applyFold();
 	await settle();
 	document.body.dataset.previewReady = 'true';

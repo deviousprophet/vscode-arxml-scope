@@ -46,6 +46,8 @@ export interface PreviewStateFields {
 	staleSave?: boolean;
 	/** Scrolls the editor to this 1-based line and waits for sticky scope. */
 	scrollLine?: number;
+	/** Scrolls the diff modified pane to this 1-based line and waits for the sticky header. */
+	diffScrollLine?: number;
 	/** Attempts Ctrl+S after the edit, exercising the save guard. */
 	trySave?: boolean;
 }

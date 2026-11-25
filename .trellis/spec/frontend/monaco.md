@@ -53,8 +53,11 @@ two **independently shaped** documents plus `leftLineKeys`/`rightLineKeys`:
   the other model; the missing side is Monaco's native diagonal view zone, not a numbered
   placeholder line.
 - Module gaps, annotations, braces, cells and field spans are emitted per side.
-- The diff models keep their exact synthetic text (no extra trailing newline): the diff
-  editor's sticky scroll is disabled.
+- Both diff models end with the same one trailing newline as the editor. Sticky scroll
+  converts a folding end to `end + 1`; without it the outermost diff scope is invalid and
+  every sticky candidate is dropped. The extra blank line is unchanged on both sides.
+- Diff sticky scroll is enabled with `defaultModel: 'foldingProviderModel'`, matching the
+  editor, so a deep scroll pins the full module and container headers.
 
 ### Must / must not
 

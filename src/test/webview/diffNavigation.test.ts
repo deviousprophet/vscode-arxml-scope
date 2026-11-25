@@ -1,11 +1,11 @@
 import * as assert from 'assert';
 
 import {
-	adjacentChangeIndex,
+	adjacentChangeLineIndex,
 	displayedChangeLine,
-	nextChangeIndex,
+	nextChangeLineIndex,
 	originalChangeLine,
-	previousChangeIndex,
+	previousChangeLineIndex,
 	type DiffNavigationChange
 } from '../../webview/monaco/diffNavigation';
 
@@ -14,23 +14,23 @@ const CHANGE: DiffNavigationChange = { originalStartLineNumber: 13, modifiedStar
 
 suite('diff navigation', () => {
 	test('Next moves strictly forward and wraps', () => {
-		assert.strictEqual(nextChangeIndex(LINES, 0), 0);
-		assert.strictEqual(nextChangeIndex(LINES, 7), 1);
-		assert.strictEqual(nextChangeIndex(LINES, 10), 2);
-		assert.strictEqual(nextChangeIndex(LINES, 25), 0);
+		assert.strictEqual(nextChangeLineIndex(LINES, 0), 0);
+		assert.strictEqual(nextChangeLineIndex(LINES, 7), 1);
+		assert.strictEqual(nextChangeLineIndex(LINES, 10), 2);
+		assert.strictEqual(nextChangeLineIndex(LINES, 25), 0);
 	});
 
 	test('Prev moves strictly backward and wraps', () => {
-		assert.strictEqual(previousChangeIndex(LINES, 0), 3);
-		assert.strictEqual(previousChangeIndex(LINES, 7), 3);
-		assert.strictEqual(previousChangeIndex(LINES, 10), 0);
-		assert.strictEqual(previousChangeIndex(LINES, 25), 2);
+		assert.strictEqual(previousChangeLineIndex(LINES, 0), 3);
+		assert.strictEqual(previousChangeLineIndex(LINES, 7), 3);
+		assert.strictEqual(previousChangeLineIndex(LINES, 10), 0);
+		assert.strictEqual(previousChangeLineIndex(LINES, 25), 2);
 	});
 
 	test('the adjacent selector handles one change and an empty list', () => {
-		assert.strictEqual(adjacentChangeIndex([4], 4, 1), 0);
-		assert.strictEqual(adjacentChangeIndex([4], 4, -1), 0);
-		assert.strictEqual(adjacentChangeIndex([], 4, 1), -1);
+		assert.strictEqual(adjacentChangeLineIndex([4], 4, 1), 0);
+		assert.strictEqual(adjacentChangeLineIndex([4], 4, -1), 0);
+		assert.strictEqual(adjacentChangeLineIndex([], 4, 1), -1);
 	});
 
 	test('swap changes which line each pane reveals', () => {

@@ -6,8 +6,8 @@
 - [x] Add `diff-collapsed` to `previewData.ts` and the folded-line probe to `previewPage.ts`.
 - [x] Add the audit violation for a `{`-only collapsed header.
 - [x] Run focused synthetic/preview checks.
-- [ ] Full gates and preview set.
-- [ ] Commit the child and record the commit in the parent.
+- [x] Full gates and preview set. (920 tests, 39 preview states)
+- [x] Commit the child and record the commit in the parent. (5bc3f24)
 
 ## Evidence
 

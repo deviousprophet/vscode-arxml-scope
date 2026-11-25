@@ -152,6 +152,7 @@ export interface PreviewAudit {
 	gutterAlignment?: GutterAlignment;
 	navigation?: NavigationProbe;
 	folded?: FoldedProbe;
+	diffSticky?: StickyProbe;
 	folding?: FoldingProbe;
 	sash?: SashProbe;
 	content: ContentAudit;
@@ -186,6 +187,12 @@ export interface FoldedProbe {
 	originalVisible: string[];
 	reverse: { modified: string[]; original: string[] };
 	hint: string;
+}
+
+export interface StickyProbe {
+	text: string;
+	visible: boolean;
+	height: number;
 }
 
 interface GutterProbe {
@@ -375,6 +382,10 @@ function navigationOf(): NavigationProbe | undefined {
 
 function foldedOf(): FoldedProbe | undefined {
 	return (window as unknown as { __DIFF_FOLDED__?: FoldedProbe }).__DIFF_FOLDED__;
+}
+
+function diffStickyOf(): StickyProbe | undefined {
+	return (window as unknown as { __DIFF_STICKY__?: StickyProbe }).__DIFF_STICKY__;
 }
 
 interface FoldingProbe {
@@ -1588,6 +1599,7 @@ function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations
 		...gutterAlignmentIssues(state, audit.gutterAlignment),
 		...navigationIssues(state, audit.navigation),
 		...foldedIssues(state, audit.folded),
+		...diffStickyIssues(state, audit.diffSticky),
 		...foldingViolations(state, audit.folding),
 		...sashViolations(state, audit.sash),
 		...mergePressViolations(state, audit)
@@ -1810,6 +1822,11 @@ function gutterAlignmentIssues(
 	if (alignment.mergeActive !== Boolean(state.merge)) {
 		return [];
 	}
+	if (alignment.items === 0) {
+		// The gutter probe later owns item existence; an early empty snapshot is a
+		// render race, not a Merge-visibility regression.
+		return [];
+	}
 	if (!state.merge) {
 		return issueWhen(
 			alignment.visible > 0,
@@ -1875,6 +1892,26 @@ function cyclicSequenceIssues(label: string, sequence: number[], expected: numbe
 		}
 	}
 	return [];
+}
+
+function diffStickyIssues(state: AuditState, sticky: StickyProbe | undefined): string[] {
+	if (state.name !== 'diff-sticky') {
+		return [];
+	}
+	if (sticky === undefined) {
+		return ['the diff sticky probe did not run'];
+	}
+	return [
+		...issueWhen(!sticky.visible, 'the diff sticky header is not visible'),
+		...issueWhen(
+			!sticky.text.includes('Items "Items"'),
+			`the diff sticky header reads "${sticky.text}", not the Items header`
+		),
+		...issueWhen(
+			sticky.text.trim() === '{',
+			'the diff sticky header still shows only the opening brace'
+		)
+	];
 }
 
 function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): string[] {
@@ -2017,6 +2054,7 @@ function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAu
 		gutterAlignment: gutterAlignmentOf(),
 		navigation: navigationOf(),
 		folded: foldedOf(),
+		diffSticky: diffStickyOf(),
 		folding: foldingProbeOf(),
 		sash: sashProbeOf(),
 		content: contentAudit(),

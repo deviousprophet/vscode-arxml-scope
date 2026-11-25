@@ -8,7 +8,7 @@
 - [x] Verify Next/Prev before and after Swap in the live preview.
 - [x] `npm run check-types`, `npm run lint`, `npm run compile-tests`, `npm test --ignore-scripts`.
 - [x] Capture `diff-nav` and the full preview set.
-- [ ] Commit the child and record the commit in the parent.
+- [x] Commit the child and record the commit in the parent. (7449d3f)
 
 ## Evidence
 

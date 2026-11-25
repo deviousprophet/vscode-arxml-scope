@@ -632,7 +632,10 @@ function byStartLine(left: FoldingRange, right: FoldingRange): number {
 
 function toSyntheticDiffDocument(side: DiffSide): SyntheticDocument {
 	return {
-		text: side.text.join('\n'),
+		// Sticky scroll converts a folding end to `end + 1`. The editor appends a
+		// newline for the same reason: without it the outermost diff scope is
+		// invalid and every sticky candidate is dropped.
+		text: `${side.text.join('\n')}\n`,
 		lines: side.text.map((text, index) => ({
 			line: index + 1,
 			...(side.keys[index] !== undefined ? { rowId: side.keys[index] } : {}),
@@ -783,8 +786,8 @@ function finishDocuments(build: { left: DiffSide; right: DiffSide }): DiffSynthe
 	return {
 		left: toSyntheticDiffDocument(build.left),
 		right: toSyntheticDiffDocument(build.right),
-		leftLineKeys: build.left.keys,
-		rightLineKeys: build.right.keys
+		leftLineKeys: [...build.left.keys, undefined],
+		rightLineKeys: [...build.right.keys, undefined]
 	};
 }
 

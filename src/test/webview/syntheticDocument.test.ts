@@ -778,6 +778,10 @@ suite('synthetic ECUC document', () => {
 		assert.strictEqual(perSide.right.rowLine.has('module:removed#0'), false);
 		assert.ok(perSide.left.foldingRanges.length > 0, 'the left keeps its folding ranges');
 		assert.ok(perSide.right.foldingRanges.length > 0, 'the right keeps its folding ranges');
+		assert.ok(
+			perSide.left.text.endsWith('\n') && perSide.right.text.endsWith('\n'),
+			'both diff documents keep the trailing newline the sticky-scope provider needs'
+		);
 		for (const [side, keys] of [
 			[perSide.left, perSide.leftLineKeys],
 			[perSide.right, perSide.rightLineKeys]

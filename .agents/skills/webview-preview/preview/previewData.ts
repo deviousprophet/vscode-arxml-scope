@@ -29,6 +29,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-nav', page: 'diff', width: 1400, height: 900, merge: true, nav: true },
 	{ name: 'diff-collapsed', page: 'diff', width: 1400, height: 900, merge: true, foldLabel: 'Items "Items"' },
+	{ name: 'diff-sticky', page: 'diff', width: 1400, height: 900, merge: true, diffScrollLine: 40 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-removed', page: 'diff', width: 1400, height: 900, merge: true },
 	{ name: 'diff-added', page: 'diff', width: 1400, height: 900, merge: true },
@@ -440,6 +441,7 @@ function payloadFor(state: PreviewState, document: unknown) {
 		pasteEdit: state.pasteEdit,
 		staleSave: state.staleSave,
 		scrollLine: state.scrollLine,
+		diffScrollLine: state.diffScrollLine,
 		trySave: state.trySave
 	};
 }

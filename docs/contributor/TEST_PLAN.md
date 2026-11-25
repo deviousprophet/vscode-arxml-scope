@@ -257,6 +257,7 @@ regions, navigation, refresh, limits, headers, a11y, swap, search, Monaco body.
 | DIFF-07 | built-in hunk toolbar | only Copy Block to Left/Right are registered; no Revert Block and no custom arrow overlay |
 | DIFF-08 | Next/Prev diff through every change, before and after Swap | each press moves one adjacent change, wraps at the ends and never repeats the current change |
 | DIFF-09 | collapse a diff container from either side | both panes keep the full node header and `⋯` hint, child rows hide, and the fold starts on the node line |
+| DIFF-10 | deep-scroll the diff | the sticky header shows the full module/container text, not `{` or an empty widget |
 
 ## ENG — engine process
 

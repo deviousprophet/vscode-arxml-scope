@@ -135,6 +135,11 @@ the listed DOM/model state, not a screenshot diff.
   Details status says the node is no longer in the file.
 - **Sticky scroll keeps the scope.** `editor-sticky` keeps the enclosing `Items` header
   pinned while the viewport is deep in its parameter list.
+- **The diff sticky header shows the full parent scope.** `diff-sticky` scrolls deep into
+  the shared `Items` container. The audit requires a visible `.sticky-widget` whose text
+  contains `Items "Items"` and the module header; `{`-only, empty or hidden sticky text is
+  a violation. The diff documents end with the same trailing newline as the editor so the
+  outermost folding scope stays valid.
 - **The built-in gutter mounts and gates on Merge.** `diff-merge` has a 35px `.gutter`,
   hunk `.gutterItem`s and the Copy Block to Left/Right labels; `diff-off` hides only the
   items and keeps the gutter and sash. A third action, `Revert Block`, or any copy while

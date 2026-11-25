@@ -42,6 +42,26 @@ export function collapsedRowKeys(
 }
 
 /**
+ * The target region index whose start is exactly the key's node line.
+ * Missing keys, ancestors and zero-height matches are skipped.
+ */
+function targetRegionIndex(
+	key: string,
+	targetLineByKey: ReadonlyMap<string, number>,
+	targetRegions: FoldRegions
+): number | undefined {
+	const line = targetLineByKey.get(key);
+	if (line === undefined) {
+		return undefined;
+	}
+	const index = targetRegions.findRange(line);
+	if (index < 0 || targetRegions.getStartLineNumber(index) !== line) {
+		return undefined;
+	}
+	return index;
+}
+
+/**
  * The target region indexes to toggle so both panes hide the same row keys.
  * A key with no matching target node line is skipped; the other pane simply
  * does not carry that row.
@@ -57,15 +77,10 @@ export function foldTogglePlan(
 		if (sourceCollapsed.has(key) === targetCollapsed.has(key)) {
 			continue;
 		}
-		const line = targetLineByKey.get(key);
-		if (line === undefined) {
-			continue;
+		const index = targetRegionIndex(key, targetLineByKey, targetRegions);
+		if (index !== undefined) {
+			indexes.add(index);
 		}
-		const index = targetRegions.findRange(line);
-		if (index < 0 || targetRegions.getStartLineNumber(index) !== line) {
-			continue;
-		}
-		indexes.add(index);
 	}
 	return [...indexes];
 }

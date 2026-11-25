@@ -6,8 +6,8 @@
 - [x] Wire `onDidChangeHiddenAreas` for both inner editors with a re-entry guard and serialized syncs.
 - [x] Extend the `diff-collapsed` preview state to fold from each side in turn and record both panes.
 - [x] Verify left-to-right, right-to-left, nested and one-sided folds.
-- [ ] Full gates and preview set.
-- [ ] Commit the child and record the commit in the parent.
+- [x] Full gates and preview set. (920 tests, 39 preview states)
+- [x] Commit the child and record the commit in the parent. (b0e0908)
 
 ## Evidence
 

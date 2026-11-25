@@ -26,13 +26,13 @@ export function originalChangeLine(change: DiffNavigationChange, swapped: boolea
 }
 
 /** The first change strictly after `currentLine`, wrapped to the first. */
-export function nextChangeIndex(lines: readonly number[], currentLine: number): number {
+export function nextChangeLineIndex(lines: readonly number[], currentLine: number): number {
 	const at = lines.findIndex((line) => line > currentLine);
 	return at >= 0 ? at : 0;
 }
 
 /** The last change strictly before `currentLine`, wrapped to the last. */
-export function previousChangeIndex(lines: readonly number[], currentLine: number): number {
+export function previousChangeLineIndex(lines: readonly number[], currentLine: number): number {
 	for (let at = lines.length - 1; at >= 0; at -= 1) {
 		if (lines[at] < currentLine) {
 			return at;
@@ -42,7 +42,7 @@ export function previousChangeIndex(lines: readonly number[], currentLine: numbe
 }
 
 /** The adjacent change index, or -1 when there are no changes. */
-export function adjacentChangeIndex(
+export function adjacentChangeLineIndex(
 	lines: readonly number[],
 	currentLine: number,
 	direction: 1 | -1
@@ -50,5 +50,5 @@ export function adjacentChangeIndex(
 	if (lines.length === 0) {
 		return -1;
 	}
-	return direction > 0 ? nextChangeIndex(lines, currentLine) : previousChangeIndex(lines, currentLine);
+	return direction > 0 ? nextChangeLineIndex(lines, currentLine) : previousChangeLineIndex(lines, currentLine);
 }

@@ -19,13 +19,13 @@ Run children in this order because fold sync and sticky headers share the node-s
 
 ## Integration checks
 
-- [ ] `npm run check-types`
-- [ ] `npm run lint`
-- [ ] `npm run compile-tests`; `npm test --ignore-scripts`
-- [ ] full `webview-preview` seeded set
-- [ ] fallow GREEN
-- [ ] `node esbuild.js --production`
-- [ ] `git diff --check`
+- [x] `npm run check-types`
+- [x] `npm run lint`
+- [x] `npm run compile-tests`; `npm test --ignore-scripts` (920 passing)
+- [x] full `webview-preview` seeded set (39 states)
+- [x] fallow GREEN
+- [x] `node esbuild.js --production`
+- [x] `git diff --check`
 - [ ] PR #42 push and CI green
 
 ## Review gates
