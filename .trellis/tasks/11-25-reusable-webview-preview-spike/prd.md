@@ -15,6 +15,11 @@ Decide how to turn the repo-specific `webview-preview` skill into a reusable cro
 
 ## Requirements
 
+- Plan from scratch: a reusable package plus a small per-extension adapter, not a refactor of the
+  current repo-specific skill.
+- The standalone mode must consume built webview assets, not import extension source.
+- The real extension-host mode must use official `@vscode/test-cli` / `@vscode/test-electron`, with
+  a replaceable webview driver if Playwright cannot reach the frame.
 - Compare at least:
   1. official Playwright + official `@vscode/test-cli` / `@vscode/test-electron`;
   2. official Playwright against a standalone webview shell (current model);
@@ -30,7 +35,7 @@ Decide how to turn the repo-specific `webview-preview` skill into a reusable cro
 - [ ] A written comparison matrix covers capability, speed, platform support, webview access, CI cost and maintenance.
 - [ ] At least one official-stack experiment demonstrates whether Playwright can reach a VS Code webview.
 - [ ] The report identifies which current preview files are generic versus project-specific.
-- [ ] A proposed package/skill layout and per-project manifest are documented.
+- [ ] The proposed package layout, two modes and per-project adapter contract are documented.
 - [ ] A clear recommendation says what to build, what to keep and what not to use.
 - [ ] Follow-up implementation tasks are listed and ordered.
 
