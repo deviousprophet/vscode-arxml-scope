@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Unit and preview gates for the fold marker"}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Verify the marker is present while folded and cleared after expansion"}

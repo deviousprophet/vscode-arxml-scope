@@ -38,6 +38,25 @@
 	opacity: 0.55;
 }
 
+/* A folded diff container whose subtree carries a change. Glyph-margin only,
+ * so the indicator does not add text or shift the line. The cell stays clear;
+ * only the pseudo-element dot is painted. */
+.monaco-editor .arxml-fold-has-diff {
+	background: transparent;
+}
+.monaco-editor .arxml-fold-has-diff::after {
+	content: '';
+	display: block;
+	width: 6px;
+	height: 6px;
+	margin: 7px auto 0;
+	border-radius: 50%;
+	background-color: var(
+		--vscode-gitDecoration-modifiedResourceForeground,
+		var(--vscode-editorWarning-foreground, #cca700)
+	);
+}
+
 .monaco-editor .arxml-find {
 	background-color: var(--match-bg, rgba(234, 179, 8, 0.18));
 }

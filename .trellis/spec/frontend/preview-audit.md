@@ -172,7 +172,9 @@ the listed DOM/model state, not a screenshot diff.
 - **A collapsed container keeps its node header and folds both panes.** `diff-collapsed` folds
   the `Items` container through the folding command from each side in turn. The audit requires
   the full `Items "Items"` line and `⋯` fold hint in both panes and no visible `P0000` child
-  row; a one-pane fold, a `{`-only line or an unfolded container is a violation.
+  row; a one-pane fold, a `{`-only line or an unfolded container is a violation. Folding also
+  requires one `.arxml-fold-has-diff` glyph dot in each pane while collapsed and zero after
+  expansion; the dot has no count or text.
 - **Editor page.** Toolbar, line-number gutter, selected row and Details panel render
   without clipping. The `select` state must leave a selected row in the audit.
 

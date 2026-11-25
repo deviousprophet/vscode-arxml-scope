@@ -186,6 +186,9 @@ export interface FoldedProbe {
 	visible: string[];
 	originalVisible: string[];
 	reverse: { modified: string[]; original: string[] };
+	markers: { modified: number; original: number };
+	expandedMarkers: { modified: number; original: number };
+	reverseMarkers: { modified: number; original: number };
 	hint: string;
 }
 
@@ -1954,6 +1957,18 @@ function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): strin
 		...issueWhen(
 			folded.reverse.original.some((line) => line.includes('P0000')),
 			'the reverse fold left child parameters in the source pane'
+		),
+		...issueWhen(
+			folded.markers.modified < 1 || folded.markers.original < 1,
+			'the collapsed row has no hidden-difference marker in both panes'
+		),
+		...issueWhen(
+			folded.expandedMarkers.modified !== 0 || folded.expandedMarkers.original !== 0,
+			'the hidden-difference marker was not cleared after expansion'
+		),
+		...issueWhen(
+			folded.reverseMarkers.modified < 1 || folded.reverseMarkers.original < 1,
+			'the reverse fold did not restore the hidden-difference marker'
 		),
 		...issueWhen(
 			!folded.hint.includes('⋯'),

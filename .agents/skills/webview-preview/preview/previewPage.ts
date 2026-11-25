@@ -1072,14 +1072,31 @@ async function applyFold(): Promise<void> {
 		const lines = visibleLines(editor);
 		return !lines.some((text) => text.includes('P0000')) && lines.some((text) => text.includes(label));
 	};
-	modified.setPosition({ lineNumber: line, column: 1 });
-	modified.trigger('preview', 'editor.fold', { selectionLines: [line - 1] });
-	await waitFor(() => hasFolded(modified));
-	await waitFor(() => hasFolded(original));
-	await delay(150);
+	const markerCount = (editor: FoldEditor): number =>
+		editor.getDomNode()?.querySelectorAll('.arxml-fold-has-diff').length ?? 0;
+	const ensureFolded = async (
+		editor: FoldEditor,
+		targetLine: number,
+		other: FoldEditor
+	): Promise<void> => {
+		for (let attempt = 0; attempt < 10; attempt += 1) {
+			if (hasFolded(editor) && hasFolded(other)) {
+				return;
+			}
+			if (!hasFolded(editor)) {
+				editor.setPosition({ lineNumber: targetLine, column: 1 });
+				editor.trigger('preview', 'editor.fold', { selectionLines: [targetLine - 1] });
+			}
+			await delay(250);
+		}
+	};
+	await ensureFolded(modified, line, original);
+	await waitFor(() => markerCount(modified) > 0 && markerCount(original) > 0);
+	await delay(100);
 	const folded = modified.getDomNode()?.querySelector<HTMLElement>('.inline-folded');
 	const hint = folded === null || folded === undefined ? '' : getComputedStyle(folded, '::after').content;
 	const first = { visible: visibleLines(modified), originalVisible: visibleLines(original) };
+	const markers = { modified: markerCount(modified), original: markerCount(original) };
 
 	modified.trigger('preview', 'editor.unfoldAll', null);
 	original.trigger('preview', 'editor.unfoldAll', null);
@@ -1088,7 +1105,9 @@ async function applyFold(): Promise<void> {
 			visibleLines(modified).some((text) => text.includes('P0000')) &&
 			visibleLines(original).some((text) => text.includes('P0000'))
 	);
-	await delay(300);
+	await waitFor(() => markerCount(modified) === 0 && markerCount(original) === 0);
+	await delay(100);
+	const expandedMarkers = { modified: markerCount(modified), original: markerCount(original) };
 	const originalModel = original.getModel();
 	let originalLine = 0;
 	if (originalModel !== null) {
@@ -1100,18 +1119,20 @@ async function applyFold(): Promise<void> {
 		}
 	}
 	if (originalLine > 0) {
-		original.setPosition({ lineNumber: originalLine, column: 1 });
-		original.trigger('preview', 'editor.fold', { selectionLines: [originalLine - 1] });
-		await waitFor(() => hasFolded(original));
-		await waitFor(() => hasFolded(modified));
-		await delay(300);
+		await ensureFolded(original, originalLine, modified);
+		await waitFor(() => markerCount(modified) > 0 && markerCount(original) > 0);
+		await delay(100);
 	}
 	const reverse = { modified: visibleLines(modified), original: visibleLines(original) };
+	const reverseMarkers = { modified: markerCount(modified), original: markerCount(original) };
 	const probe: FoldedProbe = {
 		label,
 		visible: first.visible,
 		originalVisible: first.originalVisible,
 		reverse,
+		markers,
+		expandedMarkers,
+		reverseMarkers,
 		hint
 	};
 	(window as unknown as { __DIFF_FOLDED__?: FoldedProbe }).__DIFF_FOLDED__ = probe;

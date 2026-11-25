@@ -141,7 +141,9 @@ preview audit records the visible-row round trip (`visibleBefore`, `visibleColla
 like `buildSyntheticDocument`; a collapsed container therefore keeps its full node header
 with Monaco's `⋯` fold hint instead of leaving only the opening brace visible. Fold changes
 on either inner editor are mirrored to the other side by row key through the pinned
-`editor.contrib.folding` contribution, so collapsing from either pane folds both.
+`editor.contrib.folding` contribution, so collapsing from either pane folds both. A collapsed
+row whose subtree contains a changed/added/removed row gets a glyph-margin dot
+(`.arxml-fold-has-diff`); it carries no count or text and is cleared on expansion.
 
 ### Gutter and copy actions
 

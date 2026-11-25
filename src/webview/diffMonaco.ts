@@ -37,6 +37,7 @@ import {
 	type FoldModel,
 	type FoldingContribution
 } from './monaco/diffFolding';
+import { collapsedDifferenceKeys } from './monaco/diffFoldIndicator';
 import { DiffToolbar } from './components/toolbar/toolbar';
 import { installNoticeErrors } from './render/pageError';
 import { postToHost } from './vscodeApi';
@@ -567,6 +568,7 @@ function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
 	aligned = docs;
 	setModelTexts(docs);
 	setDiffModel();
+	refreshFoldIndicators();
 	setTitles();
 	syncToolbarState();
 	updateDiffOptions();
@@ -663,7 +665,9 @@ function copyFromGutter(direction: DiffGutterDirection, context: DiffGutterConte
 
 function swapSides(): void {
 	swapped = !swapped;
+	clearAllFoldIndicators();
 	setDiffModel();
+	refreshFoldIndicators();
 	toolbar?.setSwapped(swapped);
 	setTitles();
 	gutterAvailability?.sync();
@@ -681,9 +685,127 @@ function unfoldAll(): void {
 
 let syncingFolds = false;
 let foldSyncQueue: Promise<void> = Promise.resolve();
+let foldIndicatorQueue: Promise<void> = Promise.resolve();
+const foldIndicatorIds = new WeakMap<monaco.editor.ICodeEditor, string[]>();
 
 function scheduleFoldSync(editor: monaco.editor.ICodeEditor): void {
 	foldSyncQueue = foldSyncQueue.then(() => syncFolds(editor)).catch(() => undefined);
+}
+
+function scheduleFoldIndicator(editor: monaco.editor.ICodeEditor): void {
+	foldIndicatorQueue = foldIndicatorQueue.then(() => updateFoldIndicators(editor)).catch(() => undefined);
+}
+
+function clearFoldIndicators(editor: monaco.editor.ICodeEditor): void {
+	const ids = foldIndicatorIds.get(editor) ?? [];
+	if (ids.length > 0) {
+		editor.deltaDecorations(ids, []);
+	}
+	foldIndicatorIds.delete(editor);
+}
+
+function indicatorDecoration(line: number): monaco.editor.IModelDeltaDecoration {
+	return {
+		range: new monaco.Range(line, 1, line, 1),
+		options: {
+			glyphMarginClassName: 'arxml-fold-has-diff',
+			hoverMessage: { value: 'This collapsed container contains differences' }
+		}
+	};
+}
+
+function rowIndicatorDecorations(
+	keys: ReadonlySet<string>,
+	rowLines: ReadonlyMap<string, number>
+): monaco.editor.IModelDeltaDecoration[] {
+	const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+	for (const key of keys) {
+		const line = rowLines.get(key);
+		if (line !== undefined) {
+			decorations.push(indicatorDecoration(line));
+		}
+	}
+	return decorations;
+}
+
+function sideFoldData(
+	side: 'left' | 'right'
+): { lineKeys: readonly (string | undefined)[]; rowLines: ReadonlyMap<string, number> } | undefined {
+	if (aligned === undefined) {
+		return undefined;
+	}
+	return side === 'left'
+		? { lineKeys: aligned.leftLineKeys, rowLines: aligned.left.rowLine }
+		: { lineKeys: aligned.rightLineKeys, rowLines: aligned.right.rowLine };
+}
+
+function foldIndicatorDecorations(
+	side: 'left' | 'right',
+	fold: FoldModel
+): monaco.editor.IModelDeltaDecoration[] {
+	if (documentModel === undefined) {
+		return [];
+	}
+	const data = sideFoldData(side);
+	if (data === undefined) {
+		return [];
+	}
+	const collapsed = collapsedRowKeys(fold.regions, data.lineKeys);
+	return rowIndicatorDecorations(
+		collapsedDifferenceKeys(documentModel.rows, collapsed),
+		data.rowLines
+	);
+}
+
+async function indicatorTarget(
+	editor: monaco.editor.ICodeEditor
+): Promise<{ side: 'left' | 'right'; fold: FoldModel } | undefined> {
+	const side = sideOfModel(editor.getModel());
+	if (side === undefined) {
+		return undefined;
+	}
+	const fold = await foldingModel(editor);
+	return fold === null ? undefined : { side, fold };
+}
+
+function indicatorsReady(): boolean {
+	return aligned !== undefined && documentModel !== undefined;
+}
+
+function indicatorIds(editor: monaco.editor.ICodeEditor): string[] {
+	return foldIndicatorIds.get(editor) ?? [];
+}
+
+async function updateFoldIndicators(editor: monaco.editor.ICodeEditor): Promise<void> {
+	if (!indicatorsReady()) {
+		clearFoldIndicators(editor);
+		return;
+	}
+	const target = await indicatorTarget(editor);
+	if (target === undefined) {
+		clearFoldIndicators(editor);
+		return;
+	}
+	const decorations = foldIndicatorDecorations(target.side, target.fold);
+	const ids = editor.deltaDecorations(indicatorIds(editor), decorations);
+	foldIndicatorIds.set(editor, ids);
+}
+
+function clearAllFoldIndicators(): void {
+	for (const editor of [originalEditor(), modifiedEditor()]) {
+		if (editor !== undefined) {
+			clearFoldIndicators(editor);
+		}
+	}
+}
+
+function refreshFoldIndicators(): void {
+	for (const editor of [originalEditor(), modifiedEditor()]) {
+		if (editor !== undefined) {
+			clearFoldIndicators(editor);
+			scheduleFoldIndicator(editor);
+		}
+	}
 }
 
 function foldingContribution(
@@ -814,6 +936,7 @@ function wireFoldSync(): void {
 	for (const editor of [diffEditor.getOriginalEditor(), diffEditor.getModifiedEditor()]) {
 		editor.onDidChangeHiddenAreas(function () {
 			scheduleFoldSync(editor);
+			scheduleFoldIndicator(editor);
 		});
 	}
 }
