@@ -1,2 +1,0 @@
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Navigation unit-test and preview gate"}
-{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Verify the recorded navigation sequence is non-vacuous"}

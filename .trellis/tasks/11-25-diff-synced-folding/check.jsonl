@@ -1,2 +1,0 @@
-{"file": ".trellis/spec/frontend/testing.md", "reason": "Unit and preview gates for the fold adapter"}
-{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Verify both-pane hidden-key equality"}
