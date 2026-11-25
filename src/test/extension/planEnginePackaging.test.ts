@@ -1,5 +1,5 @@
 /**
- * Plan rows PKG-01…03 and PERF-01…06 from `docs/TEST_PLAN.md`.
+ * Plan rows PKG-01…03 and PERF-01…06 from `docs/contributor/TEST_PLAN.md`.
  *
  * The PKG rows assert the packaging contract: which engine binaries the workflow
  * verifies, that `.vscodeignore` does not drop them, and that no `dist/native`

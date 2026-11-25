@@ -3,7 +3,9 @@
 The ARXML diff is a modified VS Code 1.125 diff view. The gutter, hunk toolbar, sash,
 overview ruler, unchanged widgets, indicators and native body paint come from the pinned
 `monaco-editor` package. Only the ARXML toolbar, the synthetic ECUC documents and the two
-copy actions are ours.
+copy actions are ours. The composed page contract is in [`monaco.md`](./monaco.md); user
+behaviour is in [`docs/user/DIFF.md`](../../../docs/user/DIFF.md), and contributor setup
+links this manifest from [`docs/contributor/DEVELOPMENT.md`](../../../docs/contributor/DEVELOPMENT.md).
 
 ## Pinned release
 

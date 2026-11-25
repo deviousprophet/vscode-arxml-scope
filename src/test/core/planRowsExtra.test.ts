@@ -1,5 +1,5 @@
 /**
- * Plan rows ROW-06 and ROW-08 from `docs/TEST_PLAN.md`: the annotation shapes
+ * Plan rows ROW-06 and ROW-08 from `docs/contributor/TEST_PLAN.md`: the annotation shapes
  * that produce a comment line, and the exception list matching only a
  * `DEFINITION-REF` tail inside a longer path.
  */

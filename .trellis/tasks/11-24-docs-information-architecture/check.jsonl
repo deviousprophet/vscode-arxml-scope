@@ -1,0 +1,2 @@
+{"file": "docs/README.md", "reason": "Verify every page is indexed with audience and purpose"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Verify the new diff-parity, preview-audit and testing pages are indexed"}
