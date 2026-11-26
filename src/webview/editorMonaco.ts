@@ -2407,20 +2407,30 @@ function dispatchDocumentMessage(message: EditorProviderToWebview): boolean {
 }
 
 function dispatchEditMessage(message: EditorProviderToWebview): boolean {
+	return dispatchEditAckMessage(message) || dispatchDirtyMessage(message);
+}
+
+/** The host's answer to one edit or its flush handshake. */
+function dispatchEditAckMessage(message: EditorProviderToWebview): boolean {
 	if (message.type === 'editResult') {
 		handleEditResult(message);
 		return true;
 	}
+	if (message.type === 'flushEdits') {
+		handleFlushEditsMessage(message);
+		return true;
+	}
+	return false;
+}
+
+/** The document's dirty flag and the rows a merge copy left unsaved. */
+function dispatchDirtyMessage(message: EditorProviderToWebview): boolean {
 	if (message.type === 'dirty') {
 		handleDirtyMessage(message);
 		return true;
 	}
 	if (message.type === 'copyDirty') {
 		handleCopyDirtyMessage(message);
-		return true;
-	}
-	if (message.type === 'flushEdits') {
-		handleFlushEditsMessage(message);
 		return true;
 	}
 	return false;

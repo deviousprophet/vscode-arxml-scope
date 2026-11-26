@@ -6,10 +6,14 @@
  * says which half to fix. Quiet by default; set `ARXML_COPY_TIMING=1` to log.
  */
 
+/** The phases one copy passes through. */
+export type CopyPhase = 'plan' | 'apply' | 'patch' | 'post' | 'paint';
+
 /** One copy, split by phase. */
 export interface CopyTiming {
-	/** Absorption: every lap, in the order it was taken. */
-	phases: Record<string, number>;
+	/** Every lap, in the order it was taken. */
+	phases: Partial<Record<CopyPhase, number>>;
+	/** Copied rows the host recorded. */
 	rows: number;
 	totalMs: number;
 }
@@ -23,10 +27,10 @@ function tenths(ms: number): number {
 export class CopyClock {
 	private readonly started = performance.now();
 	private at = this.started;
-	private readonly laps: Record<string, number> = {};
+	private readonly laps: Partial<Record<CopyPhase, number>> = {};
 
 	/** Records the time since the previous lap under `phase`. */
-	lap(phase: string): void {
+	lap(phase: CopyPhase): void {
 		const now = performance.now();
 		this.laps[phase] = tenths(now - this.at);
 		this.at = now;
@@ -39,7 +43,7 @@ export class CopyClock {
 }
 
 /** Whether copy timing should be logged for this session. */
-export function copyTimingEnabled(): boolean {
+function copyTimingEnabled(): boolean {
 	return process.env.ARXML_COPY_TIMING === '1';
 }
 

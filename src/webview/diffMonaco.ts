@@ -13,6 +13,7 @@ import './monaco/monaco.css';
 import type { DiffCell, DiffDocument, DiffHeader, DiffRow } from '../core/diff/diffModel';
 import { applyDiffPatch, type DiffPatch } from '../core/diff/diffPatch';
 import { minimalLineEdit } from '../core/diff/minimalEdit';
+import { ADDED_ROW_PREFIX } from '../core/copy/copyDirty';
 import type { CopyDirtyRows } from '../core/copy/copyDirty';
 import type { DiffFindMatch, FindOptions } from '../core/searchModel';
 import type { DiffProviderToWebview } from '../diffProtocol';
@@ -571,47 +572,67 @@ function copyLine(side: DiffSide, key: string): number | undefined {
 	if (lines === undefined) {
 		return undefined;
 	}
-	return lines.rowLine.get(key) ?? lines.rowLine.get(`${side}:${key}`);
+	return lines.rowLine.get(key) ?? lines.rowLine.get(`${ADDED_ROW_PREFIX}${key}`);
 }
 
-/** A copied row gets a marker in the line-decorations margin, never diff paint. */
-function copyDecoration(line: number): monaco.editor.IModelDeltaDecoration {
+/** One whole-line margin marker; the class decides copied-dirty or pending. */
+function marginDecoration(line: number, className: string): monaco.editor.IModelDeltaDecoration {
 	return {
 		range: new monaco.Range(line, 1, line, 1),
-		options: { isWholeLine: true, linesDecorationsClassName: 'arxml-copied-line', zIndex: 2 }
+		options: { isWholeLine: true, linesDecorationsClassName: className, zIndex: 2 }
 	};
 }
 
-/** The row that was just copied from, until the host answers. */
-function pendingDecoration(line: number): monaco.editor.IModelDeltaDecoration {
-	return {
-		range: new monaco.Range(line, 1, line, 1),
-		options: { isWholeLine: true, linesDecorationsClassName: 'arxml-copy-pending', zIndex: 2 }
-	};
+/** One marker per copied row that the page can currently place. */
+function copiedLineDecorations(side: DiffSide): monaco.editor.IModelDeltaDecoration[] {
+	const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+	for (const key of copiedRows[side]) {
+		const line = copyLine(side, key);
+		if (line !== undefined) {
+			decorations.push(marginDecoration(line, 'arxml-copied-line'));
+		}
+	}
+	return decorations;
+}
+
+/** The marker for a copy in flight: the target side when it has the row, else the source. */
+function pendingMarker(): { side: DiffSide; line: number } | undefined {
+	if (pendingCopy === undefined) {
+		return undefined;
+	}
+	const target = oppositeSide(pendingCopy.side);
+	const targetLine = copyLine(target, pendingCopy.key);
+	if (targetLine !== undefined) {
+		return { side: target, line: targetLine };
+	}
+	const sourceLine = copyLine(pendingCopy.side, pendingCopy.key);
+	return sourceLine === undefined ? undefined : { side: pendingCopy.side, line: sourceLine };
+}
+
+/** The markers one side should show right now. */
+function copyDecorationsFor(side: DiffSide): monaco.editor.IModelDeltaDecoration[] {
+	const decorations = copiedLineDecorations(side);
+	const pending = pendingMarker();
+	if (pending !== undefined && pending.side === side) {
+		decorations.push(marginDecoration(pending.line, 'arxml-copy-pending'));
+	}
+	return decorations;
+}
+
+/** Replaces one model's copy decorations, reusing their previous ids. */
+function applyCopyDecorations(side: DiffSide): void {
+	const model = modelForSide(side);
+	if (model === undefined) {
+		return;
+	}
+	const ids = copyDecorationIds.get(model) ?? [];
+	copyDecorationIds.set(model, model.deltaDecorations(ids, copyDecorationsFor(side)));
 }
 
 /** Repaints the copied-dirty and pending markers on both sides. */
 function refreshCopyDecorations(): void {
 	for (const side of ['left', 'right'] as const) {
-		const model = modelForSide(side);
-		if (model === undefined) {
-			continue;
-		}
-		const decorations: monaco.editor.IModelDeltaDecoration[] = [];
-		for (const key of copiedRows[side]) {
-			const line = copyLine(side, key);
-			if (line !== undefined) {
-				decorations.push(copyDecoration(line));
-			}
-		}
-		if (pendingCopy !== undefined && pendingCopy.side === side) {
-			const line = copyLine(side, pendingCopy.key);
-			if (line !== undefined) {
-				decorations.push(pendingDecoration(line));
-			}
-		}
-		const ids = copyDecorationIds.get(model) ?? [];
-		copyDecorationIds.set(model, model.deltaDecorations(ids, decorations));
+		applyCopyDecorations(side);
 	}
 }
 
@@ -664,6 +685,15 @@ function syncToolbarState(): void {
 	document.getElementById('diff-monaco')?.setAttribute('data-merge', mergeMode ? 'true' : 'false');
 }
 
+/** The chrome around any installed document: titles, toolbar, options, empty state. */
+function settleDocument(next: DiffDocument): void {
+	setTitles();
+	syncToolbarState();
+	updateDiffOptions();
+	setEmpty(isEmptyDocument(next));
+	showSemanticSkip(next.semanticSkipped);
+}
+
 function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
 	documentModel = next;
 	semantic = nextSemantic;
@@ -672,11 +702,7 @@ function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
 	setModelTexts(docs);
 	setDiffModel();
 	refreshFoldIndicators();
-	setTitles();
-	syncToolbarState();
-	updateDiffOptions();
-	setEmpty(isEmptyDocument(next));
-	showSemanticSkip(next.semanticSkipped);
+	settleDocument(next);
 	refreshCopyDecorations();
 	clearNotice();
 }
@@ -711,25 +737,38 @@ function applyDocumentPatch(patch: DiffPatch): void {
 	}
 	const next = applyDiffPatch(documentModel, patch);
 	const docs = buildDiffSyntheticDocuments(next);
-	const originalState = originalEditor()?.saveViewState();
-	const modifiedState = modifiedEditor()?.saveViewState();
-	patchModelText(leftModel, docs.left);
-	patchModelText(rightModel, docs.right);
+	withViewStates(() => {
+		patchModelText(leftModel, docs.left);
+		patchModelText(rightModel, docs.right);
+	});
 	documentModel = next;
 	aligned = docs;
-	setTitles();
-	syncToolbarState();
-	updateDiffOptions();
-	setEmpty(isEmptyDocument(next));
-	showSemanticSkip(next.semanticSkipped);
-	if (originalState !== undefined && originalState !== null) {
-		originalEditor()?.restoreViewState(originalState);
-	}
-	if (modifiedState !== undefined && modifiedState !== null) {
-		modifiedEditor()?.restoreViewState(modifiedState);
-	}
+	refreshAfterPatch(next);
 	refreshCopyDecorations();
 	refreshFoldIndicators();
+}
+
+/** Saves both pane view states, applies the model edit and restores them. */
+function withViewStates(apply: () => void): void {
+	const originalState = originalEditor()?.saveViewState() ?? null;
+	const modifiedState = modifiedEditor()?.saveViewState() ?? null;
+	apply();
+	restoreViewState(originalEditor(), originalState);
+	restoreViewState(modifiedEditor(), modifiedState);
+}
+
+function restoreViewState(
+	editor: monaco.editor.ICodeEditor | undefined,
+	state: ReturnType<monaco.editor.ICodeEditor['saveViewState']>
+): void {
+	if (state !== null && state !== undefined) {
+		editor?.restoreViewState(state);
+	}
+}
+
+/** The chrome around a patched document; the models themselves already changed. */
+function refreshAfterPatch(next: DiffDocument): void {
+	settleDocument(next);
 	clearNotice();
 }
 
@@ -1187,6 +1226,11 @@ function dispatchDocumentMessage(message: DiffProviderToWebview): boolean {
 }
 
 function dispatchViewMessage(message: DiffProviderToWebview): boolean {
+	return dispatchModeMessage(message) || dispatchCopyMessage(message);
+}
+
+/** Toolbar mode, labels and match state. */
+function dispatchModeMessage(message: DiffProviderToWebview): boolean {
 	if (message.type === 'matchModeState') {
 		semantic = message.semantic;
 		toolbar?.setMatchMode(semantic, false);
@@ -1201,6 +1245,11 @@ function dispatchViewMessage(message: DiffProviderToWebview): boolean {
 		applyLabelsMessage(message.labels);
 		return true;
 	}
+	return false;
+}
+
+/** The copied-row state and the answer to one copy gesture. */
+function dispatchCopyMessage(message: DiffProviderToWebview): boolean {
 	if (message.type === 'copyDirty') {
 		copiedRows = message.rows;
 		clearPendingCopy();
@@ -1209,9 +1258,18 @@ function dispatchViewMessage(message: DiffProviderToWebview): boolean {
 	}
 	if (message.type === 'copyResult') {
 		clearPendingCopy();
+		acknowledgePaint(message.requestId);
 		return true;
 	}
 	return false;
+}
+
+/** Tells the host that the answer (and its markers) reached the screen. */
+function acknowledgePaint(requestId: number | undefined): void {
+	if (typeof requestId !== 'number' || typeof requestAnimationFrame !== 'function') {
+		return;
+	}
+	requestAnimationFrame(() => postToHost({ type: 'painted', requestId }));
 }
 
 function dispatchFindMessage(message: DiffProviderToWebview): boolean {

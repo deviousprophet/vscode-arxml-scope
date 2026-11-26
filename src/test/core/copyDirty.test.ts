@@ -43,24 +43,22 @@ function row(
 
 function record(overrides: Partial<CopyRecord> = {}): CopyRecord {
 	return {
-		side: 'right',
 		keys: ['P.A'],
 		start: 100,
 		end: 140,
-		text: 'P.A = 1',
 		version: 3,
 		...overrides
 	};
 }
 
 suite('copied-row keys', () => {
-	test('an added right row is keyed by the bare row id', () => {
+	test('MERGE-16 an added right row is keyed by the bare row id', () => {
 		assert.strictEqual(sideKey(row('right:Mod/A', undefined, { start: 0, end: 1 }), 'right'), 'Mod/A');
 		assert.strictEqual(sideKey(row('Mod/A', { start: 0, end: 1 }, { start: 0, end: 1 }), 'right'), 'Mod/A');
 		assert.strictEqual(sideKey(row('Mod/A', { start: 0, end: 1 }, undefined), 'right'), undefined);
 	});
 
-	test('only rows with a cell on the written side are keys', () => {
+	test('MERGE-16 only rows with a cell on the written side are keys', () => {
 		const rows = [
 			row('A', { start: 10, end: 20 }, undefined),
 			row('right:B', undefined, { start: 100, end: 130 }),
@@ -71,31 +69,31 @@ suite('copied-row keys', () => {
 		assert.deepStrictEqual(copiedRowKeys(rows, 'left', { start: 15, end: 35 }), ['A', 'C']);
 	});
 
-	test('a row touching the span edge is not part of it', () => {
+	test('MERGE-16 a row touching the span edge is not part of it', () => {
 		const rows = [row('A', undefined, { start: 0, end: 100 }), row('B', undefined, { start: 100, end: 140 })];
 		assert.deepStrictEqual(copiedRowKeys(rows, 'right', { start: 100, end: 140 }), ['B']);
 	});
 });
 
 suite('copied-row store', () => {
-	test('records rows per document and drops the duplicates', () => {
+	test('MERGE-16 records rows per document and drops the duplicates', () => {
 		const store = new CopyDirtyStore();
 		store.record('/r', record());
 		store.record('/r', record({ keys: ['P.A', 'P.B'] }));
 		assert.deepStrictEqual(store.keys('/r'), ['P.A', 'P.B']);
 		assert.deepStrictEqual(store.keys('/l'), []);
-		assert.strictEqual(store.has('/r'), true);
+		assert.deepStrictEqual(store.keys('/r'), ['P.A', 'P.B']);
 	});
 
-	test('a save clears every copy in the document', () => {
+	test('MERGE-17 a save clears every copy in the document', () => {
 		const store = new CopyDirtyStore();
 		store.record('/r', record());
 		assert.strictEqual(store.clear('/r'), true);
-		assert.strictEqual(store.has('/r'), false);
+		assert.deepStrictEqual(store.keys('/r'), []);
 		assert.strictEqual(store.clear('/r'), false);
 	});
 
-	test('an edit before the copy shifts it and keeps the rows', () => {
+	test('MERGE-18 an edit before the copy shifts it and keeps the rows', () => {
 		const store = new CopyDirtyStore();
 		store.record('/r', record());
 		// Twelve characters inserted at offset 10: the copy moves right by 12.
@@ -105,35 +103,35 @@ suite('copied-row store', () => {
 		assert.deepStrictEqual(store.records('/r')[0].end, 152);
 	});
 
-	test('an edit after the copy leaves it alone', () => {
+	test('MERGE-18 an edit after the copy leaves it alone', () => {
 		const store = new CopyDirtyStore();
 		store.record('/r', record());
 		assert.strictEqual(store.applyChange('/r', [{ start: 200, end: 201, text: '' }], 4), false);
 		assert.deepStrictEqual(store.keys('/r'), ['P.A']);
 	});
 
-	test('undoing the copy span removes the marker', () => {
+	test('MERGE-18 undoing the copy span removes the marker', () => {
 		const store = new CopyDirtyStore();
 		store.record('/r', record());
 		assert.strictEqual(store.applyChange('/r', [{ start: 100, end: 140, text: '' }], 4), true);
 		assert.deepStrictEqual(store.keys('/r'), []);
 	});
 
-	test('typing inside the copied span removes the marker', () => {
+	test('MERGE-18 typing inside the copied span removes the marker', () => {
 		const store = new CopyDirtyStore();
 		store.record('/r', record());
 		assert.strictEqual(store.applyChange('/r', [{ start: 120, end: 120, text: '7' }], 4), true);
 		assert.deepStrictEqual(store.keys('/r'), []);
 	});
 
-	test('the copy edit itself is not a user change', () => {
+	test('MERGE-18 the copy edit itself is not a user change', () => {
 		const store = new CopyDirtyStore();
 		store.record('/r', record({ version: 5 }));
 		assert.strictEqual(store.applyChange('/r', [{ start: 100, end: 140, text: '' }], 5), false);
 		assert.deepStrictEqual(store.keys('/r'), ['P.A']);
 	});
 
-	test('one event with two disjoint changes keeps both records', () => {
+	test('MERGE-18 one event with two disjoint changes keeps both records', () => {
 		const store = new CopyDirtyStore();
 		store.record('/r', record({ keys: ['P.A'], start: 100, end: 140 }));
 		store.record('/r', record({ keys: ['P.B'], start: 300, end: 340 }));
@@ -150,7 +148,7 @@ suite('copied-row store', () => {
 		assert.deepStrictEqual(store.records('/r')[0].start, 103);
 	});
 
-	test('forget drops a closed buffer without a save', () => {
+	test('MERGE-17 forget drops a closed buffer without a save', () => {
 		const store = new CopyDirtyStore();
 		store.record('/r', record());
 		assert.strictEqual(store.forget('/r'), true);

@@ -197,9 +197,12 @@ export class DiffPanel {
 		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 		let documentGeneration = 0;
 		let mergeMode = false;
-		/** The copy in flight: one clock, and the row key the page shows as pending. */
+		/** The copy in flight: one clock, the row key the page shows as pending, and its request id. */
 		let copyClock: CopyClock | undefined;
 		let copyKey: string | undefined;
+		let copySide: 'left' | 'right' | undefined;
+		let copyRows = 0;
+		let copyRequestId = 0;
 
 		panel.webview.html = shellHtml(panel, context);
 
@@ -483,20 +486,52 @@ export class DiffPanel {
 			before: nearestSibling(rowIndex, side, 1)?.range
 		});
 
-		const askReload = async (): Promise<void> => {
+		/** True when the panel reloaded the comparison; false when the user cancelled. */
+		const askReload = async (): Promise<boolean> => {
 			const answer = await vscode.window.showWarningMessage(
 				'The comparison changed. Reload it?',
 				{ modal: true },
 				'Reload',
 				'Cancel'
 			);
-			if (answer === 'Reload') {
-				await refreshNow();
+			if (answer !== 'Reload') {
+				return false;
 			}
+			await refreshNow();
+			return true;
 		};
 
 		/** The change events the host caused itself, so a copy does not schedule a rebuild. */
 		const refreshSkip = new Set<string>();
+
+		/** Ends the copy's clock when the page painted it, and logs the split. */
+		const finishCopyTiming = (requestId: number): void => {
+			if (copyClock === undefined || requestId !== copyRequestId) {
+				return;
+			}
+			copyClock.lap('paint');
+			logCopyTiming(copyClock.finish(copyRows));
+			copyClock = undefined;
+		};
+
+		/** One refused copy: say why, and let the page drop its pending marker now. */
+		const refuseCopy = async (
+			side: 'left' | 'right',
+			key: string,
+			message: string
+		): Promise<void> => {
+			await postError(message);
+			await panel.webview.postMessage({
+				type: 'copyResult',
+				ok: false,
+				side,
+				key,
+				requestId: copyRequestId,
+			});
+		};
+
+		const refuseActiveCopy = (message: string): Promise<void> =>
+			refuseCopy(copySide ?? 'left', copyKey ?? '', message);
 
 		/**
 		 * Remembers one applied copy and answers the page. `side` is the edited
@@ -511,12 +546,11 @@ export class DiffPanel {
 			const version = side === 'left' ? preparedLeft.version : preparedRight.version;
 			const span = { start: plan.start, end: plan.start + plan.text.length };
 			const keys = copiedRowKeys(current.rows, side, span);
+			copyRows = keys.length;
 			copyDirty.record(targetUri, {
-				side,
 				keys,
 				start: span.start,
 				end: span.end,
-				text: plan.text,
 				version,
 			});
 			await postCopyDirty();
@@ -525,13 +559,9 @@ export class DiffPanel {
 				ok: true,
 				side: otherSideOf(side),
 				key: copyKey ?? '',
-				keys,
+				requestId: copyRequestId,
 			});
 			copyClock?.lap('post');
-			if (copyClock !== undefined) {
-				logCopyTiming(copyClock.finish(keys.length));
-				copyClock = undefined;
-			}
 		};
 
 		/** Applies a patch answer; false when the engine refused and a rebuild follows. */
@@ -586,7 +616,7 @@ export class DiffPanel {
 			refreshSkip.add(doc.uri.toString());
 			if (!(await vscode.workspace.applyEdit(edit))) {
 				refreshSkip.delete(doc.uri.toString());
-				await postError('VS Code refused the copy');
+				await refuseActiveCopy('VS Code refused the copy');
 				return;
 			}
 			// The panel's snapshot now reflects the edit it made.
@@ -736,13 +766,13 @@ export class DiffPanel {
 			request: EngineCopyRequest
 		): Promise<{ start: number; end: number; text: string } | undefined> => {
 			if (engine.planCopy === undefined) {
-				await postError('this engine cannot plan a copy');
+				await refuseActiveCopy('this engine cannot plan a copy');
 				return undefined;
 			}
 			const plan = await engine.planCopy(request);
 			copyClock?.lap('plan');
 			if (!plan.ok) {
-				await postError(plan.reason);
+				await refuseActiveCopy(plan.reason);
 				return undefined;
 			}
 			return plan.span;
@@ -758,7 +788,7 @@ export class DiffPanel {
 			const targetSide = otherSideOf(side);
 			const chain = ancestorChain(row.parentKey, side, childKindOf(row.kind));
 			if (chain === undefined) {
-				await postError('the module is missing on the target side; copy it first');
+				await refuseActiveCopy('the module is missing on the target side; copy it first');
 				return true;
 			}
 			// The chain belongs *inside* the anchor parent: its last existing child is
@@ -770,7 +800,7 @@ export class DiffPanel {
 				.filter((cell): cell is DiffCell => cell !== undefined);
 			const anchor = childCells.at(-1);
 			if (anchor === undefined) {
-				await postError('the target parent has no child to place this element next to');
+				await refuseActiveCopy('the target parent has no child to place this element next to');
 				return true;
 			}
 			const span = await requestCopyPlan({
@@ -838,21 +868,24 @@ export class DiffPanel {
 				return;
 			}
 			if (copyInFlight) {
+				await refuseCopy(side, key, 'another copy is still running');
 				return;
 			}
 			const located = locateCopy(side, key);
 			if (located === undefined) {
+				await refuseCopy(side, key, 'that row is no longer in the comparison');
 				return;
 			}
 			copyInFlight = true;
 			copyClock = new CopyClock();
 			copyKey = key;
+			copySide = side;
+			copyRows = 0;
+			copyRequestId += 1;
 			try {
 				await runCopy(side, located);
 			} finally {
 				copyInFlight = false;
-				copyClock = undefined;
-				copyKey = undefined;
 			}
 		};
 
@@ -872,7 +905,9 @@ export class DiffPanel {
 		): Promise<void> => {
 			const { clickedDoc, otherDoc } = await openCopyDocuments(side);
 			if (snapshotIsStale(side, clickedDoc, otherDoc)) {
-				await askReload();
+				if (!(await askReload())) {
+					await refuseActiveCopy('the comparison changed; reload and try again');
+				}
 				return;
 			}
 			await applyLocatedCopy(side, located, otherDoc);
@@ -890,7 +925,7 @@ export class DiffPanel {
 				return;
 			}
 			if (moduleCollision(side, located.rowIndex)) {
-				await postError('that module already exists on the target side');
+				await refuseActiveCopy('that module already exists on the target side');
 				return;
 			}
 			await placeCopy(otherDoc, side, located.rowIndex, located.clickedCell, located.otherCell);
@@ -925,6 +960,10 @@ export class DiffPanel {
 			}
 			if (message.type === 'copy') {
 				void copyRow(message.side, message.key);
+				return true;
+			}
+			if (message.type === 'painted') {
+				finishCopyTiming(message.requestId);
 				return true;
 			}
 			return false;

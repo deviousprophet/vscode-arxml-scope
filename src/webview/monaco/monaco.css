@@ -45,18 +45,18 @@
 .monaco-editor .arxml-copied-line {
 	width: 3px;
 	margin-left: 3px;
-	background-color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+	background-color: var(--vscode-gitDecoration-modifiedResourceForeground, currentColor);
 }
 
 .monaco-editor .arxml-copied-line-bg {
-	background-color: rgba(226, 192, 141, 0.14);
+	background-color: transparent;
 }
 
 @supports (background-color: color-mix(in srgb, white 10%, transparent)) {
 	.monaco-editor .arxml-copied-line-bg {
 		background-color: color-mix(
 			in srgb,
-			var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d) 14%,
+			var(--vscode-gitDecoration-modifiedResourceForeground, transparent) 14%,
 			transparent
 		);
 	}
@@ -66,7 +66,7 @@
 .monaco-editor .arxml-copy-pending {
 	width: 3px;
 	margin-left: 3px;
-	background-color: var(--vscode-progressBar-background, #0e70c0);
+	background-color: var(--vscode-progressBar-background, currentColor);
 	animation: arxml-copy-pending-pulse 1s ease-in-out infinite;
 }
 
@@ -79,6 +79,18 @@
 @media (prefers-reduced-motion: reduce) {
 	.monaco-editor .arxml-copy-pending {
 		animation: none;
+	}
+}
+
+/* Forced colours drop background fills; keep the margin bar readable and the
+ * tint off, so the decoration never paints over the system palette. */
+@media (forced-colors: active) {
+	.monaco-editor .arxml-copied-line,
+	.monaco-editor .arxml-copy-pending {
+		background-color: var(--vscode-contrastActiveBorder, Highlight);
+	}
+	.monaco-editor .arxml-copied-line-bg {
+		background-color: transparent;
 	}
 }
 

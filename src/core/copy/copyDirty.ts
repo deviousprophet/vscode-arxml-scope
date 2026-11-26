@@ -5,8 +5,8 @@
  * saves. The pages mark the rows that copy created or changed, on the target
  * side only, until the host acknowledges a save. This module is the host's
  * record of those rows: it survives a page reload, follows later edits and
- * drops a record when its text no longer matches (an undo, or a user edit over
- * the copied span).
+ * drops a record when a change overlaps its span (an undo, or a user edit over
+ * the copied text).
  *
  * Pure: no `vscode` import and no DOM.
  */
@@ -16,15 +16,11 @@ export type CopySide = 'left' | 'right';
 
 /** One applied copy: the span it wrote and the rows that span now covers. */
 export interface CopyRecord {
-	/** The side the copy wrote to. */
-	side: CopySide;
 	/** Row keys on that side, without the diff page's added-row prefix. */
 	keys: string[];
 	/** The written span in target-document offsets. */
 	start: number;
 	end: number;
-	/** The text the plan applied; a span that no longer holds it was undone. */
-	text: string;
 	/** The target document version after the copy; earlier events are pre-record. */
 	version: number;
 }
@@ -43,7 +39,7 @@ export interface CopyDirtyRows {
 }
 
 /** Added diff rows carry the target side's prefix; pages key decorations by row id. */
-const ADDED_PREFIX = 'right:';
+export const ADDED_ROW_PREFIX = 'right:';
 
 /**
  * The row id on one side of a diff row. A row that exists only on the right is
@@ -53,9 +49,15 @@ export function sideKey(row: DiffRow, side: CopySide): string | undefined {
 	if (row[side] === undefined) {
 		return undefined;
 	}
-	return side === 'right' && row.key.startsWith(ADDED_PREFIX)
-		? row.key.slice(ADDED_PREFIX.length)
+	return side === 'right' && row.key.startsWith(ADDED_ROW_PREFIX)
+		? row.key.slice(ADDED_ROW_PREFIX.length)
 		: row.key;
+}
+
+/** True when a row's cell on `side` covers part of a written span. */
+function rowOverlapsSpan(row: DiffRow, side: CopySide, span: { start: number; end: number }): boolean {
+	const cell = row[side];
+	return cell !== undefined && cell.range.end > span.start && cell.range.start < span.end;
 }
 
 /** The row keys whose cell on `side` overlaps a written span. */
@@ -65,11 +67,7 @@ export function copiedRowKeys(
 	span: { start: number; end: number }
 ): string[] {
 	const keys: string[] = [];
-	for (const row of rows) {
-		const cell = row[side];
-		if (cell === undefined || cell.range.end <= span.start || cell.range.start >= span.end) {
-			continue;
-		}
+	for (const row of rows.filter((candidate) => rowOverlapsSpan(candidate, side, span))) {
 		const key = sideKey(row, side);
 		if (key !== undefined && !keys.includes(key)) {
 			keys.push(key);
@@ -78,21 +76,33 @@ export function copiedRowKeys(
 	return keys;
 }
 
-/** True when a change covers part of a record's span. */
-function overlaps(record: CopyRecord, change: CopyTextChange): boolean {
-	return change.start < record.end && change.end > record.start;
-}
-
 /** One record after one change: shifted when disjoint, dropped when overlapped. */
 function shiftRecord(record: CopyRecord, change: CopyTextChange): CopyRecord | undefined {
 	if (change.end <= record.start) {
 		const delta = change.text.length - (change.end - change.start);
 		return { ...record, start: record.start + delta, end: record.end + delta };
 	}
-	if (change.start >= record.end) {
+	return change.start >= record.end ? record : undefined;
+}
+
+/** One record after one event: its own version, or the shifted record. */
+function shiftOne(
+	record: CopyRecord,
+	changes: readonly CopyTextChange[],
+	version: number
+): CopyRecord | undefined {
+	if (version <= record.version) {
+		// The copy's own edit, or an event from before it: not a user change.
 		return record;
 	}
-	return overlaps(record, change) ? undefined : record;
+	let current: CopyRecord | undefined = record;
+	for (const change of changes) {
+		current = shiftRecord(current, change);
+		if (current === undefined) {
+			break;
+		}
+	}
+	return current;
 }
 
 /** Every record still standing after one event's changes. */
@@ -101,25 +111,19 @@ function shiftRecords(
 	changes: readonly CopyTextChange[],
 	version: number
 ): CopyRecord[] {
-	const next: CopyRecord[] = [];
-	for (const record of records) {
-		if (version <= record.version) {
-			// The copy's own edit, or an event from before it: not a user change.
-			next.push(record);
-			continue;
-		}
-		let current: CopyRecord | undefined = record;
-		for (const change of changes) {
-			current = shiftRecord(current, change);
-			if (current === undefined) {
-				break;
-			}
-		}
-		if (current !== undefined) {
-			next.push(current);
-		}
-	}
-	return next;
+	return records
+		.map((record) => shiftOne(record, changes, version))
+		.filter((record): record is CopyRecord => record !== undefined);
+}
+
+/** True when an event left every record where it was. */
+function sameRecords(before: readonly CopyRecord[], after: readonly CopyRecord[]): boolean {
+	return before.length === after.length && after.every((record, at) => record === before[at]);
+}
+
+/** True when two key lists hold the same ids in the same order. */
+function sameKeys(before: readonly string[], after: readonly string[]): boolean {
+	return before.length === after.length && after.every((key, at) => key === before[at]);
 }
 
 /** The host's copied-row state, one record list per document. */
@@ -154,33 +158,33 @@ export class CopyDirtyStore {
 		return keys;
 	}
 
-	/** Whether one document has any unsaved copied rows. */
-	has(document: string): boolean {
-		return this.keys(document).length > 0;
-	}
-
 	/**
-	 * Follows one document event. Returns true when the dirty rows changed:
-	 * a record was dropped because its span no longer holds the copied text, or
-	 * its offsets moved. Rows are keyed by id, so a pure shift keeps them.
+	 * Follows one document event. Returns true when the marked rows changed: a
+	 * record was dropped because a change overlapped its span (an undo, or an
+	 * edit over the copied text). Rows are keyed by id, so an edit before the
+	 * span only shifts its offsets and returns false.
 	 */
 	applyChange(document: string, changes: readonly CopyTextChange[], version: number): boolean {
 		const records = this.documents.get(document);
-		if (records === undefined || changes.length === 0) {
+		if (records === undefined) {
 			return false;
 		}
 		const before = this.keys(document);
 		const next = shiftRecords(records, changes, version);
-		if (next.length === records.length && next.every((record, at) => record === records[at])) {
+		if (sameRecords(records, next)) {
 			return false;
 		}
-		if (next.length === 0) {
+		this.replace(document, next);
+		return !sameKeys(before, this.keys(document));
+	}
+
+	/** Stores the surviving records, or forgets the document when none is left. */
+	private replace(document: string, records: readonly CopyRecord[]): void {
+		if (records.length === 0) {
 			this.documents.delete(document);
-		} else {
-			this.documents.set(document, next);
+			return;
 		}
-		const after = this.keys(document);
-		return after.length !== before.length || after.some((key, at) => key !== before[at]);
+		this.documents.set(document, [...records]);
 	}
 
 	/** A save persists every copy: the document has no copied-dirty rows left. */

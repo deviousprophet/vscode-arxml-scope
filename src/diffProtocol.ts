@@ -30,7 +30,7 @@ export type DiffProviderToWebview =
 	/** The rows each side owns that a copy wrote and the user has not saved. */
 	| { type: 'copyDirty'; rows: CopyDirtyRows }
 	/** The host applied (or refused) one copy; `side` and `key` echo the request. */
-	| { type: 'copyResult'; ok: boolean; side: 'left' | 'right'; key: string; keys: string[] }
+	| { type: 'copyResult'; ok: boolean; side: 'left' | 'right'; key: string; requestId?: number }
 	/** The engine answer for one find request. */
 	| { type: 'findResult'; requestId: number; result: DiffFindResult; error?: string }
 	/** The active VS Code colour theme changed. */
@@ -49,6 +49,8 @@ export type DiffWebviewToProvider =
 	| { type: 'mergeMode'; enabled: boolean }
 	/** Copy one row's element into the other document; `side` is the host source side. */
 	| { type: 'copy'; side: 'left' | 'right'; key: string }
+	/** The page painted the answer to one copy; the host closes its timing record. */
+	| { type: 'painted'; requestId: number }
 	/** Ask the engine for occurrences in the displayed diff. */
 	| { type: 'find'; requestId: number; query: string; options: FindOptions; changesOnly: boolean }
 ;

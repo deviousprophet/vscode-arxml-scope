@@ -90,7 +90,7 @@ suite('webview protocol', () => {
 				},
 			},
 			{ type: 'copyDirty', rows: { left: [], right: ['Mod/Items/P.A'] } },
-			{ type: 'copyResult', ok: true, side: 'left', key: 'Mod/Items/P.A', keys: ['Mod/Items/P.A'] },
+			{ type: 'copyResult', ok: true, side: 'left', key: 'Mod/Items/P.A', requestId: 1 },
 		];
 		for (const message of host) {
 			assert.strictEqual(diffMessageType(message), message.type);
@@ -101,8 +101,9 @@ suite('webview protocol', () => {
 			{ type: 'ready' },
 			{ type: 'matchMode', semantic: false },
 			{ type: 'reveal', side: 'right', key: 'row-1' },
+			{ type: 'painted', requestId: 1 },
 		];
-		assert.deepStrictEqual(intents.map((intent) => intent.type), ['ready', 'matchMode', 'reveal']);
+		assert.deepStrictEqual(intents.map((intent) => intent.type), ['ready', 'matchMode', 'reveal', 'painted']);
 	});
 
 	test('the document header comes from the model, not from page markup', () => {
