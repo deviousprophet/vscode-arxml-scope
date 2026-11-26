@@ -5,6 +5,17 @@ All notable changes to the ARXML Scope extension will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Copied rows carry a modified-line marker in the margin in the diff and in the ECUC editor until the file is saved
+- Undoing a copy, or typing over a copied row, clears only that row's marker while other copied rows keep theirs
+
+### Changed
+
+- A merge copy updates only the changed rows, so the comparison keeps its scroll, folds, selection and pane split instead of rebuilding
+
 ## [0.11.0] - 2026-11-26
 
 ### Added

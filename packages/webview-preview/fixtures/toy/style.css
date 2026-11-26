@@ -1,0 +1,61 @@
+:root {
+	color-scheme: dark;
+	font-family: system-ui, sans-serif;
+	background: #1e1e1e;
+	color: #d4d4d4;
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+}
+
+.toy-toolbar {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	padding: 12px;
+	border-bottom: 1px solid #3c3c3c;
+}
+
+.toy-button {
+	box-sizing: border-box;
+	padding: 6px 12px;
+	border: 1px solid #3c3c3c;
+	border-radius: 4px;
+	background: #2d2d2d;
+	color: inherit;
+	font: inherit;
+}
+
+.toy-content {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 16px;
+}
+
+body.overflow .toy-content {
+	width: 2000px;
+}
+
+body.clipped #save {
+	width: 48px;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+body.overlap #save {
+	position: absolute;
+	left: 20px;
+	top: 60px;
+}
+
+body.overlap #run {
+	position: absolute;
+	left: 30px;
+	top: 65px;
+}
+
+body.hide #more {
+	display: none;
+}

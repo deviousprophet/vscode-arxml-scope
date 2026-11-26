@@ -41,6 +41,7 @@ import type { ReplaceResult } from '../core/searchModel';
 import type { DefinitionInfo } from '../core/index/definitions';
 import type { IndexElement, IndexReference } from '../core/index/indexModel';
 import type { ElementResolution } from '../core/index/workspaceIndex';
+import { copyDirty } from './copyDirty';
 
 export const VIEW_TYPE = 'vscode-arxml-scope.ecucEditor';
 
@@ -388,6 +389,14 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		});
 
 		disposables.push(
+			copyDirty.onDidChange((changed) => {
+				if (changed === key) {
+					this.postCopyDirty(session);
+				}
+			})
+		);
+
+		disposables.push(
 			panel.webview.onDidReceiveMessage((raw: unknown) => this.handlePanelMessage(raw, session))
 		);
 
@@ -426,6 +435,14 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			type: 'dirty',
 			dirty: session.document.isDirty,
 			revision: session.document.version
+		});
+	}
+
+	/** Push the rows a merge copy wrote and the user has not saved yet. */
+	private postCopyDirty(session: EditorSession): void {
+		void session.panel.webview.postMessage({
+			type: 'copyDirty',
+			rows: copyDirty.keys(session.document.uri)
 		});
 	}
 
@@ -684,6 +701,7 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 		// stale values or an empty tree.
 		void session.panel.webview.postMessage({ type: 'conditions', entries: this.conditionEntries });
 		session.push();
+		this.postCopyDirty(session);
 	}
 
 	private handleConditions(

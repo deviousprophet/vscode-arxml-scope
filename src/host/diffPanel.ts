@@ -13,6 +13,8 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import type { MissingAncestor } from '../core/copy/copyTypes';
+import { copiedRowKeys } from '../core/copy/copyDirty';
+import type { CopyDirtyRows } from '../core/copy/copyDirty';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { FileLabel, compareTitle } from '../core/diff/diffModel';
 import type { DiffCell, DiffDocument } from '../core/diff/diffModel';
@@ -23,6 +25,8 @@ import { fileName } from './compareSelection';
 import { gateReason } from './ecucEditorProvider';
 import { revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
+import { copyDirty } from './copyDirty';
+import { CopyClock, logCopyTiming } from './copyTiming';
 import { diffMessageType } from '../diffProtocol';
 import type { DiffWebviewToProvider } from '../diffProtocol';
 
@@ -193,6 +197,12 @@ export class DiffPanel {
 		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 		let documentGeneration = 0;
 		let mergeMode = false;
+		/** The copy in flight: one clock, the row key the page shows as pending, and its request id. */
+		let copyClock: CopyClock | undefined;
+		let copyKey: string | undefined;
+		let copySide: 'left' | 'right' | undefined;
+		let copyRows = 0;
+		let copyRequestId = 0;
 
 		panel.webview.html = shellHtml(panel, context);
 
@@ -214,6 +224,20 @@ export class DiffPanel {
 			paneLabel(leftLabel.name, isDirty(leftUri)),
 			paneLabel(rightLabel.name, isDirty(rightUri)),
 		];
+
+		/** The copied-but-unsaved rows each side currently owns. */
+		const copyRowsNow = (): CopyDirtyRows => ({
+			left: copyDirty.keys(leftUri),
+			right: copyDirty.keys(rightUri),
+		});
+
+		/** Pushes the copied-row state; every page that shows a side reads the same rows. */
+		const postCopyDirty = async (): Promise<void> => {
+			if (disposed) {
+				return;
+			}
+			await panel.webview.postMessage({ type: 'copyDirty', rows: copyRowsNow() });
+		};
 
 		const postDocument = async (): Promise<void> => {
 			current = { ...current, labels: labelsNow() };
@@ -422,6 +446,7 @@ export class DiffPanel {
 		const onReady = (): void => {
 			boot.settle();
 			void postDocument();
+			void postCopyDirty();
 			void panel.webview.postMessage({ type: 'mergeMode', enabled: mergeMode });
 		};
 
@@ -461,26 +486,84 @@ export class DiffPanel {
 			before: nearestSibling(rowIndex, side, 1)?.range
 		});
 
-		const askReload = async (): Promise<void> => {
+		/** True when the panel reloaded the comparison; false when the user cancelled. */
+		const askReload = async (): Promise<boolean> => {
 			const answer = await vscode.window.showWarningMessage(
 				'The comparison changed. Reload it?',
 				{ modal: true },
 				'Reload',
 				'Cancel'
 			);
-			if (answer === 'Reload') {
-				await refreshNow();
+			if (answer !== 'Reload') {
+				return false;
 			}
+			await refreshNow();
+			return true;
 		};
 
 		/** The change events the host caused itself, so a copy does not schedule a rebuild. */
 		const refreshSkip = new Set<string>();
 
+		/** Ends the copy's clock when the page painted it, and logs the split. */
+		const finishCopyTiming = (requestId: number): void => {
+			if (copyClock === undefined || requestId !== copyRequestId) {
+				return;
+			}
+			copyClock.lap('paint');
+			logCopyTiming(copyClock.finish(copyRows));
+			copyClock = undefined;
+		};
+
+		/** One refused copy: say why, and let the page drop its pending marker now. */
+		const refuseCopy = async (
+			side: 'left' | 'right',
+			key: string,
+			message: string
+		): Promise<void> => {
+			await postError(message);
+			await panel.webview.postMessage({
+				type: 'copyResult',
+				ok: false,
+				side,
+				key,
+				requestId: copyRequestId,
+			});
+		};
+
+		const refuseActiveCopy = (message: string): Promise<void> =>
+			refuseCopy(copySide ?? 'left', copyKey ?? '', message);
+
 		/**
-		 * One copy reaches the engine as the same edit it applied: `doc.update` moves
-		 * the engine text, `diff.patch` answers with the changed rows. A refusal falls
-		 * back to the debounced rebuild with a notice.
+		 * Remembers one applied copy and answers the page. `side` is the edited
+		 * (destination) side; the rows come from the patched document, so a
+		 * synthesized ancestor chain is marked with the element it was created for.
 		 */
+		const recordCopied = async (
+			side: 'left' | 'right',
+			plan: { start: number; end: number; text: string }
+		): Promise<void> => {
+			const targetUri = side === 'left' ? leftUri : rightUri;
+			const version = side === 'left' ? preparedLeft.version : preparedRight.version;
+			const span = { start: plan.start, end: plan.start + plan.text.length };
+			const keys = copiedRowKeys(current.rows, side, span);
+			copyRows = keys.length;
+			copyDirty.record(targetUri, {
+				keys,
+				start: span.start,
+				end: span.end,
+				version,
+			});
+			await postCopyDirty();
+			await panel.webview.postMessage({
+				type: 'copyResult',
+				ok: true,
+				side: otherSideOf(side),
+				key: copyKey ?? '',
+				requestId: copyRequestId,
+			});
+			copyClock?.lap('post');
+		};
+
 		/** Applies a patch answer; false when the engine refused and a rebuild follows. */
 		const applyPatchAnswer = async (result: EngineDiffPatchResult): Promise<boolean> => {
 			if (result.patch === undefined) {
@@ -492,6 +575,11 @@ export class DiffPanel {
 			return true;
 		};
 
+		/**
+		 * One copy reaches the engine as the same edit it applied: `doc.update` moves
+		 * the engine text, `diff.patch` answers with the changed rows. A refusal falls
+		 * back to the debounced rebuild with a notice.
+		 */
 		const patchAfterCopy = async (
 			side: 'left' | 'right',
 			plan: { start: number; end: number; text: string }
@@ -504,13 +592,17 @@ export class DiffPanel {
 					engineSide(preparedRight, rightLabel),
 					{ side, start: plan.start, end: plan.end, text: plan.text }
 				);
+				copyClock?.lap('patch');
 				if (await applyPatchAnswer(result)) {
+					await recordCopied(side, plan);
 					return;
 				}
 			} catch (error) {
 				await postError(`The comparison was rebuilt after this copy: ${errorMessage(error)}`);
 			}
 			await refreshNow();
+			copyClock?.lap('patch');
+			await recordCopied(side, plan);
 		};
 
 		/** Applies one planned span as a single edit on `doc`. */
@@ -524,10 +616,11 @@ export class DiffPanel {
 			refreshSkip.add(doc.uri.toString());
 			if (!(await vscode.workspace.applyEdit(edit))) {
 				refreshSkip.delete(doc.uri.toString());
-				await postError('VS Code refused the copy');
+				await refuseActiveCopy('VS Code refused the copy');
 				return;
 			}
 			// The panel's snapshot now reflects the edit it made.
+			copyClock?.lap('apply');
 			if (side === 'left') {
 				preparedLeft = { ...preparedLeft, version: doc.version };
 			} else {
@@ -673,12 +766,13 @@ export class DiffPanel {
 			request: EngineCopyRequest
 		): Promise<{ start: number; end: number; text: string } | undefined> => {
 			if (engine.planCopy === undefined) {
-				await postError('this engine cannot plan a copy');
+				await refuseActiveCopy('this engine cannot plan a copy');
 				return undefined;
 			}
 			const plan = await engine.planCopy(request);
+			copyClock?.lap('plan');
 			if (!plan.ok) {
-				await postError(plan.reason);
+				await refuseActiveCopy(plan.reason);
 				return undefined;
 			}
 			return plan.span;
@@ -694,7 +788,7 @@ export class DiffPanel {
 			const targetSide = otherSideOf(side);
 			const chain = ancestorChain(row.parentKey, side, childKindOf(row.kind));
 			if (chain === undefined) {
-				await postError('the module is missing on the target side; copy it first');
+				await refuseActiveCopy('the module is missing on the target side; copy it first');
 				return true;
 			}
 			// The chain belongs *inside* the anchor parent: its last existing child is
@@ -706,7 +800,7 @@ export class DiffPanel {
 				.filter((cell): cell is DiffCell => cell !== undefined);
 			const anchor = childCells.at(-1);
 			if (anchor === undefined) {
-				await postError('the target parent has no child to place this element next to');
+				await refuseActiveCopy('the target parent has no child to place this element next to');
 				return true;
 			}
 			const span = await requestCopyPlan({
@@ -774,13 +868,20 @@ export class DiffPanel {
 				return;
 			}
 			if (copyInFlight) {
+				await refuseCopy(side, key, 'another copy is still running');
 				return;
 			}
 			const located = locateCopy(side, key);
 			if (located === undefined) {
+				await refuseCopy(side, key, 'that row is no longer in the comparison');
 				return;
 			}
 			copyInFlight = true;
+			copyClock = new CopyClock();
+			copyKey = key;
+			copySide = side;
+			copyRows = 0;
+			copyRequestId += 1;
 			try {
 				await runCopy(side, located);
 			} finally {
@@ -804,7 +905,9 @@ export class DiffPanel {
 		): Promise<void> => {
 			const { clickedDoc, otherDoc } = await openCopyDocuments(side);
 			if (snapshotIsStale(side, clickedDoc, otherDoc)) {
-				await askReload();
+				if (!(await askReload())) {
+					await refuseActiveCopy('the comparison changed; reload and try again');
+				}
 				return;
 			}
 			await applyLocatedCopy(side, located, otherDoc);
@@ -822,7 +925,7 @@ export class DiffPanel {
 				return;
 			}
 			if (moduleCollision(side, located.rowIndex)) {
-				await postError('that module already exists on the target side');
+				await refuseActiveCopy('that module already exists on the target side');
 				return;
 			}
 			await placeCopy(otherDoc, side, located.rowIndex, located.clickedCell, located.otherCell);
@@ -857,6 +960,10 @@ export class DiffPanel {
 			}
 			if (message.type === 'copy') {
 				void copyRow(message.side, message.key);
+				return true;
+			}
+			if (message.type === 'painted') {
+				finishCopyTiming(message.requestId);
 				return true;
 			}
 			return false;
@@ -919,6 +1026,14 @@ export class DiffPanel {
 				void reveal(message.side, message.key);
 			}
 		};
+
+		disposables.push(
+			copyDirty.onDidChange((changed) => {
+				if (changed === leftUri.toString() || changed === rightUri.toString()) {
+					void postCopyDirty();
+				}
+			})
+		);
 
 		disposables.push(
 			vscode.workspace.onDidChangeTextDocument((event) => {

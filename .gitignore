@@ -10,3 +10,5 @@ dist/native/
 
 # Webview preview screenshots (generated)
 artifacts/
+# Local spike/build scratch output (generated)
+.out/

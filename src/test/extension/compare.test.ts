@@ -267,7 +267,7 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 		);
 		assert.match(
 			panel,
-			/if \(chain === undefined\) \{\s*await postError\('the module is missing on the target side; copy it first'\);\s*return true;\s*\}/,
+			/if \(chain === undefined\) \{\s*await refuseActiveCopy\('the module is missing on the target side; copy it first'\);\s*return true;\s*\}/,
 			'the refusal carries the documented message and returns'
 		);
 		const refusal = panel.indexOf('the module is missing on the target side; copy it first');
@@ -327,7 +327,7 @@ ${elements}
 		);
 		assert.match(
 			panel,
-			/if \(moduleCollision\(side, located\.rowIndex\)\) \{\s*await postError\('that module already exists on the target side'\);\s*return;\s*\}/,
+			/if \(moduleCollision\(side, located\.rowIndex\)\) \{\s*await refuseActiveCopy\('that module already exists on the target side'\);\s*return;\s*\}/,
 			'the collision is refused with the documented message'
 		);
 		const collision = panel.indexOf('moduleCollision(side, located.rowIndex)');
@@ -347,14 +347,14 @@ ${elements}
 		);
 		assert.match(
 			panel,
-			/if \(answer === 'Reload'\) \{\s*await refreshNow\(\);\s*\}/,
+			/if \(answer !== 'Reload'\) \{\s*return false;\s*\}\s*await refreshNow\(\);\s*return true;/,
 			'only Reload rebuilds the comparison'
 		);
-		assert.ok(!panel.includes("answer === 'Cancel'"), 'Cancel has no branch, so it changes nothing');
+		assert.ok(!panel.includes("answer === 'Cancel'"), 'Cancel never reaches the rebuild; it only refuses the copy');
 		assert.match(
 			panel,
-			/if \(snapshotIsStale\(side, clickedDoc, otherDoc\)\) \{\s*await askReload\(\);\s*return;\s*\}/,
-			'a stale snapshot is checked before the copy is planned'
+			/if \(snapshotIsStale\(side, clickedDoc, otherDoc\)\) \{\s*if \(!\(await askReload\(\)\)\) \{\s*await refuseActiveCopy\('the comparison changed; reload and try again'\);\s*\}\s*return;\s*\}/,
+			'a cancelled reload refuses the copy instead of leaving it pending'
 		);
 		assert.match(
 			panel,

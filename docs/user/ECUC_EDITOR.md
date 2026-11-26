@@ -191,6 +191,15 @@ visible with a red marker and never applies to the `TextDocument`. `Ctrl+S` is t
 it flushes pending edits, waits for validation, and is blocked while a value is invalid or still
 being validated. The tab title and marker clear when the real `TextDocument` becomes clean.
 
+### Copied rows
+
+A merge copy in the [diff](MERGE.md) writes into this document too. Until you save, the rows that
+copy created or changed carry a modified-line marker in the margin (and a faint line tint), which
+is distinct from typing a value yourself. The marker follows the copy, not the cursor: editing over a
+copied row, or undoing the copy, removes it, while other unsaved rows keep theirs. `Ctrl+S` clears
+every copied-row marker after the host acknowledges the save. The source side of the comparison is
+never marked.
+
 ### Field edits
 
 - A parameter's `<VALUE>` is edited with a text input (or a `true`/`false` select for a Boolean

@@ -6,6 +6,7 @@
  * state when a toggle needs no new document; the page posts `ready`, a match
  * mode request and a reveal intent.
  */
+import type { CopyDirtyRows } from './core/copy/copyDirty';
 import type { DiffDocument } from './core/diff/diffModel';
 import type { DiffPatch } from './core/diff/diffPatch';
 import type { DiffFindResult, FindOptions } from './core/searchModel';
@@ -26,6 +27,10 @@ export type DiffProviderToWebview =
 	| { type: 'labels'; labels: [string, string] }
 	/** A copy was answered with the rows it changed, not the whole document. */
 	| { type: 'documentPatch'; patch: DiffPatch }
+	/** The rows each side owns that a copy wrote and the user has not saved. */
+	| { type: 'copyDirty'; rows: CopyDirtyRows }
+	/** The host applied (or refused) one copy; `side` and `key` echo the request. */
+	| { type: 'copyResult'; ok: boolean; side: 'left' | 'right'; key: string; requestId?: number }
 	/** The engine answer for one find request. */
 	| { type: 'findResult'; requestId: number; result: DiffFindResult; error?: string }
 	/** The active VS Code colour theme changed. */
@@ -44,6 +49,8 @@ export type DiffWebviewToProvider =
 	| { type: 'mergeMode'; enabled: boolean }
 	/** Copy one row's element into the other document; `side` is the host source side. */
 	| { type: 'copy'; side: 'left' | 'right'; key: string }
+	/** The page painted the answer to one copy; the host closes its timing record. */
+	| { type: 'painted'; requestId: number }
 	/** Ask the engine for occurrences in the displayed diff. */
 	| { type: 'find'; requestId: number; query: string; options: FindOptions; changesOnly: boolean }
 ;
@@ -62,6 +69,8 @@ const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'mergeMode',
 	'labels',
 	'documentPatch',
+	'copyDirty',
+	'copyResult',
 	'findResult',
 	'theme'
 ]);

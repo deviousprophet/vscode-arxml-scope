@@ -13,6 +13,7 @@ import { buildNodeIndex } from '../../../../src/core/ecuc/nodeId';
 import { buildDiffDocument } from '../../../../src/core/diff/diffModel';
 import type { DiffDocument } from '../../../../src/core/diff/diffModel';
 import type { EcucRow } from '../../../../src/core/ecuc/renderRows';
+import { sideKey } from '../../../../src/core/copy/copyDirty';
 import type { PreviewStateFields } from './previewStateFields';
 
 export interface PreviewState extends PreviewStateFields {
@@ -28,6 +29,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-collapsed-onesided', page: 'diff', width: 1400, height: 900, foldLabel: 'Items "Items"' },
 	{ name: 'diff-collapse-all', page: 'diff', width: 1400, height: 900, collapseAll: true },
 	{ name: 'diff-merge', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-copied', page: 'diff', width: 1400, height: 900, merge: true, copied: true },
 	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true, sash: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-nav', page: 'diff', width: 1400, height: 900, merge: true, nav: true },
@@ -51,6 +53,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'editor-syscond', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-labels', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-dirty', page: 'editor', width: 1400, height: 900, edit: '42' },
+	{ name: 'editor-copied', page: 'editor', width: 1400, height: 900, copied: true },
 	{ name: 'editor-invalid', page: 'editor', width: 1400, height: 900, edit: 'abc', trySave: true },
 	{ name: 'editor-details', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated' },
 	{ name: 'editor-details-save', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated', detailsSave: true },
@@ -446,22 +449,57 @@ function diffFixtureFor(state: PreviewState): DiffDocument {
 	return fixture();
 }
 
+/** The fixture a state mounts, tagged with the page it belongs to. */
+type PreviewMount =
+	| { page: 'diff'; document: DiffDocument }
+	| { page: 'editor'; document: { rows: EcucRow[]; selectedId?: string } };
+
 /** The fixture document a state mounts. */
-function documentFor(state: PreviewState) {
-	return state.page === 'diff' ? diffFixtureFor(state) : editorFixtureFor(state);
-}
-
-function messageFor(state: PreviewState, document: unknown) {
+function documentFor(state: PreviewState): PreviewMount {
 	return state.page === 'diff'
-		? { type: 'document', semantic: true, document }
-		: { type: 'document', document };
+		? { page: 'diff', document: diffFixtureFor(state) }
+		: { page: 'editor', document: editorFixtureFor(state) };
 }
 
-function payloadFor(state: PreviewState, document: unknown) {
+function messageFor(mount: PreviewMount) {
+	return mount.page === 'diff'
+		? { type: 'document', semantic: true, document: mount.document }
+		: { type: 'document', document: mount.document };
+}
+
+/** The target-side rows the diff state pretends a copy wrote. */
+function copiedDiffRows(document: DiffDocument): string[] {
+	return document.rows
+		.filter((row) => row.right !== undefined && row.status !== 'unchanged')
+		.slice(0, 3)
+		.map((row) => sideKey(row, 'right'))
+		.filter((key): key is string => key !== undefined);
+}
+
+/** The editor rows the state pretends a copy wrote. */
+function copiedEditorRows(document: { rows: EcucRow[] }): string[] {
+	return document.rows
+		.filter((row) => row.kind === 'parameter')
+		.slice(1, 3)
+		.map((row) => row.id);
+}
+
+/** The rows a state pretends a merge copy wrote and the user has not saved. */
+function copiedRowsFor(state: PreviewState, mount: PreviewMount) {
+	if (state.copied !== true) {
+		return undefined;
+	}
+	return mount.page === 'diff'
+		? { diff: { left: [], right: copiedDiffRows(mount.document) }, editor: [] }
+		: { diff: { left: [], right: [] }, editor: copiedEditorRows(mount.document) };
+}
+
+function payloadFor(state: PreviewState, mount: PreviewMount) {
 	return {
 		state: state.name,
 		page: state.page,
-		message: messageFor(state, document),
+		message: messageFor(mount),
+		copied: copiedRowsFor(state, mount),
 		merge: state.merge,
 		swap: state.swap,
 		wide: state.wide,

@@ -13,12 +13,15 @@ import '../../../../src/webview/diffMonaco';
 import '../../../../src/webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
 import type { CollapseAllProbe, FoldedProbe, GutterAlignment, NavigationProbe, PaneSnapshot, StickyProbe } from './previewAudit';
+import type { CopyDirtyRows } from '../../../../src/core/copy/copyDirty';
 import type { PreviewStateFields } from './previewStateFields';
 
 interface PreviewPayload extends PreviewStateFields {
 	state: string;
 	page: 'diff' | 'editor';
 	message: unknown;
+	/** Rows the state pretends a merge copy left unsaved. */
+	copied?: { diff: CopyDirtyRows; editor: string[] };
 	renameDocument?: { rows: PreviewRow[]; selectedId?: string };
 }
 
@@ -165,6 +168,16 @@ async function applyMerge(): Promise<void> {
 		return;
 	}
 	window.postMessage({ type: 'mergeMode', enabled: payload.merge }, '*');
+	await tick();
+}
+
+/** Posts the copied-but-unsaved rows the state describes, after the document is mounted. */
+async function applyCopied(): Promise<void> {
+	if (payload.copied === undefined) {
+		return;
+	}
+	const rows = payload.page === 'diff' ? payload.copied.diff : payload.copied.editor;
+	window.postMessage({ type: 'copyDirty', rows }, '*');
 	await tick();
 }
 
@@ -1707,6 +1720,7 @@ async function run(): Promise<void> {
 	}
 	const foldOnly = payload.foldLabel !== undefined || payload.collapseAll === true;
 	await applyMerge();
+	await applyCopied();
 	if (payload.page === 'diff' && !foldOnly) {
 		await waitForMergeArrows();
 		await probeGutterAlignment();

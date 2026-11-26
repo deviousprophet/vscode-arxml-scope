@@ -21,6 +21,20 @@ The comparison itself, its change classes and its navigation are in
 5. Save the file you changed with the normal **Save**. `Ctrl+Z` in that pane undoes one
    copy; the pane label shows `•` while its document is dirty.
 
+## Unsaved copies are visible
+
+A copy writes immediately but does not save. Until you save, the copied rows carry a
+modified-line marker in the margin of the side that received them — the same marker the
+[ECUC editor](ECUC_EDITOR.md#copied-rows) shows for that file:
+
+- The marker is a margin bar plus a faint line tint in the editor; in the diff it is the
+  margin bar only, so added/removed/changed paint keeps its meaning.
+- The source side is never marked.
+- The marker clears when the copy is undone or its text is typed over, and the whole set
+  clears after a successful **Save**. A failed save or a refused copy keeps it.
+- The `•` in the pane label is the ordinary unsaved-file marker; it covers copied and typed
+  changes together.
+
 Turning **Merge** off restores the read-only diff: the gutter and sash remain for
 resizing, but no copy actions are shown and no writes are possible.
 

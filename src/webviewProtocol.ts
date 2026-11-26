@@ -86,6 +86,8 @@ export type EditorProviderToWebview =
 	  }
 	/** The TextDocument's dirty state changed. */
 	| { type: 'dirty'; dirty: boolean; revision: number }
+	/** The rows a merge copy wrote and the user has not saved yet. */
+	| { type: 'copyDirty'; rows: string[] }
 	/** The host asks the page to submit pending edits before saving. */
 	| { type: 'flushEdits'; requestId: number }
 	/** Replace the workspace condition values (first load and a page reload). */
@@ -147,6 +149,7 @@ const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'documentPatch',
 	'editResult',
 	'dirty',
+	'copyDirty',
 	'flushEdits',
 	'conditions',
 	'select',

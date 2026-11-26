@@ -1,4 +1,9 @@
 rust-toolchain.toml
+deny.toml
+.nvmrc
+.npmrc
+patches/**
+images/icon.svg
 out/**
 node_modules/**
 src/**
@@ -20,3 +25,4 @@ package-lock.json
 DESIGN.md
 examples/**
 docs/**
+packages/**

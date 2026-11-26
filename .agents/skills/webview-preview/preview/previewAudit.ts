@@ -31,6 +31,8 @@ export interface AuditState {
 	detailsRename?: boolean;
 	/** The direct-editor delete/word-delete/replace scenario ran. */
 	deleteEdit?: boolean;
+	/** The state posted copied-but-unsaved rows. */
+	copied?: boolean;
 }
 
 interface Rect {
@@ -719,9 +721,35 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 		...monacoMountIssues(state),
 		...syntaxStateIssues(state, audit),
 		...editorStateIssues(state),
+		...copiedMarkerIssues(state),
 		...stickyStateIssues(state, audit),
 		...selectIssues(state, audit),
 		...swapViolations(state, audit.swap)
+	];
+}
+
+/** A copied row must paint its marker on the receiving side only. */
+function copiedMarkerIssues(state: AuditState): string[] {
+	if (state.copied !== true) {
+		return [];
+	}
+	if (state.page === 'editor') {
+		return [
+			...issueWhen(
+				document.querySelectorAll('#tree .arxml-copied-line').length === 0,
+				'the copied rows did not paint their modified-line marker'
+			),
+			...issueWhen(
+				document.querySelectorAll('#tree .arxml-copied-line-bg').length === 0,
+				'the copied rows did not paint their line tint'
+			)
+		];
+	}
+	const modified = document.querySelectorAll('.modified-in-monaco-diff-editor .arxml-copied-line').length;
+	const original = document.querySelectorAll('.original-in-monaco-diff-editor .arxml-copied-line').length;
+	return [
+		...issueWhen(modified === 0, 'the copied side did not paint its modified-line marker'),
+		...issueWhen(original !== 0, 'the source side painted a copied-row marker')
 	];
 }
 
