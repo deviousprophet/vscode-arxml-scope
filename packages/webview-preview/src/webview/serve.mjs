@@ -133,12 +133,15 @@ async function route(request, response, { adapter, root }) {
 	}
 	await serveAsset(response, { root, pathname: url.pathname });
 }
-/** Every request, with server failures turned into a plain-text 500. */
+/** Every request, with server failures turned into a generic plain-text 500. */
 async function handleRequest(request, response, context) {
 	try {
 		await route(request, response, context);
 	} catch (error) {
-		sendText(response, 500, error instanceof Error ? error.message : String(error));
+		// Keep the detail local: an HTTP client must not receive internal paths
+		// or stack-trace text (CodeQL: information exposure through a stack trace).
+		console.error('preview server error:', error);
+		sendText(response, 500, 'internal preview server error');
 	}
 }
 /**
