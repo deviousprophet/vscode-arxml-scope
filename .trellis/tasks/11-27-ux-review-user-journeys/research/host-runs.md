@@ -156,6 +156,6 @@ dialogs, crash/restart, one-sided merge, other themes).
    plain-language activation error (and a supported-platform list) is the minimum.
 2. Then **UX-008**: the diff needs the same page-level `Ctrl+S` handling the ECUC editor has, or
    the docs must stop implying that Save from the diff works.
-3. Then **UX-001** (save refusal next to the row/save action) and the toolbar label loss
-   (**UX-002**).
+3. Then **UX-001** (save refusal next to the row/save action), **UX-011** (keep the edited row
+   selected across the save echo) and the toolbar label loss (**UX-002**).
 4. Rerun the stale guard with a deterministic hook (or a test seam) instead of a race.
