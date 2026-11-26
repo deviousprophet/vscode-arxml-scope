@@ -1,8 +1,8 @@
 # Evidence index — UX review
 
-All preview evidence was produced on 2026-11-27 from the repository root. Preview PNGs and audit
-JSON live in the skill's ignored artifact directory; only the derived notes are stored in this
-task.
+All preview evidence was produced on 2026-11-27 from the repository root. The preview PNGs and
+audit JSON are copied into `research/evidence/preview/` and committed with this task, so the
+review travels to another machine. The derived notes stay here.
 
 ## Commands that produced the evidence
 
@@ -75,8 +75,8 @@ node .agents/skills/webview-preview/scripts/shotWebview.mjs --state <state>
 | toolbar-800 | 784×805 | yes | 0 |
 | toolbar-900 | 884×805 | yes | 0 |
 
-PNG: `<repo>/.agents/skills/webview-preview/artifacts/<state>.png`
-Audit: `<repo>/.agents/skills/webview-preview/artifacts/<state>.audit.json`
+PNG: `<repo>/evidence/preview/<state>.png`
+Audit: `<repo>/evidence/preview/<state>.audit.json`
 
 ## Journey → state mapping
 
@@ -149,16 +149,15 @@ Audit: `<repo>/.agents/skills/webview-preview/artifacts/<state>.audit.json`
 
 - `findings/UX-001-stale-save-hidden-status.md`
 - `findings/UX-002-diff-toolbar-label-loss.md`
-- `findings/UX-003-copied-rows-missing-unsaved-strip.md`
 - `findings/UX-004-details-derived-formats-stale.md`
 - `findings/UX-005-rename-refusal-generic-strip.md`
 - `findings/UX-006-vertical-sidebar-tabs.md`
-- `findings/UX-007-merge-overflow-covers-rows.md`
 
 ## Host evidence (Phase 3)
 
-The real-host runner is documented in `research/host-runs.md`; scripts live in
-`research/host/`. Artifacts are under `research/evidence/host/`.
+The real-host runner is documented in `research/host-runs.md`; the reusable scripts live in
+`.agents/skills/ux-review/scripts/host/` (the `ux-review` skill). Artifacts for this review are
+under `research/evidence/host/`.
 
 ### Exact reproduction commands
 
@@ -167,23 +166,38 @@ The real-host runner is documented in `research/host-runs.md`; scripts live in
 node esbuild.js
 node scripts/build-engine.mjs --debug
 
-# Full normal matrix (12 scenarios)
-node .trellis/tasks/11-27-ux-review-user-journeys/research/host/run.mjs
+# Full normal matrix (14 scenarios); write evidence into this task
+$env:HOST_OUT='.trellis/tasks/11-27-ux-review-user-journeys/research/evidence/host'
+node .agents/skills/ux-review/scripts/host/run.mjs
 
 # One or more scenarios only
-$env:UX_HOST_ONLY='merge'
-node .trellis/tasks/11-27-ux-review-user-journeys/research/host/run.mjs
+$env:UX_HOST_ONLY='capture-fidelity,save-continuity'
+node .agents/skills/ux-review/scripts/host/run.mjs
 Remove-Item Env:UX_HOST_ONLY
 
 # Missing-engine run (hides the binary, restores it in finally)
 $env:UX_HOST_MODE='missing-engine'
-node .trellis/tasks/11-27-ux-review-user-journeys/research/host/run.mjs
-Remove-Item Env:UX_HOST_MODE
+node .agents/skills/ux-review/scripts/host/run.mjs
+Remove-Item Env:HOST_OUT, Env:UX_HOST_MODE
 ```
 
 Each run creates a fresh `%TEMP%\arxml-ux-host-ws-*` workspace and
 `%TEMP%\arxml-ux-host-profile-*`, and removes both on exit. No trace `.zip` is kept: the
 per-scenario JSON plus workbench/webview PNGs are the step record.
+
+### Capture conditions
+
+- Preview states: a standalone **1400×900** page in dark theme. That is not the width a user sees
+  inside VS Code; do not treat it as host parity.
+- Host workbench: **1440×900**. The webview body measured **1082×777** (editor, auxiliary bar
+  closed), **786×799** (diff, Chat/auxiliary bar open) and **786×777** (save continuity, auxiliary
+  bar open). The side bar, Chat and editor split all reduce the CSS width.
+- `capture-fidelity` records `window.zoomLevel`, workbench inner size, frame `innerWidth`/`innerHeight`
+  and `devicePixelRatio` at 100% and 80% zoom; see `driver-report.json` → `captures`.
+  At 100%: workbench 1440×900, frame 786×777, DPR 1. At 80%: workbench 1728×1080, frame
+  1074×949, DPR 0.833. `window.zoomLevel` stayed 0, so use the frame width + DPR.
+- Width-sensitive findings state the measured webview width and zoom. UX-002 is a split-width
+  defect at 786–990 px, not a full-width one.
 
 ### Host artifact index
 
@@ -194,11 +208,12 @@ per-scenario JSON plus workbench/webview PNGs are the step record.
 | `edit-01-dirty-{workbench,webview}.png` | edit | EDIT-01, EDIT-03; UX-004 (Value 7 vs Decimal 1) |
 | `edit-02-saved-{workbench,webview}.png` | edit | EDIT-19 (`Ctrl+S` writes) |
 | `save-continuity-before-{workbench,webview}.png`, `save-continuity-after-{workbench,webview}.png` | save-continuity | EDIT-40; **UX-011** (Details `P99` → `P85` while scroll/focus survive) |
+| `capture-zoom-100-{workbench,webview}.png`, `capture-zoom-80-{workbench,webview}.png` | capture-fidelity | window/webview size, DPR and zoom evidence; 786→1074 CSS px at 80% |
 | `edit-16-stale-{workbench,webview}.png` | stale-node | EDIT-16; **UX-001** |
 | `entry-20-compare-two-{workbench,webview}.png` | compare-two | ENTRY-20 |
 | `diff-01-loaded-*.png`, `diff-02-strict-*.png`, `diff-03-find-*.png`, `diff-04-next-long-*.png` | diff | DIFF-01, DIFF-03, DIFF-06, DIFF-07; UX-002 (icon-only at ~990 px) |
 | `merge-01-on-*.png`, `merge-02-copied-*.png`, `merge-03-save-paths-*.png` | merge | MERGE-01, MERGE-02, MERGE-14, MERGE-15; **UX-008** |
-| `merge-10-stale-{workbench,webview}.png` | stale-copy | MERGE-10 not reproduced (no modal) |
+| `driver-report.json` → `stale-copy` | stale-copy | MERGE-10 not reproduced (no modal; screenshots removed) |
 | `engine-01-status-workbench.png` | engine-index | ENGINE-01; INDEX-01 status bar |
 | `index-04-rebuilt-workbench.png` | engine-index | INDEX-04 |
 | `a11y-01-palette-*.png` | a11y | A11Y-01 (palette-only open) |
@@ -209,7 +224,7 @@ per-scenario JSON plus workbench/webview PNGs are the step record.
 | `probe-diff-{workbench,webview}.png` | probe-diff | DOM diagnostic: toolbar buttons 40×48 px, hunk action items, scroll containers |
 | `missing-engine/first-02-missing-engine-workbench.png` | missing-engine | FIRST-02, ENGINE-04; **UX-009** |
 | `missing-engine/driver-report.json` | missing-engine | notifications, registered commands, status bar |
-| `driver-report.json` | normal | all 13 scenarios: checks, observations, screenshots |
+| `driver-report.json` | normal | all 14 scenarios: checks, observations, `captures[]` sizes |
 | `host-activation.json`, `host-run.json` | both | activation timing/error and launch summary |
 
 ### Host finding map
@@ -224,9 +239,11 @@ per-scenario JSON plus workbench/webview PNGs are the step record.
 | UX-009 | `missing-engine/first-02-missing-engine-workbench.png`, `missing-engine/driver-report.json` | confirmed |
 | UX-010 | `entry-16-stale-first-workbench.png`, `driver-report.json` → `stale-first` | confirmed, medium confidence |
 | UX-011 | `save-continuity-before-webview.png` (Details `P99`), `save-continuity-after-webview.png` (Details `P85`), `driver-report.json` → `save-continuity` | new, high confidence |
-| MERGE-10 | `merge-10-stale-workbench.png` | not reproduced (race lost) |
+| MERGE-10 | `driver-report.json` → `stale-copy` | not reproduced (race lost) |
 
-UX-003 and UX-007 are recorded as limitations, not scored findings (see their Disposition
-sections).
+UX-003 and UX-007 were dropped as limitations, not scored findings, and their candidate files
+were removed: UX-003’s copied-row marker is a deliberately distinct signal (the pane bullet and
+dirty tab cover the unsaved state); UX-007’s line-1 overflow is native Monaco placement and was
+not reproduced as an obstruction.
 
 

@@ -29,14 +29,14 @@ saved.
 ## Repro
 
 1. `node .agents/skills/webview-preview/scripts/shotWebview.mjs --state editor-stale-save`
-2. Read `.agents/skills/webview-preview/artifacts/editor-stale-save.audit.json` (0 violations),
+2. Read `research/evidence/preview/editor-stale-save.audit.json` (0 violations),
    then open `editor-stale-save.png`.
 3. Observe the top strip, the selected row, and the bottom-right status line.
 
 ## Evidence
 
-- `.agents/skills/webview-preview/artifacts/editor-stale-save.png`
-- `.agents/skills/webview-preview/artifacts/editor-stale-save.audit.json`
+- `research/evidence/preview/editor-stale-save.png`
+- `research/evidence/preview/editor-stale-save.audit.json`
 - `research/evidence.md`, `research/evidence/preview-audit-summary.md`
 
 ## Notes

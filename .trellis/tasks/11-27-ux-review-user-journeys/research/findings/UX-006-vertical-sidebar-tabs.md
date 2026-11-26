@@ -27,8 +27,8 @@ marked only by a slightly brighter background/underline. The Details panel's own
 
 ## Evidence
 
-- `.agents/skills/webview-preview/artifacts/editor.png`
-- `.agents/skills/webview-preview/artifacts/editor.audit.json`
+- `research/evidence/preview/editor.png`
+- `research/evidence/preview/editor.audit.json`
 
 ## Notes
 

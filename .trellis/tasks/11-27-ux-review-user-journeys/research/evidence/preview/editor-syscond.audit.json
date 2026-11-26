@@ -1,0 +1,333 @@
+{
+  "state": "editor-syscond",
+  "page": "editor",
+  "ready": true,
+  "viewport": {
+    "width": 1384,
+    "height": 805
+  },
+  "toolbar": {
+    "controls": 3,
+    "display": "flex",
+    "groups": {
+      "left": null,
+      "right": null
+    },
+    "overlaps": [],
+    "outside": [],
+    "clipped": [],
+    "mergePressed": null
+  },
+  "gutter": {
+    "cells": 0,
+    "rails": 0,
+    "digitsClear": true
+  },
+  "content": {
+    "pageOverflow": false,
+    "scrollWidth": 1384,
+    "clientWidth": 1384
+  },
+  "selected": "Details",
+  "swap": null,
+  "sticky": {
+    "visible": false,
+    "display": "none",
+    "text": "",
+    "rect": null
+  },
+  "syntax": [
+    {
+      "text": "module P.Syn \"Syn\"",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "module ",
+      "className": "mtk10",
+      "color": "rgb(86, 156, 214)"
+    },
+    {
+      "text": "P.Syn ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "\"Syn\"",
+      "className": "mtk5",
+      "color": "rgb(206, 145, 120)"
+    },
+    {
+      "text": "{",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "{",
+      "className": "mtk13 bracket-highlighting-0",
+      "color": "rgb(255, 215, 0)"
+    },
+    {
+      "text": "    Syntax \"Syntax\"",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "    Syntax ",
+      "className": "mtk19",
+      "color": "rgb(78, 201, 176)"
+    },
+    {
+      "text": "\"Syntax\"",
+      "className": "mtk5",
+      "color": "rgb(206, 145, 120)"
+    },
+    {
+      "text": "    {",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "    ",
+      "className": "mtk13",
+      "color": "rgb(128, 128, 128)"
+    },
+    {
+      "text": "{",
+      "className": "mtk13 bracket-highlighting-1",
+      "color": "rgb(218, 112, 214)"
+    },
+    {
+      "text": "        Binary = 0b1010",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        Binary ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "0b1010",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        Condition = 1 [(CANIPCOR",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        Condition ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "1 ",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "[",
+      "className": "mtk13 bracket-highlighting-2",
+      "color": "rgb(23, 159, 255)"
+    },
+    {
+      "text": "(",
+      "className": "mtk13 bracket-highlighting-3",
+      "color": "rgb(255, 215, 0)"
+    },
+    {
+      "text": "CANIPCORETYPE_SC",
+      "className": "mtk10",
+      "color": "rgb(86, 156, 214)"
+    },
+    {
+      "text": "==",
+      "className": "mtk16",
+      "color": "rgb(197, 134, 192)"
+    },
+    {
+      "text": "0",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": ")",
+      "className": "mtk13 bracket-highlighting-3",
+      "color": "rgb(255, 215, 0)"
+    },
+    {
+      "text": "||",
+      "className": "mtk16",
+      "color": "rgb(197, 134, 192)"
+    },
+    {
+      "text": "(",
+      "className": "mtk13 bracket-highlighting-3",
+      "color": "rgb(255, 215, 0)"
+    },
+    {
+      "text": "FEATURE",
+      "className": "mtk10",
+      "color": "rgb(86, 156, 214)"
+    },
+    {
+      "text": "==",
+      "className": "mtk16",
+      "color": "rgb(197, 134, 192)"
+    },
+    {
+      "text": "true",
+      "className": "mtk11",
+      "color": "rgb(79, 193, 255)"
+    },
+    {
+      "text": ")",
+      "className": "mtk13 bracket-highlighting-3",
+      "color": "rgb(255, 215, 0)"
+    },
+    {
+      "text": "&&",
+      "className": "mtk16",
+      "color": "rgb(197, 134, 192)"
+    },
+    {
+      "text": "(",
+      "className": "mtk13 bracket-highlighting-3",
+      "color": "rgb(255, 215, 0)"
+    },
+    {
+      "text": "MODE",
+      "className": "mtk10",
+      "color": "rgb(86, 156, 214)"
+    },
+    {
+      "text": "==",
+      "className": "mtk16",
+      "color": "rgb(197, 134, 192)"
+    },
+    {
+      "text": "\"A\"",
+      "className": "mtk5",
+      "color": "rgb(206, 145, 120)"
+    },
+    {
+      "text": ")",
+      "className": "mtk13 bracket-highlighting-3",
+      "color": "rgb(255, 215, 0)"
+    },
+    {
+      "text": "]",
+      "className": "mtk13 bracket-highlighting-2",
+      "color": "rgb(23, 159, 255)"
+    },
+    {
+      "text": "        Decimal = 42",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    }
+  ],
+  "syscond": {
+    "details": [
+      {
+        "text": "(",
+        "className": "syscond-punct",
+        "color": "color(srgb 0.595294 0.595294 0.595294)"
+      },
+      {
+        "text": "CANIPCORETYPE_SC",
+        "className": "syscond-name",
+        "color": "rgb(86, 156, 214)"
+      },
+      {
+        "text": "==",
+        "className": "syscond-operator",
+        "color": "rgb(197, 134, 192)"
+      },
+      {
+        "text": "0",
+        "className": "syscond-number",
+        "color": "rgb(181, 206, 168)"
+      },
+      {
+        "text": ")",
+        "className": "syscond-punct",
+        "color": "color(srgb 0.595294 0.595294 0.595294)"
+      },
+      {
+        "text": "||",
+        "className": "syscond-operator",
+        "color": "rgb(197, 134, 192)"
+      },
+      {
+        "text": "(",
+        "className": "syscond-punct",
+        "color": "color(srgb 0.595294 0.595294 0.595294)"
+      },
+      {
+        "text": "FEATURE",
+        "className": "syscond-name",
+        "color": "rgb(86, 156, 214)"
+      },
+      {
+        "text": "==",
+        "className": "syscond-operator",
+        "color": "rgb(197, 134, 192)"
+      },
+      {
+        "text": "true",
+        "className": "syscond-literal",
+        "color": "rgb(79, 193, 255)"
+      },
+      {
+        "text": ")",
+        "className": "syscond-punct",
+        "color": "color(srgb 0.595294 0.595294 0.595294)"
+      },
+      {
+        "text": "&&",
+        "className": "syscond-operator",
+        "color": "rgb(197, 134, 192)"
+      },
+      {
+        "text": "(",
+        "className": "syscond-punct",
+        "color": "color(srgb 0.595294 0.595294 0.595294)"
+      },
+      {
+        "text": "MODE",
+        "className": "syscond-name",
+        "color": "rgb(86, 156, 214)"
+      },
+      {
+        "text": "==",
+        "className": "syscond-operator",
+        "color": "rgb(197, 134, 192)"
+      },
+      {
+        "text": "\"A\"",
+        "className": "syscond-string",
+        "color": "rgb(206, 145, 120)"
+      },
+      {
+        "text": ")",
+        "className": "syscond-punct",
+        "color": "color(srgb 0.595294 0.595294 0.595294)"
+      }
+    ],
+    "panelName": "rgb(86, 156, 214)",
+    "panelState": "rgb(79, 193, 255)"
+  },
+  "violations": []
+}

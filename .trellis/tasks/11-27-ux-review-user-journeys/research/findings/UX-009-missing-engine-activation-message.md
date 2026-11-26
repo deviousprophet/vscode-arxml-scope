@@ -31,7 +31,7 @@ Real Extension Development Host with `dist/engine/win32-x64/arxml-engine.exe` hi
 ## Repro
 
 1. Hide the staged engine binary (the task runner does this with `UX_HOST_MODE=missing-engine`).
-2. `$env:UX_HOST_MODE='missing-engine'; node .trellis/tasks/11-27-ux-review-user-journeys/research/host/run.mjs`
+2. `$env:UX_HOST_MODE='missing-engine'; node .agents/skills/ux-review/scripts/host/run.mjs`
 3. Read `missing-engine/driver-report.json`, then open `first-02-missing-engine-workbench.png`.
 
 ## Evidence

@@ -1,0 +1,254 @@
+{
+  "state": "editor-sticky",
+  "page": "editor",
+  "ready": true,
+  "viewport": {
+    "width": 1384,
+    "height": 805
+  },
+  "toolbar": {
+    "controls": 3,
+    "display": "flex",
+    "groups": {
+      "left": null,
+      "right": null
+    },
+    "overlaps": [],
+    "outside": [],
+    "clipped": [],
+    "mergePressed": null
+  },
+  "gutter": {
+    "cells": 0,
+    "rails": 0,
+    "digitsClear": true
+  },
+  "content": {
+    "pageOverflow": false,
+    "scrollWidth": 1384,
+    "clientWidth": 1384
+  },
+  "selected": "Details",
+  "swap": null,
+  "sticky": {
+    "visible": true,
+    "display": "block",
+    "text": "13module P.Preview \"Preview\"    Items \"Items\"",
+    "rect": {
+      "x": 0,
+      "y": 61,
+      "right": 974,
+      "bottom": 99,
+      "width": 974,
+      "height": 38
+    }
+  },
+  "syntax": [
+    {
+      "text": "        P0012 = 12",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0012 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "12",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        P0013 = 13",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0013 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "13",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        P0014 = 14",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0014 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "14",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        P0015 = 15",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0015 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "15",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        P0016 = 16",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0016 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "16",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        P0017 = 17",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0017 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "17",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        P0018 = 18",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0018 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "18",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        P0019 = 19",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0019 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "19",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        P0020 = 20",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0020 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "20",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    },
+    {
+      "text": "        P0021 = 21",
+      "className": "",
+      "color": "rgb(204, 204, 204)"
+    },
+    {
+      "text": "        P0021 ",
+      "className": "mtk4",
+      "color": "rgb(156, 220, 254)"
+    },
+    {
+      "text": "= ",
+      "className": "mtk6",
+      "color": "rgb(212, 212, 212)"
+    },
+    {
+      "text": "21",
+      "className": "mtk7",
+      "color": "rgb(181, 206, 168)"
+    }
+  ],
+  "syscond": {
+    "details": [],
+    "panelName": null,
+    "panelState": null
+  },
+  "violations": []
+}

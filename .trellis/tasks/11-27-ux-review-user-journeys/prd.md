@@ -71,6 +71,9 @@ or opens the same file twice. Include the recovery path, not only the happy path
   `active-frame` webview.
 - Use a temporary workspace with copied ARXML fixtures; never open the user's working tree as
   the test workspace.
+- Record the workbench window size, the webview frame content size, `devicePixelRatio` and zoom
+  level with every capture. Test at the default zoom and at one changed zoom level; a preview
+  state’s 1400 px page is not the width a user sees inside VS Code.
 - Before and after every host round-trip (save, copy, undo/redo, rename, refresh, settings/theme,
   document patch), snapshot scroll, selection/caret, focus, folds, active pane/tab, find state,
   sash and dirty markers. Run at least one probe with the document scrolled away from the top and
@@ -86,6 +89,8 @@ or opens the same file twice. Include the recovery path, not only the happy path
 - [ ] Every P0/P1 finding has a reproducible step list and at least one evidence artifact.
 - [ ] Every mutating journey records a continuity result; at least one save probe starts scrolled
       away from the top, and any lost scroll/selection/focus/fold/search state is reported.
+- [ ] Every capture records the workbench and webview sizes, zoom and DPR; width-sensitive
+      findings are checked at two effective widths and do not claim a 1400 px preview is host parity.
 - [ ] Preview captures cover the rendered states used by the journeys; missing states are added
       or the gap is recorded.
 - [ ] Real-host runs use a temp workspace and leave no VS Code or browser process behind.

@@ -1,9 +1,9 @@
 {
   "mode": "normal",
-  "startedAt": "2026-11-26T19:14:03.734Z",
-  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-Ma1Xjr",
+  "startedAt": "2026-11-26T19:22:11.254Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-L7LK8y",
   "cdp": {
-    "port": "51742",
+    "port": "64497",
     "attempts": 1,
     "contexts": 1,
     "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/8a14f0cc1b/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
@@ -11,7 +11,7 @@
   "scenarios": [
     {
       "id": "gate",
-      "startedAt": "2026-11-26T19:14:03.783Z",
+      "startedAt": "2026-11-26T19:22:11.325Z",
       "ok": true,
       "checks": [
         {
@@ -55,24 +55,71 @@
         "tabs": [
           {
             "label": "left.arxml",
-            "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-Ma1Xjr\\left.arxml",
+            "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-L7LK8y\\left.arxml",
             "dirty": false
           },
           {
             "label": "left.arxml",
             "viewType": "vscode-arxml-scope.ecucEditor",
-            "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-Ma1Xjr\\left.arxml",
+            "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-L7LK8y\\left.arxml",
             "dirty": false
           }
         ],
         "detailsExcerpt": "container\nContKeep\nShort name\nDefinition\nFind references\nReveal in source",
         "diffExcerpt": "left.arxml\n↔\nright.arxml\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\nmodule Pkg.Diff.ModAlpha \"ModAlpha\"\n{\n    ContKeep \"ContKeep\"\n    {\n        Changed = 10\n        "
       },
-      "finishedAt": "2026-11-26T19:14:10.641Z"
+      "finishedAt": "2026-11-26T19:22:18.415Z"
+    },
+    {
+      "id": "capture-fidelity",
+      "startedAt": "2026-11-26T19:22:18.415Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the capture records the workbench zoom level",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "zooming out widens the webview CSS pixel width",
+          "ok": true,
+          "detail": "786 -> 1074"
+        }
+      ],
+      "screenshots": [],
+      "observations": {
+        "zoom0": {
+          "page": {
+            "width": 1440,
+            "height": 900,
+            "dpr": 1
+          },
+          "frame": {
+            "width": 786,
+            "height": 777,
+            "dpr": 1
+          },
+          "zoom": 0
+        },
+        "zoomOut": {
+          "page": {
+            "width": 1728,
+            "height": 1080,
+            "dpr": 0.8333333134651184
+          },
+          "frame": {
+            "width": 1074,
+            "height": 949,
+            "dpr": 0.8333333134651184
+          },
+          "zoom": 0
+        }
+      },
+      "finishedAt": "2026-11-26T19:22:22.151Z"
     },
     {
       "id": "probe-diff",
-      "startedAt": "2026-11-26T19:14:10.641Z",
+      "startedAt": "2026-11-26T19:22:22.151Z",
       "ok": true,
       "checks": [],
       "screenshots": [
@@ -92,14 +139,14 @@
               "title": "Show every row",
               "cls": "tool diff-tool tool-secondary",
               "rect": {
-                "x": 24,
-                "y": 3,
-                "width": 32,
+                "x": 28,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 56,
-                "bottom": 51,
-                "left": 24
+                "top": 6,
+                "right": 68,
+                "bottom": 54,
+                "left": 28
               }
             },
             {
@@ -107,14 +154,14 @@
               "title": "Show only differences and their context",
               "cls": "tool diff-tool tool-secondary",
               "rect": {
-                "x": 58,
-                "y": 3,
-                "width": 32,
+                "x": 70,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 90,
-                "bottom": 51,
-                "left": 58
+                "top": 6,
+                "right": 110,
+                "bottom": 54,
+                "left": 70
               }
             },
             {
@@ -122,14 +169,14 @@
               "title": "Context applies to Show diff",
               "cls": "tool diff-tool",
               "rect": {
-                "x": 91,
-                "y": 3,
-                "width": 32,
+                "x": 115,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 123,
-                "bottom": 51,
-                "left": 91
+                "top": 6,
+                "right": 155,
+                "bottom": 54,
+                "left": 115
               }
             },
             {
@@ -137,14 +184,14 @@
               "title": "Semantic matching pairs renamed containers",
               "cls": "tool diff-tool",
               "rect": {
-                "x": 124,
-                "y": 3,
-                "width": 32,
+                "x": 160,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 156,
-                "bottom": 51,
-                "left": 124
+                "top": 6,
+                "right": 200,
+                "bottom": 54,
+                "left": 160
               }
             },
             {
@@ -152,14 +199,14 @@
               "title": "Strict matching reproduces the previous diff",
               "cls": "tool diff-tool",
               "rect": {
-                "x": 158,
-                "y": 3,
-                "width": 32,
+                "x": 202,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 190,
-                "bottom": 51,
-                "left": 158
+                "top": 6,
+                "right": 242,
+                "bottom": 54,
+                "left": 202
               }
             },
             {
@@ -167,14 +214,14 @@
               "title": "Previous difference (Shift+F7)",
               "cls": "tool diff-tool tool-secondary",
               "rect": {
-                "x": 191,
-                "y": 3,
-                "width": 32,
+                "x": 247,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 223,
-                "bottom": 51,
-                "left": 191
+                "top": 6,
+                "right": 287,
+                "bottom": 54,
+                "left": 247
               }
             },
             {
@@ -182,14 +229,14 @@
               "title": "Next difference (F7)",
               "cls": "tool diff-tool tool-secondary",
               "rect": {
-                "x": 224,
-                "y": 3,
-                "width": 32,
+                "x": 289,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 256,
-                "bottom": 51,
-                "left": 224
+                "top": 6,
+                "right": 329,
+                "bottom": 54,
+                "left": 289
               }
             },
             {
@@ -197,14 +244,14 @@
               "title": "Copy rows between the panes",
               "cls": "tool diff-tool",
               "rect": {
-                "x": 257,
-                "y": 3,
-                "width": 32,
+                "x": 334,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 289,
-                "bottom": 51,
-                "left": 257
+                "top": 6,
+                "right": 374,
+                "bottom": 54,
+                "left": 334
               }
             },
             {
@@ -212,14 +259,14 @@
               "title": "Swap the displayed sides",
               "cls": "tool diff-tool",
               "rect": {
-                "x": 290,
-                "y": 3,
-                "width": 32,
+                "x": 376,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 322,
-                "bottom": 51,
-                "left": 290
+                "top": 6,
+                "right": 416,
+                "bottom": 54,
+                "left": 376
               }
             },
             {
@@ -227,14 +274,14 @@
               "title": "Collapse every container",
               "cls": "tool diff-tool tool-secondary",
               "rect": {
-                "x": 323,
-                "y": 3,
-                "width": 32,
+                "x": 421,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 355,
-                "bottom": 51,
-                "left": 323
+                "top": 6,
+                "right": 461,
+                "bottom": 54,
+                "left": 421
               }
             },
             {
@@ -242,14 +289,14 @@
               "title": "Expand every container",
               "cls": "tool diff-tool tool-secondary",
               "rect": {
-                "x": 356,
-                "y": 3,
-                "width": 32,
+                "x": 463,
+                "y": 6,
+                "width": 40,
                 "height": 48,
-                "top": 3,
-                "right": 388,
-                "bottom": 51,
-                "left": 356
+                "top": 6,
+                "right": 503,
+                "bottom": 54,
+                "left": 463
               }
             }
           ],
@@ -263,12 +310,12 @@
             {
               "cls": "monaco-scrollable-element editor-scrollable vs-dark",
               "top": 0,
-              "height": 724
+              "height": 718
             },
             {
               "cls": "monaco-scrollable-element editor-scrollable vs-dark",
               "top": 0,
-              "height": 724
+              "height": 718
             }
           ],
           "actions": [
@@ -277,14 +324,14 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 171,
+                "x": 498,
+                "y": 177,
                 "width": 20,
                 "height": 18,
-                "top": 171,
-                "right": 370,
-                "bottom": 189,
-                "left": 350
+                "top": 177,
+                "right": 518,
+                "bottom": 195,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-left\" role=\"button\" aria-label=\"Copy Block to Left\" tabindex"
             },
@@ -293,14 +340,14 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 189,
+                "x": 498,
+                "y": 195,
                 "width": 20,
                 "height": 18,
-                "top": 189,
-                "right": 370,
-                "bottom": 207,
-                "left": 350
+                "top": 195,
+                "right": 518,
+                "bottom": 213,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-right\" role=\"button\" aria-label=\"Copy Block to Right\" tabind"
             },
@@ -309,14 +356,14 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 294.5,
+                "x": 498,
+                "y": 300.5,
                 "width": 20,
                 "height": 18,
-                "top": 294.5,
-                "right": 370,
-                "bottom": 312.5,
-                "left": 350
+                "top": 300.5,
+                "right": 518,
+                "bottom": 318.5,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-left\" role=\"button\" aria-label=\"Copy Block to Left\" tabindex"
             },
@@ -325,14 +372,14 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 312.5,
+                "x": 498,
+                "y": 318.5,
                 "width": 20,
                 "height": 18,
-                "top": 312.5,
-                "right": 370,
-                "bottom": 330.5,
-                "left": 350
+                "top": 318.5,
+                "right": 518,
+                "bottom": 336.5,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-right\" role=\"button\" aria-label=\"Copy Block to Right\" tabind"
             },
@@ -341,14 +388,14 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 370.5,
+                "x": 498,
+                "y": 376.5,
                 "width": 20,
                 "height": 18,
-                "top": 370.5,
-                "right": 370,
-                "bottom": 388.5,
-                "left": 350
+                "top": 376.5,
+                "right": 518,
+                "bottom": 394.5,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-left\" role=\"button\" aria-label=\"Copy Block to Left\" tabindex"
             },
@@ -357,14 +404,14 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 388.5,
+                "x": 498,
+                "y": 394.5,
                 "width": 20,
                 "height": 18,
-                "top": 388.5,
-                "right": 370,
-                "bottom": 406.5,
-                "left": 350
+                "top": 394.5,
+                "right": 518,
+                "bottom": 412.5,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-right\" role=\"button\" aria-label=\"Copy Block to Right\" tabind"
             },
@@ -373,14 +420,14 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 418,
+                "x": 498,
+                "y": 424,
                 "width": 20,
                 "height": 18,
-                "top": 418,
-                "right": 370,
-                "bottom": 436,
-                "left": 350
+                "top": 424,
+                "right": 518,
+                "bottom": 442,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-left\" role=\"button\" aria-label=\"Copy Block to Left\" tabindex"
             },
@@ -389,14 +436,14 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 436,
+                "x": 498,
+                "y": 442,
                 "width": 20,
                 "height": 18,
-                "top": 436,
-                "right": 370,
-                "bottom": 454,
-                "left": 350
+                "top": 442,
+                "right": 518,
+                "bottom": 460,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-right\" role=\"button\" aria-label=\"Copy Block to Right\" tabind"
             },
@@ -405,14 +452,14 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 636.5,
+                "x": 498,
+                "y": 642.5,
                 "width": 20,
                 "height": 18,
-                "top": 636.5,
-                "right": 370,
-                "bottom": 654.5,
-                "left": 350
+                "top": 642.5,
+                "right": 518,
+                "bottom": 660.5,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-left\" role=\"button\" aria-label=\"Copy Block to Left\" tabindex"
             },
@@ -421,25 +468,25 @@
               "aria": null,
               "cls": "action-item menu-entry",
               "rect": {
-                "x": 350,
-                "y": 654.5,
+                "x": 498,
+                "y": 660.5,
                 "width": 20,
                 "height": 18,
-                "top": 654.5,
-                "right": 370,
-                "bottom": 672.5,
-                "left": 350
+                "top": 660.5,
+                "right": 518,
+                "bottom": 678.5,
+                "left": 498
               },
               "html": "<li class=\"action-item menu-entry\" role=\"presentation\" custom-hover=\"true\"><a class=\"action-label codicon codicon-arrow-right\" role=\"button\" aria-label=\"Copy Block to Right\" tabind"
             }
           ]
         }
       },
-      "finishedAt": "2026-11-26T19:14:12.643Z"
+      "finishedAt": "2026-11-26T19:22:24.154Z"
     },
     {
       "id": "edit",
-      "startedAt": "2026-11-26T19:14:12.643Z",
+      "startedAt": "2026-11-26T19:22:24.155Z",
       "ok": true,
       "checks": [
         {
@@ -485,11 +532,11 @@
         },
         "savedDirtyHidden": true
       },
-      "finishedAt": "2026-11-26T19:14:19.245Z"
+      "finishedAt": "2026-11-26T19:22:30.826Z"
     },
     {
       "id": "save-continuity",
-      "startedAt": "2026-11-26T19:14:19.246Z",
+      "startedAt": "2026-11-26T19:22:30.827Z",
       "ok": false,
       "checks": [
         {
@@ -553,11 +600,11 @@
         },
         "afterDetails": "parameter\nP85\nDefinition\n/P/Big/C/P85\nType\nInteger\nValue\nDecimal\n85\nHexadecimal\n0x55\nBinary\n0b01010101\nReveal in source"
       },
-      "finishedAt": "2026-11-26T19:14:24.958Z"
+      "finishedAt": "2026-11-26T19:22:36.484Z"
     },
     {
       "id": "compare-two",
-      "startedAt": "2026-11-26T19:14:24.959Z",
+      "startedAt": "2026-11-26T19:22:36.485Z",
       "ok": true,
       "checks": [
         {
@@ -578,11 +625,11 @@
       "observations": {
         "toolbar": 11
       },
-      "finishedAt": "2026-11-26T19:14:26.869Z"
+      "finishedAt": "2026-11-26T19:22:38.494Z"
     },
     {
       "id": "diff",
-      "startedAt": "2026-11-26T19:14:26.869Z",
+      "startedAt": "2026-11-26T19:22:38.495Z",
       "ok": true,
       "checks": [
         {
@@ -608,7 +655,7 @@
         {
           "name": "next-diff jumps to the changed row on a long diff",
           "ok": true,
-          "detail": "module P.Big \"Big\" ->         P232 = 232"
+          "detail": "module P.Big \"Big\" ->         P233 = 233"
         }
       ],
       "screenshots": [
@@ -640,14 +687,14 @@
         },
         "bigVisible": {
           "visibleBefore": "module P.Big \"Big\"",
-          "visibleAfter": "        P232 = 232"
+          "visibleAfter": "        P233 = 233"
         }
       },
-      "finishedAt": "2026-11-26T19:14:34.920Z"
+      "finishedAt": "2026-11-26T19:22:46.383Z"
     },
     {
       "id": "merge",
-      "startedAt": "2026-11-26T19:14:34.921Z",
+      "startedAt": "2026-11-26T19:22:46.384Z",
       "ok": false,
       "checks": [
         {
@@ -703,8 +750,8 @@
           "copyCount": 1,
           "copyVisible": true,
           "copyBox": {
-            "x": 851,
-            "y": 263,
+            "x": 703,
+            "y": 257,
             "width": 20,
             "height": 18
           }
@@ -721,11 +768,11 @@
         "dirtyAfterTabSave": [],
         "tabSaveWorked": true
       },
-      "finishedAt": "2026-11-26T19:14:58.447Z"
+      "finishedAt": "2026-11-26T19:23:09.923Z"
     },
     {
       "id": "stale-copy",
-      "startedAt": "2026-11-26T19:14:58.449Z",
+      "startedAt": "2026-11-26T19:23:09.927Z",
       "ok": false,
       "checks": [
         {
@@ -740,19 +787,19 @@
       ],
       "observations": {
         "copyBox": {
-          "x": 703,
-          "y": 514.5,
+          "x": 851,
+          "y": 517.5,
           "width": 20,
           "height": 18
         },
         "contentChanged": true,
         "dialogText": ""
       },
-      "finishedAt": "2026-11-26T19:15:03.623Z"
+      "finishedAt": "2026-11-26T19:23:15.191Z"
     },
     {
       "id": "stale-node",
-      "startedAt": "2026-11-26T19:15:03.624Z",
+      "startedAt": "2026-11-26T19:23:15.192Z",
       "ok": true,
       "checks": [
         {
@@ -775,17 +822,17 @@
         "detailsStatus": "The node is no longer in the file.",
         "dirtyHidden": false
       },
-      "finishedAt": "2026-11-26T19:15:10.571Z"
+      "finishedAt": "2026-11-26T19:23:22.295Z"
     },
     {
       "id": "engine-index",
-      "startedAt": "2026-11-26T19:15:10.571Z",
+      "startedAt": "2026-11-26T19:23:22.295Z",
       "ok": true,
       "checks": [
         {
           "name": "engine status produced a notification",
           "ok": true,
-          "detail": "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 13788"
+          "detail": "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 28408"
         },
         {
           "name": "status bar shows the index count",
@@ -804,16 +851,16 @@
       ],
       "observations": {
         "notifications": [
-          "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 13788"
+          "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 28408"
         ],
         "statusBefore": " |  ARXML Scope: 10 files indexed · cross-file checks off (no project) |  ARXML Engine |  0 \n 0 \n 3 |  | ",
         "statusAfter": " |  ARXML Scope: 10 files indexed · cross-file checks off (no project) |  ARXML Engine |  0 \n 0 \n 3 |  | "
       },
-      "finishedAt": "2026-11-26T19:15:16.932Z"
+      "finishedAt": "2026-11-26T19:23:28.595Z"
     },
     {
       "id": "a11y",
-      "startedAt": "2026-11-26T19:15:16.932Z",
+      "startedAt": "2026-11-26T19:23:28.595Z",
       "ok": true,
       "checks": [
         {
@@ -864,11 +911,11 @@
           "DIV"
         ]
       },
-      "finishedAt": "2026-11-26T19:15:23.523Z"
+      "finishedAt": "2026-11-26T19:23:35.367Z"
     },
     {
       "id": "stale-first",
-      "startedAt": "2026-11-26T19:15:23.523Z",
+      "startedAt": "2026-11-26T19:23:35.367Z",
       "ok": false,
       "checks": [
         {
@@ -896,11 +943,11 @@
           }
         ]
       },
-      "finishedAt": "2026-11-26T19:15:27.379Z"
+      "finishedAt": "2026-11-26T19:23:39.192Z"
     },
     {
       "id": "same-file",
-      "startedAt": "2026-11-26T19:15:27.379Z",
+      "startedAt": "2026-11-26T19:23:39.193Z",
       "ok": true,
       "checks": [
         {
@@ -918,7 +965,340 @@
         ],
         "tabs": []
       },
-      "finishedAt": "2026-11-26T19:15:29.735Z"
+      "finishedAt": "2026-11-26T19:23:41.606Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "gate-01-editor",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "gate-02-diff",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "capture-zoom-100",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "capture-zoom-80",
+      "page": {
+        "width": 1728,
+        "height": 1080,
+        "dpr": 0.8333333134651184
+      },
+      "frame": {
+        "width": 1074,
+        "height": 949,
+        "dpr": 0.8333333134651184
+      }
+    },
+    {
+      "name": "probe-diff",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "edit-01-dirty",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "edit-02-saved",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "save-continuity-before",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "save-continuity-after",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "entry-20-compare-two",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-01-loaded",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-02-strict",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-03-find",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-04-next-long",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-01-on",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-02-copied",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-03-save-paths",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "merge-03-saved",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 300,
+        "height": 150,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-10-stale",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "edit-16-stale",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "engine-01-status",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "index-04-rebuilt",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "a11y-01-palette",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "a11y-02-editor-focus",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "a11y-03-diff-focus",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "entry-16-stale-first",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "entry-24-same-file",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
     }
   ],
   "screenshots": [
@@ -926,6 +1306,10 @@
     "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\gate-01-editor-webview.png",
     "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\gate-02-diff-workbench.png",
     "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\gate-02-diff-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\capture-zoom-100-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\capture-zoom-100-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\capture-zoom-80-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\capture-zoom-80-webview.png",
     "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\probe-diff-workbench.png",
     "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\probe-diff-webview.png",
     "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\edit-01-dirty-workbench.png",
@@ -970,9 +1354,9 @@
   "errors": [
     {
       "stage": "screenshot:merge-03-saved",
-      "message": "locator.screenshot: Timeout 14996.849000000002ms exceeded.\nCall log:\n\u001b[2m  - taking element screenshot\u001b[22m\n\u001b[2m    - disabled all CSS animations\u001b[22m\n\u001b[2m  - waiting for fonts to load...\u001b[22m\n\u001b[2m  - fonts loaded\u001b[22m\n\u001b[2m  - attempting scroll into view action\u001b[22m\n\u001b[2m    - waiting for element to be stable\u001b[22m\n",
-      "at": "2026-11-26T19:14:58.447Z"
+      "message": "locator.screenshot: Timeout 14996.570999999996ms exceeded.\nCall log:\n\u001b[2m  - taking element screenshot\u001b[22m\n\u001b[2m    - disabled all CSS animations\u001b[22m\n\u001b[2m  - waiting for fonts to load...\u001b[22m\n\u001b[2m  - fonts loaded\u001b[22m\n\u001b[2m  - attempting scroll into view action\u001b[22m\n\u001b[2m    - waiting for element to be stable\u001b[22m\n",
+      "at": "2026-11-26T19:23:09.923Z"
     }
   ],
-  "finishedAt": "2026-11-26T19:15:29.736Z"
+  "finishedAt": "2026-11-26T19:23:41.606Z"
 }

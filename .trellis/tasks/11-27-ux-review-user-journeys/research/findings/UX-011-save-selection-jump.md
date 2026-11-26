@@ -34,8 +34,8 @@ older `selectedId` over the row the user had just clicked. A second Details edit
 1. Build the extension and debug engine.
 2. Run the host with only the continuity scenario:
    ```powershell
-   $env:HOST_ONLY='save-continuity'
-   node .trellis/tasks/11-27-ux-review-user-journeys/research/host/run.mjs
+   $env:UX_HOST_ONLY='save-continuity'
+   node .agents/skills/ux-review/scripts/host/run.mjs
    ```
 3. The driver writes a 400-parameter document, opens it in the ECUC editor, scrolls to the last
    parameter, edits `P99`, and presses `Ctrl+S`.

@@ -1,0 +1,90 @@
+{
+  "state": "diff-collapsed-onesided",
+  "page": "diff",
+  "ready": true,
+  "viewport": {
+    "width": 1384,
+    "height": 805
+  },
+  "toolbar": {
+    "controls": 11,
+    "display": "flex",
+    "groups": {
+      "left": {
+        "rect": {
+          "x": 8,
+          "y": 6,
+          "right": 596,
+          "bottom": 54,
+          "width": 588,
+          "height": 48
+        },
+        "clientWidth": 588,
+        "scrollWidth": 588
+      },
+      "right": {
+        "rect": {
+          "x": 1376,
+          "y": 30,
+          "right": 1376,
+          "bottom": 30,
+          "width": 0,
+          "height": 0
+        },
+        "clientWidth": 0,
+        "scrollWidth": 0
+      }
+    },
+    "overlaps": [],
+    "outside": [],
+    "clipped": [],
+    "mergePressed": false
+  },
+  "gutter": {
+    "cells": 0,
+    "rails": 0,
+    "digitsClear": true
+  },
+  "folded": {
+    "label": "Items \"Items\"",
+    "visible": [
+      "module P.Shared \"Shared\"",
+      "{",
+      "Items \"Items\"",
+      "}",
+      ""
+    ],
+    "originalVisible": [
+      "module P.Shared \"Shared\"",
+      "{",
+      "Items \"Items\"",
+      "}",
+      ""
+    ],
+    "markers": {
+      "modified": 1,
+      "original": 1
+    },
+    "expandedMarkers": {
+      "modified": 1,
+      "original": 1
+    },
+    "diagonalFills": {
+      "modified": 0,
+      "original": 0
+    },
+    "expandedDiagonalFills": {
+      "modified": 0,
+      "original": 0
+    },
+    "hint": "\"⋯\""
+  },
+  "content": {
+    "pageOverflow": false,
+    "scrollWidth": 1384,
+    "clientWidth": 1384
+  },
+  "selected": null,
+  "swap": null,
+  "violations": []
+}

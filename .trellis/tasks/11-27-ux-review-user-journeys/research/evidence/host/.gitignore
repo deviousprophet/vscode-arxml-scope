@@ -1,3 +1,0 @@
-# Screenshots are local evidence, not repository content.
-# Reproduce them with research/host/run.mjs; the JSON and Markdown stay tracked.
-*.png

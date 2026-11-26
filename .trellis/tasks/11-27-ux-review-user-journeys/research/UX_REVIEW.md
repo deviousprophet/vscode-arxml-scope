@@ -28,7 +28,7 @@ real-host record in
 | Dimension | Score | Primary Rationale |
 | :--- | :--- | :--- |
 | Usability & Clarity | 2/5 | Primary open/edit/diff/merge flows work, but a failed engine start is reported as a truncated developer toast, and a successful save moves the selection to an unrelated row. Two other save paths give no visible feedback. |
-| Visual Hierarchy | 3/5 | Wide-width toolbars, diff tints and the file-name strip scan well; at ordinary split widths every toolbar label disappears into ambiguous icons, and the Details/Conditions tabs are rotated vertical text at the far edge. |
+| Visual Hierarchy | 3/5 | Wide-width toolbars, diff tints and the file-name strip scan well; at 786–990 px webview widths (the real host capture, not a 1400 px preview) every toolbar label disappears into ambiguous icons, and the Details/Conditions tabs are rotated vertical text at the far edge. |
 | Accessibility & Ergonomics | 3/5 | Palette-only entry, labelled controls and a logical diff focus order were verified; the Details/Conditions tabs are not reachable by plain Tab and rotated labels add a reading cost. High-contrast, reduced-motion, zoom and screen-reader paths remain untested. |
 | Flow Efficiency | 2/5 | A first-run activation failure blocks every command (broken FIRST-02/ENGINE-04), which caps this dimension at 2. Merge completion requires leaving the diff for another tab to save, and a save loses the edited row's selection. |
 
@@ -92,7 +92,11 @@ real-host record in
   only Collapse / Expand / Sidebar; at ~1,076 px the labels returned. Show all, Show diff and
   Context become three near-identical square glyphs, and Prev/Next arrows sit beside the Swap
   arrow ([narrow editor](evidence/host/gate-01-editor-workbench.png),
-  [1,200 px preview](../../../../.agents/skills/webview-preview/artifacts/toolbar-1200.png)).
+  [1,200 px preview](evidence/preview/toolbar-1200.png)).
+  The host workbench was 1440×900; the captured webviews were 786–1082 CSS px depending on the
+  side bar/auxiliary bar, at 100% zoom. A standalone 1400 px preview keeps its labels, so this is
+  a split-width defect, not a full-width one; at 80% zoom the frame measured 1074×949 CSS px
+  (DPR 0.833), and at 120% it shrinks further.
   **UX Impact:** Users must hover or guess to navigate the diff at a normal split-editor width,
   slowing the primary comparison loop.
   **Actionable Fix:** Keep labels until they genuinely stop fitting, then collapse the secondary
@@ -121,7 +125,7 @@ real-host record in
 - **[Minor] Rename refusal uses the generic “Invalid value — not saved” strip and leaves the field unmarked (ECUC editor / Details short name):**
   A refused container short name showed the generic value-error strip while the **Short name**
   input kept its normal blue border; only the inline line and the distant status named the rename
-  ([capture](../../../../.agents/skills/webview-preview/artifacts/editor-rename-refusal.png)).
+  ([capture](evidence/preview/editor-rename-refusal.png)).
   **UX Impact:** The most prominent message describes the wrong kind of problem, and the field
   itself does not look rejected, weakening trust in the save state.
   **Actionable Fix:** Use operation-specific copy (“Short name refused — not saved”) and apply the

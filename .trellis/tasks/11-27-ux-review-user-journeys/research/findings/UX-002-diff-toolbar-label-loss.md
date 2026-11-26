@@ -38,10 +38,10 @@ labels disappear.
 
 ## Evidence
 
-- `.agents/skills/webview-preview/artifacts/toolbar-1200.png`
-- `.agents/skills/webview-preview/artifacts/toolbar-1024.png`
-- `.agents/skills/webview-preview/artifacts/toolbar-800.png`
-- `.agents/skills/webview-preview/artifacts/toolbar-640.png`
+- `research/evidence/preview/toolbar-1200.png`
+- `research/evidence/preview/toolbar-1024.png`
+- `research/evidence/preview/toolbar-800.png`
+- `research/evidence/preview/toolbar-640.png`
 - matching `.audit.json` files (toolbar group rects and scroll widths)
 
 ## Notes

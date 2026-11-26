@@ -30,8 +30,8 @@ silently does nothing. A user who closes the diff after `Ctrl+S` loses the copy.
 
 ## Repro
 
-1. `node .trellis/tasks/11-27-ux-review-user-journeys/research/host/run.mjs` with
-   `UX_HOST_ONLY=merge`.
+1. `$env:HOST_OUT='.trellis/tasks/11-27-ux-review-user-journeys/research/evidence/host';`
+   `$env:UX_HOST_ONLY='merge'; node .agents/skills/ux-review/scripts/host/run.mjs`
 2. Enable **Merge**, hover a changed hunk, click **Copy Block to Right**.
 3. Press `Ctrl+S` in the modified pane; inspect `/state` and `right.arxml`.
 4. Click the `right.arxml` tab; press `Ctrl+S` again.

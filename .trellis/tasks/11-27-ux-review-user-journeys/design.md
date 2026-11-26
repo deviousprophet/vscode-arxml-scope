@@ -59,6 +59,23 @@ is at least Major.
 At least one probe per mutating surface must start with the document scrolled away from the top
 and the edited row off-screen. A top-of-file fixture cannot expose this class.
 
+## Capture fidelity
+
+The capture is evidence only for the size, zoom and layout it recorded.
+
+- Record the workbench window inner size, the webview frame `innerWidth`/`innerHeight`,
+  `devicePixelRatio`, `window.zoomLevel`, and whether the auxiliary bar/side bar was open with
+  every screenshot.
+- The preview skill renders a standalone 1400 px page. A real 1440×900 workbench with a side bar
+  or Chat leaves roughly 780–1080 px of CSS width for the webview. Never present a preview width
+  as the host width.
+- Capture at the default zoom and at one changed zoom (80% and 120% are useful); zoom changes the
+  effective CSS width and can create or hide a toolbar/overflow defect.
+- For width-sensitive findings, state the measured webview width and zoom, and test at least two
+  effective widths. Qualify whether a wider editor area avoids the issue.
+- Keep both the workbench screenshot (chrome, tabs, dialogs) and the frame-body screenshot
+  (content), and put the measured sizes in the evidence index.
+
 ## Evidence pipeline
 
 ### 1. Preview states (rendered surfaces)
@@ -69,8 +86,9 @@ and the edited row off-screen. A top-of-file fixture cannot expose this class.
 - If a journey has no state, add the smallest state to
   `.agents/skills/webview-preview/preview/` and document it in
   `docs/contributor/WEBVIEW_PREVIEW.md`; do not invent a second renderer.
-- Copy only small audit JSON / notes into task research. Reference PNGs by their ignored
-  `artifacts/` path; do not commit large images.
+- Copy the audit JSON and the referenced PNGs into `research/evidence/preview/` and commit them
+  with the task, so the review can continue on another machine. Do not leave the only copy in
+  the skill's ignored `artifacts/` directory.
 
 ### 2. Real host (commands, keyboard, dialogs, errors)
 
@@ -81,10 +99,13 @@ Reuse the proven split from
   a temporary workspace and `--remote-debugging-port`.
 - A suite running inside the host opens documents and webviews through real commands.
 - Playwright attaches over CDP to the workbench and targets the nested `active-frame` webview.
-- A small task-local bridge (HTTP on localhost) lets the Playwright driver ask the in-host suite
+- A small skill-local bridge (HTTP on localhost) lets the Playwright driver ask the in-host suite
   to execute a command, read `vscode.env`, change a setting or report state. This avoids
   palette-typing flakiness for setup while the actual UX steps still use clicks, focus and
   keyboard where the user would.
+- The reusable runner lives in the `ux-review` skill at
+  `.agents/skills/ux-review/scripts/host/`; set `HOST_OUT` to this task's evidence directory.
+  Task research keeps evidence, not a second copy of the scripts.
 - Every run gets a fresh temp workspace copied from `src/test/fixtures/diff/{left,right}.arxml`
   plus any edge fixture. The user's working tree is never opened as the test workspace.
 
@@ -167,6 +188,6 @@ asks the user for consent to create and start a separate Trellis task (or tasks)
 returns the finding ids, evidence paths and proposed task split. No production fix, no source
 edit and no release change happens inside this review task.
 
-Committed evidence stays small: journey notes, finding files, evidence index and audit JSON.
-Screenshots and traces stay in the ignored preview artifacts directory and are referenced by
-path.
+Committed evidence includes the journey notes, finding files, evidence index, audit JSON,
+screenshots and host captures needed to continue on another machine. Traces may stay local and
+be referenced with a note; the report links the committed paths.

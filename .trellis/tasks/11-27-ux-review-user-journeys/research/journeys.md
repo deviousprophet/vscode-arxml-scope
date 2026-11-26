@@ -12,7 +12,7 @@ Status: Phase 1 complete, Phase 2 preview evidence attached. Host-only journeys 
 - **Persona** — NU new user, IE integration engineer, RE release engineer, MA maintainer,
   KO keyboard-only user, LV low-vision user.
 - **Evidence** — `PV:<state>` is a seeded preview capture in
-  `.agents/skills/webview-preview/artifacts/<state>.png` with `<state>.audit.json` read first.
+  `evidence/preview/<state>.png` with `<state>.audit.json` read first.
   `HOST:P3` means it can only be exercised in the real host. `PV gap` means no seeded state
   renders the surface.
 - **Verdict** — `good` / `friction` / `broken` / `N/A — <reason>`. A verdict is only recorded
@@ -22,6 +22,9 @@ Status: Phase 1 complete, Phase 2 preview evidence attached. Host-only journeys 
   scroll, selection/caret, focus, folds, find and pane state must be preserved. The before/after
   probes are in "Continuity probes"; a data-correct rebuild that loses the user's place is a
   finding.
+- **Capture fidelity** — `PV:` evidence is a standalone 1400×900 page, not the host design width.
+  The host workbench was 1440×900 and the webview body measured 786–1082 CSS px depending on the
+  side bar/auxiliary bar and zoom; width-sensitive verdicts state the measured width.
 
 ## Coverage proof
 

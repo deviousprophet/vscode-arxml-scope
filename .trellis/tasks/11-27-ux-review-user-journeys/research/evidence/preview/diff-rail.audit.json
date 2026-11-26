@@ -1,0 +1,90 @@
+{
+  "state": "diff-rail",
+  "page": "diff",
+  "ready": true,
+  "viewport": {
+    "width": 1384,
+    "height": 805
+  },
+  "toolbar": {
+    "controls": 11,
+    "display": "flex",
+    "groups": {
+      "left": {
+        "rect": {
+          "x": 8,
+          "y": 6,
+          "right": 596,
+          "bottom": 54,
+          "width": 588,
+          "height": 48
+        },
+        "clientWidth": 588,
+        "scrollWidth": 588
+      },
+      "right": {
+        "rect": {
+          "x": 1376,
+          "y": 30,
+          "right": 1376,
+          "bottom": 30,
+          "width": 0,
+          "height": 0
+        },
+        "clientWidth": 0,
+        "scrollWidth": 0
+      }
+    },
+    "overlaps": [],
+    "outside": [],
+    "clipped": [],
+    "mergePressed": false
+  },
+  "gutter": {
+    "cells": 0,
+    "rails": 0,
+    "digitsClear": true
+  },
+  "gutterProbe": {
+    "present": true,
+    "width": 35,
+    "items": 0,
+    "itemActions": [],
+    "buttons": [],
+    "sash": true,
+    "mergeActive": false,
+    "itemDisplay": "",
+    "itemVisible": false,
+    "currentShowAlways": false,
+    "currentActions": [],
+    "clicked": null,
+    "copy": null,
+    "overflowLabels": null,
+    "overflowDebug": [],
+    "availability": []
+  },
+  "gutterAlignment": {
+    "mergeActive": false,
+    "items": 0,
+    "visible": 0,
+    "checked": 0,
+    "maxCenterOffset": 0
+  },
+  "folding": {
+    "originalBefore": 38,
+    "originalCollapsed": 1,
+    "originalExpanded": 38,
+    "modifiedBefore": 38,
+    "modifiedCollapsed": 1,
+    "modifiedExpanded": 38,
+    "chevrons": 2
+  },
+  "content": {
+    "pageOverflow": false,
+    "scrollWidth": 1384,
+    "clientWidth": 1384
+  },
+  "selected": null,
+  "swap": null,
+  "violations": []
+}

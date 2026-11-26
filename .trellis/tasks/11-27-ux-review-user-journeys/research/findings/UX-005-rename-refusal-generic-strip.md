@@ -33,8 +33,8 @@ prominent text says the wrong kind of thing.
 
 ## Evidence
 
-- `.agents/skills/webview-preview/artifacts/editor-rename-refusal.png`
-- `.agents/skills/webview-preview/artifacts/editor-invalid.png`
+- `research/evidence/preview/editor-rename-refusal.png`
+- `research/evidence/preview/editor-invalid.png`
 - `research/findings/UX-001-stale-save-hidden-status.md` (same feedback-routing theme)
 
 ## Notes

@@ -28,10 +28,10 @@
 
 - [x] Build the extension and debug engine: `node esbuild.js`,
       `node scripts/build-engine.mjs --debug`.
-- [x] Create the task-local host runner under `research/host/`:
-      `@vscode/test-electron` + temp workspace from
+- [x] Use the reusable `ux-review` skill runner at
+      `.agents/skills/ux-review/scripts/host/` (`@vscode/test-electron` + temp workspace from
       `src/test/fixtures/diff/{left,right}.arxml` + CDP attach + `active-frame` targeting +
-      command/setting bridge.
+      command/setting bridge). Do not copy it into the task; keep only evidence here.
 - [x] Run the primary journeys first: open editor, select first + compare, open diff, merge
       copy, save, engine status, rebuild index.
 - [ ] Run the edge journeys: cancel a dialog, invalid value, refusal, stale node, missing
@@ -51,6 +51,15 @@
       — Screenshots and the Playwright-scenario report are in `research/evidence/host/`; no
       `.zip` trace was kept (CDP tracing of the whole workbench was too heavy for the task
       budget). The scenario report is the step record.
+- [x] Add a `capture-fidelity` scenario: record the workbench window size, webview frame size,
+      devicePixelRatio and `window.zoomLevel`; capture at 100% and 80% zoom and prove the webview
+      CSS width changes. Put the sizes next to each evidence artifact.
+      — Ran. 100%: workbench 1440×900, frame 786×777, DPR 1. 80%: workbench 1728×1080,
+      frame 1074×949, DPR 0.833. `window.zoomLevel` stayed 0, so the frame width + DPR are the
+      effective measurement.
+- [x] For toolbar/overflow findings, capture at two effective widths and state the measured
+      webview width and zoom; do not treat a 1400 px preview as host parity.
+      — UX-002 qualified to 786–990 px at 100% zoom; a 1400 px preview keeps its labels.
 - [x] **Gate:** every executed journey has evidence and a verdict; every skipped journey says
       why.
 
@@ -92,7 +101,7 @@ node .agents/skills/webview-preview/scripts/shotWebview.mjs --state <name>
 # Extension and engine for the real host
 node esbuild.js
 node scripts/build-engine.mjs --debug
-node .trellis/tasks/11-27-ux-review-user-journeys/research/host/run-journeys.mjs
+node .agents/skills/ux-review/scripts/host/run.mjs
 
 # Repository gates (no source change, but keep the tree healthy)
 npm run check-types

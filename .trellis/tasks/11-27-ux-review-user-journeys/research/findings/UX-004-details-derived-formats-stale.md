@@ -31,8 +31,8 @@ numeric interpretation while the user types.
 
 ## Evidence
 
-- `.agents/skills/webview-preview/artifacts/editor-dirty.png`
-- `.agents/skills/webview-preview/artifacts/editor-dirty.audit.json`
+- `research/evidence/preview/editor-dirty.png`
+- `research/evidence/preview/editor-dirty.audit.json`
 
 ## Notes
 

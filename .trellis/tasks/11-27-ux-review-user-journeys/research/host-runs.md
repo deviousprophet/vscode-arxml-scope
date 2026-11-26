@@ -1,8 +1,9 @@
 # Host runs — Phase 3 evidence
 
-Status: one normal run + one missing-engine run completed. Every listed screenshot/JSON is under
-`research/evidence/host/`. The final full-run report is `driver-report.json`; the missing-engine
-run has its own directory.
+Status: two normal runs (13 and 14 scenarios) plus one missing-engine run. Every listed
+screenshot/JSON is under `research/evidence/host/`. The final full-run report is
+`driver-report.json`; the missing-engine run has its own directory. The runner is the reusable
+`ux-review` skill at `.agents/skills/ux-review/scripts/host/`; this task keeps the evidence.
 
 ## Environment
 
@@ -21,17 +22,18 @@ run has its own directory.
 
 | File | Role |
 |---|---|
-| `research/host/run.mjs` | temp workspace + `@vscode/test-electron` launch + cleanup; `UX_HOST_MODE=missing-engine` hides the engine binary and restores it in `finally` |
-| `research/host/suite.cjs` | in-host: activate, localhost bridge (`/exec`, `/openWith`, `/openText`, `/closeAll`, `/setting`, `/config`, `/state`, `/writeFile`, `/readFile`, `/replaceDocument`, `/vscodeDelete`, `/save`, `/saveAll`, `/hasCommand`), spawn driver |
-| `research/host/driver.mjs` | Playwright: frame targeting, real clicks/typing/shortcuts, screenshots, per-scenario report |
+| `.agents/skills/ux-review/scripts/host/run.mjs` | temp workspace + `@vscode/test-electron` launch + cleanup; `UX_HOST_MODE=missing-engine` hides the engine binary and restores it in `finally` |
+| `.agents/skills/ux-review/scripts/host/suite.cjs` | in-host: activate, localhost bridge (`/exec`, `/openWith`, `/openText`, `/closeAll`, `/setting`, `/config`, `/state`, `/writeFile`, `/readFile`, `/replaceDocument`, `/vscodeDelete`, `/save`, `/saveAll`, `/hasCommand`), spawn driver |
+| `.agents/skills/ux-review/scripts/host/driver.mjs` | Playwright: frame targeting, real clicks/typing/shortcuts, screenshots, per-scenario report |
 
 Reproduce:
 
 ```powershell
 node esbuild.js
 node scripts/build-engine.mjs --debug
-node .trellis/tasks/11-27-ux-review-user-journeys/research/host/run.mjs
-$env:UX_HOST_MODE='missing-engine'; node .trellis/tasks/11-27-ux-review-user-journeys/research/host/run.mjs
+$env:HOST_OUT='.trellis/tasks/11-27-ux-review-user-journeys/research/evidence/host'
+node .agents/skills/ux-review/scripts/host/run.mjs
+$env:UX_HOST_MODE='missing-engine'; node .agents/skills/ux-review/scripts/host/run.mjs
 ```
 
 ## Gate — primary journey end to end
@@ -67,7 +69,7 @@ Evidence: `gate-01-editor-*.png`, `gate-02-diff-*.png`.
 | MERGE-02 | good | `merge-02-copied-*` | Copy-to-right dirtied `right.arxml`; pane label `right.arxml •`; separate `right.arxml ●` tab appeared. |
 | MERGE-14 | good | `merge-02-copied-*` | Both the pane bullet and the tab bullet are visible. |
 | MERGE-15 | **friction** | `merge-02-copied-*`, `merge-03-save-paths-*` | `Ctrl+S` while the diff has focus does **not** save; switching to the `right.arxml` tab and pressing `Ctrl+S` saves; Save All also saves. New **UX-008**. |
-| MERGE-10/11/12/13 | N/A — guard not reproduced | `merge-10-stale-*` | A version bump 150 ms before the copy always refreshed first; no Reload/Cancel modal was observed. Do not infer the guard works. |
+| MERGE-10/11/12/13 | N/A - guard not reproduced | `driver-report.json` → `stale-copy` | A version bump 150 ms before the copy always refreshed first; no Reload/Cancel modal was observed. Do not infer the guard works. |
 | ENGINE-01 | good | `engine-01-status-workbench.png` | Notification: `ARXML Scope engine running, pid …` with **Restart Engine** / **Open Output**; output lists state, version, protocol, pid, uptime, restarts, open docs, pending, memory, last error. |
 | ENGINE-04 / FIRST-02 | **broken** | `missing-engine/first-02-missing-engine-workbench.png` | Activation fails. Toast is truncated and developer-facing (`run "npm run engine:build"`, `(1 is the host protocol)`). No ARXML command is registered. New **UX-009**. |
 | INDEX-01 | good | `engine-01-status-workbench.png` | Status bar: `ARXML Scope: 7 files indexed · cross-file checks off (no project)`. |
@@ -80,15 +82,16 @@ Evidence: `gate-01-editor-*.png`, `gate-02-diff-*.png`.
 
 ## Scenario report
 
-`driver-report.json` (normal run): 12 scenarios, 1 non-fatal error
-(`screenshot:merge-03-saved` timed out on a webview body screenshot; the workbench screenshot
-and the check results are intact).
+`driver-report.json` (normal run): 14 scenarios, 10 pass; the four non-passing scenarios are the
+known findings/gaps below, not launch failures.
 
 | Scenario | Checks | Result |
 |---|---|---|
 | gate | 6 | all pass |
 | probe-diff | diagnostics | DOM probe only |
+| capture-fidelity | 2 | all pass; 100% frame 786×777, 80% frame 1074×949, DPR 0.833 |
 | edit | 5 | all pass |
+| save-continuity | 6 pass, 1 fail | **UX-011** (Details `P99` → `P85`) |
 | compare-two | 2 | all pass |
 | diff | 5 | all pass |
 | merge | 5 pass, 2 fail | **UX-008** |
@@ -109,11 +112,11 @@ error, not its absence.
 |---|---|---|
 | UX-001 stale save only in Details status | **confirmed** | `edit-16-stale-*`; `The node is no longer in the file.` only in the bottom-right status; dirty strip remains. |
 | UX-002 toolbar labels vanish at narrow widths | **confirmed and widened** | `gate-01-editor-workbench.png` (~780 px) and `diff-01-loaded-workbench.png` (~990 px): all icon-only. At ~1076 px (`edit-01-dirty-*`) the editor labels are back. The editor toolbar is affected too, not just the diff. |
-| UX-003 copied rows lack the page-level unsaved strip | still medium | Not re-run in the editor after a live merge; the diff half is confirmed (pane + tab bullets). |
+| UX-003 copied rows lack the page-level unsaved strip | dropped as limitation | Copied-row markers are a deliberately distinct signal; pane bullet + dirty tab cover the unsaved state. |
 | UX-004 derived integer formats do not follow the draft | **confirmed** | `edit-01-dirty-webview.png`: Value `7`, Decimal `1`, Hexadecimal `0x01`, Binary `0b00000001`. |
 | UX-005 rename refusal generic strip | not re-run | Needs the rename flow; remains preview-only. |
 | UX-006 rotated sidebar tabs | **confirmed visually** | `gate-01-editor-webview.png`, `edit-01-dirty-webview.png`. |
-| UX-007 merge overflow menu covers rows | not re-run | Remains preview-only. |
+| UX-007 merge overflow menu covers rows | dropped as limitation | Native Monaco placement; not reproduced as an obstruction in the host. |
 | UX-008 `Ctrl+S` in the diff does not save the copy | **new / confirmed** | `merge-02-copied-*`, `merge-03-save-paths-*`; tab save and Save All both work. |
 | UX-009 missing-engine activation message is developer-facing and truncated | **new / confirmed** | `missing-engine/*`. |
 | UX-010 deleted first file is compared from cached text with no warning | **new / medium** | `entry-16-stale-first-workbench.png`; `existsAfterDelete=false`, diff still opens. |

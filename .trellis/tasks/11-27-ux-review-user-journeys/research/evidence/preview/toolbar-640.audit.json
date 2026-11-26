@@ -1,0 +1,122 @@
+{
+  "state": "toolbar-640",
+  "page": "diff",
+  "ready": true,
+  "viewport": {
+    "width": 624,
+    "height": 805
+  },
+  "toolbar": {
+    "controls": 11,
+    "display": "flex",
+    "groups": {
+      "left": {
+        "rect": {
+          "x": 4,
+          "y": 3,
+          "right": 316,
+          "bottom": 51,
+          "width": 312,
+          "height": 48
+        },
+        "clientWidth": 312,
+        "scrollWidth": 312
+      },
+      "right": {
+        "rect": {
+          "x": 620,
+          "y": 27,
+          "right": 620,
+          "bottom": 27,
+          "width": 0,
+          "height": 0
+        },
+        "clientWidth": 0,
+        "scrollWidth": 0
+      }
+    },
+    "overlaps": [],
+    "outside": [],
+    "clipped": [],
+    "mergePressed": true
+  },
+  "gutter": {
+    "cells": 0,
+    "rails": 0,
+    "digitsClear": true
+  },
+  "gutterProbe": {
+    "present": true,
+    "width": 35,
+    "items": 4,
+    "itemActions": [
+      [
+        "Copy Block to Left",
+        "Copy Block to Right"
+      ],
+      [
+        "Copy Block to Left",
+        "Copy Block to Right"
+      ],
+      [
+        "Copy Block to Left",
+        "Copy Block to Right"
+      ],
+      [
+        "Copy Block to Left",
+        "Copy Block to Right"
+      ]
+    ],
+    "buttons": [
+      "Copy Block to Left",
+      "Copy Block to Right",
+      "Copy Block to Left",
+      "Copy Block to Right",
+      "Copy Block to Left",
+      "Copy Block to Right",
+      "Copy Block to Left",
+      "Copy Block to Right"
+    ],
+    "sash": true,
+    "mergeActive": true,
+    "itemDisplay": "block",
+    "itemVisible": true,
+    "currentShowAlways": true,
+    "currentActions": [
+      "Copy Block to Left",
+      "Copy Block to Right"
+    ],
+    "clicked": "Copy Block to Left",
+    "copy": {
+      "side": "right",
+      "key": "container:P/Preview/Items#0/param:P0002#0"
+    },
+    "overflowLabels": null,
+    "overflowDebug": [],
+    "availability": []
+  },
+  "gutterAlignment": {
+    "mergeActive": true,
+    "items": 4,
+    "visible": 4,
+    "checked": 4,
+    "maxCenterOffset": 0.5
+  },
+  "folding": {
+    "originalBefore": 38,
+    "originalCollapsed": 1,
+    "originalExpanded": 38,
+    "modifiedBefore": 38,
+    "modifiedCollapsed": 1,
+    "modifiedExpanded": 38,
+    "chevrons": 2
+  },
+  "content": {
+    "pageOverflow": false,
+    "scrollWidth": 624,
+    "clientWidth": 624
+  },
+  "selected": null,
+  "swap": null,
+  "violations": []
+}
