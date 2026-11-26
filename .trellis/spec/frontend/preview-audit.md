@@ -53,6 +53,12 @@ not evidence.
   (`spawnSync`/`execFileSync` block the event loop and the server cannot answer Chrome),
   requests `--dump-dom` and `--screenshot` in one run, extracts the audit from the DOM,
   writes `<state>.audit.json` and fails on violations.
+- **Known runner limit (measured 2026-11-26):** the fixed `--virtual-time-budget` is not a
+  completion signal. `diff-collapsed` folds and settles outside the budget and the runner
+  aborts with `no rendered-geometry audit`; every other sampled state captures in 1.7-2.1 s.
+  Treat this as runner nondeterminism, not a page regression. A replacement runner must wait
+  for the page's published readiness signal. Evidence and the decision are in
+  [`WEBVIEW_PREVIEW_STACK.md`](../../../docs/contributor/WEBVIEW_PREVIEW_STACK.md).
 - `previewWebview.mjs` bundles the skill's `previewData.ts` for Node and
   `previewPage.ts` for the browser with esbuild and serves one HTML document per state.
   It serves the bundled `monaco.worker.js` and hashed font assets and deliberately drops
