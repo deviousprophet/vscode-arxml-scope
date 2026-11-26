@@ -1,0 +1,9 @@
+{
+  "extensionId": "deviousprophet.vscode-arxml-scope",
+  "mode": "missing-engine",
+  "error": "Error: Rust engine is not built at h:\\workspace\\vscode-arxml-scope\\dist\\engine\\win32-x64\\arxml-engine.exe; run \"npm run engine:build\" (1 is the host protocol)\n\tat startFailure (h:\\workspace\\vscode-arxml-scope\\dist\\extension.js:11156:12)\n\tat startClient (h:\\workspace\\vscode-arxml-scope\\dist\\extension.js:11151:11)\n\tat async EngineSupervisor.replaceProcess (h:\\workspace\\vscode-arxml-scope\\dist\\extension.js:10912:16)\n\tat async EngineSupervisor.start (h:\\workspace\\vscode-arxml-scope\\dist\\extension.js:10718:5)\n\tat async createEngineSupervisor (h:\\workspace\\vscode-arxml-scope\\dist\\extension.js:11110:5)\n\tat async activate (h:\\workspace\\vscode-arxml-scope\\dist\\extension.js:11308:22)\n\tat async SS._activate (file:///c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/8a14f0cc1b/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:168:16078)\n\tat async SS._waitForDepsThenActivate (file:///c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/8a14f0cc1b/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:168:16020)\n\tat async SS._initialize (file:///c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/8a14f0cc1b/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:168:15387)",
+  "activatedAt": null,
+  "driverExit": 0,
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-gswQOf",
+  "cdpPort": "58297"
+}

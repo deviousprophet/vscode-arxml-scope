@@ -1,0 +1,10 @@
+{
+  "_type": "host-run",
+  "startedAt": "2026-11-26T18:39:29.189Z",
+  "finishedAt": "2026-11-26T18:39:35.856Z",
+  "ok": true,
+  "mode": "missing-engine",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-gswQOf",
+  "cdpPort": 58297,
+  "outDir": "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-user-journeys\\research\\evidence\\host\\missing-engine"
+}
