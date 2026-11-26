@@ -474,6 +474,20 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
     enter `displayIndexByKey` or search/F7 navigation.
 12. **Dispose everything.** `panel.onDidDispose` sets `disposed`, disposes the watchdog, clears the
     pending refresh timer and every subscription. In-flight async work checks `disposed` before posting.
+13. **A copy is patched, then acknowledged, then tracked.** `applyPlan` applies one `WorkspaceEdit` and
+    updates the prepared side's version; `patchAfterCopy` sends the same span to `doc.update` +
+    `diff.patch` and posts `documentPatch`. The page applies the patch as a line-level model edit and
+    restores both view states, so scroll, folds, selection and the sash survive. A refused patch falls
+    back to the debounced rebuild, and the copy is still acknowledged: the write did happen.
+14. **Copied rows are host state, not page state.** After the patch the host records
+    `{ side, keys, start, end, text, version }` in `copyDirty` (`src/core/copy/copyDirty.ts`) keyed by
+    the **target** document URI and posts `copyDirty` (`{ left: string[], right: string[] }`). Row keys
+    are bare row ids: a `right:`-prefixed added row is normalized through `sideKey`, so the editor page
+    and the diff page decorate the same ids. `copyResult` echoes the click side and key and lets the
+    page clear its optimistic pending marker; `error` clears it too. The registry follows document
+    events: a change that overlaps a copied span (undo, typing over it) drops that record, a disjoint
+    edit shifts its offsets, a save clears the document and a closed buffer forgets it. Every change
+    fires `onDidChange`, so both pages re-read the same rows.
 
 ### 4. Validation & Error Matrix
 
@@ -523,6 +537,12 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
   added/removed rows without word spans, unchanged rows, the one-base-row height including the module
   gap, and no `data-gap`.
 - `src/test/webview/page/search.test.ts` — Enter-only chunked search and count states.
+- `src/test/core/copyDirty.test.ts` — target-side keys, added-row normalization, offset shift, undo /
+  edit-over drop, save clear and closed-buffer forget.
+- `src/test/core/minimalEdit.test.ts` — the line-level splice a copy patch applies, with exact text
+  round trips.
+- `webview-preview` — `diff-copied` and `editor-copied` prove the margin marker paints on the copied
+  side only and stays distinct from diff paint.
 - Reveal is asserted through `reveal.test.ts` / `uxReveal.test.ts`; the source-level `beside` forcing
   is a regression guard, while the real panel behaviour is observed in the Extension Development Host.
 

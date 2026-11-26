@@ -300,6 +300,11 @@ the built-in hover gutter copies a hunk to the other side as one undoable edit. 
 | MERGE-13 | stale bytes | Reload/Cancel modal; Cancel changes nothing |
 | MERGE-14 | edited pane label | `•` while dirty, cleared on save |
 | MERGE-15 | 20 MiB pair | row visible < 100 ms (median), no copy > 250 ms, 10 copies / 10 s |
+| MERGE-16 | copied rows before save | the target rows carry the margin marker in the diff and in the ECUC editor; the source side stays clean |
+| MERGE-17 | save after a copy | every copied marker clears after the save is acknowledged; a failed save keeps them |
+| MERGE-18 | undo or type over a copied row | that row's marker clears; other unsaved copied rows keep theirs |
+| MERGE-19 | copy patch on the page | the patch is a line-level model edit; scroll, folds, selection and the sash ratio survive |
+| MERGE-20 | copy plan latency | 1/10/100-row plans stay under the 100 ms budget; the page patch stays under 50 ms (`npm run benchmark copy`) |
 
 ## PKG — packaging and activation
 

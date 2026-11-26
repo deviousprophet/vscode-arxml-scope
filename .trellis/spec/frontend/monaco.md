@@ -65,6 +65,9 @@ two **independently shaped** documents plus `leftLineKeys`/`rightLineKeys`:
   full re-scan or a structural change.
 - **Must** update one line in place for a one-row `documentPatch`; keep the line map and
   folding ranges consistent.
+- **Must** apply a `documentPatch` as the smallest line edit (`minimalLineEdit`) and
+  restore both diff view states, never `setValue` on both models: a copy must keep scroll,
+  folds, selection and the sash.
 - **Must not** treat the Monaco text as a second source of truth, parse it back into ECUC,
   or persist it.
 - **Must not** add a second row renderer for the diff page.
@@ -121,6 +124,12 @@ Ownership:
 - **The page owns** the ARXML toolbar (view mode, Context, Semantic/Strict, Prev/Next,
   Collapse/Expand, Swap, Merge), the fixed title strip, the two synthetic documents, the
   `data-merge` gate and the two copy actions.
+- **Copied-dirty markers are the page's decoration layer.** `copyDirty` (host) carries row
+  ids; the page paints `arxml-copied-line` in the line-decorations margin only, and
+  `arxml-copy-pending` while one copy is in flight. The editor page adds
+  `arxml-copied-line-bg` for the same ids (`copyDirty` on the editor protocol). Neither
+  uses diff paint classes, so added/removed/changed meaning is unchanged; both clear on a
+  save acknowledgement.
 - `Show all` / `Show diff` and `Context` change `hideUnchangedRegions`:
   `enabled = changesOnly`, `contextLineCount = contextActive ? 5 : 0`,
   `minimumLineCount: 3`. The toolbar control only changes these options.
