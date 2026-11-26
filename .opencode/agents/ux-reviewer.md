@@ -60,11 +60,12 @@ Host.
    pane state after any rebuild.
 3. **Preview evidence.** Load the `webview-preview` skill. Run `--list`, map journeys to states,
    capture with `--state`, and read the audit JSON before the PNG.
-4. **Real-host evidence.** Build the extension and debug engine; launch VS Code with
-   `@vscode/test-electron` and a temporary workspace; attach Playwright over CDP to the nested
-   `active-frame`; drive commands, clicks, focus and keyboard as a user would. Reuse the proven
-   split in `docs/contributor/WEBVIEW_PREVIEW_STACK.md` and
-   `packages/webview-preview/experiments/extensionHost/`.
+4. **Real-host evidence.** Load the `ux-review` skill. Build the extension and debug engine,
+   then run `.agents/skills/ux-review/scripts/host/run.mjs`; it launches VS Code with
+   `@vscode/test-electron`, attaches Playwright over CDP to the nested `active-frame`, and drives
+   commands, clicks, focus and keyboard. Set `HOST_OUT` to the task research directory for
+   evidence. Do not copy the runner into the task; the skill is the reusable home. The spike
+   decision is in `docs/contributor/WEBVIEW_PREVIEW_STACK.md`.
 5. **Continuity probe after every host round-trip.** Before and after every action that can
    rebuild or replace the page model — save, copy, undo/redo, rename, settings/theme change,
    refresh, document patch, compare/reload — snapshot and compare the continuity state below.
@@ -98,6 +99,32 @@ window width and with content scrolled; a top-of-file fixture cannot expose this
 Scroll and selection are independent. A save can preserve the exact scroll and focus while
 applying an older host `selectedId`, so the editor looks stable but Details now targets a
 different row. Assert the selected row and Details as a pair, separately from scroll and focus.
+
+## Capture fidelity (mandatory)
+
+A screenshot is only evidence for the layout it actually captured.
+
+- Record the workbench window size, the webview frame's `innerWidth`/`innerHeight`,
+  `devicePixelRatio`, zoom and the auxiliary-bar/side-bar state with every screenshot.
+- Test at the default zoom and at one changed zoom level. Zoom changes the CSS-pixel width the
+  webview receives: zooming in can turn a comfortable split into an icon-only toolbar, and
+  zooming out can hide a width defect. Record the zoom level with the size; do not assume 100%.
+- Close the Chat/auxiliary bar, notifications and the "extensions disabled" toast before a
+  capture; if the host forces one, record it and the resulting webview width.
+- The webview width is **not** the window width and **not** the preview state width. The
+  preview skill renders a standalone 1400 px page; a real 1440×900 workbench with a sidebar or
+  auxiliary bar leaves roughly 780–1080 px for the webview. Never cite a preview width as if it
+  were the host width.
+- For any width-sensitive finding (toolbar labels, overflow, density), capture at least two
+  realistic widths and report the measured webview width for each. State whether a wider editor
+  area avoids the issue; do not imply a split-width defect affects every layout.
+- Capture both the full workbench (chrome, tabs, notifications, dialogs) and the webview frame
+  body (content). They answer different questions; neither replaces the other.
+- If this review must continue on another machine, set `HOST_OUT` to a tracked task evidence
+  directory and commit the PNGs and JSON; otherwise the default `artifacts/host/` is ignored.
+- Put the measured sizes in the evidence index next to each artifact.
+- For portability, commit the screenshots and audits the report links; large traces may stay
+  local with a note.
 
 ## Journey taxonomy
 
