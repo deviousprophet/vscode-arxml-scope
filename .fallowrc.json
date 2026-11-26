@@ -10,7 +10,13 @@
     "src/test/parity/oracle*.ts",
     ".vscode-test.mjs",
     "esbuild.js",
-    ".github/scripts/*.mjs"
+    ".github/scripts/*.mjs",
+    "packages/webview-preview/adapters/arxml/index.mjs",
+    "packages/webview-preview/adapters/toy/index.mjs",
+    "packages/webview-preview/experiments/extensionHost/cdpCapture.mjs",
+    "packages/webview-preview/experiments/extensionHost/run.mjs",
+    "packages/webview-preview/experiments/extensionHost/suite.cjs",
+    "packages/webview-preview/fixtures/toy/style.css"
   ],
   "ignorePatterns": [
     ".opencode/**",
