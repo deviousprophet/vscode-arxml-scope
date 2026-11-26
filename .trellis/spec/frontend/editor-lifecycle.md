@@ -480,7 +480,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
     restores both view states, so scroll, folds, selection and the sash survive. A refused patch falls
     back to the debounced rebuild, and the copy is still acknowledged: the write did happen.
 14. **Copied rows are host state, not page state.** After the patch the host records
-    `{ side, keys, start, end, text, version }` in `copyDirty` (`src/core/copy/copyDirty.ts`) keyed by
+    `{ keys, start, end, version }` in `copyDirty` (`src/core/copy/copyDirty.ts`) keyed by
     the **target** document URI and posts `copyDirty` (`{ left: string[], right: string[] }`). Row keys
     are bare row ids: a `right:`-prefixed added row is normalized through `sideKey`, so the editor page
     and the diff page decorate the same ids. `copyResult` echoes the click side and key and lets the

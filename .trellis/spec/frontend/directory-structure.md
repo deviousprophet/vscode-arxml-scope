@@ -11,6 +11,8 @@ src/
     ecucEdit.ts             the edit record, region resolution, applyEdit
     ecucStructureEdit.ts    delete/duplicate plans and one-edit structure writes
     diffPanel.ts            the WebviewPanel lifecycle, refresh and reveal
+    copyDirty.ts            the copied-but-unsaved registry keyed by target document
+    copyTiming.ts           per-copy phase timings behind ARXML_COPY_TIMING
     compareSelection.ts     the session-only first-file stash
     conditionValues.ts      SW-SYSCOND entries and the workspaceState store
     indexService.ts         workspace discovery, streamed reads, watcher, status bar
@@ -34,6 +36,9 @@ src/
                       arxmlFeatures.ts (ref tokens and document symbols)
     diff/             diffModel.ts (matching/status/merged order, pure)
                       wordDiff.ts (token-level comparison, pure)
+                      minimalEdit.ts (line-level copy patch, pure)
+    copy/             planCopy.ts (copy ranges and ancestor wrapping, pure)
+                      copyDirty.ts (copied-but-unsaved row registry, pure)
   webview/            browser-only page code. NO `vscode` imports.
     editorMonaco.ts         editor composition root: Monaco page, row model, search, message bridge
     diffMonaco.ts           diff composition root: Monaco diff editor, gutter/sash, search, message bridge
