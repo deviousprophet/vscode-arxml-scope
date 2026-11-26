@@ -5,12 +5,68 @@
  * Each factory returns `{ id, run(ctx) }` where `ctx` is
  * `{ page, diagnostics, state }` and `run` resolves to human-readable issues.
  */
-
 /** Runs a DOM probe in the page with no closure over this module. */
 async function probe(page, fn, arg) {
 	return page.evaluate(fn, arg);
 }
-
+/** Shared visible/clipped/overlap probe; the page owns the geometry rules. */
+async function geometryProbe(page, { selector, mode, tolerance = 0 }) {
+	return probe(
+		page,
+		({ controlSelector, probeMode, allowed }) => {
+			const shownByStyle = (style) =>
+				style.display !== 'none' &&
+				style.visibility !== 'hidden' &&
+				Number(style.opacity) > 0;
+			const shownByRect = (rect) => rect.width > 0 && rect.height > 0;
+			const visible = (element) =>
+				shownByStyle(getComputedStyle(element)) && shownByRect(element.getBoundingClientRect());
+			const clippedIssues = (element) => {
+				const issues = [];
+				if (element.scrollWidth > element.clientWidth + 1) {
+					issues.push(
+						`${controlSelector} content ${element.scrollWidth}px is clipped by ${element.clientWidth}px (${(element.textContent ?? '').trim().slice(0, 40)})`
+					);
+				}
+				if (element.scrollHeight > element.clientHeight + 1) {
+					issues.push(
+						`${controlSelector} content ${element.scrollHeight}px is clipped vertically by ${element.clientHeight}px`
+					);
+				}
+				return issues;
+			};
+			const label = (element) =>
+				(element.getAttribute('aria-label') ?? element.textContent ?? element.tagName)
+					.trim()
+					.slice(0, 40);
+			const overlapOf = (a, b) => {
+				const ra = a.getBoundingClientRect();
+				const rb = b.getBoundingClientRect();
+				const width = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+				const height = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+				return width * height > allowed ? { width, height } : undefined;
+			};
+			const overlapIssues = (a, b) => {
+				const area = a.contains(b) || b.contains(a) ? undefined : overlapOf(a, b);
+				return area === undefined
+					? []
+					: [
+							`${controlSelector} "${label(a)}" overlaps "${label(b)}" by ${Math.round(area.width)}x${Math.round(area.height)}px`
+						];
+			};
+			const clipped = () =>
+				[...document.querySelectorAll(controlSelector)].filter(visible).flatMap(clippedIssues);
+			const overlapping = () => {
+				const elements = [...document.querySelectorAll(controlSelector)].filter(visible);
+				return elements.flatMap((a, index) =>
+					elements.slice(index + 1).flatMap((b) => overlapIssues(a, b))
+				);
+			};
+			return probeMode === 'clip' ? clipped() : overlapping();
+		},
+		{ controlSelector: selector, probeMode: mode, allowed: tolerance }
+	);
+}
 export function noHorizontalOverflow({ selector = 'html' } = {}) {
 	return {
 		id: 'no-horizontal-overflow',
@@ -20,117 +76,35 @@ export function noHorizontalOverflow({ selector = 'html' } = {}) {
 				(rootSelector) => {
 					const root = document.querySelector(rootSelector) ?? document.documentElement;
 					const scrolling = document.scrollingElement ?? document.documentElement;
-					const issues = [];
-					if (scrolling.scrollWidth > scrolling.clientWidth + 1) {
-						issues.push(
-							`document scrollWidth ${scrolling.scrollWidth} exceeds clientWidth ${scrolling.clientWidth}`
-						);
-					}
-					if (root.scrollWidth > root.clientWidth + 1) {
-						issues.push(
-							`${rootSelector} scrollWidth ${root.scrollWidth} exceeds clientWidth ${root.clientWidth}`
-						);
-					}
-					return issues;
+					const overflow = (label, element) =>
+						element.scrollWidth > element.clientWidth + 1
+							? [
+									`${label} scrollWidth ${element.scrollWidth} exceeds clientWidth ${element.clientWidth}`
+								]
+							: [];
+					return [...overflow('document', scrolling), ...overflow(rootSelector, root)];
 				},
 				selector
 			);
 		}
 	};
 }
-
 export function noClippedControls({ selector }) {
 	return {
 		id: `no-clipped-controls:${selector}`,
 		async run({ page }) {
-			return probe(
-				page,
-				(controlSelector) => {
-					const visible = (element) => {
-						const style = getComputedStyle(element);
-						const rect = element.getBoundingClientRect();
-						return (
-							style.display !== 'none' &&
-							style.visibility !== 'hidden' &&
-							Number(style.opacity) > 0 &&
-							rect.width > 0 &&
-							rect.height > 0
-						);
-					};
-					const issues = [];
-					for (const element of document.querySelectorAll(controlSelector)) {
-						if (!visible(element)) {
-							continue;
-						}
-						if (element.scrollWidth > element.clientWidth + 1) {
-							issues.push(
-								`${controlSelector} content ${element.scrollWidth}px is clipped by ${element.clientWidth}px (${(element.textContent ?? '').trim().slice(0, 40)})`
-							);
-						}
-						if (element.scrollHeight > element.clientHeight + 1) {
-							issues.push(
-								`${controlSelector} content ${element.scrollHeight}px is clipped vertically by ${element.clientHeight}px`
-							);
-						}
-					}
-					return issues;
-				},
-				selector
-			);
+			return geometryProbe(page, { selector, mode: 'clip' });
 		}
 	};
 }
-
 export function noOverlap({ selector, tolerance = 4 } = {}) {
 	return {
 		id: `no-overlap:${selector}`,
 		async run({ page }) {
-			return probe(
-				page,
-				({ controlSelector, allowed }) => {
-					const visible = (element) => {
-						const style = getComputedStyle(element);
-						const rect = element.getBoundingClientRect();
-						return (
-							style.display !== 'none' &&
-							style.visibility !== 'hidden' &&
-							Number(style.opacity) > 0 &&
-							rect.width > 0 &&
-							rect.height > 0
-						);
-					};
-					const label = (element) =>
-						(element.getAttribute('aria-label') ?? element.textContent ?? element.tagName)
-							.trim()
-							.slice(0, 40);
-					const elements = [...document.querySelectorAll(controlSelector)].filter(visible);
-					const issues = [];
-					for (let i = 0; i < elements.length; i += 1) {
-						for (let j = i + 1; j < elements.length; j += 1) {
-							const a = elements[i];
-							const b = elements[j];
-							if (a.contains(b) || b.contains(a)) {
-								continue;
-							}
-							const ra = a.getBoundingClientRect();
-							const rb = b.getBoundingClientRect();
-							const width = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
-							const height = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
-							if (width * height > allowed) {
-								issues.push(
-									`${controlSelector} "${label(a)}" overlaps "${label(b)}" by ${Math.round(width)}x${Math.round(height)}px`
-								);
-							}
-						}
-					}
-					return issues;
-				},
-				{ controlSelector: selector, allowed: tolerance }
-			);
+			return geometryProbe(page, { selector, mode: 'overlap', tolerance });
 		}
 	};
 }
-
 export function allVisible({ selector, min = 1 } = {}) {
 	return {
 		id: `all-visible:${selector}`,
@@ -138,58 +112,56 @@ export function allVisible({ selector, min = 1 } = {}) {
 			return probe(
 				page,
 				({ controlSelector, minimum }) => {
-					const issues = [];
+					const hiddenByStyle = (style) =>
+						style.display === 'none' ||
+						style.visibility === 'hidden' ||
+						Number(style.opacity) === 0;
+					const hiddenByRect = (rect) => rect.width === 0 || rect.height === 0;
+					const hidden = (element) =>
+						hiddenByStyle(getComputedStyle(element)) ||
+						hiddenByRect(element.getBoundingClientRect());
 					const elements = [...document.querySelectorAll(controlSelector)];
-					if (elements.length < minimum) {
-						issues.push(`${controlSelector} matched ${elements.length}, expected at least ${minimum}`);
-					}
-					for (const element of elements) {
-						const style = getComputedStyle(element);
-						const rect = element.getBoundingClientRect();
-						if (
-							style.display === 'none' ||
-							style.visibility === 'hidden' ||
-							Number(style.opacity) === 0 ||
-							rect.width === 0 ||
-							rect.height === 0
-						) {
-							issues.push(
-								`${controlSelector} "${(element.textContent ?? '').trim().slice(0, 40)}" is not visible`
-							);
-						}
-					}
-					return issues;
+					const countIssue =
+						elements.length < minimum
+							? [`${controlSelector} matched ${elements.length}, expected at least ${minimum}`]
+							: [];
+					return [
+						...countIssue,
+						...elements
+							.filter(hidden)
+							.map(
+								(element) =>
+									`${controlSelector} "${(element.textContent ?? '').trim().slice(0, 40)}" is not visible`
+							)
+					];
 				},
 				{ controlSelector: selector, minimum: min }
 			);
 		}
 	};
 }
-
+/** True when a diagnostic message is explicitly allowed or ignored. */
+function suppressed(message, allowed, ignore) {
+	return allowed.has(message) || ignore.some((pattern) => pattern.test(message));
+}
+/** Every diagnostic that the caller asked to report, with its kind. */
+function diagnosticIssues(diagnostics, allowed, ignore) {
+	const reported = (message) => !suppressed(message, allowed, ignore);
+	return [
+		...diagnostics.consoleErrors.filter(reported).map((message) => `console error: ${message}`),
+		...diagnostics.pageErrors.filter(reported).map((message) => `page error: ${message}`),
+		...diagnostics.requestFailures.map(
+			(failure) =>
+				`request failure: ${failure.url} (${failure.status ?? failure.error ?? 'unknown'})`
+		)
+	];
+}
 /** Turns captured browser diagnostics into an assertion result. */
 export function noConsoleErrors({ allow = [], ignore = [] } = {}) {
 	return {
 		id: 'no-console-errors',
 		async run({ diagnostics }) {
-			const allowed = new Set(allow);
-			const ignored = (message) => ignore.some((pattern) => pattern.test(message));
-			const issues = [];
-			for (const message of diagnostics.consoleErrors) {
-				if (!allowed.has(message) && !ignored(message)) {
-					issues.push(`console error: ${message}`);
-				}
-			}
-			for (const message of diagnostics.pageErrors) {
-				if (!allowed.has(message) && !ignored(message)) {
-					issues.push(`page error: ${message}`);
-				}
-			}
-			for (const failure of diagnostics.requestFailures) {
-				issues.push(
-					`request failure: ${failure.url} (${failure.status ?? failure.error ?? 'unknown'})`
-				);
-			}
-			return issues;
+			return diagnosticIssues(diagnostics, new Set(allow), ignore);
 		}
 	};
 }

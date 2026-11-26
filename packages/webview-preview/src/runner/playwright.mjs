@@ -25,7 +25,7 @@ const LINUX_CANDIDATES = [
 	'/usr/bin/microsoft-edge'
 ];
 
-export function findSystemBrowser(env = process.env) {
+function findSystemBrowser(env = process.env) {
 	if (env.PLAYWRIGHT_CHROME_PATH) {
 		return env.PLAYWRIGHT_CHROME_PATH;
 	}

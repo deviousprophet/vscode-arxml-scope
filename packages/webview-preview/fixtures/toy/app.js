@@ -1,10 +1,14 @@
 const vscode = acquireVsCodeApi();
 
-function apply(state) {
-	document.body.className = '';
-	for (const name of state.classes ?? []) {
-		document.body.classList.add(name);
+function applyClasses(body, names) {
+	body.className = '';
+	for (const name of names ?? []) {
+		body.classList.add(name);
 	}
+}
+
+function apply(state) {
+	applyClasses(document.body, state.classes);
 	const content = document.getElementById('content');
 	if (state.text) {
 		content.textContent = state.text;

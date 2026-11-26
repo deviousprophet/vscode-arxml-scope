@@ -10,25 +10,41 @@ import { pathToFileURL } from 'node:url';
 import { listStates, runStandalone } from './modes/standalone.mjs';
 import { summarize } from './runner/report.mjs';
 
+const VALUE_FLAGS = new Map([
+	['--adapter', 'adapter'],
+	['--state', 'state'],
+	['--out', 'out'],
+	['--browser', 'browser']
+]);
+const BOOLEAN_FLAGS = new Map([
+	['--list', 'list'],
+	['--allow-failures', 'allowFailures']
+]);
+/**
+ * Consumes one flag. Returns 1 when it took the next argument, 0 when it was a
+ * boolean flag, and -1 when the flag is unknown.
+ */
+function consumeFlag(args, arg, next) {
+	const valueKey = VALUE_FLAGS.get(arg);
+	if (valueKey !== undefined) {
+		args[valueKey] = next;
+		return 1;
+	}
+	const booleanKey = BOOLEAN_FLAGS.get(arg);
+	if (booleanKey !== undefined) {
+		args[booleanKey] = true;
+		return 0;
+	}
+	return -1;
+}
 function parseArgs(argv) {
 	const args = { allowFailures: false, list: false };
 	for (let i = 0; i < argv.length; i += 1) {
-		const arg = argv[i];
-		if (arg === '--adapter') {
-			args.adapter = argv[++i];
-		} else if (arg === '--state') {
-			args.state = argv[++i];
-		} else if (arg === '--out') {
-			args.out = argv[++i];
-		} else if (arg === '--browser') {
-			args.browser = argv[++i];
-		} else if (arg === '--list') {
-			args.list = true;
-		} else if (arg === '--allow-failures') {
-			args.allowFailures = true;
-		} else {
-			throw new Error(`Unknown argument: ${arg}`);
+		const used = consumeFlag(args, argv[i], argv[i + 1]);
+		if (used < 0) {
+			throw new Error(`Unknown argument: ${argv[i]}`);
 		}
+		i += used;
 	}
 	if (!args.adapter) {
 		throw new Error('--adapter is required');
