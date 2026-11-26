@@ -1,4 +1,0 @@
-{"file": ".agents/skills/webview-preview/SKILL.md", "reason": "Current preview workflow, limits and project-specific assumptions"}
-{"file": "docs/contributor/WEBVIEW_PREVIEW.md", "reason": "Human-facing preview states, outputs and limits"}
-{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Audit invariants that must remain project-owned"}
-{"file": ".trellis/spec/guides/documentation-architecture-guide.md", "reason": "Skill/spec/docs home rules for a reusable tool"}
