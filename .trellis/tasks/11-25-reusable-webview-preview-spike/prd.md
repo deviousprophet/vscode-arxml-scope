@@ -32,12 +32,12 @@ Decide how to turn the repo-specific `webview-preview` skill into a reusable cro
 
 ## Acceptance criteria
 
-- [ ] A written comparison matrix covers capability, speed, platform support, webview access, CI cost and maintenance.
-- [ ] At least one official-stack experiment demonstrates whether Playwright can reach a VS Code webview.
-- [ ] The report identifies which current preview files are generic versus project-specific.
-- [ ] The proposed package layout, two modes and per-project adapter contract are documented.
-- [ ] A clear recommendation says what to build, what to keep and what not to use.
-- [ ] Follow-up implementation tasks are listed and ordered.
+- [x] A written comparison matrix covers capability, speed, platform support, webview access, CI cost and maintenance.
+- [x] At least one official-stack experiment demonstrates whether Playwright can reach a VS Code webview.
+- [x] The report identifies which current preview files are generic versus project-specific.
+- [x] The proposed package layout, two modes and per-project adapter contract are documented.
+- [x] A clear recommendation says what to build, what to keep and what not to use.
+- [x] Follow-up implementation tasks are listed and ordered.
 
 ## Non-goals
 
