@@ -1,0 +1,16 @@
+{
+	"name": "@spike/webview-preview",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Throwaway spike: reusable Playwright webview preview/audit core.",
+	"scripts": {
+		"preview:toy": "node src/cli.mjs --adapter adapters/toy/index.mjs",
+		"preview:arxml": "node src/cli.mjs --adapter adapters/arxml/index.mjs",
+		"build:arxml": "node adapters/arxml/build.mjs"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.65.1",
+		"esbuild": "^0.28.2"
+	}
+}

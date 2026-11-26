@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Toy webview</title>
+		<link rel="stylesheet" href="/style.css" />
+		<script src="/app.js" defer></script>
+	</head>
+	<body>
+		<header class="toy-toolbar" aria-label="Toy toolbar">
+			<button id="save" class="toy-button" type="button">Save document</button>
+			<button id="run" class="toy-button" type="button">Run</button>
+			<button id="more" class="toy-button" type="button">More</button>
+			<button id="hidden" class="toy-button" type="button" hidden>Hidden</button>
+		</header>
+		<main id="content" class="toy-content">
+			<h1>Toy webview</h1>
+			<p>State is delivered through a <code>postMessage</code> envelope.</p>
+		</main>
+	</body>
+</html>
