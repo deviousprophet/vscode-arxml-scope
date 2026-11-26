@@ -68,7 +68,7 @@ suite('shared system-condition palette', () => {
 	});
 
 	test('every page loads the shared stylesheet', () => {
-		for (const page of ['editorMonaco.ts', 'editorViewer.ts', 'diffMonaco.ts', 'diffViewer.ts']) {
+		for (const page of ['editorMonaco.ts', 'editorViewer.ts', 'diffMonaco.ts']) {
 			assert.ok(
 				webviewSource(page).includes("import './styles/tokens.css';"),
 				`${page} imports the shared tokens`

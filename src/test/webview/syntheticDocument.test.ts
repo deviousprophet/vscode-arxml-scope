@@ -15,7 +15,7 @@ import {
 } from '../../core/ecuc/editOrder';
 import { fieldTextFromWholeLine } from '../../core/ecuc/lineEdit';
 import {
-	buildAlignedSyntheticDocuments,
+	buildDiffSyntheticDocuments,
 	buildSyntheticDocument,
 	displayForRaw,
 	searchRangeOnLine,
@@ -332,26 +332,6 @@ function oneSidedDiffDocument(): DiffDocument {
 		summary: { changed: 0, added: 4, removed: 4, unchanged: 3, renamed: 0 },
 		semanticSkipped: 0
 	};
-}
-
-/** The first blank line at or after `start`: the end of one rendered subtree block. */
-function blockEnd(lines: string[], start: number): number {
-	let end = start;
-	while (end < lines.length && lines[end] !== '') {
-		end += 1;
-	}
-	return end;
-}
-
-/** The side without the block holds blank placeholders and no synthesized braces. */
-function assertBlockMissing(lines: string[], start: number, end: number): void {
-	for (let at = start; at < end; at += 1) {
-		assert.strictEqual(lines[at], '', `the missing side of line ${at + 1} stays blank`);
-		assert.ok(
-			!lines[at].includes('{') && !lines[at].includes('}'),
-			`the missing side of line ${at + 1} has no synthesized brace`
-		);
-	}
 }
 
 /** Re-key the pending draft and the in-flight edit with each proved host pair. */
@@ -767,117 +747,78 @@ suite('synthetic ECUC document', () => {
 		);
 	});
 
-	test('the aligned diff documents have equal line counts', () => {
-		const rowsModel = rows();
-		const document: DiffDocument = {
-			left: { name: 'left.arxml', path: 'left.arxml' },
-			right: { name: 'right.arxml', path: 'right.arxml' },
-			leftHeader: { packages: ['P.Preview'] },
-			rightHeader: { schema: '00048', packages: ['P.Preview'] },
-			labels: ['left.arxml', 'right.arxml'],
-			rows: [
-				diffRow(rowsModel[0], 'changed', 'module:m#0'),
-				diffRow(rowsModel[1], 'unchanged', 'container:m#0/c#0'),
-				diffRow(rowsModel[2], 'changed', 'container:m#0/c#0/param:P0000#0')
-			],
-			summary: { changed: 2, added: 0, removed: 0, unchanged: 1, renamed: 0 },
-			semanticSkipped: 0
-		};
-		const aligned = buildAlignedSyntheticDocuments(document);
-		const left = aligned.left.text.split('\n');
-		const right = aligned.right.text.split('\n');
-		assert.strictEqual(left.length, right.length);
-		assert.strictEqual(left[0], 'module P.Preview "Preview"');
-		assert.strictEqual(right[0], 'module P.Preview "Preview"');
-		assert.strictEqual(left[1], '{');
-		assert.strictEqual(right[1], '{');
-		assert.deepStrictEqual(
-			searchRangeOnLine(aligned.right.lines[0], { field: 'label', start: 0, end: 9 }),
-			{ startColumn: 8, endColumn: 17 },
-			'the diff label span skips the module keyword'
+	test('the per-side diff documents keep each side’s own shape', () => {
+		const document = oneSidedDiffDocument();
+		const perSide = buildDiffSyntheticDocuments(document);
+		const left = perSide.left.text.split('\n');
+		const right = perSide.right.text.split('\n');
+
+		assert.ok(
+			left.some((line) => line.includes('P.RemovedMod')),
+			'the removed module renders only on the left'
 		);
-		assert.deepStrictEqual(
-			searchRangeOnLine(aligned.right.lines[0], { field: 'meta', part: 0, start: 1, end: 8 }),
-			{ startColumn: 19, endColumn: 26 },
-			'the diff meta span maps inside the quoted short name'
+		assert.ok(
+			!left.some((line) => line.includes('P.AddedMod')),
+			'the left does not synthesize the added module'
 		);
-		assert.strictEqual(left.length, right.length);
+		assert.ok(
+			right.some((line) => line.includes('P.AddedMod')),
+			'the added module renders only on the right'
+		);
+		assert.ok(
+			!right.some((line) => line.includes('P.RemovedMod')),
+			'the right does not synthesize the removed module'
+		);
+		assert.strictEqual(perSide.leftLineKeys.length, left.length);
+		assert.strictEqual(perSide.rightLineKeys.length, right.length);
+		assert.strictEqual(
+			perSide.left.rowLine.get('module:removed#0'),
+			left.indexOf('module P.RemovedMod "RemovedMod"') + 1
+		);
+		assert.strictEqual(perSide.right.rowLine.has('module:removed#0'), false);
+		assert.ok(perSide.left.foldingRanges.length > 0, 'the left keeps its folding ranges');
+		assert.ok(perSide.right.foldingRanges.length > 0, 'the right keeps its folding ranges');
+		assert.ok(
+			perSide.left.text.endsWith('\n') && perSide.right.text.endsWith('\n'),
+			'both diff documents keep the trailing newline the sticky-scope provider needs'
+		);
+		for (const [side, keys] of [
+			[perSide.left, perSide.leftLineKeys],
+			[perSide.right, perSide.rightLineKeys]
+		] as const) {
+			for (const range of side.foldingRanges) {
+				const key = keys[range.startLine - 1];
+				assert.ok(key, `fold start line ${range.startLine} has a row key`);
+				assert.strictEqual(
+					side.rowLine.get(key),
+					range.startLine,
+					`fold range for ${key} starts on its node line`
+				);
+			}
+		}
 	});
 
-	test('a one-sided module and container leave the missing side blank', () => {
-		const document = oneSidedDiffDocument();
+	test('a pure removal gives the two sides different line counts', () => {
+		const full = oneSidedDiffDocument();
+		const document: DiffDocument = {
+			...full,
+			rows: full.rows.filter((row) => row.left !== undefined)
+		};
+		const perSide = buildDiffSyntheticDocuments(document);
+		const left = perSide.left.text.split('\n');
+		const right = perSide.right.text.split('\n');
 
-		const aligned = buildAlignedSyntheticDocuments(document);
-		const left = aligned.left.text.split('\n');
-		const right = aligned.right.text.split('\n');
-
-		assert.strictEqual(left.length, right.length, 'the aligned models stay line-for-line equal');
-
-		const removedAt = left.indexOf('module P.RemovedMod "RemovedMod"');
-		assert.ok(removedAt >= 0, 'the removed module renders on the left');
-		const removedEnd = blockEnd(left, removedAt);
-		assert.deepStrictEqual(
-			left.slice(removedAt, removedEnd),
-			[
-				'module P.RemovedMod "RemovedMod"',
-				'{',
-				'    RemovedItems "RemovedItems"',
-				'    {',
-				'        RemovedValue = 0',
-				'        RemovedRef = /P/Target',
-				'    }',
-				'}'
-			],
-			'the owning side keeps its node line and both brace pairs'
+		assert.notStrictEqual(
+			left.length,
+			right.length,
+			'per-side documents are not padded to a shared line count'
 		);
-		assertBlockMissing(right, removedAt, removedEnd);
-
-		const addedAt = right.indexOf('module P.AddedMod "AddedMod"');
-		assert.ok(addedAt >= 0, 'the added module renders on the right');
-		assert.strictEqual(left[addedAt], '', 'the added module leaves the left node line blank');
-		const addedEnd = blockEnd(right, addedAt);
-		assert.deepStrictEqual(
-			right.slice(addedAt, addedEnd),
-			[
-				'module P.AddedMod "AddedMod"',
-				'{',
-				'    AddedItems "AddedItems"',
-				'    {',
-				'        AddedValue = 0',
-				'        AddedRef = /P/Target',
-				'    }',
-				'}'
-			],
-			'the added module keeps its node line and both brace pairs'
-		);
-		assertBlockMissing(left, addedAt, addedEnd);
-
-		const sharedAt = left.indexOf('module P.Shared "Shared"');
-		assert.ok(sharedAt > addedEnd, 'the shared module follows both one-sided blocks');
-		assert.deepStrictEqual(
-			left.slice(sharedAt, sharedAt + 7),
-			right.slice(sharedAt, sharedAt + 7),
-			'the shared subtree is identical on both sides'
-		);
-
-		assert.strictEqual(aligned.left.rowLine.get('module:removed#0'), removedAt + 1);
-		assert.strictEqual(aligned.right.rowLine.get('module:removed#0'), removedAt + 1);
-		assert.strictEqual(aligned.left.rowLine.get('module:added#0'), addedAt + 1);
-		assert.strictEqual(aligned.right.rowLine.get('module:added#0'), addedAt + 1);
-		assert.strictEqual(aligned.leftLineKeys[removedAt], 'module:removed#0');
-		assert.strictEqual(aligned.rightLineKeys[removedAt], 'module:removed#0');
-		assert.strictEqual(aligned.leftLineKeys[addedAt], 'module:added#0');
-		assert.strictEqual(aligned.rightLineKeys[addedAt], 'module:added#0');
-
-		assert.deepStrictEqual(
-			aligned.left.foldingRanges.map((range) => range.startLine),
-			[removedAt + 1, removedAt + 3, sharedAt + 1, sharedAt + 3],
-			'the left folds its own module/container and the shared ones'
-		);
-		assert.deepStrictEqual(
-			aligned.right.foldingRanges.map((range) => range.startLine),
-			[addedAt + 1, addedAt + 3, sharedAt + 1, sharedAt + 3],
-			'the right never folds a missing-side placeholder'
+		assert.ok(left.includes('module P.RemovedMod "RemovedMod"'));
+		assert.ok(!right.some((line) => line.includes('P.RemovedMod')));
+		assert.strictEqual(
+			right.filter((line) => line.includes('module P.Shared')).length,
+			1,
+			'the shared module still renders once on the right'
 		);
 	});
 
@@ -896,8 +837,8 @@ suite('synthetic ECUC document', () => {
 			summary: { changed: 1, added: 0, removed: 0, unchanged: 1, renamed: 0 },
 			semanticSkipped: 0
 		};
-		const aligned = buildAlignedSyntheticDocuments(document);
-		const line = aligned.left.text.split('\n')[2];
+		const perSide = buildDiffSyntheticDocuments(document);
+		const line = perSide.left.text.split('\n')[2];
 		assert.strictEqual(line, '     "EmptyDef" { }');
 		assert.deepStrictEqual(tokenizeEcucLine(line), [
 			{ start: 5, length: 10, type: 'string' },

@@ -1,5 +1,5 @@
 /**
- * Plan rows SCAN-01…10 from `docs/TEST_PLAN.md`.
+ * Plan rows SCAN-01…10 from `docs/contributor/TEST_PLAN.md`.
  *
  * Each test name starts with its plan ID so a failure points at the row. The
  * scanner takes text, so these cases drive it directly; encoding fixtures are

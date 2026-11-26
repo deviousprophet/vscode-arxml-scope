@@ -15,7 +15,7 @@ viewport through one callback.
 src/webview/components/virtualScroll/
     virtualScroll.ts       scroll surface + offsets + callbacks
     virtualScroll.css      surface, pane layers and per-pane horizontal bars
-src/webview/editorViewer.ts / diffViewer.ts   composition roots
+src/webview/editorMonaco.ts / diffMonaco.ts   composition roots
 src/test/webview/components/virtualScroll.test.ts
 ```
 

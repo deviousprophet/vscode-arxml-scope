@@ -172,7 +172,7 @@ that is not obvious from the code.
   asks `diff.compute` for the other mode; the engine re-pairs without a re-scan, and a stale
   `TextDocument.version` falls back to a full refresh. The page flips `aria-pressed` and the label
   immediately and shows `aria-busy` while the engine answers. `DiffSession` survives only as the
-  TypeScript parity oracle under `src/test`; do not route production through it. Do not call
+  TypeScript test oracle under `src/test`; do not route production through it. Do not call
   `refreshNow()` from the match-mode handler unless the prepared version is stale.
 - **The diff toolbar has no count summary.** The left order is Show all / Show diff, divider,
   Context, divider, Semantic / Strict, divider, Prev/Next, divider, Merge, divider, Collapse /

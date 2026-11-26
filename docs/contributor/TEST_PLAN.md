@@ -5,34 +5,39 @@ than the current suites: each area lists what is covered today and the edge case
 must be added. Use the IDs (`SCAN-01`, `MERGE-04`, …) in test names so a failure points
 at the plan row.
 
+This page is the human regression plan: layers, gates, cases and known gaps. Agent
+execution rules (what to run, how to audit a preview, how to cite a row) live in
+[`testing.md`](../../.trellis/spec/frontend/testing.md). The executable preview workflow
+lives in the [`webview-preview` skill](../../.agents/skills/webview-preview/SKILL.md).
+
 ## Layers and commands
 
 | Layer | What it proves | Command |
 |---|---|---|
 | Core unit | pure scanner/model/rows/index/diff/merge logic | `npm test` (`src/test/core`) |
 | Webview DOM | the bundled page, its components and the host↔page protocol in jsdom | `npm test` (`src/test/webview`) |
-| Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `npm run shots:webview` (see [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md)) |
+| Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `webview-preview` skill: `scripts/shotWebview.mjs` (see [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md)) |
 | Extension integration | real VS Code: panels, edits, undo, watchers, diagnostics | `npm test` (`src/test/extension`) |
 | Rust core | parse, ids, rows, edit plans, merge index, digests | `cargo test --workspace` |
-| Engine process | protocol, lifecycle, byte-for-byte row parity with the TS oracle | `npm run engine:smoke`, `npm run parity`, `npm run parity:rows` |
+| Engine process | protocol, lifecycle, byte-for-byte row parity with the TypeScript oracle | `npm run engine:smoke`, `npm test` (`src/test/parity`) |
 | Performance | ceilings and payload sizes on the 20–26 MiB fixtures | `npm run benchmark` |
 | Local sample | a real private ARXML, never committed | `ARXML_SCOPE_SAMPLE=… npm run benchmark sampleFile` |
 
 Run order for a change: `check-types` → `lint` → `cargo test`/`clippy`/`fmt` →
-`npm test` → `parity:rows` → the area benchmarks. For any toolbar, gutter or row-layout
-change, also run `npm run shots:webview`; it exits non-zero on a placement violation.
-Still audit every image for colour, spacing and clipping the invariants do not encode.
+`npm test` → the area benchmarks. For any toolbar, gutter or row-layout
+change, also run the `webview-preview` skill's `scripts/shotWebview.mjs`; it exits
+non-zero on a placement violation.
 
 ## Regression gates
 
 | Touched area | Must run |
 |---|---|
-| `core/ecuc/*` | core scanner/rows/order/validate suites, `parity:rows`, `ecucLargeFile`, `engineEdit` |
-| `core/diff/*` | `diffModel` (43 tests), `wordDiff`, `diffSemantic`, `renameScale`, `diffPage` |
+| `core/ecuc/*` | core scanner/rows/order/validate suites, row parity (`src/test/parity`), `ecucLargeFile`, `engineEdit` |
+| `core/diff/*` | `diffModel` (43 tests), `wordDiff`, `diffSemantic`, `renameScale`, `diffPage`; the `diffCodeParity` source contract when the Monaco surface changes ([diff-parity.md](../../.trellis/spec/frontend/diff-parity.md)) |
 | `core/index/*`, `host/indexService` | `indexBuilder`, `workspaceIndex`, `index` (extension), `indexBenchmark`, `validation` |
 | `host/ecucEdit`, `host/ecucStructureEdit` | `editing`, `structureEdit`, `rescan`, `planMerge` |
-| `host/engine/*`, `rust/*` | `engine` suites, `engine:smoke`, `parity`, `parity:rows`, `engineEdit` |
-| `webview/*` | page + component suites for the touched component, `protocol`; `shots:webview` for layout changes |
+| `host/engine/*`, `rust/*` | `engine` suites, `engine:smoke`, row parity (`src/test/parity`), `engineEdit` |
+| `webview/*` | page + component suites for the touched component, `protocol`; the `webview-preview` skill for layout changes |
 | `commands.ts`, manifests | `activation`, `menus`, `compare`, `reveal` |
 | copy modules | `planCopy`, `planMerge` (extension), `copyBenchmark` |
 
@@ -109,11 +114,11 @@ invalid, undo, CRLF, raw `>`, attribute `>`, stale region, engine fast path.
 | EDIT-02 | edit at the very start/end of the file | offsets clamp, one WorkspaceEdit, no corruption |
 | EDIT-03 | value containing `&`, `<`, `>`, quotes | written escaped once; row shows decoded text |
 | EDIT-04 | value changed by an external editor between plan and write | refused, no partial write |
-| EDIT-05 | engine fast path vs TypeScript fallback for the same edit | identical bytes and identical row |
+| EDIT-05 | engine fast path vs the host's TypeScript panel path for the same edit | identical bytes and identical row; there is no core fallback |
 | EDIT-06 | 20 rapid edits | no range drift; final file equals the last value |
 | EDIT-07 | edit that makes the line longer than 10k | one line, no wrapping injected |
 | EDIT-08 | undo/redo after an engine-path edit | restores bytes and rows |
-| EDIT-09 | engine unavailable (no handle) | legacy path still edits, no error |
+| EDIT-09 | panel cannot open an engine handle | the session stays on the host row/edit path, no core fallback and no error |
 | EDIT-10 | edit with a UTF-16 surrogate pair in the value | offsets stay correct |
 
 ## FIELD — container short name and definition ref
@@ -166,18 +171,19 @@ Covered: field order, boolean select, inline refusal, Tab, disabled fields.
 | DETAIL-03 | Tab from the last field of the last row | focus leaves the panel, no trap |
 | DETAIL-04 | selection moves while a draft is open | draft cancelled, no ghost write |
 
-## TREE — document tree, virtual scroll, copy
+## TREE — document surface
 
-Covered: roles, collapse, brace rows, gutter, gaps, copy, focus, virtualization.
+Covered: Monaco model mapping, folding, line identity, copy, sticky scroll, large-file
+virtualization.
 
 | ID | Case | Expected |
 |---|---|---|
-| TREE-01 | collapse a container whose selected child is hidden | selection moves to the nearest visible ancestor |
-| TREE-02 | `documentPatch` for a row outside the rendered window | store updated, no DOM patch for hidden rows |
-| TREE-03 | patch, then expand/collapse | display indices stay consistent |
-| TREE-04 | 150k rows scroll to the end and back | window rebuilds, no height drift |
-| TREE-05 | copy a range spanning a collapsed subtree | only visible rows, 4-space indent |
-| TREE-06 | zero-height viewport | at least one row rendered |
+| TREE-01 | collapse a container whose selected row is hidden | the selection stays; the nearest visible ancestor is shown |
+| TREE-02 | one-row `documentPatch` | store and synthetic line update in place, no full model rebuild |
+| TREE-03 | patch, then fold/unfold | line map and folding ranges stay consistent |
+| TREE-04 | 150k rows scroll to the end and back | Monaco window rebuilds, no height drift |
+| TREE-05 | copy a multi-row selection | one line per display row, Document indentation preserved |
+| TREE-06 | sticky scroll at the end of the file | scope header stays valid (the model keeps one trailing newline) |
 
 ## SEARCH — search
 
@@ -237,25 +243,32 @@ Covered: symbols order, definition cross-file, hover, links, index disabled/excl
 
 ## DIFF — semantic diff
 
-Covered: 43 model tests, pairing, renames, duplicates, word diff, contexts, gaps,
-navigation, refresh, limits, headers, a11y, swap, search.
+Covered: 43 model tests, pairing, renames, duplicates, word diff, contexts, hidden
+regions, navigation, refresh, limits, headers, a11y, swap, search, Monaco body.
 
 | ID | Case | Expected |
 |---|---|---|
 | DIFF-01 | both sides renamed to the same name, different children | one changed pair, not remove+add |
-| DIFF-02 | three-way merge's pairings equal the two-file diff's pairings | re-scoped: the three-way merge was removed; two-file pairing is covered by DIFF-01 and the diff-model suite |
+| DIFF-02 | two-file pairing after the three-way merge was removed | two-file pairing is covered by DIFF-01 and the diff-model suite |
 | DIFF-03 | file > pair budget | `semanticLimitReason` set, UI says so |
 | DIFF-04 | toggle strict/semantic after a refresh | cache invalidated correctly |
 | DIFF-05 | 1,200-row document with all rows changed | windowing keeps the frame budget |
+| DIFF-06 | one-sided module | the missing side has no model line and uses Monaco's native diagonal fill |
+| DIFF-07 | built-in hunk toolbar | only Copy Block to Left/Right are registered; no Revert Block and no custom arrow overlay |
+| DIFF-08 | Next/Prev diff through every change, before and after Swap | each press moves one adjacent change, wraps at the ends and never repeats the current change |
+| DIFF-09 | collapse a diff container from either side | both panes keep the full node header and `⋯` hint, child rows hide, the fold starts on the node line, and a glyph dot marks hidden differences |
+| DIFF-10 | deep-scroll the diff | the sticky header shows the full module/container text, not `{` or an empty widget |
+| DIFF-11 | collapse a shared container with a one-sided child | no visible diagonal-fill gap while folded; expanded one-sided states keep the native fill |
+| DIFF-12 | Collapse All on a one-sided module and a shared module | both module headers stay visible, children hide, and the one-sided fold is not undone by the other pane |
 
 ## ENG — engine process
 
 Covered: handshake, path per platform, missing binary, protocol mismatch, doc round
-trip, row parity, edit fast path.
+trip, row parity, edit fast path, supervision.
 
 | ID | Case | Expected |
 |---|---|---|
-| ENG-01 | engine killed mid-session | one warning, restart with backoff, documents resynced (not implemented yet) |
+| ENG-01 | engine killed mid-session | one warning, restart with bounded backoff, documents resynced; `cancel` is still unsupported |
 | ENG-02 | oversized frame and malformed header | protocol error, process exits 1, host reports it |
 | ENG-03 | panic inside an operation | error reply, process survives, next call works |
 | ENG-04 | `doc.rows` chunk boundaries at 4,000 rows | client reassembles in order, no duplicate row |
@@ -266,21 +279,22 @@ trip, row parity, edit fast path.
 
 ## MERGE — two-way copy merge in the diff view
 
-Planned (see `11-14-arxml-config-merge`). The panel's merge toggle turns the comparison into
-a two-way merge: arrows copy a row to the other side as one undoable edit.
+Shipped in `0.10.0`. The panel's Merge toggle turns the comparison into a two-way merge:
+the built-in hover gutter copies a hunk to the other side as one undoable edit. See
+[MERGE.md](../user/MERGE.md).
 
 | ID | Case | Expected |
 |---|---|---|
-| MERGE-01 | toggle off | no arrows; the plain diff is read-only (existing suites) |
+| MERGE-01 | toggle off | no visible gutter items; the `.gutter` and sash stay mounted, hidden items keep their layout, and no copy is possible |
 | MERGE-02 | copy left→right on a changed parameter | the right value becomes the left one, one undo restores |
 | MERGE-03 | copy right→left | mirrored, same bytes |
 | MERGE-04 | copy a container | the whole subtree replaces the target, target-only children removed |
-| MERGE-05 | placeholder arrow on the empty side | the element is deleted from the other side, one undo |
+| MERGE-05 | one-sided hunk | only the meaningful direction is offered; copying it deletes the element from the other side, one undo |
 | MERGE-06 | copy into a missing parent | the ancestor chain is created; unrelated source siblings are not imported |
 | MERGE-07 | copy into a missing module | refused with a message, no mutation |
 | MERGE-08 | module row copy | allowed without a name collision; refused with one |
-| MERGE-09 | `Alt+←` / `Alt+→` | copies the focused row; read-only mode ignores the keys |
-| MERGE-10 | Swap, then copy | the arrow copies from the displayed pane, not the stored side |
+| MERGE-09 | copy message while Merge is off | the host refuses it; nothing changes |
+| MERGE-10 | Swap, then copy | the gutter action copies from the displayed pane, not the stored side |
 | MERGE-11 | patch after a copy | panel equals a full rebuild; the answer carries the changed rows plus a range shift |
 | MERGE-12 | fallback cases | `top-level-order`, `module-row`, `outside-elements`, `no-baseline`, `stale-baseline`, `parent-created`, `ancestor-changed` rebuild with a notice, never a wrong row |
 | MERGE-13 | stale bytes | Reload/Cancel modal; Cancel changes nothing |
@@ -302,9 +316,9 @@ Covered: manifest, activation, engine binary path, VSIX engine verification.
 | ID | Case | Expected |
 |---|---|---|
 | MON-01 | `buildSyntheticDocument` from the row store | text, row lines, field spans and folding ranges match the Current Document; parameter values and container short names are the editable spans |
-| MON-02 | `buildAlignedSyntheticDocuments` from a `DiffDocument` | both sides have equal line counts and a row present on one side leaves a blank line on the other |
+| MON-02 | `buildDiffSyntheticDocuments` from a `DiffDocument` | each side keeps its own line count and keys; a one-sided module is absent from the other model and uses native diagonal fill |
 | MON-03 | editor and diff shells | the CSP allows the Monaco worker, injected styles and packaged font; the worker URI meta is present; the script nonce is unchanged |
-| MON-04 | `npm run shots:webview` | all seeded states capture without a geometry violation; Monaco states skip the retired DOM diff audit |
+| MON-04 | `webview-preview` skill (`scripts/shotWebview.mjs`) | all seeded states capture without a geometry violation; the built-in gutter, folding and sash probes pass |
 
 ## PERF — benchmarks
 
@@ -327,7 +341,7 @@ Covered: scan/rows/diff/index/validation/rename/edit-latency.
 | X-02 | every message field of the wrong type | dropped or refused, never applied |
 | X-03 | a11y: roles, labels, live regions on every surface | unchanged by new UI |
 | X-04 | theme: no colour literals outside the documented set | `npm run design:lint` and the colour tests |
-| X-05 | read-only surfaces (diff, preview) | never write a file; hash sources before/after |
+| X-05 | read-only surfaces (diff with Merge off, preview) | never write a file; hash sources before/after |
 
 ## Fixtures and determinism
 
@@ -340,8 +354,8 @@ Covered: scan/rows/diff/index/validation/rename/edit-latency.
 
 ## Known gaps (tracked, not silently accepted)
 
-1. Engine restart/backoff and `cancel` (ENG-01) are not implemented; the crash matrix
-   is documented in the engine design but untested.
+1. Engine restart/backoff is implemented and covered by the supervision tests; `cancel`
+   (ENG-01) is still unsupported, and the full crash matrix stays a manual check.
 2. Merge pairing depends on the TypeScript semantic matcher; a rename it cannot pair is
    an add/add conflict, and the plan says so.
 3. The private 20 MiB sample stays local (`ARXML_SCOPE_SAMPLE`); CI uses the synthetic
@@ -369,5 +383,5 @@ Covered: scan/rows/diff/index/validation/rename/edit-latency.
 14. A copy's one-`WorkspaceEdit`/undo path and MERGE-15's engine patch are not exercised in
     `vscode-test` (no webview message bridge); the planner and page cover the span and the
     message shape.
-15. The fuzz corpus (gap 4), ENG-01 and ENG-07 have no follow-up task: the programme's
-    tasks are archived, so they live here with their reasons.
+15. The fuzz corpus (gap 4), `cancel` (ENG-01) and ENG-07 have no follow-up task: the
+    programme's tasks are archived, so they live here with their reasons.

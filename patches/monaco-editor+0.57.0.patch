@@ -1,0 +1,92 @@
+diff --git a/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/gutterFeature.js b/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/gutterFeature.js
+--- a/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/gutterFeature.js
++++ b/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/gutterFeature.js
+@@ -167,6 +167,14 @@
+         ]);
+         this._showAlways = this._item.map(this, item => item.showAlways);
+         this._menuId = this._item.map(this, item => item.menuId);
++        this._arxmlContextKeyService = this._register(gutter._contextKeyService.createScoped(this._elements.buttons));
++        this._elements.buttons.__arxmlContextKeyService = this._arxmlContextKeyService;
++        const initialAvailability = globalThis.__ARXML_GUTTER_AVAILABILITY__?.(this._item.read(undefined)?.mapping);
++        this._arxmlLeftKey = this._arxmlContextKeyService.createKey('arxml.copyLeftAvailable', initialAvailability?.left ?? true);
++        this._arxmlRightKey = this._arxmlContextKeyService.createKey('arxml.copyRightAvailable', initialAvailability?.right ?? true);
++        this._register(autorun(reader => {
++            this._elements.root.__arxmlGutterItem = this._item.read(reader);
++        }));
+         this._isSmall = observableValue(this, false);
+         this._lastItemRange = undefined;
+         this._lastViewRange = undefined;
+@@ -191,6 +199,7 @@
+                 },
+                 overflowBehavior: { maxItems: this._isSmall.read(reader) ? 1 : 3 },
+                 hiddenItemStrategy: 0 /* HiddenItemStrategy.Ignore */,
++                contextKeyService: this._arxmlContextKeyService,
+                 actionRunner: store.add(new ActionRunnerWithContext(() => {
+                     const item = this._item.read(undefined);
+                     const mapping = item.mapping;
+diff --git a/node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js b/node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js
+--- a/node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js
++++ b/node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js
+@@ -232,6 +232,7 @@
+ let MenuWorkbenchToolBar = class MenuWorkbenchToolBar extends WorkbenchToolBar {
+     get onDidChangeMenuItems() { return this._onDidChangeMenuItems.event; }
+     constructor(container, menuId, options, menuService, contextKeyService, contextMenuService, keybindingService, commandService, telemetryService, actionViewService, instantiationService) {
++        const menuContextKeyService = options?.contextKeyService ?? contextKeyService;
+         super(container, {
+             resetMenu: menuId,
+             ...options,
+@@ -246,13 +247,13 @@
+                 }
+                 return createActionViewItem(instantiationService, action, opts);
+             }
+-        }, menuService, contextKeyService, contextMenuService, keybindingService, commandService, telemetryService);
++        }, menuService, menuContextKeyService, contextMenuService, keybindingService, commandService, telemetryService);
+         this._onDidChangeMenuItems = this._store.add(new Emitter());
+         this._container = container;
+         this._menuOptions = options?.menuOptions;
+         this._toolbarOptions = options?.toolbarOptions;
+         // update logic
+-        this._menu = this._store.add(menuService.createMenu(menuId, contextKeyService, { emitEventsForSubmenuChanges: true, eventDebounceDelay: options?.eventDebounceDelay }));
++        this._menu = this._store.add(menuService.createMenu(menuId, menuContextKeyService, { emitEventsForSubmenuChanges: true, eventDebounceDelay: options?.eventDebounceDelay }));
+         this._store.add(this._menu.onDidChange(() => {
+             this._updateToolbar();
+             this._onDidChangeMenuItems.fire(this);
+diff --git a/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js b/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js
+--- a/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js
++++ b/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js
+@@ -247,7 +247,7 @@ let DiffEditorViewZones = class DiffEditorViewZones extends Disposable {
+                             afterLineNumber: a.originalRange.endLineNumberExclusive - 1,
+                             domNode: createFakeLinesDiv(),
+                             heightInPx: delta,
+-                            showInHiddenAreas: true,
++                            showInHiddenAreas: false,
+                             suppressMouseDown: true,
+                         });
+                     }
+@@ -274,7 +274,7 @@ let DiffEditorViewZones = class DiffEditorViewZones extends Disposable {
+                             domNode: createFakeLinesDiv(),
+                             heightInPx: -delta,
+                             marginDomNode,
+-                            showInHiddenAreas: true,
++                            showInHiddenAreas: false,
+                             suppressMouseDown: true,
+                         });
+                     }
+@@ -292,7 +292,7 @@ let DiffEditorViewZones = class DiffEditorViewZones extends Disposable {
+                         afterLineNumber: a.originalRange.endLineNumberExclusive - 1,
+                         domNode: createFakeLinesDiv(),
+                         heightInPx: delta,
+-                        showInHiddenAreas: true,
++                        showInHiddenAreas: false,
+                         suppressMouseDown: true,
+                     });
+                 }
+@@ -301,7 +301,7 @@ let DiffEditorViewZones = class DiffEditorViewZones extends Disposable {
+                         afterLineNumber: a.modifiedRange.endLineNumberExclusive - 1,
+                         domNode: createFakeLinesDiv(),
+                         heightInPx: -delta,
+-                        showInHiddenAreas: true,
++                        showInHiddenAreas: false,
+                         suppressMouseDown: true,
+                     });
+                 }

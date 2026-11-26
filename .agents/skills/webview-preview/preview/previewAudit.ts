@@ -16,6 +16,9 @@ export interface AuditState {
 	wide?: boolean;
 	pan?: number;
 	select?: boolean;
+	sash?: boolean;
+	foldLabel?: string;
+	collapseAll?: boolean;
 	/** The text the Details state typed into `#details-value`. */
 	detailsEdit?: string;
 	/** Ctrl+S ran after the Details typing and every edit was acknowledged. */
@@ -39,29 +42,6 @@ interface Rect {
 	height: number;
 }
 
-interface PaneAudit {
-	side: 'left' | 'right';
-	rect: Rect;
-	clientWidth: number;
-	contentWidth: number;
-	scrollLeft: number;
-	gutterInset: number;
-	rows: number;
-	changedRows: number;
-	rails: number;
-	innerRail: boolean;
-}
-
-interface ArrowAudit {
-	side: string;
-	rect: Rect;
-	vertical: boolean;
-	insideX: boolean;
-	edgeGap: number;
-	visible: boolean;
-	opaque: boolean;
-}
-
 interface ToolbarControl {
 	name: string;
 	rect: Rect;
@@ -78,7 +58,6 @@ interface ToolbarAudit {
 	controls: number;
 	display: string;
 	groups: Record<string, GroupAudit | null>;
-	swapCenterGap: number;
 	overlaps: string[];
 	outside: string[];
 	clipped: string[];
@@ -89,7 +68,6 @@ interface GutterAudit {
 	cells: number;
 	rails: number;
 	digitsClear: boolean;
-	legacyCellRail: boolean;
 }
 
 interface ContentAudit {
@@ -112,35 +90,21 @@ interface SyscondAudit {
 	panelState: string | null;
 }
 
-/** Actual aligned models and placeholder paint for the one-sided diff fixture. */
+/** Actual per-side models and native paint for the one-sided diff states. */
 export interface OneSidedAudit {
 	originalLines: number;
 	modifiedLines: number;
-	missingSideBlank: boolean;
-	missingSideBraces: string[];
-	owningSideBraces: number;
-	gapLines: number;
-	placeholderLines: number;
-	placeholderExpected: number;
-	realSidePlaceholder: boolean;
-	placeholderFill: string;
-	neutralFill: string;
-	fillsNeutral: boolean;
-	diffFillNeutral: boolean;
+	placeholderDecorations: number;
+	placeholderElements: number;
+	legacyPaint: number;
+	diagonalFills: number;
 	owningFill: boolean;
-	gutterNeutral: boolean;
-	signHidden: boolean;
 	lineChanges: number;
-	owningArrows: number;
+	changes: PreviewLineChange[];
+	hasDeletion: boolean;
+	hasInsertion: boolean;
 	removedNavigable: boolean;
 	addedNavigable: boolean;
-}
-
-interface PaneBounds {
-	side: string;
-	rect?: Rect;
-	left: number;
-	right: number;
 }
 
 interface PreviewModelDecoration {
@@ -184,10 +148,16 @@ export interface PreviewAudit {
 	page: 'diff' | 'editor';
 	ready: boolean;
 	viewport: { width: number; height: number };
-	panes: PaneAudit[];
-	arrows: ArrowAudit[];
 	toolbar: ToolbarAudit;
 	gutter: GutterAudit;
+	gutterProbe?: GutterProbe;
+	gutterAlignment?: GutterAlignment;
+	navigation?: NavigationProbe;
+	folded?: FoldedProbe;
+	diffSticky?: StickyProbe;
+	collapseAll?: CollapseAllProbe;
+	folding?: FoldingProbe;
+	sash?: SashProbe;
 	content: ContentAudit;
 	selected: string | null;
 	swap: { before: PaneSnapshot; after: PaneSnapshot } | null;
@@ -196,6 +166,81 @@ export interface PreviewAudit {
 	oneSided?: OneSidedAudit;
 	sticky?: { visible: boolean; display: string; text: string; rect: Rect | null };
 	violations: string[];
+}
+
+export interface GutterAlignment {
+	mergeActive: boolean;
+	items: number;
+	visible: number;
+	checked: number;
+	maxCenterOffset: number;
+}
+
+export interface NavigationProbe {
+	changes: number[];
+	swappedChanges: number[];
+	forward: number[];
+	backward: number[];
+	afterSwap: number[];
+}
+
+export interface FoldedProbe {
+	label: string;
+	visible: string[];
+	originalVisible: string[];
+	markers: { modified: number; original: number };
+	expandedMarkers: { modified: number; original: number };
+	diagonalFills: { modified: number; original: number };
+	expandedDiagonalFills: { modified: number; original: number };
+	hint: string;
+}
+
+export interface StickyProbe {
+	text: string;
+	visible: boolean;
+	height: number;
+}
+
+export interface CollapseAllProbe {
+	original: string[];
+	modified: string[];
+}
+
+interface GutterProbe {
+	present: boolean;
+	width: number;
+	items: number;
+	itemActions: string[][];
+	buttons: string[];
+	sash: boolean;
+	mergeActive: boolean;
+	itemDisplay: string;
+	itemVisible: boolean;
+	currentShowAlways: boolean;
+	currentActions: string[];
+	clicked: string | null;
+	copy: { side?: string; key?: string } | null;
+	overflowLabels: string[] | null;
+	overflowDebug: string[];
+	availability: GutterAvailabilitySnapshot[];
+}
+
+interface GutterAvailabilitySnapshot {
+	hasItem: boolean;
+	hasService: boolean;
+	mapping: unknown;
+	values: { left: boolean; right: boolean } | null;
+	buttons: number;
+}
+
+interface SashProbe {
+	present: boolean;
+	gutterWidth: number;
+	initial: [number, number];
+	dragged: [number, number];
+	afterDocument: [number, number];
+	afterSwap: [number, number] | null;
+	reset: [number, number] | null;
 }
 
 function rectOf(element: Element): Rect {
@@ -265,55 +310,6 @@ function statusTextOf(id: string): string {
 	return document.getElementById(id)?.textContent ?? '';
 }
 
-function paneAudits(): PaneAudit[] {
-	const left = paneAudit('left');
-	const right = paneAudit('right');
-	return [left, right].filter((pane): pane is PaneAudit => pane !== undefined);
-}
-
-function paneAudit(side: 'left' | 'right'): PaneAudit | undefined {
-	const pane = document.getElementById(`diff-pane-${side}`);
-	if (!pane) {
-		return undefined;
-	}
-	const rect = rectOf(pane);
-	const rails = paneRails(pane);
-	return {
-		side,
-		rect,
-		clientWidth: pane.clientWidth,
-		contentWidth: paneContentWidth(pane),
-		scrollLeft: paneScrollLeft(side),
-		gutterInset: gutterInset(pane, rect),
-		rows: pane.querySelectorAll('.diff-row').length,
-		changedRows: pane.querySelectorAll('.diff-row[data-status="changed"]').length,
-		rails: rails.count,
-		innerRail: rails.inner
-	};
-}
-
-function paneContentWidth(pane: HTMLElement): number {
-	const windowEl = pane.querySelector('.document-tree-window');
-	return windowEl ? rectOf(windowEl).width : 0;
-}
-
-function paneScrollLeft(side: string): number {
-	const bar = document.querySelector(`#diff-list .virtual-scroll-hscroll-${side}`) as HTMLElement | null;
-	return bar ? Math.round(bar.scrollLeft) : 0;
-}
-
-function gutterInset(pane: HTMLElement, rect: Rect): number {
-	const gutter = pane.querySelector('.document-tree-lines');
-	return gutter ? rectOf(gutter).x - (rect.x + pane.clientLeft) : 0;
-}
-
-function paneRails(pane: HTMLElement): { count: number; inner: boolean } {
-	const shadows = Array.from(pane.querySelectorAll('.document-tree-line-number'))
-		.map((cell) => getComputedStyle(cell).boxShadow)
-		.filter((shadow) => shadow !== 'none');
-	return { count: shadows.length, inner: shadows.every((shadow) => shadow.includes('-3px')) };
-}
-
 function toolbarAudit(): ToolbarAudit {
 	const controls = visibleControls();
 	const toolbar = document.querySelector('.toolbar') as HTMLElement | null;
@@ -322,10 +318,8 @@ function toolbarAudit(): ToolbarAudit {
 		display: toolbar ? getComputedStyle(toolbar).display : '',
 		groups: {
 			left: groupAudit('.toolbar-left'),
-			center: groupAudit('.toolbar-center'),
 			right: groupAudit('.toolbar-right')
 		},
-		swapCenterGap: swapCenterGap(),
 		overlaps: overlapLabels(controls),
 		outside: outsideLabels(controls),
 		clipped: clippedLabels(controls),
@@ -338,24 +332,13 @@ function groupAudit(selector: string): GroupAudit | null {
 	return group ? { rect: rectOf(group), clientWidth: group.clientWidth, scrollWidth: group.scrollWidth } : null;
 }
 
-/** How far the Swap button's centre sits from the pane divider. */
-function swapCenterGap(): number {
-	const swap = document.getElementById('diff-swap');
-	const left = document.getElementById('diff-pane-left');
-	if (!swap || !left) {
-		return 0;
-	}
-	const swapRect = rectOf(swap);
-	return Math.round(Math.abs(swapRect.x + swapRect.width / 2 - rectOf(left).right));
-}
-
 function visibleControls(): ToolbarControl[] {
 	const elements = Array.from(document.querySelectorAll('.toolbar .tool, .toolbar .search-field'));
 	return elements.filter(isVisible).map(controlOf);
 }
 
 function controlOf(element: Element): ToolbarControl {
-	const group = element.closest('.toolbar-left, .toolbar-center, .toolbar-right');
+	const group = element.closest('.toolbar-left, .toolbar-right');
 	return { name: labelOf(element), rect: rectOf(element), groupRect: group ? rectOf(group) : undefined };
 }
 
@@ -396,68 +379,46 @@ function inside(inner: Rect, outer: Rect): boolean {
 	return inner.x >= outer.x - 1 && inner.right <= outer.right + 1;
 }
 
-function arrowAudits(): ArrowAudit[] {
-	return Array.from(document.querySelectorAll('.diff-copy-arrow')).map(arrowAudit);
+function gutterProbeOf(): GutterProbe | undefined {
+	return (window as unknown as { __GUTTER_PROBE__?: GutterProbe }).__GUTTER_PROBE__;
 }
 
-function arrowAudit(button: Element): ArrowAudit {
-	const pane = button.closest('.diff-pane') as HTMLElement | null;
-	const rect = rectOf(button);
-	const bounds = paneBounds(pane);
-	return {
-		side: bounds.side,
-		rect,
-		vertical: isVertical(rect, bounds),
-		insideX: isInsideX(rect, bounds),
-		edgeGap: edgeGap(rect, bounds),
-		visible: isArrowVisible(button),
-		opaque: opaqueBackground(button)
-	};
+function gutterAlignmentOf(): GutterAlignment | undefined {
+	return (window as unknown as { __GUTTER_ALIGNMENT__?: GutterAlignment }).__GUTTER_ALIGNMENT__;
 }
 
-function isArrowVisible(element: Element): boolean {
-	const style = getComputedStyle(element);
-	return style.display !== 'none' && style.visibility !== 'hidden' && Number.parseFloat(style.opacity) > 0.5;
+function navigationOf(): NavigationProbe | undefined {
+	return (window as unknown as { __DIFF_NAVIGATION__?: NavigationProbe }).__DIFF_NAVIGATION__;
 }
 
-/** The arrow overlays the row text; a transparent background would leave it legible. */
-function opaqueBackground(element: Element): boolean {
-	const color = getComputedStyle(element).backgroundColor;
-	const match = color.match(/rgba?\(([^)]+)\)/);
-	if (!match) {
-		return color !== 'transparent';
-	}
-	const parts = match[1].split(',').map((part) => Number.parseFloat(part));
-	return parts.length < 4 || parts[3] >= 1;
+function foldedOf(): FoldedProbe | undefined {
+	return (window as unknown as { __DIFF_FOLDED__?: FoldedProbe }).__DIFF_FOLDED__;
 }
 
-function paneBounds(pane: HTMLElement | null): PaneBounds {
-	if (!pane) {
-		return { side: 'unknown', left: 0, right: 0 };
-	}
-	const rect = rectOf(pane);
-	const rightBorder = pane.offsetWidth - pane.clientWidth - pane.clientLeft;
-	return {
-		side: pane.id.replace('diff-pane-', ''),
-		rect,
-		left: rect.x + pane.clientLeft,
-		right: rect.right - rightBorder
-	};
+function diffStickyOf(): StickyProbe | undefined {
+	return (window as unknown as { __DIFF_STICKY__?: StickyProbe }).__DIFF_STICKY__;
 }
 
-function isVertical(rect: Rect, bounds: PaneBounds): boolean {
-	return bounds.rect !== undefined && rect.y >= bounds.rect.y && rect.bottom <= bounds.rect.bottom;
+function collapseAllOf(): CollapseAllProbe | undefined {
+	return (window as unknown as { __COLLAPSE_ALL__?: CollapseAllProbe }).__COLLAPSE_ALL__;
 }
 
-function isInsideX(rect: Rect, bounds: PaneBounds): boolean {
-	return bounds.rect !== undefined && rect.x >= bounds.left - 1 && rect.right <= bounds.right + 1;
+interface FoldingProbe {
+	originalBefore: number;
+	originalCollapsed: number;
+	originalExpanded: number;
+	modifiedBefore: number;
+	modifiedCollapsed: number;
+	modifiedExpanded: number;
+	chevrons: number;
 }
 
-function edgeGap(rect: Rect, bounds: PaneBounds): number {
-	if (bounds.rect === undefined) {
-		return 0;
-	}
-	return bounds.side === 'left' ? bounds.right - rect.right : rect.x - bounds.left;
+function foldingProbeOf(): FoldingProbe | undefined {
+	return (window as unknown as { __FOLDING_PROBE__?: FoldingProbe }).__FOLDING_PROBE__;
+}
+
+function sashProbeOf(): SashProbe | undefined {
+	return (window as unknown as { __SASH_PROBE__?: SashProbe }).__SASH_PROBE__;
 }
 
 function gutterAudit(): GutterAudit {
@@ -466,10 +427,7 @@ function gutterAudit(): GutterAudit {
 	return {
 		cells: cells.length,
 		rails: changed.filter((cell) => getComputedStyle(cell).boxShadow !== 'none').length,
-		digitsClear: changed.every(digitsClearOfCell),
-		legacyCellRail: Array.from(document.querySelectorAll('.diff-cell')).some(
-			(cell) => getComputedStyle(cell).boxShadow !== 'none'
-		)
+		digitsClear: changed.every(digitsClearOfCell)
 	};
 }
 
@@ -522,12 +480,13 @@ function violationsOf(state: AuditState, audit: Omit<PreviewAudit, 'violations'>
 }
 
 function oneSidedStateIssues(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
-	if (state.name !== 'diff-one-sided') {
+	const oneSided = state.name === 'diff-one-sided' || state.name === 'diff-removed' || state.name === 'diff-added';
+	if (!oneSided) {
 		return [];
 	}
 	return audit.oneSided === undefined
-		? ['the one-sided audit could not read the aligned diff models']
-		: oneSidedViolations(audit.oneSided);
+		? ['the one-sided audit could not read the per-side diff models']
+		: oneSidedViolations(audit.oneSided, state.name);
 }
 
 function pageIssues(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
@@ -599,11 +558,9 @@ const SYSCOND_COLORS = {
 	string: 'rgb(206, 145, 120)'
 };
 
-/** The `diff-one-sided` fixture contract, so a fixture edit names the failing expectation. */
+/** The one-sided fixture contract, so a fixture edit names the failing expectation. */
 const ONE_SIDED_FIXTURE = {
-	owningBraces: 8,
-	minLineChanges: 3,
-	owningArrows: 2
+	minLineChanges: 3
 } as const;
 
 /** The Dark+ definition and string colours the label preview resolves. */
@@ -1348,9 +1305,6 @@ function gutterViolations(gutter: GutterAudit): string[] {
 	if (!gutter.digitsClear) {
 		issues.push('a line-number digit overlaps its status rail');
 	}
-	if (gutter.legacyCellRail) {
-		issues.push('a diff cell paints a status rail at the pane edge');
-	}
 	return issues;
 }
 
@@ -1425,30 +1379,9 @@ function blockEnd(lines: readonly string[], start: number): number {
 	return at;
 }
 
-function braceCount(lines: readonly string[], start: number, end: number): number {
-	let count = 0;
-	for (let at = Math.max(0, start); at < end; at += 1) {
-		if (lines[at].includes('{') || lines[at].includes('}')) {
-			count += 1;
-		}
-	}
-	return count;
-}
-
 function decorationHasClass(options: PreviewModelDecoration['options'], name: string): boolean {
 	const value = options.className;
 	return typeof value === 'string' && value.split(/\s+/).includes(name);
-}
-
-/** Resolves a theme variable through a hidden probe, e.g. `var(--vscode-editor-background)`. */
-function resolvedColor(expression: string): string {
-	const probe = document.createElement('div');
-	probe.style.color = expression;
-	probe.style.display = 'none';
-	document.body.appendChild(probe);
-	const color = getComputedStyle(probe).color;
-	probe.remove();
-	return color;
 }
 
 interface OneSidedContext {
@@ -1463,18 +1396,6 @@ interface OneSidedContext {
 	addedAt: number;
 	removedEnd: number;
 	addedEnd: number;
-}
-
-interface SideScan {
-	present: boolean;
-	blank: boolean;
-	braces: string[];
-}
-
-interface GutterScan {
-	wrappers: number;
-	neutral: boolean;
-	signsHidden: boolean;
 }
 
 function previewDiffEditor(): PreviewDiffEditor | undefined {
@@ -1526,82 +1447,10 @@ function oneSidedContext(): OneSidedContext | undefined {
 	};
 }
 
-function scanMissingSide(lines: readonly string[], start: number, end: number, label: string): SideScan {
-	if (start < 0) {
-		return { present: false, blank: true, braces: [] };
-	}
-	return {
-		present: true,
-		blank: equallyBlank(lines, start, end),
-		braces: braceLines(lines, start, end, label)
-	};
-}
-
-function equallyBlank(lines: readonly string[], start: number, end: number): boolean {
-	for (let at = start; at < end; at += 1) {
-		if (lines[at] !== '') {
-			return false;
-		}
-	}
-	return true;
-}
-
-function braceLines(lines: readonly string[], start: number, end: number, label: string): string[] {
-	const braces: string[] = [];
-	for (let at = start; at < end; at += 1) {
-		const line = lines[at];
-		if (line.includes('{') || line.includes('}')) {
-			braces.push(`${label} ${at + 1}: ${line}`);
-		}
-	}
-	return braces;
-}
-
-function missingSideScan(c: OneSidedContext): { blank: boolean; braces: string[] } {
-	const right = scanMissingSide(c.right, c.removedAt, c.removedEnd, 'right');
-	const left = scanMissingSide(c.left, c.addedAt, c.addedEnd, 'left');
-	return {
-		blank: right.present && left.present && right.blank && left.blank,
-		braces: [...right.braces, ...left.braces]
-	};
-}
-
-function placeholderOf(model: PreviewDiffModel): number[] {
-	return model
-		.getAllDecorations()
-		.filter((decoration) => decorationHasClass(decoration.options, 'arxml-diff-placeholder'))
-		.map((decoration) => decoration.range.startLineNumber);
-}
-
-function realSidePlaceholder(c: OneSidedContext, left: number[], right: number[]): boolean {
-	const onRight = right.some((line) => c.addedAt >= 0 && line > c.addedAt && line <= c.addedEnd);
-	const onLeft = left.some((line) => c.removedAt >= 0 && line > c.removedAt && line <= c.removedEnd);
-	return onRight || onLeft;
-}
-
 function diffRoots(c: OneSidedContext): HTMLElement[] {
 	return [c.originalEditor.getDomNode(), c.modifiedEditor.getDomNode()].filter(
 		(root): root is HTMLElement => root !== null
 	);
-}
-
-function placeholderFill(c: OneSidedContext): string {
-	const sample =
-		c.originalEditor.getDomNode()?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
-		c.modifiedEditor.getDomNode()?.querySelector<HTMLElement>('.cdr.arxml-diff-placeholder') ??
-		null;
-	return sample === null ? '' : getComputedStyle(sample).backgroundColor;
-}
-
-function countGapLines(left: readonly string[], right: readonly string[]): number {
-	let gaps = 0;
-	const lineCount = Math.min(left.length, right.length);
-	for (let at = 0; at < lineCount; at += 1) {
-		if (left[at] === '' && right[at] === '') {
-			gaps += 1;
-		}
-	}
-	return gaps;
 }
 
 function hasVisibleFill(element: Element): boolean {
@@ -1609,74 +1458,18 @@ function hasVisibleFill(element: Element): boolean {
 	return alpha !== undefined && alpha > 0;
 }
 
-function placeholderPaintScan(
-	roots: HTMLElement[],
-	neutralFill: string
-): { elements: number; neutral: boolean } {
-	const elements = roots.flatMap((root) => Array.from(root.querySelectorAll('.cdr.arxml-diff-placeholder')));
-	const neutral = elements.every((element) => getComputedStyle(element).backgroundColor === neutralFill);
-	return { elements: elements.length, neutral };
-}
-
-const PLACEHOLDER_DIFF_FILL_SELECTOR =
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-insert, ' +
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .line-delete, ' +
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-insert, ' +
-	'.view-overlays > div:has(> .arxml-diff-placeholder) > .char-delete';
-const PLACEHOLDER_GUTTER_SELECTOR = '.margin-view-overlays > div:has(> .arxml-diff-placeholder-margin)';
-
-function diffFillNeutral(roots: HTMLElement[]): boolean {
-	return roots.every((root) =>
-		Array.from(root.querySelectorAll(PLACEHOLDER_DIFF_FILL_SELECTOR)).every((fill) => !hasVisibleFill(fill))
-	);
-}
-
-function gutterScan(roots: HTMLElement[]): GutterScan {
-	const scans = roots.flatMap((root) =>
-		Array.from(root.querySelectorAll(PLACEHOLDER_GUTTER_SELECTOR)).map(gutterWrapperScan)
-	);
-	return {
-		wrappers: scans.reduce((total, scan) => total + scan.wrappers, 0),
-		neutral: scans.every((scan) => scan.neutral),
-		signsHidden: scans.every((scan) => scan.signsHidden)
-	};
-}
-
-function gutterWrapperScan(wrapper: Element): GutterScan {
-	const fill = wrapper.querySelector('.gutter-insert, .gutter-delete');
-	const neutral = fill === null || !hasVisibleFill(fill);
-	const signs = Array.from(wrapper.querySelectorAll('.insert-sign, .delete-sign'));
-	return {
-		wrappers: 1,
-		neutral,
-		signsHidden: signs.every((sign) => getComputedStyle(sign).display === 'none')
-	};
-}
-
-/** The owning side must keep its own removed/added fill; only placeholders go neutral. */
+/** The owning side keeps its own removed/added fill; the missing side is native paint only. */
 function owningFillVisible(root: HTMLElement | null, className: 'line-delete' | 'line-insert'): boolean {
 	if (root === null) {
 		return false;
 	}
-	return Array.from(root.querySelectorAll(`.view-overlays > div > .${className}`)).some(isOwningFill);
+	return Array.from(root.querySelectorAll(`.view-overlays > div > .${className}`)).some(hasVisibleFill);
 }
 
-function isOwningFill(fill: Element): boolean {
-	const wrapper = fill.parentElement;
-	if (wrapper === null || hasPlaceholderChild(wrapper)) {
-		return false;
-	}
-	return hasVisibleFill(fill);
-}
-
-function hasPlaceholderChild(wrapper: Element): boolean {
-	return Array.from(wrapper.children).some((child) => child.classList.contains('arxml-diff-placeholder'));
-}
-
-function owningFills(c: OneSidedContext): boolean {
+function owningFills(c: OneSidedContext, needsDeletion: boolean, needsInsertion: boolean): boolean {
 	return (
-		owningFillVisible(c.originalEditor.getDomNode(), 'line-delete') &&
-		owningFillVisible(c.modifiedEditor.getDomNode(), 'line-insert')
+		(!needsDeletion || owningFillVisible(c.originalEditor.getDomNode(), 'line-delete')) &&
+		(!needsInsertion || owningFillVisible(c.modifiedEditor.getDomNode(), 'line-insert'))
 	);
 }
 
@@ -1686,27 +1479,6 @@ function lineChangesOf(editor: PreviewDiffEditor): PreviewLineChange[] {
 
 function covers(start: number, end: number, line: number): boolean {
 	return start > 0 && line >= start && line <= Math.max(start, end);
-}
-
-function isGlyphArrow(decoration: PreviewModelDecoration, line: number): boolean {
-	const glyph = decoration.options.glyphMarginClassName;
-	return (
-		decoration.range.startLineNumber === line &&
-		typeof glyph === 'string' &&
-		glyph.includes('arxml-merge-arrow')
-	);
-}
-
-function glyphArrowOn(model: PreviewDiffModel, line: number): boolean {
-	return model.getAllDecorations().some((decoration) => isGlyphArrow(decoration, line));
-}
-
-function arrowAt(at: number, model: PreviewDiffModel): number {
-	return at >= 0 && glyphArrowOn(model, at + 1) ? 1 : 0;
-}
-
-function owningArrowCount(c: OneSidedContext): number {
-	return arrowAt(c.removedAt, c.originalModel) + arrowAt(c.addedAt, c.modifiedModel);
 }
 
 function removedNavigable(c: OneSidedContext, changes: PreviewLineChange[]): boolean {
@@ -1725,20 +1497,6 @@ function addedNavigable(c: OneSidedContext, changes: PreviewLineChange[]): boole
 	return changes.some((change) => covers(change.modifiedStartLineNumber, change.modifiedEndLineNumber, line));
 }
 
-function placeholderExpected(c: OneSidedContext, gapLines: number): number {
-	return (
-		c.removedEnd - Math.max(0, c.removedAt) + (c.addedEnd - Math.max(0, c.addedAt)) + 2 * gapLines
-	);
-}
-
-function fillsNeutralScan(scan: { elements: number; neutral: boolean }, expected: number): boolean {
-	return scan.elements > 0 && scan.neutral && scan.elements === expected;
-}
-
-function countedAnd(count: number, value: boolean): boolean {
-	return count > 0 && value;
-}
-
 /**
  * Reads the actual aligned models and the rendered placeholder layers. The fake
  * brace regression lived in the model text, so this audit cannot pass on geometry
@@ -1749,195 +1507,316 @@ function oneSidedAudit(): OneSidedAudit | undefined {
 	return context === undefined ? undefined : oneSidedValues(context);
 }
 
+function isPureDeletion(change: PreviewLineChange): boolean {
+	return change.modifiedEndLineNumber === 0 && change.originalEndLineNumber >= change.originalStartLineNumber;
+}
+
+function isPureInsertion(change: PreviewLineChange): boolean {
+	return change.originalEndLineNumber === 0 && change.modifiedEndLineNumber >= change.modifiedStartLineNumber;
+}
+
+function placeholderDecorationCount(model: PreviewDiffModel): number {
+	return model
+		.getAllDecorations()
+		.filter((decoration) => decorationHasClass(decoration.options, 'arxml-diff-placeholder')).length;
+}
+
+const PLACEHOLDER_ELEMENT_SELECTOR = '.arxml-diff-placeholder, .arxml-diff-placeholder-margin';
+const LEGACY_DIFF_LAYER_SELECTOR = [
+	'.arxml-diff-merge-margin',
+	'.arxml-copy-left-margin',
+	'.arxml-copy-right-margin',
+	'.arrow-revert-change',
+	'.arxml-diff-selection',
+	'.arxml-diff-ruler'
+].join(', ');
+
 function oneSidedValues(c: OneSidedContext): OneSidedAudit {
-	const missing = missingSideScan(c);
-	const leftPlaceholders = placeholderOf(c.originalModel);
-	const rightPlaceholders = placeholderOf(c.modifiedModel);
 	const roots = diffRoots(c);
-	const neutralFill = resolvedColor('var(--vscode-editor-background)');
-	const placeholderPaint = placeholderPaintScan(roots, neutralFill);
-	const gutter = gutterScan(roots);
 	const changes = lineChangesOf(c.editor);
-	const gapLines = countGapLines(c.left, c.right);
+	const hasDeletion = changes.some(isPureDeletion);
+	const hasInsertion = changes.some(isPureInsertion);
 	return {
 		originalLines: c.originalModel.getLineCount(),
 		modifiedLines: c.modifiedModel.getLineCount(),
-		missingSideBlank: missing.blank,
-		missingSideBraces: missing.braces,
-		owningSideBraces:
-			braceCount(c.left, c.removedAt, c.removedEnd) + braceCount(c.right, c.addedAt, c.addedEnd),
-		gapLines,
-		placeholderLines: leftPlaceholders.length + rightPlaceholders.length,
-		placeholderExpected: placeholderExpected(c, gapLines),
-		realSidePlaceholder: realSidePlaceholder(c, leftPlaceholders, rightPlaceholders),
-		placeholderFill: placeholderFill(c),
-		neutralFill,
-		fillsNeutral: fillsNeutralScan(
-			placeholderPaint,
-			leftPlaceholders.length + rightPlaceholders.length
+		placeholderDecorations:
+			placeholderDecorationCount(c.originalModel) + placeholderDecorationCount(c.modifiedModel),
+		placeholderElements: roots.reduce(
+			(total, root) => total + root.querySelectorAll(PLACEHOLDER_ELEMENT_SELECTOR).length,
+			0
 		),
-		diffFillNeutral: diffFillNeutral(roots),
-		owningFill: owningFills(c),
-		gutterNeutral: countedAnd(gutter.wrappers, gutter.neutral),
-		signHidden: countedAnd(gutter.wrappers, gutter.signsHidden),
+		legacyPaint: roots.reduce(
+			(total, root) => total + root.querySelectorAll(LEGACY_DIFF_LAYER_SELECTOR).length,
+			0
+		),
+		diagonalFills: document.querySelectorAll('.monaco-diff-editor .diagonal-fill').length,
+		owningFill: owningFills(c, hasDeletion, hasInsertion),
 		lineChanges: changes.length,
-		owningArrows: owningArrowCount(c),
+		changes,
+		hasDeletion,
+		hasInsertion,
 		removedNavigable: removedNavigable(c, changes),
 		addedNavigable: addedNavigable(c, changes)
 	};
 }
 
-function oneSidedViolations(audit: OneSidedAudit): string[] {
+function oneSidedViolations(audit: OneSidedAudit, stateName: string): string[] {
+	const isRemoved = stateName === 'diff-removed';
+	const isAdded = stateName === 'diff-added';
+	const minimumChanges = isRemoved || isAdded ? 2 : ONE_SIDED_FIXTURE.minLineChanges;
 	return [
-		...oneSidedModelIssues(audit),
-		...oneSidedPaintIssues(audit),
-		...oneSidedNavigationIssues(audit)
+		...issueWhen(
+			audit.placeholderDecorations > 0,
+			`the per-side models still carry ${audit.placeholderDecorations} placeholder decorations`
+		),
+		...issueWhen(
+			audit.placeholderElements > 0,
+			`the diff body still renders ${audit.placeholderElements} placeholder elements`
+		),
+		...issueWhen(
+			audit.legacyPaint > 0,
+			`the diff body still renders ${audit.legacyPaint} legacy merge/selection layers`
+		),
+		...issueWhen(
+			audit.diagonalFills === 0,
+			'the one-sided gap does not use the native diagonal fill'
+		),
+		...issueWhen(!audit.owningFill, 'the owning side lost its native inserted/deleted line fill'),
+		...issueWhen(
+			audit.lineChanges < minimumChanges,
+			`the diff has ${audit.lineChanges} line changes, fewer than the ${minimumChanges} expected`
+		),
+		...issueWhen(isRemoved && !audit.hasDeletion, 'the removed module is not a deletion hunk'),
+		...issueWhen(isAdded && !audit.hasInsertion, 'the added module is not an insertion hunk'),
+		...issueWhen(
+			!isAdded && !audit.removedNavigable,
+			'the removed block is missing from the navigation change list'
+		),
+		...issueWhen(
+			!isRemoved && !audit.addedNavigable,
+			'the added block is missing from the navigation change list'
+		),
+		...issueWhen(
+			(isRemoved || isAdded) && audit.originalLines === audit.modifiedLines,
+			'the per-side models still have equal line counts'
+		)
 	];
 }
 
-function oneSidedModelIssues(audit: OneSidedAudit): string[] {
-	return [
-		...issueWhen(
-			audit.originalLines !== audit.modifiedLines,
-			`the aligned models have ${audit.originalLines} and ${audit.modifiedLines} lines`
-		),
-		...issueWhen(!audit.missingSideBlank, 'a missing-side placeholder still has content'),
-		...issueWhen(
-			audit.missingSideBraces.length > 0,
-			`the missing side synthesized braces (${audit.missingSideBraces.join('; ')})`
-		),
-		...issueWhen(
-			audit.owningSideBraces !== ONE_SIDED_FIXTURE.owningBraces,
-			`the owning side has ${audit.owningSideBraces} brace lines, not the ${ONE_SIDED_FIXTURE.owningBraces} in the diff-one-sided fixture`
-		),
-		...issueWhen(
-			audit.placeholderLines !== audit.placeholderExpected,
-			`expected ${audit.placeholderExpected} placeholder lines, found ${audit.placeholderLines}`
-		),
-		...issueWhen(audit.realSidePlaceholder, 'a placeholder decoration covers a line that owns a cell')
-	];
-}
-
-function oneSidedPaintIssues(audit: OneSidedAudit): string[] {
-	return [
-		...issueWhen(
-			audit.placeholderFill === '' || audit.placeholderFill !== audit.neutralFill,
-			`the placeholder fill is ${audit.placeholderFill || '<none>'}, not the editor background ${audit.neutralFill}`
-		),
-		...issueWhen(!audit.fillsNeutral, 'a placeholder layer is not painted with the editor background'),
-		...issueWhen(
-			!audit.diffFillNeutral,
-			'a placeholder wrapper keeps Monaco inserted/deleted line or char fill'
-		),
-		...issueWhen(!audit.owningFill, 'the owning side lost its inserted/deleted line fill'),
-		...issueWhen(!audit.gutterNeutral, 'the placeholder gutter keeps the inserted/deleted line fill'),
-		...issueWhen(!audit.signHidden, 'the placeholder gutter keeps the inserted/deleted sign')
-	];
-}
-
-function oneSidedNavigationIssues(audit: OneSidedAudit): string[] {
-	return [
-		...issueWhen(
-			audit.lineChanges < ONE_SIDED_FIXTURE.minLineChanges,
-			`the diff has ${audit.lineChanges} line changes, fewer than the ${ONE_SIDED_FIXTURE.minLineChanges} in the diff-one-sided fixture`
-		),
-		...issueWhen(
-			audit.owningArrows !== ONE_SIDED_FIXTURE.owningArrows,
-			`the owning side has ${audit.owningArrows} merge arrows, not the ${ONE_SIDED_FIXTURE.owningArrows} in the diff-one-sided fixture`
-		),
-		...issueWhen(!audit.removedNavigable, 'the removed block is missing from the navigation change list'),
-		...issueWhen(!audit.addedNavigable, 'the added block is missing from the navigation change list')
-	];
-}
 
 function diffViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
-	if (usesMonacoDiff()) {
-		// Monaco owns the gutter, arrows, scroll surface and selection now. The
-		// legacy audit below describes the DOM renderer it replaced; keep a small
-		// Monaco-specific mount/tint/arrow check instead.
-		return monacoDiffViolations(state);
+	if (!usesMonacoDiff()) {
+		return ['the Monaco diff editor did not mount'];
 	}
 	return [
-		...mergeViolations(state, audit.panes, audit.arrows),
-		...arrowStateViolations(state, audit),
-		...railViolations(state, audit.gutter),
-		...paneRailViolations(audit.panes),
-		...centeredSwapIssues(audit),
-		...(state.wide ? wideViolations(audit.panes) : []),
-		...(state.pan ? panViolations(state.pan, audit.panes) : [])
+		...monacoDiffViolations(state),
+		...gutterProbeViolations(state, audit.gutterProbe),
+		...gutterAlignmentIssues(state, audit.gutterAlignment),
+		...navigationIssues(state, audit.navigation),
+		...foldedIssues(state, audit.folded),
+		...diffStickyIssues(state, audit.diffSticky),
+		...collapseAllIssues(state, audit.collapseAll),
+		...foldingViolations(state, audit.folding),
+		...sashViolations(state, audit.sash),
+		...mergePressViolations(state, audit)
 	];
 }
 
-function centeredSwapIssues(audit: Omit<PreviewAudit, 'violations'>): string[] {
-	if (audit.toolbar.swapCenterGap <= 12) {
+const GUTTER_ACTION_LABELS = new Set(['Copy Block to Left', 'Copy Block to Right', 'More Actions...']);
+
+function gutterProbeViolations(state: AuditState, probe: GutterProbe | undefined): string[] {
+	if (state.page !== 'diff' || state.foldLabel !== undefined || state.collapseAll === true) {
 		return [];
 	}
-	return [`the Swap action is ${audit.toolbar.swapCenterGap}px off the pane divider`];
-}
-
-function paneRailViolations(panes: PaneAudit[]): string[] {
-	return panes.flatMap(railIssues);
-}
-
-function railIssues(pane: PaneAudit): string[] {
-	if (pane.rails === 0) {
-		return [`the ${pane.side} pane has no gutter status rail`];
+	if (probe === undefined) {
+		return ['the built-in diff gutter probe did not run'];
 	}
-	if (!pane.innerRail) {
-		return [`the ${pane.side} gutter rail is not on the inner edge`];
+	return [
+		...issueWhen(!probe.present, 'the built-in diff gutter did not mount'),
+		...issueWhen(
+			probe.width < 30 || probe.width > 45,
+			`the built-in diff gutter is ${probe.width}px wide`
+		),
+		...issueWhen(state.merge && probe.items === 0, 'the built-in diff gutter has no hunk items'),
+		...issueWhen(!probe.sash, 'the built-in diff sash did not mount'),
+		...issueWhen(
+			probe.mergeActive !== Boolean(state.merge),
+			`the Merge state is ${probe.mergeActive}, expected ${Boolean(state.merge)}`
+		),
+		...issueWhen(probe.buttons.includes('Revert Block'), 'the built-in Revert action is still visible'),
+		...probe.buttons
+			.filter((label) => !GUTTER_ACTION_LABELS.has(label))
+			.map((label) => `unexpected gutter action ${label}`),
+		...mergeGutterIssues(state, probe)
+	];
+}
+
+function mergeGutterIssues(state: AuditState, probe: GutterProbe): string[] {
+	if (!state.merge) {
+		return [
+			...issueWhen(
+				probe.items > 0 && probe.itemVisible,
+				'gutter copy actions are visible while Merge is off'
+			),
+			...issueWhen(probe.copy !== null, 'a gutter copy fired while Merge is off')
+		];
+	}
+	return [
+		...issueWhen(!probe.itemVisible, 'gutter copy actions are hidden inside Merge'),
+		...issueWhen(
+			state.name !== 'diff-removed' && !probe.currentShowAlways,
+			'the current hunk is not marked showAlways'
+		),
+		...copyTargetIssues(state, probe),
+		...renderedActionIssues(state, probe),
+		...availabilityIssues(state, probe)
+	];
+}
+
+const COPY_LEFT_LABEL = 'Copy Block to Left';
+const COPY_RIGHT_LABEL = 'Copy Block to Right';
+
+function renderedActionIssues(state: AuditState, probe: GutterProbe): string[] {
+	if (state.name === 'diff-removed' || state.name === 'diff-added') {
+		const first = probe.itemActions[0] ?? [];
+		return [
+			...issueWhen(
+				!first.includes(COPY_LEFT_LABEL) || !first.includes(COPY_RIGHT_LABEL),
+				'the one-sided hunk does not render both copy directions'
+			)
+		];
+	}
+	if (state.name === 'diff-merge' || state.name === 'diff-swap' || state.name === 'diff-sash') {
+		return probe.itemActions
+			.filter((actions) => actions.length === 1 && actions[0] !== 'More Actions...')
+			.map(() => 'a changed hunk renders only one copy action');
 	}
 	return [];
 }
 
-function mergeViolations(state: AuditState, panes: PaneAudit[], arrows: ArrowAudit[]): string[] {
-	if (!state.merge) {
-		return [];
+function copyTargetIssues(state: AuditState, probe: GutterProbe): string[] {
+	if (probe.clicked === 'More Actions...') {
+		const labels = probe.overflowLabels ?? [];
+		const hasBoth = labels.includes(COPY_LEFT_LABEL) && labels.includes(COPY_RIGHT_LABEL);
+		return [
+			...issueWhen(probe.overflowLabels === null, 'the gutter overflow menu did not open'),
+			...issueWhen(
+				state.name === 'diff-one-sided' && !hasBoth,
+				'the overflow menu does not offer both copy actions'
+			)
+		];
 	}
-	return panes.flatMap((pane) => paneArrowViolations(pane, arrows));
+	const expected = expectedCopySide(state.swap === true, probe.clicked);
+	return [
+		...issueWhen(probe.clicked === null, 'no gutter copy action was available'),
+		...issueWhen(probe.copy === null, 'clicking the gutter action did not post a host copy'),
+		...issueWhen(
+			probe.copy !== null && probe.copy.side !== expected,
+			`the gutter copy posted side ${probe.copy?.side ?? '<none>'}, expected ${expected}`
+		),
+		...issueWhen(
+			probe.copy !== null && !probe.copy.key?.includes(':'),
+			'the gutter copy posted no semantic row key'
+		)
+	];
 }
 
-function paneArrowViolations(pane: PaneAudit, arrows: ArrowAudit[]): string[] {
-	const own = arrows.filter((arrow) => arrow.side === pane.side && arrow.vertical);
-	if (own.length === 0) {
-		return [`no copy arrow is rendered in the ${pane.side} pane`];
+function expectedCopySide(swapped: boolean, action: string | null): 'left' | 'right' | undefined {
+	if (action === 'Copy Block to Left') {
+		return swapped ? 'left' : 'right';
 	}
-	return own.map((arrow) => arrowIssue(arrow, pane)).filter((issue): issue is string => issue !== undefined);
-}
-
-function arrowIssue(arrow: ArrowAudit, pane: PaneAudit): string | undefined {
-	return arrowPlacementIssue(arrow, pane) ?? arrowPresentationIssue(arrow, pane);
-}
-
-function arrowPlacementIssue(arrow: ArrowAudit, pane: PaneAudit): string | undefined {
-	if (!arrow.insideX) {
-		return `${pane.side} copy arrow is outside its pane (x=${arrow.rect.x})`;
-	}
-	if (arrow.edgeGap > 2) {
-		return `${pane.side} copy arrow is ${arrow.edgeGap}px from the inner edge`;
+	if (action === 'Copy Block to Right') {
+		return swapped ? 'right' : 'left';
 	}
 	return undefined;
 }
 
-function arrowPresentationIssue(arrow: ArrowAudit, pane: PaneAudit): string | undefined {
-	if (!arrow.visible) {
-		return `${pane.side} copy arrow is not visible`;
-	}
-	if (!arrow.opaque) {
-		return `${pane.side} copy arrow has a transparent background over the row text`;
-	}
-	return undefined;
-}
-
-function arrowStateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
-	return [...offArrowViolations(state, audit), ...mergePressViolations(state, audit)];
-}
-
-function offArrowViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
-	if (state.merge || audit.arrows.length === 0) {
+function availabilityIssues(state: AuditState, probe: GutterProbe): string[] {
+	if (
+		state.name !== 'diff-merge' &&
+		state.name !== 'diff-swap' &&
+		state.name !== 'diff-sash' &&
+		state.name !== 'diff-removed' &&
+		state.name !== 'diff-added'
+	) {
 		return [];
 	}
-	return ['copy arrows are visible while Merge is off'];
+	return probe.availability
+		.filter((item) => item.values !== null && (!item.values.left || !item.values.right))
+		.map(() => 'a changed hunk hides a copy action');
 }
+
+function foldingViolations(state: AuditState, probe: FoldingProbe | undefined): string[] {
+	if (state.page !== 'diff' || state.foldLabel !== undefined || state.collapseAll === true) {
+		return [];
+	}
+	if (probe === undefined) {
+		return ['the diff folding probe did not run'];
+	}
+	return [
+		...issueWhen(
+			probe.originalCollapsed >= probe.originalBefore,
+			'Collapse All did not hide original-pane rows'
+		),
+		...issueWhen(
+			probe.originalExpanded !== probe.originalBefore,
+			'Expand All did not restore the original-pane rows'
+		),
+		...issueWhen(
+			probe.modifiedCollapsed >= probe.modifiedBefore,
+			'Collapse All did not hide modified-pane rows'
+		),
+		...issueWhen(
+			probe.modifiedExpanded !== probe.modifiedBefore,
+			'Expand All did not restore the modified-pane rows'
+		)
+	];
+}
+
+function widthPairMatches(left: [number, number], right: [number, number]): boolean {
+	return Math.abs(left[0] - right[0]) <= 4 && Math.abs(left[1] - right[1]) <= 4;
+}
+
+function sashViolations(state: AuditState, probe: SashProbe | undefined): string[] {
+	if (state.page !== 'diff' || !state.sash) {
+		return [];
+	}
+	if (probe === undefined) {
+		return ['the diff sash probe did not run'];
+	}
+	const issues = [
+		...issueWhen(!probe.present, 'the diff sash was not found for the drag probe'),
+		...issueWhen(
+			Math.abs(probe.initial[0] + probe.gutterWidth - probe.initial[1]) > 4,
+			`the diff panes start at ${probe.initial[0]}px and ${probe.initial[1]}px, not 50/50`
+		),
+		...issueWhen(
+			probe.dragged[0] <= probe.initial[0] + 60,
+			'dragging the sash did not widen the left pane'
+		),
+		...issueWhen(
+			!widthPairMatches(probe.dragged, probe.afterDocument),
+			'the sash ratio reset when the document was replaced'
+		),
+		...issueWhen(probe.reset === null, 'the sash double-click reset was not measured'),
+		...issueWhen(
+			probe.reset !== null &&
+				Math.abs(probe.reset[0] + probe.gutterWidth - probe.reset[1]) > 4,
+			'the sash double-click did not restore 50/50'
+		)
+	];
+	if (state.swap) {
+		issues.push(
+			...issueWhen(probe.afterSwap === null, 'the sash ratio after Swap was not measured'),
+			...issueWhen(
+				probe.afterSwap !== null && !widthPairMatches(probe.dragged, probe.afterSwap),
+				'the sash ratio reset when the panes were swapped'
+			)
+		);
+	}
+	return issues;
+}
+
 
 function mergePressViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
 	if (!state.merge || audit.toolbar.mergePressed === true) {
@@ -1946,49 +1825,225 @@ function mergePressViolations(state: AuditState, audit: Omit<PreviewAudit, 'viol
 	return ['Merge is not pressed'];
 }
 
-function railViolations(state: AuditState, gutter: GutterAudit): string[] {
-	if (state.page !== 'diff' || gutter.rails > 0) {
+function gutterAlignmentIssues(
+	state: AuditState,
+	alignment: GutterAlignment | undefined
+): string[] {
+	if (state.page !== 'diff' || state.name === 'diff-collapsed-onesided' || state.foldLabel !== undefined || state.collapseAll === true) {
 		return [];
 	}
-	return ['no gutter status rail is rendered'];
+	if (alignment === undefined) {
+		return ['the gutter alignment probe did not run'];
+	}
+	if (alignment.mergeActive !== Boolean(state.merge)) {
+		return [];
+	}
+	if (alignment.items === 0) {
+		// The gutter probe later owns item existence; an early empty snapshot is a
+		// render race, not a Merge-visibility regression.
+		return [];
+	}
+	if (!state.merge) {
+		return issueWhen(
+			alignment.visible > 0,
+			'gutter copy actions are visible while Merge is off'
+		);
+	}
+	return [
+		...issueWhen(alignment.visible === 0, 'gutter copy actions are hidden inside Merge'),
+		...issueWhen(
+			alignment.visible > 0 && alignment.checked === 0,
+			'the gutter alignment probe found no compact hunk to measure'
+		),
+		...issueWhen(
+			alignment.maxCenterOffset > 1,
+			`the gutter copy buttons are ${alignment.maxCenterOffset}px off the hunk centre`
+		)
+	];
 }
 
-function wideViolations(panes: PaneAudit[]): string[] {
-	return panes
-		.filter((pane) => pane.contentWidth <= pane.clientWidth + 20)
-		.map((pane) => `the ${pane.side} pane did not overflow horizontally`);
-}
-
-function panViolations(pan: number, panes: PaneAudit[]): string[] {
+function navigationIssues(state: AuditState, navigation: NavigationProbe | undefined): string[] {
+	if (state.page !== 'diff' || state.name !== 'diff-nav') {
+		return [];
+	}
+	if (navigation === undefined) {
+		return ['the navigation probe did not run'];
+	}
 	const issues: string[] = [];
-	for (const pane of panes) {
-		const max = Math.max(0, pane.contentWidth - pane.clientWidth);
-		const expected = Math.min(pan, max);
-		if (Math.abs(pane.scrollLeft - expected) > 5) {
-			issues.push(`the ${pane.side} pane is at ${pane.scrollLeft}px, expected ${expected}px`);
+	if (navigation.changes.length < 2) {
+		issues.push(`the navigation fixture has ${navigation.changes.length} changes, not at least 2`);
+	}
+	if (new Set(navigation.changes).size !== navigation.changes.length) {
+		issues.push('the navigation change list contains duplicate lines');
+	}
+	issues.push(
+		...cyclicSequenceIssues('Next', navigation.forward, navigation.changes),
+		...cyclicSequenceIssues('Prev', navigation.backward, [...navigation.changes].reverse()),
+		...cyclicSequenceIssues('Next after Swap', navigation.afterSwap, navigation.swappedChanges)
+	);
+	return issues;
+}
+
+function cyclicSequenceIssues(label: string, sequence: number[], expected: number[]): string[] {
+	const count = expected.length;
+	if (count === 0) {
+		return [`${label} has no expected change lines`];
+	}
+	if (sequence.length !== count + 1) {
+		return [`${label} recorded ${sequence.length} steps for ${count} changes`];
+	}
+	if (new Set(sequence).size !== count) {
+		return [`${label} did not cover every change exactly once before wrapping`];
+	}
+	const start = expected.indexOf(sequence[0]);
+	if (start < 0) {
+		return [`${label} starts at line ${sequence[0]}, outside the change list`];
+	}
+	for (let step = 0; step <= count; step += 1) {
+		const wanted = expected[(start + step) % count];
+		if (sequence[step] !== wanted) {
+			return [
+				`${label} step ${step} is line ${sequence[step]}, expected ${wanted}`
+			];
 		}
 	}
-	return issues;
+	return [];
+}
+
+function diffStickyIssues(state: AuditState, sticky: StickyProbe | undefined): string[] {
+	if (state.name !== 'diff-sticky') {
+		return [];
+	}
+	if (sticky === undefined) {
+		return ['the diff sticky probe did not run'];
+	}
+	return [
+		...issueWhen(!sticky.visible, 'the diff sticky header is not visible'),
+		...issueWhen(
+			!sticky.text.includes('Items "Items"'),
+			`the diff sticky header reads "${sticky.text}", not the Items header`
+		),
+		...issueWhen(
+			sticky.text.trim() === '{',
+			'the diff sticky header still shows only the opening brace'
+		)
+	];
+}
+
+function collapseAllIssues(
+	state: AuditState,
+	probe: CollapseAllProbe | undefined
+): string[] {
+	if (state.name !== 'diff-collapse-all') {
+		return [];
+	}
+	if (probe === undefined) {
+		return ['the Collapse All probe did not run'];
+	}
+	const has = (lines: string[], text: string): boolean =>
+		lines.some((line) => line.includes(text));
+	return [
+		...issueWhen(
+			!has(probe.original, 'module P.RemovedMod'),
+			'the left-only module header is missing after Collapse All'
+		),
+		...issueWhen(
+			has(probe.original, 'RemovedValue'),
+			'Collapse All left the left-only container expanded'
+		),
+		...issueWhen(
+			has(probe.original, 'ChangedValue') || has(probe.modified, 'ChangedValue'),
+			'Collapse All left a shared container expanded'
+		),
+		...issueWhen(
+			!has(probe.modified, 'module P.Shared'),
+			'the shared module header is missing after Collapse All'
+		)
+	];
+}
+
+function foldedIssues(state: AuditState, folded: FoldedProbe | undefined): string[] {
+	const oneSided = state.name === 'diff-collapsed-onesided';
+	if (state.name !== 'diff-collapsed' && !oneSided) {
+		return [];
+	}
+	if (folded === undefined) {
+		return ['the collapsed-row probe did not run'];
+	}
+	const header = folded.visible.find((line) => line.includes(folded.label));
+	const originalHeader = folded.originalVisible.find((line) => line.includes(folded.label));
+	return [
+		...issueWhen(header === undefined, `the collapsed row does not show ${folded.label}`),
+		...issueWhen(
+			originalHeader === undefined,
+			`the other pane did not receive the ${folded.label} fold`
+		),
+		...issueWhen(
+			folded.visible.some((line) => line.includes('P0000')),
+			'the collapsed row still shows its child parameters'
+		),
+		...issueWhen(
+			folded.originalVisible.some((line) => line.includes('P0000')),
+			'the other pane still shows the collapsed child parameters'
+		),
+		...issueWhen(
+			folded.markers.modified < 1 || folded.markers.original < 1,
+			'the collapsed row has no hidden-difference marker in both panes'
+		),
+		...(!oneSided
+			? [
+					...issueWhen(
+						folded.expandedMarkers.modified !== 0 ||
+							folded.expandedMarkers.original !== 0,
+						'the hidden-difference marker was not cleared after expansion'
+					)
+				]
+			: []),
+		...(oneSided
+			? [
+					...issueWhen(
+						folded.diagonalFills.modified !== 0 || folded.diagonalFills.original !== 0,
+						'the folded one-sided gap still renders a diagonal fill'
+					)
+				]
+			: []),
+		...issueWhen(
+			!folded.hint.includes('⋯'),
+			'the collapsed row has no fold hint'
+		)
+	];
+}
+
+interface PreviewSnapshotModel {
+	getValue(): string;
+}
+
+interface PreviewSnapshotEditor {
+	getModel(): PreviewSnapshotModel | null;
+}
+
+interface PreviewSnapshotDiff {
+	getOriginalEditor(): PreviewSnapshotEditor;
+	getModifiedEditor(): PreviewSnapshotEditor;
 }
 
 /** A capture-able before/after view of the panes for the Swap state. */
 export function paneSnapshot(): PaneSnapshot {
+	const diff = (window as unknown as { __ARXML_DIFF_EDITOR__?: PreviewSnapshotDiff })
+		.__ARXML_DIFF_EDITOR__;
+	const left = diff?.getOriginalEditor().getModel()?.getValue().slice(0, 400) ?? '';
+	const right = diff?.getModifiedEditor().getModel()?.getValue().slice(0, 400) ?? '';
 	return {
 		leftTitle: titleOf('diff-title-left'),
 		rightTitle: titleOf('diff-title-right'),
-		leftValue: changedValue('left'),
-		rightValue: changedValue('right')
+		leftValue: left,
+		rightValue: right
 	};
 }
 
 function titleOf(id: string): string {
 	const element = document.getElementById(id);
 	return element === null ? '' : textOf(element);
-}
-
-function changedValue(side: 'left' | 'right'): string {
-	const cell = document.querySelector(`#diff-pane-${side} .diff-row[data-status="changed"] .diff-cell`);
-	return cell === null ? '' : textOf(cell);
 }
 
 function selectedKey(): string | null {
@@ -2045,10 +2100,16 @@ function auditBase(state: AuditState, swapBefore?: PaneSnapshot): Omit<PreviewAu
 		page: state.page,
 		ready: document.body.dataset.previewReady === 'true',
 		viewport: { width: window.innerWidth, height: window.innerHeight },
-		panes: paneAudits(),
-		arrows: arrowAudits(),
 		toolbar: toolbarAudit(),
 		gutter: gutterAudit(),
+		gutterProbe: gutterProbeOf(),
+		gutterAlignment: gutterAlignmentOf(),
+		navigation: navigationOf(),
+		folded: foldedOf(),
+		diffSticky: diffStickyOf(),
+		collapseAll: collapseAllOf(),
+		folding: foldingProbeOf(),
+		sash: sashProbeOf(),
 		content: contentAudit(),
 		selected: selectedKey(),
 		swap: swapSnapshot(swapBefore),
@@ -2072,7 +2133,9 @@ function syscondOf(state: AuditState): SyscondAudit | undefined {
 }
 
 function oneSidedOf(state: AuditState): OneSidedAudit | undefined {
-	return state.name === 'diff-one-sided' ? oneSidedAudit() : undefined;
+	return state.name === 'diff-one-sided' || state.name === 'diff-removed' || state.name === 'diff-added'
+		? oneSidedAudit()
+		: undefined;
 }
 
 function syntaxOf(state: AuditState): PreviewAudit['syntax'] {

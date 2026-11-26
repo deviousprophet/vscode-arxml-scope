@@ -13,12 +13,12 @@ import {
 import { installMarkup } from '../pageTestUtils';
 
 suite('Toolbar component', () => {
-	test('the editor strip is grow, Collapse, Expand, then Sidebar', () => {
+	test('the editor strip puts Collapse/Expand left and Sidebar right', () => {
 		const html = renderEditorToolbarHtml();
 		assert.ok(html.startsWith('<div class="toolbar">'));
-		assert.ok(html.indexOf('class="grow"') < html.indexOf('id="collapse-all"'));
 		assert.ok(html.indexOf('id="collapse-all"') < html.indexOf('id="expand-all"'));
-		assert.ok(html.indexOf('id="expand-all"') < html.indexOf('id="toggle-sidebar"'));
+		assert.ok(html.indexOf('id="expand-all"') < html.indexOf('class="grow"'));
+		assert.ok(html.indexOf('class="grow"') < html.indexOf('id="toggle-sidebar"'));
 		const buttons = html.match(/<button[^>]*class="tool diff-tool"[\s\S]*?<\/button>/g) ?? [];
 		assert.strictEqual(buttons.length, 3, 'three icon-over-label actions');
 		for (const button of buttons) {
@@ -45,9 +45,8 @@ suite('Toolbar component', () => {
 
 	test('the diff strip groups view, context, matching and navigation with dividers', () => {
 		const html = renderDiffToolbarHtml();
-		assert.ok(html.indexOf('class="toolbar-left"') < html.indexOf('class="toolbar-center"'));
-		assert.ok(html.indexOf('class="toolbar-center"') < html.indexOf('class="toolbar-right"'));
-		const left = html.slice(html.indexOf('class="toolbar-left"'), html.indexOf('class="toolbar-center"'));
+		assert.ok(html.indexOf('class="toolbar-left"') < html.indexOf('class="toolbar-right"'));
+		const left = html.slice(html.indexOf('class="toolbar-left"'), html.indexOf('class="toolbar-right"'));
 		assert.ok(left.indexOf('id="diff-view-all"') < left.indexOf('id="diff-view-diff"'));
 		assert.ok(left.indexOf('id="diff-view-diff"') < left.indexOf('id="diff-context"'));
 		assert.ok(left.indexOf('id="diff-context"') < left.indexOf('id="diff-mode-semantic"'));
@@ -55,14 +54,12 @@ suite('Toolbar component', () => {
 		assert.ok(left.indexOf('id="diff-mode-strict"') < left.indexOf('id="diff-prev"'));
 		assert.ok(left.indexOf('id="diff-prev"') < left.indexOf('id="diff-next"'));
 		assert.ok(left.indexOf('id="diff-next"') < left.indexOf('id="diff-merge"'));
-		assert.ok(left.indexOf('id="diff-merge"') < left.indexOf('id="diff-collapse-all"'));
+		assert.ok(left.indexOf('id="diff-merge"') < left.indexOf('id="diff-swap"'));
+		assert.ok(left.indexOf('id="diff-swap"') < left.indexOf('id="diff-collapse-all"'));
 		assert.ok(left.indexOf('id="diff-collapse-all"') < left.indexOf('id="diff-expand-all"'));
 		assert.strictEqual(left.split('toolbar-divider').length - 1, 5, 'five group dividers');
 		assert.ok(left.includes('>Show diff<'), 'the label is Show diff');
-		const centre = html.slice(html.indexOf('class="toolbar-center"'), html.indexOf('class="toolbar-right"'));
-		assert.ok(centre.includes('id="diff-swap"'));
-		assert.ok(!centre.includes('id="diff-prev"'));
-		assert.ok(!centre.includes('id="diff-context"'));
+		assert.ok(!html.includes('toolbar-center'), 'Swap is not a centred control');
 		const right = html.slice(html.indexOf('class="toolbar-right"'));
 		assert.ok(right.includes('id="diff-match-status"'));
 		assert.ok(/id="diff-swap"[^>]*aria-label="Swap sides"/.test(html));

@@ -106,30 +106,10 @@ export class DiffView {
 		this.right.setModel(model);
 	}
 
-	/** Re-colour the selected display row's number in both panes. */
-	refreshActiveLine(): void {
-		if (this.left) {
-			this.left.refreshActiveLine();
-		}
-		if (this.right) {
-			this.right.refreshActiveLine();
-		}
-	}
-
-	/** The number-column width of each pane, in `ch`. */
-	lineNumberChars(): [number, number] {
-		return [this.left ? this.left.lineNumberChars() : 0, this.right ? this.right.lineNumberChars() : 0];
-	}
-
 	setContent(content: VirtualScrollContent): void {
 		if (this.scroll) {
 			this.scroll.setContent(content);
 		}
-	}
-
-	setContentWidth(width: number): void {
-		this.left.setContentWidth(width);
-		this.right.setContentWidth(width);
 	}
 
 	setHeader(header: { left: DocumentTreeHeader; right: DocumentTreeHeader }): void {
@@ -242,14 +222,6 @@ export class DiffView {
 
 	getScrollLeft(index = 0): number {
 		return this.scroll ? this.scroll.getScrollLeft(index) : 0;
-	}
-
-	getVisibleRange(): [number, number] {
-		return this.scroll ? this.scroll.getVisibleRange() : [0, 0];
-	}
-
-	scrollToIndex(index: number, align?: 'auto' | 'start' | 'end'): void {
-		this.scroll?.scrollToIndex(index, align);
 	}
 
 	/** Match the fixed title strip's width to the vertical scrollbar's gutter. */

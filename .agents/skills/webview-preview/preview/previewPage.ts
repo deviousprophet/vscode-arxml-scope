@@ -9,10 +9,10 @@
 // The production entries auto-mount when their page root is present, exactly as
 // the extension webview does. Importing them is the whole wiring; calling the
 // mount functions again would bind every toolbar action twice.
-import '../../webview/diffMonaco';
-import '../../webview/editorMonaco';
+import '../../../../src/webview/diffMonaco';
+import '../../../../src/webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
-import type { PaneSnapshot } from './previewAudit';
+import type { CollapseAllProbe, FoldedProbe, GutterAlignment, NavigationProbe, PaneSnapshot, StickyProbe } from './previewAudit';
 import type { PreviewStateFields } from './previewStateFields';
 
 interface PreviewPayload extends PreviewStateFields {
@@ -95,6 +95,28 @@ declare global {
 const payload = window.__PREVIEW__;
 let swapBefore: PaneSnapshot | undefined;
 
+function publishPageError(message: string): void {
+	if (message.includes('ResizeObserver loop')) {
+		return;
+	}
+	if (document.getElementById('preview-audit') !== null) {
+		return;
+	}
+	const node = document.createElement('script');
+	node.type = 'application/json';
+	node.id = 'preview-audit';
+	node.textContent = JSON.stringify({
+		state: payload.state,
+		page: payload.page,
+		ready: false,
+		violations: [`page error: ${message}`]
+	}).replaceAll('<', '\\u003c');
+	document.body.appendChild(node);
+}
+
+window.addEventListener('error', (event) => publishPageError(event.message));
+window.addEventListener('unhandledrejection', (event) => publishPageError(String(event.reason)));
+
 function tick(): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -134,13 +156,7 @@ async function waitFor(predicate: () => boolean): Promise<void> {
 }
 
 async function jumpToChange(): Promise<void> {
-	const pane = document.getElementById('diff-pane-left');
-	if (!pane) {
-		return;
-	}
-	pane.dispatchEvent(
-		new KeyboardEvent('keydown', { key: 'F7', bubbles: true, cancelable: true })
-	);
+	click('diff-next');
 	await tick();
 }
 
@@ -181,13 +197,74 @@ async function applyJumps(): Promise<void> {
 	}
 }
 
+async function probeNavigation(): Promise<void> {
+	if (payload.page !== 'diff' || payload.nav !== true) {
+		return;
+	}
+	const editor = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getLineChanges?(): Array<{
+					originalStartLineNumber: number;
+					modifiedStartLineNumber: number;
+				}> | null;
+				getModifiedEditor(): { getPosition(): { lineNumber: number } | null };
+			};
+		}
+	).__ARXML_DIFF_EDITOR__;
+	if (editor === undefined) {
+		return;
+	}
+	const rawChanges = editor.getLineChanges?.() ?? [];
+	const changes = rawChanges.map(
+		(change) => change.modifiedStartLineNumber || change.originalStartLineNumber
+	);
+	const swappedChanges = rawChanges.map(
+		(change) => change.originalStartLineNumber || change.modifiedStartLineNumber
+	);
+	const position = (): number => editor.getModifiedEditor().getPosition()?.lineNumber ?? 0;
+	const waitForChanges = async (): Promise<void> => {
+		for (let attempt = 0; attempt < 80; attempt += 1) {
+			if ((editor.getLineChanges?.()?.length ?? 0) > 0) {
+				return;
+			}
+			await delay(25);
+		}
+	};
+	const forward: number[] = [];
+	const backward: number[] = [];
+	const afterSwap: number[] = [];
+	for (let press = 0; press < changes.length + 1; press += 1) {
+		click('diff-next');
+		await delay(40);
+		forward.push(position());
+	}
+	for (let press = 0; press < changes.length + 1; press += 1) {
+		click('diff-prev');
+		await delay(40);
+		backward.push(position());
+	}
+	click('diff-swap');
+	await delay(200);
+	await waitForChanges();
+	for (let press = 0; press < changes.length + 1; press += 1) {
+		click('diff-next');
+		await delay(40);
+		afterSwap.push(position());
+	}
+	click('diff-swap');
+	await delay(200);
+	const probe: NavigationProbe = { changes, swappedChanges, forward, backward, afterSwap };
+	(window as unknown as { __DIFF_NAVIGATION__?: NavigationProbe }).__DIFF_NAVIGATION__ = probe;
+}
+
 function selectRow(): HTMLElement | null {
 	if (payload.page === 'editor') {
 		return document.querySelector(
 			'#tree-pane .node[data-document-index]:not([aria-selected="true"])'
 		) as HTMLElement | null;
 	}
-	return document.querySelector('#diff-pane-left .diff-row[data-status="changed"]') as HTMLElement | null;
+	return null;
 }
 
 async function applySelect(): Promise<void> {
@@ -209,6 +286,9 @@ function publishAudit(): void {
 			wide: payload.wide,
 			pan: payload.pan,
 			select: payload.select,
+			sash: payload.sash,
+			foldLabel: payload.foldLabel,
+			collapseAll: payload.collapseAll,
 			detailsEdit: payload.detailsEdit,
 			detailsSave: payload.detailsSave,
 			detailsUndo: payload.detailsUndo,
@@ -919,6 +999,288 @@ async function applyScroll(): Promise<void> {
 	await delay(1200);
 }
 
+async function applyDiffScroll(): Promise<void> {
+	const line = payload.diffScrollLine;
+	if (payload.page !== 'diff' || line === undefined || line <= 0) {
+		return;
+	}
+	const editor = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getModifiedEditor(): {
+					getModel(): { getLineCount(): number } | null;
+					getDomNode(): HTMLElement | null;
+					revealLineInCenter(line: number): void;
+				};
+			};
+		}
+	).__ARXML_DIFF_EDITOR__?.getModifiedEditor();
+	const model = editor?.getModel();
+	if (editor === undefined || model === null || model === undefined) {
+		return;
+	}
+	editor.revealLineInCenter(Math.min(line, model.getLineCount()));
+	await delay(1400);
+	const widget = editor.getDomNode()?.querySelector<HTMLElement>('.sticky-widget');
+	const rect = widget?.getBoundingClientRect();
+	const probe: StickyProbe = {
+		text: widget?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+		visible: rect !== undefined && rect.height > 0,
+		height: rect === undefined ? 0 : Math.round(rect.height)
+	};
+	(window as unknown as { __DIFF_STICKY__?: StickyProbe }).__DIFF_STICKY__ = probe;
+}
+
+interface PreviewFoldRegions {
+	readonly length: number;
+	getStartLineNumber(index: number): number;
+	isCollapsed(index: number): boolean;
+	findRange(line: number): number;
+}
+
+interface PreviewFoldModel {
+	readonly regions: PreviewFoldRegions;
+	toggleCollapseState(regions: readonly { regionIndex: number }[]): void;
+}
+
+async function previewFoldModel(editor: { getContribution(id: string): unknown }): Promise<PreviewFoldModel | null> {
+	const contribution = editor.getContribution('editor.contrib.folding') as {
+		getFoldingModel?(): Promise<PreviewFoldModel | null> | PreviewFoldModel | null;
+	} | null;
+	const model = contribution?.getFoldingModel?.();
+	return model === undefined ? null : await model;
+}
+
+async function foldAllRegions(editor: { getContribution(id: string): unknown }): Promise<void> {
+	const model = await previewFoldModel(editor);
+	if (model === null) {
+		return;
+	}
+	const indexes: number[] = [];
+	for (let index = 0; index < model.regions.length; index += 1) {
+		if (!model.regions.isCollapsed(index)) {
+			indexes.push(index);
+		}
+	}
+	if (indexes.length > 0) {
+		model.toggleCollapseState(indexes.map((regionIndex) => ({ regionIndex })));
+	}
+}
+
+async function applyCollapseAll(): Promise<void> {
+	if (payload.page !== 'diff' || payload.collapseAll !== true) {
+		return;
+	}
+	const diff = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getOriginalEditor(): { getDomNode(): HTMLElement | null; getContribution(id: string): unknown };
+				getModifiedEditor(): { getDomNode(): HTMLElement | null; getContribution(id: string): unknown };
+			};
+		}
+	).__ARXML_DIFF_EDITOR__;
+	if (diff === undefined) {
+		return;
+	}
+	const visible = (editor: { getDomNode(): HTMLElement | null }): string[] =>
+		Array.from(editor.getDomNode()?.querySelectorAll<HTMLElement>('.view-line') ?? []).map(
+			(element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+		);
+	const collapsed = (): boolean =>
+		!visible(diff.getOriginalEditor()).some((line) => line.includes('RemovedValue')) &&
+		!visible(diff.getModifiedEditor()).some((line) => line.includes('ChangedValue'));
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		click('diff-collapse-all');
+		await delay(300);
+		if (collapsed()) {
+			break;
+		}
+	}
+	if (!collapsed()) {
+		for (let attempt = 0; attempt < 20 && !collapsed(); attempt += 1) {
+			await foldAllRegions(diff.getOriginalEditor());
+			await foldAllRegions(diff.getModifiedEditor());
+			await delay(300);
+		}
+	}
+	const probe: CollapseAllProbe = {
+		original: visible(diff.getOriginalEditor()),
+		modified: visible(diff.getModifiedEditor())
+	};
+	(window as unknown as { __COLLAPSE_ALL__?: CollapseAllProbe }).__COLLAPSE_ALL__ = probe;
+}
+
+async function applyFold(): Promise<void> {
+	const label = payload.foldLabel;
+	if (payload.page !== 'diff' || label === undefined) {
+		return;
+	}
+	interface FoldEditor {
+		getModel(): { getLineCount(): number; getLineContent(line: number): string } | null;
+		getDomNode(): HTMLElement | null;
+		getContribution(id: string): unknown;
+		getScrollTop(): number;
+		setScrollTop(top: number): void;
+	}
+	interface FoldRegions {
+		readonly length: number;
+		getStartLineNumber(index: number): number;
+		isCollapsed(index: number): boolean;
+		findRange(line: number): number;
+	}
+	interface FoldModel {
+		readonly regions: FoldRegions;
+		toggleCollapseState(regions: readonly { regionIndex: number }[]): void;
+	}
+	const diff = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getOriginalEditor(): FoldEditor;
+				getModifiedEditor(): FoldEditor;
+			};
+		}
+	).__ARXML_DIFF_EDITOR__;
+	const modified = diff?.getModifiedEditor();
+	const original = diff?.getOriginalEditor();
+	const model = modified?.getModel();
+	if (modified === undefined || original === undefined || model === null || model === undefined) {
+		return;
+	}
+	let line = 0;
+	for (let at = 1; at <= model.getLineCount(); at += 1) {
+		if (model.getLineContent(at).includes(label)) {
+			line = at;
+			break;
+		}
+	}
+	if (line === 0) {
+		return;
+	}
+	const visibleLines = (editor: FoldEditor): string[] =>
+		Array.from(editor.getDomNode()?.querySelectorAll<HTMLElement>('.view-line') ?? []).map(
+			(element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+		);
+	const hasFolded = (editor: FoldEditor): boolean => {
+		const lines = visibleLines(editor);
+		return !lines.some((text) => text.includes('P0000')) && lines.some((text) => text.includes(label));
+	};
+	const markerCount = (editor: FoldEditor): number =>
+		editor.getDomNode()?.querySelectorAll('.arxml-fold-has-diff').length ?? 0;
+	const diagonalFillCount = (editor: FoldEditor): number =>
+		Array.from(editor.getDomNode()?.querySelectorAll<HTMLElement>('.diagonal-fill') ?? []).filter(
+			(element) => element.getBoundingClientRect().height > 0
+		).length;
+	const foldModel = async (editor: FoldEditor): Promise<FoldModel | null> => {
+		const contribution = editor.getContribution('editor.contrib.folding') as {
+			getFoldingModel?(): Promise<FoldModel | null> | FoldModel | null;
+		} | null;
+		const model = contribution?.getFoldingModel?.();
+		return model === undefined ? null : await model;
+	};
+	const foldAtLine = async (editor: FoldEditor, targetLine: number): Promise<void> => {
+		const model = await foldModel(editor);
+		if (model === null) {
+			return;
+		}
+		const index = model.regions.findRange(targetLine);
+		if (index >= 0 && model.regions.getStartLineNumber(index) === targetLine && !model.regions.isCollapsed(index)) {
+			model.toggleCollapseState([{ regionIndex: index }]);
+		}
+	};
+	const unfoldAll = async (editor: FoldEditor): Promise<void> => {
+		const model = await foldModel(editor);
+		if (model === null) {
+			return;
+		}
+		const indexes: number[] = [];
+		for (let index = 0; index < model.regions.length; index += 1) {
+			if (model.regions.isCollapsed(index)) {
+				indexes.push(index);
+			}
+		}
+		if (indexes.length > 0) {
+			model.toggleCollapseState(indexes.map((regionIndex) => ({ regionIndex })));
+		}
+	};
+	const lineFor = (editor: FoldEditor, text: string): number => {
+		const model = editor.getModel();
+		if (model === null) {
+			return 0;
+		}
+		for (let at = 1; at <= model.getLineCount(); at += 1) {
+			if (model.getLineContent(at).includes(text)) {
+				return at;
+			}
+		}
+		return 0;
+	};
+	const ensureFolded = async (
+		editor: FoldEditor,
+		targetLine: number,
+		other: FoldEditor,
+		otherLine: number
+	): Promise<void> => {
+		for (let attempt = 0; attempt < 40; attempt += 1) {
+			if (hasFolded(editor) && hasFolded(other)) {
+				return;
+			}
+			await foldAtLine(editor, targetLine);
+			await foldAtLine(other, otherLine);
+			await delay(250);
+		}
+	};
+	const ensureUnfolded = async (): Promise<void> => {
+		for (let attempt = 0; attempt < 10; attempt += 1) {
+			const open =
+				visibleLines(modified).some((text) => text.includes('P0000')) &&
+				visibleLines(original).some((text) => text.includes('P0000'));
+			const markers = markerCount(modified) + markerCount(original) === 0;
+			if (open && markers) {
+				return;
+			}
+			await unfoldAll(modified);
+			await unfoldAll(original);
+			await delay(250);
+		}
+	};
+	await delay(500);
+	await ensureFolded(modified, line, original, lineFor(original, label));
+	await waitFor(() => markerCount(modified) > 0 && markerCount(original) > 0);
+	await delay(150);
+	const folded = modified.getDomNode()?.querySelector<HTMLElement>('.inline-folded');
+	const hint = folded === null || folded === undefined ? '' : getComputedStyle(folded, '::after').content;
+	const first = { visible: visibleLines(modified), originalVisible: visibleLines(original) };
+	const markers = { modified: markerCount(modified), original: markerCount(original) };
+	const diagonalFills = {
+		modified: diagonalFillCount(modified),
+		original: diagonalFillCount(original)
+	};
+
+	const oneSided = payload.state === 'diff-collapsed-onesided';
+	let expandedMarkers = markers;
+	let expandedDiagonalFills = diagonalFills;
+	if (!oneSided) {
+		await ensureUnfolded();
+		await delay(100);
+		expandedMarkers = { modified: markerCount(modified), original: markerCount(original) };
+		expandedDiagonalFills = {
+			modified: diagonalFillCount(modified),
+			original: diagonalFillCount(original)
+		};
+	}
+	const probe: FoldedProbe = {
+		label,
+		visible: first.visible,
+		originalVisible: first.originalVisible,
+		markers,
+		expandedMarkers,
+		diagonalFills,
+		expandedDiagonalFills,
+		hint
+	};
+	(window as unknown as { __DIFF_FOLDED__?: FoldedProbe }).__DIFF_FOLDED__ = probe;
+}
+
 function revealLine(line: number): void {
 	const editor = previewEditor();
 	if (editor === undefined) {
@@ -945,7 +1307,396 @@ async function waitForDiffRender(): Promise<void> {
 }
 
 async function waitForMergeArrows(): Promise<void> {
-	await waitFor(() => document.querySelector('[class*="arxml-merge-arrow"]') !== null);
+	await waitFor(
+		() =>
+			document.querySelector('.monaco-diff-editor .gutter') !== null ||
+			document.querySelector('.monaco-diff-editor .gutterItem') !== null
+	);
+}interface GutterAvailabilitySnapshot {
+	hasItem: boolean;
+	hasService: boolean;
+	mapping: unknown;
+	values: { left: boolean; right: boolean } | null;
+	buttons: number;
+}
+
+interface GutterProbe {
+	present: boolean;
+	width: number;
+	items: number;
+	itemActions: string[][];
+	buttons: string[];
+	sash: boolean;
+	mergeActive: boolean;
+	itemDisplay: string;
+	itemVisible: boolean;
+	currentShowAlways: boolean;
+	currentActions: string[];
+	clicked: string | null;
+	copy: { side?: string; key?: string } | null;
+	overflowLabels: string[] | null;
+	overflowDebug: string[];
+	availability: GutterAvailabilitySnapshot[];
+}
+
+function isElementVisible(element: Element | undefined): boolean {
+	if (element === undefined) {
+		return false;
+	}
+	const style = getComputedStyle(element);
+	return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
+function gutterButtonLabel(button: Element): string {
+	return (
+		button.getAttribute('aria-label') ??
+		button.getAttribute('title') ??
+		button.textContent?.trim() ??
+		button.className
+	);
+}
+
+function itemActions(item: Element): string[] {
+	return Array.from(item.querySelectorAll('.action-label')).map(gutterButtonLabel);
+}
+
+async function probeGutterAlignment(): Promise<void> {
+	await waitFor(() => document.querySelector('.monaco-diff-editor .gutterItem') !== null);
+	await delay(120);
+	const items = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem'));
+	const changes =
+		(
+			window as unknown as {
+				__ARXML_DIFF_EDITOR__?: {
+					getLineChanges?(): Array<{
+						originalStartLineNumber: number;
+						modifiedStartLineNumber: number;
+					}> | null;
+				};
+			}
+		).__ARXML_DIFF_EDITOR__?.getLineChanges?.() ?? [];
+	const indexed = items.map((item, index) => ({ item, change: changes[index] }));
+	const visible = indexed.filter(({ item }) => isElementVisible(item));
+	let checked = 0;
+	let maxCenterOffset = 0;
+	for (const { item, change } of visible) {
+		const itemRect = item.getBoundingClientRect();
+		const buttons = item.querySelector<HTMLElement>('.buttons');
+		if (
+			buttons === null ||
+			itemRect.height > 44 ||
+			change === undefined ||
+			change.originalStartLineNumber === 0 ||
+			change.modifiedStartLineNumber === 0
+		) {
+			continue;
+		}
+		const buttonRect = buttons.getBoundingClientRect();
+		const offset = Math.abs(
+			buttonRect.top + buttonRect.height / 2 - (itemRect.top + itemRect.height / 2)
+		);
+		maxCenterOffset = Math.max(maxCenterOffset, offset);
+		checked += 1;
+	}
+	const alignment: GutterAlignment = {
+		mergeActive: document.getElementById('diff-monaco')?.getAttribute('data-merge') === 'true',
+		items: items.length,
+		visible: visible.length,
+		checked,
+		maxCenterOffset: Math.round(maxCenterOffset * 10) / 10
+	};
+	(window as unknown as { __GUTTER_ALIGNMENT__?: GutterAlignment }).__GUTTER_ALIGNMENT__ = alignment;
+}
+
+async function probeGutter(): Promise<void> {
+	if (payload.page !== 'diff') {
+		return;
+	}
+	await waitFor(() => document.querySelector('.monaco-diff-editor .gutterItem') !== null);
+	await delay(250);
+	const diff = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getLineChanges?(): Array<{
+					originalStartLineNumber: number;
+					modifiedStartLineNumber: number;
+				}> | null;
+				getOriginalEditor(): { setPosition(position: { lineNumber: number; column: number }): void };
+				getModifiedEditor(): { setPosition(position: { lineNumber: number; column: number }): void };
+			};
+		}
+	).__ARXML_DIFF_EDITOR__;
+	const firstChange = diff?.getLineChanges?.()?.[0];
+	if (diff !== undefined && firstChange !== undefined) {
+		diff.getOriginalEditor().setPosition({
+			lineNumber: Math.max(1, firstChange.originalStartLineNumber),
+			column: 1
+		});
+		diff.getModifiedEditor().setPosition({
+			lineNumber: Math.max(1, firstChange.modifiedStartLineNumber),
+			column: 1
+		});
+		await delay(200);
+	}
+	const gutter = document.querySelector<HTMLElement>('.monaco-diff-editor .gutter');
+	const items = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem'));
+	const buttons = Array.from(document.querySelectorAll<HTMLElement>('.monaco-diff-editor .gutterItem .action-label'));
+	const messages = window.__PREVIEW_MESSAGES__ as Array<{ type?: string; side?: string; key?: string }>;
+	const before = messages.length;
+	const mergeActive = document.getElementById('diff-monaco')?.getAttribute('data-merge') === 'true';
+	const clicked = buttons[0] === undefined ? null : gutterButtonLabel(buttons[0]);
+	const current = items[0];
+	const currentActions = current === undefined ? [] : itemActions(current);
+	let overflowLabels: string[] | null = null;
+	let overflowDebug: string[] = [];
+	if (mergeActive && clicked === 'More Actions...') {
+		buttons[0]?.dispatchEvent(
+			new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, buttons: 1, view: window })
+		);
+		buttons[0]?.click();
+		await delay(400);
+		const menuRoots = Array.from(
+			document.querySelectorAll<HTMLElement>(
+				'.monaco-menu, .context-view, [role="menu"], .monaco-menu-container'
+			)
+		);
+		const menuButtons = menuRoots.flatMap((root) =>
+			Array.from(root.querySelectorAll<HTMLElement>('.action-label, [role="menuitem"], .action-item'))
+		);
+		overflowLabels = Array.from(
+			new Set(menuButtons.map(gutterButtonLabel).filter((label) => label.length > 0))
+		);
+		overflowDebug = menuRoots.slice(0, 5).map((root) => {
+			const text = root.textContent?.replace(/\s+/g, ' ').trim().slice(0, 120) ?? '';
+			return `${root.tagName}.${root.className}: ${text}`;
+		});
+		const copyButton = menuButtons.find((button) =>
+			/^Copy Block to (Left|Right)$/.test(gutterButtonLabel(button))
+		);
+		copyButton?.click();
+		await tick();
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+	} else if (mergeActive) {
+		buttons[0]?.click();
+		await tick();
+	}
+	const copy = messages.slice(before).find((message) => message.type === 'copy');
+	(window as unknown as { __GUTTER_PROBE__?: GutterProbe }).__GUTTER_PROBE__ = {
+		present: gutter !== null,
+		width: gutter === null ? 0 : Math.round(gutter.getBoundingClientRect().width),
+		items: items.length,
+		itemActions: items.map(itemActions),
+		buttons: buttons.map(gutterButtonLabel),
+		sash: document.querySelector('.monaco-diff-editor .monaco-sash.vertical') !== null,
+		mergeActive,
+		itemDisplay: current === undefined ? '' : getComputedStyle(current).display,
+		itemVisible: isElementVisible(current),
+		currentShowAlways: current?.classList.contains('showAlways') === true,
+		currentActions,
+		clicked,
+		copy: copy === undefined ? null : { side: copy.side, key: copy.key },
+		overflowLabels,
+		overflowDebug,
+		availability: (window as unknown as { __ARXML_GUTTER_PROBE__?: GutterAvailabilitySnapshot[] })
+			.__ARXML_GUTTER_PROBE__ ?? []
+	};
+}
+
+interface FoldingProbe {
+	originalBefore: number;
+	originalCollapsed: number;
+	originalExpanded: number;
+	modifiedBefore: number;
+	modifiedCollapsed: number;
+	modifiedExpanded: number;
+	chevrons: number;
+}
+
+interface PreviewVisibleRange {
+	startLineNumber: number;
+	endLineNumber: number;
+}
+
+interface PreviewFoldEditor {
+	getVisibleRanges(): PreviewVisibleRange[];
+}
+
+async function probeFolding(): Promise<void> {
+	if (payload.page !== 'diff') {
+		return;
+	}
+	const editor = (
+		window as unknown as {
+			__ARXML_DIFF_EDITOR__?: {
+				getOriginalEditor(): PreviewFoldEditor;
+				getModifiedEditor(): PreviewFoldEditor;
+			};
+		}
+	).__ARXML_DIFF_EDITOR__;
+	if (editor === undefined) {
+		return;
+	}
+	const countVisible = (target: PreviewFoldEditor): number =>
+		target.getVisibleRanges().reduce(
+			(total, range) => total + range.endLineNumber - range.startLineNumber + 1,
+			0
+		);
+	const original = editor.getOriginalEditor();
+	const modified = editor.getModifiedEditor();
+	const originalBefore = countVisible(original);
+	const modifiedBefore = countVisible(modified);
+	click('diff-collapse-all');
+	await delay(250);
+	const originalCollapsed = countVisible(original);
+	const modifiedCollapsed = countVisible(modified);
+	const chevrons = document.querySelectorAll(
+		'.monaco-diff-editor .codicon-folding-collapsed, .monaco-diff-editor .codicon-folding-expanded'
+	).length;
+	click('diff-expand-all');
+	await delay(250);
+	const originalExpanded = countVisible(original);
+	const modifiedExpanded = countVisible(modified);
+	(window as unknown as { __FOLDING_PROBE__?: FoldingProbe }).__FOLDING_PROBE__ = {
+		originalBefore,
+		originalCollapsed,
+		originalExpanded,
+		modifiedBefore,
+		modifiedCollapsed,
+		modifiedExpanded,
+		chevrons
+	};
+}
+
+interface PreviewLayoutInfo {
+	width: number;
+	height: number;
+}
+
+interface PreviewSashEditor {
+	getLayoutInfo(): PreviewLayoutInfo;
+}
+
+interface PreviewSashDiffEditor {
+	getOriginalEditor(): PreviewSashEditor;
+	getModifiedEditor(): PreviewSashEditor;
+}
+
+interface SashProbe {
+	present: boolean;
+	gutterWidth: number;
+	initial: [number, number];
+	dragged: [number, number];
+	afterDocument: [number, number];
+	afterSwap: [number, number] | null;
+	reset: [number, number] | null;
+}
+
+function paneWidths(editor: PreviewSashDiffEditor): [number, number] {
+	return [
+		Math.round(editor.getOriginalEditor().getLayoutInfo().width),
+		Math.round(editor.getModifiedEditor().getLayoutInfo().width)
+	];
+}
+
+function previewSashEditor(): PreviewSashDiffEditor | undefined {
+	return (window as unknown as { __ARXML_DIFF_EDITOR__?: PreviewSashDiffEditor }).__ARXML_DIFF_EDITOR__;
+}
+
+function dragSash(sash: HTMLElement, deltaX: number): void {
+	const rect = sash.getBoundingClientRect();
+	const clientX = rect.left + rect.width / 2;
+	const clientY = rect.top + Math.min(rect.height / 2, 60);
+	sash.dispatchEvent(
+		new MouseEvent('mousedown', {
+			bubbles: true,
+			cancelable: true,
+			clientX,
+			clientY,
+			button: 0,
+			buttons: 1,
+			view: window
+		})
+	);
+	window.dispatchEvent(
+		new MouseEvent('mousemove', {
+			bubbles: true,
+			cancelable: true,
+			clientX: clientX + deltaX,
+			clientY,
+			button: 0,
+			buttons: 1,
+			view: window
+		})
+	);
+	window.dispatchEvent(
+		new MouseEvent('mouseup', {
+			bubbles: true,
+			cancelable: true,
+			clientX: clientX + deltaX,
+			clientY,
+			button: 0,
+			buttons: 0,
+			view: window
+		})
+	);
+}
+
+async function probeSash(): Promise<void> {
+	if (payload.page !== 'diff' || !payload.sash) {
+		return;
+	}
+	await delay(250);
+	const editor = previewSashEditor();
+	const sash = document.querySelector<HTMLElement>('.monaco-diff-editor .monaco-sash.vertical');
+	const gutterWidth = Math.round(
+		document.querySelector('.monaco-diff-editor .gutter')?.getBoundingClientRect().width ?? 0
+	);
+	if (editor === undefined || sash === null) {
+		(window as unknown as { __SASH_PROBE__?: SashProbe }).__SASH_PROBE__ = {
+			present: sash !== null,
+			gutterWidth,
+			initial: [0, 0],
+			dragged: [0, 0],
+			afterDocument: [0, 0],
+			afterSwap: null,
+			reset: null
+		};
+		return;
+	}
+	const initial = paneWidths(editor);
+	dragSash(sash, 140);
+	await delay(350);
+	const dragged = paneWidths(editor);
+	window.postMessage(payload.message, '*');
+	await delay(350);
+	const afterDocument = paneWidths(editor);
+	(window as unknown as { __SASH_PROBE__?: SashProbe }).__SASH_PROBE__ = {
+		present: true,
+		gutterWidth,
+		initial,
+		dragged,
+		afterDocument,
+		afterSwap: null,
+		reset: null
+	};
+}
+
+async function probeSashAfterSwap(): Promise<void> {
+	if (payload.page !== 'diff' || !payload.sash) {
+		return;
+	}
+	const editor = previewSashEditor();
+	const sash = document.querySelector<HTMLElement>('.monaco-diff-editor .monaco-sash.vertical');
+	const probe = (window as unknown as { __SASH_PROBE__?: SashProbe }).__SASH_PROBE__;
+	if (editor === undefined || sash === null || probe === undefined) {
+		return;
+	}
+	probe.afterSwap = paneWidths(editor);
+	sash.dispatchEvent(
+		new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: 0, clientY: 0, view: window })
+	);
+	await delay(350);
+	probe.reset = paneWidths(editor);
 }
 
 async function run(): Promise<void> {
@@ -954,13 +1705,22 @@ async function run(): Promise<void> {
 	if (payload.page === 'diff') {
 		await waitForDiffRender();
 	}
+	const foldOnly = payload.foldLabel !== undefined || payload.collapseAll === true;
 	await applyMerge();
-	if (payload.page === 'diff' && payload.merge) {
+	if (payload.page === 'diff' && !foldOnly) {
 		await waitForMergeArrows();
+		await probeGutterAlignment();
+		await probeFolding();
+		await probeSash();
 	}
 	await applySwap();
+	if (payload.page === 'diff' && !foldOnly) {
+		await probeGutter();
+		await probeSashAfterSwap();
+	}
 	await applyPan();
 	await applyJumps();
+	await probeNavigation();
 	await applySelect();
 	await applyFind();
 	await applyDirtyEdit();
@@ -971,6 +1731,9 @@ async function run(): Promise<void> {
 	await applyPasteEdit();
 	await applyStaleSave();
 	await applyScroll();
+	await applyDiffScroll();
+	await applyFold();
+	await applyCollapseAll();
 	await settle();
 	document.body.dataset.previewReady = 'true';
 	publishAudit();

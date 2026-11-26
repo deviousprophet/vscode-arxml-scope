@@ -1,5 +1,5 @@
 /**
- * Plan rows COND-01, 02, 05, 06 from `docs/TEST_PLAN.md`.
+ * Plan rows COND-01, 02, 05, 06 from `docs/contributor/TEST_PLAN.md`.
  *
  * COND-03 (both ambiguous candidates listed) and COND-04 (a cap notice for the
  * 201st entry) are re-scoped: the evaluator reports the symbol as missing and

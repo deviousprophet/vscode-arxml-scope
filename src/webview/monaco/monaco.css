@@ -38,6 +38,27 @@
 	opacity: 0.55;
 }
 
+/* A folded diff container whose subtree carries a change. Glyph-margin only,
+ * so the indicator does not add text or shift the line. The cell stays clear;
+ * only the pseudo-element dot is painted. */
+.monaco-editor .arxml-fold-has-diff {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+}
+.monaco-editor .arxml-fold-has-diff::after {
+	content: '';
+	display: block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background-color: var(
+		--vscode-gitDecoration-modifiedResourceForeground,
+		var(--vscode-editorWarning-foreground, #cca700)
+	);
+}
+
 .monaco-editor .arxml-find {
 	background-color: var(--match-bg, rgba(234, 179, 8, 0.18));
 }
@@ -62,59 +83,25 @@
 	min-height: 0;
 }
 
-.monaco-diff-editor .arxml-subtree {
-	background-color: var(--vscode-editor-selectionHighlightBackground, rgba(38, 79, 120, 0.18));
+/* The built-in gutter and sash stay mounted so panes resize in every mode.
+ * Merge owns only the copy items. Keep the items laid out while hidden:
+ * Monaco measures the button toolbar height during `layout`, and `display:
+ * none` makes that height 0, so the arrows are positioned almost one line too
+ * low until the next scroll. */
+#diff-monaco:not([data-merge="true"]) .monaco-diff-editor .gutter .gutterItem {
+	visibility: hidden;
+	pointer-events: none;
 }
 
-.monaco-diff-editor .arxml-selected {
-	background-color: var(--vscode-editor-selectionHighlightBackground, rgba(38, 79, 120, 0.28));
-	box-shadow: inset 2px 0 0 var(--vscode-focusBorder, #007fd4);
+/* Native find-button tooltips are compact and can overlap their anchor. If the
+ * tooltip accepts pointer events it steals hover, hides itself, and the button
+ * re-triggers it in a loop. Keep compact tooltips non-interactive. */
+.monaco-hover.workbench-hover.compact {
+	pointer-events: none;
 }
-
-.monaco-diff-editor .arxml-merge-arrow-right::after,
-.monaco-diff-editor .arxml-merge-arrow-left::after {
-	font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-	font-size: 14px;
-	line-height: 18px;
-	color: var(--vscode-editorGutter-modifiedBackground, var(--vscode-focusBorder));
-	cursor: pointer;
+.workbench-hover-container:has(.monaco-hover.workbench-hover.compact) {
+	pointer-events: none;
 }
-
-.monaco-diff-editor .arxml-merge-arrow-right::after {
-	content: "→";
-}
-
-.monaco-diff-editor .arxml-merge-arrow-left::after {
-	content: "←";
-}
-
-/* A row that exists on only one side keeps a blank placeholder line on the
- * other. Monaco's own diff decorations still classify that blank line as an
- * insertion or deletion, so this opaque editor-background layer paints over the
- * line fill. The model decoration carries zIndex 2 so it sorts after Monaco's
- * whole-line decorations (default 0); the CSS z-index also keeps it above the
- * normal-pass fill Monaco appends later. The selectors below neutralize the
- * remaining diff fill divs, the gutter/line-number fill and the +/- sign. The
- * real side keeps its change fill because its lines have no placeholder class. */
-.monaco-diff-editor .arxml-diff-placeholder {
-	background-color: var(--vscode-editor-background) !important;
-	z-index: 1;
-}
-
-.monaco-diff-editor .view-overlays > div:has(> .arxml-diff-placeholder) > .line-insert,
-.monaco-diff-editor .view-overlays > div:has(> .arxml-diff-placeholder) > .line-delete,
-.monaco-diff-editor .view-overlays > div:has(> .arxml-diff-placeholder) > .char-insert,
-.monaco-diff-editor .view-overlays > div:has(> .arxml-diff-placeholder) > .char-delete {
-	background-color: transparent !important;
-	border-color: transparent !important;
-}
-
-.monaco-diff-editor .margin-view-overlays > div:has(> .arxml-diff-placeholder-margin) > .gutter-insert,
-.monaco-diff-editor .margin-view-overlays > div:has(> .arxml-diff-placeholder-margin) > .gutter-delete {
-	background-color: transparent !important;
-}
-
-.monaco-diff-editor .margin-view-overlays > div:has(> .arxml-diff-placeholder-margin) > .insert-sign,
-.monaco-diff-editor .margin-view-overlays > div:has(> .arxml-diff-placeholder-margin) > .delete-sign {
-	display: none !important;
+.context-view:has(.monaco-hover.workbench-hover.compact) {
+	pointer-events: none;
 }

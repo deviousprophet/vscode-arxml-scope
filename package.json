@@ -317,6 +317,7 @@
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "npm run engine:build && npm run check-types && npm run lint && node esbuild.js",
+    "postinstall": "patch-package",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
@@ -327,15 +328,8 @@
     "check-types": "tsc --noEmit",
     "lint": "node eslint-rules/require-escaped-html.test.mjs && eslint src && npm run design:lint",
     "design:lint": "npx -y -p @google/design.md@0.4.0 designmd lint DESIGN.md",
-    "preview:webview": "node scripts/previewWebview.mjs",
-    "shots:webview": "node scripts/shotWebview.mjs",
     "test": "vscode-test",
     "benchmark": "node src/test/benchmarks/runBenchmark.ts",
-    "parity": "node scripts/parity.mjs",
-    "parity:rows": "node scripts/parityRows.mjs",
-    "parity:diff": "node scripts/parityDiff.mjs",
-    "parity:copy": "node scripts/parityCopy.mjs",
-    "parity:words": "node scripts/parityWords.mjs",
     "engine:build": "node scripts/build-engine.mjs",
     "rust:test": "cargo test --manifest-path rust/Cargo.toml --workspace",
     "rust:fmt": "cargo fmt --manifest-path rust/Cargo.toml --all -- --check",
@@ -353,6 +347,7 @@
     "eslint": "^10.15.0",
     "jsdom": "^31.0.1",
     "npm-run-all": "^4.1.5",
+    "patch-package": "^8.0.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.73.0"
   },
@@ -360,7 +355,8 @@
     "diff": "^8.0.4",
     "serialize-javascript": "^7.1.3",
     "minimatch@>=7.0.0 <11.0.1": "^11.0.1",
-    "glob@>=9.0.0 <14.0.2": "^14.0.2"
+    "glob@>=9.0.0 <14.0.2": "^14.0.2",
+    "dompurify": "^3.4.17"
   },
   "allowScripts": {
     "esbuild@0.28.2": true

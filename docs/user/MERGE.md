@@ -1,24 +1,28 @@
 # Two-way copy merge in the diff
 
 The diff panel can merge two ECUC configurations directly: turn on **Merge** and copy a
-row from either side into the other. It is the compare view plus arrows — no base file, no
-conflict wizard, no generated `.merged.arxml`.
+row from either side into the other through the built-in hover gutter. It is the compare
+view plus a hunk toolbar — no base file, no conflict wizard, no generated `.merged.arxml`.
+The comparison itself, its change classes and its navigation are in
+[Semantic Diff](DIFF.md).
 
 ## Using it
 
 1. Compare two files as usual (**Compare with…** or **Compare Selected**).
-2. Click **Merge** in the diff title strip. The toggle only affects this panel and is off
+2. Click **Merge** in the diff toolbar. The toggle only affects this panel and is off
    by default.
-3. Changed rows show an arrow on their inner edge: `→` on the left pane copies that row
-   into the right file, `←` on the right pane copies into the left. A row with an element
-   only on one side keeps an arrow on the empty side; that arrow deletes the element from
-   the side that has it.
-4. `Alt+←` / `Alt+→` copy the focused row toward that pane.
+3. Hover a changed hunk in the diff. VS Code's built-in hunk toolbar shows
+   **Copy Block to Left** and **Copy Block to Right**. On a hunk with an element only on
+   one side, copy from the side that has it to add it to the other side, or copy from the
+   empty side to delete it from the side that has it. A short hunk at line 1 collapses
+   its actions into **More Actions…**.
+4. Copying a container carries its subtree. Copying from the empty side deletes the
+   element from the side that has it.
 5. Save the file you changed with the normal **Save**. `Ctrl+Z` in that pane undoes one
    copy; the pane label shows `•` while its document is dirty.
 
-Turning **Merge** off restores the read-only diff: no arrows, no writes, identical to
-before.
+Turning **Merge** off restores the read-only diff: the gutter and sash remain for
+resizing, but no copy actions are shown and no writes are possible.
 
 ## What a copy does
 
@@ -48,9 +52,9 @@ chain would need a **module**, the copy is refused: creating a module also decid
 
 ## Limits
 
-- One row per copy; multi-row/range copies are not implemented.
+- One semantic block per copy; multi-row/range selections are not copied.
 - Creating modules or packages is out of scope; copy an existing module row instead where
   the target has no name collision.
 - References whose targets move are not repaired by the merge; the existing validation
   reports them after the files are saved.
-- Reordering is not a copy: arrows act on the row they are clicked on.
+- Reordering is not a copy: an action targets the topmost semantic row in its hunk.

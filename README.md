@@ -8,7 +8,7 @@
 Browse and edit AUTOSAR ECUC-Values files without reading raw XML. The ECUC editor presents modules,
 containers, parameters and references as a keyboard-navigable document, with a tabbed sidebar for
 details, conditions and definition-derived type/range/default data, VS Code-style find and replace, and a
-read-only semantic diff. The custom editor is opt-in: a plain open still uses the text editor.
+semantic diff with an optional two-way copy merge. The custom editor is opt-in: a plain open still uses the text editor.
 
 ## Quick start
 
@@ -24,8 +24,9 @@ read-only semantic diff. The custom editor is opt-in: a plain open still uses th
 ## Documentation
 
 - [Documentation index](docs/README.md) — the ECUC editor and semantic diff guides.
-- [ECUC editor guide](docs/ECUC_EDITOR.md) — opening, editing, Conditions and settings.
-- [Semantic diff guide](docs/DIFF.md) — selecting files, change classes, navigation and limitations.
+- [ECUC editor guide](docs/user/ECUC_EDITOR.md) — opening, editing, Conditions and settings.
+- [Semantic diff guide](docs/user/DIFF.md) — selecting files, change classes, navigation and limitations.
+- [Two-way merge guide](docs/user/MERGE.md) — copying hunks between the compared files.
 - [Synthetic ECUC example](examples/README.md) — a small file to open, edit and compare.
 - [Changelog](CHANGELOG.md) · [License](LICENSE)
 
@@ -40,11 +41,9 @@ npm run compile
 npm test
 ```
 
-For layout changes to the webview, run `npm run shots:webview` and inspect
-`artifacts/webview/` before review. See [the preview harness](docs/WEBVIEW_PREVIEW.md).
-
 `npm run compile` and `npm test` build the Rust engine binary first (`npm run engine:build`). `npm run benchmark` runs
-the optional performance suite.
+the optional performance suite. See [Development](docs/contributor/DEVELOPMENT.md) for the full setup,
+test, engine and preview loop.
 
 ## Issues
 

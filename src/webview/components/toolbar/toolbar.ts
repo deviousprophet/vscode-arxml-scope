@@ -17,9 +17,9 @@ export interface EditorToolbarCallbacks {
 export function renderEditorToolbarHtml(): string {
 	return `<div class="toolbar">
 <span id="editor-dirty-status" class="editor-dirty-status" role="status" aria-live="polite" hidden></span>
-<span class="grow"></span>
 <button id="collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
 <button id="expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
+<span class="grow"></span>
 <button id="toggle-sidebar" class="tool diff-tool" type="button" aria-pressed="true" title="Hide sidebar" aria-label="Sidebar">${ICON_SIDEBAR}<span class="lbl">Sidebar</span></button>
 </div>`;
 }
@@ -175,12 +175,10 @@ export function renderDiffToolbarHtml(): string {
 <button id="diff-next" class="tool diff-tool tool-secondary" type="button" title="Next difference (F7)" aria-label="Next difference">${ICON_NEXT}<span class="lbl">Next diff</span></button>
 <span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
 <button id="diff-merge" class="tool diff-tool" type="button" aria-pressed="false" aria-label="Merge mode" title="Copy rows between the panes">${ICON_MERGE}<span class="lbl">Merge</span></button>
+<button id="diff-swap" class="tool diff-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false">${ICON_SWAP}<span class="lbl">Swap sides</span></button>
 <span class="toolbar-divider" role="presentation" aria-hidden="true"></span>
 <button id="diff-collapse-all" class="tool diff-tool tool-secondary" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
 <button id="diff-expand-all" class="tool diff-tool tool-secondary" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
-</div>
-<div class="toolbar-center">
-<button id="diff-swap" class="tool diff-tool" type="button" title="Swap the displayed sides" aria-label="Swap sides" aria-pressed="false">${ICON_SWAP}<span class="lbl">Swap sides</span></button>
 </div>
 <div class="toolbar-right">
 <span id="diff-match-status" class="match-status" role="status" aria-live="polite"></span>

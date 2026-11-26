@@ -35,12 +35,14 @@ src/
     diff/             diffModel.ts (matching/status/merged order, pure)
                       wordDiff.ts (token-level comparison, pure)
   webview/            browser-only page code. NO `vscode` imports.
-    editorViewer.ts         editor composition root: row model, selection, search, message bridge
-    diffViewer.ts           diff composition root: diff document, view mode, search, message bridge
+    editorMonaco.ts         editor composition root: Monaco page, row model, search, message bridge
+    diffMonaco.ts           diff composition root: Monaco diff editor, gutter/sash, search, message bridge
+    monaco/                 setup.ts  synthetic.ts  diffBody.ts  diffGutterActions.ts
+                            diffGutterAvailability.ts  findBridge.ts  tokens.ts  worker.ts
     components/
       documentTree/         documentTreeView.ts  documentTreeState.ts  documentRows.ts  documentTree.css
       virtualScroll/        virtualScroll.ts  virtualScroll.css
-      diffView/             diffView.ts  diffViewRender.ts  diffView.css
+      diffView/             diffViewRender.ts  diffView.ts  diffView.css
       toolbar/              toolbar.ts  toolbar.css
       searchBar/            searchBar.ts  searchBar.css
       sidebar/              sidebar.ts  sidebar.css
@@ -48,7 +50,7 @@ src/
         conditionsPanel/    conditionsPanel.ts  conditionsPanel.css
       contextMenu/          contextMenu.ts  contextMenu.css
       detailsEditor/        detailsEditor.ts  detailsEditor.css
-    render/                 virtualScroll.ts  rowView.ts  rowSearch.ts  treeQuery.ts
+    render/                 virtualScroll.ts  rowView.ts  treeQuery.ts
                             dom.ts  pageError.ts
     styles/                 tokens.css  base.css
   test/
@@ -103,9 +105,9 @@ testable without a running editor.
 | An engine spawn, handshake, frame or document operation | `src/host/engine/` |
 | A Rust parser/index/validation/diff implementation | `rust/arxml-core/` |
 | An engine-process operation or protocol frame | `rust/arxml-engine/src/main.rs` |
-| A parity/debug CLI command | `rust/arxml-cli/src/main.rs` |
+| A debug CLI command | `rust/arxml-cli/src/main.rs` |
 | A reusable UI unit with markup, input behaviour and styles | `src/webview/components/<Name>/` |
-| A page shell / provider bridge | `src/webview/editorViewer.ts` or `diffViewer.ts` |
+| A page shell / provider bridge | `src/webview/editorMonaco.ts` or `diffMonaco.ts` |
 | A shared page helper (scroll, rows, search, escaping) | `src/webview/render/` |
 | Shared tokens, reset or layout boxes | `src/webview/styles/` |
 | A synthetic fixture for a core suite | `src/test/fixtures/` |

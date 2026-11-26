@@ -2,7 +2,7 @@
  * Shared copy-planner types.
  *
  * The host and the engine seam import these; the TypeScript planner in
- * `planCopy.ts` is the parity oracle and re-exports them for its tests.
+ * `planCopy.ts` re-exports them for the copy tests and the benchmark.
  */
 
 export interface CopyRange {

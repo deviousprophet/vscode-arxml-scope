@@ -6,8 +6,8 @@
 //! Two pairing paths live here. The strict pass pairs children by content, exact id
 //! and an ordinal-free fallback; the semantic pass then pairs leftover modules and
 //! containers by a weighted score and learns rename substitutions from the pairs it
-//! accepts. Both are ports of `src/core/diff/diffModel.ts`, and `npm run parity:diff`
-//! compares whole documents against it.
+//! accepts. Both are ports of `src/core/diff/diffModel.ts`; the TypeScript builder
+//! stays test-only and no longer has a cross-language parity command.
 
 use std::cell::RefCell;
 use std::cmp::Ordering;

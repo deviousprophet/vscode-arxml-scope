@@ -70,15 +70,6 @@ export interface SyntheticDocument {
 	foldingRanges: FoldingRange[];
 }
 
-/** The aligned pair the diff page feeds to Monaco's diff editor. */
-export interface AlignedSyntheticDocuments {
-	left: SyntheticDocument;
-	right: SyntheticDocument;
-	/** Model line -> merged diff row key, per side. */
-	leftLineKeys: (string | undefined)[];
-	rightLineKeys: (string | undefined)[];
-}
-
 interface LineBuilder {
 	line: number;
 	parts: string[];
@@ -509,7 +500,7 @@ interface DiffLineText {
 	searchSpans: SearchSpan[];
 }
 
-function cellLine(cell: DiffCell | undefined, row: DiffRow): DiffLineText {
+function cellLine(cell: DiffCell | undefined, row: DiffRow, hasChildren = row.hasChildren): DiffLineText {
 	if (cell === undefined) {
 		return { text: '', searchSpans: [] };
 	}
@@ -517,7 +508,7 @@ function cellLine(cell: DiffCell | undefined, row: DiffRow): DiffLineText {
 	appendCellLabel(line, cell);
 	appendCellValue(line, cell);
 	appendCellMeta(line, cell);
-	appendEmptyCellContainer(line, cell, row);
+	appendEmptyCellContainer(line, cell, hasChildren);
 	appendChangedDefinition(line, cell, row);
 	return line;
 }
@@ -572,8 +563,8 @@ function appendCellMeta(line: DiffLineText, cell: DiffCell): void {
 	}
 }
 
-function appendEmptyCellContainer(line: DiffLineText, cell: DiffCell, row: DiffRow): void {
-	if (cell.kind === 'container' && !row.hasChildren) {
+function appendEmptyCellContainer(line: DiffLineText, cell: DiffCell, hasChildren: boolean): void {
+	if (cell.kind === 'container' && !hasChildren) {
 		line.text += ' { }';
 	}
 }
@@ -600,28 +591,6 @@ function commentText(cell: DiffCell | undefined, index: number, level: number): 
 	return text === undefined ? '' : `${indent(level)}/* ${escapeNewlines(text)} */`;
 }
 
-/** Serialize the merged diff rows into two line-aligned synthetic documents. */
-export function buildAlignedSyntheticDocuments(document: DiffDocument): AlignedSyntheticDocuments {
-	const build: AlignedBuild = {
-		document,
-		left: createDiffSide(),
-		right: createDiffSide(),
-		at: 0,
-		hasModule: false
-	};
-	while (build.at < document.rows.length) {
-		walkAlignedRow(build);
-	}
-	build.left.folding.sort(byStartLine);
-	build.right.folding.sort(byStartLine);
-	return {
-		left: toSyntheticDiffDocument(build.left),
-		right: toSyntheticDiffDocument(build.right),
-		leftLineKeys: build.left.keys,
-		rightLineKeys: build.right.keys
-	};
-}
-
 interface DiffSide {
 	text: string[];
 	searchSpans: SearchSpan[][];
@@ -630,69 +599,8 @@ interface DiffSide {
 	folding: FoldingRange[];
 }
 
-interface AlignedBuild {
-	document: DiffDocument;
-	left: DiffSide;
-	right: DiffSide;
-	at: number;
-	hasModule: boolean;
-}
-
 function createDiffSide(): DiffSide {
 	return { text: [], searchSpans: [], keys: [], rowLine: new Map(), folding: [] };
-}
-
-function emitLine(
-	build: AlignedBuild,
-	left: string,
-	right: string,
-	key?: string,
-	leftSpans: SearchSpan[] = [],
-	rightSpans: SearchSpan[] = []
-): void {
-	build.left.text.push(left);
-	build.right.text.push(right);
-	build.left.searchSpans.push(leftSpans);
-	build.right.searchSpans.push(rightSpans);
-	build.left.keys.push(key);
-	build.right.keys.push(key);
-}
-
-function walkAlignedRow(build: AlignedBuild): void {
-	const row = build.document.rows[build.at];
-	build.at += 1;
-	appendModuleGap(build, row);
-	appendRowComments(build, row);
-	const leftLine = build.left.text.length + 1;
-	const rightLine = build.right.text.length + 1;
-	appendRowCells(build, row);
-	build.left.rowLine.set(row.key, leftLine);
-	build.right.rowLine.set(row.key, rightLine);
-	if (!row.hasChildren) {
-		return;
-	}
-	appendChildBlock(build, row, leftLine, rightLine);
-}
-
-function appendModuleGap(build: AlignedBuild, row: DiffRow): void {
-	if (row.kind !== 'module') {
-		return;
-	}
-	if (build.hasModule) {
-		emitLine(build, '', '', undefined);
-	}
-	build.hasModule = true;
-}
-
-function appendRowComments(build: AlignedBuild, row: DiffRow): void {
-	const count = commentCount(row);
-	for (let index = 0; index < count; index += 1) {
-		emitLine(build, commentText(row.left, index, row.level), commentText(row.right, index, row.level), row.key);
-	}
-}
-
-function commentCount(row: DiffRow): number {
-	return Math.max(sideCommentCount(row.left), sideCommentCount(row.right));
 }
 
 function sideCommentCount(cell: DiffCell | undefined): number {
@@ -704,32 +612,6 @@ function sideCommentCount(cell: DiffCell | undefined): number {
 		return 0;
 	}
 	return comments.length;
-}
-
-function appendRowCells(build: AlignedBuild, row: DiffRow): void {
-	const leftCell = cellLine(row.left, row);
-	const rightCell = cellLine(row.right, row);
-	emitLine(build, leftCell.text, rightCell.text, row.key, leftCell.searchSpans, rightCell.searchSpans);
-}
-
-function appendChildBlock(build: AlignedBuild, row: DiffRow, leftStart: number, rightStart: number): void {
-	const pad = indent(row.level);
-	// A one-sided row owns no line on the missing side: its braces stay blank
-	// there, so the block never reads as a valid empty container.
-	emitLine(build, braceText(row.left !== undefined, pad, '{'), braceText(row.right !== undefined, pad, '{'), row.key);
-	const end = build.at + row.subtreeSize;
-	while (build.at < end) {
-		walkAlignedRow(build);
-	}
-	const leftEnd = build.left.text.length + 1;
-	const rightEnd = build.right.text.length + 1;
-	emitLine(build, braceText(row.left !== undefined, pad, '}'), braceText(row.right !== undefined, pad, '}'), row.key);
-	appendSideFolding(build.left.folding, row.left, leftStart, leftEnd);
-	appendSideFolding(build.right.folding, row.right, rightStart, rightEnd);
-}
-
-function braceText(present: boolean, pad: string, brace: string): string {
-	return present ? `${pad}${brace}` : '';
 }
 
 function appendSideFolding(
@@ -750,7 +632,10 @@ function byStartLine(left: FoldingRange, right: FoldingRange): number {
 
 function toSyntheticDiffDocument(side: DiffSide): SyntheticDocument {
 	return {
-		text: side.text.join('\n'),
+		// Sticky scroll converts a folding end to `end + 1`. The editor appends a
+		// newline for the same reason: without it the outermost diff scope is
+		// invalid and every sticky candidate is dropped.
+		text: `${side.text.join('\n')}\n`,
 		lines: side.text.map((text, index) => ({
 			line: index + 1,
 			...(side.keys[index] !== undefined ? { rowId: side.keys[index] } : {}),
@@ -762,4 +647,161 @@ function toSyntheticDiffDocument(side: DiffSide): SyntheticDocument {
 		rowLine: side.rowLine,
 		foldingRanges: side.folding
 	};
+}
+
+/** The per-side synthetic documents and the model-line -> row-key maps. */
+export interface DiffSyntheticDocuments {
+	left: SyntheticDocument;
+	right: SyntheticDocument;
+	leftLineKeys: (string | undefined)[];
+	rightLineKeys: (string | undefined)[];
+}
+
+type DocumentSide = 'left' | 'right';
+
+interface DiffBuild {
+	document: DiffDocument;
+	left: DiffSide;
+	right: DiffSide;
+	at: number;
+	hasModule: Record<DocumentSide, boolean>;
+}
+
+function sideCell(row: DiffRow, side: DocumentSide): DiffCell | undefined {
+	return side === 'left' ? row.left : row.right;
+}
+
+function sideHasChildren(document: DiffDocument, index: number, side: DocumentSide): boolean {
+	const row = document.rows[index];
+	const end = Math.min(document.rows.length, index + 1 + Math.max(0, row.subtreeSize));
+	for (let child = index + 1; child < end; child += 1) {
+		if (sideCell(document.rows[child], side) !== undefined) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function emitSideLine(
+	side: DiffSide,
+	text: string,
+	key?: string,
+	spans: SearchSpan[] = []
+): void {
+	side.text.push(text);
+	side.searchSpans.push(spans);
+	side.keys.push(key);
+}
+
+function appendSideModuleGap(build: DiffBuild, row: DiffRow, sideName: DocumentSide): void {
+	if (row.kind !== 'module') {
+		return;
+	}
+	const side = build[sideName];
+	if (build.hasModule[sideName]) {
+		emitSideLine(side, '', undefined);
+	}
+	build.hasModule[sideName] = true;
+}
+
+function appendSideComments(build: DiffBuild, row: DiffRow, sideName: DocumentSide): void {
+	const cell = sideCell(row, sideName);
+	const count = sideCommentCount(cell);
+	for (let index = 0; index < count; index += 1) {
+		emitSideLine(build[sideName], commentText(cell, index, row.level), row.key);
+	}
+}
+
+function appendSideCell(build: DiffBuild, row: DiffRow, sideName: DocumentSide, hasChildren: boolean): void {
+	const cell = sideCell(row, sideName);
+	if (cell === undefined) {
+		return;
+	}
+	const line = cellLine(cell, row, hasChildren);
+	emitSideLine(build[sideName], line.text, row.key, line.searchSpans);
+}
+
+function openSideBlock(build: DiffBuild, row: DiffRow, sideName: DocumentSide): number | undefined {
+	const cell = sideCell(row, sideName);
+	if (cell === undefined || !sideHasChildren(build.document, build.at - 1, sideName)) {
+		return undefined;
+	}
+	const startLine = build[sideName].rowLine.get(row.key);
+	if (startLine === undefined) {
+		return undefined;
+	}
+	emitSideLine(build[sideName], `${indent(row.level)}{`, row.key);
+	return startLine;
+}
+
+function closeSideBlock(build: DiffBuild, row: DiffRow, sideName: DocumentSide, startLine: number | undefined): void {
+	if (startLine === undefined) {
+		return;
+	}
+	const side = build[sideName];
+	emitSideLine(side, `${indent(row.level)}}`, row.key);
+	appendSideFolding(side.folding, sideCell(row, sideName), startLine, side.text.length);
+}
+
+function walkSideRow(build: DiffBuild, row: DiffRow, index: number, sideName: DocumentSide): void {
+	if (sideCell(row, sideName) === undefined) {
+		return;
+	}
+	appendSideModuleGap(build, row, sideName);
+	appendSideComments(build, row, sideName);
+	appendSideCell(build, row, sideName, sideHasChildren(build.document, index, sideName));
+	build[sideName].rowLine.set(row.key, build[sideName].text.length);
+}
+
+function walkChildren(build: DiffBuild, row: DiffRow): void {
+	if (!row.hasChildren) {
+		return;
+	}
+	const end = build.at + row.subtreeSize;
+	while (build.at < end && build.at < build.document.rows.length) {
+		walkDiffRow(build);
+	}
+}
+
+function walkDiffRow(build: DiffBuild): void {
+	const index = build.at;
+	const row = build.document.rows[index];
+	build.at += 1;
+	for (const sideName of ['left', 'right'] as const) {
+		walkSideRow(build, row, index, sideName);
+	}
+	const starts = {
+		left: openSideBlock(build, row, 'left'),
+		right: openSideBlock(build, row, 'right')
+	};
+	walkChildren(build, row);
+	closeSideBlock(build, row, 'left', starts.left);
+	closeSideBlock(build, row, 'right', starts.right);
+}
+
+/** Sort and serialize a completed pair of synthetic sides. */
+function finishDocuments(build: { left: DiffSide; right: DiffSide }): DiffSyntheticDocuments {
+	build.left.folding.sort(byStartLine);
+	build.right.folding.sort(byStartLine);
+	return {
+		left: toSyntheticDiffDocument(build.left),
+		right: toSyntheticDiffDocument(build.right),
+		leftLineKeys: [...build.left.keys, undefined],
+		rightLineKeys: [...build.right.keys, undefined]
+	};
+}
+
+/** Serialize the merged diff rows into two independently shaped synthetic documents. */
+export function buildDiffSyntheticDocuments(document: DiffDocument): DiffSyntheticDocuments {
+	const build: DiffBuild = {
+		document,
+		left: createDiffSide(),
+		right: createDiffSide(),
+		at: 0,
+		hasModule: { left: false, right: false }
+	};
+	while (build.at < document.rows.length) {
+		walkDiffRow(build);
+	}
+	return finishDocuments(build);
 }

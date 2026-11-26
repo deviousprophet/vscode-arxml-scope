@@ -10,7 +10,7 @@ with merge mode off.
 Two independent webview surfaces use the same static-shell + `postMessage` pattern:
 
 - the ECUC custom text editor (`EcucEditorProvider`, `VIEW_TYPE = 'vscode-arxml-scope.ecucEditor'`);
-- the read-only semantic diff panel (`DiffPanel.viewType = 'vscode-arxml-scope.diff'`).
+- the semantic diff panel (`DiffPanel.viewType = 'vscode-arxml-scope.diff'`); merge mode is off by default.
 
 The rendering surface is `monaco-editor@0.57.0`, pinned exactly and bundled by esbuild. The
 page serializes the existing rows into a synthetic ECUC document (`src/webview/monaco/synthetic.ts`)
@@ -25,7 +25,7 @@ The webview CSP additionally allows `style-src 'unsafe-inline'`, `worker-src blo
 
 The host owns documents, scans, writes and persistence. A Rust engine process is
 required at activation (`src/host/engine/engineLoader.ts`, `npm run engine:build`); it
-serves the parity-checked scanner, rows, edit plans, diff and copy plans. The editor
+serves the engine-checked scanner, rows, edit plans, diff and copy plans. The editor
 validates an edit against the engine model, applies the returned span as one
 `WorkspaceEdit`, and replaces the resulting row through a `documentPatch`; the full
 row store is still built in TypeScript when a panel opens and after a structural
@@ -54,7 +54,7 @@ TypeScript fallback.
   512 MiB.
 - Copy planning lives in Rust (`copy.plan`); `diffPanel` must not import
   `planCopy`/`planDelete`/`wrapWithAncestors` from production code. Those stay as the
-  parity oracle only.
+  TypeScript reference implementation for the copy tests and benchmark only.
 
 ### Find and replace
 
@@ -160,7 +160,7 @@ export async function applyStructureEdit(
 export function watchBoot(onSilent: () => void, timeoutMs: number): BootWatchdog;
 ```
 
-The page boot order is `mountEditor()` from `src/webview/editorViewer.ts`: install the console error
+The page boot order is `mountEditor()` from `src/webview/editorMonaco.ts`: install the console error
 reporter, subscribe to `message`, wire the sidebar, Conditions panel, Details editor, toolbar and
 search components, mount one `DocumentTreeView('#tree', 'document', …)`, initialize an empty row
 store, then `postToHost({ type: 'ready' })`.
@@ -332,7 +332,7 @@ const applied = await applyEdit(document, plan.record);
 if (!applied.ok) { this.selections.set(key, previous!); /* post inline notice */ }
 ```
 
-## Scenario: Compare two ECUC files in the read-only diff panel
+## Scenario: Compare two ECUC files in the diff panel
 
 ### 1. Scope / Trigger
 
@@ -342,8 +342,9 @@ if (!applied.ok) { this.selections.set(key, previous!); /* post inline notice */
   - `vscode-arxml-scope.compareToStaged` (`Compare with First File`, guarded by the
     `arxmlScope.hasCompareSelection` context key);
   - `vscode-arxml-scope.compareSelected` (`Compare Two ARXML Files…`, guarded by `listDoubleSelection`).
-- The diff is read-only. It never creates a `WorkspaceEdit`, writes a file, repairs a difference or
-  generates a derived document.
+- The comparison is read-only while merge mode is off. Merge mode is the only write path: the page
+  posts `copy` and the host applies one `WorkspaceEdit`. The comparison itself never repairs a
+  difference or generates a derived document.
 
 ### 2. Signatures
 
@@ -512,7 +513,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
   merged order, summary, visibility, flattening, next-change wrap, labels/title.
 - `src/test/core/wordDiff.test.ts` — tokenizer (whitespace, identifiers, one-character punctuation,
   hex literal, path slashes), LCS, empty sides and adjacent-segment merging.
-- `src/test/webview/components/diffView.test.ts` — fixed title strip with an aligned divider, one
+- `src/test/webview/components/diffView.test.ts` — fixed title strip with a single flex bar, one
   VirtualScroll, two window panes with per-pane horizontal bars, shared content geometry, swap reset,
   header update, optional status, word-colour CSS and the shared module gap row.
 - `src/test/webview/page/diffPage.test.ts` — loading state before the first document, toolbar both
@@ -531,7 +532,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
 // Wrong: a "fix" action that writes the right value into the left file.
 await vscode.workspace.applyEdit(new vscode.WorkspaceEdit());
 
-// Correct: the diff is read-only; the page only asks the host to reveal a row.
+// Correct: the comparison does not write; the page only asks the host to reveal a row.
 if (message.type === 'reveal') {
   void reveal(message.side, message.key);
 }

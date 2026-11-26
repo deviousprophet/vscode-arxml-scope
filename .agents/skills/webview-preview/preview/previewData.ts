@@ -1,18 +1,18 @@
 /**
  * Server-side state for the webview preview.
  *
- * Runs in Node (bundled by `scripts/previewWebview.mjs`): it builds the synthetic
+ * Runs in Node (bundled by the webview-preview skill): it builds the synthetic
  * documents with the real scanner, row builder and diff builder, renders the
  * production shell, and inlines the protocol payload. No page code is forked.
  */
-import { diffShell, editorShell } from '../../host/webviewShell';
-import { scanEcucValues } from '../../core/ecuc/scanner';
-import { buildRows } from '../../core/ecuc/renderRows';
-import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
-import { buildNodeIndex } from '../../core/ecuc/nodeId';
-import { buildDiffDocument } from '../../core/diff/diffModel';
-import type { DiffDocument } from '../../core/diff/diffModel';
-import type { EcucRow } from '../../core/ecuc/renderRows';
+import { diffShell, editorShell } from '../../../../src/host/webviewShell';
+import { scanEcucValues } from '../../../../src/core/ecuc/scanner';
+import { buildRows } from '../../../../src/core/ecuc/renderRows';
+import { SORT_EXCEPTIONS } from '../../../../src/core/ecuc/order';
+import { buildNodeIndex } from '../../../../src/core/ecuc/nodeId';
+import { buildDiffDocument } from '../../../../src/core/diff/diffModel';
+import type { DiffDocument } from '../../../../src/core/diff/diffModel';
+import type { EcucRow } from '../../../../src/core/ecuc/renderRows';
 import type { PreviewStateFields } from './previewStateFields';
 
 export interface PreviewState extends PreviewStateFields {
@@ -23,11 +23,19 @@ export interface PreviewState extends PreviewStateFields {
 }
 
 export const STATES: PreviewState[] = [
-	{ name: 'diff-off', page: 'diff', width: 1400, height: 900 },
+	{ name: 'diff-off', page: 'diff', width: 1400, height: 900, sash: true },
+	{ name: 'diff-collapsed', page: 'diff', width: 1400, height: 900, merge: true, foldLabel: 'Items "Items"' },
+	{ name: 'diff-collapsed-onesided', page: 'diff', width: 1400, height: 900, foldLabel: 'Items "Items"' },
+	{ name: 'diff-collapse-all', page: 'diff', width: 1400, height: 900, collapseAll: true },
 	{ name: 'diff-merge', page: 'diff', width: 1400, height: 900, merge: true },
-	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true },
+	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true, sash: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
+	{ name: 'diff-nav', page: 'diff', width: 1400, height: 900, merge: true, nav: true },
+	{ name: 'diff-sticky', page: 'diff', width: 1400, height: 900, merge: true, diffScrollLine: 40 },
 	{ name: 'diff-one-sided', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-removed', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-added', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-sash', page: 'diff', width: 1400, height: 900, merge: true, sash: true },
 	{ name: 'diff-wide', page: 'diff', width: 1400, height: 900, merge: true, wide: true },
 	{
 		name: 'diff-wide-panned',
@@ -216,6 +224,81 @@ function oneSidedPair(): DiffDocument {
 	);
 }
 
+/** A shared module/container with one child container that exists on only one side. */
+function collapsedOneSidedDocument(side: 'left' | 'right', changed: string): string {
+	const own =
+		side === 'left'
+			? oneSidedContainer(
+					'Shared',
+					'RemovedContainer',
+					oneSidedValue('Shared', 'RemovedContainer', 'RemovedValue', '1')
+				)
+			: '';
+	const items = oneSidedContainer(
+		'Shared',
+		'Items',
+		oneSidedValue('Shared', 'Items', 'P0000', '0') +
+			own +
+			oneSidedValue('Shared', 'Items', 'ChangedValue', changed)
+	);
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${oneSidedModule('Shared', items)}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+/** A shared module whose Items container holds a left-only child container. */
+function collapsedOneSidedPair(): DiffDocument {
+	const leftSide = rowsOf(collapsedOneSidedDocument('left', '5'));
+	const rightSide = rowsOf(collapsedOneSidedDocument('right', '5'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
+/** The shared module alone, so the other side has a real deletion block. */
+function sharedOnlyDocument(changed: string): string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${oneSidedShared(changed)}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+}
+
+/** A left-only module with no counterpart, plus a shared changed value. */
+function removedPair(): DiffDocument {
+	const leftSide = rowsOf(oneSidedDocument('left'));
+	const rightSide = rowsOf(sharedOnlyDocument('7'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
+/** A right-only module with no counterpart, plus a shared changed value. */
+function addedPair(): DiffDocument {
+	const leftSide = rowsOf(sharedOnlyDocument('6'));
+	const rightSide = rowsOf(oneSidedDocument('right'));
+	return buildDiffDocument(
+		{ name: 'left.arxml', path: '/preview/left.arxml' },
+		{ name: 'right.arxml', path: '/preview/right.arxml' },
+		leftSide.rows,
+		rightSide.rows,
+		leftSide.rangeOf,
+		rightSide.rangeOf,
+		PAIR_HEADERS,
+		{ semanticMatching: true }
+	);
+}
+
 function editorDocument(): { rows: EcucRow[]; selectedId?: string } {
 	const rows = rowsOf(synthetic(values(1100, () => false))).rows;
 	return { rows, selectedId: rows[0]?.id };
@@ -347,6 +430,18 @@ function diffFixtureFor(state: PreviewState): DiffDocument {
 	if (state.name === 'diff-one-sided') {
 		return oneSidedPair();
 	}
+	if (state.name === 'diff-removed') {
+		return removedPair();
+	}
+	if (state.name === 'diff-added') {
+		return addedPair();
+	}
+	if (state.name === 'diff-collapsed-onesided') {
+		return collapsedOneSidedPair();
+	}
+	if (state.name === 'diff-collapse-all') {
+		return removedPair();
+	}
 	const fixture = state.wide ? widePair : state.name === 'diff-rail' ? railPair : mergePair;
 	return fixture();
 }
@@ -372,7 +467,11 @@ function payloadFor(state: PreviewState, document: unknown) {
 		wide: state.wide,
 		pan: state.pan,
 		jump: state.jump,
+		nav: state.nav,
+		foldLabel: state.foldLabel,
+		collapseAll: state.collapseAll,
 		select: state.select,
+		sash: state.sash,
 		find: state.find,
 		edit: state.edit,
 		detailsEdit: state.detailsEdit,
@@ -388,6 +487,7 @@ function payloadFor(state: PreviewState, document: unknown) {
 		pasteEdit: state.pasteEdit,
 		staleSave: state.staleSave,
 		scrollLine: state.scrollLine,
+		diffScrollLine: state.diffScrollLine,
 		trySave: state.trySave
 	};
 }

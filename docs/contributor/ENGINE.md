@@ -1,7 +1,9 @@
 # The Rust engine
 
-ARXML Scope runs its ECUC core in a separate Rust process. This page is the
-operator-facing summary; the protocol table lives in `rust/README.md`.
+ARXML Scope runs its ECUC core in a separate Rust process. This page is the operator-facing summary:
+what the process is for, how it is supervised and how to inspect it. The wire protocol table and the
+Rust crate layout live in [`rust/README.md`](../../rust/README.md); the host session contract lives in
+[`editor-lifecycle.md`](../../.trellis/spec/frontend/editor-lifecycle.md).
 
 ## Why a process
 
@@ -9,8 +11,10 @@ operator-facing summary; the protocol table lives in `rust/README.md`.
 - The same engine is reusable for a language server and a CLI.
 - The host stays glue and rendering.
 
-There is no TypeScript fallback and no engine setting. Activation fails when the
-engine is missing, unsupported or speaks another protocol.
+There is no TypeScript fallback for the core and no engine setting. Activation fails when the
+engine is missing, unsupported or speaks another protocol. (A panel that cannot open an engine handle
+can stay on the host-side TypeScript row path for that session; that is a degraded panel, not a second
+core.)
 
 ## Lifecycle
 
@@ -38,12 +42,17 @@ target fails activation with that list. Large documents use the chunked upload p
 
 The engine owns find: `doc.search` and `diff.search` apply case-sensitive,
 whole-word and regex options over the visible row fields, and `doc.replace` returns
-validated plans for parameter values and container short names. The page matcher in
-`src/webview/render/searchPattern.ts` only draws highlight marks.
+validated plans for parameter values and container short names. The page's find bridge
+only maps those matches and draws Monaco's highlight marks.
 
 ## Limits
 
 - Cancelling a long diff is not supported yet; restarting the engine is the coarse
   cancel.
 - A non-value edit still takes a full resync in the engine, about 1.7 s at 26 MiB.
-- The first row store is still built in TypeScript; row windows are planned.
+- The first row store is still built in TypeScript when a panel opens and after a
+  structural change.
+
+Build, test and packaging commands for the engine are in
+[DEVELOPMENT.md](DEVELOPMENT.md); the parity and gate rows are in
+[TEST_PLAN.md](TEST_PLAN.md).

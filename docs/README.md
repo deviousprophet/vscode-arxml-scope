@@ -1,23 +1,44 @@
 # ARXML Scope Documentation
 
-User-facing guides for the ECUC editor and the semantic diff. The Trellis coding specs under
-`.trellis/spec/frontend/` describe how the same features are implemented; these pages describe what
-the extension does and how to use it.
+`docs/` is the human documentation library: product guides for users and setup notes for
+contributors. Code-level implementation contracts live in `.trellis/spec/`, and the
+executable preview workflow lives in the `webview-preview` skill. See the
+[documentation architecture guide](../.trellis/spec/guides/documentation-architecture-guide.md)
+for the audience rules.
 
-| Guide | What it covers |
-|---|---|
-| [ECUC editor](ECUC_EDITOR.md) | Opening a file, the Document tree, Details, editing rules, Conditions, reveal/navigation, settings and limitations. |
-| [Semantic diff](DIFF.md) | Selecting and comparing two files, change classes, search/view/swap/collapse, refresh and limitations. |
-| [Design system](../DESIGN.md) | The webview visual identity: theme tokens, typography, spacing, shapes and component rules. |
-| [Two-way merge](MERGE.md) | Turning the diff into a merge: per-row copy arrows, what a copy replaces, and the safety rules. |
-| [Webview preview](WEBVIEW_PREVIEW.md) | Serving the real webview pages, capturing seeded states in headless Chrome/Edge, and the visual self-audit checklist. |
-| [Test plan](TEST_PLAN.md) | The regression plan for every feature: layers, gates, edge cases and the known gaps. |
-| [Synthetic example](../examples/README.md) | A small ECUC-Values file to open, edit and compare without customer data. |
+## Start here
 
-Also useful:
+| Page | Audience | Purpose |
+|---|---|---|
+| [Documentation index](README.md) | Everyone | This page: the audience map for every file under `docs/`. |
 
-- [Root README](../README.md) — installation and quick start.
-- [Changelog](../CHANGELOG.md) — released changes.
-- [Frontend guidelines](https://github.com/deviousprophet/vscode-arxml-scope/blob/main/.trellis/spec/frontend/index.md) — the implementation contracts behind these guides.
+## For users
+
+| Page | Audience | Purpose |
+|---|---|---|
+| [ECUC editor](user/ECUC_EDITOR.md) | Users | Opening a file, the Document, Details, editing rules, Conditions, reveal/navigation, settings and limitations. |
+| [Semantic diff](user/DIFF.md) | Users | Selecting and comparing two files, change classes, renamed containers, search/view/swap/collapse, refresh and limitations. |
+| [Two-way merge](user/MERGE.md) | Users | Turning the diff into a merge: the built-in hover gutter copy actions, what a copy replaces, and the safety rules. |
+| [Synthetic example](../examples/README.md) | Users | A small ECUC-Values file to open, edit and compare without customer data. |
+
+## For contributors
+
+| Page | Audience | Purpose |
+|---|---|---|
+| [Development](contributor/DEVELOPMENT.md) | Contributors | Setup, build, test and the links to the engine, preview, test plan and diff contracts. |
+| [Engine](contributor/ENGINE.md) | Contributors/operators | The Rust engine's process model, lifecycle, restart/backoff, status command, support matrix and limits. |
+| [Test plan](contributor/TEST_PLAN.md) | Contributors | The human regression plan: layers, commands, per-area gates, case IDs and known gaps. |
+| [Webview preview](contributor/WEBVIEW_PREVIEW.md) | Contributors | The human preview guide: what the harness is, the seeded state table, outputs, commands pointer and limits. |
+| [Design system](../DESIGN.md) | Contributors | The webview visual identity and design contract: theme tokens, typography, spacing and component rules; the `design:lint` target. |
+| [Changelog](../CHANGELOG.md) | Everyone | Released changes. |
+| [Root README](../README.md) | Everyone | Installation, quick start and the repository overview. |
+
+## Agent contracts
+
+Agent-facing work does not live in `docs/`. Code-level contracts are indexed in
+[`.trellis/spec/frontend/index.md`](../.trellis/spec/frontend/index.md), thinking guides in
+[`.trellis/spec/guides/index.md`](../.trellis/spec/guides/index.md), the executable preview
+workflow in the [`webview-preview` skill](../.agents/skills/webview-preview/SKILL.md), and
+the engine wire protocol in [`rust/README.md`](../rust/README.md).
 
 All sample content in this repository is synthetic. Do not commit a real customer ARXML file.

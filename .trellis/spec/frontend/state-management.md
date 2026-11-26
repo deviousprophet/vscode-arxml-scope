@@ -53,8 +53,9 @@ second owner of the rule, and the reason the flag exists.
 `resolveFocusId`, `subtreeRowIds` and `guidesFor` live in
 `components/documentTree/documentTreeState.ts`. `inspectorFields` lives in
 `components/sidebar/detailsPanel/detailsPanel.ts`; `ancestorIds`, `flattenRows` and the tree-query
-helpers live in `render/treeQuery.ts`; the virtual-scroll math lives in `render/virtualScroll.ts`; the
-chunked `RowSearchEngine` lives in `render/rowSearch.ts`.
+helpers live in `render/treeQuery.ts`; the virtual-scroll math lives in `render/virtualScroll.ts`.
+Search is owned by the Rust engine (`doc.search`/`diff.search`); the page only maps returned field
+offsets onto the rendered line.
 
 The pages import these modules into their esbuild bundles; the tests import the same modules or mount
 the compiled entrypoint in jsdom (`src/test/webview/pageTestUtils.ts`). There is no `toString()`

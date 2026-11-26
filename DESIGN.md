@@ -272,21 +272,25 @@ subtree fills keep one stable width while rows scroll horizontally.
 ### Chrome
 
 **Merge mode.** The diff toolbar carries one `Merge` toggle, styled as a toolbar tool with its
-pressed state carried by `aria-pressed` (never a mirroring class). Turning it on shows a 22px copy
-arrow on the inner edge of each changed row, fixed to the pane viewport even when the long rows pan;
-the arrow sits on an opaque chip so the text underneath never shows through, and it mirrors its glyph
-and tooltip with the displayed pane, so Swap keeps it pointing at the destination. Turning it off
-restores the read-only diff exactly.
+pressed state carried by `aria-pressed` (never a mirroring class). Turning it on reveals
+VS Code's built-in 35px hunk gutter: hovering a hunk shows `Copy Block to Left` and
+`Copy Block to Right`, and the current hunk uses VS Code's `showAlways`. A one-sided hunk
+offers both directions: copying from the owning side adds it, copying from the empty side
+deletes it. The gutter and sash stay mounted when Merge is off;
+only the hunk items are made invisible, without collapsing their layout, so Monaco can measure the
+toolbar and center the arrows before Merge is revealed. The panes still resize either way. Labels
+follow the displayed panes and the host receives the stored side shown in the source pane, including
+after Swap.
 
 The toolbar is a 54px strip with divider-separated groups and icon-over-label tools: a 60x48 box with
 an 18px icon above a 10px label. The dense diff group drops its secondary labels (Show all/Show diff,
 Prev/Next, Collapse/Expand) at 1399px, then its primary labels (Context, Semantic, Strict, Merge) at
 1150px; the editor labels hide at 1040px. Diff boxes compact to 40px, then 36px at 960px, 32px at
-880px and 28px at 720px. The strip stays a three-column grid at every width, so the Swap action keeps
-its place over the pane divider. The Document strip carries Collapse, Expand and the Sidebar toggle
-in the same variant as the diff toolbar. Use the shared sidebar button primitives for other actions;
-do not invent a second button style. The sidebar is a 360px panel with a 28px vertical tab strip and
-a 22px section header.
+880px and 28px at 720px. The strip is a flex row at every width: the diff actions stay left, Swap
+follows Merge, and the match status sits on the right. The Document strip puts Collapse/Expand left
+and the Sidebar toggle on the right, in the same variant as the diff toolbar. Use the shared sidebar
+button primitives for other actions; do not invent a second button style. The sidebar is a 360px
+panel with a 28px vertical tab strip and a 22px section header.
 
 ### Search
 
@@ -309,15 +313,14 @@ checks that those hosts are not clipping when a find widget is visible.
 
 ### Diff
 
-Each pane is its own surface inside the shared scroller. Status is a background tint plus a 3px rail:
-`added` on the right, `removed` on the left, `changed` on both. Changed words get a 1px outline in the
-same colour. Each pane also owns its own line-number gutter: rows missing on a side leave that gutter
-blank, hidden unchanged runs are not numbered, and the gutter cell repeats the pane's status tint so
-the number stays legible over the tinted row. Both panes share one blank module-gap row before every
-module after the first: it is numbered on both sides, carries no change status, and never takes
-selection, search or F7. The pane window spans at least the pane width and the full content width,
-including header lines, so the selection and subtree tints fill a stable width. Syntax tokens keep
-their own colours.
+The diff view is the built-in Monaco diff editor with two independently shaped ECUC
+documents. Status paint, changed-word spans, diagonal gaps for a missing side, the
+overview ruler and the unchanged-region widgets are Monaco's; there is no custom rail,
+placeholder row or margin layer. Each side keeps its own line numbers and folding ranges,
+and folding is enabled in both panes as the intentional modified feature. The ARXML
+toolbar sits above the editor; the 35px hunk gutter and the pane sash belong to Monaco.
+The gutter menu actions are the two ARXML copy commands described under Merge mode.
+Syntax tokens keep their own colours.
 
 ### Diagnostics and overlay
 

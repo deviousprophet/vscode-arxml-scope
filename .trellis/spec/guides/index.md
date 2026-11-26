@@ -23,6 +23,7 @@ These guides help you **ask the right questions before coding**.
 |-------|---------|-------------|
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
+| [Documentation Architecture Guide](./documentation-architecture-guide.md) | Keep docs audience-split with one canonical home per fact | Adding, moving, splitting or indexing a docs/spec page |
 
 ---
 
@@ -50,6 +51,16 @@ These guides help you **ask the right questions before coding**.
 - [ ] Multiple branches update the same derived state from `kind` / `action`
 
 → Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
+
+### When to Think About the Documentation Boundary
+
+- [ ] You are adding a docs page, spec page or skill page
+- [ ] A guide mixes user workflow with build commands, source paths or audit invariants
+- [ ] A command block or invariant checklist appears in two homes
+- [ ] You are moving or renaming a page that another page, test comment or root file links
+- [ ] A page is “kept for history” instead of relying on git history
+
+→ Read [Documentation Architecture Guide](./documentation-architecture-guide.md)
 
 ### When Verifying AI Cross-Review Results
 

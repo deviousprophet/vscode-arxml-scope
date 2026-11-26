@@ -14,7 +14,7 @@ draft, the add/clear actions and the status line. The host owns workspace persis
 src/webview/components/sidebar/conditionsPanel/
     conditionsPanel.ts   markup + validation + panel controller script
     conditionsPanel.css  panel styles
-src/webview/editorViewer.ts         composition root (rows + persistence callback)
+src/webview/editorMonaco.ts         composition root (rows + persistence callback)
 src/test/webview/components/conditionsPanel.test.ts
 ```
 

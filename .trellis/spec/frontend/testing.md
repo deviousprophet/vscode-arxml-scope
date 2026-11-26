@@ -57,19 +57,29 @@ partial write cannot hide behind a message.
 
 ## Running the tests
 
-| Purpose | Command |
-|---|---|
-| Everything | `npm test` |
-| Types only | `npm run check-types` |
-| Lint only | `npm run lint` |
-| Large-file benchmark | `npm run benchmark` |
-| One benchmark / keep going | `npm run benchmark -- <name>` / `npm run benchmark -- --continue` |
-| Core suites only | `npm run compile-tests` then `npx mocha --ui tdd "out/test/core/*.test.js"` |
+The layer table, per-area gates and run order are canonical in
+[`docs/contributor/TEST_PLAN.md`](../../../docs/contributor/TEST_PLAN.md); this page does
+not keep a second gate table. The agent rules that go with them are:
 
-`npm test` drives a real VS Code instance through `vscode-test`, so the first run downloads VS Code
-into `.vscode-test/` (gitignored). If that download is blocked by a proxy, the failure is environmental
-— check before assuming a code defect. The suite uses the **TDD** mocha UI: plain `npx mocha` fails
-with `suite is not defined`.
+- `npm test` drives a real VS Code instance through `vscode-test`, so the first run downloads VS Code
+  into `.vscode-test/` (gitignored). If that download is blocked by a proxy, the failure is environmental
+  — check before assuming a code defect. The suite uses the **TDD** mocha UI: plain `npx mocha` fails
+  with `suite is not defined`.
+- A test name carries the plan ID it proves (`SCAN-01`, `MERGE-04`, …). A new behaviour without a
+  plan row either gets one in `docs/contributor/TEST_PLAN.md` or is not part of the regression plan.
+- Touch `core/diff/*` or the Monaco page: run `diffModel`/`wordDiff`/`diffSemantic`, the
+  `diffCodeParity` and `syntheticDocument` source contracts, and the diff preview states. The
+  code-level contracts are [`diff-matching.md`](./diff-matching.md),
+  [`diff-parity.md`](./diff-parity.md) and [`monaco.md`](./monaco.md).
+- Touch layout, toolbar, gutter, folding or the page shell: capture the narrowest state while fixing,
+  then the **full seeded set** before review. Read the audit JSON first; the PNG is the taste check.
+  Invariants: [`preview-audit.md`](./preview-audit.md).
+- Touch the engine or the protocol: run `engine:smoke`, `rust:test` and `npm test` (the row
+  parity suite lives in `src/test/parity`). There is no
+  TypeScript core fallback; a panel without an engine handle stays on the host row path only.
+- A docs-only change does not run the product suites. It must resolve every relative link, keep
+  UTF-8 without replacement characters and leave the tree clean under `git diff --check`; run the
+  design lint only when `DESIGN.md` changed.
 
 There is no real VS Code webview in the test host. Page behaviour is mounted into **jsdom** from the
 same static shell the host writes (`src/test/webview/pageTestUtils.ts`): `installDom` provides the
@@ -81,17 +91,22 @@ in the task notes rather than implying it was tested.
 
 ## Manual checks happen through the preview harness or the Extension Development Host
 
-The page is served locally by `npm run preview:webview` and captured by `npm run shots:webview`.
-The harness wraps the **production shell** (`webviewShell.ts`) and imports the real page entries
-(`diffViewer.ts`, `editorViewer.ts`), which auto-mount exactly as in the extension. It seeds states
-through the host protocol and writes `artifacts/webview/<state>.png` plus `<state>.audit.json`;
-`docs/WEBVIEW_PREVIEW.md` holds the state table and the visual audit checklist. The runner fails
-when the rendered geometry violates an invariant: a copy arrow outside its pane, a toolbar control
-overlapping or clipped, a digit touching its rail, or a page-level horizontal scroll. When changing
-scroll-dependent chrome, add a wide/overflow state and a panned state; a fixture whose lines fit
-the pane cannot catch an arrow pinned to the content edge. Do not call a mount function after
-importing a page entry: a second mount binds every toolbar action twice and toggles cancel
-themselves.
+The preview is the `webview-preview` skill. The skill owns the runner commands, flags,
+outputs and cleanup ([`SKILL.md`](../../../.agents/skills/webview-preview/SKILL.md)); the
+human state table and limits are in
+[`docs/contributor/WEBVIEW_PREVIEW.md`](../../../docs/contributor/WEBVIEW_PREVIEW.md); the
+audit invariants and execution rules are in [`preview-audit.md`](./preview-audit.md). Do
+not restate the command block here. The harness wraps the **production shell**
+(`webviewShell.ts`) and imports the real page entries (`diffMonaco.ts`, `editorMonaco.ts`),
+which auto-mount exactly as in the extension. It seeds states through the host protocol and writes
+`.agents/skills/webview-preview/artifacts/<state>.png` plus `<state>.audit.json`.
+
+When changing scroll-dependent chrome, add a wide/overflow state and a panned state. Do not call a
+mount function after importing a page entry: a second mount binds every toolbar action twice and
+toggles cancel themselves.
+
+Source-level wiring or hash tests are a last resort. Label the suite and test names as a source
+contract, and keep the behavioural proof in the preview harness or Extension Development Host.
 
 The screenshots are Chromium layout evidence, not a behavioural gate. They do not prove VS Code
 theme fidelity (the harness seeds the supported dark-theme tokens), keyboard focus, screen-reader output or
@@ -179,17 +194,16 @@ source-line gutter, and the row model carries no source-position fields.
 ## Virtual page tests drive the compiled page module
 
 The virtual row renderer is tested at two levels. Pure modules (`renderRows`, `virtualScroll`,
-`treeQuery`, `rowSearch`) have ordinary unit tests over values. The page entrypoint is mounted in
+`treeQuery`) have ordinary unit tests over values. The editor page entrypoint is mounted in
 jsdom from the host's static shell and driven through the protocol: `installDom` + `loadModule` give
-the test the real `mountEditor`/`mountDiff` path, so `flattenRows`, `ancestorIds`, `reconcileRowState`,
+the test the real `mountEditor` path, so `flattenRows`, `ancestorIds`, `reconcileRowState`,
 `subtreeRowIds`, `guidesFor`, the inspector and the virtual window run as they do in the shipped page
-— the test does not re-implement them.
+— the test does not re-implement them. The Monaco diff page is exercised by the preview harness and
+its source contract; jsdom does not provide the editor layout.
 `virtualPage.test.ts` pins the window range and overscan, the bounded row count, collapse display
 lists, the selected subtree, the offscreen inspector, focus restoration and the re-scan payload.
-`rowSearch.test.ts` pins the chunked engine: matches, progress, cancellation, the timing constants
-and a 150k-row completion threshold. Structural
-assertions (a window loop, spacers, no `innerHTML`/style attribute in the row builder, `data-level`
-CSS) are the regression guard; the real DOM pass is the Extension Development Host.
+Structural assertions (a window loop, spacers, no `innerHTML`/style attribute in the row builder,
+`data-level` CSS) are the regression guard; the real DOM pass is the Extension Development Host.
 
 Mutation checks for this layer: render the full row list instead of `[start,end)`, remove the
 top/bottom spacers, zero the overscan, drop subtree collapse logic, use `innerHTML` for row text, use

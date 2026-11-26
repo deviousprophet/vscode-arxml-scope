@@ -6,13 +6,6 @@ only the text of the field the user edited.
 
 The editor is opt-in: a normal open still uses VS Code's text editor.
 
-> **Renderer status.** The Document surface is now a Monaco editor — the same editor and diff
-> editor that VS Code uses. Selection, scrolling, folding, word wrap, minimap, sticky scroll and
-> undo follow the host editor. Parameter values and container short names can be typed directly;
-> definition refs are edited in Details; everything else is read-only. Sections below that describe roving row focus, Space-to-select,
-> type-ahead, the custom copy planner, the custom collapsible hint or the custom virtual scroll
-> describe the retired DOM renderer and are kept as the ECUC interaction reference.
-
 ## Opening a file
 
 Use any of:
@@ -31,7 +24,9 @@ condition values again. It does not rely on the first HTML payload carrying mode
 
 ## The Document surface
 
-The left side is a single **Document** view; there is no Tree/Document toggle.
+The left side is a single **Document** view; there is no Tree/Document toggle. The Document is a Monaco
+editor over a synthetic text: one display line per row, with the row's fields mapped back to the ECUC
+model. Selection, scrolling, folding, word wrap, minimap, sticky scroll and undo are the host editor's.
 
 - Modules, containers, parameters and references are emitted in display order.
 - A module label is the dotted definition path; a container shows its definition tail and short name;
@@ -43,56 +38,37 @@ The left side is a single **Document** view; there is no Tree/Document toggle.
 - One blank numbered line separates consecutive module groups. It sits above the module's annotations,
   has no rule, border, hover or selection treatment, and clicking it or its number changes nothing. The
   first module has no module gap.
-- A fixed line-number gutter numbers each display line from 1: the schema/package lines, the blank
-  separator, the module gaps, annotations, braces and nodes. Numbers renumber when containers collapse
-  or the document changes, and the selected row's number uses the active line-number colour. The
-  selected and keyboard-focused rows also repeat their 2px rail on the number cell, so the indicator
-  stays visible beside the opaque gutter. The gutter stays fixed
-  while the document scrolls horizontally, follows the rows vertically, and is not searchable,
-  selectable or focusable. Clicking a number performs the row's own action: it selects a node, focuses a
-  header, and does nothing for a blank separator or module gap.
+- Line numbers are Monaco's model-line numbers, starting at 1. Folding hides lines but does not
+  renumber the visible ones; the numbers follow the rows vertically and stay fixed during horizontal
+  scrolling. Clicking a number selects that display line, and the row selection follows the cursor.
 - Annotations appear as muted italic comment lines directly above their node. Selecting a container
   tints the annotation rows of its descendants; the annotation rows stay non-selectable and clicking
   one changes nothing.
 - Containers draw `{` and `}` brace rows. An empty container shows `{ }`.
-- Collapsed containers show a ` { … }` hint and stay collapsible from the fixed 26px fold gutter.
-- **Collapse** and **Expand** in the toolbar rebuild the display around the current point: the focused
-  row, else the selected row, else the current search match stays at its viewport offset. When
-  **Collapse** hides that row, its nearest visible ancestor stays in view instead, and **Expand** brings
-  the row back without moving the selection, focus or current search match.
-- Bracket guides follow the open ancestor containers. They fade at rest and activate on hover.
+- A container folds from the fold control beside its first line or with the toolbar. **Collapse**
+  folds every container; **Expand** unfolds them again.
 - Selecting a container tints its visible subtree; syntax tokens keep their colours.
-- The selected row background, its 2px rail and the selected-subtree tint span a stable width: at least
-  the visible pane and the full document content width. A longer row scrolling into or out of the
-  rendered window does not change that width, and the highlight starts after the fixed gutter and
-  reaches the pane's right edge.
 - Long labels, values and metadata stay on one line and scroll horizontally.
-- Row text is selectable: drag or double-click to select labels, values, meta and comments, then use the
-  native webview copy shortcut. A selection spanning two or more rendered rows copies one line per row,
-  indented by `4 * (level - 1)` spaces like the tree, built from the visible label, value, meta chips,
-  disabled suffix, header keyword/package text and brace/comment text. A collapsed selection, one inside
-  a single row or one outside
-  the Document tree stays on the native path, so a partial word or substring copy remains exact. The
-  line-number gutter, fold control, indent guides, blank separator lines and sidebar chrome stay
-  non-selectable, and a double-click never opens the source editor.
+- Row text is selectable: drag or double-click to select labels, values, meta and comments, then use
+  the native webview copy shortcut. A selection spanning two or more rows copies one line per display
+  row, including the Document's indentation. The fold control and sidebar chrome stay non-selectable,
+  and a double-click never opens the source editor.
 
-Only the visible window is rendered. The page precomputes the row offsets, including the header rows,
-the header gap and the module gaps, so the scrollbar thumb and drag match the content; a scroll frame
-only renders the visible window. One virtual-scroll surface owns the vertical scroll and the row
-offsets; the docs view has one horizontal bar, and the scrollbars are native.
+Only the visible window is rendered; Monaco owns vertical and horizontal scrolling, the minimap and
+sticky scope headers.
 
 ### Keyboard
 
 | Key | Action |
 |---|---|
-| `Up` / `Down`, `Home` / `End`, `PageUp` / `PageDown` | Move the roving focus through the rendered rows. |
-| `Left` | Collapse the focused container, or move to its parent. |
-| `Right` | Expand the focused container, or move to its first child. |
-| `Space` | Select the focused row. |
-| `Enter` | A parameter opens its Details value editor; a container with children toggles; a leaf, empty container or reference reveals in source. |
-| `Ctrl+Enter` / `Alt+Enter` | Reveal the focused row in source. |
-| `F2` | Open a parameter's Details value editor. |
-| A single character | Type-ahead jump to the next visible label with that prefix. |
+| `Up` / `Down`, `Home` / `End`, `PageUp` / `PageDown` | Move the cursor and the row selection through the document. |
+| `Left` / `Right` | Move the cursor within the row; use the fold control or the toolbar to collapse or expand. |
+| `F2` | Open the selected parameter's Details value editor. |
+| `Ctrl+Enter` / `Alt+Enter` | Reveal the selected row in source. |
+| `Alt+Z` | Toggle word wrap. |
+| `Ctrl+S` | Save pending edits. |
+| `Ctrl+F` / `Ctrl+H` | Find, or find and replace. |
+| `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` | Undo/redo; a local draft first, otherwise the file. |
 
 ### Search and replace
 
@@ -219,7 +195,8 @@ being validated. The tab title and marker clear when the real `TextDocument` bec
 
 - A parameter's `<VALUE>` is edited with a text input (or a `true`/`false` select for a Boolean
   parameter).
-- A container's `<SHORT-NAME>` and `<DEFINITION-REF>` are edited with text inputs.
+- A container's `<SHORT-NAME>` and `<DEFINITION-REF>` have text inputs in Details; the short name is
+  also typed directly in the Document.
 - Details typing is live; `Enter` does not commit. `Escape` restores the field's accepted value, and
   `Tab` uses normal browser focus movement without writing.
 - Integer, Float, Boolean and XML-invalid input is marked locally as a problem while typing; the host
@@ -280,7 +257,7 @@ The **Conditions** tab edits the workspace values used to evaluate each node's o
 
 | Action | Behaviour |
 |---|---|
-| **Reveal in source** (Details, `Ctrl+Enter`/`Alt+Enter` on a row; `Enter` on a leaf, empty container or reference) | Opens the ARXML text editor at the node's range. |
+| **Reveal in source** (Details, `Ctrl+Enter`/`Alt+Enter` on a row) | Opens the ARXML text editor at the node's range. |
 | **Jump to target** (Details, reference only) | Follows a reference across files; a same-file target selects the row, an ECUC-Values target opens that file at its row, and any other ARXML target opens the text editor at its range. |
 | **Find references** (Details, module/container) | Lists every indexed reference that resolves to the selected element; choosing one reveals it in the text editor. |
 | **ARXML Scope: Reveal in ARXML Source** | Command Palette entry for the same reveal path. |
@@ -326,9 +303,8 @@ collection is recomputed after every index change.
 - Definition resolution refuses an ambiguous suffix. Vendor-specific variant merging is not performed;
   copies of one identity resolve to the referencing file's copy or to every copy for navigation. When
   several definition bodies share one path, Details shows `N definitions found` and does not pick one.
-- Validation is a full workspace pass after the debounce; the benchmark bounds it, but a very large
-  workspace can still take a moment before the Problems panel updates. The diagnostic caps keep the
-  panel bounded.
+- Validation is a full workspace pass after the debounce; a very large workspace can still take a
+  moment before the Problems panel updates. The diagnostic caps keep the panel bounded.
 - The index reads saved bytes from disk, not open editor buffers, so an unsaved edit in a
   module-definition file is picked up only after it is saved. It also uses Node file-system paths, so
   virtual workspaces are not indexed.
@@ -341,17 +317,15 @@ collection is recomputed after every index change.
   edit (a module/container added, removed or renamed, or a changed `DEFINITION-REF`) invalidates the
   reverse map, and the next **Find References** rebuilds it; a very large workspace can pause briefly on
   that first query.
-- The single-file editor model (`core/ecuc/scanner.ts`) and the workspace index
-  (`core/index/xmlStream.ts`) are separate parsers. They share the XML text helpers; they converge only
-  when cross-file features need one model.
-- The Document is read-only by design; edits are limited to `<VALUE>`, container `<SHORT-NAME>` /
-  `<DEFINITION-REF>`, and delete/duplicate of a container or parameter.
+- The Document is not a free text buffer: only parameter values and container short names are typed
+  directly, while definition refs and structural changes use Details or the row context menu. Other
+  text is restored if edited.
 - CDATA-backed values are displayed but cannot be edited.
 - Conditions are evaluated for display only; the extension does not rewrite or remove disabled nodes.
 - The page follows the editor theme for colours and fonts. Search uses fixed highlight tiers because
   theme find-match colours may be transparent; high contrast/forced-colours uses outlines instead of
   fills.
-- Large files are virtualized, but browser layout/paint cost is not eliminated. Use the benchmark suite
-  for scan/row/diff/index timing, not as a promise for every machine.
-- Line numbers follow display rows, not XML source lines, so collapsing or filtering renumbers them.
-  Their width is at least five characters; there is no line-number setting.
+- Large files stay virtualized, but browser layout and paint cost is not eliminated; very large files
+  still take longer to scroll and fold.
+- Line numbers follow display lines, not XML source lines, so a folded line's number is skipped
+  rather than mapped to an XML line.
