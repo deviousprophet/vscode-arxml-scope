@@ -13,6 +13,7 @@ import '../../../../src/webview/diffMonaco';
 import '../../../../src/webview/editorMonaco';
 import { paneSnapshot, previewAudit } from './previewAudit';
 import type { CollapseAllProbe, FoldedProbe, GutterAlignment, NavigationProbe, PaneSnapshot, StickyProbe } from './previewAudit';
+import type { CopyDirtyRows } from '../../../../src/core/copy/copyDirty';
 import type { PreviewStateFields } from './previewStateFields';
 
 interface PreviewPayload extends PreviewStateFields {
@@ -20,7 +21,7 @@ interface PreviewPayload extends PreviewStateFields {
 	page: 'diff' | 'editor';
 	message: unknown;
 	/** Rows the state pretends a merge copy left unsaved. */
-	copied?: { diff: { left: string[]; right: string[] }; editor: string[] };
+	copied?: { diff: CopyDirtyRows; editor: string[] };
 	renameDocument?: { rows: PreviewRow[]; selectedId?: string };
 }
 

@@ -728,13 +728,29 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 	];
 }
 
-/** A copied row must paint its margin marker; the diff paint must not swallow it. */
+/** A copied row must paint its marker on the receiving side only. */
 function copiedMarkerIssues(state: AuditState): string[] {
 	if (state.copied !== true) {
 		return [];
 	}
-	const markers = document.querySelectorAll('.arxml-copied-line').length;
-	return issueWhen(markers === 0, 'the copied rows did not paint their modified-line marker');
+	if (state.page === 'editor') {
+		return [
+			...issueWhen(
+				document.querySelectorAll('#tree .arxml-copied-line').length === 0,
+				'the copied rows did not paint their modified-line marker'
+			),
+			...issueWhen(
+				document.querySelectorAll('#tree .arxml-copied-line-bg').length === 0,
+				'the copied rows did not paint their line tint'
+			)
+		];
+	}
+	const modified = document.querySelectorAll('.modified-in-monaco-diff-editor .arxml-copied-line').length;
+	const original = document.querySelectorAll('.original-in-monaco-diff-editor .arxml-copied-line').length;
+	return [
+		...issueWhen(modified === 0, 'the copied side did not paint its modified-line marker'),
+		...issueWhen(original !== 0, 'the source side painted a copied-row marker')
+	];
 }
 
 function monacoMountIssues(state: AuditState): string[] {

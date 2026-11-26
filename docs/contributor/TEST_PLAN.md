@@ -39,7 +39,7 @@ non-zero on a placement violation.
 | `host/engine/*`, `rust/*` | `engine` suites, `engine:smoke`, row parity (`src/test/parity`), `engineEdit` |
 | `webview/*` | page + component suites for the touched component, `protocol`; the `webview-preview` skill for layout changes |
 | `commands.ts`, manifests | `activation`, `menus`, `compare`, `reveal` |
-| copy modules | `planCopy`, `planMerge` (extension), `copyBenchmark` |
+| copy modules | `planCopy`, `planMerge` (extension), `copyDirty`, `minimalEdit`, `copyBenchmark` |
 
 ## SCAN — scanner and model
 

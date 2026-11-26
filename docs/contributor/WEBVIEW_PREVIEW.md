@@ -42,6 +42,7 @@ projection for choosing a state.
 |---|---|---|---|
 | `diff-off` | diff | 1400×900 | baseline diff; the built-in gutter and sash are mounted, copy actions are hidden outside Merge without collapsing their layout, and the sash drag/reset runs |
 | `diff-merge` | diff | 1400×900 | Merge pressed; the built-in hunk toolbar offers Copy Block to Left/Right and its arrows start centered on the hunk |
+| `diff-copied` | diff | 1400×900 | three copied rows carry the modified-line margin marker on the modified pane only; the original pane stays clean |
 | `diff-swap` | diff | 1400×900 | Swap pressed; headers and values mirror, the copy direction/host side follow the displayed panes, and the sash ratio survives |
 | `diff-rail` | diff | 1400×900 | long document; Next diff jumps to the change near line 1000 and scrolls |
 | `diff-nav` | diff | 1400×900 | Next/Prev visit every change in order and wrap; the probe repeats the sequence after Swap |
@@ -60,6 +61,7 @@ projection for choosing a state.
 | `editor-syscond` | editor | 1400×900 | the `Condition` row selected; the Monaco editor condition line and Details Condition code share the macro-blue name, magenta operator, cyan literal and number, and the Conditions panel uses the same name/state colours |
 | `editor-labels` | editor | 1400×900 | a module, a normal container, a parameter and a container with no `DEFINITION-REF`; the no-label line starts with its quoted short name in the string colour, and the normal container keeps the label in the type colour and the short name in the string colour |
 | `editor-dirty` | editor | 1400×900 | a typed parameter shows the `● Unsaved changes` toolbar marker and posts no host edit before `Ctrl+S` |
+| `editor-copied` | editor | 1400×900 | two copied rows show the modified-line margin bar and line tint, as after a merge copy and before a save |
 | `editor-invalid` | editor | 1400×900 | invalid direct input shows the red marker/error and a `Ctrl+S` attempt is blocked |
 | `editor-details` | editor | 1400×900 | typing in the Details value stays local; focus/caret kept, the line repainted, no host edit |
 | `editor-details-save` | editor | 1400×900 | `Ctrl+S` sends one raw edit, waits for its ack, saves, then the host echo rebuild keeps Details focus/caret |

@@ -13,6 +13,7 @@ import { buildNodeIndex } from '../../../../src/core/ecuc/nodeId';
 import { buildDiffDocument } from '../../../../src/core/diff/diffModel';
 import type { DiffDocument } from '../../../../src/core/diff/diffModel';
 import type { EcucRow } from '../../../../src/core/ecuc/renderRows';
+import { sideKey } from '../../../../src/core/copy/copyDirty';
 import type { PreviewStateFields } from './previewStateFields';
 
 export interface PreviewState extends PreviewStateFields {
@@ -448,44 +449,57 @@ function diffFixtureFor(state: PreviewState): DiffDocument {
 	return fixture();
 }
 
+/** The fixture a state mounts, tagged with the page it belongs to. */
+type PreviewMount =
+	| { page: 'diff'; document: DiffDocument }
+	| { page: 'editor'; document: { rows: EcucRow[]; selectedId?: string } };
+
 /** The fixture document a state mounts. */
-function documentFor(state: PreviewState) {
-	return state.page === 'diff' ? diffFixtureFor(state) : editorFixtureFor(state);
-}
-
-function messageFor(state: PreviewState, document: unknown) {
+function documentFor(state: PreviewState): PreviewMount {
 	return state.page === 'diff'
-		? { type: 'document', semantic: true, document }
-		: { type: 'document', document };
+		? { page: 'diff', document: diffFixtureFor(state) }
+		: { page: 'editor', document: editorFixtureFor(state) };
 }
 
-/** The rows a state pretends a merge copy wrote and the user has not saved. */
-function copiedRowsFor(state: PreviewState, document: unknown) {
-	if (state.copied !== true) {
-		return undefined;
-	}
-	if (state.page === 'diff') {
-		const rows = (document as DiffDocument).rows;
-		const right = rows
-			.filter((row) => row.right !== undefined && row.status !== 'unchanged')
-			.slice(0, 3)
-			.map((row) => (row.key.startsWith('right:') ? row.key.slice('right:'.length) : row.key));
-		return { diff: { left: [], right }, editor: [] };
-	}
-	const rows = (document as { rows?: Array<{ id: string; kind: string }> }).rows ?? [];
-	const editor = rows
+function messageFor(mount: PreviewMount) {
+	return mount.page === 'diff'
+		? { type: 'document', semantic: true, document: mount.document }
+		: { type: 'document', document: mount.document };
+}
+
+/** The target-side rows the diff state pretends a copy wrote. */
+function copiedDiffRows(document: DiffDocument): string[] {
+	return document.rows
+		.filter((row) => row.right !== undefined && row.status !== 'unchanged')
+		.slice(0, 3)
+		.map((row) => sideKey(row, 'right'))
+		.filter((key): key is string => key !== undefined);
+}
+
+/** The editor rows the state pretends a copy wrote. */
+function copiedEditorRows(document: { rows: EcucRow[] }): string[] {
+	return document.rows
 		.filter((row) => row.kind === 'parameter')
 		.slice(1, 3)
 		.map((row) => row.id);
-	return { diff: { left: [], right: [] }, editor };
 }
 
-function payloadFor(state: PreviewState, document: unknown) {
+/** The rows a state pretends a merge copy wrote and the user has not saved. */
+function copiedRowsFor(state: PreviewState, mount: PreviewMount) {
+	if (state.copied !== true) {
+		return undefined;
+	}
+	return mount.page === 'diff'
+		? { diff: { left: [], right: copiedDiffRows(mount.document) }, editor: [] }
+		: { diff: { left: [], right: [] }, editor: copiedEditorRows(mount.document) };
+}
+
+function payloadFor(state: PreviewState, mount: PreviewMount) {
 	return {
 		state: state.name,
 		page: state.page,
-		message: messageFor(state, document),
-		copied: copiedRowsFor(state, document),
+		message: messageFor(mount),
+		copied: copiedRowsFor(state, mount),
 		merge: state.merge,
 		swap: state.swap,
 		wide: state.wide,
