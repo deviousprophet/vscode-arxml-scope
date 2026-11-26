@@ -52,4 +52,6 @@ export interface PreviewStateFields {
 	diffScrollLine?: number;
 	/** Attempts Ctrl+S after the edit, exercising the save guard. */
 	trySave?: boolean;
+	/** Posts copied-but-unsaved rows so the page paints the modified-line markers. */
+	copied?: boolean;
 }

@@ -31,6 +31,8 @@ export interface AuditState {
 	detailsRename?: boolean;
 	/** The direct-editor delete/word-delete/replace scenario ran. */
 	deleteEdit?: boolean;
+	/** The state posted copied-but-unsaved rows. */
+	copied?: boolean;
 }
 
 interface Rect {
@@ -719,10 +721,20 @@ function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violation
 		...monacoMountIssues(state),
 		...syntaxStateIssues(state, audit),
 		...editorStateIssues(state),
+		...copiedMarkerIssues(state),
 		...stickyStateIssues(state, audit),
 		...selectIssues(state, audit),
 		...swapViolations(state, audit.swap)
 	];
+}
+
+/** A copied row must paint its margin marker; the diff paint must not swallow it. */
+function copiedMarkerIssues(state: AuditState): string[] {
+	if (state.copied !== true) {
+		return [];
+	}
+	const markers = document.querySelectorAll('.arxml-copied-line').length;
+	return issueWhen(markers === 0, 'the copied rows did not paint their modified-line marker');
 }
 
 function monacoMountIssues(state: AuditState): string[] {

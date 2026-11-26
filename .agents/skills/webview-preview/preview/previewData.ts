@@ -28,6 +28,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'diff-collapsed-onesided', page: 'diff', width: 1400, height: 900, foldLabel: 'Items "Items"' },
 	{ name: 'diff-collapse-all', page: 'diff', width: 1400, height: 900, collapseAll: true },
 	{ name: 'diff-merge', page: 'diff', width: 1400, height: 900, merge: true },
+	{ name: 'diff-copied', page: 'diff', width: 1400, height: 900, merge: true, copied: true },
 	{ name: 'diff-swap', page: 'diff', width: 1400, height: 900, merge: true, swap: true, sash: true },
 	{ name: 'diff-rail', page: 'diff', width: 1400, height: 900, jump: 1 },
 	{ name: 'diff-nav', page: 'diff', width: 1400, height: 900, merge: true, nav: true },
@@ -51,6 +52,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'editor-syscond', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-labels', page: 'editor', width: 1400, height: 900 },
 	{ name: 'editor-dirty', page: 'editor', width: 1400, height: 900, edit: '42' },
+	{ name: 'editor-copied', page: 'editor', width: 1400, height: 900, copied: true },
 	{ name: 'editor-invalid', page: 'editor', width: 1400, height: 900, edit: 'abc', trySave: true },
 	{ name: 'editor-details', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated' },
 	{ name: 'editor-details-save', page: 'editor', width: 1400, height: 900, detailsEdit: ' updated', detailsSave: true },
@@ -457,11 +459,33 @@ function messageFor(state: PreviewState, document: unknown) {
 		: { type: 'document', document };
 }
 
+/** The rows a state pretends a merge copy wrote and the user has not saved. */
+function copiedRowsFor(state: PreviewState, document: unknown) {
+	if (state.copied !== true) {
+		return undefined;
+	}
+	if (state.page === 'diff') {
+		const rows = (document as DiffDocument).rows;
+		const right = rows
+			.filter((row) => row.right !== undefined && row.status !== 'unchanged')
+			.slice(0, 3)
+			.map((row) => (row.key.startsWith('right:') ? row.key.slice('right:'.length) : row.key));
+		return { diff: { left: [], right }, editor: [] };
+	}
+	const rows = (document as { rows?: Array<{ id: string; kind: string }> }).rows ?? [];
+	const editor = rows
+		.filter((row) => row.kind === 'parameter')
+		.slice(1, 3)
+		.map((row) => row.id);
+	return { diff: { left: [], right: [] }, editor };
+}
+
 function payloadFor(state: PreviewState, document: unknown) {
 	return {
 		state: state.name,
 		page: state.page,
 		message: messageFor(state, document),
+		copied: copiedRowsFor(state, document),
 		merge: state.merge,
 		swap: state.swap,
 		wide: state.wide,

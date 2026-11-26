@@ -26,6 +26,7 @@ suite('webview protocol', () => {
 			{ type: 'editResult', editId: 1, ok: true, revision: 3 },
 			{ type: 'editResult', editId: 2, ok: false, reason: 'not an integer', revision: 3 },
 			{ type: 'dirty', dirty: false, revision: 4 },
+			{ type: 'copyDirty', rows: ['Mod/Items/P.A'] },
 			{ type: 'flushEdits', requestId: 1 },
 			{ type: 'conditions', entries: [] },
 			{ type: 'select', nodeId: 'x' },
@@ -88,6 +89,8 @@ suite('webview protocol', () => {
 					semanticSkipped: 0,
 				},
 			},
+			{ type: 'copyDirty', rows: { left: [], right: ['Mod/Items/P.A'] } },
+			{ type: 'copyResult', ok: true, side: 'left', key: 'Mod/Items/P.A', keys: ['Mod/Items/P.A'] },
 		];
 		for (const message of host) {
 			assert.strictEqual(diffMessageType(message), message.type);
