@@ -2,7 +2,8 @@
 
 This directory is a **spike fixture**, not a shipped package. It exists to prove or
 disprove the architecture decision recorded in
-`.trellis/tasks/11-25-reusable-webview-preview-spike/`:
+`docs/contributor/WEBVIEW_PREVIEW_STACK.md` (the task record behind it is archived
+separately):
 
 - a generic Playwright core that consumes built webview assets;
 - a small per-extension adapter (build command, entry, states, audits);
