@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Current test layers and where a reusable preview tool fits"}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Verify project-specific probes stay in the adapter"}
