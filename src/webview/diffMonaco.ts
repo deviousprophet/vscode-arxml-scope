@@ -12,6 +12,8 @@ import './components/diffView/diffView.css';
 import './monaco/monaco.css';
 import type { DiffCell, DiffDocument, DiffHeader, DiffRow } from '../core/diff/diffModel';
 import { applyDiffPatch, type DiffPatch } from '../core/diff/diffPatch';
+import { minimalLineEdit } from '../core/diff/minimalEdit';
+import type { CopyDirtyRows } from '../core/copy/copyDirty';
 import type { DiffFindMatch, FindOptions } from '../core/searchModel';
 import type { DiffProviderToWebview } from '../diffProtocol';
 import {
@@ -84,6 +86,14 @@ let diffFindRequests = new Map<number, string>();
 let diffFindRequestId = 0;
 let mounted = false;
 const pendingMessages: DiffProviderToWebview[] = [];
+
+/** Rows a copy wrote and the host has not saved yet, per host side. */
+let copiedRows: CopyDirtyRows = { left: [], right: [] };
+/** The row the user just copied from, until the host answers. */
+let pendingCopy: { side: DiffSide; key: string } | undefined;
+let pendingCopyTimer: ReturnType<typeof setTimeout> | undefined;
+/** The decoration ids per synthetic model, so a refresh replaces its own set. */
+const copyDecorationIds = new WeakMap<monaco.editor.ITextModel, string[]>();
 
 if (typeof window !== 'undefined') {
 	window.addEventListener('message', function (event) {
@@ -543,6 +553,99 @@ function isEmptyDocument(doc: DiffDocument): boolean {
 	return doc.summary.changed + doc.summary.added + doc.summary.removed === 0;
 }
 
+/** The synthetic model for one host side; Swap only changes which pane shows it. */
+function modelForSide(side: DiffSide): monaco.editor.ITextModel | undefined {
+	return side === 'left' ? leftModel : rightModel;
+}
+
+function sideLines(side: DiffSide): SyntheticDocument | undefined {
+	return side === 'left' ? aligned?.left : aligned?.right;
+}
+
+/**
+ * The line of a copied row. The registry keys rows by the id the editor uses;
+ * the page keys an added row `right:<id>`, so both spellings are tried.
+ */
+function copyLine(side: DiffSide, key: string): number | undefined {
+	const lines = sideLines(side);
+	if (lines === undefined) {
+		return undefined;
+	}
+	return lines.rowLine.get(key) ?? lines.rowLine.get(`${side}:${key}`);
+}
+
+/** A copied row gets a marker in the line-decorations margin, never diff paint. */
+function copyDecoration(line: number): monaco.editor.IModelDeltaDecoration {
+	return {
+		range: new monaco.Range(line, 1, line, 1),
+		options: { isWholeLine: true, linesDecorationsClassName: 'arxml-copied-line', zIndex: 2 }
+	};
+}
+
+/** The row that was just copied from, until the host answers. */
+function pendingDecoration(line: number): monaco.editor.IModelDeltaDecoration {
+	return {
+		range: new monaco.Range(line, 1, line, 1),
+		options: { isWholeLine: true, linesDecorationsClassName: 'arxml-copy-pending', zIndex: 2 }
+	};
+}
+
+/** Repaints the copied-dirty and pending markers on both sides. */
+function refreshCopyDecorations(): void {
+	for (const side of ['left', 'right'] as const) {
+		const model = modelForSide(side);
+		if (model === undefined) {
+			continue;
+		}
+		const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+		for (const key of copiedRows[side]) {
+			const line = copyLine(side, key);
+			if (line !== undefined) {
+				decorations.push(copyDecoration(line));
+			}
+		}
+		if (pendingCopy !== undefined && pendingCopy.side === side) {
+			const line = copyLine(side, pendingCopy.key);
+			if (line !== undefined) {
+				decorations.push(pendingDecoration(line));
+			}
+		}
+		const ids = copyDecorationIds.get(model) ?? [];
+		copyDecorationIds.set(model, model.deltaDecorations(ids, decorations));
+	}
+}
+
+/** A silent host must not leave the pending marker behind. */
+const PENDING_COPY_TIMEOUT_MS = 5_000;
+
+function clearPendingCopy(): void {
+	if (pendingCopyTimer !== undefined) {
+		clearTimeout(pendingCopyTimer);
+		pendingCopyTimer = undefined;
+	}
+	if (pendingCopy === undefined) {
+		return;
+	}
+	pendingCopy = undefined;
+	refreshCopyDecorations();
+}
+
+/** Marks the clicked row as in flight before the host has written anything. */
+function startPendingCopy(side: DiffSide, key: string): void {
+	pendingCopy = { side, key };
+	if (pendingCopyTimer !== undefined) {
+		clearTimeout(pendingCopyTimer);
+	}
+	pendingCopyTimer = setTimeout(clearPendingCopy, PENDING_COPY_TIMEOUT_MS);
+	refreshCopyDecorations();
+}
+
+/** One copy gesture: paint the pending marker, then ask the host. */
+function requestCopy(side: DiffSide, key: string): void {
+	startPendingCopy(side, key);
+	postToHost({ type: 'copy', side, key });
+}
+
 function showSemanticSkip(count: number): void {
 	const skip = document.getElementById('diff-semantic-skip');
 	if (skip === null) {
@@ -574,6 +677,59 @@ function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
 	updateDiffOptions();
 	setEmpty(isEmptyDocument(next));
 	showSemanticSkip(next.semanticSkipped);
+	refreshCopyDecorations();
+	clearNotice();
+}
+
+/** Replaces only the changed lines: scroll, folds and selection survive a copy. */
+function patchModelText(model: monaco.editor.ITextModel | undefined, source: SyntheticDocument): void {
+	if (model === undefined) {
+		return;
+	}
+	const current = model.getValue();
+	if (current !== source.text) {
+		const edit = minimalLineEdit(current, source.text);
+		if (edit !== undefined) {
+			model.applyEdits([
+				{
+					range: new monaco.Range(edit.startLine, 1, edit.startLine + edit.deleteCount, 1),
+					text: edit.text
+				}
+			]);
+		}
+	}
+	setModelFolding(model, source.foldingRanges);
+}
+
+/**
+ * A copy patch changes a few rows, not the whole comparison: apply the model
+ * diff in place and restore both view states instead of rebuilding the editor.
+ */
+function applyDocumentPatch(patch: DiffPatch): void {
+	if (documentModel === undefined) {
+		return;
+	}
+	const next = applyDiffPatch(documentModel, patch);
+	const docs = buildDiffSyntheticDocuments(next);
+	const originalState = originalEditor()?.saveViewState();
+	const modifiedState = modifiedEditor()?.saveViewState();
+	patchModelText(leftModel, docs.left);
+	patchModelText(rightModel, docs.right);
+	documentModel = next;
+	aligned = docs;
+	setTitles();
+	syncToolbarState();
+	updateDiffOptions();
+	setEmpty(isEmptyDocument(next));
+	showSemanticSkip(next.semanticSkipped);
+	if (originalState !== undefined && originalState !== null) {
+		originalEditor()?.restoreViewState(originalState);
+	}
+	if (modifiedState !== undefined && modifiedState !== null) {
+		modifiedEditor()?.restoreViewState(modifiedState);
+	}
+	refreshCopyDecorations();
+	refreshFoldIndicators();
 	clearNotice();
 }
 
@@ -659,7 +815,7 @@ function gutterCopyRequest(
 function copyFromGutter(direction: DiffGutterDirection, context: DiffGutterContext | undefined): void {
 	const request = gutterCopyRequest(direction, context);
 	if (request !== undefined) {
-		postToHost({ type: 'copy', ...request });
+		requestCopy(request.side, request.key);
 	}
 }
 
@@ -1024,9 +1180,7 @@ function dispatchDocumentMessage(message: DiffProviderToWebview): boolean {
 		return true;
 	}
 	if (message.type === 'documentPatch') {
-		if (documentModel !== undefined) {
-			applyDocument(applyDiffPatch(documentModel, message.patch), semantic);
-		}
+		applyDocumentPatch(message.patch);
 		return true;
 	}
 	return false;
@@ -1047,6 +1201,16 @@ function dispatchViewMessage(message: DiffProviderToWebview): boolean {
 		applyLabelsMessage(message.labels);
 		return true;
 	}
+	if (message.type === 'copyDirty') {
+		copiedRows = message.rows;
+		clearPendingCopy();
+		refreshCopyDecorations();
+		return true;
+	}
+	if (message.type === 'copyResult') {
+		clearPendingCopy();
+		return true;
+	}
 	return false;
 }
 
@@ -1065,6 +1229,8 @@ function dispatchChromeMessage(message: DiffProviderToWebview): boolean {
 		return true;
 	}
 	if (message.type === 'error') {
+		// A refused or failed copy must not leave its pending marker behind.
+		clearPendingCopy();
 		setNotice(message.message, 'error');
 		return true;
 	}
@@ -1175,7 +1341,7 @@ function handleMergeClick(
 	if (row === undefined) {
 		return;
 	}
-	postToHost({ type: 'copy', side: copyHostSide(pane, row), key: row.key });
+	requestCopy(copyHostSide(pane, row), row.key);
 }
 
 function eventLine(event: monaco.editor.IEditorMouseEvent): number | undefined {

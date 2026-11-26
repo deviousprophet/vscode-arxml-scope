@@ -38,6 +38,50 @@
 	opacity: 0.55;
 }
 
+/* Copied-but-unsaved rows. The margin bar is the modified-line reference; the
+ * soft line background sits under selection and the current-line overlay, so
+ * the editor's own focus treatment keeps working. The diff page uses only the
+ * margin bar, so added/removed/changed paint keeps its meaning. */
+.monaco-editor .arxml-copied-line {
+	width: 3px;
+	margin-left: 3px;
+	background-color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+}
+
+.monaco-editor .arxml-copied-line-bg {
+	background-color: rgba(226, 192, 141, 0.14);
+}
+
+@supports (background-color: color-mix(in srgb, white 10%, transparent)) {
+	.monaco-editor .arxml-copied-line-bg {
+		background-color: color-mix(
+			in srgb,
+			var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d) 14%,
+			transparent
+		);
+	}
+}
+
+/* One copy is in flight; the marker clears on the host answer or the timeout. */
+.monaco-editor .arxml-copy-pending {
+	width: 3px;
+	margin-left: 3px;
+	background-color: var(--vscode-progressBar-background, #0e70c0);
+	animation: arxml-copy-pending-pulse 1s ease-in-out infinite;
+}
+
+@keyframes arxml-copy-pending-pulse {
+	50% {
+		opacity: 0.35;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.monaco-editor .arxml-copy-pending {
+		animation: none;
+	}
+}
+
 /* A folded diff container whose subtree carries a change. Glyph-margin only,
  * so the indicator does not add text or shift the line. The cell stays clear;
  * only the pseudo-element dot is painted. */

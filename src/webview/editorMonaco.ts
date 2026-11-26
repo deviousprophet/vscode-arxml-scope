@@ -158,6 +158,8 @@ let localUndoActive = false;
 let editSequence = 0;
 let hostRevision = 0;
 let hostDirty = false;
+/** Row ids a merge copy wrote into this document and the user has not saved. */
+let copiedIds = new Set<string>();
 /** True once the host proves it speaks the revisioned edit protocol. */
 let hostAcks = false;
 const flushRequests = new Set<number>();
@@ -469,7 +471,27 @@ function buildDecorations(): monaco.editor.IModelDeltaDecoration[] {
 	const decorations: monaco.editor.IModelDeltaDecoration[] = [];
 	appendSubtreeDecorations(decorations);
 	appendDisabledDecorations(decorations);
+	appendCopiedDecorations(decorations);
 	return decorations;
+}
+
+/** Copied rows carry a modified-line margin marker until the document is saved. */
+function appendCopiedDecorations(decorations: monaco.editor.IModelDeltaDecoration[]): void {
+	for (const id of copiedIds) {
+		const line = lineOf(id);
+		if (line === undefined) {
+			continue;
+		}
+		decorations.push({
+			range: new monaco.Range(line, 1, line, 1),
+			options: {
+				isWholeLine: true,
+				className: 'arxml-copied-line-bg',
+				linesDecorationsClassName: 'arxml-copied-line',
+				zIndex: 1
+			}
+		});
+	}
 }
 
 function appendSubtreeDecorations(decorations: monaco.editor.IModelDeltaDecoration[]): void {
@@ -2393,6 +2415,10 @@ function dispatchEditMessage(message: EditorProviderToWebview): boolean {
 		handleDirtyMessage(message);
 		return true;
 	}
+	if (message.type === 'copyDirty') {
+		handleCopyDirtyMessage(message);
+		return true;
+	}
 	if (message.type === 'flushEdits') {
 		handleFlushEditsMessage(message);
 		return true;
@@ -2513,6 +2539,14 @@ function handleDirtyMessage(message: EditorMessage<'dirty'>): void {
 	hostRevision = Math.max(hostRevision, message.revision);
 	hostDirty = message.dirty;
 	updateDirtyStatus();
+}
+
+function handleCopyDirtyMessage(message: EditorMessage<'copyDirty'>): void {
+	if (!Array.isArray(message.rows)) {
+		return;
+	}
+	copiedIds = new Set(message.rows.filter((row): row is string => typeof row === 'string'));
+	applyDecorations();
 }
 
 function handleFlushEditsMessage(message: EditorMessage<'flushEdits'>): void {

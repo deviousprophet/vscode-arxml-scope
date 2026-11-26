@@ -13,6 +13,8 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import type { MissingAncestor } from '../core/copy/copyTypes';
+import { copiedRowKeys } from '../core/copy/copyDirty';
+import type { CopyDirtyRows } from '../core/copy/copyDirty';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { FileLabel, compareTitle } from '../core/diff/diffModel';
 import type { DiffCell, DiffDocument } from '../core/diff/diffModel';
@@ -23,6 +25,8 @@ import { fileName } from './compareSelection';
 import { gateReason } from './ecucEditorProvider';
 import { revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
+import { copyDirty } from './copyDirty';
+import { CopyClock, logCopyTiming } from './copyTiming';
 import { diffMessageType } from '../diffProtocol';
 import type { DiffWebviewToProvider } from '../diffProtocol';
 
@@ -193,6 +197,9 @@ export class DiffPanel {
 		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 		let documentGeneration = 0;
 		let mergeMode = false;
+		/** The copy in flight: one clock, and the row key the page shows as pending. */
+		let copyClock: CopyClock | undefined;
+		let copyKey: string | undefined;
 
 		panel.webview.html = shellHtml(panel, context);
 
@@ -214,6 +221,20 @@ export class DiffPanel {
 			paneLabel(leftLabel.name, isDirty(leftUri)),
 			paneLabel(rightLabel.name, isDirty(rightUri)),
 		];
+
+		/** The copied-but-unsaved rows each side currently owns. */
+		const copyRowsNow = (): CopyDirtyRows => ({
+			left: copyDirty.keys(leftUri),
+			right: copyDirty.keys(rightUri),
+		});
+
+		/** Pushes the copied-row state; every page that shows a side reads the same rows. */
+		const postCopyDirty = async (): Promise<void> => {
+			if (disposed) {
+				return;
+			}
+			await panel.webview.postMessage({ type: 'copyDirty', rows: copyRowsNow() });
+		};
 
 		const postDocument = async (): Promise<void> => {
 			current = { ...current, labels: labelsNow() };
@@ -422,6 +443,7 @@ export class DiffPanel {
 		const onReady = (): void => {
 			boot.settle();
 			void postDocument();
+			void postCopyDirty();
 			void panel.webview.postMessage({ type: 'mergeMode', enabled: mergeMode });
 		};
 
@@ -477,10 +499,41 @@ export class DiffPanel {
 		const refreshSkip = new Set<string>();
 
 		/**
-		 * One copy reaches the engine as the same edit it applied: `doc.update` moves
-		 * the engine text, `diff.patch` answers with the changed rows. A refusal falls
-		 * back to the debounced rebuild with a notice.
+		 * Remembers one applied copy and answers the page. `side` is the edited
+		 * (destination) side; the rows come from the patched document, so a
+		 * synthesized ancestor chain is marked with the element it was created for.
 		 */
+		const recordCopied = async (
+			side: 'left' | 'right',
+			plan: { start: number; end: number; text: string }
+		): Promise<void> => {
+			const targetUri = side === 'left' ? leftUri : rightUri;
+			const version = side === 'left' ? preparedLeft.version : preparedRight.version;
+			const span = { start: plan.start, end: plan.start + plan.text.length };
+			const keys = copiedRowKeys(current.rows, side, span);
+			copyDirty.record(targetUri, {
+				side,
+				keys,
+				start: span.start,
+				end: span.end,
+				text: plan.text,
+				version,
+			});
+			await postCopyDirty();
+			await panel.webview.postMessage({
+				type: 'copyResult',
+				ok: true,
+				side: otherSideOf(side),
+				key: copyKey ?? '',
+				keys,
+			});
+			copyClock?.lap('post');
+			if (copyClock !== undefined) {
+				logCopyTiming(copyClock.finish(keys.length));
+				copyClock = undefined;
+			}
+		};
+
 		/** Applies a patch answer; false when the engine refused and a rebuild follows. */
 		const applyPatchAnswer = async (result: EngineDiffPatchResult): Promise<boolean> => {
 			if (result.patch === undefined) {
@@ -492,6 +545,11 @@ export class DiffPanel {
 			return true;
 		};
 
+		/**
+		 * One copy reaches the engine as the same edit it applied: `doc.update` moves
+		 * the engine text, `diff.patch` answers with the changed rows. A refusal falls
+		 * back to the debounced rebuild with a notice.
+		 */
 		const patchAfterCopy = async (
 			side: 'left' | 'right',
 			plan: { start: number; end: number; text: string }
@@ -504,13 +562,17 @@ export class DiffPanel {
 					engineSide(preparedRight, rightLabel),
 					{ side, start: plan.start, end: plan.end, text: plan.text }
 				);
+				copyClock?.lap('patch');
 				if (await applyPatchAnswer(result)) {
+					await recordCopied(side, plan);
 					return;
 				}
 			} catch (error) {
 				await postError(`The comparison was rebuilt after this copy: ${errorMessage(error)}`);
 			}
 			await refreshNow();
+			copyClock?.lap('patch');
+			await recordCopied(side, plan);
 		};
 
 		/** Applies one planned span as a single edit on `doc`. */
@@ -528,6 +590,7 @@ export class DiffPanel {
 				return;
 			}
 			// The panel's snapshot now reflects the edit it made.
+			copyClock?.lap('apply');
 			if (side === 'left') {
 				preparedLeft = { ...preparedLeft, version: doc.version };
 			} else {
@@ -677,6 +740,7 @@ export class DiffPanel {
 				return undefined;
 			}
 			const plan = await engine.planCopy(request);
+			copyClock?.lap('plan');
 			if (!plan.ok) {
 				await postError(plan.reason);
 				return undefined;
@@ -781,10 +845,14 @@ export class DiffPanel {
 				return;
 			}
 			copyInFlight = true;
+			copyClock = new CopyClock();
+			copyKey = key;
 			try {
 				await runCopy(side, located);
 			} finally {
 				copyInFlight = false;
+				copyClock = undefined;
+				copyKey = undefined;
 			}
 		};
 
@@ -919,6 +987,14 @@ export class DiffPanel {
 				void reveal(message.side, message.key);
 			}
 		};
+
+		disposables.push(
+			copyDirty.onDidChange((changed) => {
+				if (changed === leftUri.toString() || changed === rightUri.toString()) {
+					void postCopyDirty();
+				}
+			})
+		);
 
 		disposables.push(
 			vscode.workspace.onDidChangeTextDocument((event) => {

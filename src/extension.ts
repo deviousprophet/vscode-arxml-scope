@@ -8,6 +8,7 @@ import { CompareSelectionStore } from './host/compareSelection';
 import { IndexService } from './host/indexService';
 import { ValidationService } from './host/validationService';
 import { registerTextFeatures } from './host/textFeatures';
+import { copyDirty } from './host/copyDirty';
 import { resolveEngine } from './host/engine/engineLoader';
 import { registerEngineStatus } from './host/engineStatus';
 import type { CoreEngine } from './host/engine/coreEngine';
@@ -48,6 +49,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<ArxmlS
 	const validationService = new ValidationService(indexService);
 	context.subscriptions.push({ dispose: () => validationService.dispose() });
 	registerTextFeatures(context, indexService);
+	// One registry follows document edits and saves so the diff page and the
+	// ECUC editor agree on which rows a merge copy left dirty.
+	copyDirty.watch(context);
 	// The ECUC editor. `priority: "option"` in the manifest is what keeps a normally
 	// opened `.arxml` in the text editor: the view is reachable only
 	// through the command, the menu entry, or *Open With…*.
