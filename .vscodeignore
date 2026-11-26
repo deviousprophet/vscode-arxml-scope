@@ -1,4 +1,9 @@
 rust-toolchain.toml
+deny.toml
+.nvmrc
+.npmrc
+patches/**
+images/icon.svg
 out/**
 node_modules/**
 src/**
