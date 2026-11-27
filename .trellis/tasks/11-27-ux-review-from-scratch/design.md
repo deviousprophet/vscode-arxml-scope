@@ -50,6 +50,14 @@ measured webview width and test 100% plus one changed zoom (e.g. 80%).
 - No `docs/contributor` preview pages or docs index rows.
 - The report stays in the task; the skill references are the durable tool documentation.
 
+## Design review
+
+After preview/host evidence, load
+`.agents/skills/ux-review/references/DESIGN_REVIEW.md` and run the adapted Floor/Reflex/Finish
+gates cold. The reference is adapted from Hallmark's gate model for a VS Code desktop IDE;
+marketing-page rules (hero, themes, 40px touch, 320–1920 breakpoints) are not imported. Floor
+failures are at least Major; map findings into the existing four dimensions, not a fifth score.
+
 ## Agent workflow
 
 The main agent dispatches `ux-reviewer` with the active task path. The reviewer resolves the task,

@@ -33,6 +33,9 @@
 
 ## Phase 4 — Findings and score
 
+- [ ] Run the design-review gates from
+      `.agents/skills/ux-review/references/DESIGN_REVIEW.md` against the evidence; record
+      Floor/Reflex/Finish findings and map them into the four dimensions.
 - [ ] One finding file per issue under `research/findings/`.
 - [ ] Order Critical → Major → Minor; include repro, expected vs actual, heuristic, evidence,
       confidence.
