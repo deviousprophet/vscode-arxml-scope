@@ -59,6 +59,12 @@ desktop IDE; marketing-page rules (hero, themes, 40px touch, 320–1920 breakpoi
 imported. Floor
 failures are at least Major; map findings into the existing four dimensions, not a fifth score.
 
+Before the cold review, run the cross-state stability probe in
+`.agents/skills/ux-review/references/STATE_STABILITY.md` and `scripts/preview/state-diff.mjs`.
+Compare a baseline with every variant at the same viewport; stable controls keep their rect, order
+and visible identity within 1 px. A status, label, count or loading indicator getting a stable slot
+is the normal fix; it must not move a toolbar action.
+
 ## Agent workflow
 
 The main agent dispatches `ux-reviewer` with the active task path. The reviewer resolves the task,
