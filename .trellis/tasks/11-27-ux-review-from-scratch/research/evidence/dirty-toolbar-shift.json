@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-28",
+  "source": "preview editor / editor-dirty at 1400x900",
+  "state": "editor-dirty",
+  "clean": {
+    "editor-dirty-status": { "display": "none", "hidden": true, "width": 0 },
+    "collapse-all": { "x": 8, "y": 6, "width": 60, "height": 48 },
+    "expand-all": { "x": 74, "y": 6, "width": 60, "height": 48 },
+    "toggle-sidebar": { "x": 1332, "y": 6, "width": 60, "height": 48 }
+  },
+  "dirty": {
+    "editor-dirty-status": {
+      "display": "flex",
+      "hidden": false,
+      "x": 8,
+      "y": 22.296875,
+      "width": 106.25,
+      "height": 15.390625,
+      "text": "● Unsaved changes"
+    },
+    "collapse-all": { "x": 120.25, "y": 6, "width": 60, "height": 48 },
+    "expand-all": { "x": 186.25, "y": 6, "width": 60, "height": 48 },
+    "toggle-sidebar": { "x": 1332, "y": 6, "width": 60, "height": 48 }
+  },
+  "shiftPx": 112.25,
+  "expected": "Collapse and Expand keep their clean-state x positions when the dirty status appears; the status gets a stable slot that does not move the controls."
+}

@@ -166,6 +166,16 @@
   leaves a duplicate tab the user must close manually. **Actionable Fix:** close the custom editor
   tab after showing the text editor in `replace`, or rename the custom tab to `(ECUC editor)` and
   document the behavior.
+- **[Minor] The dirty status pushes Collapse/Expand 112 px to the right (ECUC editor toolbar):**
+  `● Unsaved changes` is the first flex item. In the clean state it is hidden and `Collapse` starts
+  at x=8; once the draft appears it takes 106.25 px at x=8 and moves `Collapse` to x=120.25 and
+  `Expand` to x=186.25 — a **112.25 px shift** while the user is typing. Evidence:
+  `research/evidence/dirty-toolbar-shift.json`,
+  `research/evidence/preview/editor.png`, `research/evidence/preview/editor-dirty.png`;
+  `research/findings/UX-16-dirty-status-toolbar-shift.md`. **UX Impact:** a control the user may
+  reach for moves under the cursor when the dirty state arrives; the toolbar does not feel stable.
+  **Actionable Fix:** give the status a reserved slot or move it after the controls so the leading
+  buttons keep their x position; add a cross-state audit assertion for the button rects.
 - **[Minor] The find count reads "? of N" in both the diff and the editor (find widget):** the total
   is right, the current index is a literal question mark — `? of 3` in the diff and `? of 1` in the
   ECUC editor — contrary to the documented `1 of N`. Evidence:
