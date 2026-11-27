@@ -1,0 +1,287 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T03:10:45.420Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-IdB8Kz",
+  "cdp": {
+    "port": "56373",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "compare-two",
+      "startedAt": "2026-11-27T03:10:45.509Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Compare Two opened the diff",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "both pane labels are present",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\entry-20-compare-two-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\entry-20-compare-two-webview.png"
+      ],
+      "observations": {
+        "toolbar": 11
+      },
+      "finishedAt": "2026-11-27T03:10:48.592Z"
+    },
+    {
+      "id": "engine-index",
+      "startedAt": "2026-11-27T03:10:48.592Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "engine status produced a notification",
+          "ok": true,
+          "detail": "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 13328"
+        },
+        {
+          "name": "status bar shows the index count",
+          "ok": true,
+          "detail": " |  ARXML Scope: 5 files indexed · cross-file checks off (no project) |  ARXML Engine |  0 \n 0 \n 2 |  | "
+        },
+        {
+          "name": "rebuild leaves a status count",
+          "ok": true,
+          "detail": " |  ARXML Scope: 5 files indexed · cross-file checks off (no project) |  ARXML Engine |  0 \n 0 \n 2 |  | "
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\engine-01-status-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\index-04-rebuilt-workbench.png"
+      ],
+      "observations": {
+        "notifications": [
+          "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 13328"
+        ],
+        "statusBefore": " |  ARXML Scope: 5 files indexed · cross-file checks off (no project) |  ARXML Engine |  0 \n 0 \n 2 |  | ",
+        "statusAfter": " |  ARXML Scope: 5 files indexed · cross-file checks off (no project) |  ARXML Engine |  0 \n 0 \n 2 |  | "
+      },
+      "finishedAt": "2026-11-27T03:10:53.424Z"
+    },
+    {
+      "id": "a11y",
+      "startedAt": "2026-11-27T03:10:53.424Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "command palette opens the ECUC editor by keyboard",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "editor toolbar exposes a keyboard focus order",
+          "ok": true,
+          "detail": "collapse-all > expand-all > toggle-sidebar > native-edit-context > native-edit-context > native-edit-context"
+        },
+        {
+          "name": "diff toolbar exposes 11 focusable controls",
+          "ok": true,
+          "detail": "diff-view-all > diff-view-diff > diff-mode-semantic > diff-mode-strict > diff-prev > diff-next > diff-merge > diff-swap > diff-collapse-all > diff-expand-all > DIV > DIV"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-01-palette-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-01-palette-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-02-editor-focus-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-02-editor-focus-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-03-diff-focus-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-03-diff-focus-webview.png"
+      ],
+      "observations": {
+        "editorTabOrder": [
+          "collapse-all",
+          "expand-all",
+          "toggle-sidebar",
+          "native-edit-context",
+          "native-edit-context",
+          "native-edit-context"
+        ],
+        "diffTabOrder": [
+          "diff-view-all",
+          "diff-view-diff",
+          "diff-mode-semantic",
+          "diff-mode-strict",
+          "diff-prev",
+          "diff-next",
+          "diff-merge",
+          "diff-swap",
+          "diff-collapse-all",
+          "diff-expand-all",
+          "DIV",
+          "DIV"
+        ]
+      },
+      "finishedAt": "2026-11-27T03:11:00.234Z"
+    },
+    {
+      "id": "stale-first",
+      "startedAt": "2026-11-27T03:11:00.234Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "the first file is really gone",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "missing first file is reported, not opaquely opened",
+          "ok": false,
+          "detail": ""
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\entry-16-stale-first-workbench.png"
+      ],
+      "observations": {
+        "existsAfterDelete": false,
+        "notifications": [],
+        "tabs": [
+          {
+            "label": "stale-first.arxml ↔ right.arxml",
+            "viewType": "mainThreadWebview-vscode-arxml-scope.diff",
+            "dirty": false
+          }
+        ]
+      },
+      "finishedAt": "2026-11-27T03:11:04.119Z"
+    },
+    {
+      "id": "same-file",
+      "startedAt": "2026-11-27T03:11:04.119Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "same-file compare resolves to a stated outcome",
+          "ok": true,
+          "detail": "{\"notifications\":[\"Select exactly two .arxml files to compare.\"],\"webviews\":[]}"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\entry-24-same-file-workbench.png"
+      ],
+      "observations": {
+        "notifications": [
+          "Select exactly two .arxml files to compare."
+        ],
+        "tabs": []
+      },
+      "finishedAt": "2026-11-27T03:11:06.511Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "entry-20-compare-two",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "engine-01-status",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "index-04-rebuilt",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "a11y-01-palette",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "a11y-02-editor-focus",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "a11y-03-diff-focus",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "entry-16-stale-first",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "entry-24-same-file",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\entry-20-compare-two-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\entry-20-compare-two-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\engine-01-status-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\index-04-rebuilt-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-01-palette-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-01-palette-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-02-editor-focus-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-02-editor-focus-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-03-diff-focus-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\a11y-03-diff-focus-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\entry-16-stale-first-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\entry-24-same-file-workbench.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T03:11:06.512Z"
+}

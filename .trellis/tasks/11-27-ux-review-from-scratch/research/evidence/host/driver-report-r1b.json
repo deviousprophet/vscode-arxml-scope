@@ -1,0 +1,96 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T03:13:45.157Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-RB4Mbe",
+  "cdp": {
+    "port": "55843",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "capture-fidelity",
+      "startedAt": "2026-11-27T03:13:45.201Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the capture records the workbench zoom level",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "zooming out widens the webview CSS pixel width",
+          "ok": true,
+          "detail": "1082 -> 1369"
+        }
+      ],
+      "screenshots": [],
+      "observations": {
+        "zoom0": {
+          "page": {
+            "width": 1440,
+            "height": 900,
+            "dpr": 1
+          },
+          "frame": {
+            "width": 1082,
+            "height": 777,
+            "dpr": 1
+          },
+          "zoom": 0
+        },
+        "zoomOut": {
+          "page": {
+            "width": 1728,
+            "height": 1080,
+            "dpr": 0.8333333134651184
+          },
+          "frame": {
+            "width": 1369,
+            "height": 949,
+            "dpr": 0.8333333134651184
+          },
+          "zoom": 0
+        }
+      },
+      "finishedAt": "2026-11-27T03:13:50.062Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "capture-zoom-100",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "capture-zoom-80",
+      "page": {
+        "width": 1728,
+        "height": 1080,
+        "dpr": 0.8333333134651184
+      },
+      "frame": {
+        "width": 1369,
+        "height": 949,
+        "dpr": 0.8333333134651184
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\capture-zoom-100-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\capture-zoom-100-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\capture-zoom-80-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\capture-zoom-80-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T03:13:50.063Z"
+}

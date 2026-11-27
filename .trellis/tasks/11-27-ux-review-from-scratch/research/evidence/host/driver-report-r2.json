@@ -1,0 +1,366 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T03:08:47.564Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-XJnuWT",
+  "cdp": {
+    "port": "55353",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "diff",
+      "startedAt": "2026-11-27T03:08:47.651Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "11 toolbar controls",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "semantic is the default mode",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Strict toggle flips",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "name": "diff find reports a match",
+          "ok": true,
+          "detail": "? of 3"
+        },
+        {
+          "name": "next-diff jumps to the changed row on a long diff",
+          "ok": true,
+          "detail": "module P.Big \"Big\" ->         P233 = 233"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-01-loaded-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-01-loaded-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-02-strict-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-02-strict-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-03-find-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-03-find-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-04-next-long-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-04-next-long-webview.png"
+      ],
+      "observations": {
+        "initialMode": "true",
+        "strict": {
+          "strict": "true",
+          "status": ""
+        },
+        "findCount": "? of 3",
+        "diffScroll": {
+          "scrollBefore": {
+            "top": 0,
+            "firstLine": "module Pkg.Diff.ModAlpha \"ModAlpha\""
+          },
+          "scrollAfter": {
+            "top": 0,
+            "firstLine": "module Pkg.Diff.ModAlpha \"ModAlpha\""
+          }
+        },
+        "bigVisible": {
+          "visibleBefore": "module P.Big \"Big\"",
+          "visibleAfter": "        P233 = 233"
+        }
+      },
+      "finishedAt": "2026-11-27T03:08:56.882Z"
+    },
+    {
+      "id": "merge",
+      "startedAt": "2026-11-27T03:08:56.882Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "Merge turns on",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "a changed hunk exists",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "copy action exists in the hunk toolbar",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "receiving pane shows the unsaved marker",
+          "ok": true,
+          "detail": "left.arxml\n↔\nright.arxml •\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n"
+        },
+        {
+          "name": "a document is dirty after the copy",
+          "ok": true,
+          "detail": [
+            "right.arxml"
+          ]
+        },
+        {
+          "name": "Ctrl+S clears the dirty documents",
+          "ok": false,
+          "detail": [
+            "right.arxml"
+          ]
+        },
+        {
+          "name": "save wrote the copy to right.arxml",
+          "ok": false,
+          "detail": "7724 -> 7724 bytes"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-01-on-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-01-on-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-02-copied-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-02-copied-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-03-save-paths-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-03-saved-workbench.png"
+      ],
+      "observations": {
+        "copyAction": {
+          "copyCount": 1,
+          "copyVisible": true,
+          "copyBox": {
+            "x": 703,
+            "y": 257,
+            "width": 20,
+            "height": 18
+          }
+        },
+        "paneHasDirtyMark": true,
+        "dirtyTabs": [
+          "right.arxml"
+        ],
+        "dirtyAfterSave": [
+          "right.arxml"
+        ],
+        "rightChanged": false,
+        "rightTabCount": 1,
+        "dirtyAfterTabSave": [],
+        "tabSaveWorked": true
+      },
+      "finishedAt": "2026-11-27T03:09:20.555Z"
+    },
+    {
+      "id": "stale-copy",
+      "startedAt": "2026-11-27T03:09:20.555Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "stale snapshot raised the Reload/Cancel modal",
+          "ok": false,
+          "detail": ""
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-10-stale-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-10-stale-webview.png"
+      ],
+      "observations": {
+        "copyBox": {
+          "x": 851,
+          "y": 517.5,
+          "width": 20,
+          "height": 18
+        },
+        "contentChanged": true,
+        "dialogText": ""
+      },
+      "finishedAt": "2026-11-27T03:09:25.783Z"
+    },
+    {
+      "id": "stale-node",
+      "startedAt": "2026-11-27T03:09:25.783Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "stale save is refused",
+          "ok": true,
+          "detail": "The node is no longer in the file."
+        },
+        {
+          "name": "refusal is not only the top strip",
+          "ok": true,
+          "detail": "The node is no longer in the file."
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-16-stale-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-16-stale-webview.png"
+      ],
+      "observations": {
+        "renamed": true,
+        "detailsStatus": "The node is no longer in the file.",
+        "dirtyHidden": false
+      },
+      "finishedAt": "2026-11-27T03:09:33.086Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "diff-01-loaded",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-02-strict",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-03-find",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-04-next-long",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-01-on",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-02-copied",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-03-save-paths",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "merge-03-saved",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 300,
+        "height": 150,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-10-stale",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "edit-16-stale",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 777,
+        "dpr": 1
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-01-loaded-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-01-loaded-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-02-strict-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-02-strict-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-03-find-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-03-find-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-04-next-long-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\diff-04-next-long-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-01-on-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-01-on-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-02-copied-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-02-copied-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-03-save-paths-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-03-saved-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-10-stale-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\merge-10-stale-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-16-stale-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-16-stale-webview.png"
+  ],
+  "errors": [
+    {
+      "stage": "screenshot:merge-03-saved",
+      "message": "locator.screenshot: Timeout 14996.498999999996ms exceeded.\nCall log:\n  - taking element screenshot\n    - disabled all CSS animations\n  - waiting for fonts to load...\n  - fonts loaded\n  - attempting scroll into view action\n    - waiting for element to be stable\n",
+      "at": "2026-11-27T03:09:20.555Z"
+    }
+  ],
+  "finishedAt": "2026-11-27T03:09:33.086Z"
+}

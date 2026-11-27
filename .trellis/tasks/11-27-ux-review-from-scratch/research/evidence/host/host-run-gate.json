@@ -1,0 +1,10 @@
+{
+  "_type": "host-run",
+  "startedAt": "2026-11-27T03:23:39.343Z",
+  "finishedAt": "2026-11-27T03:23:49.655Z",
+  "ok": true,
+  "mode": "normal",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-8rUVn7",
+  "cdpPort": 50169,
+  "outDir": "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host"
+}

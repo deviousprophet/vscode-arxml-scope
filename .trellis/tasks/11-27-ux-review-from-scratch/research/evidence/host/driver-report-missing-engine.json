@@ -1,0 +1,68 @@
+{
+  "mode": "missing-engine",
+  "startedAt": "2026-11-27T03:11:34.398Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-alxgzV",
+  "cdp": {
+    "port": "52553",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "missing-engine",
+      "startedAt": "2026-11-27T03:11:34.460Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "a startup error is shown",
+          "ok": true,
+          "detail": "Reload and Enable Extensions\nAll installed extensions are temporarily disabled. / Activating extension 'deviousprophet.vscode-arxml-scope' failed: Rust engine is not built at h:\\workspace\\vscode-arxml-scope\\dist\\engine\\win32-x64\\arxml-engin"
+        },
+        {
+          "name": "the error names the engine or platform",
+          "ok": true,
+          "detail": "Reload and Enable Extensions\nAll installed extensions are temporarily disabled. / Activating extension 'deviousprophet.vscode-arxml-scope' failed: Rust engine is not built at h:\\workspace\\vscode-arxml-scope\\dist\\engine\\win32-x64\\arxml-engin"
+        },
+        {
+          "name": "no ARXML commands are registered",
+          "ok": true,
+          "detail": "{\"vscode-arxml-scope.openEcucEditor\":false,\"vscode-arxml-scope.showEngineStatus\":false,\"vscode-arxml-scope.rebuildIndex\":false}"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\first-02-missing-engine-workbench.png"
+      ],
+      "observations": {
+        "notifications": [
+          "Reload and Enable Extensions\nAll installed extensions are temporarily disabled.",
+          "Activating extension 'deviousprophet.vscode-arxml-scope' failed: Rust engine is not built at h:\\workspace\\vscode-arxml-scope\\dist\\engine\\win32-x64\\arxml-engine.exe; run \"npm run engine:build\" (1 is the host protocol).",
+          "ARXML Scope: Rust engine is not built at h:\\workspace\\vscode-arxml-scope\\dist\\engine\\win32-x64\\arxml-engine.exe; run \"npm run engine:build\" (1 is the host protocol)"
+        ],
+        "statusBar": " |  0 \n 0 |  | ",
+        "commands": {
+          "vscode-arxml-scope.openEcucEditor": false,
+          "vscode-arxml-scope.showEngineStatus": false,
+          "vscode-arxml-scope.rebuildIndex": false
+        }
+      },
+      "finishedAt": "2026-11-27T03:11:37.128Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "first-02-missing-engine",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\first-02-missing-engine-workbench.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T03:11:37.128Z"
+}

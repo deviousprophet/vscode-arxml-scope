@@ -1,0 +1,9 @@
+{"file": ".agents/skills/ux-review/SKILL.md", "reason": "Single skill entry point for Preview and Host modes; commands and guardrails."}
+{"file": ".agents/skills/ux-review/references/WEBVIEW_PREVIEW.md", "reason": "43-state table, commands, limits and capture fidelity for the preview pass."}
+{"file": ".agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md", "reason": "Host runner architecture, CDP evidence and the preview/host split."}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Preview execution rules, audit invariants and proof boundaries."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Test-layer placement for preview and host evidence."}
+{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Editor, diff and merge contracts and error paths used by the journeys."}
+{"file": "docs/user/ECUC_EDITOR.md", "reason": "User-facing editor journeys, settings and limitations."}
+{"file": "docs/user/DIFF.md", "reason": "User-facing diff journeys, navigation, merge and limits."}
+{"file": "docs/user/MERGE.md", "reason": "User-facing merge copy, refusal and save journeys."}

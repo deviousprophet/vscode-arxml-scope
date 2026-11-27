@@ -1,0 +1,117 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T03:25:54.605Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-LWWwG3",
+  "cdp": {
+    "port": "63785",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "save-continuity",
+      "startedAt": "2026-11-27T03:25:54.646Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "a parameter row is visible after scrolling",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the save clears the dirty strip",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the document was scrolled away from the top before the save",
+          "ok": true,
+          "detail": "package P -> P68 = 68"
+        },
+        {
+          "name": "the scroll anchor survives the save",
+          "ok": true,
+          "detail": "P68 = 68 / } -> P68 = 68 / }"
+        },
+        {
+          "name": "the selected row and Details stay on the edited row after the save",
+          "ok": true,
+          "detail": "parameter / P99 / Definition / /P/Big/C/P99 -> parameter / P99 / Definition / /P/Big/C/P99"
+        },
+        {
+          "name": "the edited row stays in view after the save",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the editor keeps focus after the save",
+          "ok": true,
+          "detail": "DIV native-edit-context"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.out\\ux-save-fix2\\save-continuity-before-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.out\\ux-save-fix2\\save-continuity-before-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.out\\ux-save-fix2\\save-continuity-after-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.out\\ux-save-fix2\\save-continuity-after-webview.png"
+      ],
+      "observations": {
+        "targetText": "P99 = 99",
+        "beforeDetails": "parameter\nP99\nDefinition\n/P/Big/C/P99\nType\nInteger\nValue\nDecimal\n99\nHexadecimal\n0x63\nBinary\n0b01100011\nReveal in source",
+        "beforeSave": {
+          "scrollTop": 0,
+          "activeTag": "DIV",
+          "activeClass": "native-edit-context",
+          "firstLine": "P68 = 68",
+          "lastLine": "}"
+        },
+        "afterSave": {
+          "scrollTop": 0,
+          "activeTag": "DIV",
+          "activeClass": "native-edit-context",
+          "firstLine": "P68 = 68",
+          "lastLine": "}"
+        },
+        "afterDetails": "parameter\nP99\nDefinition\n/P/Big/C/P99\nType\nInteger\nValue\nDecimal\n91\nHexadecimal\n0x5B\nBinary\n0b01011011\nReveal in source"
+      },
+      "finishedAt": "2026-11-27T03:26:01.655Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "save-continuity-before",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "save-continuity-after",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.out\\ux-save-fix2\\save-continuity-before-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.out\\ux-save-fix2\\save-continuity-before-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.out\\ux-save-fix2\\save-continuity-after-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.out\\ux-save-fix2\\save-continuity-after-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T03:26:01.655Z"
+}

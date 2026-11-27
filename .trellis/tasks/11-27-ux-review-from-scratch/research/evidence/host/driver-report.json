@@ -1,0 +1,110 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T03:23:42.232Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-8rUVn7",
+  "cdp": {
+    "port": "50169",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "gate",
+      "startedAt": "2026-11-27T03:23:42.327Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "editor webview frame",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "editor tab is the ECUC custom editor",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "ContKeep row rendered",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Details populated from row selection",
+          "ok": true,
+          "detail": "container\nContKeep\nShort name\nDefinition\nFind references\nReveal in source"
+        },
+        {
+          "name": "compareToStaged loaded a diff webview",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "diff names both files",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-01-editor-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-01-editor-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-02-diff-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-02-diff-webview.png"
+      ],
+      "observations": {
+        "tabs": [
+          {
+            "label": "left.arxml",
+            "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-8rUVn7\\left.arxml",
+            "dirty": false
+          },
+          {
+            "label": "left.arxml",
+            "viewType": "vscode-arxml-scope.ecucEditor",
+            "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-8rUVn7\\left.arxml",
+            "dirty": false
+          }
+        ],
+        "detailsExcerpt": "container\nContKeep\nShort name\nDefinition\nFind references\nReveal in source",
+        "diffExcerpt": "left.arxml\n↔\nright.arxml\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\nmodule Pkg.Diff.ModAlpha \"ModAlpha\"\n{\n    ContKeep \"ContKeep\"\n    {\n        Changed = 10\n        "
+      },
+      "finishedAt": "2026-11-27T03:23:48.989Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "gate-01-editor",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "gate-02-diff",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-01-editor-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-01-editor-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-02-diff-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-02-diff-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T03:23:48.989Z"
+}

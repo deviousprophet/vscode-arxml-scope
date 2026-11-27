@@ -1,0 +1,274 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T03:07:40.412Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-uEo6v6",
+  "cdp": {
+    "port": "50160",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "capture-fidelity",
+      "startedAt": "2026-11-27T03:07:40.473Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the capture records the workbench zoom level",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "zooming out widens the webview CSS pixel width",
+          "ok": true,
+          "detail": "1082 -> 1369"
+        }
+      ],
+      "screenshots": [],
+      "observations": {
+        "zoom0": {
+          "page": {
+            "width": 1440,
+            "height": 900,
+            "dpr": 1
+          },
+          "frame": {
+            "width": 1082,
+            "height": 777,
+            "dpr": 1
+          },
+          "zoom": 0
+        },
+        "zoomOut": {
+          "page": {
+            "width": 1728,
+            "height": 1080,
+            "dpr": 0.8333333134651184
+          },
+          "frame": {
+            "width": 1369,
+            "height": 949,
+            "dpr": 0.8333333134651184
+          },
+          "zoom": 0
+        }
+      },
+      "finishedAt": "2026-11-27T03:07:45.061Z"
+    },
+    {
+      "id": "edit",
+      "startedAt": "2026-11-27T03:07:45.061Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "ArrowDown moves the row selection",
+          "ok": true,
+          "detail": "details changed after 2 press(es)"
+        },
+        {
+          "name": "editing marks the page dirty",
+          "ok": true,
+          "detail": "● Unsaved changes"
+        },
+        {
+          "name": "Details value reflects the draft",
+          "ok": true,
+          "detail": "7"
+        },
+        {
+          "name": "Ctrl+S clears the dirty strip",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Ctrl+S wrote the edited parameter value to the file",
+          "ok": true,
+          "detail": "Keep = 7 in left.arxml"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-01-dirty-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-01-dirty-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-02-saved-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-02-saved-webview.png"
+      ],
+      "observations": {
+        "before": "container\nContKeep\nShort name\nDefinition\nFind references\nReveal in source",
+        "after": "parameter\nChanged\nDefinition\n/Pkg/Diff/ModAlpha/ContKeep/Changed\nType\nInteger\nValue\nDecimal\n10\nHexadecimal\n0x0A\nBinary\n0",
+        "arrowPresses": 2,
+        "inlineDirty": {
+          "dirtyText": "● Unsaved changes",
+          "dirtyHidden": false,
+          "detailsValue": "7"
+        },
+        "savedDirtyHidden": true
+      },
+      "finishedAt": "2026-11-27T03:07:51.768Z"
+    },
+    {
+      "id": "save-continuity",
+      "startedAt": "2026-11-27T03:07:51.768Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "a parameter row is visible after scrolling",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the save clears the dirty strip",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the document was scrolled away from the top before the save",
+          "ok": true,
+          "detail": "package P -> P68 = 68"
+        },
+        {
+          "name": "the scroll anchor survives the save",
+          "ok": true,
+          "detail": "P68 = 68 / } -> P68 = 68 / }"
+        },
+        {
+          "name": "the selected row and Details stay on the edited row after the save",
+          "ok": false,
+          "detail": "parameter\nP99\nDefinition\n/P/Big/C/P99\nType\nInteger\nValue\nDecimal\n99\nHexadecimal\n -> parameter\nP85\nDefinition\n/P/Big/C/P85\nType\nInteger\nValue\nDecimal\n85\nHexadecimal\n"
+        },
+        {
+          "name": "the edited row stays in view after the save",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the editor keeps focus after the save",
+          "ok": true,
+          "detail": "DIV native-edit-context"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\save-continuity-before-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\save-continuity-before-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\save-continuity-after-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\save-continuity-after-webview.png"
+      ],
+      "observations": {
+        "targetText": "P99 = 99",
+        "beforeDetails": "parameter\nP99\nDefinition\n/P/Big/C/P99\nType\nInteger\nValue\nDecimal\n99\nHexadecimal\n0x63\nBinary\n0b01100011\nReveal in source",
+        "beforeSave": {
+          "scrollTop": 0,
+          "activeTag": "DIV",
+          "activeClass": "native-edit-context",
+          "firstLine": "P68 = 68",
+          "lastLine": "}"
+        },
+        "afterSave": {
+          "scrollTop": 0,
+          "activeTag": "DIV",
+          "activeClass": "native-edit-context",
+          "firstLine": "P68 = 68",
+          "lastLine": "}"
+        },
+        "afterDetails": "parameter\nP85\nDefinition\n/P/Big/C/P85\nType\nInteger\nValue\nDecimal\n85\nHexadecimal\n0x55\nBinary\n0b01010101\nReveal in source"
+      },
+      "finishedAt": "2026-11-27T03:07:57.478Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "capture-zoom-100",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "capture-zoom-80",
+      "page": {
+        "width": 1728,
+        "height": 1080,
+        "dpr": 0.8333333134651184
+      },
+      "frame": {
+        "width": 1369,
+        "height": 949,
+        "dpr": 0.8333333134651184
+      }
+    },
+    {
+      "name": "edit-01-dirty",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "edit-02-saved",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 786,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "save-continuity-before",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "save-continuity-after",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\capture-zoom-100-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\capture-zoom-100-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\capture-zoom-80-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\capture-zoom-80-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-01-dirty-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-01-dirty-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-02-saved-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\edit-02-saved-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\save-continuity-before-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\save-continuity-before-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\save-continuity-after-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\save-continuity-after-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T03:07:57.478Z"
+}
