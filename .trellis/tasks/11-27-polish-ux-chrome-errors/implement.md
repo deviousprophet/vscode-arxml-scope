@@ -10,6 +10,10 @@
 
 - [ ] Remove protocol/`npm` jargon from the activation failure; keep it persistent and actionable.
 - [ ] Fix the diff find count to `1 of N` after the first match.
+- [ ] Make the gate/diff stale copy truthful and offer the promised action.
+- [ ] Name the missing module and add a reveal action.
+- [ ] Record one index skip reason with its threshold.
+- [ ] Fix `replace` reveal to leave one tab (or two distinguishable tabs).
 - [ ] Add preview/host assertions for each finding.
 
 ## Phase 3 — Verification

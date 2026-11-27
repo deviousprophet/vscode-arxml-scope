@@ -36,6 +36,21 @@ Owner: the native find bridge (`src/webview/monaco/findBridge.ts` or diff find i
 count must reflect the first/current match (`1 of 3`), not `?`; verify after Enter and next.
 Tests: host `diff`; unit around the find bridge if the count is computed there.
 
+## Gate, diff, merge, index and reveal copy (UX-11…UX-15)
+
+- **Gate copy:** in `src/host/` open-command path, either open the text editor after refusing a
+  non-ECUC file or change the copy to “has no ECUC values” and add **Open as Text**. Test host
+  `first-gate` for empty, malformed and non-ECUC files.
+- **Diff stale side:** `src/webview/diffMonaco.ts`/host notice. A diff-specific message names the
+  stale side, says the comparison stopped updating, and offers **Reload comparison** / **Open as
+  Text**. Test `diff-side-not-ecuc`.
+- **Merge missing module:** `src/host/diffPanel.ts` refusal. Name the module and add a **Reveal
+  module** action; “copy it first” alone is circular. Test `merge-collision`.
+- **Index skip reason:** `src/host/indexService.ts`. Record `too-large`, `unsupported-encoding` or
+  `unreadable` per file and render one reason with the threshold. Test `index-toggles`.
+- **Reveal replace:** `src/host/navigation.ts`. Close the custom editor after the text editor is
+  shown in `replace`, or rename the custom tab and document it. Test `reveal-modes`.
+
 ## Rollback
 
 Revert the child branch; no migration.

@@ -21,7 +21,8 @@
   "children": [
     "11-27-fix-diff-save-compare",
     "11-27-fix-editor-refusal-recovery",
-    "11-27-polish-ux-chrome-errors"
+    "11-27-polish-ux-chrome-errors",
+    "11-27-fix-light-theme-contrast"
   ],
   "parent": null,
   "relatedFiles": [],

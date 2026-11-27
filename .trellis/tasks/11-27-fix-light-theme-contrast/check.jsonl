@@ -1,0 +1,3 @@
+{"file": ".agents/skills/ux-review/references/DESIGN_REVIEW.md", "reason": "Check the Floor contrast gate and severity."}
+{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Check token use and no literal colours."}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Check the preview visual proof remains valid."}

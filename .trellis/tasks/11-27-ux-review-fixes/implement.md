@@ -10,7 +10,8 @@
 
 1. `11-27-fix-diff-save-compare` — UX-06, UX-07.
 2. `11-27-fix-editor-refusal-recovery` — UX-01, UX-02.
-3. `11-27-polish-ux-chrome-errors` — UX-03/04/05/08/09.
+3. `11-27-fix-light-theme-contrast` — UX-10.
+4. `11-27-polish-ux-chrome-errors` — UX-03/04/05/08/09/11/12/13/14/15.
 
 Each child: implement → targeted tests → preview/host proof → check → commit/push. Do not start
 the next child until the previous one's findings are either fixed or explicitly deferred.

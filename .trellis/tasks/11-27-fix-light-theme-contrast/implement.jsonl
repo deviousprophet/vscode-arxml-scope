@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-10-light-theme-label-contrast.md", "reason": "Measured light-theme contrast defect and exact token evidence."}
+{"file": ".agents/skills/ux-review/references/DESIGN_REVIEW.md", "reason": "Floor contrast and theme-token rules."}
+{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Token ownership and webview CSS conventions."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Toolbar label/icon contracts and theme behavior."}

@@ -3,6 +3,11 @@
 {"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-05-diff-default-show-all-context-inert.md", "reason": "Diff default/Context/change count."}
 {"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-08-activation-error-jargon.md", "reason": "Activation error copy."}
 {"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-09-diff-find-count.md", "reason": "Diff find count."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-11-gate-copy-promises-editor.md", "reason": "Gate refusal copy/action."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-12-diff-stale-side-copy.md", "reason": "Diff stale-side copy."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-13-merge-module-refusal-copy.md", "reason": "Merge module refusal copy/action."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-14-index-skipped-reason.md", "reason": "Index skip diagnostic."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-15-reveal-replace-tab.md", "reason": "Reveal replace tab behavior."}
 {"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Toolbar/sidebar CSS and tokens."}
 {"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Toolbar/button state and accessibility contracts."}
 {"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Preview states/audit rules for toolbar widths."}
