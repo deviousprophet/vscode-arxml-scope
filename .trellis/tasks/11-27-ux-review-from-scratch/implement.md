@@ -13,6 +13,9 @@
 
 - [ ] `node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --list` → 43 states.
 - [ ] Map rendered journeys to states; capture the mapped states; read each audit JSON first.
+- [ ] Run the cross-state stability probe (`references/STATE_STABILITY.md`,
+      `scripts/preview/state-diff.mjs`) for every stateful surface: baseline vs each variant,
+      stable selectors, 1 px tolerance. Add a finding for each unintended transition.
 - [ ] Copy PNGs/audits into `research/evidence/preview/`; record the capture conditions.
 - [ ] Record rendered journeys with no state in `journeys.md → Preview gaps`.
 - [ ] **Gate:** every rendered journey has a state or a recorded gap; audits read; 0 unexpected

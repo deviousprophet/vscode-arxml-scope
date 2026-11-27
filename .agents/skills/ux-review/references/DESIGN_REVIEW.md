@@ -67,6 +67,20 @@ but the finding must name the reason.
 - Duplicate navigation/steps for one goal; a command that requires leaving the surface to finish
   the obvious next step.
 
+## State stability
+
+A state can be correct in isolation and still move the interface when it appears. Compare a
+baseline state with each variant at the same viewport and require stable controls to keep their
+x/y/width/height (within 1 px), order and visible identity. Exclude only controls the state
+intentionally shows/hides. Cover clean → dirty/invalid/stale, default → hover/focus/disabled/
+loading/error, merge/sidebar/find/selection/swap, theme and zoom. A status, label, count, error or
+loading indicator must take a stable slot; it must not push a toolbar/action under the pointer.
+One unintended transition is one finding. See
+[`STATE_STABILITY.md`](STATE_STABILITY.md) and the `state-diff.mjs` probe.
+
+Floor when the movement blocks the action or moves a control under the pointer during a primary
+action; Reflex otherwise.
+
 ## Finish checks — craft, not blockers
 
 - Alignment, spacing and density are even; no orphan controls or one-off gaps.

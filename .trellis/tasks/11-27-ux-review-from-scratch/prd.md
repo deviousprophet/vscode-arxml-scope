@@ -53,6 +53,9 @@ preview/host evidence, a new scorecard and a new severity-ranked report.
 - [ ] Each surface has a primary path plus cancel/invalid/missing/edge coverage.
 - [ ] Preview `--list` returns 43 states; captured states have audit JSON read first; rendered
       journeys without a state are recorded as gaps.
+- [ ] Cross-state stability is checked for stateful surfaces: stable controls keep their rect
+      within 1 px across clean/dirty/invalid/stale, default/hover/focus/disabled/loading/error,
+      merge/sidebar/find/selection/swap, theme and zoom.
 - [ ] At least one save-continuity probe starts scrolled away from the top; scroll/selection/
       focus/folds are checked separately.
 - [ ] Every capture records workbench/webview size, DPR and zoom; width-sensitive findings test
