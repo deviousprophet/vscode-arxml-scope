@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-06-diff-save-noop.md", "reason": "Exact diff-save repro, evidence and expected behavior."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-07-deleted-first-file-silent.md", "reason": "Exact deleted-first-file repro and expected behavior."}
+{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Diff/compare session contracts and error paths."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Protocol message boundary and guard rules for the new save message."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Test-layer placement for host/extension and protocol tests."}

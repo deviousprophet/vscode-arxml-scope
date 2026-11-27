@@ -1,0 +1,30 @@
+{
+  "id": "ux-review-fixes",
+  "name": "ux-review-fixes",
+  "title": "Fix UX review findings",
+  "description": "Parent for the fresh UX review fixes: diff save/comparison truthfulness, editor refusal/recovery feedback, and chrome/error polish. Source findings are in 11-27-ux-review-from-scratch/research/findings/.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "deviousprophet",
+  "assignee": "deviousprophet",
+  "createdAt": "2026-11-27",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "feat/ux-review-from-scratch",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-27-fix-diff-save-compare",
+    "11-27-fix-editor-refusal-recovery",
+    "11-27-polish-ux-chrome-errors"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

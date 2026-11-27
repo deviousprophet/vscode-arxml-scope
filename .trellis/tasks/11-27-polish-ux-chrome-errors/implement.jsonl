@@ -1,0 +1,9 @@
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-03-sidebar-toggle-primary-weight.md", "reason": "Sidebar toggle visual hierarchy."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-04-toolbar-labels-dropped-at-1024.md", "reason": "Diff toolbar label threshold."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-05-diff-default-show-all-context-inert.md", "reason": "Diff default/Context/change count."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-08-activation-error-jargon.md", "reason": "Activation error copy."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-09-diff-find-count.md", "reason": "Diff find count."}
+{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Toolbar/sidebar CSS and tokens."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Toolbar/button state and accessibility contracts."}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Preview states/audit rules for toolbar widths."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Test-layer placement."}

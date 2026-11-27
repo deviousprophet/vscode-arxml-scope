@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Check toolbar/sidebar styling and tokens."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Check state/aria behavior."}
+{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Check the width-states audit."}

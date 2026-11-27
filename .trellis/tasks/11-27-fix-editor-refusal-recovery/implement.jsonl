@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-01-invalid-feedback-duplication.md", "reason": "Invalid/refused feedback duplication and stale derived formats."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-02-stale-node-dead-end.md", "reason": "Stale-node dead end and recovery requirements."}
+{"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Editor draft/save/refusal contracts."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Feedback, focus and accessibility contracts for the editor surfaces."}
+{"file": ".trellis/spec/frontend/testing.md", "reason": "Page/preview/host regression layers."}
