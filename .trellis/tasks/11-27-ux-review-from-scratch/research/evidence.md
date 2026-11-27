@@ -166,8 +166,9 @@ Measured toolbar geometry at every width (`audit.toolbar.groups.left`):
 ## Host evidence
 
 Run in the real Extension Development Host (`@vscode/test-electron` + Playwright over CDP to the
-nested `active-frame`). Seven launches, thirteen distinct scenarios, one `missing-engine` launch.
-Full verdicts and N/A reasons: `research/host-runs.md`.
+nested `active-frame`). Eight launches: thirteen first-pass scenarios, one `missing-engine` launch,
+and one consolidated deep-discovery launch with 19 new scenarios. Full verdicts and N/A reasons:
+`research/host-runs.md`.
 
 | # | `UX_HOST_ONLY` | Report | PNGs |
 |---|---|---|---|
@@ -178,6 +179,7 @@ Full verdicts and N/A reasons: `research/host-runs.md`.
 | 5 | `engine-index,a11y,stale-first,same-file,compare-two` | `driver-report-r3.json` | `engine-01-*`, `index-04-*`, `a11y-01…03-*`, `entry-16-*`, `entry-24-*`, `entry-20-*` |
 | 6 | `UX_HOST_MODE=missing-engine` | `driver-report-missing-engine.json` | `first-02-missing-engine-*` |
 | 7 | `save-continuity` (corrected probe) | `driver-report-save-continuity-fixed.json` | `save-continuity-before/after-*` (replaced) |
+| 8 | 19 deep-discovery scenarios | `driver-report-deep-all.json` | `deep-*` |
 
 `host-run*.json` and `host-activation*.json` are kept per launch (base name = launch 1).
 
@@ -197,6 +199,10 @@ Full verdicts and N/A reasons: `research/host-runs.md`.
 | `a11y-01/02` | 1440×900 | 1082×777 | 1 | 0 |
 | `a11y-03` | 1440×900 | 1082×799 | 1 | 0 |
 | `first-02-missing-engine` | 1440×900 | n/a | 1 | 0 |
+| `deep-*` editor/diff (16 captures) | 1440×900 | 1082×777 / 1082×799 | 1 | 0 |
+| `deep-reveal-beside/reverse` | 1440×900 | **541×777** (editor split) | 1 | 0 |
+| `deep-theme-light/hc` | 1440×900 | 1082×481 (Output panel open) | 1 | 0 |
+| `deep-theme-zoom150` | 1000×625 (device 1440×900) | **642×207** | 1.44 | 150 % |
 
 Width-sensitive statements use **1082 px (100 %)** and **1369 px (80 %)**. The 786 px group ran
 with the Chat/auxiliary bar open (content evidence only).
@@ -214,6 +220,9 @@ node .agents/skills/ux-review/scripts/host/run.mjs
 #    engine-index,a11y,stale-first,same-file,compare-two
 # corrected, click-free save probe (CONT-01):
 $env:UX_HOST_ONLY='save-continuity'
+node .agents/skills/ux-review/scripts/host/run.mjs
+# deep-discovery pass (19 scenarios, one launch):
+$env:UX_HOST_ONLY='edit-invalid,edit-details-save,edit-multi-save,row-menu,conditions-tab,reveal-modes,find-replace,settings-sort,diff-collapse-all,diff-showdiff-swap,diff-identical,diff-side-not-ecuc,merge-collision,merge-subtree,merge-off,index-toggles,engine-restart,theme-zoom,first-gate'
 node .agents/skills/ux-review/scripts/host/run.mjs
 $env:UX_HOST_MODE='missing-engine'
 node .agents/skills/ux-review/scripts/host/run.mjs
@@ -244,7 +253,7 @@ Remove-Item Env:HOST_OUT, Env:UX_HOST_ONLY, Env:UX_HOST_MODE
 | Report | `research/UX_REVIEW.md` |
 | Journey matrix (135 rows) | `research/journeys.md` |
 | Host run log and per-journey verdicts | `research/host-runs.md` |
-| Findings (9) | `research/findings/` (UX-01 … UX-09) |
+| Findings (15) | `research/findings/` (UX-01 … UX-15) |
 | Preview captures + audits (43 + 43) | `research/evidence/preview/` |
 | Host captures + JSON (68 files) | `research/evidence/host/` |
 
@@ -270,11 +279,11 @@ Remove-Item Env:HOST_OUT, Env:UX_HOST_ONLY, Env:UX_HOST_MODE
 
 ### Deep discovery evidence
 
-`driver-report-deep-all.json` covers 21 scenarios: `edit-invalid`, `edit-details-save`,
+`driver-report-deep-all.json` covers 19 scenarios: `edit-invalid`, `edit-details-save`,
 `edit-multi-save`, `row-menu`, `conditions-tab`, `reveal-modes`, `find-replace`, `settings-sort`,
 `diff-collapse-all`, `diff-showdiff-swap`, `diff-identical`, `diff-side-not-ecuc`,
 `merge-collision`, `merge-subtree`, `merge-off`, `index-toggles`, `engine-restart`, `theme-zoom`,
-`first-gate`, plus the gate/continuity baseline. Captures are `research/evidence/host/deep-*.png`.
+`first-gate`. Captures are `research/evidence/host/deep-*.png`.
 The path matrix and remaining gaps are in `research/deep-discovery.md`.
 
 ### Continuity evidence

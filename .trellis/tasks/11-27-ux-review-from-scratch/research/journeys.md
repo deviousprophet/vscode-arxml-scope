@@ -309,7 +309,7 @@ row below conflicts with the matrix above, the host result wins.
 | EDIT-05 / EDIT-10 invalid/rename refusal | **finding UX-01**, four channels host-confirmed; invalid draft not written | `driver-report-deep-all.json` → `edit-invalid` |
 | EDIT-06 Details-first save | pass; one save, Details keeps focus/caret, dirty clears | `edit-details-save` |
 | EDIT-08 multi-field save | pass; one `Ctrl+S` writes both, values stay visible | `edit-multi-save` |
-| EDIT-24 row menu / duplicate / delete | menu + prompt work; native delete confirmation not observable over CDP, not scored | `row-menu` |
+| EDIT-12 / EDIT-13 row menu / duplicate / delete | menu + prompt work; native delete confirmation not observable over CDP, not scored | `row-menu` |
 | EDIT-25 reveal modes | `beside`/`focus` pass; `replace` leaves the ECUC tab open — **UX-15** | `reveal-modes` |
 | EDIT-28 Conditions tab | open/save/invalid/clear pass | `conditions-tab` |
 | DIFF-06 Collapse All | pass; the preview flake did not reproduce | `diff-collapse-all` |

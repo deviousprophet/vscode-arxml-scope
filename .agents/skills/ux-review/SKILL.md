@@ -143,6 +143,33 @@ Default output: `artifacts/host/` under this skill (ignored by git).
 | `stale-first` | Deleted first file |
 | `same-file` | Same file twice |
 | `missing-engine` | Activation failure path (only in `UX_HOST_MODE=missing-engine`) |
+| `edit-invalid` | Invalid draft across toolbar/strip/inline/status; blocked save; fix and save |
+| `edit-details-save` | Details-first save; focus and caret after the host echo |
+| `edit-multi-save` | Two drafts, one `Ctrl+S`, both values written |
+| `row-menu` | Row context menu + Duplicate Quick Input; native confirmation is not reachable over CDP |
+| `conditions-tab` | Add/edit, invalid name, save, clear; disabled-row count changes |
+| `reveal-modes` | `beside` / `focus` / `replace` plus source → editor reveal |
+| `find-replace` | Native find count; replace is a recorded gap (closed shadow root) |
+| `settings-sort` | `ecuc.editor.sort` re-renders an open panel live |
+| `diff-collapse-all` | Collapse All / Expand All row counts |
+| `diff-showdiff-swap` | Swap, Show diff, Context on a long pair |
+| `diff-identical` | Identical files → stated empty result |
+| `diff-side-not-ecuc` | A side stops being ECUC; last good + notice |
+| `merge-collision` | Copy refused when the target lacks the module |
+| `merge-subtree` | Container copy carries its subtree |
+| `merge-off` | No visible copy action outside Merge |
+| `index-toggles` | Enable/disable, exclude, size cap, cross-file cycle |
+| `engine-restart` | Show status, Restart Engine, pid replaced |
+| `theme-zoom` | Light/high-contrast colours, 150 % toolbar layout |
+| `first-gate` | Empty/malformed/non-ECUC open command |
+
+The `deep-*` scenarios were added for the deep-discovery pass. They call `ensureChatClosed()` so the
+recorded frame width is stable, and `openEditorOnly()` where the reveal modes need no pre-existing
+text tab. Two host limits are known: native modal dialogs (Delete/Duplicate confirmation and the
+stale-snapshot Reload/Cancel) do not render in the captured page, so those confirmations cannot be
+driven over CDP; and the native find widget's inputs live in a closed shadow root, so only its
+text/count is readable and the replace row is not drivable. Record those as `N/A`, not as product
+defects.
 
 ## What the host runner does
 

@@ -16,7 +16,7 @@ Artifacts: `research/evidence/host/`
 | 5 | normal | `engine-index,a11y,stale-first,same-file,compare-two` | completed, 1 scenario failed | `driver-report-r3.json` |
 | 6 | `missing-engine` | — | ok | `driver-report-missing-engine.json` |
 | 7 | normal | `save-continuity` (corrected probe) | ok, 7/7 | `driver-report-save-continuity-fixed.json` |
-| 8 | normal | deep discovery scenarios | completed, 8 scenarios with findings | `driver-report-deep-all.json` |
+| 8 | normal | 19 deep-discovery scenarios (see below) | completed; expected failing checks are UX-10…UX-15 | `driver-report-deep-all.json` |
 
 Each launch used a fresh `%TEMP%\arxml-ux-host-ws-*` workspace and profile; the runner removed
 them on exit. No host, Chrome or bridge process was left running (checked after the last launch).
@@ -136,7 +136,7 @@ At 1082 px the diff toolbar is below the 1150 px label breakpoint, so all labels
 
 | Finding | Status | What changed |
 |---|---|---|
-| UX-01 invalid/refusal feedback duplication | **retained, host-unconfirmed** | Preview + source prove four channels; the host has no invalid-input scenario. Needs an `edit` variant that types `abc` and presses `Ctrl+S`. |
+| UX-01 invalid/refusal feedback duplication | **confirmed** | Deep `edit-invalid` proves all four channels in the host, the blocked save and the recovery. |
 | UX-02 stale-node dead end | **confirmed** | `stale-node`: refusal in `#details-status`, dirty retained, no recovery control; the blocked draft has no local surface (the capture's Details shows `ContParentA` because the probe clicked the centre; the preview shows the stale row still editable). |
 | UX-03 sidebar toggle primary weight | **confirmed** | Host captures at 1082 px and 786 px show the saturated 60×48 block. |
 | UX-04 labels dropped at 1024 | **confirmed** | 1440×900 / 100 % → frame 1082 px → icon-only diff toolbar; 80 % → 1369 px. |
@@ -144,7 +144,7 @@ At 1082 px the diff toolbar is below the 1150 px label breakpoint, so all labels
 | UX-06 diff save no-op | **new (host only, Major)** | `merge`: Ctrl+S in the pane leaves `right.arxml` dirty and unchanged; the separate tab saves. |
 | UX-07 deleted first file silent | **new (host only, Major)** | `stale-first`: diff opens with zero notifications after the file was deleted. |
 | UX-08 activation error jargon | **new (host only, Minor)** | `missing-engine`: `(1 is the host protocol)` appears twice. |
-| UX-09 diff find count | **new (host only, Minor)** | `diff`: `? of 3`. |
+| UX-09 find count | **new (host only, Minor)** | Diff `? of 3`; deep pass adds editor `? of 1`. |
 
 **Not a finding:** the original `save-continuity` selection change (P99 → P85) was caused by the
 runner's centre-click before `Ctrl+S`; the corrected probe passes with `P99 → P99`. Scroll, focus,
@@ -172,12 +172,32 @@ Details and the dirty clear all pass. The probe still does not measure an exact 
 
 ## Deep discovery (second pass)
 
-The deep pass adds host coverage for several rows above and six findings. See
-[`deep-discovery.md`](deep-discovery.md) for the path matrix. New findings: UX-10 (light-theme
-contrast, Floor, Major), UX-11 (gate copy), UX-12 (diff stale-side copy), UX-13 (merge module
-refusal), UX-14 (index skip reason), UX-15 (replace reveal tab). The N/A table above is the
-first-pass record; where a deep scenario exists, the deep row wins.
+One consolidated launch (`driver-report-deep-all.json`) ran 19 scenarios added for this pass:
 
-Extending `driver.mjs` with a selection-safe save probe and a Collapse All step is the highest-value
-tooling follow-up; it was **not** done here because this task owns evidence and the report, and the
-skill is the shared home for the runner.
+`edit-invalid, edit-details-save, edit-multi-save, row-menu, conditions-tab, reveal-modes,
+find-replace, settings-sort, diff-collapse-all, diff-showdiff-swap, diff-identical,
+diff-side-not-ecuc, merge-collision, merge-subtree, merge-off, index-toggles, engine-restart,
+theme-zoom, first-gate`.
+
+Passing behavior: invalid draft blocked (UX-01 host-confirmed), Details-first and multi-field save,
+Conditions add/invalid/save/clear, beside/focus reveal, sort re-render, Collapse All (58→8→58),
+Swap, Show diff/Context (76→22), identical files, subtree copy, merge off, index enable/exclude/
+cap/cycle, engine restart (pid replaced), 150 % zoom, and the ECUC gate refusal itself.
+
+Findings from the failing checks: **UX-10** (light-theme label contrast, Floor, Major), **UX-11**
+(gate copy promises a text editor), **UX-12** (stale-side notice reuses the gate copy), **UX-13**
+(module refusal names no module), **UX-14** (skipped-file reason is a three-way list), **UX-15**
+(`replace` reveal leaves the ECUC tab). **UX-09** was strengthened with the editor find count
+(`? of 1`); no existing finding was dropped or downgraded.
+
+Harness limits observed in this pass:
+
+- **Native modal dialogs are not reachable over CDP.** The row context menu and the duplicate
+  Quick Input work, but the Delete/Duplicate confirmation never appears in the captured page and
+  `pages` stays at one. The same explains the `stale-copy` Reload/Cancel miss: the modal is not in
+  the page, so that journey stays `N/A`, not a product verdict.
+- **The native find widget's inputs are in a closed shadow root.** Its count text is readable
+  (`? of 1`), the replace row is not drivable; replace remains a gap.
+- Some first-pass captures ran with Chat open (786 px); the deep scenarios call
+  `ensureChatClosed()` and the report records the real frame width.
+- The path matrix and remaining gaps are in [`deep-discovery.md`](deep-discovery.md).
