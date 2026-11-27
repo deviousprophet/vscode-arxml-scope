@@ -276,6 +276,7 @@ Remove-Item Env:HOST_OUT, Env:UX_HOST_ONLY, Env:UX_HOST_MODE
 | UX-13 Minor | `research/evidence/host/deep-merge-collision-workbench.png`, `driver-report-deep-all.json` (`merge-collision`) |
 | UX-14 Minor | `research/evidence/host/deep-index-toggles-workbench.png`, `driver-report-deep-all.json` (`index-toggles.capped.text`) |
 | UX-15 Minor | `research/evidence/host/deep-reveal-replace-workbench.png`, `driver-report-deep-all.json` (`reveal-modes.modes.replace`) |
+| UX-16 Minor | `research/evidence/dirty-toolbar-shift.json`, `research/evidence/preview/editor.png`, `editor-dirty.png` |
 
 ### Deep discovery evidence
 

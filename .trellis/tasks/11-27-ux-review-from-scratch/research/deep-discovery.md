@@ -183,3 +183,10 @@ host-confirmed. No existing finding was dropped or downgraded.
   replace row is not drivable. Documented in `SKILL.md` with the new scenarios.
 - `reset()` still toggles the auxiliary bar; the new scenarios call `ensureChatClosed()` and the
   captures record the real frame width.
+
+## Follow-up after the pass
+
+A toolbar state-transition check found **UX-16** (Minor, Reflex — layout stability): the
+`● Unsaved changes` status is the first flex item, so it pushes `Collapse`/`Expand` by 112.25 px
+when a draft appears. Measured in the production preview DOM; evidence
+`research/evidence/dirty-toolbar-shift.json`.

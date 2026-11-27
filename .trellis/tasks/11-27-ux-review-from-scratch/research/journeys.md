@@ -306,6 +306,7 @@ row below conflicts with the matrix above, the host result wins.
 
 | Journey | Deep verdict | Evidence |
 |---|---|---|
+| EDIT-01/EDIT-03 typing | **finding UX-16**; dirty status shifts Collapse/Expand by 112 px | `dirty-toolbar-shift.json` |
 | EDIT-05 / EDIT-10 invalid/rename refusal | **finding UX-01**, four channels host-confirmed; invalid draft not written | `driver-report-deep-all.json` → `edit-invalid` |
 | EDIT-06 Details-first save | pass; one save, Details keeps focus/caret, dirty clears | `edit-details-save` |
 | EDIT-08 multi-field save | pass; one `Ctrl+S` writes both, values stay visible | `edit-multi-save` |
