@@ -15,6 +15,7 @@ Close the Minor findings from the fresh and deep review:
 - **UX-13** — the module-missing refusal names neither the module nor a way to it.
 - **UX-14** — the skipped-file tooltip gives three alternative reasons instead of the real one.
 - **UX-15** — `revealMode = replace` leaves the ECUC tab open with a duplicate label.
+- **UX-16** — the `● Unsaved changes` status pushes Collapse/Expand 112 px when a draft appears.
 
 Source: the matching `research/findings/UX-*.md` files in
 `.trellis/tasks/11-27-ux-review-from-scratch/`.
@@ -37,7 +38,9 @@ Source: the matching `research/findings/UX-*.md` files in
 8. Index skip diagnostics name one actual reason and the threshold; no three-way “or” list.
 9. `revealMode = replace` leaves one tab (or a clearly renamed ECUC tab) and the documented
    behavior matches.
-10. Add preview/host regressions for each; no feature redesign beyond the finding.
+10. The dirty status does not move the leading Collapse/Expand controls; add a cross-state
+    assertion that the button rects stay within 1 px.
+11. Add preview/host regressions for each; no feature redesign beyond the finding.
 
 ## Acceptance criteria
 
@@ -51,6 +54,7 @@ Source: the matching `research/findings/UX-*.md` files in
 - [ ] Merge module refusal names the module and offers a reveal action.
 - [ ] Index skip tooltip names one reason and the threshold.
 - [ ] `replace` reveal leaves one tab or two distinguishable tabs.
+- [ ] The dirty status leaves Collapse/Expand within 1 px of their clean x position.
 - [ ] Preview toolbar widths and host `diff`/`missing-engine`/`first-gate`/`diff-side-not-ecuc`/
       `merge-collision`/`index-toggles`/`reveal-modes` scenarios pass.
 - [ ] `npm run check-types`, `npm run lint`, `npm test` pass.

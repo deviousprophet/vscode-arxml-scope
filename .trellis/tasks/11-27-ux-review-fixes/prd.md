@@ -12,7 +12,7 @@ Close the user-facing defects from the fresh UX review. The review report and ev
 | `11-27-fix-diff-save-compare` | UX-06, UX-07 | P1 |
 | `11-27-fix-editor-refusal-recovery` | UX-01, UX-02 | P1 |
 | `11-27-fix-light-theme-contrast` | UX-10 | P1 |
-| `11-27-polish-ux-chrome-errors` | UX-03, UX-04, UX-05, UX-08, UX-09, UX-11, UX-12, UX-13, UX-14, UX-15 | P2 |
+| `11-27-polish-ux-chrome-errors` | UX-03, UX-04, UX-05, UX-08, UX-09, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16 | P2 |
 
 Each child is independently plannable, implementable, testable and archivable. The parent owns
 the shared source requirement, the integration review and the final verification.

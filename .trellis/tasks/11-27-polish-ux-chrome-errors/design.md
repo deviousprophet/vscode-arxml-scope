@@ -51,6 +51,14 @@ Tests: host `diff`; unit around the find bridge if the count is computed there.
 - **Reveal replace:** `src/host/navigation.ts`. Close the custom editor after the text editor is
   shown in `replace`, or rename the custom tab and document it. Test `reveal-modes`.
 
+## Dirty-status layout stability (UX-16)
+
+The `● Unsaved changes` span is the first flex item before Collapse/Expand. When it appears it
+takes 106.25 px and moves both buttons by 112.25 px. Give the status a reserved slot, move it after
+the controls, or place it in the free space before the sidebar; keep `role="status"` and
+`aria-live`. Add a preview cross-state assertion (`editor` vs `editor-dirty`) for the button x
+positions; fail on >1 px. Evidence: `research/evidence/dirty-toolbar-shift.json`.
+
 ## Rollback
 
 Revert the child branch; no migration.

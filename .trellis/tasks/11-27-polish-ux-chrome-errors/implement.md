@@ -14,6 +14,7 @@
 - [ ] Name the missing module and add a reveal action.
 - [ ] Record one index skip reason with its threshold.
 - [ ] Fix `replace` reveal to leave one tab (or two distinguishable tabs).
+- [ ] Keep Collapse/Expand stable when the dirty status appears; add the cross-state rect assertion.
 - [ ] Add preview/host assertions for each finding.
 
 ## Phase 3 — Verification

@@ -8,6 +8,7 @@
 {"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-13-merge-module-refusal-copy.md", "reason": "Merge module refusal copy/action."}
 {"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-14-index-skipped-reason.md", "reason": "Index skip diagnostic."}
 {"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-15-reveal-replace-tab.md", "reason": "Reveal replace tab behavior."}
+{"file": ".trellis/tasks/11-27-ux-review-from-scratch/research/findings/UX-16-dirty-status-toolbar-shift.md", "reason": "Dirty-status toolbar layout shift."}
 {"file": ".trellis/spec/frontend/css-guidelines.md", "reason": "Toolbar/sidebar CSS and tokens."}
 {"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Toolbar/button state and accessibility contracts."}
 {"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Preview states/audit rules for toolbar widths."}
