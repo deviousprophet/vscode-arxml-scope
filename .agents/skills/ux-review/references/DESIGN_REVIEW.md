@@ -1,8 +1,7 @@
 # Design review for VS Code extension UI
 
-Reference model: the floor/reflex/finish gate idea from
-[Nutlope/hallmark](https://github.com/Nutlope/hallmark), adapted for a desktop IDE. Hallmark's
-page-building rules, themes, photography and marketing-page heuristics are deliberately **not**
+The floor/reflex/finish gate names are internal review language, adapted for a desktop IDE.
+Marketing-page rules, themes, photography and web-layout heuristics are deliberately not
 imported. VS Code's design system and this repository's `DESIGN.md` win on every conflict.
 
 Use this reference after the Preview and Host evidence exists, before scoring. It is a review
@@ -111,7 +110,7 @@ The thread that built the page is its weakest reviewer.
 IDE-specific checks the cold reviewer must make: keyboard-only path, focus ring, 80/120/150%
 zoom, high-contrast, side bar/auxiliary bar widths, and whether the same action is duplicated.
 
-## What not to import from Hallmark
+## What not to import from web design guidance
 
 - 44×44 touch targets as a universal rule (desktop pointer targets are smaller; keep the actual
   VS Code control size and a comfortable hit area).

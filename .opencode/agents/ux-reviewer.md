@@ -155,7 +155,7 @@ A screenshot is only evidence for the layout it actually captured.
 ## Design review gates
 
 Read [`references/DESIGN_REVIEW.md`](../../.agents/skills/ux-review/references/DESIGN_REVIEW.md)
-before scoring. It adapts the Hallmark floor/reflex/finish model to a desktop IDE; VS Code and
+before scoring. It uses an internal floor/reflex/finish gate model for a desktop IDE; VS Code and
 `DESIGN.md` win on every conflict.
 
 - **Floor** failures are never waivable: theme tokens, contrast, keyboard/focus-visible, reduced
@@ -168,8 +168,8 @@ before scoring. It adapts the Hallmark floor/reflex/finish model to a desktop ID
 - **Finish** findings are craft/minor; report and answer them.
 
 Run the lens cold: screenshots first, source only to locate; at most eight findings; first word
-`rebuild`, `fix` or `ship`; name what must not be diluted. Do not import Hallmark's marketing
-rules (hero, 80-word budget, themes, 44px touch, 320–1920 page breakpoints).
+`rebuild`, `fix` or `ship`; name what must not be diluted. Do not import marketing-page rules
+from external web design guidance (hero, 80-word budget, themes, 44px touch, 320–1920 page breakpoints).
 
 ## Evaluation criteria and scoring (1–5)
 

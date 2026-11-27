@@ -68,7 +68,7 @@ clipboard or packaged-VSIX behavior. The 43-state table and limits are in
 ## Design review
 
 After the Preview/Host evidence exists, apply the VS Code-adapted lens in
-[`references/DESIGN_REVIEW.md`](references/DESIGN_REVIEW.md). It adapts the Hallmark
+[`references/DESIGN_REVIEW.md`](references/DESIGN_REVIEW.md). It uses an internal
 floor/reflex/finish gate model to a desktop IDE; VS Code and this repository's `DESIGN.md` win on
 every conflict.
 
@@ -83,7 +83,8 @@ every conflict.
 
 Run it as a cold review: screenshots first, source only to locate; at most eight findings; first
 word `rebuild`, `fix` or `ship`; name what must not be diluted. Map findings into the existing
-four scoring dimensions; do not add a fifth score. Do not import Hallmark's marketing-page rules
+four scoring dimensions; do not add a fifth score. Do not import marketing-page rules from
+external web design guidance.
 (hero, word budget, themes, 44px touch, 320–1920 breakpoints).
 
 ## Host mode
