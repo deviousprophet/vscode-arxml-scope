@@ -154,7 +154,7 @@
   that applied and the threshold. Evidence:
   `research/evidence/host/deep-index-toggles-workbench.png`,
   `research/evidence/host/driver-report-deep-all.json` (`index-toggles.capped.text`);
-  `research/findings/UX-14-index-skipped-reason.md`. **UX Impact:** the user cannot tell whether
+  `research/findings/UX-14-index-skipped-reason.md`. Gate: **Finish — specific copy**. **UX Impact:** the user cannot tell whether
   raising the cap will help or the file is unreadable. **Actionable Fix:** record one reason per
   file and render `over arxmlScope.index.maxFileSizeMB = 1 MB` for the size case.
 - **[Minor] Reveal in source in `replace` mode leaves the ECUC tab open (editor tab strip):** the
@@ -162,7 +162,7 @@
   `left.arxml:vscode-arxml-scope.ecucEditor` and `left.arxml` — two identical labels. `beside` and
   `focus` behave correctly. Evidence: `research/evidence/host/deep-reveal-replace-workbench.png`,
   `research/evidence/host/driver-report-deep-all.json` (`reveal-modes.modes.replace`);
-  `research/findings/UX-15-reveal-replace-tab.md`. **UX Impact:** the mode meant to avoid a split
+  `research/findings/UX-15-reveal-replace-tab.md`. Gate: **Reflex — duplicate state**. **UX Impact:** the mode meant to avoid a split
   leaves a duplicate tab the user must close manually. **Actionable Fix:** close the custom editor
   tab after showing the text editor in `replace`, or rename the custom tab to `(ECUC editor)` and
   document the behavior.
@@ -173,28 +173,9 @@
   `research/evidence/host/deep-find-webview.png`,
   `research/evidence/host/driver-report-deep-all.json` (`findCount: "? of 3"`,
   `find-replace.widgetText: "? of 1"`); `research/findings/UX-09-diff-find-count.md`.
-  **UX Impact:** the user cannot tell whether Enter advanced or how many matches remain. **Actionable
-  Fix:** populate the current index in the shared native-find bridge and render `1 of N`; gate the
-  host check on `\d+ of \d+`.
-- **[Minor] Reveal in source in `replace` mode leaves the ECUC tab open (tab strip):** with
-  `revealMode=replace`, Reveal in source opens the text editor in the same group but does not close
-  the custom editor tab; `/state` reports `left.arxml:vscode-arxml-scope.ecucEditor` and
-  `left.arxml`, two identical tabs. Evidence:
-  `research/evidence/host/deep-reveal-replace-workbench.png`,
-  `research/evidence/host/driver-report-deep-all.json` (reveal-modes.replace). Gate: **Reflex —
-  duplicate state**. **UX Impact:** the mode that exists to avoid the split still leaves a duplicate
-  tab; the user must close it manually and cannot tell the tabs apart. **Actionable Fix:** close the
-  custom tab in `replace` mode, or rename it `left.arxml (ECUC editor)` and document that it stays.
-  Finding: `research/findings/UX-15-reveal-replace-tab.md`.
-- **[Minor] The skipped-file tooltip does not say which reason applied (index status tooltip):** the
-  1.7 MB file is correctly skipped, but the tooltip says
-  `Skipped: huge.arxml (size limit, encoding or unreadable)` — three alternatives for one file.
-  Evidence: `research/evidence/host/deep-index-toggles-workbench.png`,
-  `research/evidence/host/driver-report-deep-all.json` (index-toggles.capped). Gate: **Finish —
-  specific copy**. **UX Impact:** the user cannot decide whether to raise the cap or fix the
-  encoding. **Actionable Fix:** record the reason per file and print one (`over maxFileSizeMB = 1 MB`,
-  `unsupported encoding`, `unreadable`). Finding:
-  `research/findings/UX-14-index-skipped-reason.md`.
+  Gate: **Finish — real counts**. **UX Impact:** the user cannot tell whether Enter advanced or how
+  many matches remain. **Actionable Fix:** populate the current index in the shared native-find
+  bridge and render `1 of N`; gate the host check on `\d+ of \d+`.
 - **[Minor] Activation failure leaks an internal protocol constant and is shown twice (first-run
   notification):** both toasts end with `run "npm run engine:build" (1 is the host protocol)`, an
   absolute build path, and the same failure is reported by VS Code and by the extension. Evidence:
