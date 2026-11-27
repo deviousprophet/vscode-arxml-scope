@@ -59,6 +59,8 @@ preview/host evidence, a new scorecard and a new severity-ranked report.
       two effective widths.
 - [ ] Every P0/P1 finding has a repro and committed evidence.
 - [ ] The report has exactly the three approved sections and a 1–5 scorecard.
+- [ ] The design-review gates are applied; Floor findings are at least Major and no external
+      marketing-page rules are imported as requirements.
 - [ ] The review ends with the fix-task handoff; no production fix and no `src/**` change.
 - [ ] No preview documentation is added back under `docs/`; the skill owns it.
 

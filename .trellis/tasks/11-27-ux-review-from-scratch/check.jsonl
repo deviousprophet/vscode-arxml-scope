@@ -1,4 +1,5 @@
 {"file": ".agents/skills/ux-review/references/WEBVIEW_PREVIEW.md", "reason": "Check that every rendered journey has a seeded state or a recorded gap."}
+{"file": ".agents/skills/ux-review/references/DESIGN_REVIEW.md", "reason": "Check the Floor/Reflex/Finish gates and their severity mapping."}
 {"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Audit-first verification and the known runner limit."}
 {"file": ".trellis/spec/frontend/testing.md", "reason": "Keep preview and host evidence at the correct test layer."}
 {"file": "docs/contributor/TEST_PLAN.md", "reason": "Map the review evidence to the human regression plan."}

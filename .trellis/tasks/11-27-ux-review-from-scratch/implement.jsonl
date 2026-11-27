@@ -1,4 +1,5 @@
-{"file": ".agents/skills/ux-review/SKILL.md", "reason": "Single skill entry point for Preview and Host modes; commands and guardrails."}
+{"file": ".agents/skills/ux-review/references/DESIGN_REVIEW.md", "reason": "VS Code-adapted Floor/Reflex/Finish design gates for the UI/UX review."}
+{"file": ".agents/skills/ux-review/SKILL.md", "reason": "Single skill entry point for Preview, Host and Design review modes."}
 {"file": ".agents/skills/ux-review/references/WEBVIEW_PREVIEW.md", "reason": "43-state table, commands, limits and capture fidelity for the preview pass."}
 {"file": ".agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md", "reason": "Host runner architecture, CDP evidence and the preview/host split."}
 {"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Preview execution rules, audit invariants and proof boundaries."}

@@ -282,6 +282,51 @@ function bigPair(size = 300, changedIndex = 250) {
 	return { left: build(changedIndex), right: build(9999) };
 }
 
+/** Close the auxiliary bar only when it is actually open, so captures keep one width. */
+async function ensureChatClosed() {
+	const aux = page.locator('.part.auxiliarybar').first();
+	const count = await aux.count().catch(() => 0);
+	if (count > 0 && (await aux.isVisible().catch(() => false))) {
+		await B('/exec', { command: 'workbench.action.toggleAuxiliaryBar' }).catch(() => {});
+		await sleep(300);
+	}
+}
+
+/** Open only the custom editor (no pre-existing text tab), so reveal modes are observable. */
+async function openEditorOnly(file) {
+	await B('/openWith', { path: file, viewType: 'vscode-arxml-scope.ecucEditor' });
+	const frame = await findFrameWith('#toggle-sidebar');
+	await frame.waitForSelector('.monaco-editor', { state: 'attached', timeout: 30000 });
+	await sleep(400);
+	return frame;
+}
+
+const readDoc = (file) => B('/readFile', { path: file }).then((result) => result.content);
+const writeDoc = (file, content) => B('/writeFile', { path: file, content });
+
+/** The status-bar labels (VS Code puts the full tooltip on aria-label). */
+async function statusLabels() {
+	const labels = await page
+		.locator('.statusbar-item')
+		.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label') || node.textContent || ''))
+		.catch(() => []);
+	return labels.join(' | ');
+}
+
+/** The focused element inside a webview frame. */
+function activeIn(frame) {
+	return frame.evaluate(() => ({
+		id: document.activeElement?.id || '',
+		tag: document.activeElement?.tagName || '',
+		text: (document.activeElement?.textContent || '').trim().slice(0, 60)
+	}));
+}
+
+/** One row line in the ECUC document. */
+function rowLine(frame, text) {
+	return frame.locator('.view-line').filter({ hasText: text }).first();
+}
+
 async function main() {
 	persist();
 	await connect();
@@ -879,6 +924,743 @@ async function main() {
 		const webviews = state.tabs.filter((tab) => tab.viewType);
 		check('same-file compare resolves to a stated outcome', notifications.length > 0 || webviews.length > 0, JSON.stringify({ notifications, webviews }).slice(0, 240));
 		record.screenshots.push(...(await shot('entry-24-same-file')));
+	});
+
+	await scenario('edit-invalid', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openEditor();
+		await rowLine(frame, 'Keep =').click();
+		await sleep(350);
+		const value = frame.locator('#details-value');
+		await value.fill('abc');
+		await sleep(900);
+		const toolbar = await frame.locator('#editor-dirty-status').innerText().catch(() => '');
+		const strip = await frame.locator('#editor-error-strip').innerText().catch(() => '');
+		const inline = await frame.locator('.details-value-error').first().innerText().catch(() => '');
+		const status = await frame.locator('#details-status').innerText().catch(() => '');
+		record.observations.invalidChannels = { toolbar, strip, inline, status };
+		check('the toolbar reports the invalid draft', /invalid/i.test(toolbar), toolbar);
+		check('the editor error strip repeats it', /invalid/i.test(strip), strip);
+		check('the Details field shows an inline error', /invalid/i.test(inline), inline);
+		check('the Details status line repeats it too', /invalid/i.test(status), status);
+		record.screenshots.push(...(await shot('deep-edit-invalid', frame)));
+		await page.keyboard.press('Control+s');
+		await sleep(1500);
+		const blockedText = readFileSync(leftPath, 'utf8');
+		check('the invalid draft is not written', /\/Keep<\/DEFINITION-REF>\s*<VALUE>1<\/VALUE>/.test(blockedText));
+		check('the draft stays dirty after the blocked save', !(await frame.locator('#editor-dirty-status').evaluate((node) => node.hidden)));
+		await value.fill('7');
+		await sleep(900);
+		await page.keyboard.press('Control+s');
+		await sleep(1800);
+		const fixedText = readFileSync(leftPath, 'utf8');
+		check('fixing the value saves it', /\/Keep<\/DEFINITION-REF>\s*<VALUE>7<\/VALUE>/.test(fixedText));
+		check('the dirty marker clears after the fixed save', await frame.locator('#editor-dirty-status').evaluate((node) => node.hidden));
+		record.observations.afterFix = {
+			strip: await frame.locator('#editor-error-strip').innerText().catch(() => ''),
+			status: await frame.locator('#details-status').innerText().catch(() => ''),
+			value: await frame.locator('#details-value').inputValue().catch(() => null)
+		};
+		record.screenshots.push(...(await shot('deep-edit-invalid-fixed', frame)));
+	});
+
+	await scenario('edit-details-save', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openEditor();
+		await rowLine(frame, 'Changed =').click();
+		await sleep(350);
+		const value = frame.locator('#details-value');
+		await value.fill('12');
+		await sleep(800);
+		const before = await activeIn(frame);
+		const caretBefore = await value.evaluate((node) => node.selectionStart);
+		record.observations.beforeSave = { ...before, caret: caretBefore };
+		await page.keyboard.press('Control+s');
+		await sleep(1800);
+		const after = await activeIn(frame);
+		const caretAfter = await value.evaluate((node) => node.selectionStart).catch(() => null);
+		const details = await frame.locator('#sb-details-body').innerText().catch(() => '');
+		record.observations.afterSave = { ...after, caret: caretAfter, details: details.slice(0, 160) };
+		check('Ctrl+S from the Details field saves the value', /\/Changed<\/DEFINITION-REF>\s*<VALUE>12<\/VALUE>/.test(readFileSync(leftPath, 'utf8')));
+		check('the dirty marker clears', await frame.locator('#editor-dirty-status').evaluate((node) => node.hidden));
+		check('Details keeps focus after the host echo', after.id === 'details-value', JSON.stringify(after));
+		check('Details keeps the caret at the end', caretAfter === 2, String(caretAfter));
+		check('Details still shows the edited row', /Changed/.test(details), details.slice(0, 80));
+		record.screenshots.push(...(await shot('deep-edit-details-save', frame)));
+	});
+
+	await scenario('edit-multi-save', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openEditor();
+		await rowLine(frame, 'Keep =').click();
+		await page.keyboard.press('End');
+		await page.keyboard.press('Backspace');
+		await page.keyboard.type('5');
+		await sleep(900);
+		await rowLine(frame, 'Changed =').click();
+		await sleep(300);
+		await frame.locator('#details-value').fill('15');
+		await sleep(900);
+		const beforeSave = await frame.locator('#editor-dirty-status').innerText().catch(() => '');
+		await page.keyboard.press('Control+s');
+		await sleep(2200);
+		const text = readFileSync(leftPath, 'utf8');
+		record.observations.beforeSave = beforeSave;
+		record.observations.afterSave = await frame.locator('#editor-dirty-status').evaluate((node) => node.hidden);
+		check('one Ctrl+S writes both drafts', /\/Keep<\/DEFINITION-REF>\s*<VALUE>5<\/VALUE>/.test(text) && /\/Changed<\/DEFINITION-REF>\s*<VALUE>15<\/VALUE>/.test(text));
+		check('both values stay visible', (await rowLine(frame, 'Keep = 5').count()) === 1 && (await rowLine(frame, 'Changed = 15').count()) === 1);
+		check('the dirty marker clears', await frame.locator('#editor-dirty-status').evaluate((node) => node.hidden));
+		record.screenshots.push(...(await shot('deep-edit-multi-save', frame)));
+	});
+
+	await scenario('row-menu', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openEditor();
+		await rowLine(frame, 'ContKeep').click({ button: 'right' });
+		await sleep(500);
+		const context = frame.locator('.context-view').first();
+		const menuVisible = await context.isVisible().catch(() => false);
+		const menuText = menuVisible ? await context.innerText().catch(() => '') : '';
+		record.observations.menu = { visible: menuVisible, text: menuText.slice(0, 400) };
+		check('right-click on a row opens the context menu', menuVisible, String(menuVisible));
+		check('the menu offers the ECUC actions', /Duplicate ECUC element/.test(menuText) && /Delete ECUC element/.test(menuText), menuText.slice(0, 160));
+		if (!menuVisible) {
+			record.screenshots.push(...(await shot('deep-row-menu-missing', frame)));
+			return;
+		}
+		await frame.locator('.context-view .action-item', { hasText: 'Delete ECUC element' }).first().click({ force: true });
+		await sleep(1200);
+		const dialogProbe = await page.evaluate(() => ({
+			classes: [
+				...new Set(
+					[...document.querySelectorAll('[class*="dialog"], [role="dialog"]')].map((node) => String(node.className).slice(0, 80))
+				)
+			].slice(0, 8),
+			text: [...document.querySelectorAll('[class*="dialog"], [role="dialog"]')].map((node) => (node.textContent || '').trim().slice(0, 120)).slice(0, 4)
+		}));
+		record.observations.dialogProbe = dialogProbe;
+		record.observations.pagesAfterDelete = browser.contexts().flatMap((context) => context.pages().map((candidate) => candidate.url()));
+		record.observations.editorAfterDelete = {
+			strip: await frame.locator('#editor-error-strip').innerText().catch(() => ''),
+			status: await frame.locator('#details-status').innerText().catch(() => ''),
+			notifications: await workbenchNotifications()
+		};
+		const dialog = page.locator('.monaco-dialog-box').first();
+		const dialogCount = await dialog.count();
+		const dialogText = dialogCount ? await dialog.innerText().catch(() => '') : '';
+		record.observations.deleteDialog = { dialogCount, dialogText: dialogText.slice(0, 200) };
+		check('Delete asks for confirmation', dialogCount > 0 && /delete/i.test(dialogText), dialogText.slice(0, 120));
+		await page.getByRole('button', { name: 'Cancel' }).click().catch(() => {});
+		await sleep(500);
+		check('cancelling Delete changes nothing', /ContKeep/.test(readFileSync(leftPath, 'utf8')));
+		record.screenshots.push(...(await shot('deep-row-menu-delete-cancel', frame)));
+
+		await rowLine(frame, 'ContKeep').click({ button: 'right' });
+		await sleep(400);
+		await frame.locator('.context-view .action-item', { hasText: 'Duplicate ECUC element' }).first().click({ force: true });
+		await sleep(700);
+		const quick = page.locator('.quick-input-widget').first();
+		const quickVisible = await quick.isVisible().catch(() => false);
+		const quickText = quickVisible ? await quick.innerText().catch(() => '') : '';
+		record.observations.duplicatePrompt = { quickVisible, quickText: quickText.slice(0, 160) };
+		check('Duplicate asks for a new short name', quickVisible && /short name/i.test(quickText), quickText.slice(0, 120));
+		if (quickVisible) {
+			const quickInput = page.locator('.quick-input-widget input').first();
+			await quickInput.click();
+			await page.keyboard.type('ContKeepCopy');
+			await sleep(400);
+			await page.keyboard.press('Enter');
+			await sleep(1500);
+			record.observations.afterDuplicateEnter = {
+				quickVisible: await quick.isVisible().catch(() => false),
+				quickValue: await quick.locator('input').first().inputValue().catch(() => ''),
+				pages: browser.contexts().flatMap((context) => context.pages().map((candidate) => candidate.url())),
+				strip: await frame.locator('#editor-error-strip').innerText().catch(() => ''),
+				status: await frame.locator('#details-status').innerText().catch(() => ''),
+				notifications: await workbenchNotifications()
+			};
+			const confirm = page.locator('.monaco-dialog-box').first();
+			const confirmCount = await confirm.count();
+			const confirmText = confirmCount ? await confirm.innerText().catch(() => '') : '';
+			record.observations.duplicateConfirm = { confirmCount, text: confirmText.slice(0, 160) };
+			check('Duplicate confirms before writing', confirmCount > 0 && /duplicate/i.test(confirmText), confirmText.slice(0, 120));
+			if (confirmCount > 0) {
+				await page.locator('.monaco-dialog-box').getByRole('button', { name: 'Duplicate', exact: true }).click().catch(() => {});
+			}
+			await sleep(1600);
+			await B('/save', { path: leftPath });
+			await sleep(600);
+			const text = readFileSync(leftPath, 'utf8');
+			check('the duplicate is written after confirmation', /ContKeepCopy/.test(text));
+			check('the duplicate row is visible', (await rowLine(frame, 'ContKeepCopy').count()) > 0);
+			record.screenshots.push(...(await shot('deep-row-menu-duplicate', frame)));
+		}
+	});
+
+	await scenario('conditions-tab', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const syscond = path.join(WS, 'syscond.arxml');
+		copyFileSync(path.join(repoRoot, 'src/test/fixtures/editor/syscond.arxml'), syscond);
+		const frame = await openEditor(syscond);
+		await frame.locator('#stab-conditions').click();
+		await sleep(500);
+		const panelVisible = await frame.locator('#sbp-conditions').isVisible().catch(() => false);
+		record.observations.panelVisible = panelVisible;
+		check('the Conditions tab opens', panelVisible);
+		const disabledBefore = await frame.locator('#conditions-count').innerText().catch(() => '');
+		record.observations.disabledBefore = disabledBefore;
+		const row = frame.locator('.condition-row[data-name="CANIPCORETYPE_SC"]').first();
+		check('the referenced constant has a row', (await row.count()) > 0);
+		await row.locator('.condition-edit').click();
+		await sleep(300);
+		await row.locator('.condition-value').fill('1');
+		await row.locator('.condition-save').click();
+		await sleep(1300);
+		record.observations.afterSet = {
+			value: await frame.locator('.condition-row[data-name="CANIPCORETYPE_SC"]').first().getAttribute('data-value').catch(() => null),
+			status: await frame.locator('#conditions-status').innerText().catch(() => ''),
+			disabled: await frame.locator('#conditions-count').innerText().catch(() => '')
+		};
+		check('saving the value commits it', record.observations.afterSet.value === '1', String(record.observations.afterSet.value));
+		check('the document re-evaluates its disabled rows', record.observations.afterSet.disabled !== disabledBefore, `${disabledBefore} -> ${record.observations.afterSet.disabled}`);
+		record.screenshots.push(...(await shot('deep-conditions-set', frame)));
+
+		await frame.locator('#conditions-add').click();
+		await sleep(300);
+		const draft = frame.locator('.condition-row[data-new="true"]').first();
+		await draft.locator('.condition-name').fill('1BAD');
+		await draft.locator('.condition-value').fill('x');
+		await draft.locator('.condition-save').click();
+		await sleep(600);
+		const invalidStatus = await frame.locator('#conditions-status').innerText().catch(() => '');
+		record.observations.invalidNameStatus = invalidStatus;
+		check('an invalid constant name is refused inline', /invalid name/i.test(invalidStatus), invalidStatus);
+		check('the invalid draft stays editable', (await frame.locator('.condition-row[data-new="true"]').count()) > 0);
+		await draft.locator('.condition-name').fill('FEATURE');
+		await draft.locator('.condition-value').fill('true');
+		await draft.locator('.condition-save').click();
+		await sleep(900);
+		const added = frame.locator('.condition-row[data-name="FEATURE"]').first();
+		record.observations.added = {
+			count: await added.count(),
+			value: (await added.count()) ? await added.getAttribute('data-value') : null
+		};
+		check('a valid manual row saves', record.observations.added.count > 0 && record.observations.added.value === 'true', JSON.stringify(record.observations.added));
+		await frame.locator('#conditions-clear').click();
+		await sleep(700);
+		record.observations.afterClear = {
+			rows: await frame.locator('.condition-row').count(),
+			value: await frame.locator('.condition-row[data-name="FEATURE"]').first().getAttribute('data-value').catch(() => null),
+			status: await frame.locator('#conditions-status').innerText().catch(() => '')
+		};
+		check('Clear values empties the values but keeps the rows', record.observations.afterClear.rows > 0 && record.observations.afterClear.value === '', JSON.stringify(record.observations.afterClear));
+		record.screenshots.push(...(await shot('deep-conditions-clear', frame)));
+	});
+
+	await scenario('reveal-modes', async ({ check, record }) => {
+		record.observations.modes = {};
+		for (const mode of ['beside', 'focus', 'replace']) {
+			await reset();
+			await ensureChatClosed();
+			await B('/setting', { section: 'arxmlScope.ecuc.editor', key: 'revealMode', value: mode });
+			const frame = await openEditorOnly(leftPath);
+			await rowLine(frame, 'ContKeep').click();
+			await sleep(300);
+			await frame.getByRole('button', { name: 'Reveal in source' }).click();
+			await sleep(1000);
+			const state = await B('/state');
+			const observation = {
+				activeTab: state.activeTab,
+				activeTextEditor: state.activeTextEditor,
+				tabs: state.tabs.map((tab) => `${tab.label}${tab.viewType ? ':' + tab.viewType : ''}`),
+				activeElement: await activeIn(frame)
+			};
+			record.observations.modes[mode] = observation;
+			if (mode === 'beside') {
+				check('beside keeps the ECUC editor active', observation.activeTab?.viewType === 'vscode-arxml-scope.ecucEditor', JSON.stringify(observation.activeTab));
+				check('beside opens a source tab next to it', observation.tabs.some((tab) => tab.endsWith('left.arxml') && !tab.includes('vscode-arxml-scope')));
+			}
+			if (mode === 'focus') {
+				check('focus moves to the source editor', path.resolve(observation.activeTextEditor ?? '').toLowerCase() === path.resolve(leftPath).toLowerCase(), JSON.stringify(observation.activeTextEditor));
+			}
+			if (mode === 'replace') {
+				check('replace removes the ECUC tab', !observation.tabs.some((tab) => tab.includes('vscode-arxml-scope.ecucEditor')), observation.tabs.join(', '));
+			}
+			if (mode === 'focus') {
+				await page.keyboard.press('Control+f');
+				await page.keyboard.type('ContKeep');
+				await page.keyboard.press('Enter');
+				await page.keyboard.press('Escape');
+				await B('/exec', { command: 'vscode-arxml-scope.revealInEcucEditor' });
+				await sleep(1200);
+				const back = await B('/state');
+				const editorFrame = await findFrameWith('#toggle-sidebar');
+				const details = await editorFrame.locator('#sb-details-body').innerText().catch(() => '');
+				record.observations.reverse = { activeTab: back.activeTab, details: details.slice(0, 120) };
+				check('Reveal in ECUC Editor returns to the custom editor', back.activeTab?.viewType === 'vscode-arxml-scope.ecucEditor', JSON.stringify(back.activeTab));
+				check('the reverse reveal selects the node at the cursor', /ContKeep/.test(details), details.slice(0, 80));
+				record.screenshots.push(...(await shot('deep-reveal-reverse', editorFrame)));
+			}
+			record.screenshots.push(...(await shot(`deep-reveal-${mode}`, mode === 'beside' ? frame : undefined)));
+		}
+		await B('/setting', { section: 'arxmlScope.ecuc.editor', key: 'revealMode', value: 'beside' });
+	});
+
+	await scenario('find-replace', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openEditor();
+		await rowLine(frame, 'ContKeep').click();
+		await sleep(300);
+		await page.keyboard.press('Control+f');
+		await sleep(500);
+		record.observations.widgets = await frame.evaluate(() =>
+			[...document.querySelectorAll('.find-widget')].map((element) => ({
+				id: element.id,
+				cls: String(element.className).slice(0, 80),
+				visible: Boolean(element.offsetWidth || element.offsetHeight),
+				inputs: element.querySelectorAll('input').length,
+				text: (element.textContent || '').trim().slice(0, 60)
+			}))
+		);
+		const widget = frame.locator('.find-widget.visible').first();
+		const findVisible = (await widget.count()) > 0;
+		record.observations.findVisible = findVisible;
+		check('Ctrl+F opens the native find widget', findVisible);
+		await page.keyboard.type('Changed');
+		await sleep(1000);
+		const widgetText = await widget.innerText().catch(() => '');
+		record.observations.widgetText = widgetText.slice(0, 120);
+		check('the native widget reports the match count', /\d+\s*of\s*\d+|\d+\s+results?|no results/i.test(widgetText), widgetText.slice(0, 80));
+		await page.keyboard.press('Escape');
+		record.screenshots.push(...(await shot('deep-find', frame)));
+		// The native widget's inputs live in a closed shadow root in this VS Code build;
+		// the replace row cannot be driven from Playwright. Recorded as a coverage gap.
+		record.observations.replaceGap = 'native find inputs are not reachable over CDP (closed shadow root)';
+	});
+
+	await scenario('settings-sort', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const sortPath = path.join(WS, 'sorttest.arxml');
+		const param = (name, value) =>
+			`<ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Sort/C/${name}</DEFINITION-REF><VALUE>${value}</VALUE></ECUC-NUMERICAL-PARAM-VALUE>`;
+		const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>Sort</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/Sort</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/Sort/C</DEFINITION-REF><PARAMETER-VALUES>${param('Zeta', 1)}${param('Alpha', 2)}${param('Mu', 3)}</PARAMETER-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		await writeDoc(sortPath, xml);
+		await B('/setting', { section: 'arxmlScope.ecuc.editor', key: 'sort', value: 'all' });
+		const frame = await openEditorOnly(sortPath);
+		const parameterRows = async () =>
+			(await frame.locator('.view-line').allInnerTexts()).map((line) => line.trim()).filter((line) => /^(Zeta|Alpha|Mu)\s*=/.test(line));
+		record.observations.allOrder = await parameterRows();
+		check('sort: all orders the parameters', record.observations.allOrder[0]?.startsWith('Alpha'), JSON.stringify(record.observations.allOrder));
+		await B('/setting', { section: 'arxmlScope.ecuc.editor', key: 'sort', value: 'declaration' });
+		await sleep(1200);
+		record.observations.declarationOrder = await parameterRows();
+		check('sort: declaration restores file order live', record.observations.declarationOrder[0]?.startsWith('Zeta'), JSON.stringify(record.observations.declarationOrder));
+		await B('/setting', { section: 'arxmlScope.ecuc.editor', key: 'sort', value: 'all' });
+		await sleep(600);
+		record.screenshots.push(...(await shot('deep-settings-sort', frame)));
+	});
+
+	await scenario('diff-collapse-all', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openDiff();
+		const before = await frame.locator('.view-line').count();
+		await frame.locator('#diff-collapse-all').click();
+		await sleep(1000);
+		const collapsed = await frame.locator('.view-line').count();
+		record.observations.collapse = { before, collapsed };
+		check('Collapse All hides container children', collapsed < before, `${before} -> ${collapsed}`);
+		record.screenshots.push(...(await shot('deep-diff-collapse-all', frame)));
+		await frame.locator('#diff-expand-all').click();
+		await sleep(1000);
+		const expanded = await frame.locator('.view-line').count();
+		record.observations.expand = { collapsed, expanded };
+		check('Expand All restores the rows', expanded >= before - 2, `${collapsed} -> ${expanded}`);
+	});
+
+	await scenario('diff-showdiff-swap', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openDiff();
+		const titles = async () => ({
+			left: await frame.locator('#diff-title-left').innerText(),
+			right: await frame.locator('#diff-title-right').innerText()
+		});
+		const before = await titles();
+		await frame.locator('#diff-swap').click();
+		await sleep(500);
+		const swapped = await titles();
+		record.observations.titles = { before, swapped };
+		check('Swap mirrors the pane titles', swapped.left === before.right && swapped.right === before.left, JSON.stringify(swapped));
+		check('Swap is shown as a state', (await frame.locator('#diff-swap').getAttribute('aria-pressed')) === 'true');
+		await frame.locator('#diff-swap').click();
+		await sleep(400);
+		// The default fixture is dense (changes every few rows), so hiding needs a long
+		// unchanged run: use a 400-parameter pair with one change near line 250.
+		const big = bigPair(400, 250);
+		const bigLeft = path.join(WS, 'showdiff-left.arxml');
+		const bigRight = path.join(WS, 'showdiff-right.arxml');
+		await writeDoc(bigLeft, big.left);
+		await writeDoc(bigRight, big.right);
+		await B('/closeAll');
+		const bigFrame = await openDiff(bigLeft, bigRight);
+		const allLines = await bigFrame.locator('.view-line').count();
+		await bigFrame.locator('#diff-view-diff').click();
+		await sleep(1200);
+		const diffLines = await bigFrame.locator('.view-line').count();
+		const contextDisabled = await bigFrame.locator('#diff-context').getAttribute('disabled');
+		record.observations.showDiff = { allLines, diffLines, contextDisabled };
+		check('Show diff is pressed', (await bigFrame.locator('#diff-view-diff').getAttribute('aria-pressed')) === 'true');
+		check('Show diff hides unchanged rows', diffLines < allLines, `${allLines} -> ${diffLines}`);
+		check('Context is enabled in Show diff', contextDisabled === null, String(contextDisabled));
+		await bigFrame.locator('#diff-context').click();
+		await sleep(900);
+		const contextOffLines = await bigFrame.locator('.view-line').count();
+		record.observations.contextOff = { contextOffLines, pressed: await bigFrame.locator('#diff-context').getAttribute('aria-pressed') };
+		check('Context off hides the surrounding unchanged rows', contextOffLines <= diffLines, `${diffLines} -> ${contextOffLines}`);
+		record.screenshots.push(...(await shot('deep-diff-showdiff', bigFrame)));
+		await bigFrame.locator('#diff-view-all').click();
+		await sleep(900);
+		const restored = await bigFrame.locator('.view-line').count();
+		check('Show all restores the rows', restored >= allLines - 2, `${contextOffLines} -> ${restored}`);
+		check('Context is disabled in Show all', (await bigFrame.locator('#diff-context').getAttribute('disabled')) !== null);
+	});
+
+	await scenario('diff-identical', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const same = readFileSync(leftPath, 'utf8');
+		const a = path.join(WS, 'identical-a.arxml');
+		const b = path.join(WS, 'identical-b.arxml');
+		await writeDoc(a, same);
+		await writeDoc(b, same);
+		await B('/exec', { command: 'vscode-arxml-scope.compareSelected', args: [uri(a), [uri(b)]] });
+		const frame = await findFrameWith('#diff-view-all');
+		await sleep(1200);
+		const empty = frame.locator('#diff-empty');
+		const visible = await empty.isVisible().catch(() => false);
+		const text = await frame.locator('#diff-empty-text').innerText().catch(() => '');
+		record.observations.empty = { visible, text };
+		check('identical files show a stated empty result', visible && /no differences/i.test(text), `${visible} ${text}`);
+		check('the toolbar is still available', (await frame.locator('.toolbar .tool').count()) === 11);
+		record.screenshots.push(...(await shot('deep-diff-identical', frame)));
+	});
+
+	await scenario('diff-side-not-ecuc', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openDiff();
+		const rowsBefore = await frame.locator('.view-line').count();
+		const notEcuc = '<?xml version="1.0" encoding="UTF-8"?>\n<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES/></AUTOSAR>\n';
+		await B('/replaceDocument', { path: rightPath, content: notEcuc, waitMs: 0 });
+		await sleep(1500);
+		const notice = frame.locator('#diff-notice');
+		const noticeText = await notice.innerText().catch(() => '');
+		const noticeVisible = await notice.isVisible().catch(() => false);
+		const rowsAfter = await frame.locator('.view-line').count();
+		record.observations = { rowsBefore, rowsAfter, noticeVisible, noticeText: noticeText.slice(0, 200) };
+		check('the last good comparison stays visible', rowsAfter > 0, `${rowsBefore} -> ${rowsAfter}`);
+		check('a side that stops being ECUC is explained', noticeVisible && /ECUC|refresh|could not/i.test(noticeText), noticeText.slice(0, 120));
+		check('the notice explains that the comparison stopped updating', /stopped|last good|no longer updating|stale/i.test(noticeText), noticeText.slice(0, 120));
+		check('the notice does not promise a text editor that is not shown', !/showing the text editor/i.test(noticeText), noticeText.slice(0, 120));
+		record.screenshots.push(...(await shot('deep-diff-side-not-ecuc', frame)));
+	});
+
+	await scenario('merge-collision', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const moduleXml = (name, value) => `<ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>${name}</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/${name}</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>C</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/${name}/C</DEFINITION-REF><PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/${name}/C/V</DEFINITION-REF><VALUE>${value}</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES></ECUC-CONTAINER-VALUE></CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES>`;
+		const wrap = (modules) => `<?xml version="1.0" encoding="UTF-8"?>\n<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS>${modules}</ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const left = path.join(WS, 'col-left.arxml');
+		const right = path.join(WS, 'col-right.arxml');
+		await writeDoc(left, wrap(moduleXml('ColX', 1)));
+		await writeDoc(right, wrap(moduleXml('ColY', 2)));
+		const frame = await openDiff(left, right);
+		await frame.locator('#diff-merge').click();
+		await sleep(700);
+		const rightBefore = readFileSync(right, 'utf8');
+		const line = frame.locator('.line-delete').first();
+		await line.hover({ force: true }).catch(() => {});
+		await sleep(300);
+		const copy = frame.locator('a[aria-label="Copy Block to Right"], button[aria-label="Copy Block to Right"]').first();
+		const copyCount = await copy.count();
+		record.observations.copyCount = copyCount;
+		if (copyCount > 0) {
+			await copy.click({ force: true }).catch(() => {});
+			await sleep(1400);
+		}
+		const notice = frame.locator('#diff-notice');
+		const noticeText = await notice.innerText().catch(() => '');
+		record.observations.notice = { visible: await notice.isVisible().catch(() => false), text: noticeText.slice(0, 200) };
+		check('copying a missing module is refused', /module/i.test(noticeText), noticeText.slice(0, 120));
+		check('the refusal names the missing module', /\/P\/|ColX|ColY/.test(noticeText), noticeText.slice(0, 120));
+		check('the refusal offers a way to reach the module', /reveal|go to|select|scroll/i.test(noticeText), noticeText.slice(0, 120));
+		check('the refused copy writes nothing', readFileSync(right, 'utf8') === rightBefore);
+		record.screenshots.push(...(await shot('deep-merge-collision', frame)));
+	});
+
+	await scenario('merge-subtree', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const extra = `<ECUC-CONTAINER-VALUE><SHORT-NAME>Extra</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/Sub/Extra</DEFINITION-REF><PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Sub/Extra/Nested</DEFINITION-REF><VALUE>5</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES></ECUC-CONTAINER-VALUE>`;
+		const wrap = (containers) => `<?xml version="1.0" encoding="UTF-8"?>\n<AUTOSAR xmlns="http://autosar.org/schema/r4.0"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>Sub</SHORT-NAME><DEFINITION-REF DEST="ECUC-MODULE-DEF">/P/Sub</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>Base</SHORT-NAME><DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/P/Sub/Base</DEFINITION-REF><PARAMETER-VALUES><ECUC-NUMERICAL-PARAM-VALUE><DEFINITION-REF DEST="ECUC-INTEGER-PARAM-DEF">/P/Sub/Base/BaseVal</DEFINITION-REF><VALUE>1</VALUE></ECUC-NUMERICAL-PARAM-VALUE></PARAMETER-VALUES></ECUC-CONTAINER-VALUE>${containers}</CONTAINERS></ECUC-MODULE-CONFIGURATION-VALUES></ELEMENTS></AR-PACKAGE></AR-PACKAGES></AUTOSAR>`;
+		const left = path.join(WS, 'sub-left.arxml');
+		const right = path.join(WS, 'sub-right.arxml');
+		await writeDoc(left, wrap(extra));
+		await writeDoc(right, wrap(''));
+		const frame = await openDiff(left, right);
+		await frame.locator('#diff-merge').click();
+		await sleep(700);
+		const line = frame.locator('.line-delete').filter({ hasText: 'Extra' }).first();
+		await line.hover({ force: true }).catch(() => {});
+		await sleep(300);
+		const copy = frame.locator('a[aria-label="Copy Block to Right"], button[aria-label="Copy Block to Right"]').first();
+		if ((await copy.count()) > 0) {
+			await copy.click({ force: true }).catch(() => {});
+			await sleep(1600);
+		}
+		await B('/save', { path: right });
+		await sleep(600);
+		const text = readFileSync(right, 'utf8');
+		record.observations.rightText = text.slice(0, 400);
+		check('the copied container is written', /<SHORT-NAME>Extra<\/SHORT-NAME>/.test(text));
+		check('the whole subtree comes with it', /Nested<\/DEFINITION-REF>\s*<VALUE>5<\/VALUE>/.test(text));
+		record.screenshots.push(...(await shot('deep-merge-subtree', frame)));
+	});
+
+	await scenario('merge-off', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openDiff();
+		const visibleCopies = () =>
+			frame.evaluate(() =>
+				[...document.querySelectorAll('a[aria-label="Copy Block to Right"], button[aria-label="Copy Block to Right"]')].filter(
+					(element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden'
+				).length
+			);
+		await frame.locator('.line-insert').first().hover({ force: true }).catch(() => {});
+		await sleep(400);
+		const offCount = await visibleCopies();
+		await frame.locator('#diff-merge').click();
+		await sleep(600);
+		await frame.locator('.line-insert').first().hover({ force: true }).catch(() => {});
+		await sleep(400);
+		const onCount = await visibleCopies();
+		await frame.locator('#diff-merge').click();
+		await sleep(600);
+		await frame.locator('.line-insert').first().hover({ force: true }).catch(() => {});
+		await sleep(400);
+		const offAgain = await visibleCopies();
+		record.observations = { offCount, onCount, offAgain };
+		check('Merge off offers no copy action', offCount === 0, String(offCount));
+		check('Merge on offers the copy action', onCount > 0, String(onCount));
+		check('turning Merge off removes it again', offAgain === 0, String(offAgain));
+	});
+
+	await scenario('index-toggles', async ({ check, record }) => {
+		await reset();
+		const readStatus = () => statusLabels();
+		const readCount = (text) => Number(/(\d+) files indexed/.exec(text)?.[1] ?? NaN);
+		const initial = await readStatus();
+		const initialCount = readCount(initial);
+		record.observations.initial = { count: initialCount, text: initial.slice(0, 220) };
+		check('the index starts enabled', Number.isFinite(initialCount), initial.slice(0, 160));
+		await B('/setting', { section: 'arxmlScope.index', key: 'enabled', value: false });
+		await sleep(900);
+		const disabled = await readStatus();
+		record.observations.disabled = disabled.slice(0, 220);
+		check('disabling the index hides its status', !/files indexed/i.test(disabled), disabled.slice(0, 160));
+		await B('/setting', { section: 'arxmlScope.index', key: 'enabled', value: true });
+		await B('/exec', { command: 'vscode-arxml-scope.rebuildIndex' });
+		await sleep(1800);
+		const reenabled = await readStatus();
+		check('re-enabling restores the index', readCount(reenabled) === initialCount, reenabled.slice(0, 160));
+		await B('/setting', { section: 'arxmlScope.index', key: 'exclude', value: ['**/right.arxml'] });
+		await B('/exec', { command: 'vscode-arxml-scope.rebuildIndex' });
+		await sleep(1800);
+		const excluded = await readStatus();
+		const excludedCount = readCount(excluded);
+		record.observations.exclude = { count: excludedCount, text: excluded.slice(0, 220) };
+		check('an excluded file leaves the index count', excludedCount === initialCount - 1, `${initialCount} -> ${excludedCount}`);
+		check('the tooltip reports the excluded file', /excluded by arxmlScope\.index\.exclude/i.test(excluded), excluded.slice(0, 160));
+		await B('/setting', { section: 'arxmlScope.index', key: 'exclude', value: [] });
+		await B('/exec', { command: 'vscode-arxml-scope.rebuildIndex' });
+		await sleep(1800);
+		const hugePath = path.join(WS, 'huge.arxml');
+		await writeDoc(hugePath, bigPair(12000, 6000).left);
+		await B('/exec', { command: 'vscode-arxml-scope.rebuildIndex' });
+		await sleep(3000);
+		const withHuge = await readStatus();
+		const withHugeCount = readCount(withHuge);
+		record.observations.withHuge = { count: withHugeCount, text: withHuge.slice(0, 220) };
+		check('the large file is indexed under the default cap', withHugeCount === initialCount + 1, `${initialCount} -> ${withHugeCount}`);
+		await B('/setting', { section: 'arxmlScope.index', key: 'maxFileSizeMB', value: 1 });
+		await B('/exec', { command: 'vscode-arxml-scope.rebuildIndex' });
+		await sleep(3000);
+		const capped = await readStatus();
+		const cappedCount = readCount(capped);
+		record.observations.capped = { count: cappedCount, text: capped.slice(0, 260) };
+		check('the size cap skips the large file', cappedCount === initialCount, `${withHugeCount} -> ${cappedCount}`);
+		check('the tooltip reports the skipped file', /skipped|too large|maxFileSizeMB/i.test(capped), capped.slice(0, 160));
+		check('the skipped tooltip names the actual reason', !/encoding or unreadable/i.test(capped), capped.slice(0, 160));
+		await B('/setting', { section: 'arxmlScope.index', key: 'maxFileSizeMB', value: 50 });
+		await B('/deleteFile', { path: hugePath });
+		await B('/exec', { command: 'vscode-arxml-scope.rebuildIndex' });
+		await sleep(1800);
+		const cycleLabel = async () => {
+			await B('/exec', { command: 'vscode-arxml-scope.cycleCrossFileRules' });
+			await sleep(700);
+			return readStatus();
+		};
+		const always = await cycleLabel();
+		const never = await cycleLabel();
+		const auto = await cycleLabel();
+		record.observations.cycle = { always: always.slice(0, 140), never: never.slice(0, 140), auto: auto.slice(0, 140) };
+		check('the cycle reaches always', /cross-file checks always/i.test(always), always.slice(0, 160));
+		check('the cycle reaches never', /cross-file checks off/i.test(never) && !/always/i.test(never), never.slice(0, 160));
+		check('the cycle returns to auto', /off \(no project\)/i.test(auto), auto.slice(0, 160));
+		record.screenshots.push(...(await shot('deep-index-toggles')));
+	});
+
+	await scenario('engine-restart', async ({ check, record }) => {
+		await reset();
+		await B('/exec', { command: 'vscode-arxml-scope.showEngineStatus', detached: true });
+		await sleep(1300);
+		const first = (await workbenchNotifications()).join(' / ');
+		const firstPid = /pid (\d+)/.exec(first)?.[1];
+		record.observations.first = { text: first.slice(0, 200), pid: firstPid };
+		check('Show Engine Status reports a running pid', Boolean(firstPid), first.slice(0, 160));
+		const restart = page.getByRole('button', { name: 'Restart Engine' }).first();
+		if ((await restart.count()) > 0) {
+			await restart.click().catch(() => {});
+			await sleep(2800);
+		}
+		const restarted = (await workbenchNotifications()).join(' / ');
+		record.observations.restarted = restarted.slice(0, 200);
+		check('Restart reports success', /engine restarted/i.test(restarted), restarted.slice(0, 160));
+		await B('/exec', { command: 'vscode-arxml-scope.showEngineStatus', detached: true });
+		await sleep(1300);
+		const second = (await workbenchNotifications()).join(' / ');
+		const secondPid = /pid (\d+)/.exec(second)?.[1];
+		record.observations.second = { text: second.slice(0, 200), pid: secondPid };
+		check('Restart actually replaces the process', Boolean(secondPid) && secondPid !== firstPid, `${firstPid} -> ${secondPid}`);
+		record.screenshots.push(...(await shot('deep-engine-restart')));
+	});
+
+	await scenario('theme-zoom', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		const frame = await openEditor();
+		const probe = () =>
+			frame.evaluate(() => {
+				const rgb = (value) => {
+					const srgb = /color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)/.exec(String(value));
+					if (srgb) {
+						return [srgb[1], srgb[2], srgb[3]].map((part) => Math.round(Number(part) * 255));
+					}
+					return (String(value).match(/\d+/g) ?? []).map(Number);
+				};
+				const luminance = (color) => {
+					const [r, g, b] = color.map((part) => part / 255).map((part) => (part <= 0.03928 ? part / 12.92 : Math.pow((part + 0.055) / 1.055, 2.4)));
+					return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+				};
+				const contrast = (a, b) => {
+					const l1 = luminance(a);
+					const l2 = luminance(b);
+					return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+				};
+				const body = getComputedStyle(document.body);
+				const bg = rgb(body.backgroundColor);
+				const fg = rgb(body.color);
+				const bar = document.querySelector('.toolbar');
+				const tool = document.querySelector('.toolbar .tool');
+				const tbg = bar ? rgb(getComputedStyle(bar).backgroundColor) : bg;
+				const tfg = tool ? rgb(getComputedStyle(tool).color) : fg;
+				return {
+					bg,
+					fg,
+					tbg,
+					tfg,
+					tbgRaw: bar ? getComputedStyle(bar).backgroundColor : null,
+					tfgRaw: tool ? getComputedStyle(tool).color : null,
+					bodyContrast: Math.round(contrast(fg, bg) * 10) / 10,
+					toolContrast: Math.round(contrast(tfg, tbg) * 10) / 10,
+					overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+				};
+			});
+		await B('/setting', { section: 'workbench', key: 'colorTheme', value: 'Default Light Modern' });
+		await sleep(1100);
+		const light = await probe();
+		record.observations.light = light;
+		check('the light theme paints a light surface', light.bg[0] > 128, JSON.stringify(light.bg));
+		check('body text keeps 4.5:1 contrast in light', light.bodyContrast >= 4.5, String(light.bodyContrast));
+		check('toolbar text keeps 3:1 contrast in light', light.toolContrast >= 3, String(light.toolContrast));
+		check('toolbar labels keep 4.5:1 contrast in light', light.toolContrast >= 4.5, `${light.toolContrast}:1 ${JSON.stringify(light.tfgRaw)} on ${JSON.stringify(light.tbgRaw)}`);
+		record.screenshots.push(...(await shot('deep-theme-light', frame)));
+		await B('/setting', { section: 'workbench', key: 'colorTheme', value: 'Default High Contrast' });
+		await sleep(1100);
+		const hc = await probe();
+		record.observations.highContrast = hc;
+		check('high contrast keeps a dark surface and light text', hc.bg[0] < 40 && hc.fg[0] > 200, JSON.stringify({ bg: hc.bg, fg: hc.fg }));
+		record.screenshots.push(...(await shot('deep-theme-hc', frame)));
+		await B('/setting', { section: 'workbench', key: 'colorTheme', value: 'Default Dark Modern' });
+		await sleep(900);
+		await B('/exec', { command: 'workbench.action.zoomIn' });
+		await B('/exec', { command: 'workbench.action.zoomIn' });
+		await sleep(1200);
+		const layout = await frame.evaluate(() => {
+			const bar = document.querySelector('.toolbar')?.getBoundingClientRect();
+			const tools = [...document.querySelectorAll('.toolbar .tool')].map((element) => element.getBoundingClientRect());
+			let overlaps = 0;
+			for (let index = 1; index < tools.length; index += 1) {
+				if (tools[index].left < tools[index - 1].right - 1) {
+					overlaps += 1;
+				}
+			}
+			return {
+				width: innerWidth,
+				count: tools.length,
+				overlaps,
+				inside: tools.every((rect) => !bar || (rect.left >= bar.left - 1 && rect.right <= bar.right + 1)),
+				overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+			};
+		});
+		record.observations.zoom150 = layout;
+		check('150% zoom keeps the toolbar inside the row', layout.inside && layout.overlaps === 0, JSON.stringify(layout));
+		check('150% zoom adds no page scroll', !layout.overflow, String(layout.overflow));
+		record.screenshots.push(...(await shot('deep-theme-zoom150', frame)));
+		await B('/exec', { command: 'workbench.action.zoomReset' });
+		await sleep(600);
+	});
+
+	await scenario('first-gate', async ({ check, record }) => {
+		await reset();
+		await ensureChatClosed();
+		record.observations.gates = {};
+		for (const name of ['empty.arxml', 'malformed.arxml', 'not-ecuc.arxml']) {
+			const file = path.join(WS, name);
+			await B('/exec', { command: 'vscode-arxml-scope.openEcucEditor', args: [uri(file)] });
+			await sleep(1000);
+			const notifications = await workbenchNotifications();
+			const tabs = (await B('/state')).tabs;
+			const entry = {
+				notifications: notifications.map((text) => text.slice(0, 180)),
+				tabs: tabs.map((tab) => `${tab.label}${tab.viewType ? ':' + tab.viewType : ''}`)
+			};
+			record.observations.gates[name] = entry;
+			check(`${name} is refused with an explanation`, notifications.some((text) => /ECUC values|not an \.arxml/i.test(text)), notifications.join(' / ').slice(0, 160));
+			check(`${name} does not open the ECUC editor`, !tabs.some((tab) => tab.viewType === 'vscode-arxml-scope.ecucEditor'), entry.tabs.join(', '));
+			check(`${name} opens the text editor the message promises`, tabs.length > 0, entry.tabs.join(', '));
+		}
+		record.screenshots.push(...(await shot('deep-first-gate')));
 	});
 
 	report.finishedAt = new Date().toISOString();

@@ -1,0 +1,230 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T15:13:46.517Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-FQirhg",
+  "cdp": {
+    "port": "55622",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "find-replace",
+      "startedAt": "2026-11-27T15:13:46.567Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "Ctrl+F opens the native find widget",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the native widget reports the match count",
+          "ok": false,
+          "detail": "? of 1"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-find-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-find-webview.png"
+      ],
+      "observations": {
+        "widgets": [
+          {
+            "id": "",
+            "cls": "editor-widget find-widget visible",
+            "visible": true,
+            "inputs": 0,
+            "text": "No results"
+          }
+        ],
+        "findVisible": true,
+        "widgetText": "? of 1",
+        "replaceGap": "native find inputs are not reachable over CDP (closed shadow root)"
+      },
+      "finishedAt": "2026-11-27T15:13:51.963Z"
+    },
+    {
+      "id": "theme-zoom",
+      "startedAt": "2026-11-27T15:13:51.963Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the light theme paints a light surface",
+          "ok": true,
+          "detail": "[255,255,255]"
+        },
+        {
+          "name": "body text keeps 4.5:1 contrast in light",
+          "ok": true,
+          "detail": "11.2"
+        },
+        {
+          "name": "toolbar text keeps 3:1 contrast in light",
+          "ok": true,
+          "detail": "67459587.7"
+        },
+        {
+          "name": "high contrast keeps a dark surface and light text",
+          "ok": true,
+          "detail": "{\"bg\":[0,0,0],\"fg\":[255,255,255]}"
+        },
+        {
+          "name": "150% zoom keeps the toolbar inside the row",
+          "ok": true,
+          "detail": "{\"width\":642,\"count\":3,\"overlaps\":0,\"inside\":true,\"overflow\":false}"
+        },
+        {
+          "name": "150% zoom adds no page scroll",
+          "ok": true,
+          "detail": "false"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-webview.png"
+      ],
+      "observations": {
+        "light": {
+          "bg": [
+            255,
+            255,
+            255
+          ],
+          "fg": [
+            59,
+            59,
+            59
+          ],
+          "tbg": [
+            255,
+            255,
+            255
+          ],
+          "tfg": [
+            0,
+            577255,
+            0,
+            577255,
+            0,
+            577255
+          ],
+          "tbgRaw": "rgb(255, 255, 255)",
+          "tfgRaw": "color(srgb 0.577255 0.577255 0.577255)",
+          "bodyContrast": 11.2,
+          "toolContrast": 67459587.7,
+          "overflow": false
+        },
+        "highContrast": {
+          "bg": [
+            0,
+            0,
+            0
+          ],
+          "fg": [
+            255,
+            255,
+            255
+          ],
+          "tbg": [
+            0,
+            0,
+            0
+          ],
+          "tfg": [
+            0,
+            55,
+            0,
+            55,
+            0,
+            55
+          ],
+          "tbgRaw": "rgb(0, 0, 0)",
+          "tfgRaw": "color(srgb 0.55 0.55 0.55)",
+          "bodyContrast": 21,
+          "toolContrast": 1.5,
+          "overflow": false
+        },
+        "zoom150": {
+          "width": 642,
+          "count": 3,
+          "overlaps": 0,
+          "inside": true,
+          "overflow": false
+        }
+      },
+      "finishedAt": "2026-11-27T15:13:59.940Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "deep-find",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-theme-light",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-theme-hc",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-theme-zoom150",
+      "page": {
+        "width": 1000,
+        "height": 625,
+        "dpr": 1.440000057220459
+      },
+      "frame": {
+        "width": 642,
+        "height": 503,
+        "dpr": 1.440000057220459
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-find-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-find-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T15:13:59.942Z"
+}

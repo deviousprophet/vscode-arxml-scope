@@ -1,0 +1,369 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T15:12:02.266Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-i1ypDB",
+  "cdp": {
+    "port": "64489",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "merge-off",
+      "startedAt": "2026-11-27T15:12:02.324Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Merge off offers no copy action",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "Merge on offers the copy action",
+          "ok": true,
+          "detail": "5"
+        },
+        {
+          "name": "turning Merge off removes it again",
+          "ok": true,
+          "detail": "0"
+        }
+      ],
+      "screenshots": [],
+      "observations": {
+        "offCount": 0,
+        "onCount": 5,
+        "offAgain": 0
+      },
+      "finishedAt": "2026-11-27T15:12:07.959Z"
+    },
+    {
+      "id": "index-toggles",
+      "startedAt": "2026-11-27T15:12:07.959Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the index starts enabled",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 5 files indexed · cross-file checks off (no project), 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packages\nCross-"
+        },
+        {
+          "name": "disabling the index hides its status",
+          "ok": true,
+          "detail": "remote | pulse  ARXML Engine, ARXML Scope engine running, pid 28880 | No Problems | Notifications | Copilot status"
+        },
+        {
+          "name": "re-enabling restores the index",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 5 files indexed · cross-file checks off (no project), 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packages\nCross-"
+        },
+        {
+          "name": "an excluded file leaves the index count",
+          "ok": true,
+          "detail": "5 -> 4"
+        },
+        {
+          "name": "the tooltip reports the excluded file",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 4 files indexed · cross-file checks off (no project), 4 files indexed\n17 elements, 1 references, 0 definitions\n2 packages\nCross-"
+        },
+        {
+          "name": "the large file is indexed under the default cap",
+          "ok": true,
+          "detail": "5 -> 6"
+        },
+        {
+          "name": "the size cap skips the large file",
+          "ok": true,
+          "detail": "6 -> 5"
+        },
+        {
+          "name": "the tooltip reports the skipped file",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 5 files indexed · cross-file checks off (no project), 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packages\nCross-"
+        },
+        {
+          "name": "the cycle reaches always",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 5 files indexed · cross-file checks always, 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packages\nCross-file check"
+        },
+        {
+          "name": "the cycle reaches never",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 5 files indexed · cross-file checks off, 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packages\nCross-file checks: "
+        },
+        {
+          "name": "the cycle returns to auto",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 5 files indexed · cross-file checks off (no project), 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packages\nCross-"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-index-toggles-workbench.png"
+      ],
+      "observations": {
+        "initial": {
+          "count": 5,
+          "text": "remote | database  ARXML Scope: 5 files indexed · cross-file checks off (no project), 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packages\nCross-file checks: off (no project)\nUpdated 10:12:03 PM\nClick to c"
+        },
+        "disabled": "remote | pulse  ARXML Engine, ARXML Scope engine running, pid 28880 | No Problems | Notifications | Copilot status",
+        "exclude": {
+          "count": 4,
+          "text": "remote | database  ARXML Scope: 4 files indexed · cross-file checks off (no project), 4 files indexed\n17 elements, 1 references, 0 definitions\n2 packages\nCross-file checks: off (no project)\n1 file excluded by arxmlScope."
+        },
+        "withHuge": {
+          "count": 6,
+          "text": "remote | database  ARXML Scope: 6 files indexed · cross-file checks off (no project), 6 files indexed\n12036 elements, 2 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nUpdated 10:12:17 PM\nClick t"
+        },
+        "capped": {
+          "count": 5,
+          "text": "remote | database  ARXML Scope: 5 files indexed · cross-file checks off (no project), 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packages\nCross-file checks: off (no project)\nSkipped: huge.arxml (size limit, encoding or unreadable)\nUpdated 10:12"
+        },
+        "cycle": {
+          "always": "remote | database  ARXML Scope: 5 files indexed · cross-file checks always, 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packa",
+          "never": "remote | database  ARXML Scope: 5 files indexed · cross-file checks off, 5 files indexed\n34 elements, 2 references, 0 definitions\n2 packages",
+          "auto": "remote | database  ARXML Scope: 5 files indexed · cross-file checks off (no project), 5 files indexed\n34 elements, 2 references, 0 definitio"
+        }
+      },
+      "finishedAt": "2026-11-27T15:12:27.492Z"
+    },
+    {
+      "id": "theme-zoom",
+      "startedAt": "2026-11-27T15:12:27.492Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the light theme paints a light surface",
+          "ok": true,
+          "detail": "[255,255,255]"
+        },
+        {
+          "name": "body text keeps 4.5:1 contrast in light",
+          "ok": true,
+          "detail": "11.2"
+        },
+        {
+          "name": "toolbar text keeps 3:1 contrast in light",
+          "ok": true,
+          "detail": "67459587.7"
+        },
+        {
+          "name": "high contrast keeps a dark surface and light text",
+          "ok": true,
+          "detail": "{\"bg\":[0,0,0],\"fg\":[255,255,255]}"
+        },
+        {
+          "name": "150% zoom keeps the toolbar inside the row",
+          "ok": true,
+          "detail": "{\"width\":642,\"count\":3,\"overlaps\":0,\"inside\":true,\"overflow\":false}"
+        },
+        {
+          "name": "150% zoom adds no page scroll",
+          "ok": true,
+          "detail": "false"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-webview.png"
+      ],
+      "observations": {
+        "light": {
+          "bg": [
+            255,
+            255,
+            255
+          ],
+          "fg": [
+            59,
+            59,
+            59
+          ],
+          "bodyContrast": 11.2,
+          "toolContrast": 67459587.7,
+          "overflow": false
+        },
+        "highContrast": {
+          "bg": [
+            0,
+            0,
+            0
+          ],
+          "fg": [
+            255,
+            255,
+            255
+          ],
+          "bodyContrast": 21,
+          "toolContrast": 1.5,
+          "overflow": false
+        },
+        "zoom150": {
+          "width": 642,
+          "count": 3,
+          "overlaps": 0,
+          "inside": true,
+          "overflow": false
+        }
+      },
+      "finishedAt": "2026-11-27T15:12:35.391Z"
+    },
+    {
+      "id": "first-gate",
+      "startedAt": "2026-11-27T15:12:35.391Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "empty.arxml is refused with an explanation",
+          "ok": true,
+          "detail": "\"empty.arxml\" contains no ECUC values; showing the text editor instead."
+        },
+        {
+          "name": "empty.arxml does not open the ECUC editor",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "empty.arxml does not silently open a text editor",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "malformed.arxml is refused with an explanation",
+          "ok": true,
+          "detail": "\"malformed.arxml\" contains no ECUC values; showing the text editor instead. / \"empty.arxml\" contains no ECUC values; showing the text editor instead."
+        },
+        {
+          "name": "malformed.arxml does not open the ECUC editor",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "malformed.arxml does not silently open a text editor",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "not-ecuc.arxml is refused with an explanation",
+          "ok": true,
+          "detail": "\"not-ecuc.arxml\" contains no ECUC values; showing the text editor instead. / \"malformed.arxml\" contains no ECUC values; showing the text editor instead. / \"empt"
+        },
+        {
+          "name": "not-ecuc.arxml does not open the ECUC editor",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "not-ecuc.arxml does not silently open a text editor",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-first-gate-workbench.png"
+      ],
+      "observations": {
+        "gates": {
+          "empty.arxml": {
+            "notifications": [
+              "\"empty.arxml\" contains no ECUC values; showing the text editor instead."
+            ],
+            "tabs": []
+          },
+          "malformed.arxml": {
+            "notifications": [
+              "\"malformed.arxml\" contains no ECUC values; showing the text editor instead.",
+              "\"empty.arxml\" contains no ECUC values; showing the text editor instead."
+            ],
+            "tabs": []
+          },
+          "not-ecuc.arxml": {
+            "notifications": [
+              "\"not-ecuc.arxml\" contains no ECUC values; showing the text editor instead.",
+              "\"malformed.arxml\" contains no ECUC values; showing the text editor instead.",
+              "\"empty.arxml\" contains no ECUC values; showing the text editor instead."
+            ],
+            "tabs": []
+          }
+        }
+      },
+      "finishedAt": "2026-11-27T15:12:39.678Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "deep-index-toggles",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "deep-theme-light",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-theme-hc",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-theme-zoom150",
+      "page": {
+        "width": 1000,
+        "height": 625,
+        "dpr": 1.440000057220459
+      },
+      "frame": {
+        "width": 642,
+        "height": 503,
+        "dpr": 1.440000057220459
+      }
+    },
+    {
+      "name": "deep-first-gate",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-index-toggles-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-first-gate-workbench.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T15:12:39.678Z"
+}

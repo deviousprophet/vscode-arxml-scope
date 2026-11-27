@@ -1,0 +1,196 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T15:01:03.310Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-bbxyLr",
+  "cdp": {
+    "port": "61783",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "row-menu",
+      "startedAt": "2026-11-27T15:01:03.508Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "right-click on a row opens the context menu",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "name": "the menu offers the ECUC actions",
+          "ok": true,
+          "detail": "Change All Occurrences\nCtrl+F2\nCut\nCopy\nPaste\nDelete ECUC element\nDuplicate ECUC element\nCommand Palette\nF1"
+        },
+        {
+          "name": "Delete asks for confirmation",
+          "ok": false,
+          "detail": ""
+        },
+        {
+          "name": "cancelling Delete changes nothing",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Duplicate asks for a new short name",
+          "ok": true,
+          "detail": "New short name for the duplicate (Press 'Enter' to confirm or 'Escape' to cancel)"
+        },
+        {
+          "name": "Duplicate confirms before writing",
+          "ok": false,
+          "detail": ""
+        },
+        {
+          "name": "the duplicate is written after confirmation",
+          "ok": false,
+          "detail": null
+        },
+        {
+          "name": "the duplicate row is visible",
+          "ok": false,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-delete-cancel-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-delete-cancel-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-duplicate-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-duplicate-webview.png"
+      ],
+      "observations": {
+        "menu": {
+          "visible": true,
+          "text": "Change All Occurrences\nCtrl+F2\nCut\nCopy\nPaste\nDelete ECUC element\nDuplicate ECUC element\nCommand Palette\nF1"
+        },
+        "dialogProbe": {
+          "classes": [
+            "monaco-enable-motion modern-ui modern-ui-tabs modern-ui-connected-editor-tabs mo",
+            "monaco-list-row"
+          ],
+          "text": [
+            "FileEditSelectionViewGoRunTerminalHelp[Extension Development Host] arxml-ux-host-ws-bbxyLr[Extension Development Host] a",
+            "Reload and Enable ExtensionsAll installed extensions are temporarily disabled."
+          ]
+        },
+        "pagesAfterDelete": [
+          "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+        ],
+        "editorAfterDelete": {
+          "strip": "",
+          "status": "",
+          "notifications": [
+            "Reload and Enable Extensions\nAll installed extensions are temporarily disabled."
+          ]
+        },
+        "deleteDialog": {
+          "dialogCount": 0,
+          "dialogText": ""
+        },
+        "duplicatePrompt": {
+          "quickVisible": true,
+          "quickText": "New short name for the duplicate (Press 'Enter' to confirm or 'Escape' to cancel)"
+        },
+        "afterDuplicateEnter": {
+          "quickVisible": false,
+          "quickValue": "ContKeep_CopyContKeepCopy",
+          "pages": [
+            "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+          ],
+          "strip": "",
+          "status": "",
+          "notifications": [
+            "Reload and Enable Extensions\nAll installed extensions are temporarily disabled."
+          ]
+        },
+        "duplicateConfirm": {
+          "confirmCount": 0,
+          "text": ""
+        }
+      },
+      "finishedAt": "2026-11-27T15:01:30.208Z"
+    },
+    {
+      "id": "find-replace",
+      "startedAt": "2026-11-27T15:01:30.209Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "Ctrl+F opens the native find widget",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [],
+      "observations": {
+        "widgets": [
+          {
+            "id": "",
+            "cls": "editor-widget find-widget visible",
+            "visible": true,
+            "inputs": 0,
+            "text": "No results"
+          }
+        ],
+        "findVisible": true
+      },
+      "error": "locator.fill: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator('.find-widget.visible input').first()\n\n    at h:\\workspace\\vscode-arxml-scope\\.agents\\skills\\ux-review\\scripts\\host\\driver.mjs:1235:61\n    at async scenario (h:\\workspace\\vscode-arxml-scope\\.agents\\skills\\ux-review\\scripts\\host\\driver.mjs:236:3)\n    at async main (h:\\workspace\\vscode-arxml-scope\\.agents\\skills\\ux-review\\scripts\\host\\driver.mjs:1214:2)\n    at async file:///h:/workspace/vscode-arxml-scope/.agents/skills/ux-review/scripts/host/driver.mjs:1308:2",
+      "finishedAt": "2026-11-27T15:01:48.570Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "deep-row-menu-delete-cancel",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-row-menu-duplicate",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "find-replace-blocked",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-delete-cancel-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-delete-cancel-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-duplicate-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-duplicate-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\find-replace-blocked-workbench.png"
+  ],
+  "errors": [
+    {
+      "stage": "find-replace",
+      "message": "locator.fill: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator('.find-widget.visible input').first()\n",
+      "at": "2026-11-27T15:01:48.473Z"
+    }
+  ],
+  "finishedAt": "2026-11-27T15:01:48.570Z"
+}

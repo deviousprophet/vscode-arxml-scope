@@ -1,0 +1,267 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T14:49:54.618Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-XVTyWn",
+  "cdp": {
+    "port": "63873",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "edit-invalid",
+      "startedAt": "2026-11-27T14:49:54.659Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the toolbar reports the invalid draft",
+          "ok": true,
+          "detail": "Invalid value — not saved"
+        },
+        {
+          "name": "the editor error strip repeats it",
+          "ok": true,
+          "detail": "Invalid value — Invalid integer value"
+        },
+        {
+          "name": "the Details field shows an inline error",
+          "ok": true,
+          "detail": "/* Invalid integer value */"
+        },
+        {
+          "name": "the Details status line repeats it too",
+          "ok": true,
+          "detail": "Invalid integer value"
+        },
+        {
+          "name": "the invalid draft is not written",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the draft stays dirty after the blocked save",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "fixing the value saves it",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the dirty marker clears after the fixed save",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-fixed-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-fixed-webview.png"
+      ],
+      "observations": {
+        "invalidChannels": {
+          "toolbar": "Invalid value — not saved",
+          "strip": "Invalid value — Invalid integer value",
+          "inline": "/* Invalid integer value */",
+          "status": "Invalid integer value"
+        },
+        "afterFix": {
+          "strip": "",
+          "status": "",
+          "value": "7"
+        }
+      },
+      "finishedAt": "2026-11-27T14:50:03.421Z"
+    },
+    {
+      "id": "edit-details-save",
+      "startedAt": "2026-11-27T14:50:03.422Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "Ctrl+S from the Details field saves the value",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the dirty marker clears",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Details keeps focus after the host echo",
+          "ok": true,
+          "detail": "{\"id\":\"details-value\",\"tag\":\"INPUT\",\"text\":\"\"}"
+        },
+        {
+          "name": "Details keeps the caret at the end",
+          "ok": false,
+          "detail": "undefined"
+        },
+        {
+          "name": "Details still shows the edited row",
+          "ok": true,
+          "detail": "parameter\nChanged\nDefinition\n/Pkg/Diff/ModAlpha/ContKeep/Changed\nType\nInteger\nVa"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-details-save-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-details-save-webview.png"
+      ],
+      "observations": {
+        "beforeSave": {
+          "id": "details-value",
+          "tag": "INPUT",
+          "text": "",
+          "caret": 2
+        },
+        "afterSave": {
+          "id": "details-value",
+          "tag": "INPUT",
+          "text": "",
+          "caret": 2,
+          "details": "parameter\nChanged\nDefinition\n/Pkg/Diff/ModAlpha/ContKeep/Changed\nType\nInteger\nValue\nDecimal\n12\nHexadecimal\n0x0C\nBinary\n0b00001100\nReveal in source"
+        }
+      },
+      "finishedAt": "2026-11-27T14:50:08.910Z"
+    },
+    {
+      "id": "edit-multi-save",
+      "startedAt": "2026-11-27T14:50:08.910Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "one Ctrl+S writes both drafts",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "both values stay visible",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the dirty marker clears",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-multi-save-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-multi-save-webview.png"
+      ],
+      "observations": {
+        "beforeSave": "● Unsaved changes",
+        "afterSave": true
+      },
+      "finishedAt": "2026-11-27T14:50:15.793Z"
+    },
+    {
+      "id": "row-menu",
+      "startedAt": "2026-11-27T14:50:15.793Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "right-click on a row opens the row menu",
+          "ok": false,
+          "detail": "false"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-missing-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-missing-webview.png"
+      ],
+      "observations": {
+        "menu": {
+          "visible": false,
+          "text": ""
+        }
+      },
+      "finishedAt": "2026-11-27T14:50:18.767Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "deep-edit-invalid",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-edit-invalid-fixed",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-edit-details-save",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-edit-multi-save",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-row-menu-missing",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-fixed-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-fixed-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-details-save-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-details-save-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-multi-save-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-multi-save-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-missing-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-missing-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T14:50:18.767Z"
+}
