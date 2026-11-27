@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Check that every rendered journey has an audit-first verdict."}
-{"file": ".trellis/spec/guides/documentation-architecture-guide.md", "reason": "Place the report with the contributor audience and link it from the docs index."}
-{"file": "docs/contributor/TEST_PLAN.md", "reason": "Map the review evidence to the existing test plan boundaries."}
-{"file": ".agents/skills/ux-review/references/WEBVIEW_PREVIEW.md", "reason": "Confirm any new preview state is documented in the state table."}
