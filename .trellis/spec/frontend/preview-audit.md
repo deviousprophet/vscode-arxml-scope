@@ -8,7 +8,7 @@ under the Search field, a gutter item offering both directions on a deletion —
 jsdom suites cannot see layout at all.
 
 Executable workflow, flags, outputs and cleanup: [`SKILL.md`](../../../.agents/skills/ux-review/SKILL.md).
-Human state table and limits: [`docs/contributor/WEBVIEW_PREVIEW.md`](../../../docs/contributor/WEBVIEW_PREVIEW.md).
+Human state table and limits: [`.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md`](../../../.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md).
 Pinned Monaco surface: [`diff-parity.md`](./diff-parity.md).
 
 ## Trigger

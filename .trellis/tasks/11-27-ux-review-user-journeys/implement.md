@@ -21,7 +21,7 @@
 - [ ] Capture the mapped states; read each `audit.json` before its PNG.
 - [ ] Record geometry/paint findings and screenshots that look plausible but fail the audit.
 - [ ] If a journey has no state, add the smallest state to the preview skill, document it in
-      `docs/contributor/WEBVIEW_PREVIEW.md`, and recapture.
+      `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md`, and recapture.
 - [ ] **Gate:** every rendered journey has a state or a recorded gap.
 
 ## Phase 3 — Real host evidence

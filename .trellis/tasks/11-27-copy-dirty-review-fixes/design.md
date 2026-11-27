@@ -98,7 +98,7 @@ Implementation shape:
 - `previewAudit.ts`: add `copyRefusal?: boolean` and `copiedCleared?: boolean` to `AuditState`;
   skip `copiedMarkerIssues` when `copiedCleared`; add the refusal check. Record the posted
   copy in the audit so a state that never clicked cannot pass silently.
-- `docs/contributor/WEBVIEW_PREVIEW.md` state table: add both rows.
+- `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md` state table: add both rows.
 
 The states use existing fixtures and selectors; no new layout surface.
 

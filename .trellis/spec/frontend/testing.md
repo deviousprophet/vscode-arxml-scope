@@ -94,7 +94,7 @@ in the task notes rather than implying it was tested.
 The preview is the `ux-review` skill's Preview mode. The skill owns the runner commands, flags,
 outputs and cleanup ([`SKILL.md`](../../../.agents/skills/ux-review/SKILL.md)); the
 human state table and limits are in
-[`docs/contributor/WEBVIEW_PREVIEW.md`](../../../docs/contributor/WEBVIEW_PREVIEW.md); the
+[`.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md`](../../../.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md); the
 audit invariants and execution rules are in [`preview-audit.md`](./preview-audit.md). Do
 not restate the command block here. The harness wraps the **production shell**
 (`webviewShell.ts`) and imports the real page entries (`diffMonaco.ts`, `editorMonaco.ts`),

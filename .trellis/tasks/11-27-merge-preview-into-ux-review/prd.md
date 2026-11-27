@@ -34,8 +34,9 @@ references.
 
 ## Constraints
 
-- Keep the existing docs as the human source for the state table and limits; the skill links
-  them rather than duplicating 43 state descriptions.
+- Keep the 43-state table and limits in
+  `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md`; do not keep a `docs/contributor`
+  preview page.
 - Keep the host runner's ARXML-specific commands/selectors isolated in `scripts/host/`.
 - The old skill remains recoverable from git history; do not keep a duplicate directory.
 

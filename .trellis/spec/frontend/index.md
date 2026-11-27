@@ -39,7 +39,7 @@ the [Cross-Layer Thinking Guide](../guides/cross-layer-thinking-guide.md) and th
 | Documentation index (users and contributors) | [`docs/README.md`](../../../docs/README.md) |
 | User guides (ECUC editor, diff, merge) | [`docs/user/ECUC_EDITOR.md`](../../../docs/user/ECUC_EDITOR.md) — the index links diff and merge |
 | Contributor setup, tests, preview and engine | [`docs/contributor/DEVELOPMENT.md`](../../../docs/contributor/DEVELOPMENT.md) |
-| Webview preview state table and limits | [`docs/contributor/WEBVIEW_PREVIEW.md`](../../../docs/contributor/WEBVIEW_PREVIEW.md) |
+| Webview preview state table and limits | [`.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md`](../../../.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md) |
 | Webview visual identity and design tokens | [`DESIGN.md`](../../../DESIGN.md) |
 | Rust engine protocol and crate layout | [`rust/README.md`](../../../rust/README.md) |
 

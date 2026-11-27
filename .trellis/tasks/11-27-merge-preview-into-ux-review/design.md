@@ -41,7 +41,8 @@ at the repository root.
 `ux-review/SKILL.md` has one frontmatter description covering both modes and two sections:
 
 1. **Preview mode** — the old `webview-preview` commands, audit-first rule, output locations,
-   workflow and limits. Link `docs/contributor/WEBVIEW_PREVIEW.md` for the 43-state table and
+   workflow and limits. Keep the 43-state table in
+ `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md` and link it from `SKILL.md`.
    `DESIGN.md` for the webview design contract.
 2. **Host mode** — the current real-host runner, scenarios, capture fidelity, continuity,
    outputs and cleanup.
@@ -57,7 +58,7 @@ state → Preview; commands/keyboard/dialogs/continuity → Host.
 | `DESIGN.md` | Same |
 | `.trellis/spec/frontend/preview-audit.md` | Executable-workflow link → `ux-review/SKILL.md` |
 | `.trellis/spec/frontend/testing.md`, `component-guidelines.md` | Skill path references |
-| `docs/contributor/WEBVIEW_PREVIEW.md` | Commands and skill path |
+| `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md` | Commands and skill path |
 | `docs/contributor/WEBVIEW_PREVIEW_STACK.md` | Current-harness path |
 | `docs/contributor/TEST_PLAN.md` | Skill path references |
 | `docs/README.md` | Skill pointer if present |

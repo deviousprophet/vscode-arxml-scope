@@ -62,7 +62,7 @@ Workflow:
 Preview limits: the shell is the production webview with seeded fixtures, not the Extension
 Development Host; it is dark-theme oriented, does not prove real keyboard/IME, screen-reader, OS
 clipboard or packaged-VSIX behavior. The 43-state table and limits are in
-[`docs/contributor/WEBVIEW_PREVIEW.md`](../../../docs/contributor/WEBVIEW_PREVIEW.md).
+[`references/WEBVIEW_PREVIEW.md`](references/WEBVIEW_PREVIEW.md).
 
 ## Host mode
 

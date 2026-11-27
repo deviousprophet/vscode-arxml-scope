@@ -28,7 +28,6 @@ for the audience rules.
 | [Development](contributor/DEVELOPMENT.md) | Contributors | Setup, build, test and the links to the engine, preview, test plan and diff contracts. |
 | [Engine](contributor/ENGINE.md) | Contributors/operators | The Rust engine's process model, lifecycle, restart/backoff, status command, support matrix and limits. |
 | [Test plan](contributor/TEST_PLAN.md) | Contributors | The human regression plan: layers, commands, per-area gates, case IDs and known gaps. |
-| [Webview preview](contributor/WEBVIEW_PREVIEW.md) | Contributors | The human preview guide: what the harness is, the seeded state table, outputs, commands pointer and limits. |
 | [Webview preview stack](contributor/WEBVIEW_PREVIEW_STACK.md) | Contributors | The spike decision and evidence for a reusable standalone Playwright core plus an optional real-VS Code E2E mode. |
 | [Design system](../DESIGN.md) | Contributors | The webview visual identity and design contract: theme tokens, typography, spacing and component rules; the `design:lint` target. |
 | [Changelog](../CHANGELOG.md) | Everyone | Released changes. |

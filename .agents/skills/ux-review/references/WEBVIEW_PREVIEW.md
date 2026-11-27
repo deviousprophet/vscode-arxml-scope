@@ -16,13 +16,13 @@ markup and no extra dependency.
 
 A 2026 spike evaluated a reusable Playwright-based stack and proved both a standalone
 built-asset mode and an optional real-VS-Code mode. The decision and evidence are in
-[WEBVIEW_PREVIEW_STACK.md](WEBVIEW_PREVIEW_STACK.md). This harness remains the current
+[WEBVIEW_PREVIEW_STACK.md](../../../../docs/contributor/WEBVIEW_PREVIEW_STACK.md). This harness remains the current
 implementation until the follow-up port lands.
 
 ## Commands and workflow
 
 The executable workflow, command flags, outputs and cleanup rules are owned by the
-[`ux-review` Preview mode](../../.agents/skills/ux-review/SKILL.md). In short, run
+[`ux-review`](../SKILL.md). In short, run
 `node .agents/skills/ux-review/scripts/preview/shotWebview.mjs` to capture the full seeded
 set, add `--state <name>` for one state and `--list` for the names. There is no
 `package.json` alias; the runner lives only in the skill.
@@ -99,7 +99,7 @@ owns the step-by-step procedure.
 The visual invariants — toolbar placement, translucent fills, per-side body, folding,
 value/condition colours, dirty/invalid/rename/draft behaviour, gutter availability, sash
 and swap — are agent contracts in
-[`preview-audit.md`](../../.trellis/spec/frontend/preview-audit.md). Read that page before
+[`preview-audit.md`](../../../../.trellis/spec/frontend/preview-audit.md). Read that page before
 changing the preview audit or interpreting a new violation; this page deliberately does
 not restate them.
 

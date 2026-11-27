@@ -22,17 +22,19 @@
 - [x] Merge `webview-preview/SKILL.md` into `ux-review/SKILL.md` as **Preview mode**; keep the
       current host content as **Host mode**.
 - [x] Add the preview commands, audit-first workflow, outputs, limits and links to
-      `docs/contributor/WEBVIEW_PREVIEW.md` / `DESIGN.md`.
+      `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md` / `DESIGN.md`.
 - [x] Update `.opencode/agents/ux-reviewer.md` to load only `ux-review`; preview work uses
       Preview mode, host work uses Host mode.
 - [x] Add `.agents/skills/ux-review/.gitignore` for `.cache/` and `artifacts/`.
 
 ## Phase 4 — References
 
+- [x] Move `docs/contributor/WEBVIEW_PREVIEW.md` to
+      `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md`; remove its `docs/README.md` row.
 - [x] `git grep "webview-preview"` and update every live reference: `AGENTS.md`, `DESIGN.md`,
       `.trellis/spec/frontend/{preview-audit,testing,component-guidelines,css-guidelines,
       component-diff-view,diff-parity,editor-lifecycle,monaco}.md`,
-      `docs/contributor/{WEBVIEW_PREVIEW,WEBVIEW_PREVIEW_STACK,TEST_PLAN,DEVELOPMENT}.md`,
+      `docs/contributor/{WEBVIEW_PREVIEW_STACK,TEST_PLAN,DEVELOPMENT}.md`,
       `docs/README.md`, the UX task and the skill itself.
 - [x] Leave archived task records as historical text.
 - [x] Update the UX task's preview evidence commands to

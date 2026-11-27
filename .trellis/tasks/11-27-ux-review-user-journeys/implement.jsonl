@@ -2,7 +2,7 @@
 {"file": ".trellis/spec/frontend/testing.md", "reason": "Test-layer placement so the review adds evidence at the right layer without duplicating suites."}
 {"file": ".trellis/spec/frontend/editor-lifecycle.md", "reason": "Editor, diff and merge session contracts and error paths that the journeys exercise."}
 {"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Webview shell, event ownership, theme and accessibility contracts."}
-{"file": "docs/contributor/WEBVIEW_PREVIEW.md", "reason": "Seeded state table, outputs and limits used to map journeys to preview states."}
+{"file": ".agents/skills/ux-review/references/WEBVIEW_PREVIEW.md", "reason": "Seeded state table, outputs and limits used to map journeys to preview states."}
 {"file": "docs/contributor/WEBVIEW_PREVIEW_STACK.md", "reason": "Proven extension-host and CDP evidence for driving the real VS Code host."}
 {"file": "docs/user/ECUC_EDITOR.md", "reason": "User-facing editor journeys, settings and limitations."}
 {"file": "docs/user/DIFF.md", "reason": "User-facing diff journeys, navigation, merge and limits."}

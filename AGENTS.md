@@ -30,7 +30,7 @@ the document tree, diff, toolbar, search or sidebar. `npm run design:lint` valid
 Layout changes also need eyes: load the `ux-review` skill's Preview mode and run
 `.agents/skills/ux-review/scripts/preview/shotWebview.mjs`. It captures every seeded state to
 `.agents/skills/ux-review/artifacts/`. The states and the audit checklist are in
-[`docs/contributor/WEBVIEW_PREVIEW.md`](docs/contributor/WEBVIEW_PREVIEW.md).
+[`.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md`](.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md).
 
 <!-- DESIGN.md:END -->
 

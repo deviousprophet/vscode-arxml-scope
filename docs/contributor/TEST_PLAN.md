@@ -16,7 +16,7 @@ lives in the [`ux-review` Preview mode](../../.agents/skills/ux-review/SKILL.md)
 |---|---|---|
 | Core unit | pure scanner/model/rows/index/diff/merge logic | `npm test` (`src/test/core`) |
 | Webview DOM | the bundled page, its components and the host↔page protocol in jsdom | `npm test` (`src/test/webview`) |
-| Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `ux-review` Preview mode: `scripts/preview/shotWebview.mjs` (see [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md)) |
+| Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `ux-review` Preview mode: `scripts/preview/shotWebview.mjs` (see [preview states and limits](../../.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md)) |
 | Extension integration | real VS Code: panels, edits, undo, watchers, diagnostics | `npm test` (`src/test/extension`) |
 | Rust core | parse, ids, rows, edit plans, merge index, digests | `cargo test --workspace` |
 | Engine process | protocol, lifecycle, byte-for-byte row parity with the TypeScript oracle | `npm run engine:smoke`, `npm test` (`src/test/parity`) |

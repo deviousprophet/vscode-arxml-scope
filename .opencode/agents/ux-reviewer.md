@@ -27,7 +27,7 @@ code quality.
 - Write only under `{TASK_DIR}/research/`; the report is `{TASK_DIR}/research/UX_REVIEW.md`.
   Never modify `src/**`, `.trellis/spec/`, user docs, `docs/**` or release files.
 - The only preview change you may make is a test-only state or audit check when a journey has no
-  seeded surface; document it in `docs/contributor/WEBVIEW_PREVIEW.md`.
+  seeded surface; document it in `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md`.
 - Use a temporary workspace copied from `src/test/fixtures/`. Never open or edit the user's
   working tree as the test workspace.
 - Make no commits, pushes, branches or releases.
