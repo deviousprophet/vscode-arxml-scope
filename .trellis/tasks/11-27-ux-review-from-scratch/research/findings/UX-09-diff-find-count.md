@@ -1,9 +1,10 @@
-# UX-09 — The diff find count reads "? of 3" instead of "1 of 3"
+# UX-09 — The find count reads "? of N" instead of "1 of N" (diff and editor)
 
 - **Severity:** Minor
-- **Journey:** DIFF-09 (find in the diff), DIFF-05 (next/prev navigation)
+- **Gate:** Finish — counts must be real
+- **Journey:** DIFF-09 (find in the diff), EDIT-18 (find in the editor), DIFF-05
 - **Heuristic:** Nielsen #1 visibility of system status; recognition over recall
-- **Confidence:** High — visible in the host capture and recorded by the driver
+- **Confidence:** High — host-confirmed on both surfaces in the deep pass
 
 ## Repro
 
@@ -22,6 +23,13 @@ mark. The driver records `findCount: "? of 3"`; the screenshot shows the same st
 
 The scenario's check passes because it accepts any non-empty count
 (`count.length > 0`), so the defect is visible but not gated.
+
+Host confirmation, deep pass: the same defect appears in the **editor** find widget. With the
+cursor in `ContKeep`, `Ctrl+F` and typing `Changed` produces **`? of 1`**
+(`research/evidence/host/deep-find-webview.png`,
+`research/evidence/host/driver-report-deep-all.json`, `find-replace.widgetText`). Both surfaces
+use the shared native-find bridge, so the fix belongs in the shared current-index plumbing.
+The deep-pass check now requires a numeric `\d+ of \d+` and fails on `? of 1`.
 
 Evidence: `research/evidence/host/diff-03-find-workbench.png` (crop of the widget at 1082 px),
 `research/evidence/host/driver-report-r2.json` (`diff` observations: `findCount: "? of 3"`).

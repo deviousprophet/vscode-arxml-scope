@@ -1,0 +1,240 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T15:05:54.374Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-yjjWDY",
+  "cdp": {
+    "port": "51150",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "diff-collapse-all",
+      "startedAt": "2026-11-27T15:05:54.492Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Collapse All hides container children",
+          "ok": true,
+          "detail": "58 -> 8"
+        },
+        {
+          "name": "Expand All restores the rows",
+          "ok": true,
+          "detail": "8 -> 58"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-collapse-all-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-collapse-all-webview.png"
+      ],
+      "observations": {
+        "collapse": {
+          "before": 58,
+          "collapsed": 8
+        },
+        "expand": {
+          "collapsed": 8,
+          "expanded": 58
+        }
+      },
+      "finishedAt": "2026-11-27T15:05:59.901Z"
+    },
+    {
+      "id": "diff-showdiff-swap",
+      "startedAt": "2026-11-27T15:05:59.902Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "Swap mirrors the pane titles",
+          "ok": true,
+          "detail": "{\"left\":\"right.arxml\",\"right\":\"left.arxml\"}"
+        },
+        {
+          "name": "Swap is shown as a state",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Show diff is pressed",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Show diff hides unchanged rows",
+          "ok": false,
+          "detail": "58 -> 58"
+        },
+        {
+          "name": "Context is enabled in Show diff",
+          "ok": true,
+          "detail": "null"
+        },
+        {
+          "name": "Context off hides the surrounding unchanged rows",
+          "ok": true,
+          "detail": "58 -> 58"
+        },
+        {
+          "name": "Show all restores the rows",
+          "ok": true,
+          "detail": "58 -> 58"
+        },
+        {
+          "name": "Context is disabled in Show all",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-webview.png"
+      ],
+      "observations": {
+        "titles": {
+          "before": {
+            "left": "left.arxml",
+            "right": "right.arxml"
+          },
+          "swapped": {
+            "left": "right.arxml",
+            "right": "left.arxml"
+          }
+        },
+        "showDiff": {
+          "allLines": 58,
+          "diffLines": 58,
+          "contextDisabled": null
+        },
+        "contextOff": {
+          "contextOffLines": 58,
+          "pressed": "false"
+        }
+      },
+      "finishedAt": "2026-11-27T15:06:05.959Z"
+    },
+    {
+      "id": "diff-identical",
+      "startedAt": "2026-11-27T15:06:05.959Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "identical files show a stated empty result",
+          "ok": true,
+          "detail": "true No differences"
+        },
+        {
+          "name": "the toolbar is still available",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-identical-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-identical-webview.png"
+      ],
+      "observations": {
+        "empty": {
+          "visible": true,
+          "text": "No differences"
+        }
+      },
+      "finishedAt": "2026-11-27T15:06:09.089Z"
+    },
+    {
+      "id": "diff-side-not-ecuc",
+      "startedAt": "2026-11-27T15:06:09.090Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the last good comparison stays visible",
+          "ok": true,
+          "detail": "58 -> 56"
+        },
+        {
+          "name": "a side that stops being ECUC is explained",
+          "ok": true,
+          "detail": "\"right.arxml\" contains no ECUC values; showing the text editor instead."
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-side-not-ecuc-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-side-not-ecuc-webview.png"
+      ],
+      "observations": {
+        "rowsBefore": 58,
+        "rowsAfter": 56,
+        "noticeVisible": true,
+        "noticeText": "\"right.arxml\" contains no ECUC values; showing the text editor instead."
+      },
+      "finishedAt": "2026-11-27T15:06:12.865Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "deep-diff-collapse-all",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-diff-showdiff",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-diff-identical",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-diff-side-not-ecuc",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-collapse-all-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-collapse-all-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-identical-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-identical-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-side-not-ecuc-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-side-not-ecuc-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T15:06:12.865Z"
+}

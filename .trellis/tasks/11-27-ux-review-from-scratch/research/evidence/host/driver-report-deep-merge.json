@@ -1,0 +1,345 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-27T15:08:37.811Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-MLcBjV",
+  "cdp": {
+    "port": "51693",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "diff-showdiff-swap",
+      "startedAt": "2026-11-27T15:08:37.917Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Swap mirrors the pane titles",
+          "ok": true,
+          "detail": "{\"left\":\"right.arxml\",\"right\":\"left.arxml\"}"
+        },
+        {
+          "name": "Swap is shown as a state",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Show diff is pressed",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Show diff hides unchanged rows",
+          "ok": true,
+          "detail": "76 -> 22"
+        },
+        {
+          "name": "Context is enabled in Show diff",
+          "ok": true,
+          "detail": "null"
+        },
+        {
+          "name": "Context off hides the surrounding unchanged rows",
+          "ok": true,
+          "detail": "22 -> 22"
+        },
+        {
+          "name": "Show all restores the rows",
+          "ok": true,
+          "detail": "22 -> 76"
+        },
+        {
+          "name": "Context is disabled in Show all",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-webview.png"
+      ],
+      "observations": {
+        "titles": {
+          "before": {
+            "left": "left.arxml",
+            "right": "right.arxml"
+          },
+          "swapped": {
+            "left": "right.arxml",
+            "right": "left.arxml"
+          }
+        },
+        "showDiff": {
+          "allLines": 76,
+          "diffLines": 22,
+          "contextDisabled": null
+        },
+        "contextOff": {
+          "contextOffLines": 22,
+          "pressed": "false"
+        }
+      },
+      "finishedAt": "2026-11-27T15:08:46.840Z"
+    },
+    {
+      "id": "merge-collision",
+      "startedAt": "2026-11-27T15:08:46.840Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "copying a missing module is refused",
+          "ok": true,
+          "detail": "the module is missing on the target side; copy it first"
+        },
+        {
+          "name": "the refused copy writes nothing",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-collision-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-collision-webview.png"
+      ],
+      "observations": {
+        "copyCount": 1,
+        "notice": {
+          "visible": true,
+          "text": "the module is missing on the target side; copy it first"
+        }
+      },
+      "finishedAt": "2026-11-27T15:08:51.596Z"
+    },
+    {
+      "id": "merge-subtree",
+      "startedAt": "2026-11-27T15:08:51.596Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the copied container is written",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the whole subtree comes with it",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-subtree-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-subtree-webview.png"
+      ],
+      "observations": {
+        "rightText": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<AUTOSAR xmlns=\"http://autosar.org/schema/r4.0\"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>Sub</SHORT-NAME><DEFINITION-REF DEST=\"ECUC-MODULE-DEF\">/P/Sub</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>Base</SHORT-NAME><DEFINITION-REF DEST=\"ECUC-PARAM-CONF-CONTAINER-DEF\">/P/Sub/Base<"
+      },
+      "finishedAt": "2026-11-27T15:09:12.200Z"
+    },
+    {
+      "id": "merge-off",
+      "startedAt": "2026-11-27T15:09:12.201Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "Merge off offers no copy action",
+          "ok": false,
+          "detail": "5"
+        },
+        {
+          "name": "Merge on offers the copy action",
+          "ok": true,
+          "detail": "5"
+        },
+        {
+          "name": "turning Merge off removes it again",
+          "ok": false,
+          "detail": "5"
+        }
+      ],
+      "screenshots": [],
+      "observations": {
+        "offCount": 5,
+        "onCount": 5,
+        "offAgain": 5
+      },
+      "finishedAt": "2026-11-27T15:09:16.894Z"
+    },
+    {
+      "id": "index-toggles",
+      "startedAt": "2026-11-27T15:09:16.894Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "the index starts enabled",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 11 files indexed · cross-file checks off (no project), 11 files indexed\n854 elements, 2 references, 0 definitions\n3 packages\nCro"
+        },
+        {
+          "name": "disabling the index hides its status",
+          "ok": true,
+          "detail": "remote | pulse  ARXML Engine, ARXML Scope engine running, pid 23428 | No Problems | Notifications | Copilot status"
+        },
+        {
+          "name": "re-enabling restores the index",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 11 files indexed · cross-file checks off (no project), 11 files indexed\n854 elements, 2 references, 0 definitions\n3 packages\nCro"
+        },
+        {
+          "name": "an excluded file leaves the index count",
+          "ok": false,
+          "detail": "remote | database  ARXML Scope: 10 files indexed · cross-file checks off (no project), 10 files indexed\n837 elements, 1 references, 0 definitions\n3 packages\nCro"
+        },
+        {
+          "name": "the large file is indexed under the default cap",
+          "ok": false,
+          "detail": "remote | database  ARXML Scope: 12 files indexed · cross-file checks off (no project), 12 files indexed\n6856 elements, 2 references, 0 definitions\n3 packages\nCr"
+        },
+        {
+          "name": "the size cap skips the large file",
+          "ok": false,
+          "detail": "remote | database  ARXML Scope: 12 files indexed · cross-file checks off (no project), 12 files indexed\n6856 elements, 2 references, 0 definitions\n3 packages\nCr"
+        },
+        {
+          "name": "the cycle reaches always",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 11 files indexed · cross-file checks always, 11 files indexed\n854 elements, 2 references, 0 definitions\n3 packages\nCross-file ch"
+        },
+        {
+          "name": "the cycle reaches never",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 11 files indexed · cross-file checks off, 11 files indexed\n854 elements, 2 references, 0 definitions\n3 packages\nCross-file check"
+        },
+        {
+          "name": "the cycle returns to auto",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 11 files indexed · cross-file checks off (no project), 11 files indexed\n854 elements, 2 references, 0 definitions\n3 packages\nCro"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-index-toggles-workbench.png"
+      ],
+      "observations": {
+        "initial": "remote | database  ARXML Scope: 11 files indexed · cross-file checks off (no project), 11 files indexed\n854 elements, 2 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nUpdated 10:09:13 PM\nClick t",
+        "disabled": "remote | pulse  ARXML Engine, ARXML Scope engine running, pid 23428 | No Problems | Notifications | Copilot status",
+        "exclude": "remote | database  ARXML Scope: 10 files indexed · cross-file checks off (no project), 10 files indexed\n837 elements, 1 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\n1 file excluded by arxmlSco",
+        "withHuge": "remote | database  ARXML Scope: 12 files indexed · cross-file checks off (no project), 12 files indexed\n6856 elements, 2 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nUpdated 10:09:25 PM\nClick ",
+        "capped": "remote | database  ARXML Scope: 12 files indexed · cross-file checks off (no project), 12 files indexed\n6856 elements, 2 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nUpdated 10:09:27 PM\nClick ",
+        "cycle": {
+          "always": "remote | database  ARXML Scope: 11 files indexed · cross-file checks always, 11 files indexed\n854 elements, 2 references, 0 definitions\n3 pa",
+          "never": "remote | database  ARXML Scope: 11 files indexed · cross-file checks off, 11 files indexed\n854 elements, 2 references, 0 definitions\n3 packa",
+          "auto": "remote | database  ARXML Scope: 11 files indexed · cross-file checks off (no project), 11 files indexed\n854 elements, 2 references, 0 defini"
+        }
+      },
+      "finishedAt": "2026-11-27T15:09:34.786Z"
+    },
+    {
+      "id": "engine-restart",
+      "startedAt": "2026-11-27T15:09:34.786Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Show Engine Status reports a running pid",
+          "ok": true,
+          "detail": "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 23428"
+        },
+        {
+          "name": "Restart reports success",
+          "ok": true,
+          "detail": "ARXML Scope: engine restarted"
+        },
+        {
+          "name": "Restart actually replaces the process",
+          "ok": true,
+          "detail": "23428 -> 17920"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-engine-restart-workbench.png"
+      ],
+      "observations": {
+        "first": {
+          "text": "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 23428",
+          "pid": "23428"
+        },
+        "restarted": "ARXML Scope: engine restarted",
+        "second": {
+          "text": "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 17920 / ARXML Scope: engine restarted",
+          "pid": "17920"
+        }
+      },
+      "finishedAt": "2026-11-27T15:09:41.149Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "deep-diff-showdiff",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-merge-collision",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-merge-subtree",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-index-toggles",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "deep-engine-restart",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-collision-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-collision-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-subtree-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-subtree-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-index-toggles-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-engine-restart-workbench.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-27T15:09:41.149Z"
+}

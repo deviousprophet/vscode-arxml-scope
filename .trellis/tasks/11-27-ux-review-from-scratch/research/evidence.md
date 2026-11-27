@@ -261,6 +261,21 @@ Remove-Item Env:HOST_OUT, Env:UX_HOST_ONLY, Env:UX_HOST_MODE
 | UX-07 Major | `research/evidence/host/entry-16-stale-first-workbench.png`, `driver-report-r3.json` |
 | UX-08 Minor | `research/evidence/host/first-02-missing-engine-workbench.png`, `driver-report-missing-engine.json` |
 | UX-09 Minor | `research/evidence/host/diff-03-find-workbench.png`, `driver-report-r2.json` |
+| UX-10 Major (Floor contrast) | `research/evidence/host/deep-theme-light-webview.png`, `driver-report-deep-all.json` (`theme-zoom.toolContrast: 3.1`) |
+| UX-11 Minor | `research/evidence/host/deep-first-gate-workbench.png`, `driver-report-deep-all.json` (`first-gate`) |
+| UX-12 Minor | `research/evidence/host/deep-diff-side-not-ecuc-webview.png`, `driver-report-deep-all.json` (`diff-side-not-ecuc`) |
+| UX-13 Minor | `research/evidence/host/deep-merge-collision-workbench.png`, `driver-report-deep-all.json` (`merge-collision`) |
+| UX-14 Minor | `research/evidence/host/deep-index-toggles-workbench.png`, `driver-report-deep-all.json` (`index-toggles.capped.text`) |
+| UX-15 Minor | `research/evidence/host/deep-reveal-replace-workbench.png`, `driver-report-deep-all.json` (`reveal-modes.modes.replace`) |
+
+### Deep discovery evidence
+
+`driver-report-deep-all.json` covers 21 scenarios: `edit-invalid`, `edit-details-save`,
+`edit-multi-save`, `row-menu`, `conditions-tab`, `reveal-modes`, `find-replace`, `settings-sort`,
+`diff-collapse-all`, `diff-showdiff-swap`, `diff-identical`, `diff-side-not-ecuc`,
+`merge-collision`, `merge-subtree`, `merge-off`, `index-toggles`, `engine-restart`, `theme-zoom`,
+`first-gate`, plus the gate/continuity baseline. Captures are `research/evidence/host/deep-*.png`.
+The path matrix and remaining gaps are in `research/deep-discovery.md`.
 
 ### Continuity evidence
 
@@ -270,11 +285,10 @@ Remove-Item Env:HOST_OUT, Env:UX_HOST_ONLY, Env:UX_HOST_MODE
 
 ### Coverage limits (recorded, not findings)
 
-- Invalid-value duplication (UX-01) is preview- and source-proven; the host has no invalid-input
-  scenario.
-- Not exercised by the runner: Collapse All, Details-first save focus/caret, folds continuity,
-  settings, light/high-contrast/reduced-motion, index options, Conditions tab, row menu,
-  navigation Quick Picks, packaged VSIX.
+- Native Delete/Duplicate confirmation could not be observed over CDP; `row-menu` is not scored.
+- Native find inputs sit in a closed shadow root; the widget text is readable, the input is not.
 - `stale-copy` did not reproduce; MERGE-07 is `N/A`.
+- Screen-reader output, reduced motion, packaged VSIX and multi-root workspaces remain unrun.
 - The 786 px host captures ran with Chat open; width statements use 1082 px and 1369 px only.
+- 80% element screenshots mis-clip; workbench captures are used for width/zoom claims.
 

@@ -299,7 +299,31 @@ state was added in this run because nothing required it for the mapped journeys)
 No test-only preview state was added: the mapping above is adequate for Phase 2, and the
 remaining gaps are exactly the journeys the host pass must cover.
 
-## Capture conditions
+## Deep discovery additions
+
+The second pass adds host evidence for paths the first pass marked `N/A` or preview-only. Where a
+row below conflicts with the matrix above, the host result wins.
+
+| Journey | Deep verdict | Evidence |
+|---|---|---|
+| EDIT-05 / EDIT-10 invalid/rename refusal | **finding UX-01**, four channels host-confirmed; invalid draft not written | `driver-report-deep-all.json` → `edit-invalid` |
+| EDIT-06 Details-first save | pass; one save, Details keeps focus/caret, dirty clears | `edit-details-save` |
+| EDIT-08 multi-field save | pass; one `Ctrl+S` writes both, values stay visible | `edit-multi-save` |
+| EDIT-24 row menu / duplicate / delete | menu + prompt work; native delete confirmation not observable over CDP, not scored | `row-menu` |
+| EDIT-25 reveal modes | `beside`/`focus` pass; `replace` leaves the ECUC tab open — **UX-15** | `reveal-modes` |
+| EDIT-28 Conditions tab | open/save/invalid/clear pass | `conditions-tab` |
+| DIFF-06 Collapse All | pass; the preview flake did not reproduce | `diff-collapse-all` |
+| DIFF-07 Swap / Show diff / Context | pass; Show diff hides rows, Context enables/disables correctly | `diff-showdiff-swap` |
+| DIFF-14 identical files | pass; stated empty result | `diff-identical` |
+| DIFF-15 side stops being ECUC | **finding UX-12**; stale copy | `diff-side-not-ecuc` |
+| MERGE-06 module collision | **finding UX-13**; vague refusal | `merge-collision` |
+| MERGE subtree / merge off | pass | `merge-subtree`, `merge-off` |
+| INDEX-03/09 size cap/exclude/encoding | **finding UX-14**; skip reason vague | `index-toggles` |
+| ENGINE restart | pass; process replaced | `engine-restart` |
+| SET sort | pass; live re-order | `settings-sort` |
+| A11Y-04 light | **finding UX-10**; toolbar labels 3.1:1 | `theme-zoom` |
+| FIRST-03 empty/malformed/non-ECUC | **finding UX-11**; copy promises a text editor that never opens | `first-gate` |
+
 
 Preview PNGs are 1 CSS px : 1 image px (DPR 1) at the requested state size; the page's audit
 reports `window.innerWidth × innerHeight = (width − 16) × 805`. All 43 audits were read first and

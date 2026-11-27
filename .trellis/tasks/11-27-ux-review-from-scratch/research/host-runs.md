@@ -16,6 +16,7 @@ Artifacts: `research/evidence/host/`
 | 5 | normal | `engine-index,a11y,stale-first,same-file,compare-two` | completed, 1 scenario failed | `driver-report-r3.json` |
 | 6 | `missing-engine` | — | ok | `driver-report-missing-engine.json` |
 | 7 | normal | `save-continuity` (corrected probe) | ok, 7/7 | `driver-report-save-continuity-fixed.json` |
+| 8 | normal | deep discovery scenarios | completed, 8 scenarios with findings | `driver-report-deep-all.json` |
 
 Each launch used a fresh `%TEMP%\arxml-ux-host-ws-*` workspace and profile; the runner removed
 them on exit. No host, Chrome or bridge process was left running (checked after the last launch).
@@ -168,6 +169,14 @@ Details and the dirty clear all pass. The probe still does not measure an exact 
 | A11Y-03/04/06 | No light/HC/reduced-motion scenario |
 | FIRST-02/03/04/05/06 | Only the missing-engine activation path exists; no empty/malformed compare, closed comparison file or packaged VSIX |
 | DIFF-06 Collapse All | Preview flake could not be re-tested in the host (no scenario) |
+
+## Deep discovery (second pass)
+
+The deep pass adds host coverage for several rows above and six findings. See
+[`deep-discovery.md`](deep-discovery.md) for the path matrix. New findings: UX-10 (light-theme
+contrast, Floor, Major), UX-11 (gate copy), UX-12 (diff stale-side copy), UX-13 (merge module
+refusal), UX-14 (index skip reason), UX-15 (replace reveal tab). The N/A table above is the
+first-pass record; where a deep scenario exists, the deep row wins.
 
 Extending `driver.mjs` with a selection-safe save probe and a Collapse All step is the highest-value
 tooling follow-up; it was **not** done here because this task owns evidence and the report, and the

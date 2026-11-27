@@ -1,79 +1,1111 @@
 {
   "mode": "normal",
-  "startedAt": "2026-11-27T03:23:42.232Z",
-  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-8rUVn7",
+  "startedAt": "2026-11-27T15:17:24.773Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-lFaoEU",
   "cdp": {
-    "port": "50169",
+    "port": "52049",
     "attempts": 1,
     "contexts": 1,
     "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
   },
   "scenarios": [
     {
-      "id": "gate",
-      "startedAt": "2026-11-27T03:23:42.327Z",
+      "id": "edit-invalid",
+      "startedAt": "2026-11-27T15:17:24.819Z",
       "ok": true,
       "checks": [
         {
-          "name": "editor webview frame",
+          "name": "the toolbar reports the invalid draft",
+          "ok": true,
+          "detail": "Invalid value — not saved"
+        },
+        {
+          "name": "the editor error strip repeats it",
+          "ok": true,
+          "detail": "Invalid value — Invalid integer value"
+        },
+        {
+          "name": "the Details field shows an inline error",
+          "ok": true,
+          "detail": "/* Invalid integer value */"
+        },
+        {
+          "name": "the Details status line repeats it too",
+          "ok": true,
+          "detail": "Invalid integer value"
+        },
+        {
+          "name": "the invalid draft is not written",
           "ok": true,
           "detail": null
         },
         {
-          "name": "editor tab is the ECUC custom editor",
+          "name": "the draft stays dirty after the blocked save",
           "ok": true,
           "detail": null
         },
         {
-          "name": "ContKeep row rendered",
+          "name": "fixing the value saves it",
           "ok": true,
           "detail": null
         },
         {
-          "name": "Details populated from row selection",
-          "ok": true,
-          "detail": "container\nContKeep\nShort name\nDefinition\nFind references\nReveal in source"
-        },
-        {
-          "name": "compareToStaged loaded a diff webview",
-          "ok": true,
-          "detail": null
-        },
-        {
-          "name": "diff names both files",
+          "name": "the dirty marker clears after the fixed save",
           "ok": true,
           "detail": null
         }
       ],
       "screenshots": [
-        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-01-editor-workbench.png",
-        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-01-editor-webview.png",
-        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-02-diff-workbench.png",
-        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-02-diff-webview.png"
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-fixed-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-fixed-webview.png"
       ],
       "observations": {
-        "tabs": [
-          {
-            "label": "left.arxml",
-            "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-8rUVn7\\left.arxml",
-            "dirty": false
+        "invalidChannels": {
+          "toolbar": "Invalid value — not saved",
+          "strip": "Invalid value — Invalid integer value",
+          "inline": "/* Invalid integer value */",
+          "status": "Invalid integer value"
+        },
+        "afterFix": {
+          "strip": "",
+          "status": "",
+          "value": "7"
+        }
+      },
+      "finishedAt": "2026-11-27T15:17:34.073Z"
+    },
+    {
+      "id": "edit-details-save",
+      "startedAt": "2026-11-27T15:17:34.073Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Ctrl+S from the Details field saves the value",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the dirty marker clears",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Details keeps focus after the host echo",
+          "ok": true,
+          "detail": "{\"id\":\"details-value\",\"tag\":\"INPUT\",\"text\":\"\"}"
+        },
+        {
+          "name": "Details keeps the caret at the end",
+          "ok": true,
+          "detail": "2"
+        },
+        {
+          "name": "Details still shows the edited row",
+          "ok": true,
+          "detail": "parameter\nChanged\nDefinition\n/Pkg/Diff/ModAlpha/ContKeep/Changed\nType\nInteger\nVa"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-details-save-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-details-save-webview.png"
+      ],
+      "observations": {
+        "beforeSave": {
+          "id": "details-value",
+          "tag": "INPUT",
+          "text": "",
+          "caret": 2
+        },
+        "afterSave": {
+          "id": "details-value",
+          "tag": "INPUT",
+          "text": "",
+          "caret": 2,
+          "details": "parameter\nChanged\nDefinition\n/Pkg/Diff/ModAlpha/ContKeep/Changed\nType\nInteger\nValue\nDecimal\n12\nHexadecimal\n0x0C\nBinary\n0b00001100\nReveal in source"
+        }
+      },
+      "finishedAt": "2026-11-27T15:17:39.480Z"
+    },
+    {
+      "id": "edit-multi-save",
+      "startedAt": "2026-11-27T15:17:39.480Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "one Ctrl+S writes both drafts",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "both values stay visible",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the dirty marker clears",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-multi-save-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-multi-save-webview.png"
+      ],
+      "observations": {
+        "beforeSave": "● Unsaved changes",
+        "afterSave": true
+      },
+      "finishedAt": "2026-11-27T15:17:46.281Z"
+    },
+    {
+      "id": "row-menu",
+      "startedAt": "2026-11-27T15:17:46.281Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "right-click on a row opens the context menu",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "name": "the menu offers the ECUC actions",
+          "ok": true,
+          "detail": "Change All Occurrences\nCtrl+F2\nCut\nCopy\nPaste\nDelete ECUC element\nDuplicate ECUC element\nCommand Palette\nF1"
+        },
+        {
+          "name": "Delete asks for confirmation",
+          "ok": false,
+          "detail": ""
+        },
+        {
+          "name": "cancelling Delete changes nothing",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Duplicate asks for a new short name",
+          "ok": true,
+          "detail": "New short name for the duplicate (Press 'Enter' to confirm or 'Escape' to cancel)"
+        },
+        {
+          "name": "Duplicate confirms before writing",
+          "ok": false,
+          "detail": ""
+        },
+        {
+          "name": "the duplicate is written after confirmation",
+          "ok": false,
+          "detail": null
+        },
+        {
+          "name": "the duplicate row is visible",
+          "ok": false,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-delete-cancel-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-delete-cancel-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-duplicate-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-duplicate-webview.png"
+      ],
+      "observations": {
+        "menu": {
+          "visible": true,
+          "text": "Change All Occurrences\nCtrl+F2\nCut\nCopy\nPaste\nDelete ECUC element\nDuplicate ECUC element\nCommand Palette\nF1"
+        },
+        "dialogProbe": {
+          "classes": [
+            "monaco-enable-motion modern-ui modern-ui-tabs modern-ui-connected-editor-tabs mo"
+          ],
+          "text": [
+            "FileEditSelectionViewGoRunTerminalHelp[Extension Development Host] arxml-ux-host-ws-lFaoEU[Extension Development Host] a"
+          ]
+        },
+        "pagesAfterDelete": [
+          "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+        ],
+        "editorAfterDelete": {
+          "strip": "",
+          "status": "",
+          "notifications": []
+        },
+        "deleteDialog": {
+          "dialogCount": 0,
+          "dialogText": ""
+        },
+        "duplicatePrompt": {
+          "quickVisible": true,
+          "quickText": "New short name for the duplicate (Press 'Enter' to confirm or 'Escape' to cancel)"
+        },
+        "afterDuplicateEnter": {
+          "quickVisible": false,
+          "quickValue": "ContKeep_CopyContKeepCopy",
+          "pages": [
+            "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+          ],
+          "strip": "",
+          "status": "",
+          "notifications": []
+        },
+        "duplicateConfirm": {
+          "confirmCount": 0,
+          "text": ""
+        }
+      },
+      "finishedAt": "2026-11-27T15:18:11.513Z"
+    },
+    {
+      "id": "conditions-tab",
+      "startedAt": "2026-11-27T15:18:11.513Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the Conditions tab opens",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the referenced constant has a row",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "saving the value commits it",
+          "ok": true,
+          "detail": "1"
+        },
+        {
+          "name": "the document re-evaluates its disabled rows",
+          "ok": true,
+          "detail": "1 disabled -> 9 disabled"
+        },
+        {
+          "name": "an invalid constant name is refused inline",
+          "ok": true,
+          "detail": "Invalid name: use a constant name or path (letters, digits, _ . - /)."
+        },
+        {
+          "name": "the invalid draft stays editable",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "a valid manual row saves",
+          "ok": true,
+          "detail": "{\"count\":1,\"value\":\"true\"}"
+        },
+        {
+          "name": "Clear values empties the values but keeps the rows",
+          "ok": true,
+          "detail": "{\"rows\":4,\"value\":\"\",\"status\":\"\"}"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-conditions-set-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-conditions-set-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-conditions-clear-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-conditions-clear-webview.png"
+      ],
+      "observations": {
+        "panelVisible": true,
+        "disabledBefore": "1 disabled",
+        "afterSet": {
+          "value": "1",
+          "status": "",
+          "disabled": "9 disabled"
+        },
+        "invalidNameStatus": "Invalid name: use a constant name or path (letters, digits, _ . - /).",
+        "added": {
+          "count": 1,
+          "value": "true"
+        },
+        "afterClear": {
+          "rows": 4,
+          "value": "",
+          "status": ""
+        }
+      },
+      "finishedAt": "2026-11-27T15:18:19.059Z"
+    },
+    {
+      "id": "reveal-modes",
+      "startedAt": "2026-11-27T15:18:19.059Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "beside keeps the ECUC editor active",
+          "ok": true,
+          "detail": "{\"label\":\"left.arxml\",\"viewType\":\"vscode-arxml-scope.ecucEditor\",\"uri\":\"c:\\\\Users\\\\tripm\\\\AppData\\\\Local\\\\Temp\\\\arxml-ux-host-ws-lFaoEU\\\\left.arxml\",\"dirty\":false}"
+        },
+        {
+          "name": "beside opens a source tab next to it",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "focus moves to the source editor",
+          "ok": true,
+          "detail": "\"c:\\\\Users\\\\tripm\\\\AppData\\\\Local\\\\Temp\\\\arxml-ux-host-ws-lFaoEU\\\\left.arxml\""
+        },
+        {
+          "name": "Reveal in ECUC Editor returns to the custom editor",
+          "ok": true,
+          "detail": "{\"label\":\"left.arxml\",\"viewType\":\"vscode-arxml-scope.ecucEditor\",\"uri\":\"c:\\\\Users\\\\tripm\\\\AppData\\\\Local\\\\Temp\\\\arxml-ux-host-ws-lFaoEU\\\\left.arxml\",\"dirty\":false}"
+        },
+        {
+          "name": "the reverse reveal selects the node at the cursor",
+          "ok": true,
+          "detail": "container\nContKeep\nShort name\nDefinition\nFind references\nReveal in source"
+        },
+        {
+          "name": "replace removes the ECUC tab",
+          "ok": false,
+          "detail": "left.arxml:vscode-arxml-scope.ecucEditor, left.arxml"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-beside-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-beside-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-reverse-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-reverse-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-focus-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-replace-workbench.png"
+      ],
+      "observations": {
+        "modes": {
+          "beside": {
+            "activeTab": {
+              "label": "left.arxml",
+              "viewType": "vscode-arxml-scope.ecucEditor",
+              "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-lFaoEU\\left.arxml",
+              "dirty": false
+            },
+            "activeTextEditor": null,
+            "tabs": [
+              "left.arxml:vscode-arxml-scope.ecucEditor",
+              "left.arxml"
+            ],
+            "activeElement": {
+              "id": "",
+              "tag": "BUTTON",
+              "text": "Reveal in source"
+            }
           },
-          {
+          "focus": {
+            "activeTab": {
+              "label": "left.arxml",
+              "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-lFaoEU\\left.arxml",
+              "dirty": false
+            },
+            "activeTextEditor": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-lFaoEU\\left.arxml",
+            "tabs": [
+              "left.arxml:vscode-arxml-scope.ecucEditor",
+              "left.arxml"
+            ],
+            "activeElement": {
+              "id": "",
+              "tag": "BODY",
+              "text": "Collapse\nExpand\n\nSidebar\n\n\n\n\n0000000000000000000000000000000"
+            }
+          },
+          "replace": {
+            "activeTab": {
+              "label": "left.arxml",
+              "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-lFaoEU\\left.arxml",
+              "dirty": false
+            },
+            "activeTextEditor": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-lFaoEU\\left.arxml",
+            "tabs": [
+              "left.arxml:vscode-arxml-scope.ecucEditor",
+              "left.arxml"
+            ],
+            "activeElement": {
+              "id": "",
+              "tag": "BODY",
+              "text": "Collapse\nExpand\n\nSidebar\n\n\n\n\n0000000000000000000000000000000"
+            }
+          }
+        },
+        "reverse": {
+          "activeTab": {
             "label": "left.arxml",
             "viewType": "vscode-arxml-scope.ecucEditor",
-            "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-8rUVn7\\left.arxml",
+            "uri": "c:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-lFaoEU\\left.arxml",
             "dirty": false
+          },
+          "details": "container\nContKeep\nShort name\nDefinition\nFind references\nReveal in source"
+        }
+      },
+      "finishedAt": "2026-11-27T15:18:31.949Z"
+    },
+    {
+      "id": "find-replace",
+      "startedAt": "2026-11-27T15:18:31.950Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "Ctrl+F opens the native find widget",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the native widget reports the match count",
+          "ok": false,
+          "detail": "? of 1"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-find-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-find-webview.png"
+      ],
+      "observations": {
+        "widgets": [
+          {
+            "id": "",
+            "cls": "editor-widget find-widget visible",
+            "visible": true,
+            "inputs": 0,
+            "text": "No results"
           }
         ],
-        "detailsExcerpt": "container\nContKeep\nShort name\nDefinition\nFind references\nReveal in source",
-        "diffExcerpt": "left.arxml\n↔\nright.arxml\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\nmodule Pkg.Diff.ModAlpha \"ModAlpha\"\n{\n    ContKeep \"ContKeep\"\n    {\n        Changed = 10\n        "
+        "findVisible": true,
+        "widgetText": "? of 1",
+        "replaceGap": "native find inputs are not reachable over CDP (closed shadow root)"
       },
-      "finishedAt": "2026-11-27T03:23:48.989Z"
+      "finishedAt": "2026-11-27T15:18:36.223Z"
+    },
+    {
+      "id": "settings-sort",
+      "startedAt": "2026-11-27T15:18:36.224Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "sort: all orders the parameters",
+          "ok": true,
+          "detail": "[\"Alpha = 2\",\"Mu = 3\",\"Zeta = 1\"]"
+        },
+        {
+          "name": "sort: declaration restores file order live",
+          "ok": true,
+          "detail": "[\"Zeta = 1\",\"Alpha = 2\",\"Mu = 3\"]"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-settings-sort-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-settings-sort-webview.png"
+      ],
+      "observations": {
+        "allOrder": [
+          "Alpha = 2",
+          "Mu = 3",
+          "Zeta = 1"
+        ],
+        "declarationOrder": [
+          "Zeta = 1",
+          "Alpha = 2",
+          "Mu = 3"
+        ]
+      },
+      "finishedAt": "2026-11-27T15:18:40.359Z"
+    },
+    {
+      "id": "diff-collapse-all",
+      "startedAt": "2026-11-27T15:18:40.359Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Collapse All hides container children",
+          "ok": true,
+          "detail": "58 -> 8"
+        },
+        {
+          "name": "Expand All restores the rows",
+          "ok": true,
+          "detail": "8 -> 58"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-collapse-all-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-collapse-all-webview.png"
+      ],
+      "observations": {
+        "collapse": {
+          "before": 58,
+          "collapsed": 8
+        },
+        "expand": {
+          "collapsed": 8,
+          "expanded": 58
+        }
+      },
+      "finishedAt": "2026-11-27T15:18:45.530Z"
+    },
+    {
+      "id": "diff-showdiff-swap",
+      "startedAt": "2026-11-27T15:18:45.530Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Swap mirrors the pane titles",
+          "ok": true,
+          "detail": "{\"left\":\"right.arxml\",\"right\":\"left.arxml\"}"
+        },
+        {
+          "name": "Swap is shown as a state",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Show diff is pressed",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Show diff hides unchanged rows",
+          "ok": true,
+          "detail": "76 -> 22"
+        },
+        {
+          "name": "Context is enabled in Show diff",
+          "ok": true,
+          "detail": "null"
+        },
+        {
+          "name": "Context off hides the surrounding unchanged rows",
+          "ok": true,
+          "detail": "22 -> 22"
+        },
+        {
+          "name": "Show all restores the rows",
+          "ok": true,
+          "detail": "22 -> 76"
+        },
+        {
+          "name": "Context is disabled in Show all",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-webview.png"
+      ],
+      "observations": {
+        "titles": {
+          "before": {
+            "left": "left.arxml",
+            "right": "right.arxml"
+          },
+          "swapped": {
+            "left": "right.arxml",
+            "right": "left.arxml"
+          }
+        },
+        "showDiff": {
+          "allLines": 76,
+          "diffLines": 22,
+          "contextDisabled": null
+        },
+        "contextOff": {
+          "contextOffLines": 22,
+          "pressed": "false"
+        }
+      },
+      "finishedAt": "2026-11-27T15:18:53.486Z"
+    },
+    {
+      "id": "diff-identical",
+      "startedAt": "2026-11-27T15:18:53.487Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "identical files show a stated empty result",
+          "ok": true,
+          "detail": "true No differences"
+        },
+        {
+          "name": "the toolbar is still available",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-identical-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-identical-webview.png"
+      ],
+      "observations": {
+        "empty": {
+          "visible": true,
+          "text": "No differences"
+        }
+      },
+      "finishedAt": "2026-11-27T15:18:56.616Z"
+    },
+    {
+      "id": "diff-side-not-ecuc",
+      "startedAt": "2026-11-27T15:18:56.617Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "the last good comparison stays visible",
+          "ok": true,
+          "detail": "58 -> 56"
+        },
+        {
+          "name": "a side that stops being ECUC is explained",
+          "ok": true,
+          "detail": "\"right.arxml\" contains no ECUC values; showing the text editor instead."
+        },
+        {
+          "name": "the notice explains that the comparison stopped updating",
+          "ok": false,
+          "detail": "\"right.arxml\" contains no ECUC values; showing the text editor instead."
+        },
+        {
+          "name": "the notice does not promise a text editor that is not shown",
+          "ok": false,
+          "detail": "\"right.arxml\" contains no ECUC values; showing the text editor instead."
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-side-not-ecuc-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-side-not-ecuc-webview.png"
+      ],
+      "observations": {
+        "rowsBefore": 58,
+        "rowsAfter": 56,
+        "noticeVisible": true,
+        "noticeText": "\"right.arxml\" contains no ECUC values; showing the text editor instead."
+      },
+      "finishedAt": "2026-11-27T15:19:00.396Z"
+    },
+    {
+      "id": "merge-collision",
+      "startedAt": "2026-11-27T15:19:00.396Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "copying a missing module is refused",
+          "ok": true,
+          "detail": "the module is missing on the target side; copy it first"
+        },
+        {
+          "name": "the refusal names the missing module",
+          "ok": false,
+          "detail": "the module is missing on the target side; copy it first"
+        },
+        {
+          "name": "the refusal offers a way to reach the module",
+          "ok": false,
+          "detail": "the module is missing on the target side; copy it first"
+        },
+        {
+          "name": "the refused copy writes nothing",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-collision-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-collision-webview.png"
+      ],
+      "observations": {
+        "copyCount": 1,
+        "notice": {
+          "visible": true,
+          "text": "the module is missing on the target side; copy it first"
+        }
+      },
+      "finishedAt": "2026-11-27T15:19:05.195Z"
+    },
+    {
+      "id": "merge-subtree",
+      "startedAt": "2026-11-27T15:19:05.195Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the copied container is written",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the whole subtree comes with it",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-subtree-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-subtree-webview.png"
+      ],
+      "observations": {
+        "rightText": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<AUTOSAR xmlns=\"http://autosar.org/schema/r4.0\"><AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME><ELEMENTS><ECUC-MODULE-CONFIGURATION-VALUES><SHORT-NAME>Sub</SHORT-NAME><DEFINITION-REF DEST=\"ECUC-MODULE-DEF\">/P/Sub</DEFINITION-REF><CONTAINERS><ECUC-CONTAINER-VALUE><SHORT-NAME>Base</SHORT-NAME><DEFINITION-REF DEST=\"ECUC-PARAM-CONF-CONTAINER-DEF\">/P/Sub/Base<"
+      },
+      "finishedAt": "2026-11-27T15:19:25.828Z"
+    },
+    {
+      "id": "merge-off",
+      "startedAt": "2026-11-27T15:19:25.829Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Merge off offers no copy action",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "Merge on offers the copy action",
+          "ok": true,
+          "detail": "5"
+        },
+        {
+          "name": "turning Merge off removes it again",
+          "ok": true,
+          "detail": "0"
+        }
+      ],
+      "screenshots": [],
+      "observations": {
+        "offCount": 0,
+        "onCount": 5,
+        "offAgain": 0
+      },
+      "finishedAt": "2026-11-27T15:19:30.512Z"
+    },
+    {
+      "id": "index-toggles",
+      "startedAt": "2026-11-27T15:19:30.512Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "the index starts enabled",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off (no project), 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packages\nCro"
+        },
+        {
+          "name": "disabling the index hides its status",
+          "ok": true,
+          "detail": "remote | pulse  ARXML Engine, ARXML Scope engine running, pid 4164 | No Problems | Notifications | Copilot status"
+        },
+        {
+          "name": "re-enabling restores the index",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off (no project), 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packages\nCro"
+        },
+        {
+          "name": "an excluded file leaves the index count",
+          "ok": true,
+          "detail": "15 -> 14"
+        },
+        {
+          "name": "the tooltip reports the excluded file",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 14 files indexed · cross-file checks off (no project), 14 files indexed\n892 elements, 4 references, 0 definitions\n3 packages\nCro"
+        },
+        {
+          "name": "the large file is indexed under the default cap",
+          "ok": true,
+          "detail": "15 -> 16"
+        },
+        {
+          "name": "the size cap skips the large file",
+          "ok": true,
+          "detail": "16 -> 15"
+        },
+        {
+          "name": "the tooltip reports the skipped file",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off (no project), 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packages\nCro"
+        },
+        {
+          "name": "the skipped tooltip names the actual reason",
+          "ok": false,
+          "detail": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off (no project), 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packages\nCro"
+        },
+        {
+          "name": "the cycle reaches always",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 15 files indexed · cross-file checks always, 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packages\nCross-file ch"
+        },
+        {
+          "name": "the cycle reaches never",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off, 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packages\nCross-file check"
+        },
+        {
+          "name": "the cycle returns to auto",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off (no project), 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packages\nCro"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-index-toggles-workbench.png"
+      ],
+      "observations": {
+        "initial": {
+          "count": 15,
+          "text": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off (no project), 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nUpdated 10:19:26 PM\nClick t"
+        },
+        "disabled": "remote | pulse  ARXML Engine, ARXML Scope engine running, pid 4164 | No Problems | Notifications | Copilot status",
+        "exclude": {
+          "count": 14,
+          "text": "remote | database  ARXML Scope: 14 files indexed · cross-file checks off (no project), 14 files indexed\n892 elements, 4 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\n1 file excluded by arxmlSco"
+        },
+        "withHuge": {
+          "count": 16,
+          "text": "remote | database  ARXML Scope: 16 files indexed · cross-file checks off (no project), 16 files indexed\n12911 elements, 5 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nUpdated 10:19:38 PM\nClick"
+        },
+        "capped": {
+          "count": 15,
+          "text": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off (no project), 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nSkipped: huge.arxml (size limit, encoding or unreadable)\nUpdated 10"
+        },
+        "cycle": {
+          "always": "remote | database  ARXML Scope: 15 files indexed · cross-file checks always, 15 files indexed\n909 elements, 5 references, 0 definitions\n3 pa",
+          "never": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off, 15 files indexed\n909 elements, 5 references, 0 definitions\n3 packa",
+          "auto": "remote | database  ARXML Scope: 15 files indexed · cross-file checks off (no project), 15 files indexed\n909 elements, 5 references, 0 defini"
+        }
+      },
+      "finishedAt": "2026-11-27T15:19:48.772Z"
+    },
+    {
+      "id": "engine-restart",
+      "startedAt": "2026-11-27T15:19:48.772Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Show Engine Status reports a running pid",
+          "ok": true,
+          "detail": "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 4164"
+        },
+        {
+          "name": "Restart reports success",
+          "ok": true,
+          "detail": "ARXML Scope: engine restarted"
+        },
+        {
+          "name": "Restart actually replaces the process",
+          "ok": true,
+          "detail": "4164 -> 2980"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-engine-restart-workbench.png"
+      ],
+      "observations": {
+        "first": {
+          "text": "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 4164",
+          "pid": "4164"
+        },
+        "restarted": "ARXML Scope: engine restarted",
+        "second": {
+          "text": "Source: ARXML Scope\nRestart Engine\nOpen Output\nARXML Scope engine running, pid 2980 / ARXML Scope: engine restarted",
+          "pid": "2980"
+        }
+      },
+      "finishedAt": "2026-11-27T15:19:55.178Z"
+    },
+    {
+      "id": "theme-zoom",
+      "startedAt": "2026-11-27T15:19:55.178Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "the light theme paints a light surface",
+          "ok": true,
+          "detail": "[255,255,255]"
+        },
+        {
+          "name": "body text keeps 4.5:1 contrast in light",
+          "ok": true,
+          "detail": "11.2"
+        },
+        {
+          "name": "toolbar text keeps 3:1 contrast in light",
+          "ok": true,
+          "detail": "3.1"
+        },
+        {
+          "name": "toolbar labels keep 4.5:1 contrast in light",
+          "ok": false,
+          "detail": "3.1:1 \"color(srgb 0.577255 0.577255 0.577255)\" on \"rgb(255, 255, 255)\""
+        },
+        {
+          "name": "high contrast keeps a dark surface and light text",
+          "ok": true,
+          "detail": "{\"bg\":[0,0,0],\"fg\":[255,255,255]}"
+        },
+        {
+          "name": "150% zoom keeps the toolbar inside the row",
+          "ok": true,
+          "detail": "{\"width\":642,\"count\":3,\"overlaps\":0,\"inside\":true,\"overflow\":false}"
+        },
+        {
+          "name": "150% zoom adds no page scroll",
+          "ok": true,
+          "detail": "false"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-webview.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-workbench.png",
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-webview.png"
+      ],
+      "observations": {
+        "light": {
+          "bg": [
+            255,
+            255,
+            255
+          ],
+          "fg": [
+            59,
+            59,
+            59
+          ],
+          "tbg": [
+            255,
+            255,
+            255
+          ],
+          "tfg": [
+            147,
+            147,
+            147
+          ],
+          "tbgRaw": "rgb(255, 255, 255)",
+          "tfgRaw": "color(srgb 0.577255 0.577255 0.577255)",
+          "bodyContrast": 11.2,
+          "toolContrast": 3.1,
+          "overflow": false
+        },
+        "highContrast": {
+          "bg": [
+            0,
+            0,
+            0
+          ],
+          "fg": [
+            255,
+            255,
+            255
+          ],
+          "tbg": [
+            0,
+            0,
+            0
+          ],
+          "tfg": [
+            140,
+            140,
+            140
+          ],
+          "tbgRaw": "rgb(0, 0, 0)",
+          "tfgRaw": "color(srgb 0.55 0.55 0.55)",
+          "bodyContrast": 21,
+          "toolContrast": 6.2,
+          "overflow": false
+        },
+        "zoom150": {
+          "width": 642,
+          "count": 3,
+          "overlaps": 0,
+          "inside": true,
+          "overflow": false
+        }
+      },
+      "finishedAt": "2026-11-27T15:20:03.136Z"
+    },
+    {
+      "id": "first-gate",
+      "startedAt": "2026-11-27T15:20:03.138Z",
+      "ok": false,
+      "checks": [
+        {
+          "name": "empty.arxml is refused with an explanation",
+          "ok": true,
+          "detail": "\"empty.arxml\" contains no ECUC values; showing the text editor instead."
+        },
+        {
+          "name": "empty.arxml does not open the ECUC editor",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "empty.arxml opens the text editor the message promises",
+          "ok": false,
+          "detail": ""
+        },
+        {
+          "name": "malformed.arxml is refused with an explanation",
+          "ok": true,
+          "detail": "\"malformed.arxml\" contains no ECUC values; showing the text editor instead. / \"empty.arxml\" contains no ECUC values; showing the text editor instead."
+        },
+        {
+          "name": "malformed.arxml does not open the ECUC editor",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "malformed.arxml opens the text editor the message promises",
+          "ok": false,
+          "detail": ""
+        },
+        {
+          "name": "not-ecuc.arxml is refused with an explanation",
+          "ok": true,
+          "detail": "\"not-ecuc.arxml\" contains no ECUC values; showing the text editor instead. / \"malformed.arxml\" contains no ECUC values; showing the text editor instead. / \"empt"
+        },
+        {
+          "name": "not-ecuc.arxml does not open the ECUC editor",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "not-ecuc.arxml opens the text editor the message promises",
+          "ok": false,
+          "detail": ""
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-first-gate-workbench.png"
+      ],
+      "observations": {
+        "gates": {
+          "empty.arxml": {
+            "notifications": [
+              "\"empty.arxml\" contains no ECUC values; showing the text editor instead."
+            ],
+            "tabs": []
+          },
+          "malformed.arxml": {
+            "notifications": [
+              "\"malformed.arxml\" contains no ECUC values; showing the text editor instead.",
+              "\"empty.arxml\" contains no ECUC values; showing the text editor instead."
+            ],
+            "tabs": []
+          },
+          "not-ecuc.arxml": {
+            "notifications": [
+              "\"not-ecuc.arxml\" contains no ECUC values; showing the text editor instead.",
+              "\"malformed.arxml\" contains no ECUC values; showing the text editor instead.",
+              "\"empty.arxml\" contains no ECUC values; showing the text editor instead."
+            ],
+            "tabs": []
+          }
+        }
+      },
+      "finishedAt": "2026-11-27T15:20:07.470Z"
     }
   ],
   "captures": [
     {
-      "name": "gate-01-editor",
+      "name": "deep-edit-invalid",
       "page": {
         "width": 1440,
         "height": 900,
@@ -86,7 +1118,168 @@
       }
     },
     {
-      "name": "gate-02-diff",
+      "name": "deep-edit-invalid-fixed",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-edit-details-save",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-edit-multi-save",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-row-menu-delete-cancel",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-row-menu-duplicate",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-conditions-set",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-conditions-clear",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-reveal-beside",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 541,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-reveal-reverse",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 541,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-reveal-focus",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "deep-reveal-replace",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "deep-find",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-settings-sort",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-diff-collapse-all",
       "page": {
         "width": 1440,
         "height": 900,
@@ -97,14 +1290,188 @@
         "height": 799,
         "dpr": 1
       }
+    },
+    {
+      "name": "deep-diff-showdiff",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-diff-identical",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-diff-side-not-ecuc",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-merge-collision",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-merge-subtree",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-index-toggles",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "deep-engine-restart",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "deep-theme-light",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 481,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-theme-hc",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 481,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-theme-zoom150",
+      "page": {
+        "width": 1000,
+        "height": 625,
+        "dpr": 1.440000057220459
+      },
+      "frame": {
+        "width": 642,
+        "height": 207,
+        "dpr": 1.440000057220459
+      }
+    },
+    {
+      "name": "deep-first-gate",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
     }
   ],
   "screenshots": [
-    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-01-editor-workbench.png",
-    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-01-editor-webview.png",
-    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-02-diff-workbench.png",
-    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\gate-02-diff-webview.png"
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-fixed-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-invalid-fixed-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-details-save-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-details-save-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-multi-save-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-edit-multi-save-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-delete-cancel-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-delete-cancel-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-duplicate-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-row-menu-duplicate-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-conditions-set-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-conditions-set-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-conditions-clear-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-conditions-clear-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-beside-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-beside-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-reverse-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-reverse-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-focus-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-reveal-replace-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-find-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-find-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-settings-sort-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-settings-sort-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-collapse-all-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-collapse-all-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-showdiff-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-identical-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-identical-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-side-not-ecuc-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-diff-side-not-ecuc-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-collision-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-collision-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-subtree-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-merge-subtree-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-index-toggles-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-engine-restart-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-light-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-hc-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-workbench.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-theme-zoom150-webview.png",
+    "H:\\workspace\\vscode-arxml-scope\\.trellis\\tasks\\11-27-ux-review-from-scratch\\research\\evidence\\host\\deep-first-gate-workbench.png"
   ],
   "errors": [],
-  "finishedAt": "2026-11-27T03:23:48.989Z"
+  "finishedAt": "2026-11-27T15:20:07.470Z"
 }

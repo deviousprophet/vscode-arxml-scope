@@ -2,11 +2,14 @@
 
 - **Severity:** Major
 - **Journey:** EDIT-05 (invalid value), EDIT-10 (rename refusal), CONT-01/02 (save blocked)
+- **Gate:** Reflex — duplicate refusal channels
 - **Heuristic:** Nielsen #4 consistency and standards, #8 aesthetic and minimalist design,
   #9 help users recognise/diagnose/recover
-- **Confidence:** High (rendered preview + source path). **Not exercised in the host**: the host
-  `edit` scenario only saves a valid value, so the duplication is proven in the seeded page and in
-  `src/webview/editorMonaco.ts`, not in an Extension Development Host capture.
+- **Confidence:** High — **host-confirmed in the deep pass** (`deep-edit-invalid`): the toolbar,
+  editor strip, inline Details message and bottom status line all reported the same invalid draft;
+  the blocked save left the file unchanged and the draft dirty. Host evidence:
+  `research/evidence/host/deep-edit-invalid-workbench.png`,
+  `research/evidence/host/driver-report-deep-all.json` (`edit-invalid.invalidChannels`).
 
 ## Repro
 
