@@ -1,16 +1,17 @@
 ---
 name: ux-review
-description: "Run the ARXML Scope UX review: capture seeded webview states in headless Chrome/Edge with geometry audits, and drive the real VS Code Extension Development Host with Playwright over CDP for commands, keyboard, dialogs, capture metrics and continuity. Use for UX audits, layout checks and real-host journeys."
+description: "Run the ARXML Scope UX review: capture seeded webview states in headless Chrome/Edge with geometry audits, drive the real VS Code Extension Development Host with Playwright over CDP for commands, keyboard, dialogs, capture metrics and continuity, and apply a VS Code-adapted design-review lens for tokens, states, focus, density and recovery. Use for UX audits, layout checks and real-host journeys."
 ---
 
 # UX Review
 
-Two modes, one skill:
+Two evidence modes, one design-review lens:
 
 | Mode | Use for | Stack |
 |---|---|---|
 | **Preview** | Rendered webview states, layout, CSS, toolbar, editor, diff, sidebar | Headless Chrome/Edge + seeded states |
 | **Host** | Commands, dialogs, keyboard/focus, save/copy continuity, window/zoom metrics | VS Code Extension Development Host + Playwright CDP |
+| **Design review** | UI quality after evidence: tokens, eight states, focus, density, hierarchy, recovery | Screenshots + DOM/source; adapted gate model |
 
 The former `webview-preview` skill has been merged here. Do not add a second copy of the preview or host
 runner under `src/test` or `scripts/`.
@@ -63,6 +64,27 @@ Preview limits: the shell is the production webview with seeded fixtures, not th
 Development Host; it is dark-theme oriented, does not prove real keyboard/IME, screen-reader, OS
 clipboard or packaged-VSIX behavior. The 43-state table and limits are in
 [`references/WEBVIEW_PREVIEW.md`](references/WEBVIEW_PREVIEW.md).
+
+## Design review
+
+After the Preview/Host evidence exists, apply the VS Code-adapted lens in
+[`references/DESIGN_REVIEW.md`](references/DESIGN_REVIEW.md). It adapts the Hallmark
+floor/reflex/finish gate model to a desktop IDE; VS Code and this repository's `DESIGN.md` win on
+every conflict.
+
+- **Floor** (never waivable): theme tokens, contrast, keyboard/focus-visible, reduced motion,
+  truthful save/copy/restart state, complete states, layout integrity at real widths/zoom and
+  recovery from stale/refused states.
+- **Reflex** (challenge the default): anonymous icon-only toolbars, duplicate refusal channels,
+  inert pressed controls, colour-only status, nested chrome, placeholder labels, developer jargon,
+  optimistic success.
+- **Finish** (craft): alignment, density, icon/tooltip consistency, real counts and empty/error
+  copy.
+
+Run it as a cold review: screenshots first, source only to locate; at most eight findings; first
+word `rebuild`, `fix` or `ship`; name what must not be diluted. Map findings into the existing
+four scoring dimensions; do not add a fifth score. Do not import Hallmark's marketing-page rules
+(hero, word budget, themes, 44px touch, 320–1920 breakpoints).
 
 ## Host mode
 

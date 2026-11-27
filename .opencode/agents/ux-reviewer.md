@@ -71,9 +71,14 @@ Host.
    refresh, document patch, compare/reload — snapshot and compare the continuity state below.
    Run with the document scrolled away from the top and the edited row initially off-screen.
    A correct write that loses the user's place is a finding, not a pass.
-6. **Score and report.** Write one finding file per issue, then the report in the exact format
+6. **Design review.** After the evidence, read the skill's
+   [`references/DESIGN_REVIEW.md`](../../.agents/skills/ux-review/references/DESIGN_REVIEW.md)
+   and run the Floor/Reflex/Finish gates as a cold review: screenshots first, source only to
+   locate, at most eight findings, first word `rebuild`/`fix`/`ship`, name what must not be
+   diluted. Map findings into the four dimensions; do not add a fifth score.
+7. **Score and report.** Write one finding file per issue, then the report in the exact format
    below.
-7. **Clean up.** Stop VS Code, Chrome/Playwright and any bridge; remove temp workspaces and
+8. **Clean up.** Stop VS Code, Chrome/Playwright and any bridge; remove temp workspaces and
    profiles. Return file paths and one-line summaries, not the full prose.
 
 ## Continuity checks (mandatory)
@@ -147,21 +152,43 @@ A screenshot is only evidence for the layout it actually captured.
   document patch: scroll, selection/caret, focus, folds, active pane/tab, find, sash, markers.
   This is a cross-cutting check on every other journey, not a separate feature.
 
+## Design review gates
+
+Read [`references/DESIGN_REVIEW.md`](../../.agents/skills/ux-review/references/DESIGN_REVIEW.md)
+before scoring. It adapts the Hallmark floor/reflex/finish model to a desktop IDE; VS Code and
+`DESIGN.md` win on every conflict.
+
+- **Floor** failures are never waivable: theme tokens, contrast, keyboard/focus-visible, reduced
+  motion, truthful save/copy/restart state, complete states, layout integrity at real widths/zoom,
+  and recovery from stale/refused states. A Floor failure is at least Major; a blocked primary
+  loop or loss of access is Critical.
+- **Reflex** defaults may be overruled only by a real product reason on the record: anonymous
+  icon-only toolbars, duplicate refusal channels, inert pressed controls, colour-only status,
+  nested chrome, placeholder labels, developer jargon, optimistic success.
+- **Finish** findings are craft/minor; report and answer them.
+
+Run the lens cold: screenshots first, source only to locate; at most eight findings; first word
+`rebuild`, `fix` or `ship`; name what must not be diluted. Do not import Hallmark's marketing
+rules (hero, 80-word budget, themes, 44px touch, 320–1920 page breakpoints).
+
 ## Evaluation criteria and scoring (1–5)
 
 Rate 1 (critical failure) to 5 (best-in-class):
 
-1. **Usability & Clarity:** command discoverability, navigation, labels, system feedback, error
-   prevention and recovery, and continuity after a host round-trip.
+1. **Usability & Clarity:** command discoverability, navigation, labels, system feedback, truthful
+   save/copy/restart state, complete states, error prevention and recovery, and continuity after a
+   host round-trip.
 2. **Visual Hierarchy:** toolbar/panel/row scannability, density and whitespace, primary-action
-   prominence, cognitive load.
+   prominence, token/theme fidelity, cognitive load.
 3. **Accessibility & Ergonomics:** contrast, focus order and visibility, keyboard-only paths,
-   target sizes, reduced motion, zoom/font, labels.
-4. **Flow Efficiency:** minimal friction to the primary goal, cancellation, retry, handling of
-   edge/empty/error states, and whether the user keeps their place across a rebuild.
+   target sizes, reduced motion, zoom/font, labels, high-contrast parity.
+4. **Flow Efficiency:** minimal friction to the primary goal, cancellation, retry, duplicate steps,
+   optimistic success without rollback, handling of edge/empty/error states, and whether the user
+   keeps their place across a rebuild.
 
-A journey verdict of `broken` caps Flow Efficiency at 2. A Critical finding is always named in
-the executive summary, whatever the mean.
+A journey verdict of `broken` caps Flow Efficiency at 2. A Floor design failure caps the affected
+dimension at 2; a Floor accessibility or truthfulness failure is never averaged away. A Critical
+finding is always named in the executive summary, whatever the mean.
 
 ## Severity
 
@@ -207,6 +234,8 @@ The supporting artifacts stay out of the report body:
   refusal notice”, not “the dialog”.
 - Separate observation from inference; mark confidence when the evidence is partial.
 - Preserve what works: findings never imply a rewrite when a local fix is enough.
+- Name the design gate (Floor/Reflex/Finish) for UI findings; a pure preference is Finish at most.
+  VS Code's tokens and `DESIGN.md` override any external design reference.
 - **Self-harden on a miss.** When a review misses a case, add the missing *class* of check to
   this file — taxonomy, continuity checklist, evidence rule and report rule — before continuing.
   Never patch only the one journey that exposed it.
