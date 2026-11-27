@@ -16,7 +16,7 @@ markup and no extra dependency.
 
 A 2026 spike evaluated a reusable Playwright-based stack and proved both a standalone
 built-asset mode and an optional real-VS-Code mode. The decision and evidence are in
-[WEBVIEW_PREVIEW_STACK.md](../../../../docs/contributor/WEBVIEW_PREVIEW_STACK.md). This harness remains the current
+[WEBVIEW_PREVIEW_STACK.md](WEBVIEW_PREVIEW_STACK.md). This harness remains the current
 implementation until the follow-up port lands.
 
 ## Commands and workflow

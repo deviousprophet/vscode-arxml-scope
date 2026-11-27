@@ -2,7 +2,7 @@
 
 This directory is a **spike fixture**, not a shipped package. It exists to prove or
 disprove the architecture decision recorded in
-`docs/contributor/WEBVIEW_PREVIEW_STACK.md` (the task record behind it is archived
+`.agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md` (the task record behind it is archived
 separately):
 
 - a generic Playwright core that consumes built webview assets;
@@ -27,4 +27,4 @@ overrides detection); it never downloads a browser bundle.
 ## Evidence
 
 The comparison matrix and recommendation live in
-`docs/contributor/WEBVIEW_PREVIEW_STACK.md` (written by the spike).
+`.agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md` (written by the spike).

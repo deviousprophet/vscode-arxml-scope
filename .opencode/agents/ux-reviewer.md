@@ -65,7 +65,7 @@ Host.
    `@vscode/test-electron`, attaches Playwright over CDP to the nested `active-frame`, and drives
    commands, clicks, focus and keyboard. Set `HOST_OUT` to the task research directory for
    evidence. Do not copy the runner into the task; the skill is the reusable home. The spike
-   decision is in `docs/contributor/WEBVIEW_PREVIEW_STACK.md`.
+   decision is in `.agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md`.
 5. **Continuity probe after every host round-trip.** Before and after every action that can
    rebuild or replace the page model — save, copy, undo/redo, rename, settings/theme change,
    refresh, document patch, compare/reload — snapshot and compare the continuity state below.

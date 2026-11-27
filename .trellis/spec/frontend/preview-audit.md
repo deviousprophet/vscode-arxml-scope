@@ -58,7 +58,7 @@ not evidence.
   aborts with `no rendered-geometry audit`; every other sampled state captures in 1.7-2.1 s.
   Treat this as runner nondeterminism, not a page regression. A replacement runner must wait
   for the page's published readiness signal. Evidence and the decision are in
-  [`WEBVIEW_PREVIEW_STACK.md`](../../../docs/contributor/WEBVIEW_PREVIEW_STACK.md).
+  [`WEBVIEW_PREVIEW_STACK.md`](../../../.agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md).
 - `previewWebview.mjs` bundles the skill's `previewData.ts` for Node and
   `previewPage.ts` for the browser with esbuild and serves one HTML document per state.
   It serves the bundled `monaco.worker.js` and hashed font assets and deliberately drops

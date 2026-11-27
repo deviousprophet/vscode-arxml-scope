@@ -59,9 +59,9 @@ state → Preview; commands/keyboard/dialogs/continuity → Host.
 | `.trellis/spec/frontend/preview-audit.md` | Executable-workflow link → `ux-review/SKILL.md` |
 | `.trellis/spec/frontend/testing.md`, `component-guidelines.md` | Skill path references |
 | `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md` | Commands and skill path |
-| `docs/contributor/WEBVIEW_PREVIEW_STACK.md` | Current-harness path |
+| `.agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md` | Current-harness path |
 | `docs/contributor/TEST_PLAN.md` | Skill path references |
-| `docs/README.md` | Skill pointer if present |
+| `docs/README.md` | Remove both preview rows |
 | `packages/webview-preview/README.md` | Current-skill path |
 | `.agents/skills/ux-review/SKILL.md` | Merged workflow |
 | `.opencode/agents/ux-reviewer.md` | Load only `ux-review`, use preview mode |

@@ -31,6 +31,9 @@
 
 - [x] Move `docs/contributor/WEBVIEW_PREVIEW.md` to
       `.agents/skills/ux-review/references/WEBVIEW_PREVIEW.md`; remove its `docs/README.md` row.
+- [x] Move `docs/contributor/WEBVIEW_PREVIEW_STACK.md` to
+      `.agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md`; remove its `docs/README.md`
+      row.
 - [x] `git grep "webview-preview"` and update every live reference: `AGENTS.md`, `DESIGN.md`,
       `.trellis/spec/frontend/{preview-audit,testing,component-guidelines,css-guidelines,
       component-diff-view,diff-parity,editor-lifecycle,monaco}.md`,

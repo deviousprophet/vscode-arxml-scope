@@ -93,7 +93,7 @@ The capture is evidence only for the size, zoom and layout it recorded.
 ### 2. Real host (commands, keyboard, dialogs, errors)
 
 Reuse the proven split from
-[`WEBVIEW_PREVIEW_STACK.md`](../../../docs/contributor/WEBVIEW_PREVIEW_STACK.md):
+[`WEBVIEW_PREVIEW_STACK.md`](../../../.agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md):
 
 - `@vscode/test-electron` launches the installed VS Code with the extension development path,
   a temporary workspace and `--remote-debugging-port`.

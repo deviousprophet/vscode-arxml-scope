@@ -6,9 +6,9 @@ Status: spike complete. Implementation has **not** started; the fixture under
 Canonical for: the stack decision, the experiment evidence, and the adapter boundary.
 
 Not canonical for: preview commands (that stays in
-[`../../.agents/skills/ux-review/SKILL.md`](../../.agents/skills/ux-review/SKILL.md))
+[`../SKILL.md`](../SKILL.md))
 or product audit invariants (that stays in
-[`../../.trellis/spec/frontend/preview-audit.md`](../../.trellis/spec/frontend/preview-audit.md)).
+[`../../.trellis/spec/frontend/preview-audit.md`](../../../../.trellis/spec/frontend/preview-audit.md)).
 
 ## Decision
 

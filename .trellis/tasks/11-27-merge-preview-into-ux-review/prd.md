@@ -15,7 +15,9 @@ references.
 3. Fix every path that depends on the old skill depth: `shotWebview.mjs`,
    `previewWebview.mjs`, artifact/cache directories and the repo-root resolution.
 4. Update every current repository reference: `AGENTS.md`, `DESIGN.md`, `.trellis/spec/`,
-   `docs/`, `TEST_PLAN.md`, the spike report, the package README and the UX task.
+   `docs/`, `TEST_PLAN.md`, the package README and the UX task. Move both
+   `docs/contributor/WEBVIEW_PREVIEW.md` and `docs/contributor/WEBVIEW_PREVIEW_STACK.md` into
+   the skill's `references/` directory and remove their `docs/README.md` rows.
 5. Preserve the preview contract: `--list` returns 43 states, one-state capture writes PNG +
    audit JSON, the audit-first workflow and the dark-theme/limit notes.
 6. Preserve the host contract: `run.mjs` gate and capture-fidelity scenarios, `HOST_OUT`, temp
