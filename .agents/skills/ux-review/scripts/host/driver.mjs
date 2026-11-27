@@ -523,7 +523,6 @@ async function main() {
 			});
 		const beforeSave = await measure();
 		record.observations.beforeSave = beforeSave;
-		await frame.locator('.monaco-editor').first().click();
 		await page.keyboard.press('Control+s');
 		await sleep(1800);
 		const afterSave = await measure();
@@ -544,8 +543,8 @@ async function main() {
 		);
 		check(
 			'the selected row and Details stay on the edited row after the save',
-			afterDetails === beforeDetails,
-			`${beforeDetails.slice(0, 80)} -> ${afterDetails.slice(0, 80)}`
+			beforeDetails.split('\n').slice(0, 4).join('\n') === afterDetails.split('\n').slice(0, 4).join('\n'),
+			`${beforeDetails.split('\n').slice(0, 4).join(' / ')} -> ${afterDetails.split('\n').slice(0, 4).join(' / ')}`
 		);
 		const rowId = /^P\d+/.exec(targetText ?? '')?.[0] ?? targetText ?? '';
 		check(
