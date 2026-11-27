@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/frontend/preview-audit.md", "reason": "Preview execution rules and audit invariants that must survive the merge."}
-{"file": ".agents/skills/ux-review/references/WEBVIEW_PREVIEW.md", "reason": "Human preview commands, state table and limits to preserve."}
-{"file": ".agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md", "reason": "Host runner evidence and the original skill split decision."}
