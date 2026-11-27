@@ -92,7 +92,7 @@ TypeScript and CSS for those class names.
   patch contents, page options, exactly two action registrations and no legacy classes.
 - `src/test/webview/syntheticDocument.test.ts` — per-side line counts, keys, folding and
   one-sided shape.
-- `webview-preview` skill — `diff-merge`, `diff-swap`, `diff-removed`, `diff-added`,
+- `ux-review` Preview mode — `diff-merge`, `diff-swap`, `diff-removed`, `diff-added`,
   `diff-sash` and the full seeded set. The audit reads the real `.gutter`, `.gutterItem`,
   `.monaco-sash`, action availability, host copy side/key, folding ranges and native body
   paint.

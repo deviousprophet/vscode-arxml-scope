@@ -27,7 +27,7 @@ prominent text says the wrong kind of thing.
 
 ## Repro
 
-1. `node .agents/skills/webview-preview/scripts/shotWebview.mjs --state editor-rename-refusal`
+1. `node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --state editor-rename-refusal`
 2. Compare with `--state editor-invalid`.
 3. Read both audits (0 violations), then compare the field borders and top strips.
 

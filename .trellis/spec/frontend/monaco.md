@@ -195,7 +195,7 @@ one-sided hunks keep the native fill.
   spans, folding ranges and one-sided shape.
 - `src/test/webview/diffCodeParity.test.ts` — version/integrity, upstream hashes, patch
   contents, page options, exactly two action registrations and no legacy classes.
-- `webview-preview` skill — the diff and editor states in the full seeded set; the audit
+- `ux-review` Preview mode — the diff and editor states in the full seeded set; the audit
   reads the real `.gutter`, `.gutterItem`, `.monaco-sash`, action availability, folding
   ranges, native body paint and the hunk-toolbar alignment captured before any scroll. See
   [`preview-audit.md`](./preview-audit.md).

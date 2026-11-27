@@ -541,7 +541,7 @@ same node index that produced the ids, because `EcucRow` deliberately carries no
   edit-over drop, save clear and closed-buffer forget.
 - `src/test/core/minimalEdit.test.ts` — the line-level splice a copy patch applies, with exact text
   round trips.
-- `webview-preview` — `diff-copied` and `editor-copied` prove the margin marker paints on the copied
+- `ux-review` Preview mode — `diff-copied` and `editor-copied` prove the margin marker paints on the copied
   side only and stays distinct from diff paint.
 - Reveal is asserted through `reveal.test.ts` / `uxReveal.test.ts`; the source-level `beside` forcing
   is a regression guard, while the real panel behaviour is observed in the Extension Development Host.

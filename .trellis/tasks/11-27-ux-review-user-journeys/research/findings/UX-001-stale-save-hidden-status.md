@@ -28,7 +28,7 @@ saved.
 
 ## Repro
 
-1. `node .agents/skills/webview-preview/scripts/shotWebview.mjs --state editor-stale-save`
+1. `node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --state editor-stale-save`
 2. Read `research/evidence/preview/editor-stale-save.audit.json` (0 violations),
    then open `editor-stale-save.png`.
 3. Observe the top strip, the selected row, and the bottom-right status line.

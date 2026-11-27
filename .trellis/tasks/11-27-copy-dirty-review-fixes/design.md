@@ -7,7 +7,7 @@
 | Copied-row records and offset shifting | `src/core/copy/copyDirty.ts` | Pure algorithm fix; no `vscode`, no DOM |
 | Diff message boundary | `src/diffProtocol.ts` + `src/webview/diffMonaco.ts` | One runtime guard for `copyDirty.rows` |
 | Optimistic marker | `src/webview/diffMonaco.ts` | Target-only placement |
-| Save/refusal proof | `.agents/skills/webview-preview/` | Two seeded states and audit checks |
+| Save/refusal proof | `.agents/skills/ux-review/` | Two seeded states and audit checks |
 | Contract and user wording | `.trellis/spec/frontend/editor-lifecycle.md`, `docs/user/MERGE.md` | Describe the fixed rules |
 
 No host API, protocol field or public type is removed.

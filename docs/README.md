@@ -2,7 +2,7 @@
 
 `docs/` is the human documentation library: product guides for users and setup notes for
 contributors. Code-level implementation contracts live in `.trellis/spec/`, and the
-executable preview workflow lives in the `webview-preview` skill. See the
+executable preview workflow lives in the `ux-review` skill's Preview mode. See the
 [documentation architecture guide](../.trellis/spec/guides/documentation-architecture-guide.md)
 for the audience rules.
 
@@ -39,7 +39,7 @@ for the audience rules.
 Agent-facing work does not live in `docs/`. Code-level contracts are indexed in
 [`.trellis/spec/frontend/index.md`](../.trellis/spec/frontend/index.md), thinking guides in
 [`.trellis/spec/guides/index.md`](../.trellis/spec/guides/index.md), the executable preview
-workflow in the [`webview-preview` skill](../.agents/skills/webview-preview/SKILL.md), and
+workflow in the [`ux-review` Preview mode](../.agents/skills/ux-review/SKILL.md), and
 the engine wire protocol in [`rust/README.md`](../rust/README.md).
 
 All sample content in this repository is synthetic. Do not commit a real customer ARXML file.

@@ -27,7 +27,7 @@ in `docs/user/`. If it tells a person **how to contribute to** the product, it b
 
 | Fact | Canonical home | Everything else links to it |
 |---|---|---|
-| Preview commands, flags, outputs, cleanup, agent workflow | `.agents/skills/webview-preview/SKILL.md` | Contributor preview page, testing spec, README |
+| Preview commands, flags, outputs, cleanup, agent workflow | `.agents/skills/ux-review/SKILL.md` | Contributor preview page, testing spec, README |
 | Preview audit invariants and proof boundaries | `.trellis/spec/frontend/preview-audit.md` | Contributor preview page, testing spec |
 | Test layers, per-area gates, case IDs, known gaps | `docs/contributor/TEST_PLAN.md` | Testing spec, README, contributor development |
 | Agent test execution rules | `.trellis/spec/frontend/testing.md` | Test plan |
@@ -101,7 +101,7 @@ Before calling a docs change done:
 
 - **Must not** put build/test/agent commands in `docs/user/`.
 - **Must not** put a product tutorial in `.trellis/spec/`.
-- **Must not** duplicate the `webview-preview` command block outside `SKILL.md`.
+- **Must not** duplicate the `ux-review` preview command block outside `SKILL.md`.
 - **Must not** index a page that does not exist, or leave a page out of its index.
 - **Must not** “fix” UTF-8 damage by rewriting em dashes or arrows from a console render.
 

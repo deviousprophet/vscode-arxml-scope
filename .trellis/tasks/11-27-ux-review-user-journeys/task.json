@@ -2,7 +2,7 @@
   "id": "ux-review-user-journeys",
   "name": "ux-review-user-journeys",
   "title": "UX review: user journeys and edge cases",
-  "description": "Audit the full extension UX with the webview-preview harness and a real VS Code host: inventory every command, editor, diff, merge, index, engine, settings and accessibility journey, capture evidence, and report severity-ranked findings.",
+  "description": "Audit the full extension UX with the ux-review preview harness and a real VS Code host: inventory every command, editor, diff, merge, index, engine, settings and accessibility journey, capture evidence, and report severity-ranked findings.",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,

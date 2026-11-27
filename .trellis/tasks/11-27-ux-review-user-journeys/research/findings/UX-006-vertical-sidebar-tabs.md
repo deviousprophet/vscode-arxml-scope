@@ -21,7 +21,7 @@ marked only by a slightly brighter background/underline. The Details panel's own
 
 ## Repro
 
-1. `node .agents/skills/webview-preview/scripts/shotWebview.mjs --state editor`
+1. `node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --state editor`
 2. Read `editor.audit.json` (selected: `Details`, 0 violations), then open `editor.png`.
 3. Locate the tab labels on the right edge and compare with the Details header.
 

@@ -91,15 +91,15 @@ in the task notes rather than implying it was tested.
 
 ## Manual checks happen through the preview harness or the Extension Development Host
 
-The preview is the `webview-preview` skill. The skill owns the runner commands, flags,
-outputs and cleanup ([`SKILL.md`](../../../.agents/skills/webview-preview/SKILL.md)); the
+The preview is the `ux-review` skill's Preview mode. The skill owns the runner commands, flags,
+outputs and cleanup ([`SKILL.md`](../../../.agents/skills/ux-review/SKILL.md)); the
 human state table and limits are in
 [`docs/contributor/WEBVIEW_PREVIEW.md`](../../../docs/contributor/WEBVIEW_PREVIEW.md); the
 audit invariants and execution rules are in [`preview-audit.md`](./preview-audit.md). Do
 not restate the command block here. The harness wraps the **production shell**
 (`webviewShell.ts`) and imports the real page entries (`diffMonaco.ts`, `editorMonaco.ts`),
 which auto-mount exactly as in the extension. It seeds states through the host protocol and writes
-`.agents/skills/webview-preview/artifacts/<state>.png` plus `<state>.audit.json`.
+`.agents/skills/ux-review/artifacts/<state>.png` plus `<state>.audit.json`.
 
 When changing scroll-dependent chrome, add a wide/overflow state and a panned state. Do not call a
 mount function after importing a page entry: a second mount binds every toolbar action twice and

@@ -80,11 +80,11 @@ The capture is evidence only for the size, zoom and layout it recorded.
 
 ### 1. Preview states (rendered surfaces)
 
-- `node .agents/skills/webview-preview/scripts/shotWebview.mjs --list`.
+- `node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --list`.
 - Map each rendered journey to an existing state. Capture with `--state <name>`.
 - Read `<state>.audit.json` before the PNG. Record geometry/paint violations as findings.
 - If a journey has no state, add the smallest state to
-  `.agents/skills/webview-preview/preview/` and document it in
+  `.agents/skills/ux-review/preview/` and document it in
   `docs/contributor/WEBVIEW_PREVIEW.md`; do not invent a second renderer.
 - Copy the audit JSON and the referenced PNGs into `research/evidence/preview/` and commit them
   with the task, so the review can continue on another machine. Do not leave the only copy in

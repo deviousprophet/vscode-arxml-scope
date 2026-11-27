@@ -23,7 +23,7 @@ described in [ENGINE.md](ENGINE.md) and [`rust/README.md`](../../rust/README.md)
 | Topic | Page |
 |---|---|
 | Regression layers, gates, case IDs and known gaps | [TEST_PLAN.md](TEST_PLAN.md) |
-| Preview commands, seeded states, outputs and limits | [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md) and the [`webview-preview` skill](../../.agents/skills/webview-preview/SKILL.md) |
+| Preview commands, seeded states, outputs and limits | [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md) and the [`ux-review` Preview mode](../../.agents/skills/ux-review/SKILL.md) |
 | Engine lifecycle, status and limits | [ENGINE.md](ENGINE.md) |
 | Agent test rules and the preview full-set gate | [`testing.md`](../../.trellis/spec/frontend/testing.md) |
 | Preview audit invariants | [`preview-audit.md`](../../.trellis/spec/frontend/preview-audit.md) |

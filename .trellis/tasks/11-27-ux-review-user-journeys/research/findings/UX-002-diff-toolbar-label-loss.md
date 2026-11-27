@@ -32,7 +32,7 @@ labels disappear.
 
 ## Repro
 
-1. `node .agents/skills/webview-preview/scripts/shotWebview.mjs --state toolbar-1200`
+1. `node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --state toolbar-1200`
 2. Repeat for `toolbar-1024`, `toolbar-800`, `toolbar-640`.
 3. Read each `.audit.json` (0 violations, 11 controls, no clipping), then compare the PNGs.
 

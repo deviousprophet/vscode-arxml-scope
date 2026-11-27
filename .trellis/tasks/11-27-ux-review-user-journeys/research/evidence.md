@@ -8,10 +8,10 @@ review travels to another machine. The derived notes stay here.
 
 ```powershell
 # 1. List the seeded states
-node .agents/skills/webview-preview/scripts/shotWebview.mjs --list
+node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --list
 
 # 2. Capture each mapped state (loop with up to 4 attempts per state)
-node .agents/skills/webview-preview/scripts/shotWebview.mjs --state <state>
+node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --state <state>
 
 # 3. Derived notes (this folder)
 #    preview-audit-summary.md     — every audit object, trimmed of syntax dumps

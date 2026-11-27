@@ -267,9 +267,9 @@ shared row primitive in `src/webview/render/rowView.ts`; the editor and diff pag
 
 ## Manual previews
 
-The webview is served and captured by the `webview-preview` skill
-(`.agents/skills/webview-preview/`); see its
-[`SKILL.md`](../../../.agents/skills/webview-preview/SKILL.md) for the executable workflow and
+The webview is served and captured by the `ux-review` skill's Preview mode
+(`.agents/skills/ux-review/`); see its
+[`SKILL.md`](../../../.agents/skills/ux-review/SKILL.md) for the executable workflow and
 [`preview-audit.md`](./preview-audit.md) for the rendered-geometry invariants. The harness wraps the
 production `editorShell`/`diffShell` page; a second renderer is a test that agrees with itself.
 

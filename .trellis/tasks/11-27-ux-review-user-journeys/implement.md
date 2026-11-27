@@ -6,7 +6,7 @@
       prompt: role, input handling, 1–5 rubric across usability, hierarchy, accessibility and
       flow efficiency, severity mapping, exact report structure, journey workflow and write
       guardrails.
-- [ ] Sanity-check the agent frontmatter and that it is discoverable; load the `webview-preview`
+- [ ] Sanity-check the agent frontmatter and that it is discoverable; load the `ux-review`
       skill in its instructions.
 - [ ] Read `docs/user/*.md`, `package.json` contributes and all `arxmlScope.*` settings.
 - [ ] Write `research/journeys.md` with ids, persona, preconditions, steps, expected, failure/
@@ -16,7 +16,7 @@
 
 ## Phase 2 — Preview evidence
 
-- [ ] `node .agents/skills/webview-preview/scripts/shotWebview.mjs --list`; map rendered
+- [ ] `node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --list`; map rendered
       journeys to states.
 - [ ] Capture the mapped states; read each `audit.json` before its PNG.
 - [ ] Record geometry/paint findings and screenshots that look plausible but fail the audit.
@@ -95,8 +95,8 @@
 
 ```powershell
 # Preview states and audit JSON
-node .agents/skills/webview-preview/scripts/shotWebview.mjs --list
-node .agents/skills/webview-preview/scripts/shotWebview.mjs --state <name>
+node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --list
+node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --state <name>
 
 # Extension and engine for the real host
 node esbuild.js

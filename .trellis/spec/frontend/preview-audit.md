@@ -1,13 +1,13 @@
 # Webview Preview Audit Code-Spec
 
-The `webview-preview` harness is the rendered-layout proof for the webview. It serves the
+The `ux-review` preview harness is the rendered-layout proof for the webview. It serves the
 **production** shell and bundled page entries, drives them through the real host
 protocol, captures each seeded state in headless Chromium and writes a geometry/paint
 audit. A screenshot can look plausible while the geometry is wrong — a toolbar control
 under the Search field, a gutter item offering both directions on a deletion — and the
 jsdom suites cannot see layout at all.
 
-Executable workflow, flags, outputs and cleanup: [`SKILL.md`](../../../.agents/skills/webview-preview/SKILL.md).
+Executable workflow, flags, outputs and cleanup: [`SKILL.md`](../../../.agents/skills/ux-review/SKILL.md).
 Human state table and limits: [`docs/contributor/WEBVIEW_PREVIEW.md`](../../../docs/contributor/WEBVIEW_PREVIEW.md).
 Pinned Monaco surface: [`diff-parity.md`](./diff-parity.md).
 

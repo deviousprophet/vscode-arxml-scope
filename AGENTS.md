@@ -27,9 +27,9 @@ Webview markup and CSS follow [`DESIGN.md`](DESIGN.md). Read it together with
 [`.trellis/spec/frontend/css-guidelines.md`](.trellis/spec/frontend/css-guidelines.md) before changing
 the document tree, diff, toolbar, search or sidebar. `npm run design:lint` validates the document.
 
-Layout changes also need eyes: load the `webview-preview` skill and run its
-`scripts/shotWebview.mjs`. It captures every seeded state to
-`.agents/skills/webview-preview/artifacts/`. The states and the audit checklist are in
+Layout changes also need eyes: load the `ux-review` skill's Preview mode and run
+`.agents/skills/ux-review/scripts/preview/shotWebview.mjs`. It captures every seeded state to
+`.agents/skills/ux-review/artifacts/`. The states and the audit checklist are in
 [`docs/contributor/WEBVIEW_PREVIEW.md`](docs/contributor/WEBVIEW_PREVIEW.md).
 
 <!-- DESIGN.md:END -->

@@ -8,7 +8,7 @@ at the plan row.
 This page is the human regression plan: layers, gates, cases and known gaps. Agent
 execution rules (what to run, how to audit a preview, how to cite a row) live in
 [`testing.md`](../../.trellis/spec/frontend/testing.md). The executable preview workflow
-lives in the [`webview-preview` skill](../../.agents/skills/webview-preview/SKILL.md).
+lives in the [`ux-review` Preview mode](../../.agents/skills/ux-review/SKILL.md).
 
 ## Layers and commands
 
@@ -16,7 +16,7 @@ lives in the [`webview-preview` skill](../../.agents/skills/webview-preview/SKIL
 |---|---|---|
 | Core unit | pure scanner/model/rows/index/diff/merge logic | `npm test` (`src/test/core`) |
 | Webview DOM | the bundled page, its components and the host↔page protocol in jsdom | `npm test` (`src/test/webview`) |
-| Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `webview-preview` skill: `scripts/shotWebview.mjs` (see [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md)) |
+| Webview visual | seeded production pages rendered, audited and captured in headless Chrome/Edge; the runner fails on a placement violation | `ux-review` Preview mode: `scripts/preview/shotWebview.mjs` (see [WEBVIEW_PREVIEW.md](WEBVIEW_PREVIEW.md)) |
 | Extension integration | real VS Code: panels, edits, undo, watchers, diagnostics | `npm test` (`src/test/extension`) |
 | Rust core | parse, ids, rows, edit plans, merge index, digests | `cargo test --workspace` |
 | Engine process | protocol, lifecycle, byte-for-byte row parity with the TypeScript oracle | `npm run engine:smoke`, `npm test` (`src/test/parity`) |
@@ -25,7 +25,7 @@ lives in the [`webview-preview` skill](../../.agents/skills/webview-preview/SKIL
 
 Run order for a change: `check-types` → `lint` → `cargo test`/`clippy`/`fmt` →
 `npm test` → the area benchmarks. For any toolbar, gutter or row-layout
-change, also run the `webview-preview` skill's `scripts/shotWebview.mjs`; it exits
+change, also run the `ux-review` Preview mode (`scripts/preview/shotWebview.mjs`); it exits
 non-zero on a placement violation.
 
 ## Regression gates
@@ -37,7 +37,7 @@ non-zero on a placement violation.
 | `core/index/*`, `host/indexService` | `indexBuilder`, `workspaceIndex`, `index` (extension), `indexBenchmark`, `validation` |
 | `host/ecucEdit`, `host/ecucStructureEdit` | `editing`, `structureEdit`, `rescan`, `planMerge` |
 | `host/engine/*`, `rust/*` | `engine` suites, `engine:smoke`, row parity (`src/test/parity`), `engineEdit` |
-| `webview/*` | page + component suites for the touched component, `protocol`; the `webview-preview` skill for layout changes |
+| `webview/*` | page + component suites for the touched component, `protocol`; the `ux-review` Preview mode for layout changes |
 | `commands.ts`, manifests | `activation`, `menus`, `compare`, `reveal` |
 | copy modules | `planCopy`, `planMerge` (extension), `copyDirty`, `minimalEdit`, `copyBenchmark` |
 
@@ -323,7 +323,7 @@ Covered: manifest, activation, engine binary path, VSIX engine verification.
 | MON-01 | `buildSyntheticDocument` from the row store | text, row lines, field spans and folding ranges match the Current Document; parameter values and container short names are the editable spans |
 | MON-02 | `buildDiffSyntheticDocuments` from a `DiffDocument` | each side keeps its own line count and keys; a one-sided module is absent from the other model and uses native diagonal fill |
 | MON-03 | editor and diff shells | the CSP allows the Monaco worker, injected styles and packaged font; the worker URI meta is present; the script nonce is unchanged |
-| MON-04 | `webview-preview` skill (`scripts/shotWebview.mjs`) | all seeded states capture without a geometry violation; the built-in gutter, folding and sash probes pass |
+| MON-04 | `ux-review` Preview mode (`scripts/preview/shotWebview.mjs`) | all seeded states capture without a geometry violation; the built-in gutter, folding and sash probes pass |
 
 ## PERF — benchmarks
 

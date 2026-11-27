@@ -63,7 +63,7 @@ or opens the same file twice. Include the recovery path, not only the happy path
 
 ## Method
 
-- Use the `webview-preview` seeded states for every rendered surface; read the audit JSON before
+- Use the `ux-review` preview states for every rendered surface; read the audit JSON before
   the screenshot.
 - Use a real VS Code Extension Development Host for commands, dialogs, keyboard input, focus,
   settings changes, engine failures and save/refusal flows.

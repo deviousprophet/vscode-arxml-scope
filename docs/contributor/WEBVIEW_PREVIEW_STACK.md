@@ -6,7 +6,7 @@ Status: spike complete. Implementation has **not** started; the fixture under
 Canonical for: the stack decision, the experiment evidence, and the adapter boundary.
 
 Not canonical for: preview commands (that stays in
-[`../../.agents/skills/webview-preview/SKILL.md`](../../.agents/skills/webview-preview/SKILL.md))
+[`../../.agents/skills/ux-review/SKILL.md`](../../.agents/skills/ux-review/SKILL.md))
 or product audit invariants (that stays in
 [`../../.trellis/spec/frontend/preview-audit.md`](../../.trellis/spec/frontend/preview-audit.md)).
 
@@ -37,7 +37,7 @@ Playwright runner waits for the page's explicit readiness signal and captures it
 | --- | --- | --- |
 | Toy standalone run, 6 states | `packages/webview-preview/.out/toy/` | 1 clean state passes; 5 deliberate defects each caught by a distinct generic assertion; trace written for the console state |
 | ARXML standalone run, all 43 states | `packages/webview-preview/.out/arxml-all-final/` | 43/43 pass, 0 failed, 99.1 s total, 2,281 ms average per state (launch included) |
-| ARXML parity, `diff-merge` | `.out/arxml-diff-merge/` vs `.agents/skills/webview-preview/artifacts/diff-merge.*` | same 1400x900 frame; product audit keys, `ready` and `state` match; both audits have `violations: []` |
+| ARXML parity, `diff-merge` | `.out/arxml-diff-merge/` vs `.agents/skills/ux-review/artifacts/diff-merge.*` | same 1400x900 frame; product audit keys, `ready` and `state` match; both audits have `violations: []` |
 | Current harness baseline | `.out/baseline-*.log` | `diff-collapsed` fails with "no rendered-geometry audit"; single passing states take 1.7-2.1 s |
 | Real extension host | `.out/extension-host/` | VS Code 1.147.0; Playwright reached `active-frame` on the first CDP attempt; screenshots and a 66 KB trace; real control click |
 | ExTester comparison | `@redhat-developer/page-objects` 1.26.0 source | frame switch is Selenium outer iframe then `active-frame`; not executed (see [Alternatives](#alternatives)) |
@@ -244,8 +244,8 @@ Capability notes:
 | `preview/previewPage.ts` | 1,756 | ARXML scenario runner | readiness signal and the "apply state, settle, publish audit" shape | imports `src/webview/diffMonaco` and `editorMonaco`; 100+ product interactions |
 | `preview/previewAudit.ts` | 2,180 | ARXML audit + private generic geometry | `rectOf`, `isVisible`, `intersects`, `inside`, `overlapLabels`, `outsideLabels`, `clippedLabels` | helpers are private; the exported audit is product-specific (gutter, fold, syscond, sticky, copied markers) |
 | `preview/previewStateFields.ts` | 57 | ARXML state protocol | the state manifest shape | every field is a product scenario (`merge`, `swap`, `pan`, `foldLabel`, `detailsRename`, ...) |
-| `scripts/previewWebview.mjs` | 144 | mixed server + build | static server and HTML injection pattern | hardcodes skill paths, esbuild entries, `/preview.js`, `/preview.css`, `/monaco.worker.js` |
-| `scripts/shotWebview.mjs` | 185 | mixed capture runner | browser detection, screenshot, audit extraction | Chrome CLI only; fixed `#preview-audit`; `--virtual-time-budget`; no trace or console API |
+| `scripts/preview/previewWebview.mjs` | 144 | mixed server + build | static server and HTML injection pattern | hardcodes skill paths, esbuild entries, `/preview.js`, `/preview.css`, `/monaco.worker.js` |
+| `scripts/preview/shotWebview.mjs` | 185 | mixed capture runner | browser detection, screenshot, audit extraction | Chrome CLI only; fixed `#preview-audit`; `--virtual-time-budget`; no trace or console API |
 
 Generic core (belongs in the package):
 
@@ -383,7 +383,7 @@ Mode 2, extension host:
 **Adopt A + optional B.** Concretely:
 
 - Make the standalone Playwright core the reusable package and the default preview loop.
-- Keep the current `.agents/skills/webview-preview` commands working as a thin wrapper over the new
+- Keep the `ux-review` Preview mode commands working as a thin wrapper over the new
   CLI until the adapter reaches parity; do not delete the fast loop.
 - Add extension-host mode behind an explicit flag, using `@vscode/test-electron` and the adapter's
   `open` hook. Do not make it a required gate.
@@ -406,7 +406,7 @@ Mode 2, extension host:
    command, derive states from `previewData.STATES`, read `#preview-audit`, add the console
    allowlist, and compare the new report with the current skill on a fixed state set.
 4. **Make the skill a wrapper.** Replace the implementation under
-   `.agents/skills/webview-preview` with a one-page usage guide plus a call into the package. Keep
+   `.agents/skills/ux-review` with a one-page usage guide plus a call into the package. Keep
    output paths and state names compatible; keep the old Chrome CLI only as a temporary fallback.
 5. **Add extension-host mode.** Use `@vscode/test-electron`, the adapter `prepare`/`open` hooks, the
    `active-frame` selector, workbench/webview screenshots and traces. Pin the VS Code version used
@@ -441,4 +441,5 @@ node packages/webview-preview/experiments/extensionHost/run.mjs   # needs the Ru
 Artifacts under `.out/` and `packages/webview-preview/.out/` are evidence, not tracked files. The
 only tracked additions from this spike are this report, the docs index row, the preview-audit note
 under `.trellis/spec/frontend/`, the throwaway package, the `.out/` ignore rule, and the task
-record. The current `.agents/skills/webview-preview` implementation is unchanged.
+record. The preview harness now lives in the `ux-review` skill's Preview mode and the real-host
+runner in its Host mode.

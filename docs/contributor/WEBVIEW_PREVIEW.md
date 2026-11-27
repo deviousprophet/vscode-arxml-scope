@@ -22,15 +22,15 @@ implementation until the follow-up port lands.
 ## Commands and workflow
 
 The executable workflow, command flags, outputs and cleanup rules are owned by the
-[`webview-preview` skill](../../.agents/skills/webview-preview/SKILL.md). In short, run
-`node .agents/skills/webview-preview/scripts/shotWebview.mjs` to capture the full seeded
+[`ux-review` Preview mode](../../.agents/skills/ux-review/SKILL.md). In short, run
+`node .agents/skills/ux-review/scripts/preview/shotWebview.mjs` to capture the full seeded
 set, add `--state <name>` for one state and `--list` for the names. There is no
 `package.json` alias; the runner lives only in the skill.
 
 The capture exits non-zero and prints every violation when the audit fails. Read the
 `<state>.audit.json` for the measured boxes, scroll offsets and the full violation list;
 the PNG is the visual check, the JSON is the proof of placement. Captures and audits are
-written under `.agents/skills/webview-preview/artifacts/`, which is gitignored; they are
+written under `.agents/skills/ux-review/artifacts/`, which is gitignored; they are
 evidence for the change under review, not committed fixtures.
 
 The first capture starts a private preview server on a free port. Stop a manually
@@ -39,7 +39,7 @@ its old bundle.
 
 ## States
 
-`STATES` in `.agents/skills/webview-preview/preview/previewData.ts` is the executable
+`STATES` in `.agents/skills/ux-review/preview/previewData.ts` is the executable
 source of this table; `--list` prints the current names. The table is the human-readable
 projection for choosing a state.
 
@@ -106,7 +106,7 @@ not restate them.
 ## Limits
 
 The harness proves geometry and paint in Chromium at the listed sizes. All preview
-source lives in `.agents/skills/webview-preview/`; do not reintroduce a copy under
+source lives in `.agents/skills/ux-review/`; do not reintroduce a copy under
 `src/test` or `scripts/`. The audit is a set of placement invariants, not a taste
 judgement: still inspect the PNG for colour, spacing and clipping the invariants do not
 encode. The diff body is Monaco's; the audit reads its per-side models, native diagonal

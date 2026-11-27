@@ -25,7 +25,7 @@ numeric interpretation while the user types.
 
 ## Repro
 
-1. `node .agents/skills/webview-preview/scripts/shotWebview.mjs --state editor-dirty`
+1. `node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --state editor-dirty`
 2. Read `editor-dirty.audit.json` (0 violations), then open `editor-dirty.png`.
 3. Compare the Value field with Decimal / Hexadecimal / Binary.
 

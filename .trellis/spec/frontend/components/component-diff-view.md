@@ -66,5 +66,5 @@ src/test/webview/diffCodeParity.test.ts
 
 - `src/test/webview/components/diffView.test.ts`: shell markup, title strip and CSS ownership.
 - `src/test/webview/diffCodeParity.test.ts`: static source/hash contract for the pinned Monaco surface.
-- `webview-preview` skill: `diff-merge`, `diff-swap`, `diff-one-sided`, `diff-removed`, `diff-added`,
+- `ux-review` Preview mode: `diff-merge`, `diff-swap`, `diff-one-sided`, `diff-removed`, `diff-added`,
   `diff-sash` and the full seeded set; the audit proves the real DOM.
