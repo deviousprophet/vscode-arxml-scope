@@ -60,25 +60,32 @@ Host.
    pane state after any rebuild.
 3. **Preview evidence.** Use the `ux-review` skill's Preview mode. Run `--list`, map journeys to states,
    capture with `--state`, and read the audit JSON before the PNG.
-4. **Real-host evidence.** Load the `ux-review` skill. Build the extension and debug engine,
+4. **Cross-state stability.** For every stateful surface, run the skill's
+   [`references/STATE_STABILITY.md`](../../.agents/skills/ux-review/references/STATE_STABILITY.md)
+   probe with a baseline and each variant. Name the controls that must keep their x/y/w/h; exclude
+   only controls the state intentionally hides. More than 1 px of movement, a missing selector or a
+   display/visibility change is a finding. Cover clean → dirty/invalid/stale/saved, default →
+   hover/focus/disabled/loading/error, merge/sidebar/find/selection/swap, theme and zoom — not only
+   the dirty state.
+5. **Real-host evidence.** Load the `ux-review` skill. Build the extension and debug engine,
    then run `.agents/skills/ux-review/scripts/host/run.mjs`; it launches VS Code with
    `@vscode/test-electron`, attaches Playwright over CDP to the nested `active-frame`, and drives
    commands, clicks, focus and keyboard. Set `HOST_OUT` to the task research directory for
    evidence. Do not copy the runner into the task; the skill is the reusable home. The spike
    decision is in `.agents/skills/ux-review/references/WEBVIEW_PREVIEW_STACK.md`.
-5. **Continuity probe after every host round-trip.** Before and after every action that can
+6. **Continuity probe after every host round-trip.** Before and after every action that can
    rebuild or replace the page model — save, copy, undo/redo, rename, settings/theme change,
    refresh, document patch, compare/reload — snapshot and compare the continuity state below.
    Run with the document scrolled away from the top and the edited row initially off-screen.
    A correct write that loses the user's place is a finding, not a pass.
-6. **Design review.** After the evidence, read the skill's
+7. **Design review.** After the evidence, read the skill's
    [`references/DESIGN_REVIEW.md`](../../.agents/skills/ux-review/references/DESIGN_REVIEW.md)
    and run the Floor/Reflex/Finish gates as a cold review: screenshots first, source only to
    locate, at most eight findings, first word `rebuild`/`fix`/`ship`, name what must not be
    diluted. Map findings into the four dimensions; do not add a fifth score.
-7. **Score and report.** Write one finding file per issue, then the report in the exact format
+8. **Score and report.** Write one finding file per issue, then the report in the exact format
    below.
-8. **Clean up.** Stop VS Code, Chrome/Playwright and any bridge; remove temp workspaces and
+9. **Clean up.** Stop VS Code, Chrome/Playwright and any bridge; remove temp workspaces and
    profiles. Return file paths and one-line summaries, not the full prose.
 
 ## Continuity checks (mandatory)
@@ -151,6 +158,23 @@ A screenshot is only evidence for the layout it actually captured.
 - **CONTINUITY:** after every save, copy, undo/redo, rename, refresh, settings/theme change and
   document patch: scroll, selection/caret, focus, folds, active pane/tab, find, sash, markers.
   This is a cross-cutting check on every other journey, not a separate feature.
+- **STABILITY:** compare a baseline state with every variant at the same viewport. Stable controls
+  keep x/y/w/h; only intentionally hidden/shown controls change visibility. Clean → dirty/invalid/
+  stale, default → hover/focus/disabled/loading/error, merge/sidebar/find/selection/swap, theme and
+  zoom. This is a cross-cutting check on every stateful surface.
+
+## State stability checks (mandatory)
+
+Use [`references/STATE_STABILITY.md`](../../.agents/skills/ux-review/references/STATE_STABILITY.md)
+and `scripts/preview/state-diff.mjs`. Pick the controls that must not move (primary toolbar
+actions, sash, anchors, visible buttons), exclude only intentional show/hide targets, and compare
+each variant to the baseline. Fail on more than 1 px movement, a missing selector or a display/
+visibility change. One unintended transition is one finding, not one per selector.
+
+Also look for the details a single screenshot hides: 1 px alignment drift, a status/label that
+reflows its row, a count/width change, a focus ring that shifts layout, a scrollbar appearing,
+a control under the pointer moving when a state arrives, and a disabled/loading state that changes
+size. Do not limit the list to the dirty state.
 
 ## Design review gates
 

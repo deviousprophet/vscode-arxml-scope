@@ -65,6 +65,23 @@ Development Host; it is dark-theme oriented, does not prove real keyboard/IME, s
 clipboard or packaged-VSIX behavior. The 43-state table and limits are in
 [`references/WEBVIEW_PREVIEW.md`](references/WEBVIEW_PREVIEW.md).
 
+## State stability
+
+Every individual state can pass and still move a control when another state appears. After the
+state captures, run the cross-state probe in
+[`references/STATE_STABILITY.md`](references/STATE_STABILITY.md):
+
+```powershell
+node .agents/skills/ux-review/scripts/preview/state-diff.mjs `
+  --baseline <state> --state <variant> `
+  --selector "#stable-control" --selector "#another-stable-control"
+```
+
+Name the controls that must not move; exclude controls the state intentionally hides. The probe
+fails on >1 px movement, a missing selector or a display/visibility change. Compare clean → dirty /
+invalid / stale, default → hover / focus / disabled / loading / error, merge off → on, sidebar,
+find, selection/fold/swap, theme and zoom. Treat one transition as one finding, not one per selector.
+
 ## Design review
 
 After the Preview/Host evidence exists, apply the VS Code-adapted lens in
