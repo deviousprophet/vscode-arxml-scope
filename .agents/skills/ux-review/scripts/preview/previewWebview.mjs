@@ -1,7 +1,7 @@
 /**
  * Serve the production webview pages with seeded states.
  *
- *   node .agents/skills/webview-preview/scripts/previewWebview.mjs [--port 4173]
+ *   node .agents/skills/ux-review/scripts/preview/previewWebview.mjs [--port 4173]
  *
  * Bundles the skill's `preview/previewData.ts` for Node (fixtures + shell) and
  * `preview/previewPage.ts` for the browser (the real page), then serves the shell
@@ -16,8 +16,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const skillDir = path.resolve(scriptDir, '..');
-const root = path.resolve(scriptDir, '../../../..');
+const skillDir = path.resolve(scriptDir, '../..');
+const root = path.resolve(scriptDir, '../../../../..');
 const require = createRequire(import.meta.url);
 const previewDir = path.join(skillDir, '.cache');
 

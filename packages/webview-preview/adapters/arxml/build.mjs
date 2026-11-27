@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../../../..');
 const packageRoot = path.resolve(here, '../..');
-const skillDir = path.join(repoRoot, '.agents', 'skills', 'webview-preview');
+const skillDir = path.join(repoRoot, '.agents', 'skills', 'ux-review');
 const outDir = path.join(packageRoot, '.out', 'arxml');
 
 rmSync(outDir, { recursive: true, force: true });

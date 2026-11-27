@@ -1,29 +1,72 @@
 ---
 name: ux-review
-description: "Run the real VS Code UX-review host: launch ARXML Scope in an Extension Development Host, drive webviews with Playwright over CDP, record journeys, capture metrics (window/webview size, zoom, DPR), continuity probes and screenshots. Use for UX audits, not layout-only preview captures."
+description: "Run the ARXML Scope UX review: capture seeded webview states in headless Chrome/Edge with geometry audits, and drive the real VS Code Extension Development Host with Playwright over CDP for commands, keyboard, dialogs, capture metrics and continuity. Use for UX audits, layout checks and real-host journeys."
 ---
 
-# UX Review Host
+# UX Review
 
-The reusable real-host half of the ARXML Scope UX review. The `webview-preview` skill covers
-seeded rendered states; this skill covers commands, dialogs, keyboard, focus, zoom, save/copy and
-error paths in a real VS Code window. The `ux-reviewer` agent owns the rubric, journey matrix and
-report; this skill owns the executable harness.
+Two modes, one skill:
 
-All paths below are relative to this skill directory (`.agents/skills/ux-review/`).
+| Mode | Use for | Stack |
+|---|---|---|
+| **Preview** | Rendered webview states, layout, CSS, toolbar, editor, diff, sidebar | Headless Chrome/Edge + seeded states |
+| **Host** | Commands, dialogs, keyboard/focus, save/copy continuity, window/zoom metrics | VS Code Extension Development Host + Playwright CDP |
+
+The former `webview-preview` skill has been merged here. Do not add a second copy of the preview or host
+runner under `src/test` or `scripts/`.
 
 ## When to use
 
-- A UX review needs real commands, the command palette, native dialogs, tabs, notifications,
-  focus or keyboard input.
-- A finding depends on the real webview width, zoom, side bar/auxiliary bar or window size.
-- A save/copy/rename/refresh needs a before/after continuity probe.
-- The `webview-preview` seeded states cannot render the surface (errors, empty, dialogs, host
-  chrome).
+- **Preview:** layout, CSS, toolbar, editor, diff-body, sidebar or search visual changes.
+- **Host:** a journey needs real commands, the palette, native dialogs, tabs, notifications,
+  focus/keyboard, a real webview width/zoom, or a before/after continuity probe.
 
-Not for ordinary unit tests, layout-only captures or CSS changes that `webview-preview` covers.
+Not for ordinary unit-test failures that do not affect rendering.
 
-## Prerequisites
+## Preview mode
+
+Run from any directory; the scripts resolve the repository root from their own location.
+
+```bash
+# List every seeded state
+node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --list
+
+# Capture one state
+node .agents/skills/ux-review/scripts/preview/shotWebview.mjs --state diff-merge
+
+# Capture every state
+node .agents/skills/ux-review/scripts/preview/shotWebview.mjs
+
+# Serve the preview interactively
+node .agents/skills/ux-review/scripts/preview/previewWebview.mjs [--port 4173]
+```
+
+Set `CHROME_PATH` to override the detected Chrome/Edge. The preview needs
+`dist/monaco.worker.js`; run `npm run compile` or `npm run package` first if it is missing.
+
+Outputs:
+
+- `.agents/skills/ux-review/artifacts/<state>.png` — the rendered page.
+- `.agents/skills/ux-review/artifacts/<state>.audit.json` — the rendered geometry/paint audit.
+- `.agents/skills/ux-review/.cache/` — generated browser bundle and assets.
+
+Workflow:
+
+1. Run `--list` and pick the narrowest state that exercises the change.
+2. Capture it with `--state <name>`.
+3. Read `<state>.audit.json` **first**. Non-empty `violations` block review; fix those before
+   looking at the image.
+4. Inspect `<state>.png`; the audit is not a taste judgement.
+5. Recapture the same state after a fix; for layout changes, run the full seeded set.
+
+Preview limits: the shell is the production webview with seeded fixtures, not the Extension
+Development Host; it is dark-theme oriented, does not prove real keyboard/IME, screen-reader, OS
+clipboard or packaged-VSIX behavior. The 43-state table and limits are in
+[`docs/contributor/WEBVIEW_PREVIEW.md`](../../../docs/contributor/WEBVIEW_PREVIEW.md).
+
+## Host mode
+
+## Host prerequisites
 
 ```powershell
 npm install
@@ -35,7 +78,7 @@ node scripts/build-engine.mjs --debug
 `@vscode/test-electron` is at the repo root. The runner uses the installed VS Code and a fresh
 temporary profile; it never touches the user's settings or workspace.
 
-## Commands
+## Host commands
 
 Run from the repository root:
 
@@ -59,7 +102,7 @@ Remove-Item Env:HOST_OUT, Env:UX_HOST_ONLY, Env:UX_HOST_MODE
 
 Default output: `artifacts/host/` under this skill (ignored by git).
 
-## Scenarios
+## Host scenarios
 
 | Scenario | Covers |
 |---|---|
@@ -78,7 +121,7 @@ Default output: `artifacts/host/` under this skill (ignored by git).
 | `same-file` | Same file twice |
 | `missing-engine` | Activation failure path (only in `UX_HOST_MODE=missing-engine`) |
 
-## What the runner does
+## What the host runner does
 
 1. Creates a fresh `%TEMP%\arxml-ux-host-ws-*` workspace from
    `src/test/fixtures/diff/{left,right}.arxml` and a fresh profile.
@@ -93,7 +136,7 @@ Default output: `artifacts/host/` under this skill (ignored by git).
 5. Writes `driver-report.json` (scenario checks, observations, capture metrics), workbench and
    webview PNGs, then removes the temp workspace/profile and restores the engine binary.
 
-## Capture fidelity
+## Host capture fidelity
 
 Every `shot()` records:
 
@@ -107,7 +150,7 @@ parity. For width-sensitive findings, capture at 100% and 80% zoom (the `capture
 scenario) and report the measured webview width and zoom. `window.zoomLevel` may still read 0
 after `workbench.action.zoomOut`; use the frame width and DPR as the effective measurement.
 
-## Continuity
+## Host continuity
 
 For save, copy, undo/redo, rename, refresh, settings/theme and document patch, the driver records
 scroll, selection/caret, focus, folds, active pane and markers before/after. Scroll and selection
@@ -115,7 +158,7 @@ are independent: a save can keep the scroll anchor and focus while Details jumps
 Run `save-continuity` against a large document scrolled away from the top; a top-of-file fixture
 cannot expose this class.
 
-## Outputs
+## Host outputs
 
 - `driver-report.json` — scenarios, checks, observations, `captures[]` with sizes/DPR.
 - `<scenario>-workbench.png` — full window (chrome, tabs, dialogs).
@@ -127,7 +170,7 @@ By default `artifacts/` is ignored. When the review must continue on another mac
 `HOST_OUT` to a tracked task evidence directory and commit the PNGs and JSON; keep only large
 traces local with a note. The report should link the committed paths.
 
-## Extending
+## Extending the host runner
 
 - Add a `scenario('name', async ({ check, record }) => …)` in `driver.mjs`.
 - Use `B('/exec', { command })`, `B('/openWith', …)`, `B('/setting', …)` for host setup; keep the
@@ -136,7 +179,7 @@ traces local with a note. The report should link the committed paths.
   ARXML commands, selectors and fixtures. Adapt both for another extension.
 - Do not add a second copy of the runner under `src/test` or `scripts/`.
 
-## Limits and cleanup
+## Host limits and cleanup
 
 - Development host, not a marketplace VSIX; some host chrome differs from a user install.
 - Real keyboard/IME, OS clipboard and screen-reader output are only partially observable.
