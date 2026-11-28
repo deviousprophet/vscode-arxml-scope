@@ -712,7 +712,8 @@ const EDITOR_STATE_ISSUES: ReadonlyArray<readonly [string, EditorStateIssues]> =
 	['editor-delete', deleteEditViolations],
 	['editor-multi-save', multiSaveViolations],
 	['editor-paste', pasteViolations],
-	['editor-stale-save', staleSaveViolations]
+	['editor-stale-save', staleSaveViolations],
+	['editor-stale-discard', staleDiscardViolations]
 ];
 
 function stateViolations(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
@@ -789,14 +790,35 @@ function dirtyViolations(): string[] {
 
 function invalidViolations(): string[] {
 	const messages = previewMessages();
+	const details = detailsPanelText();
 	return [
 		...issueWhen(
-			!elementShows('editor-error-strip', /Invalid value/),
-			'the invalid edit did not show the page error'
+			elementShows('editor-error-strip', /Invalid value/),
+			'the invalid edit still duplicated the refusal in the page error strip'
 		),
+		...issueWhen(
+			!elementShows('editor-dirty-status', /Invalid value/),
+			'the toolbar did not report the invalid draft'
+		),
+		...issueWhen(
+			!/Invalid integer value/.test(detailsPanelInlineError()),
+			'the invalid edit did not show its reason beside the field'
+		),
+		...issueWhen(statusTextOf('details-status').trim() !== '', 'the Details status line repeated the inline error'),
+		...issueWhen(/Hexadecimal|0x00|0b00000000/.test(details), 'the Details panel kept stale derived formats'),
+		...issueWhen(!/last accepted value/.test(details), 'the Details panel did not label the derived formats as last accepted'),
 		...issueWhen(messages.some(isEditMessage), 'an invalid edit was posted to the host'),
 		...issueWhen(messages.some(isSaveMessage), 'an invalid edit allowed the document to save')
 	];
+}
+
+function detailsPanelText(): string {
+	const body = document.getElementById('sb-details-body');
+	return body === null ? '' : textOf(body);
+}
+
+function detailsPanelInlineError(): string {
+	return textOf(document.querySelector('.details-value-error') ?? document.createElement('span'));
 }
 
 function stickyStateIssues(state: AuditState, audit: Omit<PreviewAudit, 'violations'>): string[] {
@@ -1053,8 +1075,23 @@ function renameRefusalViolations(): string[] {
 		...refusalSaveIssues(messages, edits),
 		...refusalShortNameIssues(input),
 		...inlineRefusalIssues(input),
-		...refusalStatusIssues(),
+		...refusalSurfaceIssues(),
 		...staleRefusalStatusIssues()
+	];
+}
+
+/** One field surface owns the refusal: no strip or status copy while Details is visible. */
+function refusalSurfaceIssues(): string[] {
+	return [
+		...issueWhen(elementShows('editor-error-strip', /./), 'the refusal was duplicated in the page error strip'),
+		...issueWhen(
+			statusTextOf('details-status').trim() !== '',
+			'the refusal was duplicated in the Details status line'
+		),
+		...issueWhen(
+			!elementShows('editor-dirty-status', /Short name refused/),
+			'the toolbar copy did not name the refused short name'
+		)
 	];
 }
 
@@ -1108,11 +1145,6 @@ function inlineRefusalIssues(input: HTMLInputElement | null): string[] {
 	const shown =
 		inline !== null && inline !== undefined && /refused by the test host/.test(inline.textContent ?? '');
 	return issueWhen(!shown, 'the refusal reason is not shown beside the field');
-}
-
-function refusalStatusIssues(): string[] {
-	const shown = /refused by the test host/.test(statusTextOf('details-status'));
-	return issueWhen(!shown, 'the refusal reason is not in the Details status');
 }
 
 function staleRefusalStatusIssues(): string[] {
@@ -1239,23 +1271,73 @@ function pasteViolations(): string[] {
 	return issues;
 }
 
-/** A draft whose row vanished blocks Ctrl+S and says why. */
+function staleProbe(): { blocked: boolean; discarded?: boolean } | undefined {
+	return (window as unknown as { __PREVIEW_STALE__?: { blocked: boolean; discarded?: boolean } })
+		.__PREVIEW_STALE__;
+}
+
+/** A draft whose row vanished blocks Ctrl+S, marks the row and offers recovery. */
 function staleSaveViolations(): string[] {
 	const messages = previewMessages();
+	const banner = document.getElementById('editor-stale-banner');
+	const details = detailsPanelText();
 	return [
+		...issueWhen(staleProbe()?.blocked !== true, 'the stale-save scenario did not run'),
 		...issueWhen(messages.some(isEditMessage), 'the stale draft was posted to the host'),
 		...issueWhen(messages.some(isSaveMessage), 'a stale draft allowed the document to save'),
-		...staleStatusIssues(),
-		...shownStripIssues('the stale draft was reported as an invalid value')
+		...issueWhen(banner === null || banner.hidden, 'the stale-row banner is not visible'),
+		...issueWhen(
+			!/no longer in the file/.test(banner?.textContent ?? ''),
+			'the banner does not explain the missing node'
+		),
+		...issueWhen(
+			document.getElementById('editor-stale-discard') === null,
+			'the stale state offers no discard action'
+		),
+		...issueWhen(
+			document.getElementById('editor-stale-reload') === null,
+			'the stale state offers no reload action'
+		),
+		...issueWhen(
+			document.querySelector('.inspector-stale') === null,
+			'the blocked draft has no local Details surface'
+		),
+		...issueWhen(
+			document.getElementById('details-value') !== null,
+			'the dead node still renders an editable value control'
+		),
+		...issueWhen(!/Blocked draft/.test(details), 'the Details panel does not mark the blocked draft'),
+		...issueWhen(
+			!elementShows('editor-dirty-status', /Save blocked/),
+			'the toolbar does not report the blocked save'
+		),
+		...shownStripIssues('the stale draft was reported as an invalid value'),
+		...issueWhen(
+			statusTextOf('details-status').trim() !== '',
+			'the stale refusal was duplicated in the Details status line'
+		)
 	];
 }
 
-function staleStatusIssues(): string[] {
-	const text = statusTextOf('details-status');
-	return issueWhen(
-		!/no longer in the file/.test(text),
-		`the status does not explain the missing node ("${text}")`
-	);
+/** Discard removes the blocked draft and leaves no stale surface or host message. */
+function staleDiscardViolations(): string[] {
+	const messages = previewMessages();
+	const banner = document.getElementById('editor-stale-banner');
+	return [
+		...issueWhen(staleProbe()?.discarded !== true, 'the discard action was not exercised'),
+		...issueWhen(messages.some(isEditMessage), 'discarding the stale draft posted an edit'),
+		...issueWhen(messages.some(isSaveMessage), 'discarding the stale draft allowed a save'),
+		...issueWhen(banner === null || !banner.hidden, 'the stale banner survived the discard'),
+		...issueWhen(document.querySelector('.inspector-stale') !== null, 'the blocked Details surface survived the discard'),
+		...issueWhen(
+			elementShows('editor-dirty-status', /Save blocked|Invalid value/),
+			'the toolbar still reports a blocked draft after the discard'
+		),
+		...issueWhen(
+			!document.getElementById('editor-dirty-status')?.hidden,
+			'the dirty marker survived the discard with no local draft left'
+		)
+	];
 }
 
 /** Ctrl+S sent one raw edit for the textual field, waited for its ack, then saved. */

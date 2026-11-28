@@ -28,3 +28,21 @@
 .details-value-error:empty {
 	display: none;
 }
+.inspector-stale {
+	margin: 8px 0;
+	padding: 8px;
+	border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-editorWarning-foreground));
+	background: var(--vscode-inputValidation-warningBackground, transparent);
+}
+.inspector-stale-heading {
+	color: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
+	font-weight: 600;
+}
+.inspector-stale-note {
+	margin: 4px 0 8px;
+	color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+	font-size: 11px;
+}
+.inspector-stale-value {
+	color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground, var(--vscode-foreground)));
+}

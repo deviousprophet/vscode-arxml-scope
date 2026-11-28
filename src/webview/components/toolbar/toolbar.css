@@ -56,6 +56,9 @@
 .editor-dirty-status.invalid {
 	color: var(--vscode-errorForeground, var(--vscode-editorError-foreground));
 }
+.editor-dirty-status.warning {
+	color: var(--vscode-editorWarning-foreground, var(--tok-dim));
+}
 .tool {
 	display: inline-flex;
 	align-items: center;

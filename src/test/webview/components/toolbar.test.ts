@@ -140,9 +140,20 @@ suite('Toolbar component', () => {
 			toolbar.setDirty(true);
 			assert.strictEqual(status.hidden, false);
 			assert.ok(status.textContent?.includes('Unsaved changes'), 'the marker names the state');
+			toolbar.setDirty(true, { text: 'Invalid value — not saved', title: 'Invalid integer', severity: 'error' });
+			assert.strictEqual(status.textContent, 'Invalid value — not saved');
+			assert.strictEqual(status.title, 'Invalid integer');
+			assert.strictEqual(status.classList.contains('invalid'), true);
+			assert.strictEqual(status.classList.contains('warning'), false);
+			toolbar.setDirty(true, { text: 'Save blocked — row removed', title: 'Row gone', severity: 'warning' });
+			assert.strictEqual(status.textContent, 'Save blocked — row removed');
+			assert.strictEqual(status.classList.contains('invalid'), false);
+			assert.strictEqual(status.classList.contains('warning'), true);
 			toolbar.setDirty(false);
 			assert.strictEqual(status.hidden, true);
 			assert.strictEqual(status.textContent, '');
+			assert.strictEqual(status.classList.contains('invalid'), false);
+			assert.strictEqual(status.classList.contains('warning'), false);
 			status.remove();
 			toolbar.setDirty(true);
 		} finally {

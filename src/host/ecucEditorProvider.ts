@@ -538,6 +538,10 @@ export class EcucEditorProvider implements vscode.CustomTextEditorProvider {
 			void vscode.commands.executeCommand(message.type);
 			return true;
 		}
+		if (message.type === 'reload') {
+			session.rescan();
+			return true;
+		}
 		if (message.type === 'flushed') {
 			this.handleFlushed(message, session);
 			return true;

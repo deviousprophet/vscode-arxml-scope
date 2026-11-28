@@ -45,6 +45,30 @@ body {
 .editor-error-strip[hidden] {
 	display: none;
 }
+.editor-stale-banner {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex: none;
+	padding: 4px 10px;
+	color: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
+	background: var(--vscode-inputValidation-warningBackground, transparent);
+	border-bottom: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-editorWarning-foreground));
+	font-size: 12px;
+	line-height: 18px;
+}
+.editor-stale-banner[hidden] {
+	display: none;
+}
+.editor-stale-message {
+	min-width: 0;
+	flex: 1 1 auto;
+}
+.editor-stale-actions {
+	display: inline-flex;
+	gap: 6px;
+	flex: none;
+}
 #main {
 	display: flex;
 	flex-direction: column;

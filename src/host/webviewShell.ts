@@ -65,6 +65,13 @@ ${head(assets, 'ARXML Scope')}
 <body data-view="document">
 ${renderEditorToolbarHtml()}
 <div id="editor-error-strip" class="editor-error-strip" role="alert" hidden></div>
+<div id="editor-stale-banner" class="editor-stale-banner" role="alert" hidden>
+<span id="editor-stale-message" class="editor-stale-message">This row is no longer in the file.</span>
+<span class="editor-stale-actions">
+<button id="editor-stale-discard" class="tool" type="button">Discard draft</button>
+<button id="editor-stale-reload" class="tool" type="button">Reload</button>
+</span>
+</div>
 <div id="content">
 <div id="main">
 <div id="tree-measure" aria-hidden="true"><span id="tree-ch-probe" class="ch-probe">${'0'.repeat(100)}</span><div class="probe-doc"><span class="row k-parameter has-value"><span class="label">x</span><span class="value"><span class="punct">=</span> <span class="value-text">0</span></span></span></div></div>

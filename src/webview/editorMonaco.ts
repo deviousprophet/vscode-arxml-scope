@@ -9,7 +9,7 @@
 import './styles/tokens.css';
 import './styles/base.css';
 import './monaco/monaco.css';
-import type { EcucRow, RowCondition } from '../core/ecuc/renderRows';
+import { parameterFormats, type EcucRow, type RowCondition } from '../core/ecuc/renderRows';
 import { lastShortName } from '../core/ecuc/model';
 import type {
 	EditorDocumentHeader,
@@ -44,7 +44,7 @@ import { fieldTextFromWholeLine } from '../core/ecuc/lineEdit';
 import { localValueError } from '../core/ecuc/valueValidation';
 import { createEcucEditor, defineEcucTheme, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
 import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
-import { EditorToolbar } from './components/toolbar/toolbar';
+import { EditorToolbar, type DirtyBlock } from './components/toolbar/toolbar';
 import {
 	getSidebarState,
 	mountSidebarShell,
@@ -171,9 +171,22 @@ interface InvalidEdit {
 	editId: number;
 }
 let invalidEdits = new Map<string, InvalidEdit>();
+/**
+ * The rows a draft was typed against. A re-scan can remove the row; the snapshot
+ * keeps the Details surface able to show and explain the blocked draft.
+ */
+let draftRows = new Map<string, EcucRow>();
+/** Drafts whose row is gone. Keyed like `invalidEdits`; cleared on discard/recovery. */
+let staleDrafts = new Map<string, StaleDraft>();
+interface StaleDraft {
+	nodeId: string;
+	field: EditField;
+	display: string;
+	row?: EcucRow;
+}
 let saveRequested = false;
-let localErrorShown = false;
 let errorStrip: HTMLElement | null = null;
+let staleBanner: HTMLElement | null = null;
 let decorationIds: string[] = [];
 let detailsBody: HTMLElement | null = null;
 let detailsStatus: HTMLElement | null = null;
@@ -194,6 +207,13 @@ const inspectorRows = createInspectorRows({
 	},
 	valueInput: function (row, data) {
 		return detailsValueInput(row, data, localValueFor(row.id, 'value'));
+	},
+	valueDraft: function (row) {
+		return localValueFor(row.id, 'value');
+	},
+	valueFormats: function (row, data) {
+		const draft = localValueFor(row.id, 'value');
+		return draft === undefined ? data.formats : parameterFormats(draft, data.type);
 	}
 });
 
@@ -259,14 +279,6 @@ function setDetailsStatus(message: { message?: string; kind?: string }): void {
 	} else {
 		delete detailsStatus.dataset.kind;
 	}
-}
-
-function clearDetailsStatus(): void {
-	if (!detailsStatus) {
-		return;
-	}
-	detailsStatus.textContent = '';
-	delete detailsStatus.dataset.kind;
 }
 
 interface DetailsFocusAnchor {
@@ -430,6 +442,11 @@ function updateInspector(): void {
 	}
 	const focus = captureInspectorFocus();
 	detailsBody.textContent = '';
+	const stale = staleSelection();
+	if (stale !== undefined) {
+		renderStaleDetails(stale);
+		return;
+	}
 	const row = selectedRow();
 	if (row === undefined) {
 		inspectorRows.renderEmpty();
@@ -441,6 +458,47 @@ function updateInspector(): void {
 	if (!restoreDetailsFocus(focus)) {
 		deferRenameFocus(focus);
 	}
+}
+
+/** Details for a dead node: no editable control can ever reach a write. */
+function renderStaleDetails(stale: StaleDraft): void {
+	if (detailsBody === null) {
+		return;
+	}
+	const panel = document.createElement('div');
+	panel.className = 'inspector-stale';
+	panel.setAttribute('data-node-id', stale.nodeId);
+	panel.appendChild(elementWithText('div', 'inspector-stale-heading', '⚠ Blocked draft'));
+	panel.appendChild(
+		elementWithText(
+			'div',
+			'inspector-stale-note',
+			'This row is no longer in the file. Editing is disabled until the draft is discarded or the row returns.'
+		)
+	);
+	const row = document.createElement('div');
+	row.className = 'inspector-row';
+	row.appendChild(elementWithText('span', 'inspector-key', staleFieldLabel(stale.field)));
+	row.appendChild(elementWithText('div', 'inspector-code inspector-stale-value', stale.display));
+	panel.appendChild(row);
+	detailsBody.appendChild(panel);
+}
+
+function staleFieldLabel(field: EditField): string {
+	if (field === 'shortName') {
+		return 'Short name';
+	}
+	if (field === 'definitionRef') {
+		return 'Definition';
+	}
+	return 'Value';
+}
+
+function elementWithText(tag: string, className: string, text: string): HTMLElement {
+	const element = document.createElement(tag);
+	element.className = className;
+	element.textContent = text;
+	return element;
 }
 
 function captureInspectorFocus(): DetailsFocusAnchor | undefined {
@@ -662,8 +720,38 @@ function localDraftExists(): boolean {
 }
 
 function updateDirtyStatus(): void {
-	const first = invalidEdits.values().next().value as InvalidEdit | undefined;
-	editorToolbar?.setDirty(localEditPending() || hostDirty, first?.message);
+	const stale = firstStaleDraft();
+	if (stale !== undefined) {
+		editorToolbar?.setDirty(true, {
+			text: 'Save blocked — row removed',
+			title: 'This row is no longer in the file. Discard the draft or reload the document.',
+			severity: 'warning'
+		});
+		return;
+	}
+	const first = firstInvalidEdit();
+	editorToolbar?.setDirty(localEditPending() || hostDirty, invalidBlock(first));
+}
+
+function invalidBlock(invalid: InvalidEdit | undefined): DirtyBlock | undefined {
+	if (invalid === undefined) {
+		return undefined;
+	}
+	return {
+		text: `${invalidHeadline(invalid)} — not saved`,
+		title: invalid.message,
+		severity: 'error'
+	};
+}
+
+function invalidHeadline(invalid: InvalidEdit): string {
+	if (invalid.field === 'shortName') {
+		return 'Short name refused';
+	}
+	if (invalid.field === 'definitionRef') {
+		return 'Definition refused';
+	}
+	return 'Invalid value';
 }
 
 function maybeRequestSave(): void {
@@ -736,20 +824,177 @@ function updateErrorState(): void {
 	const first = firstInvalidEdit();
 	renderErrorStrip(first);
 	applyErrorMarkers();
-	updateDetailsError(first);
 	updateDirtyStatus();
+	renderStaleBanner();
 }
 
 function firstInvalidEdit(): InvalidEdit | undefined {
 	return invalidEdits.values().next().value as InvalidEdit | undefined;
 }
 
+function firstStaleDraft(): StaleDraft | undefined {
+	return staleDrafts.values().next().value as StaleDraft | undefined;
+}
+
+/**
+ * Record that a draft's row vanished. The draft and its text stay (the row may
+ * come back), but editing is blocked and the recovery actions appear.
+ */
+function markStaleDraft(nodeId: string, field: EditField, display: string): void {
+	const key = draftKey(nodeId, field);
+	if (staleDrafts.has(key)) {
+		return;
+	}
+	staleDrafts.set(key, { nodeId, field, display, row: draftRows.get(nodeId) });
+	saveRequested = false;
+	selectedId = nodeId;
+	subtreeIds = subtreeRowIdsOf(nodeId);
+	updateErrorState();
+	updateInspector();
+	applyDecorations();
+}
+
+/** Mark every queued/invalid draft whose row the latest rebuild removed. */
+function markMissingDraftsStale(): void {
+	for (const edit of pendingEdits.values()) {
+		if (!rowById.has(edit.nodeId)) {
+			markStaleDraft(edit.nodeId, edit.field ?? 'value', edit.display);
+		}
+	}
+	for (const invalid of invalidEdits.values()) {
+		if (!rowById.has(invalid.nodeId)) {
+			markStaleDraft(invalid.nodeId, invalid.field, invalid.display);
+		}
+	}
+}
+
+/** Drop stale marks whose row returned; the draft is editable and flushable again. */
+function recoverReturnedStaleDrafts(): void {
+	let changed = false;
+	for (const [key, stale] of Array.from(staleDrafts)) {
+		if (rowById.has(stale.nodeId)) {
+			staleDrafts.delete(key);
+			changed = true;
+		}
+	}
+	if (changed) {
+		renderStaleBanner();
+		updateDirtyStatus();
+	}
+}
+
+function renderStaleBanner(): void {
+	if (staleBanner === null) {
+		return;
+	}
+	staleBanner.hidden = firstStaleDraft() === undefined;
+}
+
+/** Drop every blocked draft and restore the host rows, keeping other drafts. */
+function discardStaleDrafts(): void {
+	const staleNodes = new Set<string>();
+	for (const [key, stale] of Array.from(staleDrafts)) {
+		staleNodes.add(stale.nodeId);
+		dropDraft(key, stale.nodeId);
+	}
+	staleDrafts.clear();
+	for (const nodeId of staleNodes) {
+		if (!draftForNode(nodeId)) {
+			draftRows.delete(nodeId);
+		}
+	}
+	saveRequested = false;
+	if (selectedId !== undefined && !rowById.has(selectedId)) {
+		selectedId = undefined;
+	}
+	subtreeIds = subtreeRowIdsOf(selectedId);
+	documentModel = buildSyntheticDocument(rows, header);
+	overlayLocalEdits(documentModel);
+	rebuildModel();
+	updateInspector();
+	applyDecorations();
+	updateErrorState();
+	updateDirtyStatus();
+}
+
+function dropDraft(key: string, nodeId: string): void {
+	pendingEdits.delete(key);
+	invalidEdits.delete(key);
+	for (const [editId, edit] of Array.from(inflightEdits)) {
+		if (draftKey(edit.nodeId, edit.field) === key) {
+			inflightEdits.delete(editId);
+		}
+	}
+	for (const [editId, intent] of Array.from(renameIntents)) {
+		if (draftKey(intent.nodeId, 'shortName') === key) {
+			renameIntents.delete(editId);
+		}
+	}
+	if (!draftForNode(nodeId)) {
+		draftRows.delete(nodeId);
+	}
+}
+
+function draftForNode(nodeId: string): boolean {
+	for (const edit of pendingEdits.values()) {
+		if (edit.nodeId === nodeId) {
+			return true;
+		}
+	}
+	for (const edit of inflightEdits.values()) {
+		if (edit.nodeId === nodeId) {
+			return true;
+		}
+	}
+	for (const invalid of invalidEdits.values()) {
+		if (invalid.nodeId === nodeId) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Ask the host for the current rows. The draft is intentionally kept: if the row
+ * came back it becomes editable and flushable again; otherwise it stays blocked.
+ */
+function reloadRows(): void {
+	postToHost({ type: 'reload' });
+}
+
+/** The stale draft whose node is selected, if any: its Details controls are blocked. */
+function staleSelection(): StaleDraft | undefined {
+	return selectedId === undefined ? undefined : staleForNode(selectedId);
+}
+
+function staleForNode(nodeId: string): StaleDraft | undefined {
+	for (const stale of staleDrafts.values()) {
+		if (stale.nodeId === nodeId) {
+			return stale;
+		}
+	}
+	return undefined;
+}
+
+/** True when the Details panel can show this field's refusal beside the control. */
+function detailsShowsInvalid(invalid: InvalidEdit): boolean {
+	return detailsShowsField(invalid.nodeId);
+}
+
+function detailsShowsField(nodeId: string): boolean {
+	const state = getSidebarState();
+	return !state.hidden && state.tab === 'details' && selectedId === nodeId;
+}
+
 function renderErrorStrip(first: InvalidEdit | undefined): void {
 	if (errorStrip === null) {
 		return;
 	}
-	errorStrip.hidden = first === undefined;
-	errorStrip.textContent = first === undefined ? '' : `Invalid value — ${first.message}`;
+	// The field's own surface owns the refusal while Details is visible; the top
+	// strip is the fallback for a hidden Details tab, never a second copy.
+	const visible = first !== undefined && !detailsShowsInvalid(first);
+	errorStrip.hidden = !visible;
+	errorStrip.textContent = visible && first !== undefined ? `${invalidHeadline(first)} — ${first.message}` : '';
 }
 
 function applyErrorMarkers(): void {
@@ -767,18 +1012,6 @@ function errorMarkers(): monaco.editor.IMarkerData[] {
 
 function isMarker(marker: monaco.editor.IMarkerData | undefined): marker is monaco.editor.IMarkerData {
 	return marker !== undefined;
-}
-
-function updateDetailsError(first: InvalidEdit | undefined): void {
-	if (first !== undefined) {
-		setDetailsStatus({ message: first.message, kind: 'warn' });
-		localErrorShown = true;
-		return;
-	}
-	if (localErrorShown) {
-		clearDetailsStatus();
-		localErrorShown = false;
-	}
 }
 
 function replaceSyntheticLine(
@@ -943,6 +1176,8 @@ function updateFieldDraft(
 	line: number
 ): void {
 	const key = draftKey(nodeId, field);
+	draftRows.set(nodeId, row);
+	staleDrafts.delete(key);
 	const error = localValueError(row, field, raw);
 	const display = displayForRaw(row, field, raw);
 	const spanText = spanTextForRaw(row, field, raw);
@@ -951,10 +1186,13 @@ function updateFieldDraft(
 	if (error !== undefined) {
 		// The invalid text stays visible, but it never enters the host document.
 		storeInvalidDraft(key, nodeId, field, error, spanText);
-		return;
+	} else {
+		invalidEdits.delete(key);
+		queueValidDraft(key, nodeId, field, raw, spanText, row);
 	}
-	invalidEdits.delete(key);
-	queueValidDraft(key, nodeId, field, raw, spanText, row);
+	if (field === 'value' && selectedId === nodeId) {
+		inspectorRows.updateValueFormats(row);
+	}
 }
 
 function storeInvalidDraft(
@@ -1016,6 +1254,9 @@ function clearPendingEdits(): void {
 	resolvedRenames.clear();
 	pendingRenameFocus = undefined;
 	localUndoActive = false;
+	staleDrafts.clear();
+	draftRows.clear();
+	renderStaleBanner();
 	updateDirtyStatus();
 	maybeAcknowledgeFlush();
 }
@@ -1080,9 +1321,9 @@ function flushOneEdit(key: string, edit: QueuedEdit): boolean {
 	const row = rowById.get(edit.nodeId);
 	if (row === undefined) {
 		// A previous re-scan removed the row; sending it would only earn a refusal.
-		// Keep the draft and report it, so the status explains the blocked save and
-		// the draft can still be submitted if the row returns.
-		setDetailsStatus({ message: 'The node is no longer in the file.', kind: 'warn' });
+		// Keep the draft and mark it blocked, so the page can explain the save and
+		// offer discard/reload instead of dead-ending.
+		markStaleDraft(edit.nodeId, edit.field ?? 'value', edit.display);
 		return true;
 	}
 	// One edit per field may be in flight. A newer value waits for its ack so
@@ -1253,7 +1494,14 @@ function recordRefusal(message: EditorMessage<'editResult'>, edit: QueuedEdit): 
 	// old value; Ctrl+S stays blocked until the user corrects or reverts it.
 	saveRequested = false;
 	storeRefusal(message, edit);
+	if (isMissingNodeReason(message.reason) && !rowById.has(edit.nodeId)) {
+		markStaleDraft(edit.nodeId, edit.field ?? 'value', edit.display);
+	}
 	updateErrorState();
+}
+
+function isMissingNodeReason(reason: string | undefined): boolean {
+	return reason !== undefined && /no longer in the file|row (?:was )?removed|stale/i.test(reason);
 }
 
 function storeRefusal(message: EditorMessage<'editResult'>, edit: QueuedEdit): void {
@@ -1265,14 +1513,16 @@ function storeRefusal(message: EditorMessage<'editResult'>, edit: QueuedEdit): v
 		display: edit.display,
 		editId: edit.editId
 	});
-	showRefusalStatus(message);
+	showRefusalStatus(reason, edit);
 	syncDetailsField(edit.nodeId, edit.field ?? 'value', edit.display, reason);
 }
 
-function showRefusalStatus(message: EditorMessage<'editResult'>): void {
-	if (message.reason !== undefined && message.reason !== '') {
-		setDetailsStatus({ message: message.reason, kind: 'warn' });
+function showRefusalStatus(reason: string, edit: QueuedEdit): void {
+	if (reason === '' || detailsShowsField(edit.nodeId)) {
+		return;
 	}
+	const kind = isMissingNodeReason(reason) ? 'warn' : 'error';
+	setDetailsStatus({ message: reason, kind });
 }
 
 function followUpAfterResult(message: EditorMessage<'editResult'>, superseded: boolean): void {
@@ -1420,9 +1670,9 @@ function remapDraftsAfterRename(): void {
 	}
 	if (plan.dropped.length > 0) {
 		// The rename did not land where the host said. Its drafts cannot be addressed
-		// anywhere safe, so the next flush reports them stale and this save stops.
+		// anywhere safe, so mark them blocked and stop this save.
 		saveRequested = false;
-		setDetailsStatus({ message: 'The node is no longer in the file.', kind: 'warn' });
+		markMissingDraftsStale();
 	}
 	renameIntents = new Map();
 	for (const intent of plan.kept) {
@@ -1470,6 +1720,7 @@ function rebuildRows(nextRows: EcucRow[], nextHeader?: EditorDocumentHeader, nex
 	rows = Array.isArray(nextRows) ? nextRows : [];
 	indexRows();
 	remapDraftsAfterRename();
+	recoverReturnedStaleDrafts();
 	if (nextHeader !== undefined) {
 		header = nextHeader;
 	}
@@ -1509,6 +1760,11 @@ function applySelection(nextSelectedId: string | undefined): void {
 		selectedId = nextSelectedId;
 	}
 	if (selectedId !== undefined && !rowById.has(selectedId)) {
+		if (staleForNode(selectedId) !== undefined) {
+			// The host selection still names the blocked draft; keep it so Details
+			// can explain the dead row instead of silently moving to another node.
+			return;
+		}
 		// A patch without a selection still follows a rename the re-scan proved, so
 		// the Details panel never targets a dead id (the renamed container or any
 		// draft-bearing row under it).
@@ -2804,6 +3060,23 @@ function mountDetails(): void {
 	});
 }
 
+function mountStaleBanner(): void {
+	staleBanner = document.getElementById('editor-stale-banner');
+	const discard = document.getElementById('editor-stale-discard');
+	const reload = document.getElementById('editor-stale-reload');
+	if (discard !== null) {
+		discard.addEventListener('click', function () {
+			discardStaleDrafts();
+		});
+	}
+	if (reload !== null) {
+		reload.addEventListener('click', function () {
+			reloadRows();
+		});
+	}
+	renderStaleBanner();
+}
+
 async function mountEditor(): Promise<void> {
 	resetVsCodeApi();
 	resetDetailsEditorState();
@@ -2846,6 +3119,7 @@ async function mountEditor(): Promise<void> {
 	mountDetails();
 	mountConditionsPanel();
 	errorStrip = document.getElementById('editor-error-strip');
+	mountStaleBanner();
 	document.addEventListener('keydown', handleSaveShortcut, true);
 	setConditionRows([]);
 	setConditionsCallback(function (entries) {

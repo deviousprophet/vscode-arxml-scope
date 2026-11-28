@@ -122,6 +122,8 @@ export type EditorWebviewToProvider =
 	| { type: 'edit'; editId?: number; nodeId: string; field?: 'value' | 'shortName' | 'definitionRef'; value: string; baseRevision?: number }
 	/** The page asks the host to save the TextDocument after pending edits settle. */
 	| { type: 'save' }
+	/** Re-scan the host document and push the current rows (stale-draft recovery). */
+	| { type: 'reload' }
 	| { type: 'flushed'; requestId: number }
 	| { type: 'delete'; nodeId: string }
 	| { type: 'duplicate'; nodeId: string }

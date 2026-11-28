@@ -66,6 +66,7 @@ export const STATES: PreviewState[] = [
 	{ name: 'editor-multi-save', page: 'editor', width: 1400, height: 900, multiSave: true },
 	{ name: 'editor-paste', page: 'editor', width: 1400, height: 900, pasteEdit: true },
 	{ name: 'editor-stale-save', page: 'editor', width: 1400, height: 900, staleSave: true },
+	{ name: 'editor-stale-discard', page: 'editor', width: 1400, height: 900, staleSave: true, staleDiscard: true },
 	{ name: 'editor-sticky', page: 'editor', width: 1400, height: 900, scrollLine: 40 },
 	{ name: 'editor-find', page: 'editor', width: 1400, height: 900, find: 'Items' },
 	{ name: 'diff-find', page: 'diff', width: 1400, height: 900, merge: true, find: 'Items' },
@@ -422,7 +423,8 @@ const EDITOR_FIXTURES: Record<string, () => EditorFixture> = {
 	'editor-delete': syntaxText,
 	'editor-multi-save': syntaxText,
 	'editor-paste': syntaxText,
-	'editor-stale-save': syntaxText
+	'editor-stale-save': syntaxText,
+	'editor-stale-discard': syntaxText
 };
 
 function editorFixtureFor(state: PreviewState): EditorFixture {
@@ -524,6 +526,7 @@ function payloadFor(state: PreviewState, mount: PreviewMount) {
 		multiSave: state.multiSave,
 		pasteEdit: state.pasteEdit,
 		staleSave: state.staleSave,
+		staleDiscard: state.staleDiscard,
 		scrollLine: state.scrollLine,
 		diffScrollLine: state.diffScrollLine,
 		trySave: state.trySave
