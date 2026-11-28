@@ -348,10 +348,36 @@ suite('plan index and validation rows (extension)', function () {
 			const tooltip = statusTooltip(service);
 			assert.ok(tooltip.includes('Skipped:'), tooltip);
 			assert.ok(tooltip.includes('big.arxml'), tooltip);
+			assert.ok(
+				tooltip.includes('(over arxmlScope.index.maxFileSizeMB = 1 MB)'),
+				`the one reason names the threshold: ${tooltip}`
+			);
+			assert.ok(!/encoding or unreadable/.test(tooltip), 'no three-way fallback list');
 		} finally {
 			service.dispose();
 			await indexConfig().update('maxFileSizeMB', undefined, vscode.ConfigurationTarget.Workspace);
 			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+		}
+	});
+
+	test('UX-14 an undecodable file reports the encoding reason, not the size cap', async () => {
+		const dir = tempDir('index-encoding');
+		const bad = path.join(dir, 'utf32.arxml');
+		// UTF-32LE BOM: detection refuses it instead of decoding mojibake.
+		fs.writeFileSync(bad, Buffer.from([0xff, 0xfe, 0x00, 0x00, 0x3c, 0x00, 0x00, 0x00]));
+		const service = new IndexService();
+		try {
+			await service.rebuild();
+			const tooltip = statusTooltip(service);
+			assert.ok(tooltip.includes('utf32.arxml'), tooltip);
+			assert.ok(tooltip.includes('(unsupported encoding)'), `one reason with no cap hint: ${tooltip}`);
+			assert.ok(!/maxFileSizeMB/.test(tooltip), 'an encoding refusal does not blame the size cap');
+			assert.ok(!/encoding or unreadable/.test(tooltip), 'no three-way fallback list');
+		} finally {
+			service.dispose();
+			// The refused read stream's handle may still be closing on Windows.
+			await sleep(250);
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
 		}
 	});
 

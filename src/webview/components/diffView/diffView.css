@@ -92,6 +92,27 @@ body[data-page="diff"] .nav-btn:disabled {
 .notice[data-kind="warn"] {
 	color: var(--vscode-editorWarning-foreground, var(--tok-dim));
 }
+/* The notice's single action (Reload comparison / Reveal module). */
+.notice-action {
+	margin-left: 8px;
+	padding: 0 6px;
+	height: 16px;
+	border: 1px solid var(--vscode-panel-border, var(--vscode-editorGroup-border));
+	border-radius: 2px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	line-height: 14px;
+	cursor: pointer;
+	vertical-align: 1px;
+}
+.notice-action:hover {
+	background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+.notice-action:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
+	outline-offset: 1px;
+}
 #diff-body {
 	position: relative;
 	display: flex;

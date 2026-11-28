@@ -9,7 +9,7 @@ import * as assert from 'assert';
 
 import { SORT_EXCEPTIONS } from '../../core/ecuc/order';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { DiffCell, DiffRow, buildDiffDocument, compareTitle, diffChanges, diffVisibility, disambiguatedLabels, flattenDiffDocument, flattenDiffRows, nextChangeIndex } from '../../core/diff/diffModel';
+import { DiffCell, DiffRow, buildDiffDocument, changeSummaryText, compareTitle, diffChanges, diffVisibility, disambiguatedLabels, flattenDiffDocument, flattenDiffRows, nextChangeIndex } from '../../core/diff/diffModel';
 import { buildNodeIndex } from '../../core/ecuc/nodeId';
 import { EcucRow, buildRows } from '../../core/ecuc/renderRows';
 import { fixtureText } from '../core/modelTestUtils';
@@ -1233,5 +1233,21 @@ suite('semantic diff model (design §2, §3.3)', () => {
 				.sort();
 		assert.strictEqual(pairs(first).length, 20);
 		assert.deepStrictEqual(pairs(first), pairs(second));
+	});
+	test('UX-05 the change count is compact, truthful and absent when nothing changed', () => {
+		assert.strictEqual(
+			changeSummaryText({ changed: 0, added: 0, removed: 0, unchanged: 7, renamed: 0 }),
+			undefined,
+			'an identical comparison has no count to report'
+		);
+		assert.strictEqual(
+			changeSummaryText({ changed: 2, added: 1, removed: 1, unchanged: 5, renamed: 0 }),
+			'4 changes (2 changed, 1 added, 1 removed)'
+		);
+		assert.strictEqual(
+			changeSummaryText({ changed: 0, added: 1, removed: 0, unchanged: 5, renamed: 1 }),
+			'1 change',
+			'a single row keeps the singular and omits a redundant breakdown'
+		);
 	});
 });

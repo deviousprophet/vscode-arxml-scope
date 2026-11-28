@@ -17,7 +17,7 @@ import { copiedRowKeys } from '../core/copy/copyDirty';
 import type { CopyDirtyRows } from '../core/copy/copyDirty';
 import { SORT_EXCEPTIONS } from '../core/ecuc/order';
 import { FileLabel, compareTitle } from '../core/diff/diffModel';
-import type { DiffCell, DiffDocument } from '../core/diff/diffModel';
+import type { DiffCell, DiffDocument, DiffRow } from '../core/diff/diffModel';
 import { applyDiffPatch } from '../core/diff/diffPatch';
 import type { CoreEngine, EngineCopyRequest, EngineDiffPatchResult, EngineDiffSide } from './engine/coreEngine';
 import { diffShell } from './webviewShell';
@@ -28,7 +28,7 @@ import { watchBoot } from './bootWatchdog';
 import { copyDirty } from './copyDirty';
 import { CopyClock, logCopyTiming } from './copyTiming';
 import { diffMessageType } from '../diffProtocol';
-import type { DiffWebviewToProvider } from '../diffProtocol';
+import type { DiffNoticeAction, DiffWebviewToProvider } from '../diffProtocol';
 
 /** Re-scan debounce: one edit produces one refresh. */
 const REFRESH_DEBOUNCE_MS = 150;
@@ -119,6 +119,28 @@ function firstGateReason(
 	rightUri: vscode.Uri
 ): string | undefined {
 	return gateReason(left.getText(), leftUri.fsPath) ?? gateReason(right.getText(), rightUri.fsPath);
+}
+
+/**
+ * The diff-specific notice for a refresh whose side stopped being ECUC. The
+ * gate copy belongs to the open command; here the panel stays on its last good
+ * comparison, so the message says that and offers a reload.
+ */
+function staleSideNotice(
+	left: vscode.TextDocument,
+	leftUri: vscode.Uri,
+	right: vscode.TextDocument,
+	rightUri: vscode.Uri
+): string | undefined {
+	const side = gateReason(left.getText(), leftUri.fsPath)
+		? leftUri
+		: gateReason(right.getText(), rightUri.fsPath)
+			? rightUri
+			: undefined;
+	if (side === undefined) {
+		return undefined;
+	}
+	return `"${fileName(side)}" is no longer an ECUC-Values document. The comparison stopped updating; the last good result stays visible. Reload the comparison after the file is ECUC again.`;
 }
 
 function shellHtml(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): string {
@@ -212,11 +234,11 @@ export class DiffPanel {
 			);
 		}, BOOT_TIMEOUT_MS);
 
-		const postError = async (message: string): Promise<void> => {
+		const postError = async (message: string, action?: DiffNoticeAction): Promise<void> => {
 			if (disposed) {
 				return;
 			}
-			await panel.webview.postMessage({ type: 'error', message });
+			await panel.webview.postMessage({ type: 'error', message, action });
 		};
 
 		/** The label each side has right now: a dirty buffer carries the marker. */
@@ -294,11 +316,11 @@ export class DiffPanel {
 			if (isStale(disposed, generation, documentGeneration)) {
 				return;
 			}
-			const why = firstGateReason(nextLeft, leftUri, nextRight, rightUri);
+			const why = staleSideNotice(nextLeft, leftUri, nextRight, rightUri);
 			if (why) {
 				// Keep the last good document: the page still shows a useful
-				// comparison and the banner explains why it stopped updating.
-				await postError(why);
+				// comparison and the notice explains why it stopped updating.
+				await postError(why, { kind: 'reload', label: 'Reload comparison' });
 				return;
 			}
 			if (!(await reopenSides(generation, nextLeft, nextRight))) {
@@ -518,9 +540,10 @@ export class DiffPanel {
 		const refuseCopy = async (
 			side: 'left' | 'right',
 			key: string,
-			message: string
+			message: string,
+			action?: DiffNoticeAction
 		): Promise<void> => {
-			await postError(message);
+			await postError(message, action);
 			await panel.webview.postMessage({
 				type: 'copyResult',
 				ok: false,
@@ -530,8 +553,8 @@ export class DiffPanel {
 			});
 		};
 
-		const refuseActiveCopy = (message: string): Promise<void> =>
-			refuseCopy(copySide ?? 'left', copyKey ?? '', message);
+		const refuseActiveCopy = (message: string, action?: DiffNoticeAction): Promise<void> =>
+			refuseCopy(copySide ?? 'left', copyKey ?? '', message, action);
 
 		/**
 		 * Remembers one applied copy and answers the page. `side` is the edited
@@ -778,6 +801,30 @@ export class DiffPanel {
 			return plan.span;
 		};
 
+		/** The module row at the top of a parent chain, and the name the user reads. */
+		const moduleAtTop = (
+			parentKey: string | null,
+			sourceSide: 'left' | 'right'
+		): { key: string; label: string } | undefined => {
+			let moduleRow: DiffRow | undefined;
+			for (const index of parentChain(parentKey)) {
+				const row = current.rows[index];
+				if (row.kind === 'module') {
+					moduleRow = row;
+				}
+			}
+			if (moduleRow === undefined) {
+				return undefined;
+			}
+			const cell = cellOn(moduleRow, sourceSide);
+			const shortName = cell?.shortName ?? cell?.label;
+			if (shortName === undefined) {
+				return { key: moduleRow.key, label: 'the module' };
+			}
+			const named = cell?.definitionRef ? `"${shortName}" (${cell.definitionRef})` : `"${shortName}"`;
+			return { key: moduleRow.key, label: named };
+		};
+
 		/** Creates the missing ancestors around the copied element and inserts the chain. */
 		const synthesizeInto = async (
 			otherDoc: vscode.TextDocument,
@@ -788,7 +835,18 @@ export class DiffPanel {
 			const targetSide = otherSideOf(side);
 			const chain = ancestorChain(row.parentKey, side, childKindOf(row.kind));
 			if (chain === undefined) {
-				await refuseActiveCopy('the module is missing on the target side; copy it first');
+				const module = moduleAtTop(row.parentKey, side);
+				const target = otherSideOf(side);
+				const message =
+					module === undefined
+						? `The module is missing on the ${target}; copy its module row first.`
+						: `Module ${module.label} is missing on the ${target}; copy its module row first.`;
+				await refuseActiveCopy(
+					message,
+					module === undefined
+						? undefined
+						: { kind: 'reveal', label: 'Reveal module', side, key: module.key }
+				);
 				return true;
 			}
 			// The chain belongs *inside* the anchor parent: its last existing child is
@@ -972,6 +1030,10 @@ export class DiffPanel {
 		const handleSessionMessage = (message: DiffWebviewToProvider): boolean => {
 			if (message.type === 'ready') {
 				onReady();
+				return true;
+			}
+			if (message.type === 'reload') {
+				void refreshNow();
 				return true;
 			}
 			if (message.type === 'matchMode') {

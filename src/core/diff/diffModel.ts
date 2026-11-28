@@ -2268,6 +2268,31 @@ function summarizeDiff(rows: readonly DiffRow[]): DiffSummary {
 	return summary;
 }
 
+/**
+ * The compact change count the diff toolbar shows on open. It counts changed,
+ * added and removed rows, not hunks: a container highlighted because a
+ * descendant changed is one of them. `undefined` means the comparison has no
+ * differences to count.
+ */
+export function changeSummaryText(summary: DiffSummary): string | undefined {
+	const total = summary.changed + summary.added + summary.removed;
+	if (total === 0) {
+		return undefined;
+	}
+	const parts: string[] = [];
+	if (summary.changed > 0) {
+		parts.push(`${summary.changed} changed`);
+	}
+	if (summary.added > 0) {
+		parts.push(`${summary.added} added`);
+	}
+	if (summary.removed > 0) {
+		parts.push(`${summary.removed} removed`);
+	}
+	const count = `${total} change${total === 1 ? '' : 's'}`;
+	return parts.length > 1 ? `${count} (${parts.join(', ')})` : count;
+}
+
 /** Builds the document the panel embeds and refreshes. */
 export function buildDiffDocument(
 	left: FileLabel,

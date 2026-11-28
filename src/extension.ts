@@ -33,9 +33,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<ArxmlS
 	try {
 		resolvedEngine = await resolveEngine(context.extensionPath);
 	} catch (error) {
-		void vscode.window.showErrorMessage(
-			`ARXML Scope: ${error instanceof Error ? error.message : String(error)}`
-		);
+		// One user-facing notification: VS Code already reports the activation
+		// failure with this message. Internal detail goes to the output channel
+		// instead of a second toast or the user-facing copy.
+		logActivationFailure(context, error);
 		throw error;
 	}
 	context.subscriptions.push({ dispose: () => resolvedEngine.dispose() });
@@ -73,6 +74,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<ArxmlS
 		statusBarText: () => indexService.statusText(),
 		reindex: () => indexService.rebuild(),
 	};
+}
+
+/**
+ * Keeps internal activation detail out of the user-facing notification and in
+ * one place the message can point at. The channel is created lazily, so a
+ * successful activation never adds a panel.
+ */
+function logActivationFailure(context: vscode.ExtensionContext, error: unknown): void {
+	const channel = vscode.window.createOutputChannel('ARXML Scope');
+	context.subscriptions.push(channel);
+	channel.appendLine(`[activate] engine start failed: ${error instanceof Error ? error.message : String(error)}`);
+	if (error instanceof Error && error.cause instanceof Error) {
+		channel.appendLine(`[activate] cause: ${error.cause.message}`);
+	}
+	if (error instanceof Error && error.stack !== undefined) {
+		channel.appendLine(error.stack);
+	}
 }
 
 // This method is called when your extension is deactivated

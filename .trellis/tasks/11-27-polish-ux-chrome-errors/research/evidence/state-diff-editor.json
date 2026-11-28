@@ -1,0 +1,126 @@
+{
+  "_type": "preview-state-diff",
+  "baseline": {
+    "name": "editor",
+    "viewport": {
+      "width": 1400,
+      "height": 900
+    }
+  },
+  "tolerance": 1,
+  "selectors": [
+    "#collapse-all",
+    "#expand-all",
+    "#toggle-sidebar"
+  ],
+  "variants": [
+    {
+      "state": "editor-dirty",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "selectors": {
+        "#collapse-all": {
+          "before": {
+            "x": 8,
+            "y": 6,
+            "width": 60,
+            "height": 48,
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": 1,
+            "hidden": false,
+            "text": "Collapse"
+          },
+          "after": {
+            "x": 8,
+            "y": 6,
+            "width": 60,
+            "height": 48,
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": 1,
+            "hidden": false,
+            "text": "Collapse"
+          },
+          "delta": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "moved": false,
+          "visibilityChanged": false
+        },
+        "#expand-all": {
+          "before": {
+            "x": 74,
+            "y": 6,
+            "width": 60,
+            "height": 48,
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": 1,
+            "hidden": false,
+            "text": "Expand"
+          },
+          "after": {
+            "x": 74,
+            "y": 6,
+            "width": 60,
+            "height": 48,
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": 1,
+            "hidden": false,
+            "text": "Expand"
+          },
+          "delta": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "moved": false,
+          "visibilityChanged": false
+        },
+        "#toggle-sidebar": {
+          "before": {
+            "x": 1332,
+            "y": 6,
+            "width": 60,
+            "height": 48,
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": 1,
+            "hidden": false,
+            "text": "Sidebar"
+          },
+          "after": {
+            "x": 1332,
+            "y": 6,
+            "width": 60,
+            "height": 48,
+            "display": "flex",
+            "visibility": "visible",
+            "opacity": 1,
+            "hidden": false,
+            "text": "Sidebar"
+          },
+          "delta": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "moved": false,
+          "visibilityChanged": false
+        }
+      },
+      "failures": []
+    }
+  ],
+  "failures": [],
+  "ok": true
+}

@@ -200,7 +200,23 @@ async function replaceWithTextEditor(
 	if (isEditorFor(active, document)) {
 		applySelection(active, selection);
 	}
+	// `openWith default` puts the text editor in front but leaves the custom
+	// editor's tab behind, which the docs promised to swap away. Close it so one
+	// tab remains; a failed close leaves the distinguishable tab rather than none.
+	await closeCustomEditorTab(document.uri);
 	return selection;
+}
+
+/** Closes this file's ECUC editor tabs; the text editor stays the visible one. */
+async function closeCustomEditorTab(uri: vscode.Uri): Promise<void> {
+	const target = uri.toString();
+	const tabs = vscode.window.tabGroups.all.flatMap((group) => group.tabs);
+	for (const tab of tabs) {
+		const input = tab.input;
+		if (input instanceof vscode.TabInputCustom && input.uri.toString() === target) {
+			await vscode.window.tabGroups.close(tab, true);
+		}
+	}
 }
 
 function isEditorFor(

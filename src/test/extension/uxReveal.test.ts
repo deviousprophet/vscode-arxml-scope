@@ -314,11 +314,10 @@ suite('editor reveal (AC1, AC2)', () => {
 			await vscode.commands.executeCommand('vscode-arxml-scope.revealInSource', uri, id);
 			await sleep(400);
 
-			// `replace` swaps the *active tab* for the text editor; the custom editor's
-			// tab stays in the group's background, which is what "as older versions did"
-			// means — the point of the mode is that the tree is no longer in front.
+			// `replace` promises one tab: the text editor replaces the custom
+			// editor's tab instead of leaving a duplicate with the same label.
 			assert.strictEqual(activeViewType(), undefined, 'the custom editor is no longer the active tab');
-			assert.ok(customTabOpen(uri), 'but it is still open, so AC2 holds in replace mode too');
+			assert.ok(!customTabOpen(uri), 'the ECUC editor tab is closed, leaving one tab for the file');
 			const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
 			assert.ok(input instanceof vscode.TabInputText, 'the text editor took the tab');
 			assert.strictEqual(input.uri.toString(), uri.toString());

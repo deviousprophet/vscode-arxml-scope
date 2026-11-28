@@ -1,0 +1,67 @@
+{
+  "mode": "missing-engine",
+  "startedAt": "2026-11-28T03:17:35.813Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-wco3jj",
+  "cdp": {
+    "port": "60052",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "missing-engine",
+      "startedAt": "2026-11-28T03:17:35.878Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "a startup error is shown",
+          "ok": true,
+          "detail": "Reload and Enable Extensions\nAll installed extensions are temporarily disabled. / Activating extension 'deviousprophet.vscode-arxml-scope' failed: ARXML Scope could not start its Rust engine because h:\\workspace\\arxml-scope-worktrees\\polish"
+        },
+        {
+          "name": "the error names the engine or platform",
+          "ok": true,
+          "detail": "Reload and Enable Extensions\nAll installed extensions are temporarily disabled. / Activating extension 'deviousprophet.vscode-arxml-scope' failed: ARXML Scope could not start its Rust engine because h:\\workspace\\arxml-scope-worktrees\\polish"
+        },
+        {
+          "name": "no ARXML commands are registered",
+          "ok": true,
+          "detail": "{\"vscode-arxml-scope.openEcucEditor\":false,\"vscode-arxml-scope.showEngineStatus\":false,\"vscode-arxml-scope.rebuildIndex\":false}"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host-missing-engine\\first-02-missing-engine-workbench.png"
+      ],
+      "observations": {
+        "notifications": [
+          "Reload and Enable Extensions\nAll installed extensions are temporarily disabled.",
+          "Activating extension 'deviousprophet.vscode-arxml-scope' failed: ARXML Scope could not start its Rust engine because h:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\dist\\engine\\win32-x64\\arxml-engine.exe is missing from this install. Reinstall or update the extension, then reload the window."
+        ],
+        "statusBar": " |  0 \n 0 |  | ",
+        "commands": {
+          "vscode-arxml-scope.openEcucEditor": false,
+          "vscode-arxml-scope.showEngineStatus": false,
+          "vscode-arxml-scope.rebuildIndex": false
+        }
+      },
+      "finishedAt": "2026-11-28T03:17:38.544Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "first-02-missing-engine",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host-missing-engine\\first-02-missing-engine-workbench.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-28T03:17:38.544Z"
+}

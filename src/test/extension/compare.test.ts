@@ -267,10 +267,12 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 		);
 		assert.match(
 			panel,
-			/if \(chain === undefined\) \{\s*await refuseActiveCopy\('the module is missing on the target side; copy it first'\);\s*return true;\s*\}/,
-			'the refusal carries the documented message and returns'
+			/if \(chain === undefined\) \{[\s\S]*?await refuseActiveCopy\(/,
+			'the refusal returns before any plan or edit'
 		);
-		const refusal = panel.indexOf('the module is missing on the target side; copy it first');
+		assert.match(panel, /is missing on the \$\{target\}; copy its module row first/, 'the refusal names the target side');
+		assert.match(panel, /kind: 'reveal', label: 'Reveal module'/, 'the refusal offers a Reveal module action');
+		const refusal = panel.indexOf('copy its module row first');
 		const planning = panel.indexOf('await requestCopyPlan({', refusal);
 		const mutation = panel.indexOf('await applyPlan(otherDoc, span)', planning);
 		assert.ok(planning > refusal && mutation > planning, 'a refused module copy reaches no plan and no applyPlan');

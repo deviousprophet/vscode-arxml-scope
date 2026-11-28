@@ -39,8 +39,13 @@ compared, not just the bytes on disk.
 - One panel titled `<left> ↔ <right>`, with the two panes side by side.
 - The toolbar is icon-over-label: **Show all** / **Show diff** ÷ **Context** ÷ **Semantic** /
   **Strict** ÷ **Prev diff** / **Next diff** ÷ **Merge** ÷ **Collapse** / **Expand**, with
-  **Swap sides** centered over the pane divider. Find is a floating widget opened by `Ctrl+F`, not a
-  toolbar slot. There is no changed/added/removed/renamed count in the page.
+  **Swap sides** centered over the pane divider. Secondary labels drop first when the strip narrows;
+  **Context**, **Semantic**, **Strict**, **Merge** and **Swap sides** keep their words until the
+  panel reaches 1040 px, so Merge is never an anonymous glyph at a normal window width. Find is a
+  floating widget opened by `Ctrl+F`, not a toolbar slot.
+- On open, the toolbar status slot reports the compared rows as a compact change count
+  (`4 changes (2 changed, 1 added, 1 removed)`). It counts changed/added/removed rows, so a container
+  highlighted by a descendant's change is included; it is not a hunk or module count.
 - A fixed file-name strip above the two panes shows the shortest distinguishing label on each side,
   with the full path in its tooltip. It is chrome, not content: it never scrolls.
 - Each pane is its own synthetic ECUC document. Schema and package lines are the first content of each
@@ -149,8 +154,9 @@ A file that is not ECUC-Values is refused before the panel opens.
 ## Context and hidden unchanged rows
 
 The diff toolbar has a **Context** toggle, active by default. In **Show diff** it keeps five unchanged
-rows above and below each changed row. It has one fixed value, no menu, and is disabled while
-**Show all** is active.
+rows above and below each changed row. It has one fixed value and no menu. While **Show all** is
+active it is disabled and drawn unpressed: the preference is remembered, but a control that cannot
+act never reads as switched on.
 
 The remaining unchanged runs are hidden by Monaco's native unchanged-region control: a horizontal
 rule showing how many unchanged lines are hidden, with a chevron. Clicking the row expands the hidden
@@ -192,7 +198,8 @@ unfold every container; the selection, focus and current match do not change.
 - A successful refresh replaces the document but keeps the view mode, swap state, match mode, collapse
   set, selection, search and scroll position where the rows still exist.
 - If a side stops being ECUC-Values while the panel is open, the last good comparison stays visible and
-  a warning explains why it stopped updating.
+  a diff-specific notice names the side and says the comparison stopped updating. **Reload
+  comparison** retries once the file is ECUC again.
 - If a refresh throws, the same last-good document stays and the error is shown in the notice strip.
 - Closing the panel disposes its listeners and pending refresh timer.
 

@@ -1,0 +1,453 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-28T03:14:09.602Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-LZTuvN",
+  "cdp": {
+    "port": "58052",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "diff",
+      "startedAt": "2026-11-28T03:14:09.692Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "11 toolbar controls",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "semantic is the default mode",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "Strict toggle flips",
+          "ok": true,
+          "detail": "true"
+        },
+        {
+          "name": "diff find reports a match",
+          "ok": true,
+          "detail": "1 of 3"
+        },
+        {
+          "name": "next-diff jumps to the changed row on a long diff",
+          "ok": true,
+          "detail": "module P.Big \"Big\" ->         P233 = 233"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-01-loaded-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-01-loaded-webview.png",
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-02-strict-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-02-strict-webview.png",
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-03-find-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-03-find-webview.png",
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-04-next-long-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-04-next-long-webview.png"
+      ],
+      "observations": {
+        "initialMode": "true",
+        "strict": {
+          "strict": "true",
+          "status": "14 changes (2 changed, 6 added, 6 removed)"
+        },
+        "findCount": "1 of 3",
+        "diffScroll": {
+          "scrollBefore": {
+            "top": 0,
+            "firstLine": "module Pkg.Diff.ModAlpha \"ModAlpha\""
+          },
+          "scrollAfter": {
+            "top": 0,
+            "firstLine": "module Pkg.Diff.ModAlpha \"ModAlpha\""
+          }
+        },
+        "bigVisible": {
+          "visibleBefore": "module P.Big \"Big\"",
+          "visibleAfter": "        P233 = 233"
+        }
+      },
+      "finishedAt": "2026-11-28T03:14:18.747Z"
+    },
+    {
+      "id": "diff-side-not-ecuc",
+      "startedAt": "2026-11-28T03:14:18.747Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the last good comparison stays visible",
+          "ok": true,
+          "detail": "58 -> 56"
+        },
+        {
+          "name": "a side that stops being ECUC is explained",
+          "ok": true,
+          "detail": "\"right.arxml\" is no longer an ECUC-Values document. The comparison stopped updating; the last good result stays visible."
+        },
+        {
+          "name": "the notice explains that the comparison stopped updating",
+          "ok": true,
+          "detail": "\"right.arxml\" is no longer an ECUC-Values document. The comparison stopped updating; the last good result stays visible."
+        },
+        {
+          "name": "the notice does not promise a text editor that is not shown",
+          "ok": true,
+          "detail": "\"right.arxml\" is no longer an ECUC-Values document. The comparison stopped updating; the last good result stays visible."
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-diff-side-not-ecuc-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-diff-side-not-ecuc-webview.png"
+      ],
+      "observations": {
+        "rowsBefore": 58,
+        "rowsAfter": 56,
+        "noticeVisible": true,
+        "noticeText": "\"right.arxml\" is no longer an ECUC-Values document. The comparison stopped updating; the last good result stays visible. Reload the comparison after the file is ECUC again.Reload comparison"
+      },
+      "finishedAt": "2026-11-28T03:14:22.576Z"
+    },
+    {
+      "id": "merge-collision",
+      "startedAt": "2026-11-28T03:14:22.576Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "copying a missing module is refused",
+          "ok": true,
+          "detail": "Module \"ColX\" (/P/ColX) is missing on the right; copy its module row first.Reveal module"
+        },
+        {
+          "name": "the refusal names the missing module",
+          "ok": true,
+          "detail": "Module \"ColX\" (/P/ColX) is missing on the right; copy its module row first.Reveal module"
+        },
+        {
+          "name": "the refusal offers a way to reach the module",
+          "ok": true,
+          "detail": "Module \"ColX\" (/P/ColX) is missing on the right; copy its module row first.Reveal module"
+        },
+        {
+          "name": "the refused copy writes nothing",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-merge-collision-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-merge-collision-webview.png"
+      ],
+      "observations": {
+        "copyCount": 1,
+        "notice": {
+          "visible": true,
+          "text": "Module \"ColX\" (/P/ColX) is missing on the right; copy its module row first.Reveal module"
+        }
+      },
+      "finishedAt": "2026-11-28T03:14:27.426Z"
+    },
+    {
+      "id": "index-toggles",
+      "startedAt": "2026-11-28T03:14:27.427Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the index starts enabled",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off (no project), 9 files indexed\n644 elements, 2 references, 0 definitions\n3 packages\nCross"
+        },
+        {
+          "name": "disabling the index hides its status",
+          "ok": true,
+          "detail": "remote | pulse  ARXML Engine, ARXML Scope engine running, pid 3588 | No Problems | Notifications | Copilot status"
+        },
+        {
+          "name": "re-enabling restores the index",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off (no project), 9 files indexed\n644 elements, 2 references, 0 definitions\n3 packages\nCross"
+        },
+        {
+          "name": "an excluded file leaves the index count",
+          "ok": true,
+          "detail": "9 -> 8"
+        },
+        {
+          "name": "the tooltip reports the excluded file",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 8 files indexed · cross-file checks off (no project), 8 files indexed\n627 elements, 1 references, 0 definitions\n3 packages\nCross"
+        },
+        {
+          "name": "the large file is indexed under the default cap",
+          "ok": true,
+          "detail": "9 -> 10"
+        },
+        {
+          "name": "the size cap skips the large file",
+          "ok": true,
+          "detail": "10 -> 9"
+        },
+        {
+          "name": "the tooltip reports the skipped file",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off (no project), 9 files indexed\n644 elements, 2 references, 0 definitions\n3 packages\nCross"
+        },
+        {
+          "name": "the skipped tooltip names the actual reason",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off (no project), 9 files indexed\n644 elements, 2 references, 0 definitions\n3 packages\nCross"
+        },
+        {
+          "name": "the cycle reaches always",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 9 files indexed · cross-file checks always, 9 files indexed\n644 elements, 2 references, 0 definitions\n3 packages\nCross-file chec"
+        },
+        {
+          "name": "the cycle reaches never",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off, 9 files indexed\n644 elements, 2 references, 0 definitions\n3 packages\nCross-file checks:"
+        },
+        {
+          "name": "the cycle returns to auto",
+          "ok": true,
+          "detail": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off (no project), 9 files indexed\n644 elements, 2 references, 0 definitions\n3 packages\nCross"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-index-toggles-workbench.png"
+      ],
+      "observations": {
+        "initial": {
+          "count": 9,
+          "text": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off (no project), 9 files indexed\n644 elements, 2 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nUpdated 10:14:24 AM\nClick to "
+        },
+        "disabled": "remote | pulse  ARXML Engine, ARXML Scope engine running, pid 3588 | No Problems | Notifications | Copilot status",
+        "exclude": {
+          "count": 8,
+          "text": "remote | database  ARXML Scope: 8 files indexed · cross-file checks off (no project), 8 files indexed\n627 elements, 1 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\n1 file excluded by arxmlScope"
+        },
+        "withHuge": {
+          "count": 10,
+          "text": "remote | database  ARXML Scope: 10 files indexed · cross-file checks off (no project), 10 files indexed\n12646 elements, 2 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nUpdated 10:14:35 AM\nClick"
+        },
+        "capped": {
+          "count": 9,
+          "text": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off (no project), 9 files indexed\n644 elements, 2 references, 0 definitions\n3 packages\nCross-file checks: off (no project)\nSkipped: huge.arxml (over arxmlScope.index.maxFileSizeMB = 1 MB)\nUpda"
+        },
+        "cycle": {
+          "always": "remote | database  ARXML Scope: 9 files indexed · cross-file checks always, 9 files indexed\n644 elements, 2 references, 0 definitions\n3 pack",
+          "never": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off, 9 files indexed\n644 elements, 2 references, 0 definitions\n3 package",
+          "auto": "remote | database  ARXML Scope: 9 files indexed · cross-file checks off (no project), 9 files indexed\n644 elements, 2 references, 0 definiti"
+        }
+      },
+      "finishedAt": "2026-11-28T03:14:45.857Z"
+    },
+    {
+      "id": "first-gate",
+      "startedAt": "2026-11-28T03:14:45.857Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "empty.arxml is refused with an explanation",
+          "ok": true,
+          "detail": "\"empty.arxml\" contains no ECUC values, so the ECUC Values editor cannot show it. Opened in the text editor instead."
+        },
+        {
+          "name": "empty.arxml does not open the ECUC editor",
+          "ok": true,
+          "detail": "empty.arxml"
+        },
+        {
+          "name": "empty.arxml opens the text editor the message promises",
+          "ok": true,
+          "detail": "empty.arxml"
+        },
+        {
+          "name": "malformed.arxml is refused with an explanation",
+          "ok": true,
+          "detail": "\"malformed.arxml\" contains no ECUC values, so the ECUC Values editor cannot show it. Opened in the text editor instead. / \"empty.arxml\" contains no ECUC values,"
+        },
+        {
+          "name": "malformed.arxml does not open the ECUC editor",
+          "ok": true,
+          "detail": "malformed.arxml"
+        },
+        {
+          "name": "malformed.arxml opens the text editor the message promises",
+          "ok": true,
+          "detail": "malformed.arxml"
+        },
+        {
+          "name": "not-ecuc.arxml is refused with an explanation",
+          "ok": true,
+          "detail": "\"not-ecuc.arxml\" contains no ECUC values, so the ECUC Values editor cannot show it. Opened in the text editor instead. / \"malformed.arxml\" contains no ECUC valu"
+        },
+        {
+          "name": "not-ecuc.arxml does not open the ECUC editor",
+          "ok": true,
+          "detail": "not-ecuc.arxml"
+        },
+        {
+          "name": "not-ecuc.arxml opens the text editor the message promises",
+          "ok": true,
+          "detail": "not-ecuc.arxml"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-first-gate-workbench.png"
+      ],
+      "observations": {
+        "gates": {
+          "empty.arxml": {
+            "notifications": [
+              "\"empty.arxml\" contains no ECUC values, so the ECUC Values editor cannot show it. Opened in the text editor instead."
+            ],
+            "tabs": [
+              "empty.arxml"
+            ]
+          },
+          "malformed.arxml": {
+            "notifications": [
+              "\"malformed.arxml\" contains no ECUC values, so the ECUC Values editor cannot show it. Opened in the text editor instead.",
+              "\"empty.arxml\" contains no ECUC values, so the ECUC Values editor cannot show it. Opened in the text editor instead."
+            ],
+            "tabs": [
+              "malformed.arxml"
+            ]
+          },
+          "not-ecuc.arxml": {
+            "notifications": [
+              "\"not-ecuc.arxml\" contains no ECUC values, so the ECUC Values editor cannot show it. Opened in the text editor instead.",
+              "\"malformed.arxml\" contains no ECUC values, so the ECUC Values editor cannot show it. Opened in the text editor instead.",
+              "\"empty.arxml\" contains no ECUC values, so the ECUC Values editor cannot show it. Opened in the text editor instead."
+            ],
+            "tabs": [
+              "not-ecuc.arxml"
+            ]
+          }
+        }
+      },
+      "finishedAt": "2026-11-28T03:14:49.897Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "diff-01-loaded",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-02-strict",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-03-find",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "diff-04-next-long",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-diff-side-not-ecuc",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-merge-collision",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-index-toggles",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    },
+    {
+      "name": "deep-first-gate",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-01-loaded-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-01-loaded-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-02-strict-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-02-strict-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-03-find-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-03-find-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-04-next-long-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\diff-04-next-long-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-diff-side-not-ecuc-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-diff-side-not-ecuc-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-merge-collision-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-merge-collision-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-index-toggles-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host\\deep-first-gate-workbench.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-28T03:14:49.898Z"
+}
