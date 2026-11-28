@@ -1,0 +1,26 @@
+﻿node.exe : npm notice run vscode-arxml-scope@0.11.0 lint
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Users\tripm\AppData\Roaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm notice run ...ope@0.11.0 lint:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm notice run node eslint-rules/require-escaped-html.test.mjs && eslint src && npm run design:lint
+npm notice run vscode-arxml-scope@0.11.0 design:lint
+npm notice run npx -y -p @google/design.md@0.4.0 designmd lint DESIGN.md
+npm notice run vscode-arxml-scope@0.11.0 npx
+npm notice run designmd lint DESIGN.md
+{
+  "findings": [
+    {
+      "severity": "info",
+      "message": "Design system defines 22 colors, 5 typography scales, 5 rounding levels, 6 spacing tokens, 27 components.",
+      "rule": "token-summary"
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "warnings": 0,
+    "infos": 1
+  }
+}

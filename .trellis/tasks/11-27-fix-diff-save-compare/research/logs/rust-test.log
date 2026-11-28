@@ -1,0 +1,98 @@
+﻿node.exe : npm notice run vscode-arxml-scope@0.11.0 rust:test
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Users\tripm\AppData\Roaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm notice run ....11.0 rust:test:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm notice run cargo test --manifest-path rust/Cargo.toml --workspace
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src\main.rs (rust\target\debug\deps\arxml_cli-a54ecb92640768d7.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (rust\target\debug\deps\arxml_core-817a15880fe4599d.exe)
+
+running 60 tests
+test copy::tests::a_removal_span_keeps_inline_elements_intact ... ok
+test copy::tests::deletes_an_element_with_its_line ... ok
+test copy::tests::a_crlf_target_gets_crlf_through_the_ancestor_wrapper ... ok
+test copy::tests::inserts_after_the_anchor_with_the_target_indentation ... ok
+test copy::tests::line_endings_follow_the_target_document ... ok
+test copy::tests::nests_the_whole_missing_chain ... ok
+test copy::tests::refuses_an_insertion_without_an_anchor ... ok
+test copy::tests::reindents_by_the_delta_not_by_a_prefix_assumption ... ok
+test copy::tests::replaces_the_target_element_with_the_source_element ... ok
+test copy::tests::wraps_a_copied_parameter_in_a_minimal_container ... ok
+test copy::tests::utf16_offsets_survive_a_non_ascii_or_astral_prefix ... ok
+test diff::tests::a_removed_parameter_keeps_its_left_key ... ok
+test diff::tests::a_self_diff_is_all_unchanged ... ok
+test diff::patch::tests::a_value_change_patches_its_parent_block_and_shifts_later_ranges ... ok
+test diff::tests::a_tiny_budget_stops_scoring_and_says_why ... ok
+test diff::patch::tests::a_whitespace_only_edit_is_unpatchable ... ok
+test diff::patch::tests::an_added_parameter_patches_the_child_block ... ok
+test diff::patch::tests::an_edit_outside_elements_is_unpatchable ... ok
+test diff::patch::tests::a_module_label_changes_the_top_level_identity ... ok
+test diff::patch::tests::a_new_module_is_unpatchable ... ok
+test diff::patch::tests::a_removed_parameter_patches_the_child_block ... ok
+test diff::patch::tests::a_nested_container_add_keeps_the_patch_local ... ok
+test diff::tests::a_value_edit_marks_the_parameter_changed ... ok
+test diff::tests::an_added_container_is_right_only_and_prefixed ... ok
+test diff::tests::semantic_mode_pairs_a_renamed_container ... ok
+test diff::tests::strict_mode_reports_no_semantic_match ... ok
+test diff::tests::rows_carry_tree_positions ... ok
+test diff::patch::tests::two_copies_in_a_row_patch_against_the_previous_result ... ok
+test diff::tests::ranges_are_utf16_code_units ... ok
+test diff::tests::semantic_mode_learns_the_rename_into_the_change ... ok
+test ecuc::tests::builds_path_ids_and_rows ... ok
+test ecuc::tests::a_change_outside_a_value_takes_the_full_path ... ok
+test ecuc::tests::a_grown_value_range_is_replanned_not_reused ... ok
+test ecuc::tests::applies_a_value_edit_in_place_and_shifts_the_ranges_after_it ... ok
+test ecuc::tests::plans_a_value_edit_and_refuses_the_same_value ... ok
+test ecuc::tests::scans_a_minimal_document ... ok
+test ecuc::tests::wraps_a_self_closing_element_without_keeping_the_slash ... ok
+test search::tests::case_sensitive_narrows_the_matches ... ok
+test search::tests::is_case_insensitive_by_default ... ok
+test search::tests::diff_search_covers_both_sides_and_changes_only ... ok
+test search::tests::replace_one_field_preserves_case ... ok
+test search::tests::invalid_replacement_refuses_without_plans ... ok
+test tests::hello_names_the_engine ... ok
+test word::tests::a_path_keeps_the_shared_prefix ... ok
+test word::tests::an_empty_side_marks_the_whole_other_side_changed ... ok
+test search::tests::regex_uses_the_pattern_and_reports_invalid_patterns ... ok
+test tests::protocol_is_stable_for_this_release ... ok
+test word::tests::each_punctuation_character_is_its_own_token ... ok
+test word::tests::segments_reassemble_the_input ... ok
+test search::tests::value_matches_are_replaceable_and_meta_are_not ... ok
+test search::tests::whole_word_rejects_partial_words ... ok
+test word::tests::an_identical_pair_is_one_unchanged_segment_per_side ... ok
+test word::tests::changed_tokens_are_marked_and_their_surroundings_are_not ... ok
+test word::tests::whitespace_runs_stay_one_token ... ok
+test diff::tests::pairs_renamed_containers_with_new_ones_after_and_interleaved ... ok
+test diff::tests::pairs_renamed_containers_after_new_ones_sorting_before ... ok
+test diff::tests::unrelated_child_content_is_not_paired ... ok
+test diff::tests::pairs_a_wholly_different_name_token ... ok
+test diff::tests::pairs_two_hundred_renamed_and_leaves_three_hundred_unchanged ... ok
+test diff::tests::pairs_a_wholly_different_name_token_at_every_size ... ok
+
+test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s
+
+     Running unittests src\main.rs (rust\target\debug\deps\arxml_engine-b27b7156c06a3c22.exe)
+
+running 5 tests
+test tests::invalid_utf8_at_end_leaves_no_document ... ok
+test tests::out_of_order_chunk_removes_the_upload ... ok
+test tests::too_large_errors_carry_a_code ... ok
+test tests::chunked_open_assembles_utf8_across_a_split_character ... ok
+test tests::chunked_resync_replaces_the_document_text ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests arxml_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

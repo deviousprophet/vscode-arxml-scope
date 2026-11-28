@@ -16,7 +16,8 @@ import { minimalLineEdit } from '../core/diff/minimalEdit';
 import { ADDED_ROW_PREFIX } from '../core/copy/copyDirty';
 import type { CopyDirtyRows } from '../core/copy/copyDirty';
 import type { DiffFindMatch, FindOptions } from '../core/searchModel';
-import type { DiffProviderToWebview } from '../diffProtocol';
+import { isDiffSide } from '../diffProtocol';
+import type { DiffProviderToWebview, DiffWebviewToProvider } from '../diffProtocol';
 import {
 	buildDiffSyntheticDocuments,
 	searchRangeOnLine,
@@ -25,6 +26,7 @@ import {
 } from './monaco/synthetic';
 import { defineEcucTheme, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
 import { installDiffGutterActions, type DiffGutterContext, type DiffGutterDirection, type DiffGutterMapping, type DiffGutterRange } from './monaco/diffGutterActions';
+import { labelIsDirty, saveTargetSide } from './monaco/diffSave';
 import { firstKeyInRange, rangeHasSource, type DiffSide } from './monaco/diffBody';
 import { installGutterAvailability } from './monaco/diffGutterAvailability';
 import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
@@ -92,6 +94,8 @@ const pendingMessages: DiffProviderToWebview[] = [];
 let copiedRows: CopyDirtyRows = { left: [], right: [] };
 /** The row the user just copied from, until the host answers. */
 let pendingCopy: { side: DiffSide; key: string } | undefined;
+/** The receiving side of the last accepted copy, the fallback save target. */
+let lastReceivingSide: DiffSide | undefined;
 let pendingCopyTimer: ReturnType<typeof setTimeout> | undefined;
 /** The decoration ids per synthetic model, so a refresh replaces its own set. */
 const copyDecorationIds = new WeakMap<monaco.editor.ITextModel, string[]>();
@@ -1160,6 +1164,61 @@ function changeList(): monaco.editor.ILineChange[] {
 function focusedOriginalPane(): boolean {
 	return originalEditor()?.hasTextFocus() === true;
 }
+/** The host side of the focused pane, following the swap state; `undefined` when neither has focus. */
+function focusedHostSide(): DiffSide | undefined {
+	if (originalEditor()?.hasTextFocus() === true) {
+		return displayedSide('original');
+	}
+	if (modifiedEditor()?.hasTextFocus() === true) {
+		return displayedSide('modified');
+	}
+	return undefined;
+}
+/** Whether the pane label for one host side carries the host's unsaved marker. */
+function sideIsDirty(side: DiffSide): boolean {
+	if (documentModel === undefined) {
+		return false;
+	}
+	return labelIsDirty(documentModel.labels[side === 'left' ? 0 : 1]);
+}
+/** Posts one save intent after the runtime guard; an invalid side never reaches the host. */
+function requestSave(side: unknown): void {
+	if (!isDiffSide(side)) {
+		return;
+	}
+	postToHost({ type: 'save', side } satisfies DiffWebviewToProvider);
+}
+function isSaveShortcut(event: KeyboardEvent): boolean {
+	return (
+		(event.ctrlKey || event.metaKey) &&
+		!event.altKey &&
+		!event.shiftKey &&
+		!event.repeat &&
+		event.key.toLowerCase() === 's'
+	);
+}
+/**
+ * `Ctrl+S`/`Cmd+S` saves the focused dirty side, or the receiving side of the
+ * last copy while it is still dirty. A clean diff never posts.
+ */
+function wireSaveShortcut(): void {
+	document.addEventListener(
+		'keydown',
+		function (event) {
+			if (!isSaveShortcut(event)) {
+				return;
+			}
+			const target = saveTargetSide(focusedHostSide(), lastReceivingSide, sideIsDirty);
+			if (target === undefined) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			requestSave(target);
+		},
+		true
+	);
+}
 
 function currentDisplayedLine(fromOriginal: boolean): number {
 	const editor = fromOriginal ? originalEditor() : modifiedEditor();
@@ -1258,6 +1317,10 @@ function dispatchCopyMessage(message: DiffProviderToWebview): boolean {
 	}
 	if (message.type === 'copyResult') {
 		clearPendingCopy();
+		if (message.ok) {
+			// `side` echoes the copy's source; the receiving side is its pair.
+			lastReceivingSide = oppositeSide(message.side);
+		}
 		acknowledgePaint(message.requestId);
 		return true;
 	}
@@ -1548,6 +1611,7 @@ async function mountDiff(): Promise<void> {
 	mountToolbar();
 	wireMergeClicks();
 	wireFindScrollGuard();
+	wireSaveShortcut();
 	mounted = true;
 	for (const message of pendingMessages) {
 		handleMessage(message);

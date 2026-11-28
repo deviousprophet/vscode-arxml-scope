@@ -1,0 +1,1288 @@
+﻿node.exe : npm notice run vscode-arxml-scope@0.11.0 pretest
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Users\tripm\AppData\Roaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm notice run ...@0.11.0 pretest:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm notice run npm run compile-tests && npm run compile
+npm notice run vscode-arxml-scope@0.11.0 compile-tests
+npm notice run tsc -p . --outDir out
+npm notice run vscode-arxml-scope@0.11.0 compile
+npm notice run npm run engine:build && npm run check-types && npm run lint && node esbuild.js
+npm notice run vscode-arxml-scope@0.11.0 engine:build
+npm notice run node scripts/build-engine.mjs
+    Finished `release` profile [optimized] target(s) in 0.03s
+{"_type":"engine-build","target":"win32-x64","profile":"release","destination":"H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\dist\\engine\\win32-x64\\arxml-engine.exe"}
+npm notice run vscode-arxml-scope@0.11.0 check-types
+npm notice run tsc --noEmit
+npm notice run vscode-arxml-scope@0.11.0 lint
+npm notice run node eslint-rules/require-escaped-html.test.mjs && eslint src && npm run design:lint
+npm notice run vscode-arxml-scope@0.11.0 design:lint
+npm notice run npx -y -p @google/design.md@0.4.0 designmd lint DESIGN.md
+npm notice run vscode-arxml-scope@0.11.0 npx
+npm notice run designmd lint DESIGN.md
+{
+  "findings": [
+    {
+      "severity": "info",
+      "message": "Design system defines 22 colors, 5 typography scales, 5 rounding levels, 6 spacing tokens, 27 components.",
+      "rule": "token-summary"
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "warnings": 0,
+    "infos": 1
+  }
+}
+[watch] build started
+[watch] build finished
+[watch] build started
+[watch] build finished
+[watch] build started
+[watch] build finished
+[watch] build started
+[watch] build finished
+npm notice run vscode-arxml-scope@0.11.0 test
+npm notice run vscode-test
+- Resolving version...
+Γ£ö Validated version: 1.148.0
+Γ£ö Found existing install in 
+H:\workspace\arxml-scope-worktrees\diff-save-compare\.vscode-test\vscode-win32-x64-archive-1.148.0
+
+[main 2026-11-28T02:56:41.129Z] [node-compile-cache] main: packaged cache enabled (status: enabled, configured: H:\workspace\arxml-scope-worktrees\diff-save-compare\.vscode-test\vscode-win32-x64-archive-1.148.0\661626d0e7\resources\app\node-compile-cache\main, active: H:\workspace\arxml-scope-worktrees\diff-save-compare\.vscode-test\vscode-win32-x64-archive-1.148.0\661626d0e7\resources\app\node-compile-cache\main\v24.22.1-x64-f7f3bcf2)
+[main 2026-11-28T02:56:41.139Z] StorageMainService: creating application shared storage
+[main 2026-11-28T02:56:41.189Z] [shared storage] Creating shared storage database at ':memory:' (wasCreated: true)
+[main 2026-11-28T02:56:41.189Z] [shared storage] Initializing fallback application storage (path: in-memory)
+[main 2026-11-28T02:56:41.207Z] [shared storage] Fallback application storage initialized with 3 items
+[main 2026-11-28T02:56:41.207Z] update#setState disabled
+[main 2026-11-28T02:56:41.207Z] update#ctor - updates are disabled by the environment
+Via 'product.json#extensionEnabledApiProposals' extension 'ms-vscode.remote-repositories' wants API proposal 
+'timeline' but that proposal DOES NOT EXIST. Likely, the proposal has been finalized (check 'vscode.d.ts') or was 
+abandoned.
+Via 'product.json#extensionEnabledApiProposals' extension 'github.vscode-pull-request-github' wants API proposal 
+'agentsWindowActivation' but that proposal DOES NOT EXIST. Likely, the proposal has been finalized (check 
+'vscode.d.ts') or was abandoned.
+Via 'product.json#extensionEnabledApiProposals' extension 'github.remotehub' wants API proposal 'timeline' but that 
+proposal DOES NOT EXIST. Likely, the proposal has been finalized (check 'vscode.d.ts') or was abandoned.
+[RemoteAgentHost] Reconciling: desired=[], current=[]
+[AgentHost:renderer] Acquiring MessagePort to agent host...
+[main 2026-11-28T02:56:42.167Z] AgentHostProcessManager: agent host started
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey=undefined conversationKey=undefined modelTarget=undefined storageKey="chat.currentLanguageModel.panel" widgetViewKind="view"
+[AgentHost:renderer] MessagePort acquired, creating client...
+[AgentPluginRepositoryService] Both old and new agent-plugins directories exist; skipping directory migration
+Started local extension host with pid 17364.
+[RemoteAgentHostProtocol] Sending initialize: address=local clientId=20cd86c0-fa6c-413e-8fe3-0bf5055c2082 requestId=1
+[RemoteAgentHostProtocol] Initialized: address=local clientId=20cd86c0-fa6c-413e-8fe3-0bf5055c2082 durationMs=504
+[AgentHost:renderer] Protocol connection established; clientId=20cd86c0-fa6c-413e-8fe3-0bf5055c2082
+Loading development extension at h:\workspace\arxml-scope-worktrees\diff-save-compare
+[AccountPolicyGate] apply: state=inactive, reason=undefined, isRestricted=false
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+[RemoteAgentHost] Reconciling: desired=[], current=[]
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+[RemoteAgentHost] Reconciling: desired=[], current=[]
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+Settings Sync: Account status changed from uninitialized to unavailable
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[main 2026-11-28T02:56:44.666Z] [AgentHost:stderr] (node:21948) [DEP0169] DeprecationWarning: `url.parse()` behavior 
+is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not 
+issued for `url.parse()` vulnerabilities.
+(Use `Code --trace-deprecation ...` to show where the warning was created)
+
+
+  Extension Test Suite
+[AgentHost] No signed-in session resolved for resource: https://api.github.com
+[AgentHost] No signed-in session resolved for resource: https://api.github.com
+[AgentHost] No signed-in session resolved for resource: https://api.github.com
+(node:17364) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have 
+security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `Code --trace-deprecation ...` to show where the warning was created)
+    Γ£ö Sample test
+[AgentHost] No signed-in session resolved for resource: https://api.github.com/repos
+  ECUC local value validation
+    Γ£ö Integer accepts decimal, hexadecimal and binary, and rejects intermediates
+    Γ£ö Float follows the host decimal/fraction/exponent grammar
+    Γ£ö Boolean accepts only lowercase true/false and rejects partial typing
+    Γ£ö a textual value is valid when empty and keeps quotes as content
+    Γ£ö short names and definition refs follow the host grammar
+  webview theme colors
+    Γ£ö keeps eight-digit hex alpha intact
+    Γ£ö expands shorthand hex to six or eight digits
+    Γ£ö converts rgba() without dropping its alpha
+    Γ£ö converts modern space and slash syntax
+    Γ£ö omits alpha when a color is fully opaque
+    Γ£ö falls back when the value is not a colour Monaco can use
+  shared system-condition palette
+    Γ£ö tokens.css defines the three condition variables with Dark+/Light+ values
+    Γ£ö the Monaco theme rules repeat the same palette
+    Γ£ö tokens.css owns every syscond colour class
+    Γ£ö documentTree.css keeps the chip layout and state, not a second palette
+    Γ£ö every page loads the shared stylesheet
+    Γ£ö the Conditions panel uses the shared condition colours
+  synthetic ECUC document
+    Γ£ö serializes the Document rows, edits spans and folding ranges
+[AgentHost] No signed-in session resolved for resource: https://api.github.com/repos
+[AgentHost] No signed-in session resolved for resource: https://api.github.com/repos
+    Γ£ö a container with no definition label starts with its quoted short name
+    Γ£ö a textual value keeps its quotes outside the editable span
+    Γ£ö displayForRaw builds the rendered fragment and spanTextForRaw keeps it bare
+    Γ£ö an empty or quote-carrying textual value stays inside one pair of quotes
+    Γ£ö a numeric value that looks quoted stays bare
+    Γ£ö a container short name is the editable text inside its quotes
+    Γ£ö the flush order sends values first and renames deepest first
+    Γ£ö a rename re-keys the drafts addressed at the pre-rename id
+    Γ£ö a rename intent outlives editResult and re-keys the post-flush draft
+    Γ£ö a refusal after the rename document lands is recorded at the new id
+[AgentHost] No signed-in session resolved for resource: https://api.github.com
+    Γ£ö a refused rename forgets its intent and leaves the old-row draft addressable
+    Γ£ö a rename whose host row vanished is dropped instead of predicted
+    Γ£ö nested rename intents resolve to a fixed point from the host pairs
+    Γ£ö a whole-line repaint is attributed to the field it changed
+    Γ£ö maps Rust field offsets onto the rendered synthetic line
+    Γ£ö the per-side diff documents keep each sideΓÇÖs own shape
+    Γ£ö a pure removal gives the two sides different line counts
+    Γ£ö a diff row with no label keeps its quoted short name as a string token
+  semantic tokens for the synthetic ECUC document
+    Γ£ö module, container and parameter labels use distinct token types
+    Γ£ö values, comments, headers, braces and meta stay separate
+    Γ£ö every condition lexer class maps to its own editor token type
+    Γ£ö token offsets point at the original line
+    Γ£ö every synthetic row shape maps to its exact token matrix
+    Γ£ö a trailing backslash before the closing quote stays in the string
+    Γ£ö a parameter named context stays a label, not a context keyword
+    Γ£ö the editor and the Monaco diff share one token provider
+  webview protocol
+    Γ£ö the editor host messages have one discriminator and a shape guard
+    Γ£ö the editor webview intents stay a closed union
+    Γ£ö the diff host messages and intents have their own seam
+    Γ£ö a save intent must name one side; a malformed one is dropped
+    Γ£ö the document header comes from the model, not from page markup
+[AgentHost] No signed-in session resolved for resource: https://api.github.com
+[AgentHost] No signed-in session resolved for resource: https://api.github.com
+  native find bridge
+    Γ£ö an empty query does not ask the host or return a match
+  diff save target
+    Γ£ö the host dirty marker is the trailing bullet
+    Γ£ö the focused dirty side wins, including when both sides are dirty
+    Γ£ö a clean focused side falls back to the still-dirty copy receiver
+    Γ£ö a clean diff saves nothing
+  diff navigation
+    Γ£ö Next moves strictly forward and wraps
+    Γ£ö Prev moves strictly backward and wraps
+    Γ£ö the adjacent selector handles one change and an empty list
+    Γ£ö swap changes which line each pane reveals
+    Γ£ö a pure insertion or deletion falls back to the other side
+  diff folding
+    Γ£ö collapsed row keys follow the node line keys
+    Γ£ö only differing keys are planned and one-sided keys are skipped
+    Γ£ö an expanded source plans the target expansion
+    Γ£ö a target-only collapsed row is not unfolded
+    Γ£ö equal states plan no toggles
+  diff fold indicator
+    Γ£ö a changed row or descendant is detected
+[AgentHost] No signed-in session resolved for resource: https://api.github.com/repos
+    Γ£ö only collapsed rows whose subtree changed get a marker
+    Γ£ö a one-sided added or removed row counts as a difference
+    Γ£ö a collapsed row that exists on only one side never marks
+    Γ£ö a one-sided descendant marks a shared root
+    Γ£ö the collapsed rowΓÇÖs own rename does not mark it
+    Γ£ö a descendant change still marks a renamed collapsed row
+  VS Code diff source contract
+    Γ£ö source contract: monaco-editor is pinned to the VS Code 1.125 release
+    Γ£ö source contract: the built-in gutter, sash and diff editor files match the pinned release
+    Γ£ö source contract: the checked-in patch is the only upstream modification
+    Γ£ö source contract: the page uses the built-in diff surface with the per-side body
+    Γ£ö source contract: exactly two ARXML actions are registered on the built-in hunk toolbar
+    Γ£ö source contract: compact find-button tooltips do not steal hover
+    Γ£ö source contract: hidden Merge gutter items keep their measured layout
+    Γ£ö source contract: no custom margin, arrow, placeholder or ruler layer remains
+[AgentHost] No signed-in session resolved for resource: https://api.github.com/repos
+[AgentHost] No signed-in session resolved for resource: https://api.github.com/repos
+  row parity (TypeScript oracle vs engine)
+[AgentHost] No signed-in session resolved for resource: https://api.github.com
+[AgentHost] No signed-in session resolved for resource: https://api.github.com
+[AgentHost] No signed-in session resolved for resource: https://api.github.com
+[AgentHost] No signed-in session resolved for resource: https://api.github.com/repos
+[AgentHost] No signed-in session resolved for resource: https://api.github.com/repos
+[AgentHost] No signed-in session resolved for resource: https://api.github.com/repos
+    Γ£ö every fixture matches in both sort modes (395ms)
+  validation (extension)
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+    Γ£ö an out-of-range value reaches the diagnostic collection (921ms)
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+    Γ£ö diagnostic caps publish a summary with the hidden count (1002ms)
+    Γ£ö fragment mode suppresses cross-file diagnostics and always restores them (128ms)
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AccountPolicyGate] apply: state=inactive, reason=undefined, isRestricted=false
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+    Γ£ö disabling validation clears the collection (882ms)
+  editor reveal (AC1, AC2)
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+[AgentHostCustomizationMarketplace] Unable to load session-bound SDK installation receipts { name: 'Error' }
+    Γ£ö AC1: a select from the tree opens no text editor and survives the next re-scan (225ms)
+    Γ£ö AC12: following a same-file reference selects the target container in the editor (107ms)
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC2: a reveal leaves the custom editor open and shows the range in the source (1141ms)
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC2: focus mode takes focus in the source and still does not close the custom editor (1236ms)
+    Γ£ö AC2: the reveal mode is read per reveal, and defaults to beside (141ms)
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC2: replace mode swaps the tab, which is what that mode promises (1138ms)
+  conditions panel (design ┬º6)
+    Γ£ö the Conditions tab hosts the panel shell once, outside #tree
+    Γ£ö the shared buttons are styled and the header badge counts committed values (98ms)
+    Γ£ö a committed empty value shows the unknown state; a draft does not
+    Γ£ö rows are built from committed datasets and expose explicit actions
+    Γ£ö a host entries refresh replaces the panel rows
+    Γ£ö discovery adds each referenced constant once, in document order, and sends no message
+    Γ£ö scanned rows have no Remove; a manual row keeps its value when it becomes scanned
+    Γ£ö Remove sends one message for a manual row
+    Γ£ö Clear values empties committed values and sends once
+    Γ£ö Save commits the draft, sends exactly one message and updates the row
+    Γ£ö Save refuses an empty or duplicate name and keeps the draft
+    Γ£ö Cancel restores the committed value and removes an unsaved draft
+    Γ£ö the row builder and inspector expose disabled conditions
+  conditions provider wiring (design ┬º5)
+    Γ£ö a conditions message re-pushes one panel and never reloads another
+    Γ£ö a reloaded page is re-sent the current entries and the row document
+    Γ£ö the panel shell is static and uses the bundled assets
+  text features (extension)
+    Γ£ö document symbols expose the module and its containers
+    Γ£ö definition resolves a parameter definition across files
+    Γ£ö FEAT-02 hover explains a definition ref
+    Γ£ö document links cover reference values
+    Γ£ö find references on a container short name lists the reference value
+    Γ£ö disabling the index removes provider results (62ms)
+    Γ£ö FEAT-01 an excluded document returns no index-backed features (81ms)
+  structural row actions
+    Γ£ö lineSpan removes an own-line element with its indentation and line break
+    Γ£ö lineSpan leaves neighbouring inline elements alone
+    Γ£ö a module or reference cannot be structurally edited
+    Γ£ö a parameter duplicate copies the element, including its condition
+    Γ£ö a container duplicate suggests a unique sibling name
+    Γ£ö a CDATA-backed node is refused, just like a CDATA value edit
+    Γ£ö apply deletes one element and one undo restores it (96ms)
+    Γ£ö apply duplicates a container with the chosen name and its subtree (82ms)
+    Γ£ö apply refuses moved bytes and taken duplicate names
+  plan coverage: STRUCT
+    Γ£ö STRUCT-01 deleting the first or last child removes one line and keeps neighbours
+    Γ£ö STRUCT-02 deleting a reference-only container leaves no blank line (90ms)
+    Γ£ö STRUCT-03 a container duplicate carries conditions and annotations verbatim
+    Γ£ö STRUCT-04 a CRLF document keeps CRLF in the inserted block (60ms)
+    Γ£ö STRUCT-05 a second duplicate increments the suggestion
+    Γ£ö STRUCT-06 an inline element is deleted by its exact range
+  editor reveal (AC4, AC5)
+    Γ£ö NAV-01 AC4: an offset inside an element selects that element, not an ancestor
+    Γ£ö AC4: reveal from a parameter, a container and a reference selects its range (43ms)
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC5: reveal from a text cursor opens the custom editor at the innermost node (629ms)
+    Γ£ö AC5: the requested selection is carried in the host document message
+  editor re-scan (design ┬º1.5, ┬º2.2)
+    Γ£ö ┬º1.5: a document change re-scans and pushes the refreshed rows
+    Γ£ö ┬º1.5: a change to another document does not refresh this panel (64ms)
+    Γ£ö ┬º2.4: a re-scan keeps the node that source ΓåÆ editor selected (67ms)
+    Γ£ö AC3: toggling the sort setting re-renders an open panel (72ms)
+    Γ£ö ┬º2.2: the id of a node does not depend on where its siblings are declared
+    Γ£ö ┬º2.2: rendering in a different order does not renumber a node
+    Γ£ö ┬º2.2: editing a value does not renumber the edited node
+  editor references (AC6)
+    Γ£ö AC6: a same-file reference resolves to its target element
+    Γ£ö AC6: a same-file target maps back to its ECUC row id
+    Γ£ö NAV-03 AC6: an absent path and an ambiguous suffix resolve to nothing, with a reason
+    Γ£ö NAV-04 a follow whose target was deleted is refused with a reason and navigates nowhere
+    Γ£ö NAV-05 a parameter target with zero references lists nothing and posts no notice
+    Γ£ö NAV-02 AC6: following from the command selects the target, and resolves nothing otherwise
+  copy merge planner (MERGE rows)
+    Γ£ö MERGE-02 copying leftΓåÆright replaces the changed parameter with the left bytes
+    Γ£ö MERGE-03 copying rightΓåÆleft is mirrored and copies the same element bytes
+    Γ£ö MERGE-04 copying a container replaces the whole subtree and drops target-only children
+    Γ£ö MERGE-05 a placeholder arrow deletes the element from the side that has it
+    Γ£ö MERGE-06 a missing parent is synthesized minimally; source siblings are not imported
+  copy merge patch (engine MERGE rows)
+    Γ£ö MERGE-11 a copy patch equals a full rebuild and carries the rows plus a range shift
+    Γ£ö MERGE-12 every fallback reason rebuilds instead of applying a wrong row
+  copy merge budget (MERGE-15)
+[MERGE-15] 26 MiB: median copy 1.58 ms, slowest copy 2.04 ms, ten copies 16.73 ms, apply 0.00 ms
+    Γ£ö MERGE-15 ten copies on the 20+ MiB pair stay inside the copy budget (178ms)
+  plan index and validation rows (extension)
+    Γ£ö INDEX-01 a rename in one watch burst leaves one contribution and no duplicate path (943ms)
+    Γ£ö INDEX-02 an excluded file is picked up on rebuild only after the exclude is removed (782ms)
+    Γ£ö INDEX-03 two saves inside the debounce window cause one reindex (1026ms)
+    Γ£ö INDEX-04 disabling and re-enabling during a build does not serve the stale read (523ms)
+    Γ£ö INDEX-05 the reference map after 50 target edits equals a fresh build (133ms)
+    Γ£ö INDEX-06 a file over maxFileSizeMB is skipped and reported, never partially indexed (160ms)
+    Γ£ö VALID-01 a severity change republishes diagnostics without a reindex (128ms)
+    Γ£ö VALID-02 cap 0 keeps every diagnostic and publishes no summary (203ms)
+    Γ£ö VALID-03 a missing module definition is one diagnostic with its children counted (56ms)
+    Γ£ö VALID-04 a cross-file duplicate is not reported when one file is excluded (754ms)
+  plan coverage: PKG
+    Γ£ö PKG-01 a VSIX without dist/engine refuses activation and names the missing path
+    Γ£ö PKG-02 the verify step checks every platform engine in the VSIX
+    Γ£ö PKG-03 no dist/native artifact is produced or packaged
+  plan coverage: PERF
+[PERF-01] plan 0.1 ms, update 0.1 ms, pushed 642 bytes
+    Γ£ö PERF-01 a planned edit pushes a one-row patch under 4 KiB
+[PERF-02] copy plan on 525 KiB took 0.1 ms
+    Γ£ö PERF-02 a merge copy plan composes one element under the 100 ms benchmark ceiling
+[PERF-03] 100 edits in 11 ms, 8 rows
+    Γ£ö PERF-03 100 repeated edits keep one bounded row store
+    Γ£ö PERF-04 a benchmark without the engine reports skipped and exits 0 (147ms)
+[PERF-05] gate: npm run benchmark diff; compare engine.strict/semantic diffMs with hostToday (engine <= 2x host)
+    Γ£ö PERF-05 the 26 MiB diff benchmark records engine and host numbers for the 2x gate
+[PERF-06] patch 44.2 ms, payload 15487 bytes of 2160156
+    Γ£ö PERF-06 a diff patch payload stays under 1% of the compared document (406ms)
+  editor context menus (AC1ΓÇôAC5)
+    Γ£ö AC1: exactly one ARXML Scope submenu is contributed
+    Γ£ö AC2: the submenu holds both editor commands
+    Γ£ö AC3: editor/context contributes the submenu, not the flat commands
+    Γ£ö AC4: reveal requires text-editor focus and excludes the ECUC editor
+    Γ£ö AC5: explorer/context contributes the submenu and no direct reveal
+    Γ£ö AC2/AC3: the submenu targets registered commands
+  index service rebuild race (extension)
+    Γ£ö a read that started before a rebuild cannot overwrite the snapshot
+  provider definitions (extension)
+    Γ£ö a document push carries the resolved definition and an index change re-pushes (112ms)
+  workspace index (extension)
+    Γ£ö indexes the workspace and shows the file count in the status bar
+    Γ£ö arxmlScope.index.exclude removes matching files (189ms)
+    Γ£ö a created file is picked up by the watcher and a deleted one is dropped (646ms)
+    Γ£ö an edited file updates its entries without dropping another file (487ms)
+    Γ£ö indexes a UTF-16LE file with a BOM
+    Γ£ö indexes a UTF-16BE file with a BOM
+    Γ£ö skips a file with an unsupported encoding
+    Γ£ö disabling the index hides the status bar and enabling it rebuilds (154ms)
+    Γ£ö the status bar hides when nothing is indexed (62ms)
+  engine supervisor
+    Γ£ö reopens live documents after a process crash and keeps their ids (109ms)
+    Γ£ö replays the edited text, not the original text (110ms)
+    Γ£ö gives up after the restart limit with an actionable error (104ms)
+    Γ£ö counts rapid process crashes and gives up at the limit (775ms)
+    Γ£ö a successful request clears the last error (244ms)
+    Γ£ö dispose stops restarts (209ms)
+    Γ£ö applies UTF-16 edits in descending order
+    Γ£ö formats every health field
+  core engine process
+    Γ£ö resolves the engine binary per platform and architecture
+    Γ£ö names the supported targets when the platform has no engine
+    Γ£ö a missing engine binary is an error, not a TypeScript fallback
+    Γ£ö a protocol mismatch refuses activation and names both versions
+    Γ£ö a handshake without a version is rejected
+    Γ£ö a well-formed handshake yields the engine version
+[engine] process ready in 16.14 ms
+    Γ£ö loads the built engine and answers a document round trip
+    Γ£ö opens a document above the 64 MiB frame limit through chunked upload (371ms)
+    Γ£ö rejects an out-of-order chunk and forgets the upload
+    Γ£ö plans a copy and a delete against the engine documents
+    Γ£ö searches row fields and plans a replaceable value
+    Γ£ö searches the last diff on both sides
+  plan coverage: ENG
+    Γ£ö ENG-02 an oversized frame and a malformed header are protocol errors that exit 1 (76ms)
+    Γ£ö ENG-03 a panic reply rejects one operation and the process keeps serving (42ms)
+    Γ£ö ENG-04 doc.rows reassembles 4,000-row chunk boundaries in order (160ms)
+    Γ£ö ENG-05 plan refusals are byte-identical to the TypeScript plan
+    Γ£ö ENG-06 doc.update and a full doc.rows build agree on rows and bytes
+    Γ£ö ENG-08 two document handles stay isolated when one is closed
+  editor value editing (AC1ΓÇôAC9)
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC1: a numerical edit changes exactly that value, byte for byte (155ms)
+    Γ£ö AC1: a textual edit changes exactly that value, byte for byte (171ms)
+    Γ£ö AC2: the text-content shape replaces inside the tags (design ┬º2.1)
+    Γ£ö AC2: an empty or self-closing VALUE is replaced as a whole element (235ms)
+    Γ£ö ┬º2.1: a CDATA-backed value is refused, not mistaken for an element
+    Γ£ö AC3: &, < and > are written escaped and read back unchanged (151ms)
+    Γ£ö AC4: one Ctrl+Z restores the previous bytes and one Ctrl+Y re-applies them (152ms)
+    Γ£ö AC5: dirty after an edit, clean after save, revert restores from disk and re-renders (201ms)
+    Γ£ö AC5: edit acknowledgements carry revisions and dirty transitions (155ms)
+    Γ£ö AC5: two rapid edits to one field apply in revision order (153ms)
+    Γ£ö AC5: save flushes a queued edit before the file is written (216ms)
+    Γ£ö AC5: a page save message flushes the edit queue and saves (210ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö AC6: an invalid numerical value is refused with a reason and no mutation (233ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö AC6: a character XML cannot represent is refused with a reason and no mutation (239ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö AC6: a CDATA-backed value is refused with a reason and no mutation (229ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö AC6: a region whose bytes moved under the edit is refused rather than written (231ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö AC6: a record whose region no longer resolves is refused rather than written (218ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö AC7: an unchanged value is a no-op and does not dirty the document (225ms)
+    Γ£ö AC8: after an edit, an undo and a redo the view matches the document (153ms)
+    Γ£ö AC9: no file is created and the committed fixtures are never written (156ms)
+    Γ£ö AC7: an edit on a CRLF document leaves every other byte, line endings included (162ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö ┬º2.2: the offset-to-position conversion the write uses is VS CodeΓÇÖs, on CRLF too (235ms)
+    Γ£ö ┬º9: the rows carry the value the details editor edits, and the details editor is inlined
+    Γ£ö ┬º2.2: the region is recomputed from a fresh scan, never replayed from an offset
+    Γ£ö ┬º2.2: the element span of a value ending in a raw `>` still reaches `</VALUE>`
+    Γ£ö ┬º2.2: a `>` inside an attribute does not truncate the element being wrapped
+    Γ£ö ┬º2.2: the id in the re-scanned rows is the id the next edit resolves (184ms)
+  editor container field editing (R1ΓÇôR5)
+    Γ£ö R1/R2: the plan replaces the inner text, never the tags or attributes
+    Γ£ö R4/R5: only a container, and only a known node, can be edited
+    Γ£ö R4: an invalid or unchanged container field is refused with its reason
+    Γ£ö R5: a rename predicts the new id; a ref edit keeps the id
+    Γ£ö AC2/AC6: a short-name commit changes one span, keeps the selection and its new id (183ms)
+    Γ£ö AC3/AC7: a definition-ref commit keeps DEST and the container selected (171ms)
+    Γ£ö AC5: a refused container edit leaves the bytes, the file and the selection alone (161ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö AC5: an unchanged container field does not dirty the document (229ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö R3: the parameter value message shape is unchanged (247ms)
+    Γ£ö R4: an absent, empty or CDATA-backed element is refused, never created
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö R5: a stale container region is refused instead of rewriting moved bytes (244ms)
+    Γ£ö R5: a rename onto a sibling short name still predicts the renamed node
+    Γ£ö R4: an unknown edit field is ignored, not guessed at (184ms)
+    Γ£ö AC9: the new fixtures are never written by the suite
+  plan coverage: EDIT
+    Γ£ö EDIT-01 the same parameter edited twice plans against the shifted text (195ms)
+    Γ£ö EDIT-02 the first and last values edit without moving anything else (147ms)
+    Γ£ö EDIT-03 special characters are written escaped once and shown decoded (166ms)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö EDIT-04 an external change between plan and write is refused (235ms)
+    Γ£ö EDIT-06 twenty rapid edits leave the last value and no range drift (757ms)
+    Γ£ö EDIT-07 a value longer than 10k stays on one line (298ms)
+    Γ£ö EDIT-09 without an engine handle the legacy path still edits (157ms)
+    Γ£ö EDIT-10 a surrogate pair in the value keeps its bytes and display (169ms)
+  plan coverage: FIELD
+    Γ£ö FIELD-01 a rename onto a sibling name is allowed at this layer
+    Γ£ö FIELD-02 definition refs with hyphens and dots are accepted and keep DEST
+    Γ£ö FIELD-03 a CDATA-backed field is refused like a CDATA value
+    Γ£ö FIELD-04 renaming a nested container moves its children and predicts the id
+    Γ£ö FIELD-05 a module field edit is refused
+  plan coverage: EDIT through the engine
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+    Γ£ö EDIT-05 the engine fast path writes the same bytes and rows as the TypeScript fallback (128ms)
+    Γ£ö REPLACE-01 replace writes one value through the engine and reports it (123ms)
+    Γ£ö EDIT-08 undo and redo after an engine-path edit restore bytes and rows (224ms)
+  cross-file provider follow (extension)
+[File Watcher (node.js)] Watcher shutdown because watched path got deleted
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö a reference opens its non-ECUC target in the text editor (360ms)
+  condition values (design ┬º3)
+    Γ£ö non-array input normalizes to nothing instead of throwing
+    Γ£ö names and values are trimmed; blank names are dropped
+    Γ£ö invalid names are reported and not stored
+    Γ£ö a dot, dash or slash is legal in a full SYSC-REF tail
+    Γ£ö later duplicates replace the value and keep the first position
+    Γ£ö an empty value is unknown and stays visible as an entry
+    Γ£ö entries and values are capped at 200, values at 200 characters
+    Γ£ö raw values are parsed for evaluation but persisted exactly as entered
+    Γ£ö the store round-trips through workspaceState and clears through undefined
+    Γ£ö save normalizes too, so a bad caller cannot persist an unusable entry
+    Γ£ö load normalizes a hand-edited or old stored value
+  compare commands and diff panel (AC1, AC11, AC13)
+    Γ£ö AC13: the three compare commands are registered
+    Γ£ö AC13: the manifest adds the commands to the existing ARXML Scope submenu only
+    Γ£ö the session-only selection store keeps a URI and clears it
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC11: compareToStaged without a first file warns and opens no panel (266ms)
+    Γ£ö UX-07: a deleted stashed first file warns, opens no panel and keeps the stash (488ms)
+    Γ£ö UX-06: saving a diff side uses the normal save path and clears the copied rows
+    Γ£ö UX-06: saving a side without an open document is refused, not written
+Error: ENOENT: no such file or directory, copyfile 
+'c:\Users\tripm\AppData\Local\Temp\arxml-scope-diff-save-lCs2W4\right.arxml' -> 
+'h:\workspace\arxml-scope-worktrees\diff-save-compare\.vscode-test\user-data\User\History\-73b836c0\EGeV.arxml': 
+EntryNotFound (FileSystemError): Error: ENOENT: no such file or directory, copyfile 
+'c:\Users\tripm\AppData\Local\Temp\arxml-scope-diff-save-lCs2W4\right.arxml' -> 
+'h:\workspace\arxml-scope-worktrees\diff-save-compare\.vscode-test\user-data\User\History\-73b836c0\EGeV.arxml'
+    at o.create (file:///H:/workspace/arxml-scope-worktrees/diff-save-compare/.vscode-test/vscode-win32-x64-archive-1.1
+48.0/661626d0e7/resources/app/out/mainImpl.js:39:117225)
+    at yn (file:///H:/workspace/arxml-scope-worktrees/diff-save-compare/.vscode-test/vscode-win32-x64-archive-1.148.0/6
+61626d0e7/resources/app/out/mainImpl.js:39:115807)
+    at o.toFileSystemProviderError (file:///H:/workspace/arxml-scope-worktrees/diff-save-compare/.vscode-test/vscode-wi
+n32-x64-archive-1.148.0/661626d0e7/resources/app/out/mainImpl.js:244:30400)
+    at o.doCloneFile (file:///H:/workspace/arxml-scope-worktrees/diff-save-compare/.vscode-test/vscode-win32-x64-archiv
+e-1.148.0/661626d0e7/resources/app/out/mainImpl.js:244:29755)
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC1: selectAsFirst then compareToStaged opens a vscode-arxml-scope.diff webview tab (104ms)
+    Γ£ö AC1: compareSelected treats the clicked file as left and the other selection as right (57ms)
+    Γ£ö the diff stays read-only outside merge mode
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö X-05 AC10/R19: opening the diff leaves both files byte-identical (289ms)
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC11: a non-ECUC file is refused with no panel (342ms)
+    Γ£ö AC11: a non-.arxml file is refused with no panel (306ms)
+    Γ£ö MERGE-07 copying into a missing module is refused with a message before any edit
+    Γ£ö MERGE-08 a module row copy is allowed without a collision and refused with one
+    Γ£ö MERGE-13 stale bytes offer Reload/Cancel and only Reload mutates anything
+  boot watchdog (editor)
+    Γ£ö AC3: a page that never reports in is warned about once (73ms)
+    Γ£ö AC3: a page that reports ready is never warned about (61ms)
+    Γ£ö AC3: a panel disposed before boot is never warned about (75ms)
+  editor activation (AC2, AC3, AC9)
+    Γ£ö AC2: the gate explains a non-ECUC arxml and a non-arxml file
+    Γ£ö AC2: a non-ECUC arxml never renders an empty view and falls back to the text editor (654ms)
+    Γ£ö AC3: a normally opened arxml still uses the text editor (642ms)
+    Γ£ö AC3: the manifest never claims .arxml by default
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC3: the explicit command opens the custom editor (635ms)
+[ChatModelSelection] event=no-model-at-toolbar-build surface="workbench" sessionKey="agent-host-copilotcli" conversationKey="agent-host-copilotcli:/untitled-c9007139-827a-4099-8e42-7fcd415d395f" modelTarget="agent-host-copilotcli" storageKey="chat.currentLanguageModel.panel.agent-host-copilotcli" widgetViewKind="view"
+    Γ£ö AC9: activation, rendering and navigation create no file (1357ms)
+  xml text (core)
+    Γ£ö decodes the predefined entities and numeric references
+    Γ£ö leaves custom, unterminated and malformed entities verbatim
+    Γ£ö a declaration ends at its closing angle bracket
+    Γ£ö an internal subset ends at the bracket close, not an entity close
+    Γ£ö quotes protect an angle bracket in a declaration
+    Γ£ö nested brackets and an unterminated declaration
+    Γ£ö the scan ends at the first unquoted greater-than
+  xmlStream (core)
+    Γ£ö whole-buffer and chunked parses produce identical events
+    Γ£ö offsets point at the real construct in the source
+    Γ£ö handles quoted > in attributes, comments, CDATA, PI and DOCTYPE
+    Γ£ö reads quoted, unquoted, empty and valueless attributes
+    Γ£ö a self-closing tag emits open then close at the same offset
+    Γ£ö an unterminated construct at end-of-stream is dropped, not emitted as text
+  workspaceIndex (core)
+    Γ£ö aggregates stats across files
+    Γ£ö resolves an exact path and a unique suffix
+    Γ£ö refuses an ambiguous suffix
+    Γ£ö a duplicate exact AR path across files is ambiguous
+    Γ£ö upsert replaces only one file and remove deletes only that file
+    Γ£ö incremental lookups match a fresh build after updates and removals
+    Γ£ö replaceAll swaps the whole set in one change
+    Γ£ö resolves definitions by exact path and suffix
+    Γ£ö reports the files behind a split package
+    Γ£ö referencesFor finds a same-file reference by element identity
+    Γ£ö resolves a cross-file reference and lists the reverse references
+    Γ£ö a local copy wins; same-identity local copies merge; different identities stay ambiguous
+    Γ£ö definitionUsers lists elements then references whose definition ref resolves
+    Γ£ö builds lookups for a 200k-element file without a spread crash
+    Γ£ö notifies subscribers on every mutation and disposes them
+    Γ£ö a value/range edit of a target file keeps cross-file references without a full rebuild
+    Γ£ö editing a referencing file replaces only its own contribution
+    Γ£ö a value edit keeps a same-file reference on the fast path
+    Γ£ö adding and removing a reference-only file stays incremental
+    Γ£ö adding and removing a target file invalidates and matches a fresh index
+    Γ£ö a container path change invalidates the map and drops stale target entries
+    Γ£ö a container definitionRef change invalidates the map
+    Γ£ö a target kind change invalidates the map
+    Γ£ö duplicate targets resolve like a fresh index after the invalidation
+    Γ£ö reordering identical duplicate targets matches a fresh index
+    Γ£ö turning an absent definitionRef into an empty one invalidates the map
+    Γ£ö referencesFor returns file-then-start order after incremental updates
+    Γ£ö a listener sees the current reverse map and a generation mismatch forces a build
+    Γ£ö a host-built target at the indexed range finds the same references
+  word diff
+    Γ£ö an identical pair is one unchanged segment per side
+    Γ£ö changed tokens are marked and the surrounding text stays unchanged
+    Γ£ö an empty side marks the whole other side changed
+    Γ£ö each punctuation character is its own token
+    Γ£ö a path keeps the shared prefix and marks only the changed segment
+    Γ£ö a hex literal stays one identifier token
+    Γ£ö the longest common subsequence skips a removed word
+    Γ£ö adjacent changed tokens merge into one segment
+    Γ£ö whitespace is preserved exactly on both sides
+  ECUC validation (core)
+    Γ£ö a clean file has no diagnostics
+    Γ£ö the sliced pass yields and returns the synchronous diagnostics (80ms)
+    Γ£ö broken reference
+    Γ£ö DEST mismatch
+    Γ£ö duplicate SHORT-NAME across files
+    Γ£ö non-ECUC and parameter-value DESTs are not judged
+    Γ£ö empty values and AUTOSAR boolean/float literals are accepted
+    Γ£ö required ADD-INFO and default-valued parameters are not missing
+    Γ£ö a missing module definition is one diagnostic, not one per child
+    Γ£ö cross-file copies are not summed by multiplicity
+    Γ£ö value out of range and string length
+    Γ£ö boolean and enumeration values are checked against the definition
+    Γ£ö multiplicity on a container
+    Γ£ö missing definition
+    Γ£ö missing required container
+    Γ£ö missing required parameter
+    Γ£ö severity settings normalize unknown rules and values
+    Γ£ö cross-file rules follow auto/always/never
+    Γ£ö never keeps a same-file duplicate but hides a cross-file one
+    Γ£ö severity off removes only that rule
+    Γ£ö split container copies across files are not duplicates
+    Γ£ö a same-file split copy is still a duplicate
+    Γ£ö a same-path different-definition copy is still a duplicate
+    Γ£ö variant alternatives do not violate the upper multiplicity or duplicate rules
+    Γ£ö same-guard, unguarded and partially guarded repetitions still violate multiplicity
+    Γ£ö integer, float and string problems name the broken rule
+    Γ£ö unknown definition kinds and literal-less enumerations accept any value
+    Γ£ö multiplicity messages cover equal bounds, ranges, infinities and guards
+    Γ£ö broken reference messages name the resolution reason
+    Γ£ö missing definitions anchor at the highest missing non-module ancestor
+    Γ£ö a missing required reference is reported, a present one is not
+    Γ£ö a duplicate message counts files and the override beats an off rule
+    Γ£ö severity normalization rejects arrays, nulls and accepts every level
+    Γ£ö WITH-AUTO parameters are not missing but still parsed
+  validate (core)
+    Γ£ö AC8: numerical literals are accepted
+    Γ£ö AC8: other forms are refused for a numerical parameter
+    Γ£ö AC8: a textual parameter accepts any XML-representable string
+    Γ£ö AC8: AUTOSAR DEST types narrow the accepted literals
+    Γ£ö AC8: an unchanged value is refused
+    Γ£ö AC8: the escaped text to write is reported
+    Γ£ö AC8: characters XML cannot represent are refused
+    Γ£ö R4: a legal AUTOSAR short name is accepted
+    Γ£ö R4: an invalid short name is refused with a reason
+    Γ£ö R4: a legal definition reference path is accepted
+    Γ£ö R4: an invalid definition reference is refused with a reason
+  editor node identity (AC13)
+    Γ£ö AC13: two siblings sharing a SHORT-NAME get distinct ids, from the document order
+    Γ£ö AC13: each twin resolves to its own range, its own value and its own reveal
+    Γ£ö AC13: the collision is disambiguated at every level, not just the top one
+    Γ£ö AC13: the ids are unchanged by the sort setting
+    Γ£ö AC13: the ordinal follows the document order, not the displayed order
+    Γ£ö AC13: the ids are unchanged by a re-scan, including one that edits a twin
+  SW-SYSCOND evaluator (design ┬º2)
+    Γ£ö design ┬º2.1: literals, parentheses and comparisons
+    Γ£ö design ┬º2.1: precedence is || < && < equality < relational < unary < primary
+    Γ£ö design ┬º2.2: three-valued logic
+    Γ£ö design ┬º2.2/┬º2.3: missing identifiers are reported and never coerce
+    Γ£ö the result carries the supplied value for every referenced identifier
+    Γ£ö design ┬º2.3: lookup is exact first, then the last / segment
+    Γ£ö design ┬º2.1: numeric, hex, float, boolean and quoted-string literals
+    Γ£ö design ┬º2.2: mixed types are unknown, never a silent disable
+    Γ£ö design ┬º2.1: malformed and empty expressions are unknown with a reason
+    Γ£ö characterization: scanner and evaluator error branches
+    Γ£ö design ┬º2.4: parseConditionValue classifies one raw value
+  scanner (core)
+    Γ£ö AC1: every fixture matches its committed expected model
+    Γ£ö AC: an inline SYSC-REF in SW-SYSCOND keeps the constant name and drops formatting
+    Γ£ö AC1: parameter DEFINITION-REF DEST is captured, including namespace prefixes
+    Γ£ö AC1: every fixture parameter with a DEST carries it
+    Γ£ö AC1: the deep fixture nests a container six levels down
+    Γ£ö AC1: ranges point at the exact source text
+    Γ£ö AC1: an empty CDATA section does not widen a captured range
+    Γ£ö AC1: the module element range covers its closing tag
+    Γ£ö AC1: the model retains no reference to the input text
+    Γ£ö AC2: `<VALUE>` is resolved from its enclosing element in both contexts
+    Γ£ö AC1: annotations are read from the layered LABEL/L-4 and ANNOTATION-TEXT/VERBATIM/L-5 shape
+    Γ£ö AC1: a flat annotation yields no label and no text
+    Γ£ö AC3: detection is namespace-tolerant and gate-ordered
+    Γ£ö AC4: layout is irrelevant
+    Γ£ö characterization: stray end tags and text outside the root are ignored
+    Γ£ö namespace prefixes are stripped from every tag, and the schema release is derived
+  resolve (core)
+    Γ£ö AC7: exact match wins
+    Γ£ö AC7: a unique suffix resolves
+    Γ£ö AC7: an ambiguous suffix resolves to nothing
+    Γ£ö AC7: an absent path resolves to nothing
+    Γ£ö the dotted display path is never resolved
+    Γ£ö the longest matching suffix of the target wins
+    Γ£ö an ambiguous suffix refuses even when a shorter suffix would be unique
+  editor row model (design ┬º2)
+    Γ£ö design ┬º2: rows are in display order with levels and contiguous subtrees
+    Γ£ö design ┬º2: posinset/setsize use the same contiguous group as the renderer
+    Γ£ö design ┬º2: labels, values, targets, context and meta parts are values
+    Γ£ö annotations are comment lines and condition titles explain their inputs
+    Γ£ö condition tooltip quotes strings, marks missing values and keeps a literal fallback
+    Γ£ö design ┬º2: reference followability is same-file only
+    Γ£ö an empty container is marked empty
+    Γ£ö parameter types and formats follow the AUTOSAR DEST and value
+    Γ£ö design ┬º2: haystacks include the label, value and every visible meta fragment
+    Γ£ö design ┬º2: rows carry no display-only source position or digit width
+    Γ£ö design ┬º2: sort all uses the exception list, declaration keeps the authored order
+    Γ£ö design ┬º2: ids keep the declaration-order ordinal when the display order changes
+    Γ£ö design ┬º2: deep nesting keeps the contiguous subtree invariant
+    Γ£ö design ┬º2: a large synthetic model builds in DFS order without HTML (41ms)
+  rebuild guard
+    Γ£ö a rebuild invalidates reads that began before it
+    Γ£ö a read that starts after a rebuild is current
+    Γ£ö each rebuild invalidates the previous generation
+  validation positions (core)
+    Γ£ö maps LF offsets to line and character
+    Γ£ö maps CRLF offsets after the LF
+    Γ£ö a missing table falls back to the first line
+  plan coverage: SCAN
+    Γ£ö SCAN-01 CRLF and lone-CR documents keep exact UTF-16 ranges
+    Γ£ö SCAN-02 UTF-16LE and UTF-16BE with a BOM scan as their UTF-8 twin
+    Γ£ö SCAN-03 an astral character before a value does not shift its range
+    Γ£ö SCAN-04 an attribute containing > and quotes keeps the tag end
+    Γ£ö SCAN-05 CDATA with ]] and a > in the content stays one section
+    Γ£ö SCAN-06 self-closing, empty and whitespace VALUE are distinct shapes
+    Γ£ö SCAN-07 ten thousand levels nest without a stack failure
+    Γ£ö SCAN-08 unknown, unterminated and out-of-range entities stay verbatim
+    Γ£ö SCAN-09 a DOCTYPE internal subset with > is skipped once
+    Γ£ö SCAN-10 two sibling containers sharing one SHORT-NAME both survive
+  plan coverage: ROW extras
+    Γ£ö ROW-06 label-only, text-only and empty annotations produce the matching comment lines
+    Γ£ö ROW-08 a sortExcept tail inside a longer DEFINITION-REF keeps declaration order
+  plan coverage: ROW
+    Γ£ö ROW-01 negative, hex, binary, 64-bit and padded values format exactly
+    Γ£ö ROW-02 TRUE and False are boolean rows with no numeric formats
+    Γ£ö ROW-03 an empty container and a reference-only container differ by children
+    Γ£ö ROW-04 a module with no containers has no children and no span
+    Γ£ö ROW-05 two context paths are kept in source order
+    Γ£ö ROW-07 a false ancestor marks the child disabled by the ancestor
+    Γ£ö ROW-09 identical sort keys keep declaration order
+  plan coverage: ID
+    Γ£ö ID-01 deleting the middle duplicate shifts only the later ordinal
+    Γ£ö ID-02 renaming to a sibling name keeps the renamed node addressable
+    Γ£ö ID-03 ids do not depend on the row sort
+    Γ£ö ID-04 a short name with | and # round-trips through the id
+    Γ£ö ID-05 a container rename moves its child ids, and the prediction matches a rescan
+  plan coverage: DIFF
+    Γ£ö DIFF-01 same name with different children is one changed pair
+    Γ£ö DIFF-03 a budget-limited pair reports the reason and the skipped count
+    Γ£ö DIFF-04 toggling strict/semantic reuses each cached document
+  copy planner (core)
+    Γ£ö replaces the target element with the source element bytes
+    Γ£ö deletes an element with its line and leaves the neighbours intact
+    Γ£ö inserts after the anchor with the target indentation
+    Γ£ö refuses an insertion with no sibling to anchor it
+    Γ£ö re-indents a block by the delta, not by a prefix assumption
+    Γ£ö a removal span keeps inline elements intact
+    Γ£ö line endings follow the target document
+  copy ancestors (core)
+    Γ£ö wraps a copied parameter in a minimal container with one child list
+    Γ£ö nests the whole missing chain, innermost last
+    Γ£ö a CRLF target gets CRLF through the ancestor wrapper
+    Γ£ö keeps a definition DEST when the ancestor has one
+  plan coverage: COND
+    Γ£ö COND-01 !(A) && B and !A && B agree; unary binds tighter
+    Γ£ö COND-02 string/number and boolean/number comparisons are unknown
+    Γ£ö COND-05 quoted escapes decode; an unterminated quote is a parse reason
+    Γ£ö COND-06 a raw &amp; entity is decoded before evaluation
+  order (core)
+    Γ£ö AC5: sort all orders by DEFINITION-REF then identity, exceptions by declaration order
+    Γ£ö AC5: a DEFINITION-REF that is a prefix of another sorts as the legacy string key does
+    Γ£ö AC5: parameters and references never interleave
+    Γ£ö AC5: an instance reference orders by target plus context, not target alone
+    Γ£ö AC5: modules and containers order by definitionRef then shortName
+    Γ£ö AC6: declaration mode returns the authored order for every list
+    Γ£ö the exception list is the 15 entries from the legacy launcher
+  offsets (core)
+    Γ£ö LF document: first line, boundaries, last line
+    Γ£ö CRLF document: the break counts as two offsets
+    Γ£ö the same text position yields the same line for LF and CRLF
+    Γ£ö a lone carriage return starts a new line, and an empty document has one line
+    Γ£ö the stream builder matches LineIndex across CRLF, LF and lone CR
+    Γ£ö astral characters count as two UTF-16 units
+    Γ£ö a trailing CR at a chunk boundary is flushed by finish
+    Γ£ö a missing or empty line table degrades to line zero
+  minimal line edit
+    Γ£ö MERGE-19 equal texts need no edit
+    Γ£ö MERGE-19 one changed line replaces only that line
+    Γ£ö MERGE-19 inserted rows add lines at the change point
+    Γ£ö MERGE-19 removed rows delete lines
+    Γ£ö MERGE-19 a trailing newline is preserved when the last line changes
+    Γ£ö MERGE-19 a whole block replacement reproduces the target
+    Γ£ö MERGE-19 the edit is the smallest one outside the shared edges
+  indexBuilder (core)
+    Γ£ö indexes modules, containers and their AR paths
+    Γ£ö indexes parameter values by definition ref and a source range
+    Γ£ö indexes reference targets, DEST and the source container path
+    Γ£ö indexes every definition kind with its metadata
+    Γ£ö chunked and whole parses build the same file index
+    Γ£ö indexes definition kinds beyond the original closed list
+    Γ£ö records TARGET-REF and every CONTEXT-ELEMENT-REF on a reference value
+    Γ£ö captures UUID as an attribute and as an element
+    Γ£ö a file without ECUC content still contributes its packages
+    Γ£ö contentHash ignores whitespace and UUID but tracks content
+    Γ£ö records the own SW-SYSCOND guard and the WITH-AUTO marker
+  exclusion globs (core)
+    Γ£ö an empty list excludes nothing
+    Γ£ö ** matches zero or more segments
+    Γ£ö * and ? stay inside one segment
+    Γ£ö a wildcard-free trailing slash is a prefix
+    Γ£ö backslashes are normalized to workspace separators
+  encoding detection
+    Γ£ö detects a UTF-8 BOM
+    Γ£ö detects a UTF-16LE BOM
+    Γ£ö detects a UTF-16BE BOM
+    Γ£ö defaults to UTF-8 without a declaration
+    Γ£ö honours a common ASCII-compatible declaration
+    Γ£ö normalises a windows-1252 declaration
+    Γ£ö refuses an unsupported declaration
+    Γ£ö refuses UTF-32LE even when the first bytes mimic a BOM
+    Γ£ö a truncated BOM falls back to the declaration scan
+    Γ£ö normalises aliases, padded labels and single quotes
+    Γ£ö the declaration scan stops at 256 bytes
+  diff session (core)
+    Γ£ö a semantic build with no rename is reused for strict
+    Γ£ö an initial strict build is not proof that semantic is identical
+    Γ£ö a renamed pair caches each mode and switches between the cached objects
+    Γ£ö invalidate drops the cached documents
+  diff patch
+    Γ£ö a span replaces exactly the rows it names
+    Γ£ö an ancestor row is re-sent rather than left stale
+    Γ£ö rows after the edit shift by the reported delta
+    Γ£ö the summary and skip counters follow the patch
+  semantic diff model (design ┬º2, ┬º3.3)
+    Γ£ö AC2: a file compared with itself has no differences
+    Γ£ö AC3: a changed parameter is exactly one changed row with both values
+    Γ£ö search haystack includes condition/meta text from both sides
+    Γ£ö R6: every compared field is reported once, and annotation/meta derivatives are ignored
+    Γ£ö AC4: an added container marks every descendant added; a removed one marks every descendant removed
+    Γ£ö AC5: reordered modules, containers, parameters and references compare equal
+    Γ£ö AC5: swapping two same-named sibling parameters compares equal (base-id identity)
+    Γ£ö AC5: reordered duplicate-name containers keep their children paired across the ordinal shift
+    Γ£ö AC5: reordered duplicates that differ only in a condition compare equal
+    Γ£ö AC5: reordered duplicate-name containers with different contents compare equal
+    Γ£ö AC5/R6: a reordered duplicate container with one changed child stays one changed row
+    Γ£ö AC5/R6: a changed condition on a reordered duplicate stays one changed row
+    Γ£ö R8/R9: a shifted duplicate pairing never reuses a page key
+    Γ£ö R8/R9: a shifted duplicate container pairing keeps the added subtree keys distinct
+    Γ£ö AC6: moving a container under another parent is one removal and one addition
+    Γ£ö R9: a right-only child lands after the nearest preceding matched sibling, or before the first
+    Γ£ö design ┬º2.2: level, parent and subtreeSize are recomputed over the merged tree
+    Γ£ö the document carries the same pane labels the compare title uses
+    Γ£ö R10: titles disambiguate same-named files by the shortest path suffix
+    Γ£ö design ┬º3.3: Show all shows every row and Show diff keeps changes and ancestors
+    Γ£ö context 5 keeps five rows above and below a change, and hides the sixth
+    Γ£ö hidden runs become one expandable gap row
+    Γ£ö moduleGaps inserts one shared blank row before every module after the first
+    Γ£ö a module hidden by Show diff gets no gap and does not count as the first seen module
+    Γ£ö design ┬º3.3: flatten skips collapsed subtrees in every view
+    Γ£ö design ┬º3.3: next/previous change wraps and respects visibility
+    Γ£ö the committed left/right fixtures cover changed, added, removed, moved and duplicate rows
+    Γ£ö semantic matching pairs renamed containers and aligns their children
+    Γ£ö semantic matching learns the rename from names when children embed it
+    Γ£ö a single renamed container pairs with embedded-name children
+    Γ£ö renamed containers with no children pair on the empty-child score
+    Γ£ö self-name masking pairs a wholly different name token (175ms)
+    Γ£ö masked children pair renamed containers after new ones sorting before
+    Γ£ö masked children do not pair unrelated content
+    Γ£ö identical-child siblings pair by name and position
+    Γ£ö the pair-limit fallback uses learned substitutions
+    Γ£ö the pair-limit fallback reports containers it cannot pair
+    Γ£ö semantic matching pairs a renamed module and aligns its children
+    Γ£ö strict matching keeps the pre-change removed/added output
+    Γ£ö a different DEFINITION-REF never pairs semantically
+    Γ£ö candidate blocking pairs 500 embedded-name containers in one bucket (579ms)
+    Γ£ö an oversized bucket learns its rename before the fallback
+    Γ£ö a deterministic budget limits work and reports the reason
+    Γ£ö a near-tie at scale stays unpaired (67ms)
+    Γ£ö a large unrelated bucket does not pair through shared stop tokens
+    Γ£ö identical-child pairing is deterministic
+  definitions (core)
+    Γ£ö normalizes every supported definition kind
+    Γ£ö normalizes container, module and reference multiplicity
+    Γ£ö multiplicity parsing and display
+    Γ£ö range display handles a single endpoint
+    Γ£ö an unknown definition kind gets a readable fallback type
+    Γ£ö resolves definitions across files and refuses ambiguity
+  definition rows (core)
+    Γ£ö a resolved definition enriches parameter, container and module rows
+    Γ£ö a resolved reference definition adds its destination and multiplicity
+    Γ£ö without a lookup no row carries a definition
+    Γ£ö an unresolved reference adds nothing and never invents a value
+    Γ£ö an ambiguous definition exposes its count without picking one
+    Γ£ö a throwing definition lookup never blocks the row document
+    Γ£ö the lookup is not called for rows without a definition ref
+  cross-file reference rows (core)
+    Γ£ö the workspace resolver makes a reference followable when the target is in another file
+    Γ£ö a refused target stays not followable and carries the reason
+  copied-row keys
+    Γ£ö MERGE-16 an added right row is keyed by the bare row id
+    Γ£ö MERGE-16 only rows with a cell on the written side are keys
+    Γ£ö MERGE-16 a row touching the span edge is not part of it
+  copied-row store
+    Γ£ö MERGE-16 records rows per document and drops the duplicates
+    Γ£ö MERGE-17 a save clears every copy in the document
+    Γ£ö MERGE-18 an edit before the copy shifts it and keeps the rows
+    Γ£ö MERGE-18 an edit after the copy leaves it alone
+    Γ£ö MERGE-18 undoing the copy span removes the marker
+    Γ£ö MERGE-18 typing inside the copied span removes the marker
+    Γ£ö MERGE-18 the copy edit itself is not a user change
+    Γ£ö MERGE-18 one event with two disjoint changes keeps both records
+    Γ£ö MERGE-17 forget drops a closed buffer without a save
+  condition rows (design ┬º4)
+    Γ£ö AC1: a false parameter condition disables only that parameter
+    Γ£ö AC1: the same condition is true (and not disabled) with 0
+    Γ£ö AC2: a false container disables its whole subtree, ancestor wins
+    Γ£ö AC2: a false module disables every row below it
+    Γ£ö AC1/AC2: a true condition dims neither itself nor its subtree, and the same nodes dim when it turns false
+    Γ£ö AC3: a false reference condition disables only the reference
+    Γ£ö AC4: a missing constant is unknown, lists every missing symbol and dims nothing
+    Γ£ö AC5: a malformed condition is unknown with a syntax reason and dims nothing
+    Γ£ö AC7/AC11: a literal false disables even with no values; unknown never does
+    Γ£ö AC2: an empty discovered value is unknown and never disables a row
+    Γ£ö AC11: with no values the symbolic conditions are unknown and nothing else changes
+    Γ£ö the condition chip carries the evaluated state and its input values as the title
+    Γ£ö AC1: the fixture reports the manual CANIPCORETYPE_SC case the design names
+    Γ£ö manual sanity check: 1 dims the conditioned container and its subtree; 0 restores them
+  ARXML text features (core)
+    Γ£ö collects every definition ref and reference target
+    Γ£ö finds the token under an offset
+    Γ£ö builds a module/container/parameter symbol tree in declaration order
+    Γ£ö a token match includes both range ends and misses outside them
+    Γ£ö the node index carries the AR path of a nested container
+  virtual scroll (design ┬º5)
+    Γ£ö design ┬º5: total height and row offsets are cumulative
+    Γ£ö design ┬º5: an empty list has no rows, offset or height
+    Γ£ö design ┬º5: one row is rendered even with a zero-height viewport
+    Γ£ö design ┬º5: the visible range includes buffer rows on both sides
+    Γ£ö design ┬º5: a row exactly at the viewport bottom is not visible
+    Γ£ö design ┬º5: negative and over-scrolled positions are clamped to real rows
+    Γ£ö design ┬º5: an invalid or zero viewport still yields at least one row
+    Γ£ö design ┬º5: fixed and variable row functions compose with the maths
+    Γ£ö design ┬º5: a changed height version invalidates the height cache
+    Γ£ö design ┬º5: a different height function recomputes even at the same row count
+    Γ£ö design ┬º5: zero, negative and NaN heights do not corrupt the cumulative list
+    Γ£ö buildOffsets floors the row count and clamps invalid heights
+    Γ£ö visibleRangeFromOffsets is the same range as calcVisibleRange
+    Γ£ö visibleRangeFromOffsets clamps the viewport and buffer inputs
+  tree query helpers
+    Γ£ö flattenRows keeps every row in display order
+    Γ£ö annotation comments are fixed display rows above their node
+    Γ£ö the module gap is one blank display row before every module after the first
+    Γ£ö the module gap follows the previous module brace-close and precedes the next module
+    Γ£ö a collapsed node hides its subtree
+    Γ£ö Document adds brace rows around expanded subtrees
+    Γ£ö a collapsed node keeps its row but gets no brace pair
+    Γ£ö brace rows and node entries expose the fields the window renderer needs
+    Γ£ö flattenRows reports its own expansion decision
+    Γ£ö ancestorIds is the one owner of the parent walk
+    Γ£ö stepMatch walks match positions and wraps at both ends
+  row view primitives
+    Γ£ö conditionTokens assigns the syntax class of every slice
+    Γ£ö conditionTokens keeps literals, signed numbers, hex and names together
+    Γ£ö conditionTokens treats lone signs, dots and repeated operators as punctuation
+    Γ£ö conditionTokens honours quotes, escapes and an unterminated string
+    Γ£ö conditionTokens keeps one whitespace token and covers every character
+    Γ£ö appendHighlighted splits text into plain and marked slices
+    Γ£ö appendHighlighted trims the query and writes plain text for a blank one
+    Γ£ö appendConditionTokens marks each slice across token boundaries
+    Γ£ö appendConditionTokens with a blank query writes the condition tokens unmarked
+    Γ£ö valueSpan writes the punctuation, the value token and the kind/title
+    Γ£ö valueSpan delegates the value text to an explicit writer
+    Γ£ö metaSpan writes every part with its class, title and state
+    Γ£ö metaSpan lets an explicit writer take a part and falls back for the rest
+  page error surface
+    Γ£ö the console reporter keeps the label, message and source line
+    Γ£ö the notice surface writes the message, the hint and kind
+    Γ£ö a missing notice or a notice without a dataset is inert
+  virtual page (design ┬º4, ┬º5, ┬º8)
+    Γ£ö design ┬º5: only the viewport window plus a bounded overscan is visible
+    Γ£ö design ┬º4: collapse skips a contiguous subtree and Document adds brace rows
+    Γ£ö design ┬º4: annotation comment rows join the window but never the selectable ids
+    Γ£ö design ┬º8: the inspector reads an offscreen row from the row map
+    Γ£ö design ┬º5/┬º8: focus is restored by id, or the nearest rendered row is roving
+    Γ£ö design ┬º4: subtree ids and bracket guides cover only the selected container
+    Γ£ö design ┬º8: a re-scan preserves selection and collapse where possible
+    Γ£ö design ┬º6: the shared meta keeps the space between the keyword and the path
+    Γ£ö design ┬º4: the display list reports expansion on the row itself
+    Γ£ö TREE-02 a documentPatch outside the rendered window updates the store without patching a hidden row (82ms)
+    Γ£ö TREE-04 150k rows scroll to the end and back rebuild the window with no height drift
+    Γ£ö TREE-06 a zero-height viewport still renders at least one row
+  editor visual polish
+    Γ£ö the details inspector is outside the virtual tree region and has no view toggle
+    Γ£ö every row carries the definition path, short name and value the panel needs
+    Γ£ö the inspector reads row data and edits in details
+    Γ£ö rows are flat flex rows and .value stays a direct child of .row
+    Γ£ö selection uses a quiet tint and keeps token colours
+    Γ£ö fonts have usable fallbacks and no colour literal was introduced
+  editor Document interactions
+    Γ£ö bracket guides fade at rest and activate on container hover
+    Γ£ö the toolbar hides and shows the sidebar without losing its layout state
+    Γ£ö showing the sidebar restores the prior Details tab and keeps the selection
+    Γ£ö a reload restores a hidden sidebar with its prior tab, width and panes
+    Γ£ö a plain click selects and never reveals; the deliberate gestures reveal
+    Γ£ö a double click never reveals or opens the deferred value editor (728ms)
+    Γ£ö a single click on a value still opens the Details editor after the guard (719ms)
+    Γ£ö a value edit reveals the sidebar when it is hidden (728ms)
+    Γ£ö a click that ends a text drag keeps the selection and opens no editor (726ms)
+    Γ£ö a document refresh cancels a deferred value editor (731ms)
+    Γ£ö a key press cancels a deferred value editor (723ms)
+    Γ£ö a native range over two rendered rows copies only row text
+    Γ£ö a multi-row copy keeps the 4-space tree indent and drops gutter and sidebar text
+    Γ£ö a partial selection inside one row stays on the native copy path
+    Γ£ö copying inside an input is not overridden by a stale tree selection
+    Γ£ö TREE-03 a documentPatch then collapse/expand keeps display indices consistent
+    Γ£ö TREE-05 a copy spanning a collapsed subtree stays on visible rows with 4-space indent
+    Γ£ö TREE-01 Collapse all anchors to the nearest visible ancestor and Expand all restores the selected row (259ms)
+    Γ£ö Collapse all then Expand all keeps the current search match visible (266ms)
+    Γ£ö row text is selectable while gutter, twisty, guides and gaps are not
+    Γ£ö a toggle is built only where the row has children, with no glyph or inline hint
+    Γ£ö reference tooltips show the target without display punctuation
+    Γ£ö the details panel owns the reference jump action
+    Γ£ö details controls follow the parameter type
+    Γ£ö aria-expanded follows the displayed list
+    Γ£ö toggling flips membership and never collapses a leaf
+    Γ£ö pruning drops the ids that are gone and leaves the rest alone
+    Γ£ö Home, End, PageUp and PageDown move focus as expected
+    Γ£ö the key handler wires movement, expansion, F2/Enter editing and type-ahead
+    Γ£ö DETAIL-02 a refused write keeps the typed text and marks the details input invalid
+    Γ£ö the pinned editor dependency is the only runtime dependency
+    Γ£ö X-04 the stylesheet keeps only the documented colour literals
+    Γ£ö the presentation adds no write path
+  editor document view
+    Γ£ö Document is the only view; the sidebar shell and details exist
+    Γ£ö the document CSS is one editor surface with the quiet-source tokens
+    Γ£ö rows carry no display-only source positions
+    Γ£ö document labels and reference values use the dark semantic accents
+    Γ£ö quiet selection, focus rail and read-only values
+    Γ£ö the strip is tall icon-over-label chrome and keeps Collapse/Expand with opposite glyphs
+    Γ£ö the document keeps every parent ┬º6 field and the direct .value
+    Γ£ö the value separator is muted punctuation and stays out of the value token
+    Γ£ö annotations render above their node and the sidebar width is specified
+    Γ£ö a field refusal is left to the details panel
+    Γ£ö the layout state defaults and persistence path are present
+  editor semantic colours (AC14)
+    Γ£ö AC14: numeric, textual and boolean values carry their own kind
+    Γ£ö AC14: the Tree kind glyphs and accent borders are removed
+    Γ£ö AC14: value types, references and short names use their semantic scopes
+    Γ£ö AC14: selection is a tint and does not recolour syntax
+  search helpers
+    Γ£ö a blank query matches nothing; a query matches haystacks case-insensitively
+    Γ£ö the whole row store is searched, even below a collapsed ancestor
+    Γ£ö matchRanges finds every occurrence and haystack joins the searched fields
+    Γ£ö stepMatch wraps in both directions and handles current = -1
+  search page
+    Γ£ö SEARCH-01 a query that exists only in meta text finds the row (237ms)
+    Γ£ö SEARCH-03 a documentPatch updates the searched haystack (250ms)
+    Γ£ö Enter jumps to the first match, marks every match and selects it (243ms)
+    Γ£ö F3 cycles the current match and Shift+F3 goes back (253ms)
+    Γ£ö Ctrl+F opens the widget and Ctrl+H opens replace; Escape closes both
+    Γ£ö case, whole-word and regex options change the result set (1203ms)
+ECUC editor: the test host does not replace
+    Γ£ö Replace posts the current match, query and options (239ms)
+    Γ£ö clearing resets the count and removes the highlight (244ms)
+    Γ£ö Ctrl+F focuses Search from the tree
+    Γ£ö schema/package rows are searchable, focusable and never select (250ms)
+    Γ£ö the header keyword and its value are marked and the current header uses the strong tier (1452ms)
+    Γ£ö the two search tiers are calm, distinct and keep changed-word outlines
+    Γ£ö SEARCH-02 clearing a pending search discards a late engine answer (257ms)
+    Γ£ö the schema/package rows scroll out of the rendered window
+  editor bundled page
+    Γ£ö the host shell is strict and loads the bundled script and stylesheet
+    Γ£ö boots from the static shell, announces ready and renders the posted document
+    Γ£ö a documentPatch replaces one value row without a rebuild
+    Γ£ö the module gap is one inert numbered row between two modules
+    Γ£ö search skips the module gap and the full content width covers header lines (233ms)
+    Γ£ö the full content width covers long annotation rows
+    Γ£ö the header gap is absent when there is no schema or package header
+    Γ£ö the Document numbers every virtual row, including the header, gap, comments and braces
+    Γ£ö collapsing and expanding a container renumbers the display rows
+    Γ£ö the selected row number is active and a re-scan without the row clears it
+    Γ£ö the focused row number repeats the focus rail and clears when focus leaves
+    Γ£ö the gutter stays fixed horizontally and follows the rows vertically (52ms)
+    Γ£ö the gutter is inert decoration: no tree semantics, no search marks and no focus stop (244ms)
+    Γ£ö clicking a number selects its row; a header or gap number selects nothing
+    Γ£ö the docs view has one horizontal bar that scrolls the window
+    Γ£ö the row primitives carry the data the details panel needs, without model markup
+    Γ£ö selection fills the one Details body and the value editor owns the type
+    Γ£ö the Details find-references action posts the selected row id
+    Γ£ö selecting a container highlights the annotation row of a descendant sub-container
+    Γ£ö clicking an annotation row does not change selection
+    Γ£ö Details typing stays local and a re-scan keeps the selection
+    Γ£ö a plain click selects, a double click selects text and Ctrl+Enter reveals
+    Γ£ö search runs on Enter through the chunked engine and keeps the current match (238ms)
+    Γ£ö a large document renders only the viewport window plus overscan
+    Γ£ö the Conditions panel saves one entry and posts it to the host
+    Γ£ö the page reports an unhandled error to the webview console, not a banner
+  editor viewer characterization
+    Γ£ö the tree key map moves, expands, collapses, reveals, selects and types ahead (49ms)
+    Γ£ö type-ahead starts after the focused row and wraps
+    Γ£ö hover activates the owning container guide and leaves on the tree
+    Γ£ö the Details body keeps its field order and actions per row kind
+    Γ£ö host messages dispatch to conditions, selection, status and re-scan state
+    Γ£ö a search jump expands a collapsed target and Escape returns focus to the tree (268ms)
+    Γ£ö Tab from the parameter value does not commit the Details draft
+    Γ£ö the full content width estimate covers row labels, values, meta and headers exactly
+  editor accessibility (AC8)
+    Γ£ö X-03 AC8: the tree exposes real tree roles, levels and expansion state
+    Γ£ö AC8: arrow keys and Enter are wired
+    Γ£ö AC8: focus is visible and drawn with a theme colour
+    Γ£ö AC8: the details value editor has a label, invalid state and live error
+  VirtualScroll component
+    Γ£ö mount owns the scroller, content, horizontal bar and panes
+    Γ£ö setContent drives the total height and the visible range
+    Γ£ö scroll setters report the viewport and scroll a row into view
+    Γ£ö a deferred scroll coalesces into one animation frame
+    Γ£ö each pane has its own horizontal bar and offsets sync in diff mode
+    Γ£ö verticalScrollbarWidth reports the reserved gutter
+    Γ£ö setContentWidth grows the horizontal spacer without rebuilding rows
+    Γ£ö setContentWidth never shrinks a pane and ignores an invalid width
+    Γ£ö setContent normalizes empty offsets, a negative row count and invalid widths
+    Γ£ö a horizontal wheel scrolls the pane under the pointer and clamps at the maximum
+    Γ£ö a horizontal bar scroll mirrors only when diff sync is on and moves at least one pixel
+    Γ£ö scrollToIndex honours start, end and auto alignment and guards an empty model
+  Toolbar component
+    Γ£ö the editor strip puts Collapse/Expand left and Sidebar right
+    Γ£ö the diff strip groups view, context, matching and navigation with dividers
+    Γ£ö every main diff toolbar button has an icon over a label
+    Γ£ö mount is idempotent and reports one action per click
+    Γ£ö setSidebarHidden carries the pressed state, label and title both ways
+    Γ£ö setDirty shows and hides the unsaved marker
+    Γ£ö setViewMode writes the context disabled state, labels and titles both ways
+    Γ£ö setMatchMode carries the semantic pending state and tolerates missing buttons
+    Γ£ö the diff toolbar reports view, mode, navigation, swap and context state
+  sidebar shell
+    Γ£ö clampSidebarWidth keeps the width between 260 and 900px
+    Γ£ö loadUiState validates the persisted shape
+    Γ£ö allocatePanes fills a lone pane, splits fresh panes and honours saved sizes
+    Γ£ö allocatePanes skips collapsed panes and absorbs rounding in the last one
+    Γ£ö the shell markup has the tab strip, panels, sections and no sashes
+    Γ£ö tab activation shows one panel and persists the change
+    Γ£ö the sidebar resizer drags, steps and clamps the width
+    Γ£ö section keyboard and collapse update the pane heights and state
+    Γ£ö sash drag sizing, keyboard steps and reset obey MIN_PANE
+    Γ£ö a saved pane height is restored on mount
+    Γ£ö the shared button and field primitives use theme tokens
+    Γ£ö loadUiState rejects invalid shapes and clamps every field
+    Γ£ö tab keyboard navigation wraps, honours Home/End and ignores other keys
+    Γ£ö section head click and keyboard ignore the actions and toggle on demand
+    Γ£ö sash drag guards, commits once on release and ignores collapsed pairs
+    Γ£ö a stacked layout leaves the saved sidebar width alone
+    Γ£ö setSidebarHidden hides the shell and keeps the tab, width and panes
+    Γ£ö the hidden layout hides the panel, resizer and tab strip
+    Γ£ö mountSidebarShell does nothing without the shell elements
+    Γ£ö the editor actions use the shared classes and the old toggles are gone
+  SearchBar component
+    Γ£ö the editor and diff instances get distinct ids and option controls
+    Γ£ö feedback setters keep the count and busy slots in the flow
+    Γ£ö Enter, Shift+Enter, Escape and the nav buttons report through callbacks
+    Γ£ö toggles carry aria-pressed and report the options
+    Γ£ö the replace row toggles, reports replace and preserves case
+    Γ£ö show and hide control the widget without touching the query
+    Γ£ö F3 and Shift+F3 execute in both directions without touching the text
+    Γ£ö a page without controls and a bar without callbacks mount and key safely
+  Document tree state helpers
+    Γ£ö moveTarget ignores an empty row set and a non-movement key
+    Γ£ö resolveFocusId keeps a previous focus before the preferred and first rows
+    Γ£ö guidesFor closes only an open level and passes comments and gaps through
+  DocumentTreeView component
+    Γ£ö mount creates the window and the line-number gutter inside the pane layer
+    Γ£ö the measurement only grows; a new model can reset the content width
+    Γ£ö the number column is max(digits(max number), 5) and shrinks for an empty model
+    Γ£ö the gutter renders cells for the visible slice from the offsets
+    Γ£ö an empty model clears the gutter cells
+    Γ£ö refreshActiveLine re-colours one numbered cell without a rebuild
+    Γ£ö a blank missing-side cell never carries the active colour
+    Γ£ö the focused node cell repeats the focus rail and clears with focus
+    Γ£ö clicking a number forwards to the row click action
+    Γ£ö render positions the window at the first row offset and renders the slice
+    Γ£ö the shared horizontal offset translates the window
+    Γ£ö an unchanged viewport skips the DOM render and a move forces a new slice
+    Γ£ö clicking a row reports its virtual index
+    Γ£ö an empty model clears the window
+    Γ£ö an unmounted view ignores render, gutter click and keeps the focus-in state only
+    Γ£ö a moved viewport patches the window instead of rebuilding it
+    Γ£ö a non-overlapping jump rebuilds the window
+    Γ£ö render restores focus to the focused node row with preventScroll
+    Γ£ö a focus-in outside the window or with a bad index clears the focus rail
+    Γ£ö a gutter click outside the gutter or without a numeric index does nothing
+    Γ£ö a row click outside the window or without a numeric index is not reported
+    Γ£ö the gutter column ignores non-finite numbers and non-positive widths
+    Γ£ö an unchanged viewport refreshes the active number without rebuilding
+    Γ£ö the stylesheet owns the absolute window, the fixed gutter and no gap rule
+  Document row builder
+    Γ£ö a selected expanded container carries the full node state and child order
+    Γ£ö parameter and reference rows write their kind-specific data only
+    Γ£ö a container with no definition label shows only its quoted short name
+    Γ£ö a subtree row and a leaf row keep the remaining node flags independent
+    Γ£ö the label and value use the pair segments of the displayed side
+    Γ£ö meta chips pair by display order and extras fall back to the plain writer
+    Γ£ö a missing pair or side falls back to the plain text and the left segments
+  DiffView component
+    Γ£ö the shell owns the fixed title strip, shared scroll root, probe and empty state
+    Γ£ö the shared surface and fixed title strip are component CSS
+    Γ£ö the hidden-change dot is a small token-coloured marker with no row tint
+    Γ£ö mount creates one shared scroll surface and two window panes
+    Γ£ö both panes mount a gutter with independent widths and ranges
+    Γ£ö the component owns no host model or message access
+    Γ£ö render mirrors the single left offset to both panes and reports the viewport
+    Γ£ö an empty title hides its strip and the tooltip falls back to the text
+    Γ£ö an unmounted view still publishes a zero scrollbar gutter
+  details definition projection
+    Γ£ö definition rows use the documented order and omit absent fields
+    Γ£ö definition rows skip empty literal lists and absent optional fields
+    Γ£ö inspectorFields reads context paths, the own-condition filter and annotations
+    Γ£ö inspectorFields carries the definition and still projects the row fields
+    Γ£ö an ambiguous definition count is projected for Details
+  DetailsEditor component
+    Γ£ö insertion guards follow the parameter type without rewriting text
+    Γ£ö the component CSS owns the input and its inline refusal reason
+    Γ£ö Integer and Float get a text input; Boolean gets a true/false select
+    Γ£ö Enter leaves the live draft and Escape restores the original text
+    Γ£ö a refusal marks the waiting field invalid and shows the reason inline
+    Γ£ö beginDetailsEdit reveals the panel, selects an unselected row and focuses the first field
+    Γ£ö beginDetailsEdit falls back to setSelection and reports a missing row
+    Γ£ö Tab leaves the value without committing
+    Γ£ö Tab between container fields leaves the draft to the shared model
+    Γ£ö DETAIL-03 Tab from the last container field does not commit or trap focus
+    Γ£ö DETAIL-01 definition rows keep the documented order and omit absent fields
+    Γ£ö DETAIL-04 a selection change drops the old bindings and never writes the draft
+    Γ£ö a shared draft seeds the control and Escape still restores the host value
+    Γ£ö a container draft seeds both fields and survives a selection change
+    Γ£ö syncDetailsField sets and clears the inline error even when the text is unchanged
+    Γ£ö syncDetailsField keeps an end caret at the end when a local undo or redo changes the draft
+    Γ£ö a rebuild carries the open refusal onto the seeded control
+    Γ£ö Enter never commits, an info notice is ignored, and an empty warning uses the default reason
+  editor row context menu
+    Γ£ö the shell has one menu with Duplicate and Delete items
+    Γ£ö only container and parameter rows open the menu
+    Γ£ö menu actions report once and close before the host asks
+    Γ£ö Escape closes the menu and returns focus to the row
+    Γ£ö the menu uses theme tokens and no colour literal
+    Γ£ö ArrowDown and ArrowUp cycle focus and other keys are left alone
+    Γ£ö an outside pointerdown, scroll, resize and blur dismiss the menu
+    Γ£ö a click outside an item or with an unknown action closes without reporting
+    Γ£ö a hidden menu ignores Escape and scroll dismissal does not restore focus
+  ConditionsPanel component
+    Γ£ö the panel owns one list, its actions and the fixed status line
+    Γ£ö name validation is one rule for Save and the tests
+    Γ£ö validation trims the draft and compares the trimmed name
+    Γ£ö rendering keeps row order, classes, text and the auto/manual actions apart
+    Γ£ö one draft at a time, Enter saves and Escape restores focus
+    Γ£ö a new row validates the trimmed name, rejects duplicates and clears the error on input
+    Γ£ö CPANEL-01 discovered rows lose Remove, regain it on re-scan and keep their committed value
+    Γ£ö CPANEL-02 Clear values with a draft open keeps the typed draft
+    Γ£ö CPANEL-03 a 201st row is refused with the cap message
+    Γ£ö Remove, Clear values and the disabled count keep their contracts
+    Γ£ö boolean condition values carry the value-kind hook
+  955 passing (47s)
+[main 2026-11-28T02:57:31.942Z] Extension host with pid 17364 exited with code: 0, signal: unknown.
+[main 2026-11-28T02:57:32.977Z] AgentHostStarter: cannot create window connection: Agent Host process manager is 
+shutting down.
+Exit code:   0

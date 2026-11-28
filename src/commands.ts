@@ -11,7 +11,7 @@ import { EcucEditorProvider, VIEW_TYPE, gateReason } from './host/ecucEditorProv
 import { buildNodeIndex } from './core/ecuc/nodeId';
 import type { NodeEntry } from './core/ecuc/nodeId';
 import { followReference, innermostNodeIdAt, revealRangeInTextEditor } from './host/navigation';
-import { CompareSelectionStore, fileName } from './host/compareSelection';
+import { CompareSelectionStore, fileName, firstFileProblem } from './host/compareSelection';
 import { DiffPanel } from './host/diffPanel';
 import type { CoreEngine } from './host/engine/coreEngine';
 import { IndexService } from './host/indexService';
@@ -252,6 +252,13 @@ async function compareWithStashed(
 	first: vscode.Uri,
 	second: vscode.Uri
 ): Promise<void> {
+	// The open-buffer path would happily compare a deleted file's cached text;
+	// a missing first file is reported and the stash stays for another try.
+	const problem = await firstFileProblem(first);
+	if (problem !== undefined) {
+		void vscode.window.showWarningMessage(problem);
+		return;
+	}
 	if (await DiffPanel.open(context, first, second, engine)) {
 		compare.clear();
 	}

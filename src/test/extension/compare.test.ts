@@ -7,13 +7,14 @@
  */
 import * as assert from 'assert';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { indentationAt, planCopy } from '../../core/copy/planCopy';
 import { scanEcucValues } from '../../core/ecuc/scanner';
-import { CompareSelectionStore } from '../../host/compareSelection';
-import { DiffPanel } from '../../host/diffPanel';
+import { CompareSelectionStore, isMissingFileError } from '../../host/compareSelection';
+import { DiffPanel, saveDiffDocument } from '../../host/diffPanel';
 import { fixtureUri, repoRoot, sleep } from './testUtils';
 
 const SELECT_AS_FIRST = 'vscode-arxml-scope.selectAsFirst';
@@ -163,6 +164,71 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
 		assert.strictEqual(diffTabs().length, 0, 'no diff panel is opened without a stash');
 	});
 
+	test('UX-07: only a not-found stat failure counts as a deleted first file', () => {
+		assert.strictEqual(isMissingFileError(vscode.FileSystemError.FileNotFound()), true);
+		assert.strictEqual(isMissingFileError(vscode.FileSystemError.NoPermissions()), false);
+		assert.strictEqual(isMissingFileError(new Error('permission denied')), false);
+		assert.strictEqual(isMissingFileError(undefined), false);
+	});
+	test('UX-07: a deleted stashed first file warns, opens no panel and keeps the stash', async () => {
+		await closeDiffTabs();
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arxml-scope-stale-first-'));
+		const first = vscode.Uri.file(path.join(dir, 'stale-first.arxml'));
+		const source = fs.readFileSync(fixtureUri('diff/left.arxml').fsPath);
+		const right = fixtureUri('diff/right.arxml');
+		try {
+			await vscode.workspace.fs.writeFile(first, source);
+			await vscode.commands.executeCommand(SELECT_AS_FIRST, first);
+			await vscode.workspace.fs.delete(first);
+			await vscode.commands.executeCommand(COMPARE_TO_STAGED, right);
+			await sleep(400);
+			assert.strictEqual(diffTabs().length, 0, 'a deleted first file opens no panel');
+			// The stash survived the refusal: restoring the file retries the compare.
+			await vscode.workspace.fs.writeFile(first, source);
+			await vscode.commands.executeCommand(COMPARE_TO_STAGED, right);
+			await waitFor('the diff tab after the retry', () => diffTabs().length === 1);
+		} finally {
+			await closeDiffTabs();
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+		}
+	});
+	test('UX-06: saving a diff side uses the normal save path and clears the dirty state', async () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arxml-scope-diff-save-'));
+		const uri = vscode.Uri.file(path.join(dir, 'right.arxml'));
+		fs.copyFileSync(fixtureUri('diff/right.arxml').fsPath, uri.fsPath);
+		try {
+			const document = await vscode.workspace.openTextDocument(uri);
+			const edit = new vscode.WorkspaceEdit();
+			edit.insert(uri, new vscode.Position(0, 0), '<!-- scratch -->\n');
+			assert.ok(await vscode.workspace.applyEdit(edit), 'the scratch edit applies');
+			assert.strictEqual(document.isDirty, true, 'the copied document is dirty');
+			let saves = 0;
+			const saveListener = vscode.workspace.onDidSaveTextDocument((saved) => {
+				if (saved.uri.toString() === uri.toString()) {
+					saves += 1;
+				}
+			});
+			try {
+				assert.strictEqual(await saveDiffDocument(uri), 'saved');
+				await waitFor('the normal save event', () => saves === 1);
+			} finally {
+				saveListener.dispose();
+			}
+			assert.strictEqual(document.isDirty, false, 'the host save clears the dirty state');
+			assert.ok(
+				fs.readFileSync(uri.fsPath, 'utf8').startsWith('<!-- scratch -->'),
+				'the saved bytes contain the change'
+			);
+			assert.strictEqual(await saveDiffDocument(uri), 'clean', 'a clean side is not written again');
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+		}
+	});
+	test('UX-06: saving a side without an open document is refused, not written', async () => {
+		const uri = vscode.Uri.file(path.join(os.tmpdir(), `arxml-scope-not-open-${Date.now()}.arxml`));
+		assert.strictEqual(await saveDiffDocument(uri), 'missing');
+		assert.strictEqual(fs.existsSync(uri.fsPath), false, 'a missing document creates no file');
+	});
 	test('AC1: selectAsFirst then compareToStaged opens a vscode-arxml-scope.diff webview tab', async () => {
 		await closeDiffTabs();
 		const left = fixtureUri('diff/left.arxml');

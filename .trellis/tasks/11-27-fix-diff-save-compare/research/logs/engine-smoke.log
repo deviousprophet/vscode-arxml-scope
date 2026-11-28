@@ -1,0 +1,9 @@
+﻿node.exe : npm notice run vscode-arxml-scope@0.11.0 engine:smoke
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Users\tripm\AppData\Roaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm notice run ....0 engine:smoke:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm notice run node scripts/engine-smoke.mjs
+{"_type":"engine-smoke","protocol":1,"engine":"0.0.0","rows":8,"planned":1,"searchOk":true,"chunkedOk":true,"diffRows":15,"diffOk":true,"diffSearchOk":true,"patchRows":6,"patchOk":true,"exitCode":0,"loadMs":25}
