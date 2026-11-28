@@ -15,6 +15,11 @@ body[data-view] {
 	--tok-key: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
 	--tok-punct: var(--vscode-editor-foreground);
 	--tok-dim: var(--vscode-editor-foreground);
+	/* Small toolbar labels are text, not iconography: the @supports block
+	 * derives an 80% foreground mix that keeps the muted hierarchy while
+	 * clearing 4.5:1 on every theme surface; the plain value is the fallback.
+	 * --tok-dim stays for icons and meta, which only need the 3:1 UI threshold. */
+	--tok-label: var(--vscode-editor-foreground);
 	/* System-condition palette. VS Code exposes no theme colour for a TextMate
 	 * scope, and the nearest debug/terminal colours resolve to different hues
 	 * with weaker contrast, so the Dark+/Light+ preprocessor palette is fixed
@@ -50,6 +55,7 @@ body.vscode-high-contrast-light[data-view] {
 		--tok-comment: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-editor-foreground)) 85%, var(--vscode-editor-background));
 		--tok-punct: color-mix(in srgb, var(--vscode-editor-foreground) 70%, var(--vscode-editor-background));
 		--tok-dim: color-mix(in srgb, var(--vscode-editor-foreground) 55%, var(--vscode-editor-background));
+		--tok-label: color-mix(in srgb, var(--vscode-editor-foreground) 80%, var(--vscode-editor-background));
 		--sel-bg: color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background)) 14%, var(--vscode-editor-background));
 		--sel-bg-focus: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 24%, var(--vscode-editor-background));
 		--subtree-bg: color-mix(in srgb, var(--vscode-editor-selectionHighlightBackground, var(--vscode-list-inactiveSelectionBackground, var(--vscode-editor-background))) 18%, transparent);

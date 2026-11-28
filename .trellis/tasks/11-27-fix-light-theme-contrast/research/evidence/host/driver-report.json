@@ -1,0 +1,178 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-28T02:52:08.952Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-SulHw5",
+  "cdp": {
+    "port": "56245",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "theme-zoom",
+      "startedAt": "2026-11-28T02:52:09.114Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the light theme paints a light surface",
+          "ok": true,
+          "detail": "[255,255,255]"
+        },
+        {
+          "name": "body text keeps 4.5:1 contrast in light",
+          "ok": true,
+          "detail": "11.2"
+        },
+        {
+          "name": "toolbar text keeps 3:1 contrast in light",
+          "ok": true,
+          "detail": "6.1"
+        },
+        {
+          "name": "toolbar labels keep 4.5:1 contrast in light",
+          "ok": true,
+          "detail": "6.1:1 \"color(srgb 0.385098 0.385098 0.385098)\" on \"rgb(255, 255, 255)\""
+        },
+        {
+          "name": "high contrast keeps a dark surface and light text",
+          "ok": true,
+          "detail": "{\"bg\":[0,0,0],\"fg\":[255,255,255]}"
+        },
+        {
+          "name": "150% zoom keeps the toolbar inside the row",
+          "ok": true,
+          "detail": "{\"width\":642,\"count\":3,\"overlaps\":0,\"inside\":true,\"overflow\":false}"
+        },
+        {
+          "name": "150% zoom adds no page scroll",
+          "ok": true,
+          "detail": "false"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-light-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-light-webview.png",
+        "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-hc-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-hc-webview.png",
+        "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-zoom150-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-zoom150-webview.png"
+      ],
+      "observations": {
+        "light": {
+          "bg": [
+            255,
+            255,
+            255
+          ],
+          "fg": [
+            59,
+            59,
+            59
+          ],
+          "tbg": [
+            255,
+            255,
+            255
+          ],
+          "tfg": [
+            98,
+            98,
+            98
+          ],
+          "tbgRaw": "rgb(255, 255, 255)",
+          "tfgRaw": "color(srgb 0.385098 0.385098 0.385098)",
+          "bodyContrast": 11.2,
+          "toolContrast": 6.1,
+          "overflow": false
+        },
+        "highContrast": {
+          "bg": [
+            0,
+            0,
+            0
+          ],
+          "fg": [
+            255,
+            255,
+            255
+          ],
+          "tbg": [
+            0,
+            0,
+            0
+          ],
+          "tfg": [
+            204,
+            204,
+            204
+          ],
+          "tbgRaw": "rgb(0, 0, 0)",
+          "tfgRaw": "color(srgb 0.8 0.8 0.8)",
+          "bodyContrast": 21,
+          "toolContrast": 13.1,
+          "overflow": false
+        },
+        "zoom150": {
+          "width": 642,
+          "count": 3,
+          "overlaps": 0,
+          "inside": true,
+          "overflow": false
+        }
+      },
+      "finishedAt": "2026-11-28T02:52:18.270Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "deep-theme-light",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-theme-hc",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-theme-zoom150",
+      "page": {
+        "width": 1000,
+        "height": 625,
+        "dpr": 1.440000057220459
+      },
+      "frame": {
+        "width": 642,
+        "height": 503,
+        "dpr": 1.440000057220459
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-light-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-light-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-hc-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-hc-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-zoom150-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host\\deep-theme-zoom150-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-28T02:52:18.270Z"
+}

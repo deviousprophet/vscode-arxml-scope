@@ -1,0 +1,10 @@
+{
+  "_type": "host-run",
+  "startedAt": "2026-11-28T02:52:04.599Z",
+  "finishedAt": "2026-11-28T02:52:19.033Z",
+  "ok": true,
+  "mode": "normal",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-SulHw5",
+  "cdpPort": 56245,
+  "outDir": "H:\\workspace\\arxml-scope-worktrees\\light-theme-contrast\\.agents\\skills\\ux-review\\scripts\\artifacts\\host"
+}

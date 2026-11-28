@@ -1,0 +1,115 @@
+{
+ "method": "color-mix(in srgb, foreground P%, background) then WCAG 2.x relative luminance; P=80 label, 55 icon",
+ "targets": {
+  "label": 4.5,
+  "icon": 3.0
+ },
+ "themes": [
+  {
+   "theme": "Default Light Modern",
+   "foreground": "#3B3B3B",
+   "background": "#FFFFFF",
+   "label": {
+    "rgb": [
+     98,
+     98,
+     98
+    ],
+    "hex": "#626262",
+    "contrast": 6.1,
+    "pass": true
+   },
+   "icon": {
+    "rgb": [
+     147,
+     147,
+     147
+    ],
+    "hex": "#939393",
+    "contrast": 3.07,
+    "pass": true
+   }
+  },
+  {
+   "theme": "Default Dark Modern",
+   "foreground": "#CCCCCC",
+   "background": "#1F1F1F",
+   "label": {
+    "rgb": [
+     169,
+     169,
+     169
+    ],
+    "hex": "#A9A9A9",
+    "contrast": 7.01,
+    "pass": true
+   },
+   "icon": {
+    "rgb": [
+     126,
+     126,
+     126
+    ],
+    "hex": "#7E7E7E",
+    "contrast": 4.06,
+    "pass": true
+   }
+  },
+  {
+   "theme": "Default High Contrast",
+   "foreground": "#FFFFFF",
+   "background": "#000000",
+   "label": {
+    "rgb": [
+     204,
+     204,
+     204
+    ],
+    "hex": "#CCCCCC",
+    "contrast": 13.08,
+    "pass": true
+   },
+   "icon": {
+    "rgb": [
+     140,
+     140,
+     140
+    ],
+    "hex": "#8C8C8C",
+    "contrast": 6.25,
+    "pass": true
+   }
+  },
+  {
+   "theme": "Default High Contrast Light",
+   "foreground": "#000000",
+   "background": "#FFFFFF",
+   "label": {
+    "rgb": [
+     51,
+     51,
+     51
+    ],
+    "hex": "#333333",
+    "contrast": 12.63,
+    "pass": true
+   },
+   "icon": {
+    "rgb": [
+     115,
+     115,
+     115
+    ],
+    "hex": "#737373",
+    "contrast": 4.74,
+    "pass": true
+   }
+  }
+ ],
+ "hostMeasured": {
+  "lightLabelContrast": 6.1,
+  "lightLabelColor": "color(srgb 0.385098 0.385098 0.385098)",
+  "lightBackground": "rgb(255, 255, 255)",
+  "highContrastLabelContrast": 13.1
+ }
+}

@@ -1,0 +1,46 @@
+{
+ "editor": {
+  "size": [
+   1400,
+   900
+  ],
+  "changedPixels": 313,
+  "totalPixels": 1260000,
+  "changedPercent": 0.0248,
+  "maxChannelDelta": 43,
+  "meanDeltaAll": 0.0096,
+  "meanDeltaChanged": 38.71,
+  "bbox": [
+   19,
+   37,
+   119,
+   45
+  ],
+  "changedRowRange": [
+   37,
+   45
+  ]
+ },
+ "diff-merge": {
+  "size": [
+   1400,
+   900
+  ],
+  "changedPixels": 1155,
+  "totalPixels": 1260000,
+  "changedPercent": 0.0917,
+  "maxChannelDelta": 47,
+  "meanDeltaAll": 0.0351,
+  "meanDeltaChanged": 38.34,
+  "bbox": [
+   79,
+   37,
+   701,
+   45
+  ],
+  "changedRowRange": [
+   37,
+   45
+  ]
+ }
+}

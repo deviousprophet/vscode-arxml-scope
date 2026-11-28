@@ -83,6 +83,10 @@ suite('editor document view', () => {
 		assert.ok(/--tok-key:\s*var\(--vscode-symbolIcon-variableForeground/.test(css));
 		assert.ok(/--tok-punct:\s*color-mix/.test(css));
 		assert.ok(/--tok-dim:\s*color-mix/.test(css));
+		assert.ok(
+			/--tok-label:\s*color-mix\(in srgb, var\(--vscode-editor-foreground\) 80%, var\(--vscode-editor-background\)\)/.test(css),
+			'labels derive an 80% foreground mix'
+		);
 		assert.ok(/--hover-bg:\s*var\(--vscode-list-hoverBackground/.test(css));
 		assert.ok(/--sel-bg:\s*color-mix\([^;]*--vscode-list-inactiveSelectionBackground/.test(css));
 		assert.ok(/--sel-bg-focus:\s*color-mix\([^;]*--vscode-list-activeSelectionBackground/.test(css));
@@ -194,6 +198,8 @@ suite('editor document view', () => {
 		assert.ok(/\.toolbar\s*\{[^}]*padding:\s*3px 8px/.test(css));
 		assert.ok(/\.toolbar\s*\{[^}]*flex-wrap:\s*nowrap/.test(css));
 		assert.ok(/\.tool\s*\{[^}]*background:\s*transparent[^}]*border:\s*0/.test(css));
+		assert.ok(/\.tool\s*\{[^}]*color:\s*var\(--tok-label\)/.test(css), 'toolbar labels use the text token');
+		assert.ok(/\.tool svg\s*\{[^}]*color:\s*var\(--tok-dim\)/.test(css), 'icons keep the 3:1 muted token');
 		assert.ok(!css.includes('.view-switch'), 'no view switch');
 		assert.ok(/id="collapse-all"[^>]*aria-label="Collapse every container"/.test(html));
 		assert.ok(/id="expand-all"[^>]*aria-label="Expand every container"/.test(html));

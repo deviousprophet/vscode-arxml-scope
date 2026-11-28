@@ -64,7 +64,7 @@
 	height: 20px;
 	padding: 0 6px;
 	cursor: pointer;
-	color: var(--tok-dim);
+	color: var(--tok-label);
 	background: transparent;
 	border: 0;
 	border-radius: 2px;
@@ -116,6 +116,13 @@
 }
 .tool svg {
 	flex: none;
+	/* The label above the icon is text and uses --tok-label; the glyph only
+	 * needs the 3:1 UI contrast, so it keeps the muted token. */
+	color: var(--tok-dim);
+}
+.tool:hover svg,
+.tool[aria-pressed="true"] svg {
+	color: inherit;
 }
 .diff-tool {
 	flex: none;
