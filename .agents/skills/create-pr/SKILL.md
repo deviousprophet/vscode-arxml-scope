@@ -47,9 +47,8 @@ Rules:
 
 ## Publish
 
-1. Preview exact title/body before creation when the user has not already approved them.
-2. Write the body markdown to a temporary `.md` file (e.g. `.git/PR_BODY.md`) using the `write` tool so that markdown formatting is preserved exactly.
-3. Push with upstream tracking when needed.
-4. Create the PR using `gh pr create --title "<title>" --body-file .git/PR_BODY.md --draft`. Use `--body-file` to avoid shell escaping issues with markdown content.
-5. Create against the repository default branch unless the user specifies another base.
-6. Read back PR title, body, head, base, URL, and draft state after creation.
+1. Write the body markdown to a temporary `.md` file (e.g. `.git/PR_BODY.md`) using the `write` tool so that markdown formatting is preserved exactly.
+2. Push with upstream tracking when needed.
+3. Create the PR using `gh pr create --title "<title>" --body-file .git/PR_BODY.md --draft`. Use `--body-file` to avoid shell escaping issues with markdown content.
+4. Create against the repository default branch unless the user specifies another base.
+5. Read back PR title, body, head, base, URL, and draft state after creation.

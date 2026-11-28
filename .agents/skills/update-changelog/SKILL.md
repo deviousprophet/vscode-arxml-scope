@@ -36,7 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ```
 
-If the header is missing, names a different project, or is a foreign scaffold (an extension name that is not ARXML Scope), repair it as part of the next approved edit — surface the repair in the preview. Never change the header silently.
+If the header is missing, names a different project, or is a foreign scaffold (an extension name that is not ARXML Scope), repair it as part of the edit and report the repair. Never change the header silently.
 
 ## Modes
 
@@ -170,9 +170,9 @@ Release builds keep `[Unreleased]` out of what users see:
 
 `.github/scripts/extract-release-notes.mjs` requires: an exact `## [<version>] - <date>` heading, a non-empty body, and reverse chronology. Keep all three.
 
-## 7. Preview and wait
+## 7. Decide and apply
 
-Before any mutation, show:
+Before applying, record:
 
 - Latest release tag and analyzed range
 - The evidence-backed entry table: every surviving entry, and every candidate dropped or folded with its classification and why
@@ -182,13 +182,14 @@ Before any mutation, show:
 - Package version change (release mode only)
 - Missing GitHub context, if any
 
-Request one explicit approval. Do not edit before approval.
+Apply the update immediately after collecting the evidence. Do not stop for an approval prompt;
+report the entries, dropped/folded candidates and any header repair in the final response.
 
-## 8. Apply approved update
+## 8. Apply the update
 
 ### update mode
 
-Replace/create the `## [Unreleased]` section and apply the approved header repair. No other file changes.
+Replace/create the `## [Unreleased]` section and apply the header repair. No other file changes.
 
 ### release mode
 
@@ -223,4 +224,4 @@ Fix validation failures only within skill-owned edits. Never discard pre-existin
 
 ## 9. Never commit, tag, or push on your own
 
-This skill never commits, tags, or pushes automatically — that needs a separate explicit request. Immediately before an explicitly requested push, repeat the state commands. If the top untagged entry's date is not today's local date, preview a date-only correction, obtain approval, update it, and rerun validation.
+This skill never commits, tags, or pushes automatically - that needs a separate explicit request. Immediately before an explicitly requested push, repeat the state commands. If the top untagged entry's date is not today's local date, correct the date and rerun validation.
