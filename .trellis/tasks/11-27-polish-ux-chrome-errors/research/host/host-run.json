@@ -1,0 +1,10 @@
+{
+  "_type": "host-run",
+  "startedAt": "2026-11-28T03:14:04.752Z",
+  "finishedAt": "2026-11-28T03:14:51.149Z",
+  "ok": true,
+  "mode": "normal",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-LZTuvN",
+  "cdpPort": 58052,
+  "outDir": "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host"
+}

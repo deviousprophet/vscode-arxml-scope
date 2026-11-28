@@ -12,7 +12,7 @@ import {
 	type EngineSpawner
 } from './engineClient';
 import { createEngineSupervisor } from './engineSupervisor';
-import { EXPECTED_PROTOCOL, type CoreEngine } from './coreEngine';
+import type { CoreEngine } from './coreEngine';
 import { validateHandshake } from './engineHandshake';
 
 export type { EngineSpawner };
@@ -60,11 +60,19 @@ async function startClient(
 function startFailure(error: unknown, binary: string): Error {
 	if (error instanceof EngineError && /not built/.test(error.message)) {
 		return new Error(
-			`Rust engine is not built at ${binary}; run "npm run engine:build" (${EXPECTED_PROTOCOL} is the host protocol)`
+			`ARXML Scope could not start its Rust engine because ${binary} is missing from this install. Reinstall or update the extension, then reload the window`,
+			{ cause: error }
+		);
+	}
+	if (error instanceof EngineError && /protocol/.test(error.message)) {
+		return new Error(
+			'ARXML Scope could not start its Rust engine because the engine version does not match this extension. Reinstall or update the extension, then reload the window',
+			{ cause: error }
 		);
 	}
 	return new Error(
-		`Rust engine failed to start: ${error instanceof Error ? error.message : String(error)}`
+		'ARXML Scope could not start its Rust engine. Open the ARXML Scope output channel for details, or reinstall the extension',
+		{ cause: error }
 	);
 }
 
@@ -81,8 +89,7 @@ export async function resolveEngine(
 	if (!isSupportedTarget(platform, arch)) {
 		throw new Error(
 			`ARXML Scope has no Rust engine for ${platform}-${arch}. ` +
-				`Supported: ${SUPPORTED_TARGETS.join(', ')}. ` +
-				'Build from source with "npm run engine:build" on a supported platform.'
+				`This build supports ${SUPPORTED_TARGETS.join(', ')}; use one of those platforms or reinstall the extension`
 		);
 	}
 	const binary = enginePath(root, platform, arch);

@@ -1,0 +1,85 @@
+{
+  "state": "toolbar-1400",
+  "width": 1082,
+  "viewport": 1082,
+  "buttons": [
+    {
+      "id": "diff-view-all",
+      "label": "Show all",
+      "visible": false
+    },
+    {
+      "id": "diff-view-diff",
+      "label": "Show diff",
+      "visible": false
+    },
+    {
+      "id": "diff-context",
+      "label": "Context",
+      "visible": true
+    },
+    {
+      "id": "diff-mode-semantic",
+      "label": "Semantic",
+      "visible": true
+    },
+    {
+      "id": "diff-mode-strict",
+      "label": "Strict",
+      "visible": true
+    },
+    {
+      "id": "diff-prev",
+      "label": "Prev diff",
+      "visible": false
+    },
+    {
+      "id": "diff-next",
+      "label": "Next diff",
+      "visible": false
+    },
+    {
+      "id": "diff-merge",
+      "label": "Merge",
+      "visible": true
+    },
+    {
+      "id": "diff-swap",
+      "label": "Swap sides",
+      "visible": true
+    },
+    {
+      "id": "diff-collapse-all",
+      "label": "Collapse",
+      "visible": false
+    },
+    {
+      "id": "diff-expand-all",
+      "label": "Expand",
+      "visible": false
+    }
+  ],
+  "left": {
+    "left": 8,
+    "right": 596,
+    "width": 588
+  },
+  "right": {
+    "left": 954.65625,
+    "right": 1074,
+    "width": 119.34375
+  },
+  "toolbar": {
+    "left": 0,
+    "right": 1082,
+    "width": 1082
+  },
+  "labelsDropped": [
+    "diff-view-all",
+    "diff-view-diff",
+    "diff-prev",
+    "diff-next",
+    "diff-collapse-all",
+    "diff-expand-all"
+  ]
+}

@@ -63,10 +63,19 @@ async function cycleCrossFileRules(): Promise<void> {
 	const document = await vscode.workspace.openTextDocument(target);
 	const reason = gateReason(document.getText(), target.fsPath);
 	if (reason) {
-		void vscode.window.showWarningMessage(reason);
+		await refuseToTextEditor(document, reason);
 		return;
 	}
 	await vscode.commands.executeCommand('vscode.openWith', target, VIEW_TYPE);
+}
+
+/**
+ * A gated file still opens, in the text editor. The warning states the reason
+ * and the outcome, so the command never leaves the user with nothing on screen.
+ */
+async function refuseToTextEditor(document: vscode.TextDocument, reason: string): Promise<void> {
+	void vscode.window.showWarningMessage(`${reason} Opened in the text editor instead.`);
+	await vscode.window.showTextDocument(document, { preview: true });
 }
 
 /**
@@ -147,7 +156,7 @@ async function gatedDocumentAt(target: vscode.Uri): Promise<vscode.TextDocument 
 	if (reason === undefined) {
 		return document;
 	}
-	void vscode.window.showWarningMessage(reason);
+	await refuseToTextEditor(document, reason);
 	return undefined;
 }
 

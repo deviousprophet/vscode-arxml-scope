@@ -289,8 +289,9 @@ suite('plan coverage: PKG', () => {
 				(error: unknown) =>
 					error instanceof Error &&
 					error.message.includes(expected) &&
-					/not built/.test(error.message),
-				'the activation error names the exact engine path'
+					/missing from this install/.test(error.message) &&
+					!/npm|host protocol/.test(error.message),
+				'the activation error names the exact engine path without build jargon'
 			);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });

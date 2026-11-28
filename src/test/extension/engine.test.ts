@@ -44,7 +44,15 @@ suite('core engine process', () => {
 
 	test('a missing engine binary is an error, not a TypeScript fallback', async () => {
 		const missingRoot = path.join(repoRoot, 'does-not-exist');
-		await assert.rejects(() => resolveEngine(missingRoot), /not built/);
+		await assert.rejects(
+			() => resolveEngine(missingRoot),
+			(error: unknown) =>
+				error instanceof Error &&
+				/could not start its Rust engine/.test(error.message) &&
+				/missing from this install/.test(error.message) &&
+				!/npm|host protocol|engine:build/.test(error.message),
+			'the activation error is user-facing: no npm or protocol constants'
+		);
 	});
 
 	test('a protocol mismatch refuses activation and names both versions', () => {

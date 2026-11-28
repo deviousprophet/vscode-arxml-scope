@@ -1,0 +1,10 @@
+{
+  "_type": "host-run",
+  "startedAt": "2026-11-28T03:17:32.678Z",
+  "finishedAt": "2026-11-28T03:17:39.412Z",
+  "ok": true,
+  "mode": "missing-engine",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-wco3jj",
+  "cdpPort": 60052,
+  "outDir": "H:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\.trellis\\tasks\\11-27-polish-ux-chrome-errors\\research\\host-missing-engine"
+}

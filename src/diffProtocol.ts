@@ -13,6 +13,14 @@ import type { DiffFindResult, FindOptions } from './core/searchModel';
 
 export type { DiffDocument } from './core/diff/diffModel';
 
+/**
+ * One action attached to the diff notice. `reveal` reuses the page's reveal
+ * message; `reload` asks the host for one fresh comparison.
+ */
+export type DiffNoticeAction =
+	| { kind: 'reveal'; label: string; side: 'left' | 'right'; key: string }
+	| { kind: 'reload'; label: string };
+
 /** Host → diff page. */
 export type DiffProviderToWebview =
 	/** Install (or replace) the compared document. */
@@ -20,7 +28,7 @@ export type DiffProviderToWebview =
 	/** The mode changed but the same document is still displayed. */
 	| { type: 'matchModeState'; semantic: boolean }
 	/** The refresh failed; keep the last good document and show the banner. */
-	| { type: 'error'; message: string }
+	| { type: 'error'; message: string; action?: DiffNoticeAction }
 	/** Merge mode is on: the page shows copy arrows and accepts copy gestures. */
 	| { type: 'mergeMode'; enabled: boolean }
 	/** A buffer was edited or saved: the pane labels gained or lost their dirty marker. */
@@ -55,6 +63,8 @@ export type DiffWebviewToProvider =
 	| { type: 'find'; requestId: number; query: string; options: FindOptions; changesOnly: boolean }
 	/** Save one side through the host's normal save path; the host re-checks the side and its dirty state. */
 	| { type: 'save'; side: 'left' | 'right' }
+	/** The notice's Reload action: rebuild the comparison from the current documents. */
+	| { type: 'reload' }
 ;
 
 /** The message type, or `undefined` for a payload that is not a protocol message. */
@@ -97,7 +107,8 @@ const WEBVIEW_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 	'copy',
 	'painted',
 	'find',
-	'save'
+	'save',
+	'reload'
 ]);
 
 /**

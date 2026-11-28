@@ -10,6 +10,7 @@ import {
 	renderDiffToolbarHtml,
 	renderEditorToolbarHtml,
 } from '../../../webview/components/toolbar/toolbar';
+import { webviewCss } from '../cssTestUtils';
 import { installMarkup } from '../pageTestUtils';
 
 suite('Toolbar component', () => {
@@ -19,7 +20,10 @@ suite('Toolbar component', () => {
 		assert.ok(html.indexOf('id="collapse-all"') < html.indexOf('id="expand-all"'));
 		assert.ok(html.indexOf('id="expand-all"') < html.indexOf('class="grow"'));
 		assert.ok(html.indexOf('class="grow"') < html.indexOf('id="toggle-sidebar"'));
-		const buttons = html.match(/<button[^>]*class="tool diff-tool"[\s\S]*?<\/button>/g) ?? [];
+		// The dirty status sits after the actions so a draft never moves them.
+		assert.ok(html.indexOf('id="expand-all"') < html.indexOf('id="editor-dirty-status"'));
+		assert.ok(html.indexOf('id="editor-dirty-status"') < html.indexOf('class="grow"'));
+		const buttons = html.match(/<button[^>]*class="tool diff-tool[^"]*"[\s\S]*?<\/button>/g) ?? [];
 		assert.strictEqual(buttons.length, 3, 'three icon-over-label actions');
 		for (const button of buttons) {
 			assert.ok(button.includes('<svg'), `icon missing: ${button}`);
@@ -27,6 +31,7 @@ suite('Toolbar component', () => {
 			assert.ok(button.includes('<span class="lbl">'), `label missing: ${button}`);
 			assert.ok(button.includes('title='), `title missing: ${button}`);
 		}
+		assert.ok(/id="toggle-sidebar"[^>]*class="tool diff-tool tool-quiet"/.test(html));
 		assert.ok(/id="toggle-sidebar"[^>]*aria-pressed="true"/.test(html));
 		assert.ok(/id="toggle-sidebar"[^>]*title="Hide sidebar"/.test(html));
 		assert.ok(/id="toggle-sidebar"[^>]*aria-label="Sidebar"/.test(html));
@@ -172,10 +177,31 @@ suite('Toolbar component', () => {
 			assert.strictEqual(context.getAttribute('aria-label'), 'Show 5 lines of context');
 			toolbar.setViewMode(false);
 			assert.strictEqual(context.getAttribute('disabled'), '');
+			assert.strictEqual(context.getAttribute('aria-pressed'), 'false', 'an inert control is not pressed');
 			assert.strictEqual(context.title, 'Context applies to Show diff');
 			assert.strictEqual(context.getAttribute('aria-label'), 'Context applies to Show diff');
 			assert.strictEqual(dom.document.getElementById('diff-view-all')!.getAttribute('aria-pressed'), 'true');
 			assert.strictEqual(dom.document.getElementById('diff-view-diff')!.getAttribute('aria-pressed'), 'false');
+			toolbar.setViewMode(true);
+			assert.strictEqual(context.getAttribute('aria-pressed'), 'true', 'the preference returns with Show diff');
+		} finally {
+			dom.restore();
+		}
+	});
+
+	test('setChangeSummary fills the status slot and yields to a pending switch', () => {
+		const dom = installMarkup(`<body>${renderDiffToolbarHtml()}</body>`);
+		try {
+			const toolbar = new DiffToolbar();
+			const status = dom.document.getElementById('diff-match-status')!;
+			toolbar.setChangeSummary('4 changes (2 changed, 1 added, 1 removed)');
+			assert.strictEqual(status.textContent, '4 changes (2 changed, 1 added, 1 removed)');
+			toolbar.setMatchMode(false, true);
+			assert.strictEqual(status.textContent, 'Switching to Strict…');
+			toolbar.setMatchMode(false, false);
+			assert.strictEqual(status.textContent, '4 changes (2 changed, 1 added, 1 removed)', 'the count returns after the switch');
+			toolbar.setChangeSummary('');
+			assert.strictEqual(status.textContent, '');
 		} finally {
 			dom.restore();
 		}
@@ -261,5 +287,22 @@ suite('Toolbar component', () => {
 		} finally {
 			dom.restore();
 		}
+	});
+
+	test('the sidebar toggle is quiet and primary diff labels survive to 1041px', () => {
+		const css = webviewCss('components', 'toolbar', 'toolbar.css');
+		assert.ok(
+			/\.tool-quiet\[aria-pressed="true"\]\s*\{[^}]*--vscode-toolbar-activeBackground/.test(css),
+			'a view preference uses the quiet toolbar tint'
+		);
+		assert.ok(
+			!/\.tool-quiet\[aria-pressed="true"\]\s*\{[^}]*inputOption-activeBackground/.test(css),
+			'it never takes the saturated option fill'
+		);
+		assert.ok(
+			/@media \(min-width: 1041px\) and \(max-width: 1399px\)[\s\S]*?\.tool-secondary \.lbl\s*\{[^}]*display:\s*none/.test(css),
+			'secondary labels drop first and primary labels stay at 1082px'
+		);
+		assert.ok(!css.includes('max-width: 1150px'), 'the 1150px all-or-nothing breakpoint is gone');
 	});
 });

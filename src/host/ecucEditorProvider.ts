@@ -118,10 +118,10 @@ type NavigationMessage = Extract<EditorWebviewToProvider, { type: 'reveal' | 'fo
 export function gateReason(text: string, filePath: string): string | undefined {
 	const name = path.basename(filePath);
 	if (!isArxmlPath(filePath)) {
-		return `"${name}" is not an .arxml file; showing the text editor instead.`;
+		return `"${name}" is not an .arxml file, so the ECUC Values editor cannot show it.`;
 	}
 	if (!isEcucValues(text, filePath)) {
-		return `"${name}" contains no ECUC values; showing the text editor instead.`;
+		return `"${name}" contains no ECUC values, so the ECUC Values editor cannot show it.`;
 	}
 	return undefined;
 }

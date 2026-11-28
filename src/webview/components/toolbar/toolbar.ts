@@ -13,14 +13,18 @@ export interface EditorToolbarCallbacks {
 	onToggleSidebar?(): void;
 }
 
-/** Editor strip: flexible slot, dirty status, sidebar toggle, Collapse, Expand. */
+/**
+ * Editor strip: Collapse, Expand, then the dirty status in its own slot, the
+ * flexible gap and the sidebar toggle. The status follows the actions so a
+ * draft appearing never moves them; only the free space shrinks.
+ */
 export function renderEditorToolbarHtml(): string {
 	return `<div class="toolbar">
-<span id="editor-dirty-status" class="editor-dirty-status" role="status" aria-live="polite" hidden></span>
 <button id="collapse-all" class="tool diff-tool" type="button" title="Collapse every container" aria-label="Collapse every container">${ICON_COLLAPSE_ALL}<span class="lbl">Collapse</span></button>
 <button id="expand-all" class="tool diff-tool" type="button" title="Expand every container" aria-label="Expand every container">${ICON_EXPAND_ALL}<span class="lbl">Expand</span></button>
+<span id="editor-dirty-status" class="editor-dirty-status" role="status" aria-live="polite" hidden></span>
 <span class="grow"></span>
-<button id="toggle-sidebar" class="tool diff-tool" type="button" aria-pressed="true" title="Hide sidebar" aria-label="Sidebar">${ICON_SIDEBAR}<span class="lbl">Sidebar</span></button>
+<button id="toggle-sidebar" class="tool diff-tool tool-quiet" type="button" aria-pressed="true" title="Hide sidebar" aria-label="Sidebar">${ICON_SIDEBAR}<span class="lbl">Sidebar</span></button>
 </div>`;
 }
 
@@ -200,12 +204,17 @@ function setPressed(id: string, pressed: boolean): void {
 	}
 }
 
-function applyContextState(context: HTMLElement, changesOnly: boolean): void {
+/**
+ * Context only applies to Show diff. When it cannot act it is disabled *and*
+ * unpressed, so an inert control never reads as switched on.
+ */
+function applyContextState(context: HTMLElement, changesOnly: boolean, active: boolean): void {
 	if (changesOnly) {
 		context.removeAttribute('disabled');
 	} else {
 		context.setAttribute('disabled', '');
 	}
+	context.setAttribute('aria-pressed', changesOnly && active ? 'true' : 'false');
 	context.title = changesOnly
 		? 'Show 5 unchanged lines above and below each difference'
 		: 'Context applies to Show diff';
@@ -225,21 +234,23 @@ function pendingValue(active: boolean, pending: boolean): string {
 	return pending && active ? 'true' : 'false';
 }
 
-function setMatchStatus(semantic: boolean, pending: boolean): void {
-	const status = document.getElementById('diff-match-status');
-	if (!status) {
-		return;
+function setMatchStatusText(semantic: boolean, pending: boolean, summary: string): string {
+	if (pending) {
+		return `Switching to ${semantic ? 'Semantic' : 'Strict'}…`;
 	}
-	status.textContent = matchStatusText(semantic, pending);
-}
-
-function matchStatusText(semantic: boolean, pending: boolean): string {
-	return pending ? `Switching to ${semantic ? 'Semantic' : 'Strict'}…` : '';
+	return summary;
 }
 
 export class DiffToolbar {
 	private callbacks: DiffToolbarCallbacks;
 	mounted: boolean;
+	/** The page's Context preference, kept while it is unavailable in Show all. */
+	private contextActive = true;
+	private changesOnly = false;
+	private semantic = true;
+	private pending = false;
+	/** The compact change count shown in the status slot while nothing is pending. */
+	private summary = '';
 
 	constructor(callbacks: DiffToolbarCallbacks = {}) {
 		this.callbacks = callbacks;
@@ -274,13 +285,13 @@ export class DiffToolbar {
 	}
 
 	setViewMode(changesOnly: boolean): void {
+		this.changesOnly = changesOnly;
 		setPressed('diff-view-all', !changesOnly);
 		setPressed('diff-view-diff', changesOnly);
 		const context = document.getElementById('diff-context');
-		if (!context) {
-			return;
+		if (context) {
+			applyContextState(context, changesOnly, this.contextActive);
 		}
-		applyContextState(context, changesOnly);
 	}
 
 	setSwapped(swapped: boolean): void {
@@ -296,15 +307,31 @@ export class DiffToolbar {
 	}
 
 	setMatchMode(semantic: boolean, pending = false): void {
+		this.semantic = semantic;
+		this.pending = pending;
 		setMatchButton('diff-mode-semantic', semantic, pending);
 		setMatchButton('diff-mode-strict', !semantic, pending);
-		setMatchStatus(semantic, pending);
+		this.writeStatus();
+	}
+
+	/** The open comparison's change count, kept in the existing status live region. */
+	setChangeSummary(summary: string): void {
+		this.summary = summary;
+		this.writeStatus();
 	}
 
 	setContext(active: boolean): void {
+		this.contextActive = active;
 		const button = document.getElementById('diff-context');
 		if (button) {
-			button.setAttribute('aria-pressed', active ? 'true' : 'false');
+			applyContextState(button, this.changesOnly, active);
+		}
+	}
+
+	private writeStatus(): void {
+		const status = document.getElementById('diff-match-status');
+		if (status) {
+			status.textContent = setMatchStatusText(this.semantic, this.pending, this.summary);
 		}
 	}
 

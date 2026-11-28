@@ -35,6 +35,8 @@ export interface FindControllerState {
 export interface FindController {
 	getState?(): FindControllerState;
 	start?(opts: unknown, state?: unknown): Promise<void>;
+	/** Present on Monaco's find controller; selects the next match and sets the count. */
+	moveToNextMatch?(): boolean;
 }
 
 const FIND_START_OPTIONS = {
@@ -70,6 +72,10 @@ export function startFindController(
 			isReplaceRevealed: state.isReplaceRevealed
 		}
 	);
+	// The restart recomputes decorations without moving the cursor, so Monaco
+	// cannot locate the current match and paints "? of N". Selecting the nearest
+	// match makes the count numeric (1 of N) without changing which hit is next.
+	controller.moveToNextMatch?.();
 }
 
 interface PatchedModel {

@@ -1,0 +1,20 @@
+{
+  "findings": [
+    {
+      "state": "diff-off",
+      "viewAllPressed": "true",
+      "viewDiffPressed": "false",
+      "contextDisabled": true,
+      "contextPressed": "false",
+      "statusText": "4 changes (4 changed)"
+    },
+    {
+      "state": "diff-merge",
+      "viewAllPressed": "true",
+      "viewDiffPressed": "false",
+      "contextDisabled": true,
+      "contextPressed": "false",
+      "statusText": "4 changes (4 changed)"
+    }
+  ]
+}

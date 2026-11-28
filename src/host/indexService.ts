@@ -7,7 +7,6 @@
  * index is rebuilt from the workspace on activation.
  */
 import { createReadStream, promises as fs } from 'fs';
-import type { Stats } from 'fs';
 import * as vscode from 'vscode';
 import { IndexBuilder } from '../core/index/indexBuilder';
 import { compileExcludes } from '../core/index/glob';
@@ -90,26 +89,39 @@ interface FileDecoding {
 	head: Buffer;
 }
 
+/** Why one discovered file never reached the index. */
+type IndexSkipReason = 'too-large' | 'unsupported-encoding' | 'unreadable';
+
+/** A reader refusal that knows its reason; anything else counts as unreadable. */
+class IndexSkipError extends Error {
+	constructor(readonly reason: Exclude<IndexSkipReason, 'unreadable'>) {
+		super(reason);
+		this.name = 'IndexSkipError';
+	}
+}
+
+function skipReasonOf(error: unknown): IndexSkipReason {
+	return error instanceof IndexSkipError ? error.reason : 'unreadable';
+}
+
 /** Reads one ARXML file and returns its index contribution. */
 async function readFileIndex(uri: vscode.Uri, maxBytes: number): Promise<FileIndex | undefined> {
 	const stat = await fs.stat(uri.fsPath);
-	if (!isIndexableFile(stat, maxBytes)) {
+	if (!stat.isFile()) {
 		return undefined;
+	}
+	if (stat.size > maxBytes) {
+		throw new IndexSkipError('too-large');
 	}
 	const builder = new IndexBuilder(uri.toString());
 	const decoding: FileDecoding = { head: Buffer.alloc(0) };
 	for await (const chunk of createReadStream(uri.fsPath, { highWaterMark: CHUNK_BYTES })) {
 		if (!writeChunk(builder, decoding, chunk)) {
-			return undefined;
+			throw new IndexSkipError('unsupported-encoding');
 		}
 	}
 	finishDecoding(builder, decoding);
 	return builder.finish();
-}
-
-/** The file still has to exist, be a file and fit the size cap. */
-function isIndexableFile(stat: Stats, maxBytes: number): boolean {
-	return stat.isFile() && stat.size <= maxBytes;
 }
 
 /** Feeds one stream chunk through the decoder, detecting the encoding on the head. */
@@ -155,8 +167,8 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 	private readonly guard = new RebuildGuard();
 	/** Files the watcher touched while a rebuild was reading; drained after `replaceAll`. */
 	private readonly dirtyDuringBuild = new Set<string>();
-	/** Files that were too large or unreadable; reported in the tooltip only. */
-	private readonly skipped = new Set<string>();
+	/** Why each skipped file was dropped; reported in the tooltip only. */
+	private readonly skipped = new Map<string, IndexSkipReason>();
 	/** Files dropped by `arxmlScope.index.exclude` during the last rebuild. */
 	private excludedCount = 0;
 	private watcher?: vscode.FileSystemWatcher;
@@ -323,7 +335,7 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 
 	private storeReadResult(uri: vscode.Uri, file: FileIndex | undefined): void {
 		if (file === undefined) {
-			this.skipped.add(uri.toString());
+			this.skipped.set(uri.toString(), 'unreadable');
 			this.index.remove(uri.toString());
 		} else {
 			this.skipped.delete(uri.toString());
@@ -340,7 +352,7 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 		if (code === 'ENOENT') {
 			this.skipped.delete(uri.toString());
 		} else {
-			this.skipped.add(uri.toString());
+			this.skipped.set(uri.toString(), skipReasonOf(error));
 		}
 		this.index.remove(uri.toString());
 	}
@@ -404,11 +416,11 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 	/** Discovers and reads every indexable file without touching the live index. */
 	private async collectRebuildFiles(
 		settings: IndexSettings
-	): Promise<{ files: FileIndex[]; skipped: Set<string>; excluded: number }> {
+	): Promise<{ files: FileIndex[]; skipped: Map<string, IndexSkipReason>; excluded: number }> {
 		const uris = await vscode.workspace.findFiles('**/*.arxml');
 		uris.sort((left, right) => left.toString().localeCompare(right.toString()));
 		const files: FileIndex[] = [];
-		const skipped = new Set<string>();
+		const skipped = new Map<string, IndexSkipReason>();
 		const exclude = compileExcludes(settings.exclude);
 		let excluded = 0;
 		for (const uri of uris) {
@@ -425,28 +437,32 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 	private async readRebuildFile(
 		uri: vscode.Uri,
 		maxBytes: number,
-		skipped: Set<string>,
+		skipped: Map<string, IndexSkipReason>,
 		files: FileIndex[]
 	): Promise<void> {
 		try {
 			const file = await this.reader(uri, maxBytes);
 			if (file === undefined) {
-				skipped.add(uri.toString());
+				skipped.set(uri.toString(), 'unreadable');
 			} else {
 				files.push(file);
 			}
-		} catch {
-			skipped.add(uri.toString());
+		} catch (error) {
+			skipped.set(uri.toString(), skipReasonOf(error));
 		}
 	}
 
 	/** Swaps in the collected snapshot, then reports exactly its skipped files. */
-	private applyRebuildSnapshot(snapshot: { files: FileIndex[]; skipped: Set<string>; excluded: number }): void {
+	private applyRebuildSnapshot(snapshot: {
+		files: FileIndex[];
+		skipped: Map<string, IndexSkipReason>;
+		excluded: number;
+	}): void {
 		this.excludedCount = snapshot.excluded;
 		this.index.replaceAll(snapshot.files);
 		this.skipped.clear();
-		for (const uri of snapshot.skipped) {
-			this.skipped.add(uri);
+		for (const [uri, reason] of snapshot.skipped) {
+			this.skipped.set(uri, reason);
 		}
 	}
 
@@ -577,12 +593,14 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 		this.status.show();
 	}
 
-	/** Hidden while disabled, and on an empty non-workspace window. */
+	/** Hidden while disabled, and on a window with nothing to report. */
 	private shouldHideStatus(settings: IndexSettings, stats: IndexStats): boolean {
 		if (!settings.enabled) {
 			return true;
 		}
-		return !this.building && stats.files === 0 && workspaceFoldersExist();
+		// A skipped file is a report even when nothing was indexed: keep the item
+		// so the tooltip can name the reason.
+		return !this.building && stats.files === 0 && this.skipped.size === 0 && workspaceFoldersExist();
 	}
 
 	private statusTooltip(stats: IndexStats, mode: ReturnType<typeof crossFileRulesSetting>): string {
@@ -600,7 +618,10 @@ export class IndexService implements vscode.Disposable, DefinitionSource {
 		if (this.skipped.size === 0) {
 			return;
 		}
-		lines.push(skippedText([...this.skipped].map(fileNameOf)));
+		const maxMegabytes = Math.round(indexSettings().maxBytes / (1024 * 1024));
+		for (const line of skippedText([...this.skipped], maxMegabytes)) {
+			lines.push(line);
+		}
 	}
 
 	private appendUpdatedLine(lines: string[]): void {
@@ -645,11 +666,28 @@ function baseStatusLines(stats: IndexStats, mode: ReturnType<typeof crossFileRul
 	];
 }
 
-/** `Skipped: …` with the first five names and a count for the rest. */
-function skippedText(names: string[]): string {
-	const shown = names.slice(0, 5).join(', ');
-	const more = names.length > 5 ? ` and ${names.length - 5} more` : '';
-	return `Skipped: ${shown}${more} (size limit, encoding or unreadable)`;
+/** One reason per file, grouped by reason; five names per reason, then a count. */
+function skippedText(entries: ReadonlyArray<[string, IndexSkipReason]>, maxMegabytes: number): string[] {
+	const groups = new Map<string, string[]>();
+	for (const [uri, reason] of entries) {
+		const label = skipReasonLabel(reason, maxMegabytes);
+		const names = groups.get(label) ?? [];
+		names.push(fileNameOf(uri));
+		groups.set(label, names);
+	}
+	return [...groups].map(([label, names]) => {
+		const shown = names.slice(0, 5).join(', ');
+		const more = names.length > 5 ? ` and ${names.length - 5} more` : '';
+		return `Skipped: ${shown}${more} (${label})`;
+	});
+}
+
+/** The one reason that applied, with the configured threshold for the size cap. */
+function skipReasonLabel(reason: IndexSkipReason, maxMegabytes: number): string {
+	if (reason === 'too-large') {
+		return `over arxmlScope.index.maxFileSizeMB = ${maxMegabytes} MB`;
+	}
+	return reason === 'unsupported-encoding' ? 'unsupported encoding' : 'unreadable';
 }
 
 function excludedBySettingText(count: number): string {

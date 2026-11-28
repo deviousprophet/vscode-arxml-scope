@@ -177,7 +177,8 @@ invalidates it, and the next **Find References** rebuilds it lazily.
 
 The right edge also has a **Conditions** tab. Both tabs share the panel; only one is visible at a time.
 The toolbar's **Sidebar** toggle hides the whole shell and gives the Document the full width; showing
-it restores the previous tab (Details by default). The sidebar width, active tab, section sizes,
+it restores the previous tab (Details by default). It is a quiet chrome toggle: its pressed state is a
+subtle tint, not the primary option fill the Semantic/Strict group uses. The sidebar width, active tab, section sizes,
 collapsed sections and visibility persist across a webview reload.
 
 ## Editing rules
@@ -295,9 +296,9 @@ lookup is also cross-file and updates an open panel when a definition file chang
 |---|---|---|---|
 | `arxmlScope.ecuc.editor.sort` | `all` / `declaration` | `all` | `all` sorts modules, containers, parameters and references by the display rules; `declaration` keeps the file's own order. |
 | `arxmlScope.ecuc.editor.sortExcept` | array of `DEFINITION-REF` tails | the 15-entry legacy list | Rows whose definition tail matches keep declaration order even under `sort: all`. |
-| `arxmlScope.ecuc.editor.revealMode` | `beside` / `focus` / `replace` | `beside` | `beside` opens the source next to the editor and keeps focus in the tree; `focus` also moves focus to the source; `replace` swaps the ECUC editor's tab for the text editor. |
+| `arxmlScope.ecuc.editor.revealMode` | `beside` / `focus` / `replace` | `beside` | `beside` opens the source next to the editor and keeps focus in the tree; `focus` also moves focus to the source; `replace` closes the ECUC editor's tab after showing the text editor, so one tab remains. |
 | `arxmlScope.index.enabled` | boolean | `true` | Build the in-memory workspace index used for definition details and the status bar. |
-| `arxmlScope.index.maxFileSizeMB` | number ≥ 1 | `50` | Largest `.arxml` file the index reads. Larger files are skipped and counted in the tooltip. |
+| `arxmlScope.index.maxFileSizeMB` | number ≥ 1 | `50` | Largest `.arxml` file the index reads. Larger files are skipped; the tooltip names the reason and the threshold (`over arxmlScope.index.maxFileSizeMB = 1 MB`). Unreadable files and files with an unsupported encoding are reported with their own reason. |
 | `arxmlScope.index.exclude` | array of workspace-relative globs | `[]` | Files never indexed, validated or used by navigation or text-editor features. Example: `**/_fwd/**`, `**/_out/**`, `**/_gen/**`. |
 | `arxmlScope.validation.enabled` | boolean | `true` | Publish ECUC validation diagnostics to the Problems panel and the text editor. |
 | `arxmlScope.validation.severities` | per-rule `error` / `warning` / `information` / `off` | see defaults | Choose the severity of each rule, or turn one off. |

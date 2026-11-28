@@ -53,7 +53,9 @@ When the target lacks a parent container, the missing ancestors are created as *
 containers** — their own short name, definition ref and one child list holding only the
 copied chain. Unrelated children of the source ancestors are not imported. If the missing
 chain would need a **module**, the copy is refused: creating a module also decides its
-`AR-PACKAGE` and definition.
+`AR-PACKAGE` and definition. The refusal names the module (short name and definition ref) and
+the side that lacks it, and offers **Reveal module**, which opens the source module row in its
+text editor so the module can be copied first.
 
 ## Safety
 
@@ -61,7 +63,7 @@ chain would need a **module**, the copy is refused: creating a module also decid
   applied, a modal offers **Reload** (rebuild from the in-editor documents, keeping
   unsaved copies) or **Cancel** (nothing changes).
 - A copy that cannot be placed (no sibling, missing module) is refused with a message and
-  writes nothing.
+  writes nothing. A missing-module refusal names the module and offers **Reveal module**.
 - Merge mode is the only write path in the diff; the panel refuses copies while it is off.
 
 ## Limits

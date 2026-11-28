@@ -11,13 +11,14 @@ import './styles/base.css';
 import './components/diffView/diffView.css';
 import './monaco/monaco.css';
 import type { DiffCell, DiffDocument, DiffHeader, DiffRow } from '../core/diff/diffModel';
+import { changeSummaryText } from '../core/diff/diffModel';
 import { applyDiffPatch, type DiffPatch } from '../core/diff/diffPatch';
 import { minimalLineEdit } from '../core/diff/minimalEdit';
 import { ADDED_ROW_PREFIX } from '../core/copy/copyDirty';
 import type { CopyDirtyRows } from '../core/copy/copyDirty';
 import type { DiffFindMatch, FindOptions } from '../core/searchModel';
 import { isDiffSide } from '../diffProtocol';
-import type { DiffProviderToWebview, DiffWebviewToProvider } from '../diffProtocol';
+import type { DiffNoticeAction, DiffProviderToWebview, DiffWebviewToProvider } from '../diffProtocol';
 import {
 	buildDiffSyntheticDocuments,
 	searchRangeOnLine,
@@ -437,13 +438,30 @@ function updateDiffOptions(): void {
 	invalidateDiffFind();
 }
 
-function setNotice(text: string, kind: 'warn' | 'error' = 'warn'): void {
+function setNotice(text: string, kind: 'warn' | 'error' = 'warn', action?: DiffNoticeAction): void {
 	const notice = document.getElementById('diff-notice');
 	if (notice === null) {
 		return;
 	}
-	notice.textContent = text;
 	notice.dataset.kind = kind;
+	notice.replaceChildren(document.createTextNode(text));
+	if (action !== undefined) {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.className = 'notice-action';
+		button.textContent = action.label;
+		button.addEventListener('click', () => runNoticeAction(action));
+		notice.appendChild(button);
+	}
+}
+
+/** The notice's one action runs in the page or asks the host; it never leaves a dead label. */
+function runNoticeAction(action: DiffNoticeAction): void {
+	if (action.kind === 'reveal') {
+		postToHost({ type: 'reveal', side: action.side, key: action.key });
+		return;
+	}
+	postToHost({ type: 'reload' });
 }
 
 function clearNotice(): void {
@@ -451,7 +469,7 @@ function clearNotice(): void {
 	if (notice === null) {
 		return;
 	}
-	notice.textContent = '';
+	notice.replaceChildren();
 	delete notice.dataset.kind;
 }
 
@@ -696,6 +714,7 @@ function settleDocument(next: DiffDocument): void {
 	updateDiffOptions();
 	setEmpty(isEmptyDocument(next));
 	showSemanticSkip(next.semanticSkipped);
+	toolbar?.setChangeSummary(changeSummaryText(next.summary) ?? '');
 }
 
 function applyDocument(next: DiffDocument, nextSemantic: boolean): void {
@@ -1352,7 +1371,7 @@ function dispatchChromeMessage(message: DiffProviderToWebview): boolean {
 	if (message.type === 'error') {
 		// A refused or failed copy must not leave its pending marker behind.
 		clearPendingCopy();
-		setNotice(message.message, 'error');
+		setNotice(message.message, 'error', message.action);
 		return true;
 	}
 	return false;

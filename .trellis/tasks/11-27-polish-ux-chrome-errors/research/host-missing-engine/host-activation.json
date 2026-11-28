@@ -1,0 +1,9 @@
+{
+  "extensionId": "deviousprophet.vscode-arxml-scope",
+  "mode": "missing-engine",
+  "error": "Error: ARXML Scope could not start its Rust engine because h:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\dist\\engine\\win32-x64\\arxml-engine.exe is missing from this install. Reinstall or update the extension, then reload the window\n\tat startFailure (h:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\dist\\extension.js:11236:12)\n\tat startClient (h:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\dist\\extension.js:11231:11)\n\tat async EngineSupervisor.replaceProcess (h:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\dist\\extension.js:10992:16)\n\tat async EngineSupervisor.start (h:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\dist\\extension.js:10798:5)\n\tat async createEngineSupervisor (h:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\dist\\extension.js:11190:5)\n\tat async activate (h:\\workspace\\arxml-scope-worktrees\\polish-ux-chrome-errors\\dist\\extension.js:11396:22)\n\tat async TS._activate (file:///c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:168:16078)\n\tat async TS._waitForDepsThenActivate (file:///c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:168:16020)\n\tat async TS._initialize (file:///c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:168:15387)",
+  "activatedAt": null,
+  "driverExit": 0,
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-wco3jj",
+  "cdpPort": "60052"
+}

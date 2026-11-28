@@ -81,6 +81,14 @@
 	color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
 	background: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
 }
+/*
+ * View preferences (the sidebar toggle) are not option toggles: they keep the
+ * pressed state readable through a quiet tint, never the saturated option fill.
+ */
+.tool-quiet[aria-pressed="true"] {
+	color: var(--vscode-foreground);
+	background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
+}
 .tool:focus-visible {
 	outline: 1px solid var(--vscode-focusBorder, var(--vscode-contrastActiveBorder, transparent));
 	outline-offset: 1px;
@@ -195,9 +203,13 @@
 		padding: 0 4px;
 	}
 }
-/* Secondary labels drop first; the primary labels (Context, Semantic, Strict,
- * Merge) keep their words until the strip is icon-only. */
-@media (min-width: 1151px) and (max-width: 1399px) {
+/*
+ * Secondary labels drop first; the primary labels (Context, Semantic, Strict,
+ * Merge, Swap sides) keep their words from 1041 px up. The measured primary
+ * strip is ~640 px, so a 1400/1200/1082 px panel keeps the write action named.
+ * Only below 1041 px does the strip go icon-only.
+ */
+@media (min-width: 1041px) and (max-width: 1399px) {
 	body[data-page="diff"] .diff-tool.tool-secondary {
 		width: 40px;
 		min-width: 40px;
@@ -206,14 +218,7 @@
 		display: none;
 	}
 }
-@media (max-width: 1150px) {
-	body[data-page="diff"] .diff-tool .lbl {
-		display: none;
-	}
-	body[data-page="diff"] .diff-tool {
-		width: 40px;
-		min-width: 40px;
-	}
+@media (max-width: 1040px) {
 	body[data-page="diff"] .toolbar-left {
 		gap: 2px;
 	}
