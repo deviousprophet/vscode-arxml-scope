@@ -1,0 +1,57 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-28T03:02:15.720Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-Eu8iDx",
+  "cdp": {
+    "port": "49433",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "stale-first",
+      "startedAt": "2026-11-28T03:02:15.808Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the first file is really gone",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "missing first file is reported, not opaquely opened",
+          "ok": true,
+          "detail": "Cannot compare: \"stale-first.arxml\" no longer exists. Select it again as the first file."
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-stale-first\\entry-16-stale-first-workbench.png"
+      ],
+      "observations": {
+        "existsAfterDelete": false,
+        "notifications": [
+          "Cannot compare: \"stale-first.arxml\" no longer exists. Select it again as the first file."
+        ],
+        "tabs": []
+      },
+      "finishedAt": "2026-11-28T03:02:20.062Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "entry-16-stale-first",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": null
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-stale-first\\entry-16-stale-first-workbench.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-28T03:02:20.062Z"
+}

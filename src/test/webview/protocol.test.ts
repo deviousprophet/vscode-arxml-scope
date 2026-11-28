@@ -9,7 +9,12 @@ import { scanEcucValues } from '../../core/ecuc/scanner';
 import { buildRows } from '../../core/ecuc/renderRows';
 import { documentHeader, editorMessageType, isEditorProviderMessage } from '../../webviewProtocol';
 import type { EditorProviderToWebview, EditorWebviewToProvider } from '../../webviewProtocol';
-import { diffMessageType, isDiffProviderMessage } from '../../diffProtocol';
+import {
+	diffMessageType,
+	isDiffProviderMessage,
+	isDiffSide,
+	isDiffWebviewMessage
+} from '../../diffProtocol';
 import type { DiffProviderToWebview, DiffWebviewToProvider } from '../../diffProtocol';
 import { fixtureText } from '../core/modelTestUtils';
 
@@ -102,8 +107,31 @@ suite('webview protocol', () => {
 			{ type: 'matchMode', semantic: false },
 			{ type: 'reveal', side: 'right', key: 'row-1' },
 			{ type: 'painted', requestId: 1 },
+			{ type: 'save', side: 'left' },
+			{ type: 'save', side: 'right' },
 		];
-		assert.deepStrictEqual(intents.map((intent) => intent.type), ['ready', 'matchMode', 'reveal', 'painted']);
+		assert.deepStrictEqual(intents.map((intent) => intent.type), [
+			'ready',
+			'matchMode',
+			'reveal',
+			'painted',
+			'save',
+			'save'
+		]);
+		for (const intent of intents) {
+			assert.strictEqual(isDiffWebviewMessage(intent), true);
+		}
+	});
+	test('a save intent must name one side; a malformed one is dropped', () => {
+		assert.strictEqual(isDiffSide('left'), true);
+		assert.strictEqual(isDiffSide('right'), true);
+		assert.strictEqual(isDiffSide('both'), false);
+		assert.strictEqual(isDiffSide(undefined), false);
+		assert.strictEqual(isDiffWebviewMessage({ type: 'save', side: 'right' }), true);
+		assert.strictEqual(isDiffWebviewMessage({ type: 'save', side: 'both' }), false);
+		assert.strictEqual(isDiffWebviewMessage({ type: 'save' }), false);
+		assert.strictEqual(isDiffWebviewMessage({ type: 'not-a-diff-intent' }), false);
+		assert.strictEqual(isDiffWebviewMessage(null), false);
 	});
 
 	test('the document header comes from the model, not from page markup', () => {

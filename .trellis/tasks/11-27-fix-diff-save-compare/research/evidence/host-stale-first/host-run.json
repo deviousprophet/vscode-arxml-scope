@@ -1,0 +1,10 @@
+{
+  "_type": "host-run",
+  "startedAt": "2026-11-28T03:02:11.602Z",
+  "finishedAt": "2026-11-28T03:02:20.706Z",
+  "ok": true,
+  "mode": "normal",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-Eu8iDx",
+  "cdpPort": 49433,
+  "outDir": "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-stale-first"
+}

@@ -1,0 +1,135 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-28T03:02:02.249Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-q5pZ2o",
+  "cdp": {
+    "port": "53867",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "merge",
+      "startedAt": "2026-11-28T03:02:02.455Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "Merge turns on",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "a changed hunk exists",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "copy action exists in the hunk toolbar",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "receiving pane shows the unsaved marker",
+          "ok": true,
+          "detail": "left.arxml\n↔\nright.arxml •\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n"
+        },
+        {
+          "name": "a document is dirty after the copy",
+          "ok": true,
+          "detail": [
+            "right.arxml"
+          ]
+        },
+        {
+          "name": "Ctrl+S clears the dirty documents",
+          "ok": true,
+          "detail": []
+        },
+        {
+          "name": "save wrote the copy to right.arxml",
+          "ok": true,
+          "detail": "7724 -> 5972 bytes"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-01-on-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-01-on-webview.png",
+        "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-02-copied-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-02-copied-webview.png",
+        "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-03-saved-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-03-saved-webview.png"
+      ],
+      "observations": {
+        "copyAction": {
+          "copyCount": 1,
+          "copyVisible": true,
+          "copyBox": {
+            "x": 851,
+            "y": 263,
+            "width": 20,
+            "height": 18
+          }
+        },
+        "paneHasDirtyMark": true,
+        "dirtyTabs": [
+          "right.arxml"
+        ],
+        "dirtyAfterSave": [],
+        "rightChanged": true
+      },
+      "finishedAt": "2026-11-28T03:02:10.846Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "merge-01-on",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-02-copied",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "merge-03-saved",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 799,
+        "dpr": 1
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-01-on-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-01-on-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-02-copied-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-02-copied-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-03-saved-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\diff-save-compare\\.trellis\\tasks\\11-27-fix-diff-save-compare\\research\\evidence\\host-merge\\merge-03-saved-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-28T03:02:10.847Z"
+}

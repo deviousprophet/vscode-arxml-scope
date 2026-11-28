@@ -53,12 +53,19 @@ export type DiffWebviewToProvider =
 	| { type: 'painted'; requestId: number }
 	/** Ask the engine for occurrences in the displayed diff. */
 	| { type: 'find'; requestId: number; query: string; options: FindOptions; changesOnly: boolean }
+	/** Save one side through the host's normal save path; the host re-checks the side and its dirty state. */
+	| { type: 'save'; side: 'left' | 'right' }
 ;
 
 /** The message type, or `undefined` for a payload that is not a protocol message. */
 export function diffMessageType(message: unknown): string | undefined {
 	const type = (message as { type?: unknown } | null | undefined)?.type;
 	return typeof type === 'string' ? type : undefined;
+}
+
+/** Whether a value is one of the two compared sides. */
+export function isDiffSide(value: unknown): value is 'left' | 'right' {
+	return value === 'left' || value === 'right';
 }
 
 /** Every host message the page knows; one place to add the next one. */
@@ -79,4 +86,31 @@ const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
 export function isDiffProviderMessage(message: unknown): message is DiffProviderToWebview {
 	const type = diffMessageType(message);
 	return type !== undefined && PROVIDER_MESSAGE_TYPES.has(type);
+}
+
+/** Every intent the page sends; one place to add the next one. */
+const WEBVIEW_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+	'ready',
+	'matchMode',
+	'reveal',
+	'mergeMode',
+	'copy',
+	'painted',
+	'find',
+	'save'
+]);
+
+/**
+ * A page message with the diff protocol's shape; the host drops anything else.
+ * `save` carries an invalid side as a malformed payload, not as a save request.
+ */
+export function isDiffWebviewMessage(message: unknown): message is DiffWebviewToProvider {
+	const type = diffMessageType(message);
+	if (type === undefined || !WEBVIEW_MESSAGE_TYPES.has(type)) {
+		return false;
+	}
+	if (type === 'save') {
+		return isDiffSide((message as { side?: unknown }).side);
+	}
+	return true;
 }

@@ -1,0 +1,453 @@
+﻿diff --git a/src/commands.ts b/src/commands.ts
+index 6ee62d2..8b3ca85 100644
+--- a/src/commands.ts
++++ b/src/commands.ts
+@@ -11,7 +11,7 @@ import { EcucEditorProvider, VIEW_TYPE, gateReason } from './host/ecucEditorProv
+ import { buildNodeIndex } from './core/ecuc/nodeId';
+ import type { NodeEntry } from './core/ecuc/nodeId';
+ import { followReference, innermostNodeIdAt, revealRangeInTextEditor } from './host/navigation';
+-import { CompareSelectionStore, fileName } from './host/compareSelection';
++import { CompareSelectionStore, fileName, firstFileProblem } from './host/compareSelection';
+ import { DiffPanel } from './host/diffPanel';
+ import type { CoreEngine } from './host/engine/coreEngine';
+ import { IndexService } from './host/indexService';
+@@ -252,6 +252,13 @@ async function compareWithStashed(
+ 	first: vscode.Uri,
+ 	second: vscode.Uri
+ ): Promise<void> {
++	// The open-buffer path would happily compare a deleted file's cached text;
++	// a missing first file is reported and the stash stays for another try.
++	const problem = await firstFileProblem(first);
++	if (problem !== undefined) {
++		void vscode.window.showWarningMessage(problem);
++		return;
++	}
+ 	if (await DiffPanel.open(context, first, second, engine)) {
+ 		compare.clear();
+ 	}
+diff --git a/src/diffProtocol.ts b/src/diffProtocol.ts
+index 057625e..23ad714 100644
+--- a/src/diffProtocol.ts
++++ b/src/diffProtocol.ts
+@@ -53,6 +53,8 @@ export type DiffWebviewToProvider =
+ 	| { type: 'painted'; requestId: number }
+ 	/** Ask the engine for occurrences in the displayed diff. */
+ 	| { type: 'find'; requestId: number; query: string; options: FindOptions; changesOnly: boolean }
++	/** Save one side through the host's normal save path; the host re-checks the side and its dirty state. */
++	| { type: 'save'; side: 'left' | 'right' }
+ ;
+ 
+ /** The message type, or `undefined` for a payload that is not a protocol message. */
+@@ -61,6 +63,11 @@ export function diffMessageType(message: unknown): string | undefined {
+ 	return typeof type === 'string' ? type : undefined;
+ }
+ 
++/** Whether a value is one of the two compared sides. */
++export function isDiffSide(value: unknown): value is 'left' | 'right' {
++	return value === 'left' || value === 'right';
++}
++
+ /** Every host message the page knows; one place to add the next one. */
+ const PROVIDER_MESSAGE_TYPES: ReadonlySet<string> = new Set([
+ 	'document',
+@@ -80,3 +87,30 @@ export function isDiffProviderMessage(message: unknown): message is DiffProvider
+ 	const type = diffMessageType(message);
+ 	return type !== undefined && PROVIDER_MESSAGE_TYPES.has(type);
+ }
++
++/** Every intent the page sends; one place to add the next one. */
++const WEBVIEW_MESSAGE_TYPES: ReadonlySet<string> = new Set([
++	'ready',
++	'matchMode',
++	'reveal',
++	'mergeMode',
++	'copy',
++	'painted',
++	'find',
++	'save'
++]);
++
++/**
++ * A page message with the diff protocol's shape; the host drops anything else.
++ * `save` carries an invalid side as a malformed payload, not as a save request.
++ */
++export function isDiffWebviewMessage(message: unknown): message is DiffWebviewToProvider {
++	const type = diffMessageType(message);
++	if (type === undefined || !WEBVIEW_MESSAGE_TYPES.has(type)) {
++		return false;
++	}
++	if (type === 'save') {
++		return isDiffSide((message as { side?: unknown }).side);
++	}
++	return true;
++}
+diff --git a/src/host/compareSelection.ts b/src/host/compareSelection.ts
+index 6b40fd4..e3ff2c8 100644
+--- a/src/host/compareSelection.ts
++++ b/src/host/compareSelection.ts
+@@ -14,6 +14,32 @@ export function fileName(uri: vscode.Uri): string {
+ 	return path.basename(uri.fsPath);
+ }
+ 
++/** Whether a stat failure means the path is gone, as opposed to unreadable. */
++export function isMissingFileError(error: unknown): boolean {
++	return (
++		error instanceof vscode.FileSystemError &&
++		(error.code === 'FileNotFound' || error.code === 'EntryNotFound')
++	);
++}
++
++/**
++ * Why the stashed first file cannot be compared, or `undefined` when it is
++ * readable. A deleted path is named as such; any other failure keeps its
++ * detail instead of claiming the file no longer exists.
++ */
++export async function firstFileProblem(uri: vscode.Uri): Promise<string | undefined> {
++	try {
++		await vscode.workspace.fs.stat(uri);
++		return undefined;
++	} catch (error) {
++		if (isMissingFileError(error)) {
++			return `Cannot compare: "${fileName(uri)}" no longer exists. Select it again as the first file.`;
++		}
++		const detail = error instanceof Error ? error.message : String(error);
++		return `Cannot compare: "${fileName(uri)}" cannot be read (${detail}). Select it again as the first file.`;
++	}
++}
++
+ /** A session-only stash of the left/first compare candidate. */
+ export class CompareSelectionStore {
+ 	private selection: vscode.Uri | null = null;
+diff --git a/src/host/diffPanel.ts b/src/host/diffPanel.ts
+index bf37ec8..1d712d4 100644
+--- a/src/host/diffPanel.ts
++++ b/src/host/diffPanel.ts
+@@ -27,7 +27,7 @@ import { revealRangeInTextEditor } from './navigation';
+ import { watchBoot } from './bootWatchdog';
+ import { copyDirty } from './copyDirty';
+ import { CopyClock, logCopyTiming } from './copyTiming';
+-import { diffMessageType } from '../diffProtocol';
++import { isDiffWebviewMessage } from '../diffProtocol';
+ import type { DiffWebviewToProvider } from '../diffProtocol';
+ 
+ /** Re-scan debounce: one edit produces one refresh. */
+@@ -150,6 +150,25 @@ function isStale(disposed: boolean, generation: number, currentGeneration: numbe
+ function errorMessage(error: unknown): string {
+ 	return error instanceof Error ? error.message : String(error);
+ }
++/** What one side save did; only the failed outcomes are reported to the page. */
++export type DiffSaveOutcome = 'saved' | 'clean' | 'missing' | 'refused';
++/**
++ * Saves one compared side through VS Code's normal document save path.
++ *
++ * The host's `onDidSaveTextDocument` listeners own the dirty/copied marker
++ * refresh, so nothing is cleared here: a refused or missing document keeps
++ * every marker exactly as it was.
++ */
++export async function saveDiffDocument(uri: vscode.Uri): Promise<DiffSaveOutcome> {
++	const document = vscode.workspace.textDocuments.find((open) => open.uri.toString() === uri.toString());
++	if (document === undefined) {
++		return 'missing';
++	}
++	if (!document.isDirty) {
++		return 'clean';
++	}
++	return (await document.save()) ? 'saved' : 'refused';
++}
+ 
+ export class DiffPanel {
+ 	public static readonly viewType = 'vscode-arxml-scope.diff';
+@@ -985,6 +1004,20 @@ export class DiffPanel {
+ 			return false;
+ 		};
+ 
++		/** Saves one side; a failure keeps the markers and reaches the page's error notice. */
++		const handleSave = async (side: 'left' | 'right'): Promise<void> => {
++			const uri = side === 'left' ? leftUri : rightUri;
++			try {
++				const outcome = await saveDiffDocument(uri);
++				if (outcome === 'missing') {
++					await postError(`"${fileName(uri)}" is not open; reopen it and try again.`);
++				} else if (outcome === 'refused') {
++					await postError(`"${fileName(uri)}" could not be saved.`);
++				}
++			} catch (error) {
++				await postError(`"${fileName(uri)}" could not be saved: ${errorMessage(error)}`);
++			}
++		};
+ 		const handleFind = async (message: Extract<DiffWebviewToProvider, { type: 'find' }>): Promise<void> => {
+ 			const empty = { matches: [], total: 0, limited: false };
+ 			if (engine.searchDiff === undefined) {
+@@ -1022,6 +1055,10 @@ export class DiffPanel {
+ 			if (handleMergeProtocol(message)) {
+ 				return;
+ 			}
++			if (message.type === 'save') {
++				void handleSave(message.side);
++				return;
++			}
+ 			if (message.type === 'reveal') {
+ 				void reveal(message.side, message.key);
+ 			}
+@@ -1060,10 +1097,10 @@ export class DiffPanel {
+ 
+ 		disposables.push(
+ 			panel.webview.onDidReceiveMessage((raw: unknown) => {
+-				if (!diffMessageType(raw)) {
++				if (!isDiffWebviewMessage(raw)) {
+ 					return;
+ 				}
+-				handleMessage(raw as DiffWebviewToProvider);
++				handleMessage(raw);
+ 			})
+ 		);
+ 
+diff --git a/src/test/extension/compare.test.ts b/src/test/extension/compare.test.ts
+index 1ed92c1..43a7b43 100644
+--- a/src/test/extension/compare.test.ts
++++ b/src/test/extension/compare.test.ts
+@@ -7,13 +7,14 @@
+  */
+ import * as assert from 'assert';
+ import * as fs from 'fs';
++import * as os from 'os';
+ import * as path from 'path';
+ import * as vscode from 'vscode';
+ 
+ import { indentationAt, planCopy } from '../../core/copy/planCopy';
+ import { scanEcucValues } from '../../core/ecuc/scanner';
+ import { CompareSelectionStore } from '../../host/compareSelection';
+-import { DiffPanel } from '../../host/diffPanel';
++import { DiffPanel, saveDiffDocument } from '../../host/diffPanel';
+ import { fixtureUri, repoRoot, sleep } from './testUtils';
+ 
+ const SELECT_AS_FIRST = 'vscode-arxml-scope.selectAsFirst';
+@@ -163,6 +164,65 @@ suite('compare commands and diff panel (AC1, AC11, AC13)', function () {
+ 		assert.strictEqual(diffTabs().length, 0, 'no diff panel is opened without a stash');
+ 	});
+ 
++	test('UX-07: a deleted stashed first file warns, opens no panel and keeps the stash', async () => {
++		await closeDiffTabs();
++		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arxml-scope-stale-first-'));
++		const first = vscode.Uri.file(path.join(dir, 'stale-first.arxml'));
++		const source = fs.readFileSync(fixtureUri('diff/left.arxml').fsPath);
++		const right = fixtureUri('diff/right.arxml');
++		try {
++			await vscode.workspace.fs.writeFile(first, source);
++			await vscode.commands.executeCommand(SELECT_AS_FIRST, first);
++			await vscode.workspace.fs.delete(first);
++			await vscode.commands.executeCommand(COMPARE_TO_STAGED, right);
++			await sleep(400);
++			assert.strictEqual(diffTabs().length, 0, 'a deleted first file opens no panel');
++			// The stash survived the refusal: restoring the file retries the compare.
++			await vscode.workspace.fs.writeFile(first, source);
++			await vscode.commands.executeCommand(COMPARE_TO_STAGED, right);
++			await waitFor('the diff tab after the retry', () => diffTabs().length === 1);
++		} finally {
++			await closeDiffTabs();
++			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
++		}
++	});
++	test('UX-06: saving a diff side uses the normal save path and clears the copied rows', async () => {
++		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arxml-scope-diff-save-'));
++		const uri = vscode.Uri.file(path.join(dir, 'right.arxml'));
++		fs.copyFileSync(fixtureUri('diff/right.arxml').fsPath, uri.fsPath);
++		try {
++			const document = await vscode.workspace.openTextDocument(uri);
++			const edit = new vscode.WorkspaceEdit();
++			edit.insert(uri, new vscode.Position(0, 0), '<!-- scratch -->\n');
++			assert.ok(await vscode.workspace.applyEdit(edit), 'the scratch edit applies');
++			assert.strictEqual(document.isDirty, true, 'the copied document is dirty');
++			let saves = 0;
++			const saveListener = vscode.workspace.onDidSaveTextDocument((saved) => {
++				if (saved.uri.toString() === uri.toString()) {
++					saves += 1;
++				}
++			});
++			try {
++				assert.strictEqual(await saveDiffDocument(uri), 'saved');
++				await waitFor('the normal save event', () => saves === 1);
++			} finally {
++				saveListener.dispose();
++			}
++			assert.strictEqual(document.isDirty, false, 'the host save clears the dirty state');
++			assert.ok(
++				fs.readFileSync(uri.fsPath, 'utf8').startsWith('<!-- scratch -->'),
++				'the saved bytes contain the change'
++			);
++			assert.strictEqual(await saveDiffDocument(uri), 'clean', 'a clean side is not written again');
++		} finally {
++			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
++		}
++	});
++	test('UX-06: saving a side without an open document is refused, not written', async () => {
++		const uri = vscode.Uri.file(path.join(os.tmpdir(), `arxml-scope-not-open-${Date.now()}.arxml`));
++		assert.strictEqual(await saveDiffDocument(uri), 'missing');
++		assert.strictEqual(fs.existsSync(uri.fsPath), false, 'a missing document creates no file');
++	});
+ 	test('AC1: selectAsFirst then compareToStaged opens a vscode-arxml-scope.diff webview tab', async () => {
+ 		await closeDiffTabs();
+ 		const left = fixtureUri('diff/left.arxml');
+diff --git a/src/test/webview/protocol.test.ts b/src/test/webview/protocol.test.ts
+index 3bedcc4..9c18abd 100644
+--- a/src/test/webview/protocol.test.ts
++++ b/src/test/webview/protocol.test.ts
+@@ -9,7 +9,12 @@ import { scanEcucValues } from '../../core/ecuc/scanner';
+ import { buildRows } from '../../core/ecuc/renderRows';
+ import { documentHeader, editorMessageType, isEditorProviderMessage } from '../../webviewProtocol';
+ import type { EditorProviderToWebview, EditorWebviewToProvider } from '../../webviewProtocol';
+-import { diffMessageType, isDiffProviderMessage } from '../../diffProtocol';
++import {
++	diffMessageType,
++	isDiffProviderMessage,
++	isDiffSide,
++	isDiffWebviewMessage
++} from '../../diffProtocol';
+ import type { DiffProviderToWebview, DiffWebviewToProvider } from '../../diffProtocol';
+ import { fixtureText } from '../core/modelTestUtils';
+ 
+@@ -102,8 +107,31 @@ suite('webview protocol', () => {
+ 			{ type: 'matchMode', semantic: false },
+ 			{ type: 'reveal', side: 'right', key: 'row-1' },
+ 			{ type: 'painted', requestId: 1 },
++			{ type: 'save', side: 'left' },
++			{ type: 'save', side: 'right' },
+ 		];
+-		assert.deepStrictEqual(intents.map((intent) => intent.type), ['ready', 'matchMode', 'reveal', 'painted']);
++		assert.deepStrictEqual(intents.map((intent) => intent.type), [
++			'ready',
++			'matchMode',
++			'reveal',
++			'painted',
++			'save',
++			'save'
++		]);
++		for (const intent of intents) {
++			assert.strictEqual(isDiffWebviewMessage(intent), true);
++		}
++	});
++	test('a save intent must name one side; a malformed one is dropped', () => {
++		assert.strictEqual(isDiffSide('left'), true);
++		assert.strictEqual(isDiffSide('right'), true);
++		assert.strictEqual(isDiffSide('both'), false);
++		assert.strictEqual(isDiffSide(undefined), false);
++		assert.strictEqual(isDiffWebviewMessage({ type: 'save', side: 'right' }), true);
++		assert.strictEqual(isDiffWebviewMessage({ type: 'save', side: 'both' }), false);
++		assert.strictEqual(isDiffWebviewMessage({ type: 'save' }), false);
++		assert.strictEqual(isDiffWebviewMessage({ type: 'not-a-diff-intent' }), false);
++		assert.strictEqual(isDiffWebviewMessage(null), false);
+ 	});
+ 
+ 	test('the document header comes from the model, not from page markup', () => {
+diff --git a/src/webview/diffMonaco.ts b/src/webview/diffMonaco.ts
+index a996fc3..e5195a4 100644
+--- a/src/webview/diffMonaco.ts
++++ b/src/webview/diffMonaco.ts
+@@ -16,7 +16,8 @@ import { minimalLineEdit } from '../core/diff/minimalEdit';
+ import { ADDED_ROW_PREFIX } from '../core/copy/copyDirty';
+ import type { CopyDirtyRows } from '../core/copy/copyDirty';
+ import type { DiffFindMatch, FindOptions } from '../core/searchModel';
+-import type { DiffProviderToWebview } from '../diffProtocol';
++import { isDiffSide } from '../diffProtocol';
++import type { DiffProviderToWebview, DiffWebviewToProvider } from '../diffProtocol';
+ import {
+ 	buildDiffSyntheticDocuments,
+ 	searchRangeOnLine,
+@@ -25,6 +26,7 @@ import {
+ } from './monaco/synthetic';
+ import { defineEcucTheme, ensureMonacoEnvironment, monaco, setModelFolding } from './monaco/setup';
+ import { installDiffGutterActions, type DiffGutterContext, type DiffGutterDirection, type DiffGutterMapping, type DiffGutterRange } from './monaco/diffGutterActions';
++import { labelIsDirty, saveTargetSide } from './monaco/diffSave';
+ import { firstKeyInRange, rangeHasSource, type DiffSide } from './monaco/diffBody';
+ import { installGutterAvailability } from './monaco/diffGutterAvailability';
+ import { installFindBridge, startFindController, type MonacoFindMatch } from './monaco/findBridge';
+@@ -92,6 +94,8 @@ const pendingMessages: DiffProviderToWebview[] = [];
+ let copiedRows: CopyDirtyRows = { left: [], right: [] };
+ /** The row the user just copied from, until the host answers. */
+ let pendingCopy: { side: DiffSide; key: string } | undefined;
++/** The receiving side of the last accepted copy, the fallback save target. */
++let lastReceivingSide: DiffSide | undefined;
+ let pendingCopyTimer: ReturnType<typeof setTimeout> | undefined;
+ /** The decoration ids per synthetic model, so a refresh replaces its own set. */
+ const copyDecorationIds = new WeakMap<monaco.editor.ITextModel, string[]>();
+@@ -1160,6 +1164,61 @@ function changeList(): monaco.editor.ILineChange[] {
+ function focusedOriginalPane(): boolean {
+ 	return originalEditor()?.hasTextFocus() === true;
+ }
++/** The host side of the focused pane, following the swap state; `undefined` when neither has focus. */
++function focusedHostSide(): DiffSide | undefined {
++	if (originalEditor()?.hasTextFocus() === true) {
++		return displayedSide('original');
++	}
++	if (modifiedEditor()?.hasTextFocus() === true) {
++		return displayedSide('modified');
++	}
++	return undefined;
++}
++/** Whether the pane label for one host side carries the host's unsaved marker. */
++function sideIsDirty(side: DiffSide): boolean {
++	if (documentModel === undefined) {
++		return false;
++	}
++	return labelIsDirty(documentModel.labels[side === 'left' ? 0 : 1]);
++}
++/** Posts one save intent after the runtime guard; an invalid side never reaches the host. */
++function requestSave(side: unknown): void {
++	if (!isDiffSide(side)) {
++		return;
++	}
++	postToHost({ type: 'save', side } satisfies DiffWebviewToProvider);
++}
++function isSaveShortcut(event: KeyboardEvent): boolean {
++	return (
++		(event.ctrlKey || event.metaKey) &&
++		!event.altKey &&
++		!event.shiftKey &&
++		!event.repeat &&
++		event.key.toLowerCase() === 's'
++	);
++}
++/**
++ * `Ctrl+S`/`Cmd+S` saves the focused dirty side, or the receiving side of the
++ * last copy while it is still dirty. A clean diff never posts.
++ */
++function wireSaveShortcut(): void {
++	document.addEventListener(
++		'keydown',
++		function (event) {
++			if (!isSaveShortcut(event)) {
++				return;
++			}
++			const target = saveTargetSide(focusedHostSide(), lastReceivingSide, sideIsDirty);
++			if (target === undefined) {
++				return;
++			}
++			event.preventDefault();
++			event.stopPropagation();
++			requestSave(target);
++		},
++		true
++	);
++}
+ 
+ function currentDisplayedLine(fromOriginal: boolean): number {
+ 	const editor = fromOriginal ? originalEditor() : modifiedEditor();
+@@ -1258,6 +1317,10 @@ function dispatchCopyMessage(message: DiffProviderToWebview): boolean {
+ 	}
+ 	if (message.type === 'copyResult') {
+ 		clearPendingCopy();
++		if (message.ok) {
++			// `side` echoes the copy's source; the receiving side is its pair.
++			lastReceivingSide = oppositeSide(message.side);
++		}
+ 		acknowledgePaint(message.requestId);
+ 		return true;
+ 	}
+@@ -1548,6 +1611,7 @@ async function mountDiff(): Promise<void> {
+ 	mountToolbar();
+ 	wireMergeClicks();
+ 	wireFindScrollGuard();
++	wireSaveShortcut();
+ 	mounted = true;
+ 	for (const message of pendingMessages) {
+ 		handleMessage(message);

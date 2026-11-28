@@ -27,7 +27,7 @@ import { revealRangeInTextEditor } from './navigation';
 import { watchBoot } from './bootWatchdog';
 import { copyDirty } from './copyDirty';
 import { CopyClock, logCopyTiming } from './copyTiming';
-import { diffMessageType } from '../diffProtocol';
+import { isDiffWebviewMessage } from '../diffProtocol';
 import type { DiffWebviewToProvider } from '../diffProtocol';
 
 /** Re-scan debounce: one edit produces one refresh. */
@@ -149,6 +149,25 @@ function isStale(disposed: boolean, generation: number, currentGeneration: numbe
 
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+/** What one side save did; only the failed outcomes are reported to the page. */
+export type DiffSaveOutcome = 'saved' | 'clean' | 'missing' | 'refused';
+/**
+ * Saves one compared side through VS Code's normal document save path.
+ *
+ * The host's `onDidSaveTextDocument` listeners own the dirty/copied marker
+ * refresh, so nothing is cleared here: a refused or missing document keeps
+ * every marker exactly as it was.
+ */
+export async function saveDiffDocument(uri: vscode.Uri): Promise<DiffSaveOutcome> {
+	const document = vscode.workspace.textDocuments.find((open) => open.uri.toString() === uri.toString());
+	if (document === undefined) {
+		return 'missing';
+	}
+	if (!document.isDirty) {
+		return 'clean';
+	}
+	return (await document.save()) ? 'saved' : 'refused';
 }
 
 export class DiffPanel {
@@ -985,6 +1004,20 @@ export class DiffPanel {
 			return false;
 		};
 
+		/** Saves one side; a failure keeps the markers and reaches the page's error notice. */
+		const handleSave = async (side: 'left' | 'right'): Promise<void> => {
+			const uri = side === 'left' ? leftUri : rightUri;
+			try {
+				const outcome = await saveDiffDocument(uri);
+				if (outcome === 'missing') {
+					await postError(`"${fileName(uri)}" is not open; reopen it and try again.`);
+				} else if (outcome === 'refused') {
+					await postError(`"${fileName(uri)}" could not be saved.`);
+				}
+			} catch (error) {
+				await postError(`"${fileName(uri)}" could not be saved: ${errorMessage(error)}`);
+			}
+		};
 		const handleFind = async (message: Extract<DiffWebviewToProvider, { type: 'find' }>): Promise<void> => {
 			const empty = { matches: [], total: 0, limited: false };
 			if (engine.searchDiff === undefined) {
@@ -1020,6 +1053,10 @@ export class DiffPanel {
 				return;
 			}
 			if (handleMergeProtocol(message)) {
+				return;
+			}
+			if (message.type === 'save') {
+				void handleSave(message.side);
 				return;
 			}
 			if (message.type === 'reveal') {
@@ -1060,10 +1097,10 @@ export class DiffPanel {
 
 		disposables.push(
 			panel.webview.onDidReceiveMessage((raw: unknown) => {
-				if (!diffMessageType(raw)) {
+				if (!isDiffWebviewMessage(raw)) {
 					return;
 				}
-				handleMessage(raw as DiffWebviewToProvider);
+				handleMessage(raw);
 			})
 		);
 
