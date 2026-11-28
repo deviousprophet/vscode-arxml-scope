@@ -4,7 +4,7 @@
  * container/value control receives local draft text; everything else is one
  * tree of labelled rows, condition tokens and host actions.
  */
-import type { EcucRow } from '../../../core/ecuc/renderRows';
+import type { EcucRow, ParameterFormat } from '../../../core/ecuc/renderRows';
 import {
 	definitionRows,
 	inspectorFields,
@@ -21,12 +21,18 @@ export interface InspectorRowsHost {
 	emptyHint: string;
 	containerFields(row: EcucRow, data: InspectorFields): HTMLElement;
 	valueInput(row: EcucRow, data: InspectorFields): HTMLElement;
+	/** The local value draft, so derived formats describe the text being edited. */
+	valueDraft?(row: EcucRow): string | undefined;
+	/** Formats recomputed from the draft; empty means the draft cannot be formatted. */
+	valueFormats?(row: EcucRow, data: InspectorFields): ParameterFormat[];
 }
 
 export interface InspectorRows {
 	appendField(key: string, value: string): void;
 	renderEmpty(): void;
 	renderSelected(row: EcucRow): void;
+	/** Refresh the derived numeric rows without rebuilding the focused controls. */
+	updateValueFormats(row: EcucRow): void;
 }
 
 export function createInspectorRows(host: InspectorRowsHost): InspectorRows {
@@ -100,9 +106,33 @@ export function createInspectorRows(host: InspectorRowsHost): InspectorRows {
 		if (data.kind === 'parameter') {
 			appendElement(host.valueInput(row, data));
 		}
-		for (const format of data.formats) {
-			appendField(format.label, format.value);
+		const container = inspectorElement('div', 'inspector-formats');
+		container.setAttribute('data-formats', '');
+		appendFormats(container, row, data);
+		appendElement(container);
+	}
+
+	/** Derived formats follow the draft; an unformattable draft keeps no stale numbers. */
+	function appendFormats(container: HTMLElement, row: EcucRow, data: InspectorFields): void {
+		const draft = host.valueDraft?.(row);
+		const formats = draft === undefined ? data.formats : (host.valueFormats?.(row, data) ?? data.formats);
+		if (draft !== undefined && data.formats.length > 0 && formats.length === 0) {
+			container.appendChild(inspectorRow('Numeric formats', 'last accepted value'));
+			return;
 		}
+		for (const format of formats) {
+			container.appendChild(inspectorRow(format.label, format.value));
+		}
+	}
+
+	/** Refresh only the derived numeric rows while the user types. */
+	function updateValueFormats(row: EcucRow): void {
+		const container = host.body()?.querySelector<HTMLElement>('[data-formats]');
+		if (container === null || container === undefined) {
+			return;
+		}
+		container.textContent = '';
+		appendFormats(container, row, inspectorFields(row));
 	}
 
 	function renderReferenceFields(row: EcucRow, data: InspectorFields): void {
@@ -218,5 +248,5 @@ export function createInspectorRows(host: InspectorRowsHost): InspectorRows {
 		renderActions(row);
 	}
 
-	return { appendField, renderEmpty, renderSelected };
+	return { appendField, renderEmpty, renderSelected, updateValueFormats };
 }

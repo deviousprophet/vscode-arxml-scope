@@ -105,9 +105,10 @@ reference target, contexts, conditions and annotations as applicable.
   **Definition description** and **Definition file**. Only declared fields appear.
 - References show **Jump to target** only when the target resolves to a row in the same file.
 - **Reveal in source** opens the text editor at the node's range.
-- The Details status line carries follow failures and a field refusal when the Details tab is hidden;
-  field errors otherwise appear inline beside the control. There is no banner and no Source block or
-  copy action.
+- The Details status line carries follow failures. A field refusal appears inline beside the control
+  while Details is visible and in the top strip when it is hidden; the status line never repeats it.
+  There is no field-error banner, Source block or copy action; the stale-draft banner is the only
+  page-level recovery notice.
 
 ## Workspace index and definitions
 
@@ -209,9 +210,17 @@ never marked.
 - Details typing is live; `Enter` does not commit. `Escape` restores the field's accepted value, and
   `Tab` uses normal browser focus movement without writing.
 - Integer, Float, Boolean and XML-invalid input is marked locally as a problem while typing; the host
-  still validates the complete value against Rust before it reaches the document.
-- A refusal keeps the typed text, marks the field and the page error strip, and blocks save. The
-  refused value never reaches the file.
+  still validates the complete value against Rust before it reaches the document. Numeric formats
+  follow the draft; while the draft cannot be formatted they read `last accepted value` instead of
+  showing the previous numbers.
+- A refusal keeps the typed text, marks the field inline, and blocks save; the toolbar carries one
+  compact `Invalid value`/`Short name refused`/`Save blocked` state. The same reason is not repeated
+  in the page strip or the status line while the field is visible. The refused value never reaches
+  the file.
+- If an external change removes the draft's row, the draft is kept but marked blocked: a persistent
+  banner says **This row is no longer in the file**, that row's Details controls are disabled, and
+  **Discard draft** removes the local text while **Reload** re-scans the document. `Ctrl+S` stays
+  blocked and does not resend the dead draft.
 - A value backed by CDATA is shown but not editable.
 - A module cannot be renamed: its short name is part of every container id.
 - Direct typing is local-first: the value stays visible while the host write is in flight, and a

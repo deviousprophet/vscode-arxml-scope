@@ -1,0 +1,10 @@
+{
+  "_type": "host-run",
+  "startedAt": "2026-11-28T03:15:25.325Z",
+  "finishedAt": "2026-11-28T03:15:47.830Z",
+  "ok": true,
+  "mode": "normal",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-tjuShD",
+  "cdpPort": 58445,
+  "outDir": "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host"
+}

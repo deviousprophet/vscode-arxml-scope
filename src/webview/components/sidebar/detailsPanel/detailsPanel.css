@@ -72,3 +72,6 @@
 .details-status:empty {
 	display: none;
 }
+.details-status[data-kind="error"] {
+	color: var(--vscode-errorForeground, var(--vscode-editorError-foreground));
+}

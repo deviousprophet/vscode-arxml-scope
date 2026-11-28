@@ -67,15 +67,16 @@ projection for choosing a state.
 | `editor-labels` | editor | 1400×900 | a module, a normal container, a parameter and a container with no `DEFINITION-REF`; the no-label line starts with its quoted short name in the string colour, and the normal container keeps the label in the type colour and the short name in the string colour |
 | `editor-dirty` | editor | 1400×900 | a typed parameter shows the `● Unsaved changes` toolbar marker and posts no host edit before `Ctrl+S` |
 | `editor-copied` | editor | 1400×900 | two copied rows show the modified-line margin bar and line tint, as after a merge copy and before a save |
-| `editor-invalid` | editor | 1400×900 | invalid direct input shows the red marker/error and a `Ctrl+S` attempt is blocked |
+| `editor-invalid` | editor | 1400×900 | invalid direct input shows one inline Details error and a compact `Invalid value` toolbar state, hides the page strip/status duplicate, labels the derived formats `last accepted value`, and blocks `Ctrl+S` |
 | `editor-details` | editor | 1400×900 | typing in the Details value stays local; focus/caret kept, the line repainted, no host edit |
 | `editor-details-save` | editor | 1400×900 | `Ctrl+S` sends one raw edit, waits for its ack, saves, then the host echo rebuild keeps Details focus/caret |
 | `editor-details-rename` | editor | 1400×900 | a rename is acknowledged before the re-scan; the next save defers and the post-flush keystroke is submitted at the new id |
-| `editor-rename-refusal` | editor | 1400×900 | the re-scan lands first, then the host refuses the remapped rename; the refusal is shown inline at the new id and no save follows |
+| `editor-rename-refusal` | editor | 1400×900 | the re-scan lands first, then the host refuses the remapped rename; the refusal is shown once inline at the new id, the toolbar says `Short name refused`, and no save follows |
 | `editor-rename-late-ack` | editor | 1400×900 | the re-scan lands before the rename acknowledgement; the page keeps the post-flush draft and caret, submits it at the host id and saves |
 | `editor-multi-save` | editor | 1400×900 | two fields are edited locally, one `Ctrl+S` posts two edits then one save after both acks, and both new values stay visible |
 | `editor-paste` | editor | 1400×900 | a paste containing a newline becomes one escaped line (`\n`), keeps one quote pair and posts no host edit |
-| `editor-stale-save` | editor | 1400×900 | a draft whose row disappears from the re-scan blocks `Ctrl+S`, posts no save and explains that the node is gone |
+| `editor-stale-save` | editor | 1400×900 | a draft whose row disappears from the re-scan blocks `Ctrl+S`, keeps the draft, shows the persistent row-removed banner, disables the dead node's Details and offers Discard draft/Reload |
+| `editor-stale-discard` | editor | 1400×900 | the same blocked state after **Discard draft**: the banner and blocked Details are gone and nothing was posted |
 | `editor-details-undo` | editor | 1400×900 | a local undo after a Details edit restores the host value, caret and clean toolbar |
 | `editor-details-redo` | editor | 1400×900 | redo after that undo restores the draft, caret and dirty marker without a host edit |
 | `editor-delete` | editor | 1400×900 | type, backspace, word-delete, select-and-replace, clear and retype stay local and end at `Text = "R"` |

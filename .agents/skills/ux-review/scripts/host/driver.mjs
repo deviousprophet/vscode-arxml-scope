@@ -815,13 +815,41 @@ async function main() {
 		await frame.locator('.monaco-editor').first().click().catch(() => {});
 		await page.keyboard.press('Control+s');
 		await sleep(1800);
+		const banner = await frame.locator('#editor-stale-banner').innerText().catch(() => '');
+		const bannerHidden = await frame.locator('#editor-stale-banner').evaluate((node) => node.hidden).catch(() => null);
+		const toolbar = await frame.locator('#editor-dirty-status').innerText().catch(() => '');
 		const detailsStatus = await frame.locator('#details-status').innerText().catch(() => '');
 		const dirtyHidden = await frame.locator('#editor-dirty-status').evaluate((node) => node.hidden).catch(() => null);
-		record.observations.detailsStatus = detailsStatus;
-		record.observations.dirtyHidden = dirtyHidden;
-		check('stale save is refused', /no longer in the file|stale/i.test(detailsStatus) || dirtyHidden === false, detailsStatus);
-		check('refusal is not only the top strip', /no longer in the file|stale/i.test(detailsStatus), detailsStatus);
+		const staleDetails = await frame.locator('.inspector-stale').innerText().catch(() => '');
+		const editable = await frame.locator('#details-value').count();
+		const discard = await frame.locator('#editor-stale-discard').count();
+		const reload = await frame.locator('#editor-stale-reload').count();
+		record.observations.staleNode = {
+			banner,
+			bannerHidden,
+			toolbar,
+			detailsStatus,
+			dirtyHidden,
+			staleDetails,
+			editable,
+			discard,
+			reload
+		};
+		check('stale save keeps a persistent banner', bannerHidden === false && /no longer in the file/i.test(banner), banner);
+		check('the toolbar reports the blocked save', /Save blocked/i.test(toolbar), toolbar);
+		check('the dead node has no editable Details control', editable === 0 && /Blocked draft/.test(staleDetails), staleDetails);
+		check('the stale state offers discard and reload', discard > 0 && reload > 0, `${discard}/${reload}`);
+		check('the stale refusal is not duplicated in the status line', detailsStatus.trim() === '', detailsStatus);
 		record.screenshots.push(...(await shot('edit-16-stale', frame)));
+		await frame.locator('#editor-stale-discard').click().catch(() => {});
+		await sleep(900);
+		const afterDiscard = await frame.locator('#editor-stale-banner').evaluate((node) => node.hidden).catch(() => null);
+		record.observations.afterDiscard = {
+			bannerHidden: afterDiscard,
+			editable: await frame.locator('#details-value').count()
+		};
+		check('Discard removes the blocked draft', afterDiscard === true, String(afterDiscard));
+		record.screenshots.push(...(await shot('edit-16-stale-discarded', frame)));
 	});
 
 	await scenario('engine-index', async ({ check, record }) => {
@@ -937,13 +965,17 @@ async function main() {
 		await sleep(900);
 		const toolbar = await frame.locator('#editor-dirty-status').innerText().catch(() => '');
 		const strip = await frame.locator('#editor-error-strip').innerText().catch(() => '');
+		const stripHidden = await frame.locator('#editor-error-strip').evaluate((node) => node.hidden).catch(() => null);
 		const inline = await frame.locator('.details-value-error').first().innerText().catch(() => '');
 		const status = await frame.locator('#details-status').innerText().catch(() => '');
-		record.observations.invalidChannels = { toolbar, strip, inline, status };
+		record.observations.invalidChannels = { toolbar, strip, stripHidden, inline, status };
 		check('the toolbar reports the invalid draft', /invalid/i.test(toolbar), toolbar);
-		check('the editor error strip repeats it', /invalid/i.test(strip), strip);
+		check('the error strip does not repeat the visible field error', stripHidden === true && strip === '', strip);
 		check('the Details field shows an inline error', /invalid/i.test(inline), inline);
-		check('the Details status line repeats it too', /invalid/i.test(status), status);
+		check('the Details status line does not repeat it', status.trim() === '', status);
+		const detailsText = await frame.locator('#sb-details-body').innerText().catch(() => '');
+		check('derived formats do not describe the invalid draft', !/Hexadecimal|0x00|0b00000000/.test(detailsText), detailsText.slice(0, 200));
+		check('derived formats are labelled last accepted', /last accepted value/i.test(detailsText), detailsText.slice(0, 200));
 		record.screenshots.push(...(await shot('deep-edit-invalid', frame)));
 		await page.keyboard.press('Control+s');
 		await sleep(1500);

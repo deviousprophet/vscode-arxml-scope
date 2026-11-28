@@ -1,0 +1,219 @@
+{
+  "mode": "normal",
+  "startedAt": "2026-11-28T03:15:28.148Z",
+  "workspace": "C:\\Users\\tripm\\AppData\\Local\\Temp\\arxml-ux-host-ws-tjuShD",
+  "cdp": {
+    "port": "58445",
+    "attempts": 1,
+    "contexts": 1,
+    "pageUrl": "vscode-file://vscode-app/c:/Users/tripm/AppData/Local/Programs/Microsoft%20VS%20Code/661626d0e7/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
+  },
+  "scenarios": [
+    {
+      "id": "stale-node",
+      "startedAt": "2026-11-28T03:15:28.295Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "stale save keeps a persistent banner",
+          "ok": true,
+          "detail": "This row is no longer in the file.\nDiscard draft\nReload"
+        },
+        {
+          "name": "the toolbar reports the blocked save",
+          "ok": true,
+          "detail": "Save blocked — row removed"
+        },
+        {
+          "name": "the dead node has no editable Details control",
+          "ok": true,
+          "detail": "⚠ Blocked draft\nThis row is no longer in the file. Editing is disabled until the draft is discarded or the row returns.\nValue\n7"
+        },
+        {
+          "name": "the stale state offers discard and reload",
+          "ok": true,
+          "detail": "1/1"
+        },
+        {
+          "name": "the stale refusal is not duplicated in the status line",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "Discard removes the blocked draft",
+          "ok": true,
+          "detail": "true"
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\edit-16-stale-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\edit-16-stale-webview.png",
+        "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\edit-16-stale-discarded-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\edit-16-stale-discarded-webview.png"
+      ],
+      "observations": {
+        "renamed": true,
+        "staleNode": {
+          "banner": "This row is no longer in the file.\nDiscard draft\nReload",
+          "bannerHidden": false,
+          "toolbar": "Save blocked — row removed",
+          "detailsStatus": "",
+          "dirtyHidden": false,
+          "staleDetails": "⚠ Blocked draft\nThis row is no longer in the file. Editing is disabled until the draft is discarded or the row returns.\nValue\n7",
+          "editable": 0,
+          "discard": 1,
+          "reload": 1
+        },
+        "afterDiscard": {
+          "bannerHidden": true,
+          "editable": 0
+        }
+      },
+      "finishedAt": "2026-11-28T03:15:38.239Z"
+    },
+    {
+      "id": "edit-invalid",
+      "startedAt": "2026-11-28T03:15:38.240Z",
+      "ok": true,
+      "checks": [
+        {
+          "name": "the toolbar reports the invalid draft",
+          "ok": true,
+          "detail": "Invalid value — not saved"
+        },
+        {
+          "name": "the error strip does not repeat the visible field error",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "the Details field shows an inline error",
+          "ok": true,
+          "detail": "/* Invalid integer value */"
+        },
+        {
+          "name": "the Details status line does not repeat it",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "derived formats do not describe the invalid draft",
+          "ok": true,
+          "detail": "parameter\nKeep\nDefinition\n/Pkg/Diff/ModAlpha/ContKeep/Keep\nType\nInteger\nValue\n/* Invalid integer value */\nNumeric formats\nlast accepted value\nReveal in source"
+        },
+        {
+          "name": "derived formats are labelled last accepted",
+          "ok": true,
+          "detail": "parameter\nKeep\nDefinition\n/Pkg/Diff/ModAlpha/ContKeep/Keep\nType\nInteger\nValue\n/* Invalid integer value */\nNumeric formats\nlast accepted value\nReveal in source"
+        },
+        {
+          "name": "the invalid draft is not written",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the draft stays dirty after the blocked save",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "fixing the value saves it",
+          "ok": true,
+          "detail": null
+        },
+        {
+          "name": "the dirty marker clears after the fixed save",
+          "ok": true,
+          "detail": null
+        }
+      ],
+      "screenshots": [
+        "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\deep-edit-invalid-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\deep-edit-invalid-webview.png",
+        "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\deep-edit-invalid-fixed-workbench.png",
+        "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\deep-edit-invalid-fixed-webview.png"
+      ],
+      "observations": {
+        "invalidChannels": {
+          "toolbar": "Invalid value — not saved",
+          "strip": "",
+          "stripHidden": true,
+          "inline": "/* Invalid integer value */",
+          "status": ""
+        },
+        "afterFix": {
+          "strip": "",
+          "status": "",
+          "value": "7"
+        }
+      },
+      "finishedAt": "2026-11-28T03:15:46.409Z"
+    }
+  ],
+  "captures": [
+    {
+      "name": "edit-16-stale",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "edit-16-stale-discarded",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-edit-invalid",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "deep-edit-invalid-fixed",
+      "page": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1
+      },
+      "frame": {
+        "width": 1082,
+        "height": 777,
+        "dpr": 1
+      }
+    }
+  ],
+  "screenshots": [
+    "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\edit-16-stale-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\edit-16-stale-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\edit-16-stale-discarded-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\edit-16-stale-discarded-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\deep-edit-invalid-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\deep-edit-invalid-webview.png",
+    "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\deep-edit-invalid-fixed-workbench.png",
+    "H:\\workspace\\arxml-scope-worktrees\\editor-refusal-recovery\\.trellis\\tasks\\11-27-fix-editor-refusal-recovery\\research\\evidence\\host\\deep-edit-invalid-fixed-webview.png"
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-28T03:15:46.409Z"
+}

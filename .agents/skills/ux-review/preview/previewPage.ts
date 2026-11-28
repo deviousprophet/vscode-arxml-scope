@@ -974,7 +974,7 @@ function postStaleRescan(): void {
 	const remaining = rows.filter((row) => row.label !== 'Text');
 	const selectedId = remaining.find((row) => row.kind === 'container')?.id;
 	window.postMessage(
-		{ type: 'document', document: { ...documentPayload, rows: remaining, selectedId, revision: 2, dirty: true } },
+		{ type: 'document', document: { ...documentPayload, rows: remaining, selectedId, revision: 2, dirty: false } },
 		'*'
 	);
 }
@@ -999,6 +999,20 @@ async function applyStaleSave(): Promise<void> {
 	await tick();
 	dispatchCtrlS();
 	await tick();
+	// A second Ctrl+S must not loop or post anything on the dead row.
+	dispatchCtrlS();
+	await tick();
+	(window as unknown as { __PREVIEW_STALE__?: { blocked: boolean; discarded?: boolean } }).__PREVIEW_STALE__ = {
+		blocked: true
+	};
+	if (payload.staleDiscard === true) {
+		click('editor-stale-discard');
+		await tick();
+		(window as unknown as { __PREVIEW_STALE__?: { blocked: boolean; discarded?: boolean } }).__PREVIEW_STALE__ = {
+			blocked: true,
+			discarded: true
+		};
+	}
 }
 
 async function applyScroll(): Promise<void> {

@@ -106,8 +106,10 @@ the listed DOM/model state, not a screenshot diff.
 - **Dirty typing is visible and coalesced.** `editor-dirty` shows `● Unsaved changes`
   after a multi-character typing run and posts no host edit before `Ctrl+S`. The audit
   fails when the status is hidden or empty.
-- **Invalid input blocks save.** `editor-invalid` shows the page error, posts no edit and
-  no save after the `Ctrl+S` attempt.
+- **Invalid input blocks save on one surface.** `editor-invalid` shows one inline Details
+  error plus the compact `Invalid value` toolbar state, hides the page strip and status
+  duplicate, labels the derived formats `last accepted value`, and posts no edit or save
+  after the `Ctrl+S` attempt.
 - **Details typing stays local and keeps the caret.** `editor-details` shows the redrawn
   editor line, focus and the caret at the end of `#details-value`, and posts no host edit;
   `editor-details-save` sends one raw edit on `Ctrl+S`, posts the save only after the ack,
@@ -118,8 +120,8 @@ the listed DOM/model state, not a screenshot diff.
   appears.
 - **A refusal after the renamed re-scan lands at the new id.** `editor-rename-refusal`
   shows the post-flush `Syntax23` addressed at the host's new id, the inline reason beside
-  the short-name field, the refusal in the Details status, focus on that control, and no
-  save after the refusal.
+  the short-name field, a `Short name refused` toolbar state, focus on that control, no
+  strip/status duplicate, and no save after the refusal.
 - **A late acknowledgement keeps the caret.** `editor-rename-late-ack` delivers the
   renamed re-scan first and the host pair second; the post-flush `Syntax23` still moves to
   the new id, the short-name field keeps focus/caret, and the save follows that edit's ack.
@@ -136,9 +138,11 @@ the listed DOM/model state, not a screenshot diff.
 - **A pasted newline stays one line.** `editor-paste` pastes `\nsecond` into `Text`; the
   line reads `Text = "hello\nsecond"` with the newline escaped, one quote pair, and no host
   edit.
-- **A stale draft blocks the save.** `editor-stale-save` types into `Text`, receives a
-  re-scan without that row, and attempts `Ctrl+S`; no edit and no save are posted and the
-  Details status says the node is no longer in the file.
+- **A stale draft blocks the save and recovers.** `editor-stale-save` types into `Text`,
+  receives a re-scan without that row, and attempts `Ctrl+S`; no edit and no save are
+  posted, the persistent banner says the row is no longer in the file, the dead node has
+  no editable Details control, and Discard/Reload actions are present. `editor-stale-discard`
+  clicks Discard and requires the banner and blocked state to disappear with no host post.
 - **Sticky scroll keeps the scope.** `editor-sticky` keeps the enclosing `Items` header
   pinned while the viewport is deep in its parameter list.
 - **The diff sticky header shows the full parent scope.** `diff-sticky` scrolls deep into

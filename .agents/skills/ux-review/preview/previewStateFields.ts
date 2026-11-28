@@ -46,6 +46,8 @@ export interface PreviewStateFields {
 	pasteEdit?: boolean;
 	/** Types a draft, removes its row from the re-scan, then attempts Ctrl+S. */
 	staleSave?: boolean;
+	/** With `staleSave`, clicks the recovery action after the blocked save. */
+	staleDiscard?: boolean;
 	/** Scrolls the editor to this 1-based line and waits for sticky scope. */
 	scrollLine?: number;
 	/** Scrolls the diff modified pane to this 1-based line and waits for the sticky header. */

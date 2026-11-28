@@ -204,7 +204,8 @@ store, then `postToHost({ type: 'ready' })`.
    flushes one coalesced edit per field (values first, short names deepest-first, no-ops pruned),
    waits for every `editResult`, and posts `save`; the host drains `editChain` and calls
    `document.save()`. A draft whose row is no longer in the row store stays queued but stops the
-   save: the status says the node is gone and neither `edit` nor `save` is posted. Enter is a no-op
+   save: a persistent banner says the row is gone, the dead node's Details is disabled, and
+   Discard draft/Reload recover it; neither `edit` nor `save` is posted. Enter is a no-op
    and blur/page hide never write.
    Delete and duplicate go through `planDelete` / `planDuplicate` and `applyStructureEdit` after a
    modal confirmation. A refusal posts a `notice` (for a field, `inline: true`, `scope: 'details'`),

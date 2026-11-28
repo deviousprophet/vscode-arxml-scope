@@ -24,6 +24,13 @@ export function renderEditorToolbarHtml(): string {
 </div>`;
 }
 
+/** The one compact save signal the toolbar paints for a blocked local draft. */
+export interface DirtyBlock {
+	text: string;
+	title: string;
+	severity: 'error' | 'warning';
+}
+
 export class EditorToolbar {
 	private callbacks: EditorToolbarCallbacks;
 	mounted: boolean;
@@ -53,17 +60,18 @@ export class EditorToolbar {
 		button.title = hidden ? 'Show sidebar' : 'Hide sidebar';
 	}
 
-	/** Show the unsaved or invalid marker while the page has a local draft. */
-	setDirty(dirty: boolean, invalid?: string): void {
+	/** Show the unsaved or blocked marker while the page has a local draft. */
+	setDirty(dirty: boolean, block?: DirtyBlock): void {
 		const status = document.getElementById('editor-dirty-status');
 		if (!status) {
 			return;
 		}
-		const next = dirtyStatus(dirty, invalid);
+		const next = dirtyStatus(dirty, block);
 		writeHidden(status, next.hidden);
 		writeText(status, next.text);
 		writeTitle(status, next.title);
-		status.classList.toggle('invalid', next.invalid);
+		status.classList.toggle('invalid', next.severity === 'error');
+		status.classList.toggle('warning', next.severity === 'warning');
 	}
 
 	private bind(id: string, action: () => void): void {
@@ -78,22 +86,21 @@ interface DirtyStatus {
 	text: string;
 	title: string;
 	hidden: boolean;
-	invalid: boolean;
+	severity?: 'error' | 'warning';
 }
 
-function dirtyStatus(dirty: boolean, invalid?: string): DirtyStatus {
-	if (invalid !== undefined) {
-		return { text: 'Invalid value — not saved', title: invalid, hidden: false, invalid: true };
+function dirtyStatus(dirty: boolean, block?: DirtyBlock): DirtyStatus {
+	if (block !== undefined) {
+		return { text: block.text, title: block.title, hidden: false, severity: block.severity };
 	}
 	if (dirty) {
 		return {
 			text: '● Unsaved changes',
 			title: 'This ECUC document has unsaved changes',
-			hidden: false,
-			invalid: false
+			hidden: false
 		};
 	}
-	return { text: '', title: '', hidden: true, invalid: false };
+	return { text: '', title: '', hidden: true };
 }
 
 function writeHidden(status: HTMLElement, hidden: boolean): void {
