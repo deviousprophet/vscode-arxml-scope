@@ -43,3 +43,13 @@ and `npm run rust:test`. `npm run engine:build` stages the engine binary when it
 not built yet.
 
 <!-- VERIFICATION:END -->
+
+<!-- SHIP:START -->
+## Shipping
+
+After planning, `/ship` (agent `shipper`, skill `.agents/skills/ship/`) runs the flow to one draft
+PR: parallel worktree implementation, integration merges, full gates, `fallow-fix`,
+`update-changelog`, `code-review` and `create-pr`. It stops only on a documented blocker; it never
+force-pushes, pushes `main`, merges, or suppresses a gate.
+
+<!-- SHIP:END -->
